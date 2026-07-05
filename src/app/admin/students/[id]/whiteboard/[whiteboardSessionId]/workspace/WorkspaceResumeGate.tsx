@@ -24,7 +24,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { finalizeWhiteboardSessionFromBackend } from "@/app/admin/students/[id]/whiteboard/actions";
+import { finalizeWhiteboardSessionWithOutbox } from "@/lib/recording/finalize-whiteboard-session-client";
 import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";import { Button } from "@/components/ui/button";
 import {
   deriveResumeGateState,
@@ -118,7 +118,10 @@ export function WorkspaceResumeGate({
   const handleEndAndReview = () => {
     setFinalizeError(null);
     startFinalizeTransition(async () => {
-      const result = await finalizeWhiteboardSessionFromBackend(whiteboardSessionId);
+      const result = await finalizeWhiteboardSessionWithOutbox(
+        whiteboardSessionId,
+        studentId
+      );
       if (!result.ok) {
         setFinalizeError(result.error);
         return;

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTransition, useState } from "react";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { Button } from "@/components/ui/button";
-import { finalizeWhiteboardSessionFromBackend } from "./actions";
+import { finalizeWhiteboardSessionWithOutbox } from "@/lib/recording/finalize-whiteboard-session-client";
 import { deleteWhiteboardSessionAndDataAction } from "./notes-actions";
 export type ActiveWbListItem = {
   id: string;
@@ -63,7 +63,10 @@ function RosterRow({
   const handleEndAndReview = () => {
     setFinalizeError(null);
     startFinalizeTransition(async () => {
-      const result = await finalizeWhiteboardSessionFromBackend(session.id);
+      const result = await finalizeWhiteboardSessionWithOutbox(
+        session.id,
+        studentId
+      );
       if (!result.ok) {
         setFinalizeError(result.error);
         return;
