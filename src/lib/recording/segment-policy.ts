@@ -147,3 +147,21 @@ export function formatSessionTimeLeft(secondsLeft: number): string {
   const safe = Math.max(0, secondsLeft);
   return safe >= 90 ? `~${Math.ceil(safe / 60)} min left` : `~${safe}s left`;
 }
+
+/** Derived copy for MicControls time-alert hint — single source for interval numbers. */
+export function getTimeAlertHintParts(): {
+  minutesBefore: number;
+  billingHourHours: number;
+} {
+  return {
+    minutesBefore: SESSION_TIME_WARN_BEFORE_SECONDS / 60,
+    billingHourHours: SESSION_BILLING_HOUR_SECONDS / 3600,
+  };
+}
+
+/** Read-only hint shown beside the time-alert volume control. */
+export function formatTimeAlertHint(): string {
+  const { minutesBefore, billingHourHours } = getTimeAlertHintParts();
+  const hourWord = billingHourHours === 1 ? "hour" : "hours";
+  return `Alerts ${minutesBefore} minutes before each ${hourWord} of session time.`;
+}

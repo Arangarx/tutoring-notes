@@ -6,6 +6,7 @@ import {
   CHIME_VOL_MAX,
   CHIME_VOL_MIN,
 } from "@/lib/recording/storage";
+import { formatTimeAlertHint } from "@/lib/recording/segment-policy";
 
 /**
  * Phase 4 of the recorder refactor extracted this from AudioRecordInput.tsx so
@@ -278,7 +279,9 @@ export default function MicControls({
           Time alert sound
         </label>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 160px", minWidth: 0 }}>
-          <span style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}>Volume:</span>
+          <span style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}>
+            Time alert volume:
+          </span>
           <input
             type="range"
             className="mic-chime-slider"
@@ -293,6 +296,12 @@ export default function MicControls({
             style={{ ["--chime-pct" as string]: `${chimeVolPct}%` } as React.CSSProperties}
           />
         </div>
+        <p
+          style={{ margin: 0, fontSize: 11, color: "var(--muted)", lineHeight: 1.4, flex: "1 1 100%" }}
+          data-testid="recording-time-alert-hint"
+        >
+          {formatTimeAlertHint()}
+        </p>
       </div>
 
       {hint && (

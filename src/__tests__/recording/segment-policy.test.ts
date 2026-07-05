@@ -17,6 +17,8 @@ import {
   shouldHardStopSession,
   isSessionTimeWarning,
   formatSessionTimeLeft,
+  formatTimeAlertHint,
+  getTimeAlertHintParts,
   sessionChimeMilestoneIndex,
   effectiveSessionSafetyMaxSeconds,
   clampVadSilenceAccumulationMs,
@@ -162,6 +164,21 @@ describe("shouldHardStopSession", () => {
       writable: true,
       configurable: true,
     });
+  });
+});
+
+describe("getTimeAlertHintParts + formatTimeAlertHint", () => {
+  test("hint parts derive from SESSION_TIME_WARN_BEFORE_SECONDS and SESSION_BILLING_HOUR_SECONDS", () => {
+    expect(getTimeAlertHintParts()).toEqual({
+      minutesBefore: SESSION_TIME_WARN_BEFORE_SECONDS / 60,
+      billingHourHours: SESSION_BILLING_HOUR_SECONDS / 3600,
+    });
+  });
+
+  test("formatTimeAlertHint renders billing-aware copy", () => {
+    expect(formatTimeAlertHint()).toBe(
+      "Alerts 5 minutes before each hour of session time."
+    );
   });
 });
 

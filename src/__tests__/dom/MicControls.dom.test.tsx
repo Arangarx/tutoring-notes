@@ -94,6 +94,15 @@ describe("MicControls", () => {
     expect(screen.getByRole("slider", { name: /time alert volume/i })).toBeDisabled();
   });
 
+  test("time alert volume label and interval hint use segment-policy constants", () => {
+    render(<MicControls {...baseProps()} />);
+    expect(screen.getByText("Time alert volume:")).toBeInTheDocument();
+    expect(screen.queryByText("Volume:")).toBeNull();
+    const hint = screen.getByTestId("recording-time-alert-hint");
+    expect(hint).toHaveTextContent(/5 minutes/i);
+    expect(hint).toHaveTextContent(/each hour of session time/i);
+  });
+
   test("hint text renders below the controls when provided", () => {
     render(<MicControls {...baseProps({ hint: "Mic is busy elsewhere" })} />);
     expect(screen.getByText("Mic is busy elsewhere")).toBeInTheDocument();
