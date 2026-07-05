@@ -89,15 +89,16 @@ export function useReplayTimelineController(
   const [muted, setMuted] = useState(false);
   /**
    * Becomes true once the WebM duration scan resolves to a finite value (via
-   * `onDurationResolved`). Used by `WhiteboardReplayInFrame`'s entry effect to
-   * gate auto-play: we must not call `seek(0, {play:true})` while the 1e101
-   * hack-seek is still in-flight, otherwise Chrome parks currentTime at the
-   * measured end and playback snaps to "done" immediately.
+   * `onDurationResolved`), or synchronously when attachWebmDurationFix finds
+   * the element already has a finite duration (properly-muxed WebM / MP4).
+   * Used by `WhiteboardReplayInFrame`'s entry effect to gate auto-play: we
+   * must not call `seek(0, {play:true})` while the 1e101 hack-seek is still
+   * in-flight, otherwise Chrome parks currentTime at the measured end and
+   * playback snaps to "done" immediately.
    *
-   * Shortcut: if the stored duration is already known (`audioTimeline.totalMs >
-   * 0`) we treat it as settled immediately — the `startPlayWhenPositionReady`
-   * helper handles any residual race for that case.  This keeps jsdom tests
-   * working without mocking the WebM fix (they always supply durationSeconds).
+   * Stored `durationSeconds` (audioTimeline.totalMs > 0) is intentionally NOT
+   * a shortcut here — scrubberMax uses that value independently; entry auto-play
+   * must wait for the real element duration to settle (WS-W).
    */
   const [audioDurationResolvedByWebm, setAudioDurationResolvedByWebm] = useState(false);
 
@@ -223,12 +224,11 @@ export function useReplayTimelineController(
    * By waiting for this flag the entry effect only runs AFTER onDurationChange
    * has already reset currentTime=savedCurrentTime=0 and set needsFix=false.
    *
-   * Shortcut: stored duration > 0 means the scrubber already has a reasonable
-   * max and startPlayWhenPositionReady handles any residual race; that path
-   * does not need to wait for the WebM scan to complete first.
+   * Sole consumer: WhiteboardReplayInFrame entry effect. Scrubber max uses
+   * audioTimeline.totalMs / resolvedMaxMs independently — stored duration does
+   * NOT satisfy this gate (WS-W: totalMs>0 made this true before the scan).
    */
-  const audioDurationSettled =
-    !hasAudio || audioTimeline.totalMs > 0 || audioDurationResolvedByWebm;
+  const audioDurationSettled = !hasAudio || audioDurationResolvedByWebm;
 
   const activeSegment =
     effectiveSegments[activeSegmentIndex] ?? effectiveSegments[0] ?? null;

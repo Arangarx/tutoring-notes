@@ -1574,3 +1574,155 @@ describe("Entry auto-play — seek(0, play:true) survives in-flight WebM 1e101 s
     global.fetch = savedFetch;
   });
 });
+
+// ---------------------------------------------------------------------------
+// WS-W — stored durationSeconds must NOT bypass entry gate before WebM scan
+// ---------------------------------------------------------------------------
+describe("WS-W — stored durationSeconds does not bypass entry gate before WebM scan settles", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER (jest complement to recording-end-to-end.spec.ts test 2)
+   *
+   * WS-L persists durationSeconds on SessionRecording, so audioTimeline.totalMs > 0
+   * on first paint. The old audioDurationSettled shortcut treated that as settled
+   * before the WebM 1e101 scan completed — entry auto-play raced the scan and
+   * started from the measured end (~7–9 s on an ~8 s session).
+   *
+   * Fix: entry gate waits for onDurationResolved only; scrubber max still uses
+   * stored duration independently.
+   */
+  it("keeps audioDurationSettled false until WebM scan resolves despite stored durationSeconds", async () => {
+    const STORED_SEC = 8;
+    const MEASURED_END_SEC = 7.501;
+
+    let mockDuration: number = Infinity;
+    let currentTime = 0;
+    let isSeeking = false;
+    let isPaused = true;
+    let completeWebmScan: (() => void) | null = null;
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let srcAttr = "";
+
+    Object.defineProperty(audio, "duration", {
+      configurable: true,
+      get: () => mockDuration,
+    });
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      get: () => isSeeking,
+    });
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => {
+        if (v === 1e101) {
+          isSeeking = true;
+          currentTime = v;
+          completeWebmScan = () => {
+            currentTime = MEASURED_END_SEC;
+            isSeeking = false;
+            mockDuration = MEASURED_END_SEC;
+            audio.dispatchEvent(new Event("durationchange"));
+            audio.dispatchEvent(new Event("seeked"));
+          };
+          return;
+        }
+        currentTime = v;
+        isSeeking = false;
+      },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => {
+        srcAttr = v;
+      },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockImplementation(() => {
+      isPaused = false;
+      return Promise.resolve();
+    });
+    audio.pause = jest.fn(() => {
+      isPaused = true;
+    });
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => isPaused,
+    });
+
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm;codecs=opus",
+            durationSeconds: STORED_SEC,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    act(() => {
+      audio.dispatchEvent(new Event("loadedmetadata"));
+    });
+
+    // WS-W bug: gate opened immediately because totalMs > 0 (RED on unfixed).
+    expect(result.current.audioDurationSettled).toBe(false);
+    expect(completeWebmScan).not.toBeNull();
+    // Scrubber still benefits from stored duration while gate is closed.
+    expect(result.current.scrubberMax).toBeGreaterThan(1000);
+
+    // Entry effect must NOT fire until scan completes — do not seek yet.
+
+    act(() => {
+      completeWebmScan?.();
+    });
+
+    await waitFor(() => {
+      expect(result.current.audioDurationSettled).toBe(true);
+    });
+
+    // WebM fix reset currentTime to savedCurrentTime (=0) on durationchange.
+    expect(currentTime).toBeLessThan(1);
+
+    // Now entry auto-play may proceed from ~0.
+    act(() => {
+      result.current.seek(0, { paint: true, play: true });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(currentTime).toBeLessThan(1);
+    expect(result.current.globalMs).toBeLessThan(1000);
+    expect(result.current.playing).toBe(true);
+    expect(audio.play).toHaveBeenCalled();
+
+    unmount();
+    audio.remove();
+  });
+});

@@ -139,7 +139,9 @@ export function WhiteboardReplayInFrame({
     // Chrome parks currentTime at the measured end and play() fires from there,
     // snapping the scrubber to "done" instantly. audioDurationSettled becomes
     // true once onDurationResolved fires (scan complete, currentTime=0 already
-    // reset by onDurationChange) — or immediately when stored duration > 0.
+    // reset by onDurationChange) — or synchronously when the element already
+    // has a finite duration (no scan needed). Stored durationSeconds alone is
+    // NOT sufficient (WS-W).
     if (hasAudio && !audioDurationSettled) return;
     const needsCanvas = log.events.length > 0 || hasAudio;
     if (!needsCanvas) {
