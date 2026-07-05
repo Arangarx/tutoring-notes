@@ -133,6 +133,8 @@ These run **alongside** the lettered WS-* items above; a fresh orchestrator must
 
 ## TEST COVERAGE INVENTORY — Part-2 build target ("test absolutely everything mechanical")
 
+> **▶ MASTER EXECUTION PLAN: [`part2-test-buildout-plan.md`](part2-test-buildout-plan.md)** (WS-V consolidation `4f03dc2`, [gap-consolidation](34c4d972-fc28-4633-ad95-5e1f55153db4)) — 24 prioritized file-disjoint batches (P1 data-integrity/auth/consent first), behavior/contract oracles only, with a **dispatch-safety correction** (serialize shared-worktree code-writers — no naive parallel fan-out). The inventory below is the smokebook-item floor that plan builds on. **IN EXECUTION (serial):** P1-J1 (share-access API contracts) dispatched.
+
 **SCOPE (Andrew 2026-07-04, expanded):** NOT just the flagged items and NOT just this smokebook — **EVERY mechanical action site-wide** gets an automated test. Anything that could appear in a final comprehensive smoke and is mechanical (any click, state transition, data-flow, DB write/read, API contract, gate/guard, consent projection, ownership assertion, persistence path) → automated. "Half a day is fine as long as it's done correctly." Only genuinely-human things (real A/V, iOS, thermal, subjective audio quality, visual/copy/theme) stay in the slimmed smokebook.
 
 **WHY THIS MATTERS — dedup-audit safety net (Andrew 2026-07-04):** a **FULL COMPREHENSIVE component-deduplication audit of every component on the site** is coming **before release**. These tests are the **regression net that makes that refactor safe**. Therefore:
