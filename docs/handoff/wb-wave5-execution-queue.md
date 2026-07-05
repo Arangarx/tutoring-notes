@@ -54,6 +54,7 @@ All items below are **planned, not started** (unless noted). Priority: P1 = bloc
 
 - **WS-K — Live reduce, notes ready ≤2–3s at end** · P1 · plan: `~/.cursor/plans/live_reduce_notes_ready_at_end_ded9005b.plan.md`
   Root cause: reduce is end-gated (`notes-worker.ts` `endedAt` guard) → notes appear tens of seconds after end. HARD INVARIANT (Andrew): map AND reduce run LIVE incrementally; End = fast finalize, zero LLM if draft current; notes within 2–3s. (Live *display* stays deferred — different feature.) Also fix shimmer (undefined CSS vars) + "Waiting for transcript…" copy. Origin: Andrew smoke.
+  **DESIGN DONE (2026-07-05, read-only Sonnet pass):** two compounding causes — the `endedAt` reduce-gate (`notes-worker.ts:245`) AND a 5s poll loop (`notes-enqueue.ts:67`); BOTH must be addressed. Plan: (1) lift the `endedAt` guard; (2) add `lastReducedChunkCount` watermark to `TutorNote` (ADDITIVE Prisma migration, safe default — local/test DB only, prod apply is a HARD STOP); (3) `enqueueLiveReduce()` after each map with debounce (default **every 5 chunks or 2 min** — tunable, see FOR-ANDREW-B); (4) End fast-path: watermark-current → skip LLM, DRAFT→READY (<500ms); tail chunk → one final reduce, poll shortened **5s→1s**; (5) shimmer = 4-line CSS fix in `tutor-notes-shimmer.css` (`--surface-muted`/`--surface-hover` undefined → `transparent`; sub `var(--surface-2)`/`var(--surface-3)`); (6) copy `TutorNotesSection.tsx:196` → **"Preparing your notes..."** (Andrew already chose this — RESOLVED, not a question). Content-identity invariant preserved: default to **FULL reduce** each pass (same content as today), delta = deferred cost optimization (FOR-ANDREW-D). Fragile boundary CLEAN (end-session/outbox/lifecycle untouched) UNLESS we add a recorder pre-flush for the slow-network tail (FOR-ANDREW-A — that WOULD touch `lifecycle-machine.ts`, fragile → not doing it without Andrew). **Implementation queued behind WS-X commit** (shared test-DB/stack + clean-tree-for-review).
 
 - **WS-M — Student-side mic boost** · P2 · plan: **none yet** (decided 2026-07-04: student-side, tutor control DEFERRED).
   Student mic today is raw getUserMedia, no audio graph. Build student publish-only graph (mic→gain→publish) + reuse `MicControls` "Browser boost" slider in student shell w/ own gain state + persistence. Boost sits pre-publish → affects live + recording. Tutor-side incoming boost explicitly deferred. Origin: Andrew ("student needs the browser boost the tutor has").
@@ -178,3 +179,14 @@ Map of every smokebook item → coverage action. **BUILD** = write/strengthen a 
 ## "Known issues & roadmap" page (Andrew request)
 
 Andrew wants a Sarah/pilot-facing "Known issues and roadmap" page. Not yet planned — track here so it isn't lost. Populate from this queue's P1/P2 items once they're finalized.
+
+## FOR ANDREW — overnight batch (answer when back; NOT blocking — proceeding with safe defaults + flagged)
+
+Accumulated during the 2026-07-05 overnight autonomous run. Each is proceeding with the stated default; confirm/override when back.
+
+- **WS-K-A (tail latency vs fragile pre-flush):** design achieves ≤2–3s in typical cases; the tail case (final segment still transcribing at End) on a SLOW network may occasionally breach by ~2s (≈5s) UNLESS we add a recorder pre-flush at End — which would touch `lifecycle-machine.ts` (FRAGILE). **Default: proceeding WITHOUT the pre-flush** (invariant met in typical cases; tail+slow-net the only breach). Confirm acceptable, or authorize the fragile pre-flush as a follow-up.
+- **WS-K-B (debounce knob):** in-session incremental reduce debounce **default = every 5 chunks or 2 min** (cost vs latency). Confirm or tune.
+- **WS-K-D (delta vs full reduce):** using **FULL reduce** each incremental pass (preserves "notes content unchanged vs today" invariant; simpler/safer). Delta reduce = cheaper but more complex → deferred optimization. Confirm.
+- **WS-P (auto-reload during live session):** deferring auto-reload DURING a live recording session (freshness applied at app entry / session end only; mid-session reload would interrupt recording). Building the non-controversial parts (version poll, ChunkLoadError handler, SHA footer); **Skew-Protection dashboard toggle is YOUR action** (hard stop). Confirm the defer-during-live-session posture.
+
+(WS-K-C copy RESOLVED — "Preparing your notes...".)
