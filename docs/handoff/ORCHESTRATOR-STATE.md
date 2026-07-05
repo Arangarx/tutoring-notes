@@ -24,7 +24,14 @@
 >
 > **Merge-gate owed before master:** single `npm run test:wb-sync` relay on integrated tip (branch cumulatively touched `src/components/whiteboard/` + apply-adjacent) · `npx next build` (build-surface: `next.config.ts`) · WS-M two-device real-hardware audio smoke · WS-A F-1 outbox attempt-cap (~10-line, own 5-axis).
 >
-> **NEXT (overnight-doable, non-fragile-first):** Sarah-facing "Known issues & roadmap" page (populate from queue shipped-vs-open split) · WS-U-FRAGILE 1.3/2.4/2.5 (FSM-presentation: in-person waiting copy, hardcoded LIVE badge, hidden sync pill — Sonnet design-first + 5-axis) · PART 2 site-wide behavior-test buildout (WS-V audit). **FOR-ANDREW batch (defaults chosen, confirm when back): WS-J J-1..J-4, WS-K/G/P/N4 items — all in the queue's FOR-ANDREW section.** A heavy `ORCHESTRATOR-STATE.md` restructure is now DUE (milestone) — dispatch Composer from the template at next natural break.
+> **PROGRESSED FURTHER THIS OVERNIGHT (2026-07-05, tip `f944bc6`):**
+> - **Known-issues DRAFT** authored (`6815c4f`, `known-issues-and-roadmap-DRAFT.md`) — FOR ANDREW: placement (in-app vs doc vs email) + tone.
+> - **WS-U-FRAGILE 2.4 (badge→pillLabel) + 2.5 (visible sync pill)** SHIPPED (`65f6a93`, additive presentation-only). 1.3 in-person copy PARKED (FOR-ANDREW-U13); 1.2 dead-Start PARKED (hardest).
+> - **PART 2 launched:** master plan `part2-test-buildout-plan.md` (24 batches, WS-V consolidation). **Pure-jest/DOM tranche COMPLETE + committed:** P1-J1 share-access, J2 wb-route contracts, J3 roster CRUD+ownership, J4 review-payload (WS-S), J5 replay-mixdown+concat-SSRF, J6 AH-throttle-durable, J7 hard-stop, J8 notes-shimmer; P2-J2 note-snap, P2-J4 seen-tracker, P2-J3 consent-gate DOM; RW-B1/B3/B4. **`jest --workers=1` GREEN (283/3062); tsc clean.** Caught+fixed 3 stale DOM reds (WS-M caret / WS-W auto-play gate; `1001016`) — NOT regressions.
+> - **⚠️ jest parallel-DB flake** (test-isolation debt widened by new integration tests) — green at `--workers=1`; needs a dedicated isolation pass; gate jest must run `--workers=1` meanwhile (queue § (d)).
+>
+> **NEXT (best ATTENDED / fresh chat — relay+Docker-dependent, flaky, close-monitoring):** PART-2 SERIAL-ONLY groups — relay `wb-regression` P1-WB-1…10 (incl. P1-WB-10 IN_PERSON-audio RED-ONLY, gated on the CONFIRMED P1 above) + identity-e2e P1-ID-1…4/P2-ID-* + RW-B2 + remaining P2/P3; the jest-isolation pass; then PART 3 slim smokebook. **FOR-ANDREW batch (defaults chosen, confirm when back): WS-J J-1..J-4, WS-K/G/P/N4, WS-U13, known-issues placement, in-person-audio product call — all in the queue's FOR-ANDREW section.**
+> **This is a clean CHAT-SWAP milestone.** A heavy `ORCHESTRATOR-STATE.md` restructure is DUE (dispatch Composer from the template); the plan doc + queue are fully current so a fresh chat can pick up cold.
 
 ### 🟢 CURRENT — post-park smoke-driven bug-fix + test-everything wave (2026-07-04 PM)
 
