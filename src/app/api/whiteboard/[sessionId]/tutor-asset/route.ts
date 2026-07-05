@@ -1,5 +1,11 @@
 import { get } from "@vercel/blob";
 import { NextResponse } from "next/server";
+import {
+  harnessStoreGet,
+  isBlobHarnessActive,
+  isHarnessBlobUrl,
+  pathnameFromHarnessUrl,
+} from "@/lib/blob-harness";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { env } from "@/lib/env";
@@ -17,7 +23,7 @@ export async function GET(
   ctx: { params: Promise<{ sessionId: string }> }
 ): Promise<Response> {
   const { sessionId } = await ctx.params;
-  if (!env.BLOB_READ_WRITE_TOKEN) {
+  if (!env.BLOB_READ_WRITE_TOKEN && !isBlobHarnessActive()) {
     return new NextResponse("Blob storage is not configured.", { status: 503 });
   }
 
@@ -47,6 +53,22 @@ export async function GET(
     })
   ) {
     return new NextResponse("Not found.", { status: 404 });
+  }
+
+  if (isBlobHarnessActive() && isHarnessBlobUrl(publicUrl)) {
+    const key = pathnameFromHarnessUrl(publicUrl);
+    const stored = key ? harnessStoreGet(key) : null;
+    if (!stored) {
+      return new NextResponse("Not found.", { status: 404 });
+    }
+    const ct = stored.contentType ?? "application/octet-stream";
+    return new NextResponse(stored.bytes, {
+      status: 200,
+      headers: {
+        "Content-Type": ct,
+        "Cache-Control": "private, max-age=300",
+      },
+    });
   }
 
   const result = await get(publicUrl, { access: "private" });

@@ -10,4 +10,8 @@ const {
 export default async function globalSetup(): Promise<void> {
   applyWbRegressionLocalDatabaseEnv();
   assertLocalDatabaseUrlForHarness();
+  // Test-runner skip guard for hermetic blob specs (webServer sets server-side vars).
+  if (!process.env.BLOB_HARNESS_LOCAL) {
+    process.env.BLOB_HARNESS_LOCAL = "1";
+  }
 }

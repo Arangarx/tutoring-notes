@@ -4,6 +4,11 @@ import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
+import {
+  harnessServerPut,
+  isAllowedBlobUrl,
+  isBlobHarnessActive,
+} from "@/lib/blob-harness";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
@@ -162,8 +167,19 @@ export async function createWhiteboardSession(
     // by prefix. Random suffix to avoid collisions if a tutor starts
     // two sessions in the same millisecond (impossible in practice
     // but cheap insurance).
-    const result = await put(
-      `whiteboard-sessions/${scope.adminId}/${studentId}/${Date.now()}-events.json`,
+    const eventsPath = `whiteboard-sessions/${scope.adminId}/${studentId}/${Date.now()}-events.json`;
+    const result = isBlobHarnessActive()
+      ? await harnessServerPut(
+          eventsPath,
+          emptyEventsJson(startedAtIso),
+          {
+            contentType: "application/json",
+            addRandomSuffix: true,
+          },
+          harnessRequestOrigin()
+        )
+      : await put(
+      eventsPath,
       emptyEventsJson(startedAtIso),
       {
         // The Vercel Blob store backing this project is configured for
@@ -605,8 +621,15 @@ export type EndSessionSegment = {
  * Vercel Blob hostname guard — same shape `registerWhiteboardSessionAudioSegmentAction`
  * uses today (`blobUrl.includes("blob.vercel-storage.com")`). Folded
  * into a regex so the validator below is one branch per segment.
+ * Harness URLs accepted only when `isBlobHarnessActive()`.
  */
-const ALLOWED_BLOB_HOST_RE = /(^|\/\/)[\w.-]*blob\.vercel-storage\.com\//i;
+function blobUrlAllowedForEndSession(blobUrl: string): boolean {
+  return isAllowedBlobUrl(blobUrl);
+}
+
+function harnessRequestOrigin(): string {
+  return process.env.NEXTAUTH_URL ?? "http://localhost:3100";
+}
 
 function validateEndSessionSegments(
   segments: ReadonlyArray<EndSessionSegment>
@@ -616,7 +639,7 @@ function validateEndSessionSegments(
     if (typeof s.blobUrl !== "string" || !s.blobUrl) {
       return { ok: false, error: `Segment ${i} is missing blobUrl.` };
     }
-    if (!/^https?:\/\//i.test(s.blobUrl) || !ALLOWED_BLOB_HOST_RE.test(s.blobUrl)) {
+    if (!blobUrlAllowedForEndSession(s.blobUrl)) {
       return {
         ok: false,
         error: `Segment ${i} blobUrl is not in the whiteboard Blob namespace.`,
@@ -760,15 +783,19 @@ export async function finalizeWhiteboardSessionFromBackend(
   if (best.url === "__assembled__" && assembledScore > 0) {
     try {
       const eventsBody = JSON.stringify(assembled.log);
-      const putResult = await put(
-        `whiteboard-sessions/${session.adminUserId}/${session.studentId}/${Date.now()}-events.json`,
-        eventsBody,
-        {
+      const assembledPath = `whiteboard-sessions/${session.adminUserId}/${session.studentId}/${Date.now()}-events.json`;
+      const putResult = isBlobHarnessActive()
+        ? await harnessServerPut(
+            assembledPath,
+            eventsBody,
+            { contentType: "application/json", addRandomSuffix: true },
+            harnessRequestOrigin()
+          )
+        : await put(assembledPath, eventsBody, {
           access: "private",
           contentType: "application/json",
           addRandomSuffix: true,
-        }
-      );
+        });
       finalEventsBlobUrl = putResult.url;
     } catch (err) {
       console.error(
@@ -1639,7 +1666,7 @@ export async function registerWhiteboardSessionAudioSegmentAction(
       };
     }
 
-    if (!segment.blobUrl.includes("blob.vercel-storage.com")) {
+    if (!blobUrlAllowedForEndSession(segment.blobUrl)) {
       return { ok: false, error: "Invalid audio URL.", debugId: rid };
     }
 
@@ -1879,8 +1906,7 @@ export async function enqueueChunkTranscriptionAction(
   // 3. Blob host validation — reuse the same regex used by endWhiteboardSession.
   if (
     typeof chunkBlobUrl !== "string" ||
-    !/^https?:\/\//i.test(chunkBlobUrl) ||
-    !ALLOWED_BLOB_HOST_RE.test(chunkBlobUrl)
+    !blobUrlAllowedForEndSession(chunkBlobUrl)
   ) {
     console.warn(
       `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_rejected reason=invalid_blob_host chunkBlobUrl=${chunkBlobUrl}`

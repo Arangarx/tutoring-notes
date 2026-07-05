@@ -1,5 +1,8 @@
 import { test, expect } from "./fixtures";
-import { readLocalEnv } from "../utils/read-dotenv";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import {
   openTutorAndStudent,
   seedWbLiveSyncSession,
@@ -127,11 +130,7 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
   }) => {
     test.setTimeout(300_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for VAD durability integration."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await injectVadOverrides(page);
@@ -166,11 +165,7 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
   test("red-before: VAD cut disabled → recording count stays below 2", async ({ page }) => {
     test.setTimeout(180_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for VAD durability integration."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await page.addInitScript(() => {
@@ -206,11 +201,7 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
   }) => {
     test.setTimeout(180_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for VAD durability integration."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await page.addInitScript(() => {
@@ -248,11 +239,7 @@ test.describe("wb per-speaker transcription + replay-mix (WS-A A3+A4)", () => {
   }) => {
     test.setTimeout(420_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for per-speaker durability integration."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const session = await seedWbLiveSyncSession();
     const peers = await openTutorAndStudent(browser, session);

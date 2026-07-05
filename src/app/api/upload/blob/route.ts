@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import {
+  handleHarnessBlobGenerateClientToken,
+  isBlobHarnessActive,
+} from "@/lib/blob-harness";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import {
@@ -126,11 +130,10 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  try {
-    const jsonResponse = await handleUpload({
-      request,
-      body,
-      onBeforeGenerateToken: async (pathname, clientPayloadRaw) => {
+  const runOnBeforeGenerateToken = async (
+    pathname: string,
+    clientPayloadRaw: string | null
+  ) => {
         const payload = parseClientPayload(clientPayloadRaw);
         const kind = payload?.kind;
         if (!kind || !(kind in POLICY)) {
@@ -257,7 +260,26 @@ export async function POST(request: Request): Promise<Response> {
             rid,
           }),
         };
-      },
+  };
+
+  try {
+    if (
+      isBlobHarnessActive() &&
+      body.type === "blob.generate-client-token"
+    ) {
+      const harnessResponse = await handleHarnessBlobGenerateClientToken(
+        request,
+        body,
+        (pathname, clientPayloadRaw, multipart) =>
+          runOnBeforeGenerateToken(pathname, clientPayloadRaw)
+      );
+      return NextResponse.json(harnessResponse);
+    }
+
+    const jsonResponse = await handleUpload({
+      request,
+      body,
+      onBeforeGenerateToken: runOnBeforeGenerateToken,
     });
 
     return NextResponse.json(jsonResponse);

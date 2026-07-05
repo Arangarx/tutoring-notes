@@ -3,6 +3,8 @@
  * Prevents a joiner from proxying other sessions' files via a stolen token.
  */
 
+import { pathnameFromHarnessUrl } from "@/lib/blob-harness";
+
 export type ParsedInScope = {
   studentId: string;
   whiteboardSessionId: string;
@@ -19,8 +21,11 @@ export function parseWhiteboardSessionIdsFromPublicUrl(
   publicUrl: string
 ): ParsedInScope | null {
   try {
-    const u = new URL(publicUrl);
-    const m = PATH_RE.exec(u.pathname);
+    const harnessPath = pathnameFromHarnessUrl(publicUrl);
+    const pathForMatch = harnessPath
+      ? `/${harnessPath.replace(/^\/+/, "")}`
+      : new URL(publicUrl).pathname;
+    const m = PATH_RE.exec(pathForMatch);
     if (!m) return null;
     return { studentId: m[1], whiteboardSessionId: m[2] };
   } catch {

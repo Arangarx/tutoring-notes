@@ -11,7 +11,10 @@
  */
 
 import { test, expect } from "./fixtures";
-import { readLocalEnv } from "../utils/read-dotenv";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import {
   seedWbLiveSyncSession,
   waitForWbE2eBridge,
@@ -215,11 +218,7 @@ test.describe("WS-L replay scrub seek", { tag: [TAG.WB_RECORDING] }, () => {
   }) => {
     test.setTimeout(300_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for integration recording."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await recordEndEnterReplay(page, studentId, whiteboardSessionId);
@@ -263,11 +262,7 @@ test.describe("WS-L replay scrub seek", { tag: [TAG.WB_RECORDING] }, () => {
   }) => {
     test.setTimeout(300_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for integration recording."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await recordEndEnterReplay(page, studentId, whiteboardSessionId, {

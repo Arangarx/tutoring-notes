@@ -3,6 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { readLocalEnv } from "../utils/read-dotenv";
 import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
+import {
   clickBoardPageTab,
   drawTestStrokeOnRole,
   ensureStudentFollowsTutor,
@@ -499,11 +503,7 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
     browser,
   }) => {
     test.setTimeout(180_000);
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for image upload in this harness."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const pngPath = path.join(__dirname, "../fixtures/tiny-red-square.png");
     const session = await seedWbLiveSyncSession();
