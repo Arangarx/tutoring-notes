@@ -822,6 +822,33 @@ export function WhiteboardWorkspaceClient({
    * from writing old-page elements into the newly-active same-named page.
    */
   const boardGenerationRef = useRef(0);
+  /**
+   * BUG-3 / WS-X content-identity guard.
+   *
+   * Maps pageId → Set of anchor element IDs placed by the most recent
+   * programmatic `updateScene` in `selectTutorPage`. In
+   * `handleExcalidrawChange`, any incoming onChange that lacks ALL anchor
+   * IDs is treated as a stale foreign scene (from a different board that
+   * fired its debounced onChange after the guard released) and dropped.
+   * `applyRemoteToCanvas` also consults this map: during the post-switch
+   * fingerprint window, merge reads `pageDataRef[targetId]` (clean bucket)
+   * instead of the transitional live canvas. Cleared on the first confirmed
+   * legitimate onChange. Not set for blank-page switches (`next.length === 0`).
+   */
+  const pageSceneSetFingerprintRef = useRef<Map<string, Set<string>>>(new Map());
+  /**
+   * TEST SEAM — BUG-3 applyRemote bypass injection.
+   * Holds the current `applyRemoteToCanvas` closure for
+   * `window.__WBX_INJECT_APPLY_REMOTE__`. Only written when
+   * `NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1"`.
+   */
+  const e2eApplyRemoteInvokerRef = useRef<
+    | ((
+        elements: ReadonlyArray<ExcalidrawLikeElement>,
+        details?: Pick<WhiteboardWireRemoteDetails, "page" | "scenePageId">
+      ) => Promise<RemoteSceneIngestLogHint | void>)
+    | null
+  >(null);
   /** In-memory per-tab scene (Excalidraw only shows one at a time). */
   const pageDataRef = useRef<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>(
     Object.create(null)
@@ -1014,7 +1041,8 @@ export function WhiteboardWorkspaceClient({
       //     the `onChange` → `getElementsIncludingDeleted` path).
       const onTargetReadTime =
         activePageIdRef.current === targetId &&
-        pageSwitchProgrammaticRef.current === 0;
+        pageSwitchProgrammaticRef.current === 0 &&
+        !pageSceneSetFingerprintRef.current.has(targetId);
       const localForMerge: ReadonlyArray<ExcalidrawLikeElement> =
         onTargetReadTime
           ? (((api.getSceneElementsIncludingDeleted?.() ?? api.getSceneElements()) as ReadonlyArray<ExcalidrawLikeElement>))
@@ -3103,7 +3131,57 @@ export function WhiteboardWorkspaceClient({
         api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>
       );
     });
+    // BUG-3 / WS-X — deterministic applyRemote bypass injection seam.
+    // Playwright calls `window.__WBX_INJECT_APPLY_REMOTE__(pageId, elements)`
+    // during the post-page-switch fingerprint window to reproduce the
+    // transitional-live-canvas merge leak without relying on wire timing.
+    const win = window as Window & {
+      __WBX_INJECT_APPLY_REMOTE__?: (
+        pageId: string,
+        els: unknown
+      ) => Promise<void>;
+      __WBX_FORCE_LIVE_SCENE__?: (els: unknown) => void;
+      __WBX_FINGERPRINT_HAS__?: (pageId: string) => boolean;
+      __WBX_GET_ACTIVE_PAGE_ID__?: () => string;
+    };
+    win.__WBX_INJECT_APPLY_REMOTE__ = async (pageId, elsRaw) => {
+      const invoke = e2eApplyRemoteInvokerRef.current;
+      if (!invoke) return;
+      await invoke(elsRaw as ReadonlyArray<ExcalidrawLikeElement>, {
+        scenePageId: pageId,
+      });
+    };
+    win.__WBX_FORCE_LIVE_SCENE__ = (elsRaw) => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      (api as typeof api & {
+        updateScene: (s: {
+          elements: ReadonlyArray<unknown>;
+          captureUpdate?: string;
+        }) => void;
+      }).updateScene({
+        elements: elsRaw as ReadonlyArray<unknown>,
+        captureUpdate: "NEVER",
+      });
+    };
+    win.__WBX_FINGERPRINT_HAS__ = (pageId) =>
+      pageSceneSetFingerprintRef.current.has(pageId);
+    win.__WBX_GET_ACTIVE_PAGE_ID__ = () => activePageIdRef.current;
+    return () => {
+      delete win.__WBX_INJECT_APPLY_REMOTE__;
+      delete win.__WBX_FORCE_LIVE_SCENE__;
+      delete win.__WBX_FINGERPRINT_HAS__;
+      delete win.__WBX_GET_ACTIVE_PAGE_ID__;
+    };
   }, [role, scheduleDocumentBroadcast, recorderOnCanvasChange, studentOnCanvasChange]);
+
+  // BUG-3 / WS-X test seam: keep e2eApplyRemoteInvokerRef current so the
+  // window.__WBX_INJECT_APPLY_REMOTE__ hook always calls the latest
+  // applyRemoteToCanvas closure (useCallback deps change over time).
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1" || role !== "tutor") return;
+    e2eApplyRemoteInvokerRef.current = applyRemoteToCanvas;
+  }, [applyRemoteToCanvas, role]);
 
   // Phase 5 task 8 — anchor replay's camera at t≈0 by emitting one
   // viewport event when recording becomes active. Without this, replay's
@@ -3277,6 +3355,21 @@ export function WhiteboardWorkspaceClient({
           aDual.updateScene({ elements: next as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
           console.info(
             `[pvs] pvs=${nextId} action=restore source=page-switch viewState=absent`
+          );
+        }
+        // BUG-3 / WS-X: record anchor element IDs for the content-identity guard.
+        // `handleExcalidrawChange` uses this to reject stale foreign onChanges
+        // (carrying elements from the page we just LEFT) that fire after the
+        // pageSwitchProgrammaticRef guard drops to 0. Blank-page switches are
+        // excluded (next.length === 0 → no anchors to validate against).
+        if (next.length > 0) {
+          pageSceneSetFingerprintRef.current.set(
+            nextId,
+            new Set(
+              (next as ReadonlyArray<{ id?: string }>)
+                .map((e) => e.id ?? "")
+                .filter(Boolean)
+            )
           );
         }
         // Scope undo/redo history to the current board. Excalidraw's history
@@ -4541,6 +4634,31 @@ export function WhiteboardWorkspaceClient({
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
       const pageId = activePageIdRef.current;
+      // BUG-3 / WS-X content-identity guard — reject stale foreign onChanges
+      // that carry elements from the page we just LEFT (debounced onChange
+      // firing after pageSwitchProgrammaticRef drops to 0).
+      const fingerprint = pageSceneSetFingerprintRef.current.get(pageId);
+      if (fingerprint && fingerprint.size > 0) {
+        const incomingIds = new Set(
+          (els as ReadonlyArray<{ id?: string }>)
+            .map((e) => e.id ?? "")
+            .filter(Boolean)
+        );
+        const allAnchorsPresent = Array.from(fingerprint).every((anchorId) =>
+          incomingIds.has(anchorId)
+        );
+        if (!allAnchorsPresent) {
+          const anchorIds = Array.from(fingerprint);
+          console.info(
+            `[wba] wbsid=${whiteboardSessionId} action=stale_foreign_scene_rejected pageId=${pageId} anchors=${anchorIds.join(",")}`
+          );
+          return;
+        }
+        // First confirmed legitimate onChange — clear the fingerprint so
+        // subsequent edits (including deletes of anchor elements) are
+        // never gated.
+        pageSceneSetFingerprintRef.current.delete(pageId);
+      }
       // PR-01 Option A: store raw elements ref — no per-move clone.
       // preserveImageAssetUrlsOnSceneWrite now runs only at wire/checkpoint build time.
       pageDataRef.current[pageId] = els as ExcalidrawLikeElement[];
