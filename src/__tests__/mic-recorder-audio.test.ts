@@ -9,10 +9,10 @@
  *  - calibrateMicLevel: noise-floor subtraction + bar-range coverage (8d).
  */
 
-import { createMicAudioGraph, calibrateMicLevel, METER_NOISE_FLOOR, METER_SCALE } from "@/lib/mic-recorder-audio";
+import { createMicAudioGraph, createMicPublishGraph, calibrateMicLevel, METER_NOISE_FLOOR, METER_SCALE } from "@/lib/mic-recorder-audio";
 
 type GainParam = { value: number };
-type FakeNode = { connect: jest.Mock };
+type FakeNode = { connect: jest.Mock; disconnect?: jest.Mock };
 
 function fakeMicStream() {
   const track = { stop: jest.fn() };
@@ -637,5 +637,151 @@ describe("calibrateMicLevel — noise-floor calibration (8d)", () => {
     expect(Math.max(0, 0.075 - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.55);
     expect(Math.max(0, 0.04  - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.25);
     expect(Math.max(0, 0.015 - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.05);
+  });
+});
+
+describe("createMicPublishGraph", () => {
+  const originalAudioContext = (globalThis as { AudioContext?: unknown }).AudioContext;
+
+  afterEach(() => {
+    if (originalAudioContext === undefined) {
+      delete (globalThis as { AudioContext?: unknown }).AudioContext;
+    } else {
+      (globalThis as { AudioContext?: unknown }).AudioContext = originalAudioContext;
+    }
+  });
+
+  test("returns null when AudioContext is missing", async () => {
+    delete (globalThis as { AudioContext?: unknown }).AudioContext;
+    const stream = fakeMicStream();
+    const graph = await createMicPublishGraph(stream as unknown as MediaStream, 1);
+    expect(graph).toBeNull();
+  });
+
+  test("builds publish-only graph: setGain, dispose, no recording destination", async () => {
+    const gainParam: GainParam = { value: 0 };
+    const sourceNode: FakeNode = { connect: jest.fn(), disconnect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn((arr: Float32Array) => {
+        for (let i = 0; i < arr.length; i++) arr[i] = 0.08;
+      }),
+    };
+    const publishStream = { id: "publish-only" };
+    const close = jest.fn().mockResolvedValue(undefined);
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => sourceNode),
+      createGain: jest.fn(() => gainNode),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => ({ stream: publishStream })),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close,
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicPublishGraph(
+      stream as unknown as MediaStream,
+      1.25
+    );
+
+    expect(graph).not.toBeNull();
+    expect(ctx.createMediaStreamDestination).toHaveBeenCalledTimes(1);
+    expect(graph!.publishStream).toBe(publishStream);
+    expect(gainParam.value).toBe(1.25);
+    expect(graph!.getLevel()).toBeGreaterThan(0);
+
+    graph!.setGain(2);
+    expect(gainParam.value).toBe(2);
+
+    graph!.dispose();
+    expect(stream.track.stop).toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
+  });
+
+  test("swapLocalMicSource rewires without recreating publish destination", async () => {
+    const gainParam: GainParam = { value: 1 };
+    const firstSource = { connect: jest.fn(), disconnect: jest.fn() };
+    const secondSource = { connect: jest.fn(), disconnect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const publishStream = { id: "stable-publish" };
+    let sourceCall = 0;
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => {
+        sourceCall += 1;
+        return sourceCall === 1 ? firstSource : secondSource;
+      }),
+      createGain: jest.fn(() => gainNode),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => ({ stream: publishStream })),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicPublishGraph(stream as unknown as MediaStream, 1);
+    const nextStream = fakeMicStream();
+    expect(graph!.swapLocalMicSource(nextStream as unknown as MediaStream)).toBe(
+      true
+    );
+
+    expect(firstSource.disconnect).toHaveBeenCalled();
+    expect(secondSource.connect).toHaveBeenCalledWith(gainNode);
+    expect(graph!.publishStream).toBe(publishStream);
+    graph!.dispose();
+  });
+
+  test("swapLocalMicSource returns false and recovers prior source when createMediaStreamSource throws", async () => {
+    const gainParam: GainParam = { value: 1 };
+    const firstSource = { connect: jest.fn(), disconnect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const publishStream = { id: "stable-publish" };
+    let sourceCall = 0;
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => {
+        sourceCall += 1;
+        if (sourceCall === 1) return firstSource;
+        throw new Error("create-source-failed");
+      }),
+      createGain: jest.fn(() => gainNode),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => ({ stream: publishStream })),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicPublishGraph(stream as unknown as MediaStream, 1);
+    const nextStream = fakeMicStream();
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(graph!.swapLocalMicSource(nextStream as unknown as MediaStream)).toBe(
+      false
+    );
+    expect(firstSource.disconnect).toHaveBeenCalled();
+    expect(firstSource.connect).toHaveBeenCalledWith(gainNode);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "[avx] avx=? event=mic_device_swap result=failed reason=create-source-failed recovered=true"
+      ),
+      "create-source-failed"
+    );
+
+    warnSpy.mockRestore();
+    graph!.dispose();
   });
 });

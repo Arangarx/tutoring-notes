@@ -2263,10 +2263,22 @@ test.describe(
               .getByTestId("wb-waiting-overlay-device-pickers")
               .getByTestId("audio-device-select")
           ).toBeVisible({ timeout: 5_000 });
-          // Student dropdown absent — no gain/chime in overlay.
+          // Student overlay: gain slider only (no chime; device picker on-page).
           await expect(
-            studentPage.getByTestId("wb-waiting-overlay").getByTestId("mic-gain-slider")
-          ).toHaveCount(0);
+            studentPage.getByTestId("wb-waiting-overlay").getByTestId("wb-topbar-mic-settings")
+          ).toBeVisible({ timeout: 10_000 });
+          await studentPage
+            .getByTestId("wb-waiting-overlay")
+            .getByTestId("wb-topbar-mic-settings")
+            .click();
+          const studentPopover = studentPage
+            .getByTestId("wb-waiting-overlay")
+            .locator(".mynk-wb-mic-popover");
+          await expect(studentPopover.getByTestId("mic-gain-slider")).toBeVisible({
+            timeout: 5_000,
+          });
+          await expect(studentPopover.getByTestId("recording-chime-enabled")).toHaveCount(0);
+          await expect(studentPopover.getByTestId("mic-device-select")).toHaveCount(0);
 
           await tutorCtx.close();
         } finally {

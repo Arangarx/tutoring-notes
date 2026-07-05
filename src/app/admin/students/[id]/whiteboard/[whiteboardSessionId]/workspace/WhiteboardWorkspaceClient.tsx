@@ -5889,6 +5889,26 @@ export function WhiteboardWorkspaceClient({
           hideDevicePicker: true as const,
         }
       : undefined;
+  const overlayStudentMicControls =
+    role === "student"
+      ? {
+          meterBarRef: { current: null },
+          devices: liveAv.audioDevices ?? [],
+          selectedPickerSlot: liveAv.pickedMicSlot,
+          onPickMicSlot: () => {},
+          gainLinear: liveAv.gainLinear,
+          onGainChange: liveAv.setGainLinear,
+          isLive: liveAv.localAudioStream !== null,
+          lockDevice: false,
+          chimeEnabled: false,
+          onChimeEnabledChange: () => {},
+          chimeVolume: 0.75,
+          onChimeVolumeChange: () => {},
+          hideLevelMeter: true as const,
+          hideDevicePicker: true as const,
+          hideChime: true as const,
+        }
+      : undefined;
   const overlayMicNode = (
     <WbTopBarMicControlLive
       isMicMuted={liveAv.isMicMuted}
@@ -5899,9 +5919,13 @@ export function WhiteboardWorkspaceClient({
       isAcquiring={liveAv.isAcquiring}
       showInlineMeter
       micStream={overlayMicMeterStream}
-      showDevicePickerInDropdown={role !== "student"}
-      dropdownVariant={role === "tutor" ? "recorder" : "live-av"}
-      recorderMicControls={overlayRecorderMicControls}
+      showDevicePickerInDropdown
+      dropdownVariant="recorder"
+      recorderMicControls={
+        role === "tutor"
+          ? overlayRecorderMicControls
+          : overlayStudentMicControls
+      }
       onToggleMute={liveAv.toggleMic}
       onAcquireMic={handleAcquireMic}
       onPickMicSlot={(slot) =>
@@ -6129,6 +6153,8 @@ export function WhiteboardWorkspaceClient({
             isAcquiring={liveAv.isAcquiring}
             showInlineMeter
             micStream={overlayMicMeterStream}
+            dropdownVariant="recorder"
+            recorderMicControls={overlayStudentMicControls}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
             onPickMicSlot={(slot) =>

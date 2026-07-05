@@ -140,6 +140,127 @@ export type CreateMicAudioGraphOptions = {
   sessionId?: string;
 };
 
+export type CreateMicPublishGraphOptions = {
+  /** Same id as live-A/V `avx=` for correlating logs (`whiteboardSessionId`). */
+  sessionId?: string;
+};
+
+/**
+ * Student live-A/V publish path only: mic → gain → publishDest (+ analyser tap).
+ * No recording destination, no remote mixdown — mirrors the tutor publish branch
+ * in {@link createMicAudioGraph} without the recorder fan-out.
+ */
+export type MicPublishGraph = {
+  publishStream: MediaStream;
+  dispose: () => void;
+  getLevel: () => number;
+  setGain: (gainLinear: number) => void;
+  swapLocalMicSource: (newMicStream: MediaStream) => boolean;
+};
+
+export async function createMicPublishGraph(
+  micStream: MediaStream,
+  gainLinear: number,
+  options?: CreateMicPublishGraphOptions
+): Promise<MicPublishGraph | null> {
+  const sid = options?.sessionId ?? "?";
+  try {
+    const audioContext = new AudioContext();
+    await audioContext.resume();
+
+    let inboundMicStream = micStream;
+    let mediaStreamSource = audioContext.createMediaStreamSource(micStream);
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = gainLinear;
+
+    const publishDest = audioContext.createMediaStreamDestination();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.65;
+
+    const data = new Float32Array(analyser.fftSize);
+
+    mediaStreamSource.connect(gainNode);
+    gainNode.connect(publishDest);
+    gainNode.connect(analyser);
+
+    let disposed = false;
+
+    return {
+      publishStream: publishDest.stream,
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        try {
+          inboundMicStream.getTracks().forEach((t) => t.stop());
+        } catch {
+          /* ignore */
+        }
+        void audioContext.close();
+      },
+      getLevel: () => readAnalyserRmsLevel(analyser, data),
+      setGain: (g: number) => {
+        const clamped = Math.max(0, g);
+        gainNode.gain.value = clamped;
+        console.log(`[avx] avx=${sid} event=gain_change gain=${clamped}`);
+      },
+      swapLocalMicSource: (newMicStream: MediaStream): boolean => {
+        if (disposed) return false;
+        const prevSource = mediaStreamSource;
+        try {
+          mediaStreamSource.disconnect();
+        } catch {
+          /* ignore */
+        }
+        let newSource: MediaStreamAudioSourceNode;
+        try {
+          newSource = audioContext.createMediaStreamSource(newMicStream);
+        } catch (err) {
+          let recovered = false;
+          try {
+            prevSource.connect(gainNode);
+            recovered = true;
+          } catch {
+            /* ignore */
+          }
+          console.warn(
+            `[avx] avx=${sid} event=mic_device_swap result=failed reason=create-source-failed recovered=${recovered}`,
+            (err as Error)?.message ?? String(err)
+          );
+          return false;
+        }
+        try {
+          newSource.connect(gainNode);
+          mediaStreamSource = newSource;
+          inboundMicStream = newMicStream;
+          console.log(`[avx] avx=${sid} event=mic_device_swap result=ok`);
+          return true;
+        } catch (err) {
+          try {
+            newSource.disconnect();
+          } catch {
+            /* ignore */
+          }
+          let recovered = false;
+          try {
+            prevSource.connect(gainNode);
+            recovered = true;
+          } catch {
+            /* ignore */
+          }
+          console.warn(
+            `[avx] avx=${sid} event=mic_device_swap result=failed reason=connect-failed recovered=${recovered}`,
+            (err as Error)?.message ?? String(err)
+          );
+          return false;
+        }
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export type MicAudioGraph = {
   /**
    * Stream to pass to MediaRecorder (processed: source → gain → recordingDest).

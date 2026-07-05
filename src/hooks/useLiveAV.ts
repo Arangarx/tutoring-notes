@@ -53,15 +53,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  GAIN_DEFAULT,
+  GAIN_MAX,
+  GAIN_MIN,
   loadStoredLearnerMicDeviceId,
+  loadStoredLearnerMicGain,
   loadStoredLearnerMicGroupId,
   loadStoredVideoDeviceId,
   loadStoredVideoGroupId,
   saveStoredLearnerMicDeviceId,
+  saveStoredLearnerMicGain,
   saveStoredLearnerMicGroupId,
   saveStoredVideoDeviceId,
   saveStoredVideoGroupId,
 } from "@/lib/recording/storage";
+
+import {
+  createMicPublishGraph,
+  type MicPublishGraph,
+} from "@/lib/mic-recorder-audio";
 
 import {
   createPeerMesh,
@@ -480,6 +490,12 @@ export type UseLiveAVReturn = {
    * delegates to the recorder; otherwise uses a self-acquired stream swap.
    */
   setMicDevice: (deviceId: string) => Promise<void>;
+  /**
+   * Student publish-path digital boost (0.25–3.0). Persisted per learner when
+   * `learnerProfileId` is set. Tutor path uses `useAudioRecorder` instead.
+   */
+  gainLinear: number;
+  setGainLinear: (gain: number) => void;
 };
 
 // -----------------------------------------------------------------
@@ -842,10 +858,15 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     string | null
   >(null);
   const [pickedMicSlot, setPickedMicSlot] = useState(0);
+  const [gainLinear, setGainLinearState] = useState<number>(GAIN_DEFAULT);
 
   // Refs for things consumed by ref-stable callbacks.
   const localAudioStreamRef = useRef<MediaStream | null>(null);
   const localVideoStreamRef = useRef<MediaStream | null>(null);
+  const publishGraphRef = useRef<MicPublishGraph | null>(null);
+  const rawMicStreamRef = useRef<MediaStream | null>(null);
+  const gainLinearRef = useRef<number>(GAIN_DEFAULT);
+  gainLinearRef.current = gainLinear;
   const meshRef = useRef<PeerMesh | null>(null);
   const isMicMutedRef = useRef<boolean>(false);
   isMicMutedRef.current = isMicMuted;
@@ -895,6 +916,84 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     saveStoredLearnerMicDeviceId(learnerProfileId, "");
     saveStoredLearnerMicGroupId(learnerProfileId, "");
   }, [learnerProfileId]);
+
+  const wireStudentPublishPath = useCallback(
+    async (rawStream: MediaStream): Promise<void> => {
+      const usePublishGraph = Boolean(learnerProfileId && !externalAudioStream);
+      if (!usePublishGraph) {
+        if (isMicMutedRef.current) {
+          for (const t of rawStream.getAudioTracks()) t.enabled = false;
+        }
+        localAudioStreamRef.current = rawStream;
+        if (!unmountedRef.current) setLocalAudioStream(rawStream);
+        return;
+      }
+
+      publishGraphRef.current?.dispose();
+      publishGraphRef.current = null;
+      rawMicStreamRef.current = rawStream;
+
+      const graph = await createMicPublishGraph(
+        rawStream,
+        gainLinearRef.current,
+        { sessionId: sid }
+      );
+
+      if (unmountedRef.current) {
+        graph?.dispose();
+        for (const t of rawStream.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      }
+
+      if (!graph) {
+        log.warn(
+          "student publish graph unavailable — falling back to raw stream"
+        );
+        if (isMicMutedRef.current) {
+          for (const t of rawStream.getAudioTracks()) t.enabled = false;
+        }
+        localAudioStreamRef.current = rawStream;
+        setLocalAudioStream(rawStream);
+        return;
+      }
+
+      publishGraphRef.current = graph;
+      if (isMicMutedRef.current) {
+        for (const t of graph.publishStream.getAudioTracks()) t.enabled = false;
+      }
+      localAudioStreamRef.current = graph.publishStream;
+      setLocalAudioStream(graph.publishStream);
+      log.log(
+        `student publish graph wired gain=${gainLinearRef.current} tracks=${graph.publishStream.getAudioTracks().length}`
+      );
+    },
+    [learnerProfileId, externalAudioStream, sid, log]
+  );
+
+  const setGainLinear = useCallback((value: number) => {
+    const clamped = Math.min(GAIN_MAX, Math.max(GAIN_MIN, value));
+    setGainLinearState(clamped);
+  }, []);
+
+  useEffect(() => {
+    if (!learnerProfileId) return;
+    const stored = loadStoredLearnerMicGain(learnerProfileId);
+    setGainLinearState(stored);
+    gainLinearRef.current = stored;
+  }, [learnerProfileId, learnerAvGeneration]);
+
+  useEffect(() => {
+    if (!learnerProfileId) return;
+    saveStoredLearnerMicGain(learnerProfileId, gainLinear);
+    publishGraphRef.current?.setGain(gainLinear);
+    log.log(`event=gain_change gain=${gainLinear}`);
+  }, [gainLinear, learnerProfileId, log]);
 
   videoDevicesRef.current = videoDevices;
   selectedVideoDeviceIdRef.current = selectedVideoDeviceId;
@@ -1113,11 +1212,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
             }
             return;
           }
-          if (isMicMutedRef.current) {
-            for (const t of stream.getAudioTracks()) t.enabled = false;
-          }
-          localAudioStreamRef.current = stream;
-          setLocalAudioStream(stream);
+          await wireStudentPublishPath(stream);
           setHasEverHadLocalMedia(true);
           setHasMicPermission("granted");
           log.log(
@@ -1162,6 +1257,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       learnerProfileId,
       persistLearnerMicChoice,
       clearPersistedLearnerMicChoice,
+      wireStudentPublishPath,
     ]
   );
 
@@ -1403,16 +1499,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }
         const audioStream = new MediaStream(stream.getAudioTracks());
         const videoStream = new MediaStream(stream.getVideoTracks());
-        if (isMicMutedRef.current) {
-          for (const t of audioStream.getAudioTracks()) t.enabled = false;
-        }
         for (const t of videoStream.getVideoTracks()) {
           t.enabled = true;
         }
-        localAudioStreamRef.current = audioStream;
         localVideoStreamRef.current = videoStream;
-        setLocalAudioStream(audioStream);
         setLocalVideoStream(videoStream);
+        await wireStudentPublishPath(audioStream);
         setHasEverHadLocalMedia(true);
         setHasMicPermission("granted");
         setHasCamPermission("granted");
@@ -1464,7 +1556,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     });
     avBundleInFlightRef.current = inFlight;
     return inFlight;
-  }, [audioConstraints, externalAudioStream, enumerateDevicesCore, requestCam, videoConstraints, learnerProfileId, persistLearnerMicChoice]);
+  }, [audioConstraints, externalAudioStream, enumerateDevicesCore, requestCam, videoConstraints, learnerProfileId, persistLearnerMicChoice, wireStudentPublishPath]);
 
   // ---------------------------------------------------------------
   // Effect: pre-select learner's persisted mic device on mount / rejoin
@@ -1638,16 +1730,19 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
-      // Stop and release any acquired local streams on unmount so
-      // the OS frees the device. For externalAudioStream we DON'T
-      // stop the tracks — they belong to the recorder.
-      const aud = localAudioStreamRef.current;
-      if (aud && !audioFromExternalRef.current) {
-        for (const t of aud.getTracks()) {
-          try {
-            t.stop();
-          } catch {
-            /* ignore */
+      if (publishGraphRef.current) {
+        publishGraphRef.current.dispose();
+        publishGraphRef.current = null;
+        rawMicStreamRef.current = null;
+      } else {
+        const aud = localAudioStreamRef.current;
+        if (aud && !audioFromExternalRef.current) {
+          for (const t of aud.getTracks()) {
+            try {
+              t.stop();
+            } catch {
+              /* ignore */
+            }
           }
         }
       }
@@ -2833,10 +2928,6 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           disposeAvStreamTracks(stream);
           return;
         }
-        if (isMicMutedRef.current) newTrack.enabled = false;
-        const ms = new MediaStream([newTrack]);
-        localAudioStreamRef.current = ms;
-        setLocalAudioStream(ms);
         setError(null);
 
         const gst = newTrack.getSettings?.();
@@ -2855,12 +2946,44 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
         setPickedMicSlot(slotIndex);
 
-        const mesh = meshRef.current;
-        if (mesh && !mesh.isDisposed()) {
-          mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
-        }
-        if (prevStream && prevStream !== ms) {
-          disposeAvStreamTracks(prevStream);
+        const graph = publishGraphRef.current;
+        if (graph && learnerProfileId && !externalAudioStream) {
+          const oldRaw = rawMicStreamRef.current;
+          const swapped = graph.swapLocalMicSource(stream);
+          if (!swapped) {
+            disposeAvStreamTracks(stream);
+            if (!unmountedRef.current) {
+              const swapErr: AvAcquireError = {
+                type: "unknown",
+                message:
+                  "Could not switch microphone — kept your current mic active.",
+                raw: null,
+              };
+              setError(swapErr);
+            }
+            return;
+          }
+          rawMicStreamRef.current = stream;
+          for (const t of graph.publishStream.getAudioTracks()) {
+            t.enabled = !isMicMutedRef.current;
+          }
+          localAudioStreamRef.current = graph.publishStream;
+          setLocalAudioStream(graph.publishStream);
+          if (oldRaw && oldRaw !== stream) {
+            disposeAvStreamTracks(oldRaw);
+          }
+        } else {
+          if (isMicMutedRef.current) newTrack.enabled = false;
+          const ms = new MediaStream([newTrack]);
+          localAudioStreamRef.current = ms;
+          setLocalAudioStream(ms);
+          const mesh = meshRef.current;
+          if (mesh && !mesh.isDisposed()) {
+            mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
+          }
+          if (prevStream && prevStream !== ms) {
+            disposeAvStreamTracks(prevStream);
+          }
         }
         void enumerateDevicesCore();
         log.log(
@@ -2962,15 +3085,47 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           for (const tt of stream.getTracks()) tt.stop();
           return;
         }
-        const prev = localAudioStreamRef.current;
-        if (prev) {
-          for (const tt of prev.getTracks()) tt.stop();
+        const graph = publishGraphRef.current;
+        if (graph && learnerProfileId && !externalAudioStream) {
+          const oldRaw = rawMicStreamRef.current;
+          const swapped = graph.swapLocalMicSource(stream);
+          if (!swapped) {
+            disposeAvStreamTracks(stream);
+            if (!unmountedRef.current) {
+              const swapErr: AvAcquireError = {
+                type: "unknown",
+                message:
+                  "Could not switch microphone — kept your current mic active.",
+                raw: null,
+              };
+              setError(swapErr);
+            }
+            return;
+          }
+          rawMicStreamRef.current = stream;
+          for (const t of graph.publishStream.getAudioTracks()) {
+            t.enabled = !isMicMutedRef.current;
+          }
+          localAudioStreamRef.current = graph.publishStream;
+          setLocalAudioStream(graph.publishStream);
+          if (oldRaw && oldRaw !== stream) {
+            disposeAvStreamTracks(oldRaw);
+          }
+        } else {
+          const prev = localAudioStreamRef.current;
+          if (prev) {
+            for (const tt of prev.getTracks()) tt.stop();
+          }
+          if (isMicMutedRef.current) {
+            for (const tt of stream.getAudioTracks()) tt.enabled = false;
+          }
+          localAudioStreamRef.current = stream;
+          setLocalAudioStream(stream);
+          const mesh = meshRef.current;
+          if (mesh && !mesh.isDisposed()) {
+            mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
+          }
         }
-        if (isMicMutedRef.current) {
-          for (const tt of stream.getAudioTracks()) tt.enabled = false;
-        }
-        localAudioStreamRef.current = stream;
-        setLocalAudioStream(stream);
         const gst = newTrack.getSettings?.();
         if (gst?.deviceId) {
           setSelectedMicDeviceId(gst.deviceId);
@@ -2979,10 +3134,6 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }
         if (gst?.groupId) {
           pinnedMicEnumerateGroupRef.current = gst.groupId;
-        }
-        const mesh = meshRef.current;
-        if (mesh && !mesh.isDisposed()) {
-          mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
         }
         log.log(`event=set-mic-device deviceId=${deviceId}`);
       } catch (err) {
@@ -3134,5 +3285,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     pickedMicSlot,
     setMicDeviceBySlot,
     setMicDevice,
+    gainLinear,
+    setGainLinear,
   };
 }

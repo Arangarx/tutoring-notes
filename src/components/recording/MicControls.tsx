@@ -33,7 +33,7 @@ export function meterColor(level: number): string {
 export type MicControlsProps = {
   /** Reference to the meter fill <div> so we can update its width/colour without re-rendering. */
   meterBarRef: React.RefObject<HTMLDivElement | null>;
-  devices: MediaDeviceInfo[];
+  devices: ReadonlyArray<MediaDeviceInfo>;
   /** Index into {@link devices} — unique per enumerated row / label. */
   selectedPickerSlot: number;
   onPickMicSlot: (slotIndex: number) => void;
@@ -49,6 +49,8 @@ export type MicControlsProps = {
   hideLevelMeter?: boolean;
   /** When true, omit the device picker (host shows on-page picker elsewhere). */
   hideDevicePicker?: boolean;
+  /** When true, omit recording time-alert chime controls (student live-A/V boost only). */
+  hideChime?: boolean;
   /** Play a short sound (and vibrate on mobile) when approaching max recording length. */
   chimeEnabled: boolean;
   onChimeEnabledChange: (enabled: boolean) => void;
@@ -73,6 +75,7 @@ export default function MicControls({
   onChimeVolumeChange,
   hideLevelMeter,
   hideDevicePicker,
+  hideChime,
 }: MicControlsProps) {
   const pickerDisabled = lockDevice || (!isLive && devices.length === 0);
   const sliderDisabled = !isLive;
@@ -245,7 +248,8 @@ export default function MicControls({
         </div>
       )}
 
-      {/* Approaching max time — sound + volume (this recorder only; persisted locally). */}
+      {/* Approaching max time — sound + volume (recorder only; omitted for student boost). */}
+      {!hideChime && (
       <div
         style={{
           display: "flex",
@@ -303,6 +307,7 @@ export default function MicControls({
           {formatTimeAlertHint()}
         </p>
       </div>
+      )}
 
       {hint && (
         <p style={{ margin: 0, fontSize: 11, color: "var(--muted)", lineHeight: 1.4 }}>

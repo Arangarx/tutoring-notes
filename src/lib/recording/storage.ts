@@ -22,6 +22,8 @@ export const STORAGE_MIC_GROUP_KEY = "tn-mic-group-id";
 export const STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX = "tn-mic-device-id:";
 /** Optional group correlate for learner mic when OEM rows share a `deviceId`. */
 export const STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX = "tn-mic-group-id:";
+/** Learner-scoped publish-path mic boost (student live-A/V self-boost). */
+export const STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX = "tn-mic-gain:";
 /** Stored preferred camera (same semantics as mic device id). */
 export const STORAGE_VIDEO_DEVICE_KEY = "tn-cam-device-id";
 /** Optional correlate when OEMs reuse `deviceId` across multiple lenses. */
@@ -160,6 +162,33 @@ export function saveStoredLearnerMicGroupId(
   }
   try {
     s.setItem(key, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+function learnerMicGainStorageKey(learnerProfileId: string): string {
+  return `${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}${learnerProfileId}`;
+}
+
+export function loadStoredLearnerMicGain(learnerProfileId: string): number {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return GAIN_DEFAULT;
+  const raw = s.getItem(learnerMicGainStorageKey(learnerProfileId));
+  if (!raw) return GAIN_DEFAULT;
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n) || n < GAIN_MIN || n > GAIN_MAX) return GAIN_DEFAULT;
+  return n;
+}
+
+export function saveStoredLearnerMicGain(
+  learnerProfileId: string,
+  value: number
+): void {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return;
+  try {
+    s.setItem(learnerMicGainStorageKey(learnerProfileId), String(value));
   } catch {
     /* ignore */
   }

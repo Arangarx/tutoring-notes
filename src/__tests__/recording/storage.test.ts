@@ -17,6 +17,7 @@ import {
   STORAGE_CHIME_VOLUME_KEY,
   STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX,
   STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX,
+  STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX,
   loadStoredGain,
   saveStoredGain,
   loadStoredDeviceId,
@@ -27,6 +28,8 @@ import {
   saveStoredLearnerMicDeviceId,
   loadStoredLearnerMicGroupId,
   saveStoredLearnerMicGroupId,
+  loadStoredLearnerMicGain,
+  saveStoredLearnerMicGain,
   loadStoredChimeEnabled,
   saveStoredChimeEnabled,
   loadStoredChimeVolume,
@@ -198,6 +201,36 @@ describe("loadStoredChimeEnabled / saveStoredChimeEnabled", () => {
   });
 });
 
+describe("loadStoredLearnerMicGain / saveStoredLearnerMicGain", () => {
+  const learnerId = "lp-student-1";
+
+  test("default when nothing stored", () => {
+    expect(loadStoredLearnerMicGain(learnerId)).toBe(GAIN_DEFAULT);
+  });
+
+  test("round-trips a valid value under learner-scoped key", () => {
+    saveStoredLearnerMicGain(learnerId, 2.25);
+    expect(loadStoredLearnerMicGain(learnerId)).toBe(2.25);
+    expect(getStored(`${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}${learnerId}`)).toBe(
+      "2.25"
+    );
+  });
+
+  test("clamps junk to default", () => {
+    const w = (globalThis as unknown as { window?: { localStorage: MemoryStorage } }).window!;
+    w.localStorage.setItem(
+      `${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}${learnerId}`,
+      "not-a-number"
+    );
+    expect(loadStoredLearnerMicGain(learnerId)).toBe(GAIN_DEFAULT);
+    w.localStorage.setItem(
+      `${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}${learnerId}`,
+      String(GAIN_MAX + 1)
+    );
+    expect(loadStoredLearnerMicGain(learnerId)).toBe(GAIN_DEFAULT);
+  });
+});
+
 describe("loadStoredChimeVolume / saveStoredChimeVolume", () => {
   test("default when nothing stored", () => {
     expect(loadStoredChimeVolume()).toBe(CHIME_VOL_DEFAULT);
@@ -231,6 +264,7 @@ describe("SSR / no-window safety", () => {
     expect(loadStoredMicGroupId()).toBe("");
     expect(loadStoredLearnerMicDeviceId("lp")).toBe("");
     expect(loadStoredLearnerMicGroupId("lp")).toBe("");
+    expect(loadStoredLearnerMicGain("lp")).toBe(GAIN_DEFAULT);
     expect(loadStoredChimeEnabled()).toBe(true);
     expect(loadStoredChimeVolume()).toBe(CHIME_VOL_DEFAULT);
   });
@@ -241,6 +275,7 @@ describe("SSR / no-window safety", () => {
     expect(() => saveStoredMicGroupId("g")).not.toThrow();
     expect(() => saveStoredLearnerMicDeviceId("lp", "x")).not.toThrow();
     expect(() => saveStoredLearnerMicGroupId("lp", "g")).not.toThrow();
+    expect(() => saveStoredLearnerMicGain("lp", 1.5)).not.toThrow();
     expect(() => saveStoredChimeEnabled(true)).not.toThrow();
     expect(() => saveStoredChimeVolume(0.5)).not.toThrow();
   });
@@ -262,6 +297,7 @@ describe("quota / write failures", () => {
     expect(() => saveStoredMicGroupId("g")).not.toThrow();
     expect(() => saveStoredLearnerMicDeviceId("lp", "x")).not.toThrow();
     expect(() => saveStoredLearnerMicGroupId("lp", "g")).not.toThrow();
+    expect(() => saveStoredLearnerMicGain("lp", 1.5)).not.toThrow();
     expect(() => saveStoredChimeEnabled(true)).not.toThrow();
     expect(() => saveStoredChimeVolume(0.5)).not.toThrow();
   });

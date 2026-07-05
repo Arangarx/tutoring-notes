@@ -47,6 +47,47 @@ import type {
   WhiteboardSyncClient,
   RoomPeer,
 } from "@/lib/whiteboard/sync-client";
+import {
+  STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX,
+  saveStoredLearnerMicGain,
+} from "@/lib/recording/storage";
+
+const mockPublishSetGain = jest.fn();
+const mockPublishDispose = jest.fn();
+const mockPublishSwap = jest.fn();
+
+jest.mock("@/lib/mic-recorder-audio", () => {
+  const actual = jest.requireActual("@/lib/mic-recorder-audio");
+  return {
+    ...actual,
+    createMicPublishGraph: jest.fn(
+      async (_stream: MediaStream, gainLinear: number) => {
+        const pubTrack = {
+          kind: "audio" as const,
+          enabled: true,
+          id: "publish-graph-track",
+        };
+        return {
+          publishStream: {
+            id: "publish-graph-stream",
+            getAudioTracks: () => [pubTrack],
+            getTracks: () => [pubTrack],
+          } as unknown as MediaStream,
+          setGain: mockPublishSetGain,
+          getLevel: () => 0.5,
+          dispose: mockPublishDispose,
+          swapLocalMicSource: (stream: MediaStream) => {
+            const ret = mockPublishSwap(stream);
+            return ret === false ? false : true;
+          },
+          __testGain: gainLinear,
+        };
+      }
+    ),
+  };
+});
+
+import { createMicPublishGraph } from "@/lib/mic-recorder-audio";
 
 // -----------------------------------------------------------------
 // Fakes
@@ -2393,6 +2434,245 @@ describe("useLiveAV — camOn presence (fix: no premature false latch)", () => {
     expect(result.current.participants[0]?.camOn).toBeUndefined();
     // With undefined camOn and a live track: videoStream exposed
     expect(result.current.participants[0]?.videoStream).not.toBeNull();
+
+    unmount();
+  });
+});
+
+describe("useLiveAV — student publish-path mic boost (WS-M)", () => {
+  beforeEach(() => {
+    mockPublishSetGain.mockClear();
+    mockPublishDispose.mockClear();
+    mockPublishSwap.mockClear();
+    (createMicPublishGraph as jest.Mock).mockClear();
+    const storage = new Map<string, string>();
+    (globalThis as { window?: unknown }).window = {
+      localStorage: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          storage.set(k, v);
+        },
+        removeItem: (k: string) => {
+          storage.delete(k);
+        },
+      },
+    };
+  });
+
+  test("student path builds publish graph and exposes publishStream as localAudioStream", async () => {
+    const { stream, audioTracks } = makeFakeStream(1);
+    const getUM = jest.fn(async () => stream as unknown as MediaStream);
+    const props = makeBaseProps({
+      localPeerId: "student-S",
+      learnerProfileId: "lp-ws-m",
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+
+    expect(createMicPublishGraph).toHaveBeenCalledTimes(1);
+    expect(result.current.localAudioStream?.id).toBe("publish-graph-stream");
+    expect(result.current.localAudioStream?.getAudioTracks()[0]?.id).toBe(
+      "publish-graph-track"
+    );
+    expect(result.current.localAudioStream).not.toBe(stream);
+    expect(audioTracks[0]!.enabled).toBe(true);
+
+    unmount();
+    expect(mockPublishDispose).toHaveBeenCalled();
+  });
+
+  test("tutor path without learnerProfileId does not build publish graph", async () => {
+    const { stream } = makeFakeStream(1);
+    const getUM = jest.fn(async () => stream as unknown as MediaStream);
+    const props = makeBaseProps({ _getUserMedia: getUM });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+
+    expect(createMicPublishGraph).not.toHaveBeenCalled();
+    expect(result.current.localAudioStream).toBe(stream);
+
+    unmount();
+  });
+
+  test("gain persists per learner and forwards setGain to publish graph", async () => {
+    saveStoredLearnerMicGain("lp-gain", 2.5);
+    const { stream } = makeFakeStream(1);
+    const props = makeBaseProps({
+      learnerProfileId: "lp-gain",
+      _getUserMedia: jest.fn(async () => stream as unknown as MediaStream),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.gainLinear).toBe(2.5);
+    });
+
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    expect(createMicPublishGraph).toHaveBeenCalledWith(
+      expect.anything(),
+      2.5,
+      expect.objectContaining({ sessionId: "wb-1" })
+    );
+
+    act(() => {
+      result.current.setGainLinear(1.75);
+    });
+    expect(result.current.gainLinear).toBe(1.75);
+    expect(mockPublishSetGain).toHaveBeenCalledWith(1.75);
+    const w = (globalThis as unknown as { window?: { localStorage: { getItem: (k: string) => string | null } } }).window!;
+    expect(
+      w.localStorage.getItem(`${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}lp-gain`)
+    ).toBe("1.75");
+
+    unmount();
+  });
+
+  test("graph null fallback at gain 1.0 uses raw stream (no regression vs no-graph baseline)", async () => {
+    (createMicPublishGraph as jest.Mock).mockResolvedValueOnce(null);
+    const { stream, audioTracks } = makeFakeStream(1);
+    const props = makeBaseProps({
+      learnerProfileId: "lp-fallback",
+      _getUserMedia: jest.fn(async () => stream as unknown as MediaStream),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+
+    expect(result.current.localAudioStream).toBe(stream);
+    expect(result.current.localAudioStream?.getAudioTracks()[0]).toBe(
+      audioTracks[0]
+    );
+    expect(result.current.gainLinear).toBe(1);
+
+    act(() => {
+      result.current.toggleMic();
+    });
+    expect(audioTracks[0]!.enabled).toBe(false);
+
+    unmount();
+  });
+
+  test("toggleMic: publish-dest track silenced, raw GUM track unchanged when graph is active", async () => {
+    const { stream, audioTracks } = makeFakeStream(1);
+    const props = makeBaseProps({
+      learnerProfileId: "lp-mute-test",
+      _getUserMedia: jest.fn(async () => stream as unknown as MediaStream),
+    });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    const pubTrack = result.current.localAudioStream?.getAudioTracks()[0]!;
+    expect(pubTrack.id).toBe("publish-graph-track");
+    expect(pubTrack.enabled).toBe(true);
+    expect(audioTracks[0]!.enabled).toBe(true);
+    act(() => {
+      result.current.toggleMic();
+    });
+    expect(result.current.isMicMuted).toBe(true);
+    expect(pubTrack.enabled).toBe(false);
+    expect(audioTracks[0]!.enabled).toBe(true);
+    act(() => {
+      result.current.toggleMic();
+    });
+    expect(result.current.isMicMuted).toBe(false);
+    expect(pubTrack.enabled).toBe(true);
+    unmount();
+  });
+
+  test("setMicDevice: swap failure keeps raw GUM stream and sets error", async () => {
+    const dev = (
+      deviceId: string
+    ): MediaDeviceInfo =>
+      ({
+        deviceId,
+        kind: "audioinput",
+        label: deviceId,
+        groupId: `${deviceId}-grp`,
+        toJSON() {
+          return this;
+        },
+      }) as unknown as MediaDeviceInfo;
+
+    const nav = navigator as unknown as {
+      mediaDevices?: {
+        enumerateDevices: () => Promise<MediaDeviceInfo[]>;
+        addEventListener: jest.Mock;
+        removeEventListener: jest.Mock;
+      };
+    };
+    nav.mediaDevices = {
+      enumerateDevices: jest.fn(async () => [dev("mic-a"), dev("mic-b")]),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    };
+
+    const first = makeFakeStream(1);
+    const second = makeFakeStream(1);
+    const getUM = jest.fn(async (constraints?: MediaStreamConstraints) => {
+      const audio = constraints?.audio;
+      if (typeof audio === "object" && audio !== null) {
+        const ac = audio as MediaTrackConstraints;
+        const exactFrom = (
+          v: ConstrainDOMString | undefined
+        ): string | undefined => {
+          if (typeof v === "string") return v;
+          if (Array.isArray(v)) return undefined;
+          const ex = v?.exact;
+          return typeof ex === "string" ? ex : undefined;
+        };
+        const dev = exactFrom(ac.deviceId);
+        const grp = exactFrom(ac.groupId);
+        if (dev === "mic-b" || grp === "mic-b-grp") {
+          return second.stream as unknown as MediaStream;
+        }
+        const idealDev =
+          typeof ac.deviceId === "object" &&
+          ac.deviceId !== null &&
+          !Array.isArray(ac.deviceId)
+            ? ac.deviceId.ideal
+            : undefined;
+        if (idealDev === "mic-b") {
+          return second.stream as unknown as MediaStream;
+        }
+      }
+      return first.stream as unknown as MediaStream;
+    });
+
+    mockPublishSwap.mockReturnValue(false);
+
+    const props = makeBaseProps({
+      learnerProfileId: "lp-swap-fail",
+      localPeerId: "student-S",
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    expect(first.audioTracks[0]!.stopped).toBe(false);
+
+    await act(async () => {
+      await result.current.setMicDevice("mic-b");
+    });
+
+    expect(mockPublishSwap).toHaveBeenCalled();
+    expect(first.audioTracks[0]!.stopped).toBe(false);
+    expect(second.audioTracks[0]!.stopped).toBe(true);
+    expect(result.current.error).not.toBeNull();
+    expect(result.current.error?.type).toBe("unknown");
 
     unmount();
   });
