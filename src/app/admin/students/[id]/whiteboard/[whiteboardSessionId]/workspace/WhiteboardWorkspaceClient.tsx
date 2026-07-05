@@ -4812,6 +4812,18 @@ export function WhiteboardWorkspaceClient({
     roughness === 0 ? "Architect" : roughness === 1 ? "Artist" : "Cartoon";
   const roundnessLabel = roundness === "sharp" ? "Sharp" : "Round";
 
+  // WS-R: mirror Excalidraw hasStrokeStyle / canChangeRoundness — hide dead knobs.
+  const showRoughnessChrome =
+    activeToolType === "rectangle" ||
+    activeToolType === "ellipse" ||
+    activeToolType === "diamond" ||
+    activeToolType === "arrow" ||
+    activeToolType === "line";
+  const showRoundnessChrome =
+    activeToolType === "rectangle" ||
+    activeToolType === "ellipse" ||
+    activeToolType === "diamond";
+
   const showPropsChrome =
     activeToolType !== "selection" &&
     activeToolType !== "hand" &&
@@ -4860,22 +4872,26 @@ export function WhiteboardWorkspaceClient({
             }
           />
         </span>
-        <span
-          className="mynk-wb-summary-chip"
-          title={roughnessLabel}
-          aria-label={roughnessLabel}
-          style={{ padding: "2px 4px", background: "transparent" }}
-        >
-          <RoughnessIcon level={roughness as 0 | 1 | 2} />
-        </span>
-        <span
-          className="mynk-wb-summary-chip"
-          title={roundnessLabel}
-          aria-label={roundnessLabel}
-          style={{ padding: "2px 4px", background: "transparent" }}
-        >
-          <SharpnessIcon type={roundness} />
-        </span>
+        {showRoughnessChrome && (
+          <span
+            className="mynk-wb-summary-chip"
+            title={roughnessLabel}
+            aria-label={roughnessLabel}
+            style={{ padding: "2px 4px", background: "transparent" }}
+          >
+            <RoughnessIcon level={roughness as 0 | 1 | 2} />
+          </span>
+        )}
+        {showRoundnessChrome && (
+          <span
+            className="mynk-wb-summary-chip"
+            title={roundnessLabel}
+            aria-label={roundnessLabel}
+            style={{ padding: "2px 4px", background: "transparent" }}
+          >
+            <SharpnessIcon type={roundness} />
+          </span>
+        )}
       </button>
       {/* Panel is portaled to document.body as position:fixed so it escapes
           the rail's overflow:hidden without any overflow-clip-margin tricks. */}
@@ -4907,6 +4923,8 @@ export function WhiteboardWorkspaceClient({
             onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
             onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
             onRoundnessChange={updateRoundness}
+            showRoughness={showRoughnessChrome}
+            showRoundness={showRoundnessChrome}
           />
         </div>,
         document.body
@@ -6823,22 +6841,26 @@ export function WhiteboardWorkspaceClient({
                 }
               />
             </span>
-            <span
-              className="mynk-wb-summary-chip"
-              title={roughnessLabel}
-              aria-label={roughnessLabel}
-              style={{ padding: "2px 4px", background: "transparent" }}
-            >
-              <RoughnessIcon level={roughness as 0 | 1 | 2} />
-            </span>
-            <span
-              className="mynk-wb-summary-chip"
-              title={roundnessLabel}
-              aria-label={roundnessLabel}
-              style={{ padding: "2px 4px", background: "transparent" }}
-            >
-              <SharpnessIcon type={roundness} />
-            </span>
+            {showRoughnessChrome && (
+              <span
+                className="mynk-wb-summary-chip"
+                title={roughnessLabel}
+                aria-label={roughnessLabel}
+                style={{ padding: "2px 4px", background: "transparent" }}
+              >
+                <RoughnessIcon level={roughness as 0 | 1 | 2} />
+              </span>
+            )}
+            {showRoundnessChrome && (
+              <span
+                className="mynk-wb-summary-chip"
+                title={roundnessLabel}
+                aria-label={roundnessLabel}
+                style={{ padding: "2px 4px", background: "transparent" }}
+              >
+                <SharpnessIcon type={roundness} />
+              </span>
+            )}
             <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
               Colors &amp; styles
             </span>
@@ -6895,6 +6917,8 @@ export function WhiteboardWorkspaceClient({
                 onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
                 onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
                 onRoundnessChange={updateRoundness}
+                showRoughness={showRoughnessChrome}
+                showRoundness={showRoundnessChrome}
               />
             </WbActionSheet>
             <WbActionSheet

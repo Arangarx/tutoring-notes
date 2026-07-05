@@ -36,6 +36,10 @@ export type WbStrokePropsPanelProps = {
   onMoreStylesToggle: () => void;
   onRoughnessChange: (roughness: number) => void;
   onRoundnessChange: (roundness: "sharp" | "round") => void;
+  /** When false, hide roughness controls (no-op for freedraw / eraser / text). Default true. */
+  showRoughness?: boolean;
+  /** When false, hide edge-sharpness controls (no-op for line/arrow/freedraw). Default true. */
+  showRoundness?: boolean;
 };
 
 /** Roughness level icons — simple SVGs representing Architect / Artist / Cartoon. Exported for reuse in sidebar summary. */
@@ -130,6 +134,8 @@ export function WbStrokePropsPanel({
   onMoreStylesToggle,
   onRoughnessChange,
   onRoundnessChange,
+  showRoughness = true,
+  showRoundness = true,
 }: WbStrokePropsPanelProps) {
   const [opacityPreview, setOpacityPreview] = useState<number | null>(null);
   const displayOpacity = opacityPreview ?? opacity;
@@ -222,45 +228,47 @@ export function WbStrokePropsPanel({
 
       {moreStylesOpen && (
         <div className="mynk-wb-more-styles-area">
-          {/* ── Roughness ── icon buttons with title tooltips */}
-          <div className="mynk-wb-props-section">
-            <div className="mynk-wb-props-section-title">Roughness</div>
-            <div className="mynk-wb-props-chips mynk-wb-roughness-chips">
-              {ROUGHNESS_OPTIONS.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  className={`mynk-wb-chip mynk-wb-roughness-chip${roughness === r.value ? " mynk-wb-chip--active" : ""}`}
-                  title={r.label}
-                  aria-label={r.label}
-                  aria-pressed={roughness === r.value}
-                  onClick={() => onRoughnessChange(r.value)}
-                >
-                  <RoughnessIcon level={r.value} />
-                </button>
-              ))}
+          {showRoughness && (
+            <div className="mynk-wb-props-section" data-testid="wb-roughness-section">
+              <div className="mynk-wb-props-section-title">Roughness</div>
+              <div className="mynk-wb-props-chips mynk-wb-roughness-chips">
+                {ROUGHNESS_OPTIONS.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    className={`mynk-wb-chip mynk-wb-roughness-chip${roughness === r.value ? " mynk-wb-chip--active" : ""}`}
+                    title={r.label}
+                    aria-label={r.label}
+                    aria-pressed={roughness === r.value}
+                    onClick={() => onRoughnessChange(r.value)}
+                  >
+                    <RoughnessIcon level={r.value} />
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* ── Edge sharpness ── icon buttons with title tooltip, no text labels */}
-          <div className="mynk-wb-props-section">
-            <div className="mynk-wb-props-section-title">Edge sharpness</div>
-            <div className="mynk-wb-props-chips mynk-wb-roughness-chips">
-              {ROUNDNESS_OPTIONS.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  className={`mynk-wb-chip mynk-wb-roughness-chip mynk-wb-sharpness-chip${roundness === r.value ? " mynk-wb-chip--active" : ""}`}
-                  title={r.label}
-                  aria-label={r.label}
-                  aria-pressed={roundness === r.value}
-                  onClick={() => onRoundnessChange(r.value)}
-                >
-                  <SharpnessIcon type={r.value} />
-                </button>
-              ))}
+          {showRoundness && (
+            <div className="mynk-wb-props-section" data-testid="wb-roundness-section">
+              <div className="mynk-wb-props-section-title">Edge sharpness</div>
+              <div className="mynk-wb-props-chips mynk-wb-roughness-chips">
+                {ROUNDNESS_OPTIONS.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    className={`mynk-wb-chip mynk-wb-roughness-chip mynk-wb-sharpness-chip${roundness === r.value ? " mynk-wb-chip--active" : ""}`}
+                    title={r.label}
+                    aria-label={r.label}
+                    aria-pressed={roundness === r.value}
+                    onClick={() => onRoundnessChange(r.value)}
+                  >
+                    <SharpnessIcon type={r.value} />
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ── Z-order ── */}
           <div className="mynk-wb-props-section mynk-wb-zorder-section">
