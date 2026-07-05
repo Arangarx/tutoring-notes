@@ -564,6 +564,12 @@ model TutorNote {
   generatedAt DateTime?
   createdAt   DateTime  @default(now())
 
+  /// WS-K: watermark — number of done chunks included in the last live reduce.
+  /// Used at End to decide if a final LLM call is needed (fast-path skip).
+  lastReducedChunkCount Int      @default(0)
+  /// WS-K: timestamp of last live reduce. Used for time-based debounce in enqueueLiveReduce.
+  lastLiveReduceAt      DateTime?
+
   session WhiteboardSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 

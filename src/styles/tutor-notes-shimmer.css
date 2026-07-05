@@ -26,11 +26,11 @@
   z-index: 10;
   background: linear-gradient(
     90deg,
-    var(--surface-muted) 0%,
+    var(--surface-2) 0%,
     var(--accent-soft) 35%,
-    var(--surface-hover) 50%,
+    var(--surface-3) 50%,
     var(--accent-soft) 65%,
-    var(--surface-muted) 100%
+    var(--surface-2) 100%
   );
   background-size: 200% 100%;
   animation: tn-notes-shimmer 1.5s ease-in-out infinite;
@@ -52,7 +52,7 @@
     background: linear-gradient(
       180deg,
       var(--accent-soft) 0%,
-      var(--surface-hover) 100%
+      var(--surface-3) 100%
     );
     background-size: 100% 100%;
     opacity: 0.88;

@@ -24,6 +24,7 @@ import {
 import { estimateCostUsd, logCostEvent } from "@/lib/observability/cost-events";
 import type { ChunkExtractionPayload } from "@/lib/recording/transcript-types";
 import { MAP_MODEL } from "@/lib/ai-models";
+import { enqueueLiveReduce } from "@/lib/recording/notes-enqueue";
 
 const EXTRACT_SYSTEM_PROMPT = `You extract structured information from tutoring session audio transcripts.
 
@@ -203,6 +204,13 @@ export async function extractChunkMap(
     console.log(
       `[tnt] wbsid=${sessionId} action=map_done chunkId=${chunkId} topics=${payload.topics.length} questions=${payload.studentQuestions.length} corrections=${payload.corrections.length} followUps=${payload.followUps.length}`
     );
+
+    // WS-K: fire live reduce after each map completion (debounced in enqueueLiveReduce)
+    void enqueueLiveReduce(sessionId).catch((err: unknown) => {
+      console.warn(
+        `[tnt] wbsid=${sessionId} action=live_reduce_enqueue_failed chunkId=${chunkId} err=${err instanceof Error ? err.message : String(err)}`
+      );
+    });
 
     return "done";
   } catch (err: unknown) {

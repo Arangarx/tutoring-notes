@@ -193,7 +193,7 @@ export default function TutorNotesSection({
     isActive && note.found && note.status === "generating";
   const activeStatusCopy = isGeneratingPhase
     ? "Writing notes…"
-    : "Waiting for transcript…";
+    : "Preparing your notes...";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;

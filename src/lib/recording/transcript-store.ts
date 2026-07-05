@@ -295,7 +295,7 @@ export async function getTutorNoteBySessionId(sessionId: string): Promise<TutorN
 
 export async function updateTutorNote(
   sessionId: string,
-  data: Pick<Prisma.TutorNoteUpdateInput, "status" | "content" | "isPartial" | "error" | "generatedAt">
+  data: Pick<Prisma.TutorNoteUpdateInput, "status" | "content" | "isPartial" | "error" | "generatedAt" | "lastReducedChunkCount" | "lastLiveReduceAt">
 ): Promise<TutorNote> {
   const action =
     data.status === "done"

@@ -93,6 +93,11 @@ export type NotesJobResult =
   | { outcome: "failed"; error: string }
   | { outcome: "skipped"; reason: string }; // Already done or session not ready
 
+export type LiveReduceResult =
+  | { outcome: "live_done" }
+  | { outcome: "skipped"; reason: string }
+  | { outcome: "failed"; error: string };
+
 /**
  * Structured note fields matching SessionNote DB columns.
  * homework is intentionally omitted: it folds into nextSteps per REQ-S3-4.
@@ -187,7 +192,202 @@ function parseReduceResponse(text: string): StructuredNoteFields | null {
 
 
 // ---------------------------------------------------------------------------
-// Main worker
+// Live reduce worker (WS-K)
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a mid-session incremental reduce for a live (unsealed) session.
+ *
+ * Key differences from processNotesReduceJob (the End finalize):
+ *  - NO endedAt guard — intentionally runs while session is still live.
+ *  - Watermark-gated: skips if lastReducedChunkCount >= current done-chunk count (already current).
+ *  - Does NOT change TutorNote.status — keeps it at "pending" (review page not shown yet).
+ *  - Updates TutorNote.content + lastReducedChunkCount + lastLiveReduceAt on success.
+ *  - Produces the SAME reduce output as the End finalize (full reduce, not delta).
+ *
+ * Safe: idempotent by the watermark; never throws.
+ */
+export async function processLiveReduceJob(
+  sessionId: string
+): Promise<LiveReduceResult> {
+  console.log(`[tnt] wbsid=${sessionId} action=live_reduce_start`);
+
+  // --- 1. Watermark check: skip if draft is already current -----------------
+  const note = await getTutorNoteBySessionId(sessionId);
+  const chunks = await getTranscriptChunksBySessionId(sessionId);
+  const doneChunks = chunks.filter((c) => c.status === "done");
+  const doneCount = doneChunks.length;
+
+  if (doneCount === 0) {
+    console.log(
+      `[tnt] wbsid=${sessionId} action=live_reduce_skip reason=no_done_chunks`
+    );
+    return { outcome: "skipped", reason: "no_done_chunks" };
+  }
+
+  const watermark = note?.lastReducedChunkCount ?? 0;
+  if (watermark >= doneCount) {
+    console.log(
+      `[tnt] wbsid=${sessionId} action=live_reduce_skip reason=watermark_current watermark=${watermark} doneCount=${doneCount}`
+    );
+    return { outcome: "skipped", reason: "watermark_current" };
+  }
+
+  // --- 2. Ensure TutorNote row exists ---------------------------------------
+  if (!note) {
+    await upsertTutorNotePending(sessionId);
+  }
+
+  // --- 3. Gather inputs (same logic as finalize) ----------------------------
+  const extractionRows = await getChunkExtractionsBySessionId(sessionId);
+  const chunkById = new Map(chunks.map((c) => [c.id, c]));
+
+  const speakerLabelForChunk = (chunkId: string): string | null => {
+    const chunk = chunkById.get(chunkId);
+    if (!chunk) return null;
+    if (chunk.speakerId) return `learner:${chunk.speakerId}`;
+    const streamId = chunk.streamId ?? "tutor:mic";
+    if (streamId === "tutor:mic") return "tutor";
+    if (streamId.startsWith("speaker:")) {
+      return streamId.replace(/^speaker:/, "").replace(/:transcript$/, "");
+    }
+    return streamId;
+  };
+
+  const doneChunkIds = new Set(doneChunks.map((c) => c.id));
+  const orderedExtractions: Array<
+    ChunkExtractionPayload & { speakerLabel: string | null }
+  > = extractionRows
+    .filter((e) => doneChunkIds.has(e.chunkId))
+    .sort((a, b) => {
+      const ca = chunkById.get(a.chunkId);
+      const cb = chunkById.get(b.chunkId);
+      return (ca?.recordingTimeOffsetMs ?? 0) - (cb?.recordingTimeOffsetMs ?? 0);
+    })
+    .map((e) => ({
+      ...parseChunkExtraction(e),
+      speakerLabel: speakerLabelForChunk(e.chunkId),
+    }));
+
+  const rawTranscripts = doneChunks
+    .filter((c) => c.transcript)
+    .sort((a, b) => a.recordingTimeOffsetMs - b.recordingTimeOffsetMs)
+    .map((c) => ({
+      text: c.transcript as string,
+      speakerLabel: speakerLabelForChunk(c.id),
+    }));
+
+  console.log(
+    `[tnt] wbsid=${sessionId} action=live_reduce_inputs extractions=${orderedExtractions.length} rawTranscripts=${rawTranscripts.length} watermarkWas=${watermark} nowReducing=${doneCount}`
+  );
+
+  // --- 4. OpenAI reduce call ------------------------------------------------
+  if (!env.OPENAI_API_KEY) {
+    return { outcome: "failed", error: "OPENAI_API_KEY not configured" };
+  }
+
+  const reduceStartMs = Date.now();
+
+  try {
+    const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+    const prompt = buildReducePrompt(
+      orderedExtractions,
+      rawTranscripts.length > 0 ? rawTranscripts : undefined
+    );
+
+    const response = await client.chat.completions.create({
+      model: REDUCE_MODEL,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: REDUCE_SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 800,
+      temperature: 0.3,
+    });
+
+    const rawText = response.choices[0]?.message?.content?.trim() ?? "";
+    const inputTokens = response.usage?.prompt_tokens;
+    const outputTokens = response.usage?.completion_tokens;
+    const modelId =
+      typeof response.model === "string" && response.model.trim().length > 0
+        ? response.model.trim()
+        : REDUCE_MODEL;
+    const latencyMs = Date.now() - reduceStartMs;
+
+    const structuredFields = parseReduceResponse(rawText);
+    if (!structuredFields) {
+      console.warn(
+        `[tnt] wbsid=${sessionId} action=live_reduce_parse_failed rawText=${rawText.slice(0, 200)}`
+      );
+      return { outcome: "failed", error: "Live reduce parse failed" };
+    }
+
+    const content = JSON.stringify(structuredFields);
+
+    // --- Race A guard: abort stale write if finalize completed during LLM ---
+    const latestNote = await getTutorNoteBySessionId(sessionId);
+    if (
+      latestNote?.status === "done" ||
+      latestNote?.status === "partial" ||
+      latestNote?.status === "failed"
+    ) {
+      console.log(
+        `[tnt] wbsid=${sessionId} action=live_reduce_abort_stale_write status=${latestNote.status}`
+      );
+      return { outcome: "skipped", reason: "finalized_during_llm" };
+    }
+
+    // Log cost event (best-effort) — only bill writes that land
+    const est = estimateCostUsd({
+      kind: "GPT_NOTES_GENERATION",
+      model: modelId,
+      inputTokens: inputTokens ?? 0,
+      outputTokens: outputTokens ?? 0,
+    });
+    await logCostEvent({
+      kind: "GPT_NOTES_GENERATION",
+      model: modelId,
+      inputTokens,
+      outputTokens,
+      estimatedCostUsd: est,
+      whiteboardSessionId: sessionId,
+      sessionId,
+      metadata: {
+        tnt: true,
+        phase: "live_reduce",
+        chunks: doneCount,
+        watermarkWas: watermark,
+      },
+    }).catch((costErr: unknown) => {
+      console.warn(
+        `[tnt] wbsid=${sessionId} action=live_reduce_cost_log_failed err=${costErr instanceof Error ? costErr.message : String(costErr)}`
+      );
+    });
+
+    // --- 5. Write content + watermark; do NOT change status ----------------
+    await updateTutorNote(sessionId, {
+      content,
+      lastReducedChunkCount: doneCount,
+      lastLiveReduceAt: new Date(),
+    });
+
+    console.log(
+      `[tnt] wbsid=${sessionId} action=live_reduce_done chunks=${doneCount} latencyMs=${latencyMs}`
+    );
+
+    return { outcome: "live_done" };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[tnt] wbsid=${sessionId} action=live_reduce_failed err=${msg}`
+    );
+    return { outcome: "failed", error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main worker (End finalize)
 // ---------------------------------------------------------------------------
 
 /**
@@ -290,6 +490,22 @@ export async function processNotesReduceJob(
 
   // isPartial = true when some chunks are not done at reduce time
   const isPartial = pendingChunks > 0 || failedChunks > 0;
+
+  // --- 4.5. WS-K fast-path: skip LLM if running draft is already current ----
+  // If the live-reduce watermark covers all done chunks (and no chunks are
+  // still pending), the TutorNote.content is already up-to-date — zero LLM
+  // work needed. Just flip status "pending" → "done".
+  if (!isPartial && doneChunks > 0 && (note?.lastReducedChunkCount ?? 0) >= doneChunks) {
+    console.log(
+      `[tnt] wbsid=${sessionId} action=finalize_fast_path skipped_llm=true watermark=${note?.lastReducedChunkCount ?? 0} doneChunks=${doneChunks}`
+    );
+    await updateTutorNote(sessionId, {
+      status: "done",
+      isPartial: false,
+      generatedAt: new Date(),
+    });
+    return { outcome: "done", isPartial: false };
+  }
 
   // --- 5. Gather inputs (map extractions preferred, fallback to raw transcripts) ---
   const extractionRows = await getChunkExtractionsBySessionId(sessionId);

@@ -16,6 +16,12 @@ jest.mock("@/lib/recording/transcript-store", () => ({
   getChunkExtractionsBySessionId: jest.fn(),
 }));
 
+// WS-K: mock notes-enqueue so the fire-and-forget enqueueLiveReduce call
+// doesn't produce async-after-test warnings in the extract-chunk test suite.
+jest.mock("@/lib/recording/notes-enqueue", () => ({
+  enqueueLiveReduce: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock("@/lib/env", () => ({
   env: { OPENAI_API_KEY: "test-key" },
 }));
