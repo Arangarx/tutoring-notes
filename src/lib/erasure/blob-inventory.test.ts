@@ -79,7 +79,7 @@ type SessionBlobUrls = {
 async function createWhiteboardSession(
   adminUserId: string,
   studentId: string,
-  blobs: SessionBlobUrls
+  blobs: SessionBlobUrls & { concatBlobUrl?: string | null }
 ) {
   return db.whiteboardSession.create({
     data: {
@@ -88,6 +88,7 @@ async function createWhiteboardSession(
       consentAcknowledged: true,
       eventsBlobUrl: blobs.eventsBlobUrl,
       snapshotBlobUrl: blobs.snapshotBlobUrl ?? null,
+      concatBlobUrl: blobs.concatBlobUrl ?? null,
       eventsSchemaVersion: 1,
     },
   });
@@ -211,6 +212,33 @@ describe("enumerateLearnerFamilyBlobs — blob sources", () => {
     expect(mockList).toHaveBeenCalledWith(
       expect.objectContaining({ prefix: `whiteboard-checkpoints/${session.id}/` })
     );
+  });
+
+  it("includes concatBlobUrl (WS-G erasure inventory)", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const lp = await createLearnerProfile(ah.id);
+    const student = await createStudent(tutor.id, lp.id);
+
+    const eventsBlobUrl = `https://blob.example.com/events/${uniq()}.json`;
+    const concatBlobUrl = `https://blob.example.com/concat/${uniq()}.webm`;
+
+    await createWhiteboardSession(tutor.id, student.id, {
+      eventsBlobUrl,
+      concatBlobUrl,
+    });
+
+    mockFetchPrivateBlobBytes.mockResolvedValue({
+      buffer: Buffer.from(JSON.stringify(buildEventsLogWithAssets([])), "utf8"),
+      contentType: "application/json",
+    });
+
+    const { urls } = await enumerateLearnerFamilyBlobs({
+      kind: "learner_profile",
+      id: lp.id,
+    });
+
+    expect(urls.has(concatBlobUrl)).toBe(true);
   });
 });
 

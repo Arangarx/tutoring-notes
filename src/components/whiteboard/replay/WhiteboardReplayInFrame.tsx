@@ -17,6 +17,9 @@ export type WhiteboardReplayInFrameProps = {
   audioSegments?: readonly ReplayAudioSegment[] | null;
   audioBlobUrl?: string | null;
   audioMimeType?: string | null;
+  canonicalAudioBlobUrl?: string | null;
+  canonicalAudioMimeType?: string | null;
+  canonicalDurationSeconds?: number | null;
   whiteboardSessionId?: string;
   studentName?: string;
   durationSeconds?: number | null;
@@ -36,6 +39,9 @@ export function WhiteboardReplayInFrame({
   audioSegments,
   audioBlobUrl,
   audioMimeType,
+  canonicalAudioBlobUrl,
+  canonicalAudioMimeType,
+  canonicalDurationSeconds,
   whiteboardSessionId,
   studentName,
   embedded = false,
@@ -71,6 +77,9 @@ export function WhiteboardReplayInFrame({
     audioSegments,
     audioBlobUrl,
     audioMimeType,
+    canonicalAudioBlobUrl,
+    canonicalAudioMimeType,
+    canonicalDurationSeconds,
     whiteboardSessionId,
     applySceneAtRef,
   });

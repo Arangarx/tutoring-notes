@@ -74,6 +74,7 @@ import {
   buildReplayAudioTimeline,
   globalMsToSegmentLocal,
 } from "@/lib/whiteboard/replay-audio-timeline";
+import { resolveEffectiveSegments } from "@/lib/whiteboard/replay-helpers";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import {
   GraphEmbeddable,
@@ -145,6 +146,10 @@ export type WhiteboardReplayProps = {
   audioBlobUrl?: string | null;
   /** @deprecated Use per-segment `mimeType` in `audioSegments`. */
   audioMimeType?: string | null;
+  /** WS-G: single canonical concat blob — takes priority over `audioSegments`. */
+  canonicalAudioBlobUrl?: string | null;
+  canonicalAudioMimeType?: string | null;
+  canonicalDurationSeconds?: number | null;
   /** Optional URL to a final-snapshot PNG (preview before play). */
   snapshotBlobUrl?: string | null;
   /** Display label, e.g. "Recording of Liam's session, Apr 23 2026". */
@@ -169,26 +174,35 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     audioSegments,
     audioBlobUrl,
     audioMimeType,
+    canonicalAudioBlobUrl,
+    canonicalAudioMimeType,
+    canonicalDurationSeconds,
     snapshotBlobUrl,
     title,
     whiteboardSessionId,
   } = props;
 
-  const effectiveSegments = useMemo((): ReplayAudioSegment[] => {
-    if (audioSegments && audioSegments.length > 0) {
-      return [...audioSegments];
-    }
-    if (audioBlobUrl) {
-      return [
-        {
-          url: audioBlobUrl,
-          mimeType: audioMimeType ?? null,
-          durationSeconds: null,
-        },
-      ];
-    }
-    return [];
-  }, [audioSegments, audioBlobUrl, audioMimeType]);
+  const effectiveSegments = useMemo(
+    (): ReplayAudioSegment[] =>
+      resolveEffectiveSegments({
+        eventsBlobUrl,
+        audioSegments,
+        audioBlobUrl,
+        audioMimeType,
+        canonicalAudioBlobUrl,
+        canonicalAudioMimeType,
+        canonicalDurationSeconds,
+      }),
+    [
+      eventsBlobUrl,
+      audioSegments,
+      audioBlobUrl,
+      audioMimeType,
+      canonicalAudioBlobUrl,
+      canonicalAudioMimeType,
+      canonicalDurationSeconds,
+    ]
+  );
 
   const hasAudio = effectiveSegments.length > 0;
   const audioTimeline = useMemo(

@@ -146,13 +146,35 @@ export type ReplayTimelineControllerInput = {
   audioSegments?: readonly ReplayAudioSegment[] | null;
   audioBlobUrl?: string | null;
   audioMimeType?: string | null;
+  /** WS-G: when set, replay uses the single canonical concat blob (priority). */
+  canonicalAudioBlobUrl?: string | null;
+  canonicalAudioMimeType?: string | null;
+  canonicalDurationSeconds?: number | null;
   whiteboardSessionId?: string;
 };
 
 export function resolveEffectiveSegments(
   input: ReplayTimelineControllerInput
 ): ReplayAudioSegment[] {
-  const { audioSegments, audioBlobUrl, audioMimeType } = input;
+  const {
+    audioSegments,
+    audioBlobUrl,
+    audioMimeType,
+    canonicalAudioBlobUrl,
+    canonicalAudioMimeType,
+    canonicalDurationSeconds,
+  } = input;
+
+  if (canonicalAudioBlobUrl) {
+    return [
+      {
+        url: canonicalAudioBlobUrl,
+        mimeType: canonicalAudioMimeType ?? "audio/webm",
+        durationSeconds: canonicalDurationSeconds ?? null,
+      },
+    ];
+  }
+
   if (audioSegments && audioSegments.length > 0) {
     return [...audioSegments];
   }

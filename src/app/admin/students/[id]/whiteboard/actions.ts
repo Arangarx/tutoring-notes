@@ -47,6 +47,7 @@ import {
   kickSessionChunksAction,
   triggerNotesGenerationAction,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { enqueueReplayConcatAfterFinalize } from "@/lib/recording/concat-audio-enqueue";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -855,6 +856,10 @@ export async function finalizeWhiteboardSessionFromBackend(
       `[fzb] fzb=${whiteboardSessionId} action=notes_trigger_failed err=${notesResult.error}`
     );
   }
+
+  // WS-G: best-effort seamless replay concat — runs in after(), concurrent
+  // with notes-reduce; failure leaves multi-segment replay unchanged.
+  enqueueReplayConcatAfterFinalize(whiteboardSessionId);
 
   return {
     ok: true,

@@ -11,6 +11,7 @@ import TutorNotesSection from "@/components/whiteboard/TutorNotesSection";
 import { SessionCostPanel } from "@/components/admin/SessionCostPanel";
 import { getSessionCostBreakdown } from "@/lib/observability/cost-queries";
 import { loadTutorNoteForReview } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
 
 export const dynamic = "force-dynamic";
 
@@ -117,6 +118,8 @@ export default async function WhiteboardReviewPage({
           noteId: true,
           eventsSchemaVersion: true,
           snapshotBlobUrl: true,
+          concatBlobUrl: true,
+          concatDurationSeconds: true,
           student: { select: { id: true, name: true } },
           audioRecordings: {
             select: {
@@ -135,17 +138,19 @@ export default async function WhiteboardReviewPage({
 
   const eventsApiUrl = `/api/whiteboard/${whiteboardSessionId}/events`;
   const snapshotApiUrl = `/api/whiteboard/${whiteboardSessionId}/snapshot`;
-  const audioSegments = detail.audioRecordings.map((rec) => ({
-    url: `/api/audio/admin/${rec.id}`,
-    mimeType: rec.mimeType,
-    durationSeconds: rec.durationSeconds,
-  }));
+  const replayAudio = buildReplayAudioPayload({
+    whiteboardSessionId,
+    concatBlobUrl: detail.concatBlobUrl,
+    concatDurationSeconds: detail.concatDurationSeconds,
+    audioRecordings: detail.audioRecordings,
+    audience: "admin",
+  });
+  const audioSegments = replayAudio.audioSegments;
 
   const sessionLabel = `Recording of ${detail.student.name} — ${formatDate(detail.startedAt)}`;
-  const recordingDurationSeconds = detail.audioRecordings.reduce(
-    (sum, rec) => sum + (rec.durationSeconds ?? 0),
-    0
-  );
+  const recordingDurationSeconds = replayAudio.canonicalDurationSeconds
+    ? replayAudio.canonicalDurationSeconds
+    : detail.audioRecordings.reduce((sum, rec) => sum + (rec.durationSeconds ?? 0), 0);
   const durationLabel =
     recordingDurationSeconds > 0
       ? formatDuration(recordingDurationSeconds)
@@ -296,6 +301,9 @@ export default async function WhiteboardReviewPage({
       <WhiteboardReplay
         eventsBlobUrl={eventsApiUrl}
         audioSegments={audioSegments}
+        canonicalAudioBlobUrl={replayAudio.canonicalAudioBlobUrl}
+        canonicalAudioMimeType={replayAudio.canonicalAudioMimeType}
+        canonicalDurationSeconds={replayAudio.canonicalDurationSeconds}
         snapshotBlobUrl={detail.snapshotBlobUrl ? snapshotApiUrl : null}
         title={sessionLabel}
         whiteboardSessionId={whiteboardSessionId}

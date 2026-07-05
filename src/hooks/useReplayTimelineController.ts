@@ -44,6 +44,9 @@ export function useReplayTimelineController(
     audioSegments,
     audioBlobUrl,
     audioMimeType,
+    canonicalAudioBlobUrl,
+    canonicalAudioMimeType,
+    canonicalDurationSeconds,
     whiteboardSessionId,
     applySceneAtRef,
   } = options;
@@ -55,8 +58,19 @@ export function useReplayTimelineController(
         audioSegments,
         audioBlobUrl,
         audioMimeType,
+        canonicalAudioBlobUrl,
+        canonicalAudioMimeType,
+        canonicalDurationSeconds,
       }),
-    [eventsBlobUrl, audioSegments, audioBlobUrl, audioMimeType]
+    [
+      eventsBlobUrl,
+      audioSegments,
+      audioBlobUrl,
+      audioMimeType,
+      canonicalAudioBlobUrl,
+      canonicalAudioMimeType,
+      canonicalDurationSeconds,
+    ]
   );
 
   const hasAudio = effectiveSegments.length > 0;

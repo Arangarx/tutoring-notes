@@ -5,6 +5,7 @@ import { db, withDbRetry } from "@/lib/db";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
+import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,8 @@ export default async function ShareWhiteboardPage({
           durationSeconds: true,
           eventsSchemaVersion: true,
           snapshotBlobUrl: true,
+          concatBlobUrl: true,
+          concatDurationSeconds: true,
           audioRecordings: {
             select: {
               id: true,
@@ -141,11 +144,14 @@ export default async function ShareWhiteboardPage({
   const snapshotApiUrl = session.snapshotBlobUrl
     ? `/api/whiteboard/${whiteboardSessionId}/public-snapshot?token=${token}`
     : null;
-  const audioSegments = session.audioRecordings.map((rec) => ({
-    url: `/api/audio/${rec.id}?token=${token}`,
-    mimeType: rec.mimeType,
-    durationSeconds: rec.durationSeconds,
-  }));
+  const replayAudio = buildReplayAudioPayload({
+    whiteboardSessionId,
+    concatBlobUrl: session.concatBlobUrl,
+    concatDurationSeconds: session.concatDurationSeconds,
+    audioRecordings: session.audioRecordings,
+    audience: "share",
+    shareToken: token,
+  });
 
   return (
     <main className="min-h-dvh bg-background">
@@ -170,7 +176,10 @@ export default async function ShareWhiteboardPage({
         {/* Replay player — fenced; page chrome only reskinned above/below */}
         <WhiteboardReplay
           eventsBlobUrl={eventsApiUrl}
-          audioSegments={audioSegments}
+          audioSegments={replayAudio.audioSegments}
+          canonicalAudioBlobUrl={replayAudio.canonicalAudioBlobUrl}
+          canonicalAudioMimeType={replayAudio.canonicalAudioMimeType}
+          canonicalDurationSeconds={replayAudio.canonicalDurationSeconds}
           snapshotBlobUrl={snapshotApiUrl}
           title={sessionLabel}
         />

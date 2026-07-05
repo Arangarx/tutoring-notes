@@ -167,6 +167,7 @@ export async function enumerateLearnerFamilyBlobs(
         id: true,
         eventsBlobUrl: true,
         snapshotBlobUrl: true,
+        concatBlobUrl: true,
       },
     });
 
@@ -181,6 +182,7 @@ export async function enumerateLearnerFamilyBlobs(
     for (const session of sessions) {
       addUrl(urls, session.eventsBlobUrl);
       addUrl(urls, session.snapshotBlobUrl);
+      addUrl(urls, session.concatBlobUrl);
 
       if (session.eventsBlobUrl) {
         const { assetUrls, failed } = await collectEmbeddedAssetUrls(

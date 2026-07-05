@@ -242,6 +242,9 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
                 isReviewActive={isReplay}
                 eventsBlobUrl={payload.eventsProxyUrl}
                 audioSegments={payload.audioSegments}
+                canonicalAudioBlobUrl={payload.canonicalAudioBlobUrl}
+                canonicalAudioMimeType={payload.canonicalAudioMimeType}
+                canonicalDurationSeconds={payload.canonicalDurationSeconds}
                 whiteboardSessionId={whiteboardSessionId}
                 studentName={payload.studentName}
                 durationSeconds={payload.durationSeconds}

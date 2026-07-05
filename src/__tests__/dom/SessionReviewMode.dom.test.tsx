@@ -70,6 +70,9 @@ const basePayload = {
       durationSeconds: 60,
     },
   ],
+  canonicalAudioBlobUrl: null,
+  canonicalAudioMimeType: null,
+  canonicalDurationSeconds: null,
   initialNote: {
     found: true,
     status: "done" as const,

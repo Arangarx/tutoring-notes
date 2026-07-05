@@ -117,11 +117,13 @@
 - **Why we depend on it**: Recording re-arch Phase 1, Slice 3 — the transcription pipeline (`enqueueChunkTranscribe`) and notes pipeline (`enqueueNotesReduce`) previously used bare `void (async () => {...})()` fire-and-forget patterns. Vercel terminates the function when the response is sent, dropping those in-flight promises. On Production the Vercel Cron sweep recovers `pending` chunks; on Preview (no cron) notes never generate. `after()` eliminates this gap.
   - `src/lib/recording/chunk-transcribe-enqueue.ts:fireAndForgetWorker` — chunk transcription worker
   - `src/lib/recording/notes-enqueue.ts:fireAndForgetReduce` — notes reduce worker (with polling loop up to 4.5 min)
-  - Both require `maxDuration = 300` on the workspace route segment.
+  - `src/lib/recording/concat-audio-enqueue.ts:enqueueReplayConcatAfterFinalize` — WS-G post-finalize replay concat (best-effort; does not delay the notes path; silent no-op on failure; no cron backstop — multi-segment replay is the fallback)
+  - All three require `maxDuration = 300` on the workspace route segment.
 - **Generic / AWS equivalent**: **Lambda extension** (lifecycle hook) or **SQS trigger** (fire a message and let Lambda consume it). The `after()` pattern is a short-cut; longer workloads should use queues. See §11.1–§11.2 for the future Queues/SQS migration path.
 - **Where baked in**:
   - `src/lib/recording/chunk-transcribe-enqueue.ts` — `import { after } from "next/server"`
   - `src/lib/recording/notes-enqueue.ts` — same
+  - `src/lib/recording/concat-audio-enqueue.ts` — same
   - `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/page.tsx` — `export const maxDuration = 300`
 - **Important limits**:
   - `after()` is stable in Next.js 15 (available as `import { after } from "next/server"`). Do NOT use the unstable `unstable_after` alias from Next.js 14.

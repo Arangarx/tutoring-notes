@@ -22,6 +22,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db, withDbRetry } from "@/lib/db";
+import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { enqueueNotesReduce } from "@/lib/recording/notes-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
@@ -501,6 +502,9 @@ export type SessionReviewPayload = {
     mimeType: string;
     durationSeconds: number | null;
   }>;
+  canonicalAudioBlobUrl: string | null;
+  canonicalAudioMimeType: string | null;
+  canonicalDurationSeconds: number | null;
   initialNote: TutorNoteStatusResult;
 };
 
@@ -532,6 +536,8 @@ export async function loadSessionReviewPayload(
           durationSeconds: true,
           snapshotBlobUrl: true,
           eventsBlobUrl: true,
+          concatBlobUrl: true,
+          concatDurationSeconds: true,
           student: { select: { id: true, name: true } },
           audioRecordings: {
             select: {
@@ -584,22 +590,33 @@ export async function loadSessionReviewPayload(
     }
   }
 
+  const replayAudio = buildReplayAudioPayload({
+    whiteboardSessionId,
+    concatBlobUrl: detail.concatBlobUrl,
+    concatDurationSeconds: detail.concatDurationSeconds,
+    audioRecordings: detail.audioRecordings,
+    audience: "admin",
+  });
+
   return {
     studentName: detail.student.name,
     startedAtIso: detail.startedAt.toISOString(),
     endedAtIso: detail.endedAt?.toISOString() ?? null,
     durationSeconds: detail.durationSeconds,
-    hasAudio: detail.audioRecordings.length > 0,
+    hasAudio: replayAudio.hasAudio,
     eventCount,
     eventsProxyUrl: `/api/whiteboard/${whiteboardSessionId}/events`,
     snapshotProxyUrl: detail.snapshotBlobUrl
       ? `/api/whiteboard/${whiteboardSessionId}/snapshot`
       : null,
-    audioSegments: detail.audioRecordings.map((rec) => ({
-      url: `/api/audio/admin/${rec.id}`,
-      mimeType: rec.mimeType,
-      durationSeconds: rec.durationSeconds,
+    audioSegments: replayAudio.audioSegments.map((s) => ({
+      url: s.url,
+      mimeType: s.mimeType ?? "audio/webm",
+      durationSeconds: s.durationSeconds ?? null,
     })),
+    canonicalAudioBlobUrl: replayAudio.canonicalAudioBlobUrl,
+    canonicalAudioMimeType: replayAudio.canonicalAudioMimeType,
+    canonicalDurationSeconds: replayAudio.canonicalDurationSeconds,
     initialNote,
   };
 }

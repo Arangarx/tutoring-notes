@@ -352,6 +352,21 @@ model WhiteboardSession {
   snapshotBlobUrl String?
 
   /**
+   * WS-G — server-side FFmpeg concat of mixdown replay segments into one
+   * seamless WebM blob. Nullable until the post-finalize `after()` job
+   * completes; when absent or failed, replay falls back to multi-segment
+   * `SessionRecording` rows (no audio lost).
+   */
+  concatBlobUrl String?
+
+  /**
+   * WS-G — duration of `concatBlobUrl` in whole seconds (from ffmpeg probe
+   * after re-encode). Feeds replay scrubber / WS-L duration path when the
+   * canonical concat blob is used.
+   */
+  concatDurationSeconds Int?
+
+  /**
    * Sarah's explicit ask (blocker #24): session timer that starts when
    * BOTH parties first connect to the live room and is read by both
    * clients to compute elapsed. Survives one-side disconnect — the
