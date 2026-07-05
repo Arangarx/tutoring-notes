@@ -2672,10 +2672,16 @@ export function WhiteboardWorkspaceClient({
   useEffect(() => {
     if (!wbSignal || clockStartLoggedRef.current) return;
     clockStartLoggedRef.current = true;
+    const clockStartMode =
+      sessionMode === "IN_PERSON"
+        ? "in_person"
+        : !syncUrl
+          ? "solo"
+          : "live";
     console.log(
-      `[WhiteboardWorkspaceClient] rid=${whiteboardSessionId} wbsid=${whiteboardSessionId} action=clock_start t0=${getAudioMs()}`
+      `[WhiteboardWorkspaceClient] rid=${whiteboardSessionId} wbsid=${whiteboardSessionId} action=clock_start t0=${getAudioMs()} mode=${clockStartMode}`
     );
-  }, [wbSignal, whiteboardSessionId, getAudioMs]);
+  }, [wbSignal, whiteboardSessionId, getAudioMs, sessionMode, syncUrl]);
 
   // p3-clock: log the freeze/resume transitions of the single session clock.
   // The clock freezes whenever `wbSignal` drops while the FSM is `paused`
