@@ -13,11 +13,8 @@ jest.mock("next/navigation", () => ({
 
 import { db } from "@/lib/db";
 import { assertConsentRecordExists, ConsentError } from "@/lib/consent-scope";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "cc1") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

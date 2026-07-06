@@ -5,13 +5,10 @@
  */
 
 import { db } from "@/lib/db";
+import { uniq } from "../../../__tests__/helpers/unique-test-token";
 
 const ADMIN_ID = "00000000-0000-4000-8000-00000000e5b0";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "ers-e5b") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 afterAll(async () => {
   await db.$disconnect();

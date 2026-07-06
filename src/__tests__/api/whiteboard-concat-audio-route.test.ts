@@ -56,11 +56,8 @@ jest.mock("@/lib/student-scope", () => {
 
 import { db } from "@/lib/db";
 import { GET } from "@/app/api/whiteboard/[sessionId]/concat-audio/route";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "concat-audio") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
 

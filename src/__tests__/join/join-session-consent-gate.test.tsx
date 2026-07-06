@@ -57,15 +57,12 @@ jest.mock(
 import { db } from "@/lib/db";
 import { createSessionConsentSnapshot } from "@/lib/consent-scope";
 import JoinSessionPage from "@/app/join/[sessionId]/page";
+import { uniq } from "../helpers/unique-test-token";
 
 // ---------------------------------------------------------------------------
 // Helpers (mirrors consent-b2.test.ts)
 // ---------------------------------------------------------------------------
 
-let uniqueSuffix = 0;
-function uniq(prefix = "join") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

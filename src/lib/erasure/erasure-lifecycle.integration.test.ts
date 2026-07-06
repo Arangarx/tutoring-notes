@@ -69,6 +69,7 @@ import {
   processErasureJob,
 } from "@/lib/erasure/process-erasure-job";
 import { requestErasureByAdmin } from "@/lib/erasure/request-erasure-by-admin";
+import { uniq } from "../../__tests__/helpers/unique-test-token";
 import {
   endWhiteboardSession,
   type EndSessionSegment,
@@ -80,10 +81,6 @@ const DELETED_LEARNER_NAME = "[Deleted learner]";
 const TEST_HMAC_SECRET_AH = "test-ah-session-secret-minimum-32-bytes-xxxx";
 const TEST_HMAC_SECRET_LEARNER = "test-learner-session-secret-minimum-32-bytes";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "ers-e8") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 beforeAll(async () => {
   process.env.AH_SESSION_HMAC_SECRET = TEST_HMAC_SECRET_AH;

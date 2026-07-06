@@ -63,11 +63,8 @@ import { db } from "@/lib/db";
 import { createAccountHolderSession } from "@/lib/account-holder-session";
 import { generateRawToken, hashToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
 import ClaimSetupPage from "@/app/claim/[token]/setup/page";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "csp") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

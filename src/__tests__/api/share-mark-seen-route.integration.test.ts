@@ -16,11 +16,8 @@
 import { db } from "@/lib/db";
 import { generateShareToken } from "@/lib/security";
 import { POST } from "@/app/api/share/mark-seen/route";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "mark-seen") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 const originalNotesAuthWall = process.env.NOTES_AUTH_WALL;
 

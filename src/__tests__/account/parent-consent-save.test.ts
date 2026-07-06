@@ -25,11 +25,8 @@ jest.mock("@/lib/server-session", () => ({
 import { db } from "@/lib/db";
 import { saveParentConsentAction } from "@/app/account/children/[id]/consent/actions";
 import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "pcs") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

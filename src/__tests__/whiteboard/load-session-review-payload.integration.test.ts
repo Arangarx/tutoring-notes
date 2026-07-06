@@ -37,11 +37,8 @@ jest.mock("@/auth-options", () => ({ authOptions: {} }));
 
 import { db } from "@/lib/db";
 import { loadSessionReviewPayload } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "review-payload") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 const EVENTS_BLOB_URL = "https://blob.vercel-storage.com/review-events.json";
 

@@ -25,6 +25,7 @@ jest.mock("next/navigation", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { uniq } from "../helpers/unique-test-token";
 import {
   assertEffectiveConsent,
   assertConsentFromLiveRecord,
@@ -36,10 +37,6 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-let uniqueSuffix = 0;
-function uniq(prefix = "test") {
-  return `${prefix}-b2-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

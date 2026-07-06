@@ -5,11 +5,8 @@
  */
 
 import { db } from "@/lib/db";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "wbcursor") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function seedSession(cursors: {
   lastPersistedBatchSeq: number;

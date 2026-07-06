@@ -27,6 +27,7 @@ jest.mock("@/lib/blob", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { uniq } from "../../__tests__/helpers/unique-test-token";
 import {
   WB_EVENT_LOG_SCHEMA_VERSION,
   type WBEventLog,
@@ -36,10 +37,6 @@ import {
   resolveErasureScopeStudents,
 } from "@/lib/erasure/blob-inventory";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "ers-inv") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

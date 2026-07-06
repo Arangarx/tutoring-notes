@@ -21,11 +21,8 @@ jest.mock("@vercel/blob", () => ({
 
 import { db } from "@/lib/db";
 import { GET } from "@/app/api/w/[joinToken]/wb-asset/route";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "join-wb-asset") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
 

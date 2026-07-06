@@ -119,15 +119,12 @@ import {
   type EndSessionSegment,
 } from "@/app/admin/students/[id]/whiteboard/actions";
 import { triggerNotesGenerationAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { uniq } from "../helpers/unique-test-token";
 
 // ---------------------------------------------------------------------------
 // Helpers (mirrors consent-b2.test.ts)
 // ---------------------------------------------------------------------------
 
-let uniqueSuffix = 0;
-function uniq(prefix = "ma") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

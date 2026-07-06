@@ -43,11 +43,8 @@ jest.mock("@/lib/join-scope", () => ({
 
 import { db } from "@/lib/db";
 import { GET } from "@/app/api/sessions/[sessionId]/wb-asset/route";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "session-wb-asset") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
 

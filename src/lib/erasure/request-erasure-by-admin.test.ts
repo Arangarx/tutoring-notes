@@ -47,14 +47,11 @@ import {
 import { processErasureBatch } from "@/lib/erasure/process-erasure-batch";
 import { verifyErasureWorkerAuth } from "@/lib/erasure/erasure-worker-auth";
 import { GET as processRouteGet } from "@/app/api/internal/erasure/process/route";
+import { uniq } from "../../__tests__/helpers/unique-test-token";
 
 const TEST_HMAC_SECRET_AH = "test-ah-session-secret-minimum-32-bytes-xxxx";
 const TEST_HMAC_SECRET_LEARNER = "test-learner-session-secret-minimum-32-bytes";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "ers-e5a") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 const ADMIN_ID = "00000000-0000-4000-8000-00000000e5a0";
 

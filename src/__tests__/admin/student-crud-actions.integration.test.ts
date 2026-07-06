@@ -38,15 +38,12 @@ jest.mock("@/auth-options", () => ({ authOptions: {} }));
 
 import { db } from "@/lib/db";
 import { createStudent } from "@/app/admin/students/actions";
+import { uniq } from "../helpers/unique-test-token";
 import {
   renameStudent,
   deleteStudent,
 } from "@/app/admin/students/[id]/actions";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "roster-crud") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 function formWithName(name: string) {
   const fd = new FormData();

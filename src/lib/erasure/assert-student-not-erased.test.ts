@@ -13,6 +13,7 @@ jest.mock("next/navigation", () => ({
 
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { uniq } from "../../__tests__/helpers/unique-test-token";
 import {
   assertStudentNotErased,
   assertStudentNotErasedApi,
@@ -20,10 +21,6 @@ import {
   shouldShortCircuitEndSessionForErasure,
 } from "@/lib/erasure/assert-student-not-erased";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "e6-guard") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

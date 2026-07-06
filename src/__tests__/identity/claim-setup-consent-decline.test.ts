@@ -26,6 +26,7 @@ import { db } from "@/lib/db";
 import { createAccountHolderSession } from "@/lib/account-holder-session";
 import { generateRawToken, hashToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
 import { POST as setupPostHandler } from "@/app/api/claim/[token]/setup/route";
+import { uniq } from "../helpers/unique-test-token";
 
 const TEST_HMAC_SECRET_AH = "test-ah-session-secret-minimum-32-bytes-xxxx";
 
@@ -37,10 +38,6 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-let uniqueSuffix = 0;
-function uniq(prefix = "cc2") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

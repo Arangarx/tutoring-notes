@@ -50,11 +50,8 @@ jest.mock("@/lib/consent-scope", () => {
 import { db } from "@/lib/db";
 import { registerWhiteboardSessionAudioSegmentAction } from "@/app/admin/students/[id]/whiteboard/actions";
 import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "regseg") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function seedActiveSession() {
   const tutor = await db.adminUser.create({

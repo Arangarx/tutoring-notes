@@ -43,16 +43,13 @@ import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { GET as getPublicEvents } from "@/app/api/whiteboard/[sessionId]/public-events/route";
 import { GET as getPublicSnapshot } from "@/app/api/whiteboard/[sessionId]/public-snapshot/route";
 import { GET as getShareAudio } from "@/app/api/audio/[recordingId]/route";
+import { uniq } from "../../__tests__/helpers/unique-test-token";
 
 const ADMIN_ID = "00000000-0000-4000-8000-00000000e8a1";
 const originalFetch = global.fetch;
 const fetchMock = jest.fn();
 const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
-let uniqueSuffix = 0;
-function uniq(prefix = "share-ers") {
-  return `${prefix}-${++uniqueSuffix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 beforeAll(async () => {
   await db.$executeRawUnsafe(`

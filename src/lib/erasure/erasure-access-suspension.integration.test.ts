@@ -66,14 +66,11 @@ import { GET as getEvents } from "@/app/api/whiteboard/[sessionId]/events/route"
 import { GET as getSnapshot } from "@/app/api/whiteboard/[sessionId]/snapshot/route";
 import { GET as getTutorAsset } from "@/app/api/whiteboard/[sessionId]/tutor-asset/route";
 import { GET as getAudio } from "@/app/api/audio/admin/[recordingId]/route";
+import { uniq } from "../../__tests__/helpers/unique-test-token";
 
 const ADMIN_ID = "00000000-0000-4000-8000-00000000e8a0";
 const putMock = put as jest.MockedFunction<typeof put>;
 
-let uniqueSuffix = 0;
-function uniq(prefix = "ers-er3") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 const defaultAdminScope = {
   kind: "admin" as const,

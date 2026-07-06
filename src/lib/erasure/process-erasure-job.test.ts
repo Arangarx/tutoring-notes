@@ -31,6 +31,7 @@ jest.mock("@/lib/blob", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { uniq } from "../../__tests__/helpers/unique-test-token";
 import {
   WB_EVENT_LOG_SCHEMA_VERSION,
   type WBEventLog,
@@ -42,10 +43,6 @@ import {
 
 const DELETED_LEARNER_NAME = "[Deleted learner]";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "ers-e4") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function createTutor() {
   return db.adminUser.create({

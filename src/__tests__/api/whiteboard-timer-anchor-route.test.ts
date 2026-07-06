@@ -37,11 +37,8 @@ jest.mock("@/lib/student-scope", () => {
 
 import { db } from "@/lib/db";
 import { GET } from "@/app/api/whiteboard/[sessionId]/timer-anchor/route";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "timer-anchor") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 async function seedTimerAnchorFixture() {
   const tutor = await db.adminUser.create({

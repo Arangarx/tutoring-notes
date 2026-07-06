@@ -36,11 +36,8 @@ jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
 import { db } from "@/lib/db";
 import { generateShareToken } from "@/lib/security";
 import { GET } from "@/app/api/whiteboard/[sessionId]/public-concat-audio/route";
+import { uniq } from "../helpers/unique-test-token";
 
-let uniqueSuffix = 0;
-function uniq(prefix = "public-concat") {
-  return `${prefix}-${Date.now()}-${++uniqueSuffix}`;
-}
 
 const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
 const originalNotesAuthWall = process.env.NOTES_AUTH_WALL;
