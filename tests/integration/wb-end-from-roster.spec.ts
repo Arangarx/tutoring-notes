@@ -148,7 +148,12 @@ async function fetchRecordingCount(
     { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
   );
   expect(res.ok(), await res.text()).toBeTruthy();
-  return (await res.json()) as { count: number; byStream: Record<string, number> };
+  return (await res.json()) as {
+    count: number;
+    byStream: Record<string, number>;
+    blobUrls: string[];
+    distinctBlobUrlCount: number;
+  };
 }
 
 async function drawStrokes(page: import("@playwright/test").Page) {
@@ -279,10 +284,13 @@ test.describe(
         expect(
           recordings.count,
           "SessionRecording must survive outbox-only roster End-and-review"
-        ).toBeGreaterThanOrEqual(expectedSegmentCount);
-        expect(recordings.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(
-          expectedSegmentCount
-        );
+        ).toBeGreaterThanOrEqual(Math.max(1, expectedSegmentCount));
+        expect(Object.keys(recordings.byStream)).toEqual(["tutor:mic"]);
+        expect(recordings.byStream["tutor:mic"] ?? 0).toBe(recordings.count);
+        expect(
+          recordings.distinctBlobUrlCount,
+          `duplicate blobUrl persistence (distinct=${recordings.distinctBlobUrlCount}, count=${recordings.count}, blobUrls=${JSON.stringify(recordings.blobUrls)})`
+        ).toBe(recordings.count);
 
         const eventsRes = await page.request.get(
           `/api/whiteboard/${whiteboardSessionId}/events`
@@ -364,35 +372,6 @@ test.describe(
       } finally {
         await prisma.$disconnect();
       }
-    });
-  }
-);
-
-// ---------------------------------------------------------------------------
-// 3. Legacy intent fallback (feature-flagged off on tip)
-// ---------------------------------------------------------------------------
-
-test.describe(
-  "Legacy intent=endreview auto-end (fallback only)",
-  { tag: [TAG.WB_CHROME] },
-  () => {
-    test.skip(
-      true,
-      "LEGACY_INTENT_ENDREVIEW_AUTO_END=false — deep-link fallback disabled after WS-C"
-    );
-
-    test("intent=endreview causes exactly one auto-end → review mode", async ({
-      page,
-    }) => {
-      test.setTimeout(180_000);
-      const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
-      await page.goto(
-        `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace?intent=endreview`,
-        { waitUntil: "domcontentloaded" }
-      );
-      await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
-        timeout: 120_000,
-      });
     });
   }
 );

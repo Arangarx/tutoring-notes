@@ -149,7 +149,12 @@ async function fetchRecordingCount(
     { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
   );
   expect(res.ok(), await res.text()).toBeTruthy();
-  return (await res.json()) as { count: number; byStream: Record<string, number> };
+  return (await res.json()) as {
+    count: number;
+    byStream: Record<string, number>;
+    blobUrls: string[];
+    distinctBlobUrlCount: number;
+  };
 }
 
 async function drawStrokes(page: import("@playwright/test").Page) {
@@ -295,10 +300,16 @@ test.describe(
           .toBeGreaterThanOrEqual(expectedSegmentCount);
 
         const recordings = await fetchRecordingCount(page, whiteboardSessionId);
-        expect(recordings.count).toBeGreaterThanOrEqual(expectedSegmentCount);
-        expect(recordings.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(
-          expectedSegmentCount
-        );
+        expect(
+          recordings.count,
+          "SessionRecording must survive outbox-only gate End-and-review"
+        ).toBeGreaterThanOrEqual(Math.max(1, expectedSegmentCount));
+        expect(Object.keys(recordings.byStream)).toEqual(["tutor:mic"]);
+        expect(recordings.byStream["tutor:mic"] ?? 0).toBe(recordings.count);
+        expect(
+          recordings.distinctBlobUrlCount,
+          `duplicate blobUrl persistence (distinct=${recordings.distinctBlobUrlCount}, count=${recordings.count}, blobUrls=${JSON.stringify(recordings.blobUrls)})`
+        ).toBe(recordings.count);
 
         const eventsRes = await page.request.get(
           `/api/whiteboard/${whiteboardSessionId}/events`
