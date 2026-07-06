@@ -179,6 +179,23 @@ describe("SessionReviewMode unified surface", () => {
     expect(screen.queryByTestId("wb-replay-back-to-notes")).not.toBeInTheDocument();
   });
 
+  it("shows replay CTA with no-audio note when board events exist but no audio", async () => {
+    loadSessionReviewPayload.mockResolvedValue({
+      ...basePayload,
+      hasAudio: false,
+      eventCount: 3,
+      audioSegments: [],
+    });
+    render(
+      <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
+    );
+    expect(await screen.findByTestId("wb-review-enter-replay")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-review-no-audio-note")).toHaveTextContent(
+      "No audio was recorded for this session."
+    );
+    expect(screen.queryByTestId("wb-review-no-recording")).not.toBeInTheDocument();
+  });
+
   it("shows no recording message when no audio and no events", async () => {
     loadSessionReviewPayload.mockResolvedValue({
       ...basePayload,
@@ -190,8 +207,10 @@ describe("SessionReviewMode unified surface", () => {
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
     );
     expect(await screen.findByTestId("wb-review-no-recording")).toHaveTextContent(
-      "No recording available"
+      "Nothing was recorded for this session."
     );
+    expect(screen.queryByTestId("wb-review-enter-replay")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("wb-review-no-audio-note")).not.toBeInTheDocument();
   });
 
   it("shows billedDurationMin minutes-only when frozen billing is present", async () => {

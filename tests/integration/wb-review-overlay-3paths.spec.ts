@@ -32,6 +32,12 @@ type RecordingCountPayload = {
   byStream: Record<string, number>;
 };
 
+type WbDbStatePayload = {
+  batchCount: number;
+  lastPersistedToIndex: number;
+  latestToEventIndex: number | null;
+};
+
 async function injectVadOverrides(page: Page) {
   await page.addInitScript(() => {
     const w = window as unknown as {
@@ -77,6 +83,26 @@ async function fetchRecordingCount(
   );
   expect(res.ok(), await res.text()).toBeTruthy();
   return (await res.json()) as RecordingCountPayload;
+}
+
+async function fetchWbDbState(
+  page: Page,
+  sessionId: string
+): Promise<WbDbStatePayload> {
+  const res = await page.request.get(
+    `/api/test/whiteboard/${sessionId}/db-state`,
+    { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()) as WbDbStatePayload;
+}
+
+function sessionHasPersistedBoardEvents(dbState: WbDbStatePayload): boolean {
+  return (
+    dbState.batchCount > 0 ||
+    dbState.lastPersistedToIndex >= 0 ||
+    (dbState.latestToEventIndex ?? -1) >= 0
+  );
 }
 
 async function makeSessionStale(whiteboardSessionId: string) {
@@ -190,6 +216,7 @@ async function assertOverlayHonestNonEmpty(page: Page, sessionId: string) {
     timeout: 30_000,
   });
   await expect(page.getByTestId("wb-review-no-recording")).not.toBeVisible();
+  await expect(page.getByTestId("wb-review-no-audio-note")).not.toBeVisible();
 }
 
 async function assertPreEndNoUserDrivenVad(page: Page, sessionId: string) {
@@ -201,7 +228,10 @@ async function assertPreEndNoUserDrivenVad(page: Page, sessionId: string) {
 }
 
 /**
- * Post-End UI ↔ DB agreement — replay CTA iff count >= 1, WS-S empty iff count === 0.
+ * Post-End UI ↔ DB agreement (Option B honesty):
+ *   - count >= 1 → full replay CTA, no empty-state, no no-audio note.
+ *   - count === 0 + persisted board events → replay CTA + explicit no-audio note.
+ *   - count === 0 + no board events → honest empty-state.
  */
 async function assertOverlayAffordanceMatchesDb(page: Page, sessionId: string) {
   const rec = await fetchRecordingCount(page, sessionId);
@@ -210,12 +240,30 @@ async function assertOverlayAffordanceMatchesDb(page: Page, sessionId: string) {
       timeout: 30_000,
     });
     await expect(page.getByTestId("wb-review-no-recording")).not.toBeVisible();
+    await expect(page.getByTestId("wb-review-no-audio-note")).not.toBeVisible();
   } else {
     expect(rec.count).toBe(0);
-    const emptyState = page.getByTestId("wb-review-no-recording");
-    await expect(emptyState).toBeVisible({ timeout: 30_000 });
-    await expect(emptyState).toContainText("No recording available");
-    await expect(page.getByTestId("wb-review-enter-replay")).not.toBeVisible();
+    const dbState = await fetchWbDbState(page, sessionId);
+    const hasBoardEvents = sessionHasPersistedBoardEvents(dbState);
+    if (hasBoardEvents) {
+      await expect(page.getByTestId("wb-review-enter-replay")).toBeVisible({
+        timeout: 30_000,
+      });
+      const noAudioNote = page.getByTestId("wb-review-no-audio-note");
+      await expect(noAudioNote).toBeVisible({ timeout: 30_000 });
+      await expect(noAudioNote).toContainText(
+        "No audio was recorded for this session."
+      );
+      await expect(page.getByTestId("wb-review-no-recording")).not.toBeVisible();
+    } else {
+      const emptyState = page.getByTestId("wb-review-no-recording");
+      await expect(emptyState).toBeVisible({ timeout: 30_000 });
+      await expect(emptyState).toContainText(
+        "Nothing was recorded for this session."
+      );
+      await expect(page.getByTestId("wb-review-enter-replay")).not.toBeVisible();
+      await expect(page.getByTestId("wb-review-no-audio-note")).not.toBeVisible();
+    }
   }
 }
 
@@ -363,12 +411,7 @@ test.describe(
         await assertOverlayHonestNonEmpty(page, whiteboardSessionId);
       });
 
-      // WS-T #8 — roster End with recording-count===0 still shows
-      // wb-review-enter-replay ("▶ Replay session") instead of the honest
-      // wb-review-no-recording empty-state (WS-S overlay dishonesty on roster
-      // path; fragile-ADJACENT review-payload / loadSessionReviewPayload). Un-fixme
-      // when the product fix lands (design-first + Andrew go).
-      test.fixme(
+      test(
         "no user-driven VAD — overlay affordance honestly matches recording-count",
         async ({ page }) => {
           test.setTimeout(180_000);

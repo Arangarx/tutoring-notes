@@ -245,21 +245,32 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
                 )}
               </div>
               {canReplay ? (
-                <button
-                  type="button"
-                  className="btn primary wb-review-board-cta"
-                  data-testid="wb-review-enter-replay"
-                  onClick={enterReplay}
-                >
-                  ▶ Replay session
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn primary wb-review-board-cta"
+                    data-testid="wb-review-enter-replay"
+                    onClick={enterReplay}
+                  >
+                    ▶ Replay session
+                  </button>
+                  {payload && !payload.hasAudio && payload.eventCount > 0 ? (
+                    <p
+                      className="muted wb-review-no-audio-note"
+                      data-testid="wb-review-no-audio-note"
+                      style={{ fontSize: 13, margin: 0, padding: "4px 0 0" }}
+                    >
+                      No audio was recorded for this session.
+                    </p>
+                  ) : null}
+                </>
               ) : payload ? (
                 <div
                   className="muted wb-review-board-cta"
                   data-testid="wb-review-no-recording"
                   style={{ fontSize: 13, padding: "8px 0" }}
                 >
-                  No recording available.
+                  Nothing was recorded for this session.
                 </div>
               ) : null}
             </div>
