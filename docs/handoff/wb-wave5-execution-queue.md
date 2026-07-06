@@ -203,6 +203,20 @@ The WS-G implementer ran `npx prisma migrate deploy`, which reads `.env`'s `DATA
 
 - **(f) JEST ISOLATION CLASS-2 (2026-07-06)** — shared globally-unique `uniq()` [`3cb9a7b`](https://github.com/Arangarx/tutoring-notes/commit/3cb9a7b) eliminated fixture email-collision class; residual **non-email** cross-test DB pollution remains (~1 flake/run: upload-outbox, share-audio-proxy, erasure-lifecycle, etc.) — "no per-test DB cleanup" gap. **Follow-up:** per-test/per-suite DB cleanup (transactional rollback or targeted truncate) so `--workers=1` holds consecutive greens. Extends (d) below; cross-ref BACKLOG **JEST-ISOLATION-CLASS-2**.
 
+## Standing test doctrine (anti-drift)
+
+Durable process/test lessons — survive chat handoffs. Cross-ref GATE/HARNESS above, WS-T tallies, and TEST COVERAGE INVENTORY § HARD PRINCIPLE.
+
+- **(1) FALSE-GREEN IS THE DANGEROUS CLASS (Andrew confidence bar, 2026-07-06):** a test that passes while the feature is broken is far worse than a stale-red that fails loudly after an intentional product change. Goal = rely on the suite **WHOLESALE**. Hunt false-greens proactively; a green suite is necessary but NOT sufficient. Exemplars: WS-R roughness E5 `7511dd9` (data-model oracle, visual no-op); WS-N4 gate/roster `seedSessionRecording` fallback (masked orphan bug until removed).
+
+- **(2) NEVER `page.goto` (OR ANY MANUAL NAV/STATE NUDGE) TO MASK A REDIRECT/GATE/GUARD ORACLE** — assert the product's **ACTUAL** behavior. WS-T #7 Test #1 near-miss: a `goto` fallback that masked the real cancel-redirect was rejected before the real product fix [`9450906`](https://github.com/Arangarx/tutoring-notes/commit/9450906).
+
+- **(3) RUN FULL `npx jest --workers=1` AFTER EVERY FRAGILE-SURFACE COMMIT** — not only at batch checkpoints. WS-M/WS-W stale DOM tests sat red for weeks unnoticed because full jest wasn't re-run per fragile commit. Merge-gate bar remains `--workers=1` until JEST-ISOLATION pass lands (GATE/HARNESS § (d)/(f)).
+
+- **(4) MERGE-GATE RELAY CAN SILENTLY STOP COMPLETING** — if `auth.setup`/integration-setup flakes, ALL 163 wb-regression specs abort and reds hide (2026-07-06: masked 22 reds). Always confirm the relay actually **RAN** the specs (not just that the command exited) before trusting a green. See GATE/HARNESS § (c) + (e).
+
+- **(5) ORCHESTRATOR — PRESENT NEXT-TRANCHE PLAN + GET ANDREW'S EXPLICIT CONFIRMATION BEFORE DISPATCH** — the bootstrap's "do not dispatch until I confirm" standing rule. **LIMITED** autonomy — silence / un-clicked prompts are NOT consent (see `ORCHESTRATOR-STATE.md` autonomy posture).
+
 ## Deferred / tracked (not this pass)
 
 - **WS-A F-1** (outbox register-failure has no attempt cap → unbounded retries on persistently-failing register server; log-spam only, NO data loss). 5-axis rated SHOULD-FIX / next-wave-acceptable. **~10-line in-flight-Set fix + reuse `permanentFailAfter` + dedupe log, with its own 5-axis, before the v1-redesign merge.** F-2/F-3 fold in.
