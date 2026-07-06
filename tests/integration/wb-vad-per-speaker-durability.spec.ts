@@ -3,9 +3,12 @@ import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
+import { TAG } from "../test-tags";
 import {
   openTutorAndStudent,
   seedWbLiveSyncSession,
+  waitForWbE2eBridge,
+  waitForTutorStudentConnected,
 } from "./whiteboard-live-sync.helpers";
 
 /**
@@ -124,7 +127,47 @@ async function listOutboxRowsForSession(
   }, sessionId);
 }
 
-test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
+/** WS-N seam — same stub as wb-tab-kill-audio-durability.spec.ts `installControllableUploadStub`. */
+function installControllableUploadStub(
+  context: import("@playwright/test").BrowserContext,
+  opts: { block: boolean; delayMs: number }
+) {
+  let uploadSeq = 0;
+  return context.route("**/api/upload/audio**", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    if (opts.block) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "upload blocked for tab-kill test" }),
+      });
+      return;
+    }
+    if (opts.delayMs > 0) {
+      await new Promise((r) => setTimeout(r, opts.delayMs));
+    }
+    uploadSeq += 1;
+    try {
+      await route.continue();
+    } catch {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          url: `https://test.public.blob.vercel-storage.com/wb-tab-kill-${uploadSeq}.webm`,
+        }),
+      });
+    }
+  });
+}
+
+test.describe(
+  "wb VAD + incremental SessionRecording (WS-A A1+A2)",
+  { tag: [TAG.WB_RECORDING] },
+  () => {
   test("speak → silence → speak yields ≥2 mixdown uploads and mid-session DB rows", async ({
     page,
   }) => {
@@ -231,9 +274,13 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
       .catch(() => false);
     expect(panelHidden || reviewVisible).toBeTruthy();
   });
-});
+  }
+);
 
-test.describe("wb per-speaker transcription + replay-mix (WS-A A3+A4)", () => {
+test.describe(
+  "wb per-speaker transcription + replay-mix (WS-A A3+A4)",
+  { tag: [TAG.WB_RECORDING] },
+  () => {
   test("student speaks → transcriptionOnly upload; End → chunks + replay is mixdown-only", async ({
     browser,
   }) => {
@@ -338,4 +385,143 @@ test.describe("wb per-speaker transcription + replay-mix (WS-A A3+A4)", () => {
       await peers.close();
     }
   });
-});
+  }
+);
+
+test.describe(
+  "wb VAD durability through tutor tab-kill (WS-A + WS-N)",
+  { tag: [TAG.WB_RECORDING] },
+  () => {
+    test("two-party VAD backlog survives tab-kill → End preserves mixdown replay set", async ({
+      browser,
+    }) => {
+      /**
+       * Oracle: `/api/test/whiteboard/{id}/recording-count` — persisted
+       * SessionRecording rows grouped by streamId (same contract as P1-WB-1 /
+       * wb-session-lifecycle REPLAY-MIX). Independent of outbox hooks or VAD internals.
+       *
+       * Red-before (2026-07-05): reversing `final.count >= preKillCount` or allowing
+       * non-tutor:mic streams in byStream fails when kill drops durable segments.
+       */
+      test.setTimeout(420_000);
+
+      test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
+
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session);
+      try {
+        await injectVadOverrides(peers.tutorPage);
+        await injectVadOverrides(peers.studentPage);
+
+        const stubOpts = { block: false, delayMs: 0 };
+        await installControllableUploadStub(peers.tutorContext, stubOpts);
+
+        await peers.tutorPage.waitForTimeout(2_000);
+        await driveTwoVadSilenceCuts(peers.tutorPage);
+
+        await expect
+          .poll(
+            async () => {
+              const mid = await fetchRecordingCount(
+                peers.tutorPage,
+                session.whiteboardSessionId
+              );
+              return mid.byStream["tutor:mic"] ?? 0;
+            },
+            { timeout: 120_000, intervals: [500, 1000, 2000] }
+          )
+          .toBeGreaterThanOrEqual(1);
+
+        const preKill = await fetchRecordingCount(
+          peers.tutorPage,
+          session.whiteboardSessionId
+        );
+        const preKillCount = preKill.count;
+        expect(preKillCount).toBeGreaterThanOrEqual(1);
+
+        // Mid-backlog: block tutor uploads while per-speaker lanes keep running.
+        stubOpts.block = true;
+        await driveTwoVadSilenceCuts(peers.tutorPage);
+        await peers.studentPage.waitForTimeout(4_000);
+        await peers.tutorPage.waitForTimeout(1_500);
+
+        // WS-N tab-kill seam: close tutor page only — same BrowserContext keeps IDB.
+        await peers.tutorPage.close();
+
+        const resumePage = await peers.tutorContext.newPage();
+        await injectVadOverrides(resumePage);
+        stubOpts.block = false;
+        stubOpts.delayMs = 50;
+
+        await resumePage.goto(
+          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(resumePage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await waitForWbE2eBridge(resumePage, "tutor");
+        await waitForTutorStudentConnected(resumePage);
+
+        // WS-N seam — let blocked segments drain before End (same poll shape as tab-kill spec).
+        await expect
+          .poll(
+            async () => {
+              const rows = await listOutboxRowsForSession(
+                resumePage,
+                session.whiteboardSessionId
+              );
+              return rows.filter(
+                (r) =>
+                  r.streamId === "tutor:mic" &&
+                  r.transcriptionOnly !== true &&
+                  r.blobRemoteUrl
+              ).length;
+            },
+            { timeout: 60_000, intervals: [500, 1000, 2000] }
+          )
+          .toBeGreaterThanOrEqual(1);
+
+        const endBtn = resumePage.getByTestId("wb-end-session");
+        await expect(endBtn).toBeEnabled();
+        await endBtn.click();
+        await expect(resumePage.getByTestId("wb-end-session-confirm")).toBeVisible({
+          timeout: 15_000,
+        });
+        await resumePage.getByTestId("wb-end-session-confirm-yes").click();
+
+        await expect(resumePage.getByTestId("wb-session-review-mode")).toBeVisible({
+          timeout: 180_000,
+        });
+
+        await expect
+          .poll(
+            async () => {
+              const replay = await fetchRecordingCount(
+                resumePage,
+                session.whiteboardSessionId
+              );
+              return replay.count;
+            },
+            { timeout: 180_000, intervals: [1000, 2000, 3000] }
+          )
+          .toBeGreaterThanOrEqual(preKillCount);
+
+        const replay = await fetchRecordingCount(
+          resumePage,
+          session.whiteboardSessionId
+        );
+        expect(replay.count).toBeGreaterThanOrEqual(preKillCount);
+        expect(replay.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(preKillCount);
+        for (const streamId of Object.keys(replay.byStream)) {
+          expect(
+            streamId,
+            "REPLAY-MIX: replay rows must be tutor:mic mixdown only after tab-kill"
+          ).toBe("tutor:mic");
+        }
+      } finally {
+        await peers.close();
+      }
+    });
+  }
+);
