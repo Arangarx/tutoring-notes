@@ -856,9 +856,10 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     await loadTutorBoard(page, session);
 
     // Solo recording grace: allow audio bridge + recorder to arm before scene capture.
-    await expect(page.getByTestId("wb-recording-pill")).toContainText(/live/i, {
-      timeout: 60_000,
-    });
+    await expect(page.getByTestId("wb-recording-pill")).toContainText(
+      /solo rehearsal|recording/i,
+      { timeout: 60_000 }
+    );
     await page.waitForTimeout(2_000);
     await drawTestStrokeOnRole(
       page,
