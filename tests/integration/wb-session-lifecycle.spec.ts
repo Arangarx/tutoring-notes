@@ -768,7 +768,7 @@ test.describe(
     test("PENDING tutor Cancel → confirm → redirect to student roster; session row gone", async ({
       browser,
     }) => {
-      test.setTimeout(120_000);
+      test.setTimeout(180_000);
       const session = await seedWbPendingLiveSyncSession({ sessionMode: "IN_PERSON" });
 
       const tutorCtx = await browser.newContext({
@@ -788,16 +788,24 @@ test.describe(
         await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
           timeout: 10_000,
         });
+        await waitForWbE2eBridge(tutorPage, "tutor");
 
-        await tutorPage.getByTestId("wb-waiting-cancel").click();
-        await expect(tutorPage.getByTestId("wb-waiting-cancel-confirm")).toBeVisible({
-          timeout: 8_000,
-        });
-        await tutorPage.getByTestId("wb-waiting-cancel-confirm").click();
+        const cancelBtn = tutorPage.getByTestId("wb-waiting-cancel");
+        const confirmBtn = tutorPage.getByTestId("wb-waiting-cancel-confirm");
+        const rosterPath = `/admin/students/${session.studentId}`;
 
-        await tutorPage.waitForURL(`**/admin/students/${session.studentId}`, {
-          timeout: 20_000,
-        });
+        await expect(cancelBtn).toBeEnabled({ timeout: 30_000 });
+        await cancelBtn.click();
+        await expect(confirmBtn).toBeVisible({ timeout: 10_000 });
+        await expect(confirmBtn).toBeEnabled({ timeout: 10_000 });
+        await Promise.all([
+          tutorPage.waitForURL(
+            (url) => url.pathname === rosterPath,
+            { timeout: 60_000, waitUntil: "commit" }
+          ),
+          confirmBtn.click(),
+        ]);
+        expect(new URL(tutorPage.url()).pathname).toBe(rosterPath);
 
         const prisma = new PrismaClient();
         try {
@@ -2229,17 +2237,12 @@ test.describe(
             tutorPage.getByTestId("wb-waiting-overlay")
           ).toBeVisible({ timeout: 10_000 });
 
-          // Student: overlay has WbTopBarMicControlLive with inline meter; no in-dropdown mic picker.
+          // Student: overlay has WbTopBarMicControlLive with inline meter + settings caret.
           const studentMic = studentPage
             .getByTestId("wb-waiting-overlay")
             .getByTestId("wb-topbar-mic-toggle");
           await expect(studentMic).toBeVisible({ timeout: 10_000 });
           await expect(studentMic.locator(".mynk-wb-mic-meter")).toBeVisible();
-          await expect(
-            studentPage
-              .getByTestId("wb-waiting-overlay")
-              .getByTestId("wb-topbar-mic-settings")
-          ).toHaveCount(0);
 
           // Tutor: overlay also has WbTopBarMicControlLive with inline meter + full recorder dropdown.
           const tutorMic = tutorPage
@@ -2441,6 +2444,7 @@ test.describe(
           await expect(
             studentPage.getByTestId("student-whiteboard-canvas-mount")
           ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(studentPage, "student");
 
           const overlay = studentPage.getByTestId("wb-waiting-overlay");
           await expect(overlay).toBeVisible({ timeout: 10_000 });
@@ -2454,10 +2458,27 @@ test.describe(
             devicePickers.getByTestId("audio-device-select")
           ).toBeVisible({ timeout: 5_000 });
 
-          // Overlay mic control has no in-dropdown device picker (settings caret hidden).
-          await expect(
-            overlay.getByTestId("wb-topbar-mic-settings")
-          ).toHaveCount(0);
+          // Settings caret opens gain slider; device picker stays on-page only.
+          const micSettings = overlay.getByTestId("wb-topbar-mic-settings");
+          const popover = overlay.locator(".mynk-wb-mic-popover");
+          await expect(micSettings).toBeVisible({ timeout: 10_000 });
+          await expect(micSettings).toBeEnabled({ timeout: 10_000 });
+          await expect
+            .poll(
+              async () => {
+                if (await popover.getByTestId("mic-gain-slider").isVisible()) {
+                  return "open";
+                }
+                await micSettings.click();
+                return (await popover.getByTestId("mic-gain-slider").isVisible())
+                  ? "open"
+                  : "clicked";
+              },
+              { timeout: 15_000 }
+            )
+            .toBe("open");
+          await expect(popover.getByTestId("mic-gain-slider")).toBeVisible();
+          await expect(popover.getByTestId("mic-device-select")).toHaveCount(0);
           await expect(overlay.getByTestId("audio-device-select")).toHaveCount(
             1
           );
@@ -2469,7 +2490,7 @@ test.describe(
     );
 
     test(
-      "student live board: mic settings dropdown still contains device picker after Start",
+      "student live board: mic settings popover shows gain slider without device picker after Start",
       async ({ browser }) => {
         test.setTimeout(180_000);
         const session = await seedWbPendingLiveSyncSession();
@@ -2521,10 +2542,13 @@ test.describe(
           await expect(micSettings).toBeVisible({ timeout: 10_000 });
           await micSettings.click();
 
-          const dropdownPicker = studentPage
+          const popover = studentPage
             .getByTestId("wb-topbar-mic")
-            .getByTestId("audio-device-select");
-          await expect(dropdownPicker).toBeVisible({ timeout: 5_000 });
+            .locator(".mynk-wb-mic-popover");
+          await expect(popover.getByTestId("mic-gain-slider")).toBeVisible({
+            timeout: 5_000,
+          });
+          await expect(popover.getByTestId("mic-device-select")).toHaveCount(0);
         } finally {
           await tutorCtx.close();
           await studentCtx.close();

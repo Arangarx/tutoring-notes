@@ -3976,27 +3976,24 @@ export function WhiteboardWorkspaceClient({
     console.log(
       `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending`
     );
+    const rosterUrl = `/admin/students/${studentId}`;
     try {
-      const result = await deleteWhiteboardSessionAndDataAction(
-        whiteboardSessionId
-      );
+      const result = await deleteWhiteboardSessionAndDataAction(whiteboardSessionId);
       if (!result.ok) {
-        setCancelError(
-          result.error ?? "Could not cancel the session. Please try again."
-        );
+        setCancelError(result.error ?? "Could not cancel the session. Please try again.");
+        setIsCancelling(false);
         return;
       }
-      router.push(`/admin/students/${studentId}`);
-    } catch (err) {
+      window.location.assign(rosterUrl);
+    } catch (err: unknown) {
       console.error(
         `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
         err
       );
       setCancelError("Could not cancel the session. Please try again.");
-    } finally {
       setIsCancelling(false);
     }
-  }, [whiteboardSessionId, studentId, router, isCancelling]);
+  }, [whiteboardSessionId, studentId, isCancelling]);
 
   const handleEndSession = useCallback(async () => {
     setShowEndConfirm(false);
