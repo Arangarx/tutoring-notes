@@ -161,6 +161,7 @@ export default defineConfig({
         "**/integration/wb-resume-from-backend.spec.ts",
         "**/integration/wb-end-from-roster.spec.ts",
         "**/integration/wb-end-from-gate.spec.ts",
+        "**/integration/wb-review-overlay-3paths.spec.ts",
         "**/integration/wb-vad-per-speaker-durability.spec.ts",
         "**/integration/wb-tab-kill-audio-durability.spec.ts",
         "**/integration/wb-tutor-recording-mute.spec.ts",
