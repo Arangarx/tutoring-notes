@@ -45,6 +45,10 @@ export function subscribeCaptureDefer(listener: () => void): () => void {
 
 /** Full-page reload — centralized so deploy-freshness tests can mock jsdom navigation. */
 export function triggerDeployReload(): void {
+  if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_PLAYWRIGHT_TEST === "1") {
+    (window as Window & { __TN_PW_RELOAD_REQUESTED__?: boolean }).__TN_PW_RELOAD_REQUESTED__ =
+      true;
+  }
   location.reload();
 }
 

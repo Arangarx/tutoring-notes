@@ -35,14 +35,6 @@ test.describe("deploy freshness capture defer", () => {
       });
     });
 
-    await page.addInitScript(() => {
-      const original = Location.prototype.reload;
-      Location.prototype.reload = function reload(this: Location) {
-        (window as CaptureDeferWindow).__TN_PW_RELOAD_REQUESTED__ = true;
-        return original.call(this);
-      };
-    });
-
     await page.goto("/admin", { waitUntil: "domcontentloaded" });
 
     await page.waitForFunction(() => {
