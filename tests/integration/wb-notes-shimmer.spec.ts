@@ -8,17 +8,77 @@ import { TAG } from "../test-tags";
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
-async function fetchTutorNoteStatus(
+/** WS-K fast-finalize poll budget — independent wall-clock bound (not impl timers). */
+const NOTES_DONE_POLL_BUDGET_MS = 3_000;
+
+type NotesPipelineState = {
+  tutorNoteStatus: string | null;
+  tutorNoteLastReducedChunkCount: number;
+  doneChunkCount: number;
+  finalizeReduceCostEventCount: number;
+  liveReduceCostEventCount: number;
+};
+
+async function fetchNotesPipelineState(
   page: import("@playwright/test").Page,
   sessionId: string
-): Promise<string | null> {
+): Promise<NotesPipelineState> {
   const res = await page.request.get(
     `/api/test/whiteboard/${sessionId}/transcript-chunks`,
     { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
   );
   expect(res.ok(), await res.text()).toBeTruthy();
-  const body = (await res.json()) as { tutorNoteStatus: string | null };
+  return (await res.json()) as NotesPipelineState;
+}
+
+async function fetchTutorNoteStatus(
+  page: import("@playwright/test").Page,
+  sessionId: string
+): Promise<string | null> {
+  const body = await fetchNotesPipelineState(page, sessionId);
   return body.tutorNoteStatus;
+}
+
+async function seedWskWatermarkCurrent(
+  page: import("@playwright/test").Page,
+  sessionId: string,
+  chunkCount = 5,
+  opts?: { pruneNonHarnessChunks?: boolean }
+) {
+  const res = await page.request.post(
+    `/api/test/whiteboard/${sessionId}/seed-wsk-watermark`,
+    {
+      headers: { Authorization: `Bearer ${TEST_SECRET}` },
+      data: { chunkCount, pruneNonHarnessChunks: opts?.pruneNonHarnessChunks ?? false },
+    }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+}
+
+async function sealSessionAndEnqueueNotes(
+  page: import("@playwright/test").Page,
+  sessionId: string
+): Promise<number> {
+  const sealStartMs = Date.now();
+  const res = await page.request.post(
+    `/api/test/whiteboard/${sessionId}/seal-and-enqueue-notes`,
+    { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return sealStartMs;
+}
+
+async function assertWatermarkCurrentPrecondition(
+  page: import("@playwright/test").Page,
+  sessionId: string,
+  minDoneChunks: number
+) {
+  const s = await fetchNotesPipelineState(page, sessionId);
+  expect(s.doneChunkCount).toBeGreaterThanOrEqual(minDoneChunks);
+  expect(s.tutorNoteLastReducedChunkCount).toBeGreaterThanOrEqual(s.doneChunkCount);
+  expect(s.tutorNoteStatus).toBe("pending");
+  expect(s.liveReduceCostEventCount).toBeGreaterThanOrEqual(1);
+  return s;
 }
 
 type ShimmerOverlayState = {
@@ -226,3 +286,62 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_
     await expect(page.getByTestId("tutor-notes-status")).toBeVisible();
   });
 });
+
+test.describe(
+  "notes pipeline WS-K — fast finalize (P1-WB-5)",
+  { tag: [TAG.WB_RECORDING] },
+  () => {
+    test("live watermark current at End → done within 3s, zero finalize-reduce LLM calls", async ({
+      page,
+    }) => {
+      test.setTimeout(360_000);
+
+      test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
+
+      const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+
+      // Seed watermark BEFORE opening workspace — avoids fake-mic transcript rows.
+      await seedWskWatermarkCurrent(page, whiteboardSessionId, 5);
+      const preEnd = await assertWatermarkCurrentPrecondition(
+        page,
+        whiteboardSessionId,
+        5
+      );
+      const finalizeReduceBeforeEnd = preEnd.finalizeReduceCostEventCount;
+
+      const sealStartMs = await sealSessionAndEnqueueNotes(page, whiteboardSessionId);
+
+      const reviewNav = page.goto(
+        `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
+        { waitUntil: "domcontentloaded" }
+      );
+
+      await expect
+        .poll(
+          async () => (await fetchTutorNoteStatus(page, whiteboardSessionId)) === "done",
+          { timeout: NOTES_DONE_POLL_BUDGET_MS, intervals: [50, 100, 200] }
+        )
+        .toBe(true);
+
+      const elapsedMs = Date.now() - sealStartMs;
+      expect(
+        elapsedMs,
+        `tutor note must reach done within ${NOTES_DONE_POLL_BUDGET_MS}ms wall-clock budget`
+      ).toBeLessThanOrEqual(NOTES_DONE_POLL_BUDGET_MS);
+
+      await reviewNav;
+      await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
+        timeout: 90_000,
+      });
+
+      await expect(page.getByTestId("tutor-notes-content")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("tutor-notes-generating")).not.toBeVisible();
+
+      const postEnd = await fetchNotesPipelineState(page, whiteboardSessionId);
+      expect(postEnd.tutorNoteStatus).toBe("done");
+      expect(postEnd.finalizeReduceCostEventCount).toBe(finalizeReduceBeforeEnd);
+    });
+  }
+);
