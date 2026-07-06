@@ -24,11 +24,16 @@ import {
   seedSelfLearnerWbSession,
   loginLearnerInContext,
   loginAccountHolderInContext,
+  openTutorAndStudent,
   readEncryptionKeyFromHash,
   startSessionAsTutor,
   waitForWbE2eBridge,
   waitForTutorStudentConnected,
 } from "./whiteboard-live-sync.helpers";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import {
   seedTestAdmin,
   seedTestStudent,
@@ -3143,8 +3148,11 @@ test.describe(
           const endBtn = tutorPage.getByTestId("wb-end-session");
           await expect(endBtn).toBeVisible({ timeout: 30_000 });
           await endBtn.click();
+          await expect(tutorPage.getByTestId("wb-end-session-confirm")).toBeVisible({
+            timeout: 10_000,
+          });
           await tutorPage.getByTestId("wb-end-session-confirm-yes").click();
-          await expect(tutorPage.getByRole("toolbar", { name: "Session review" })).toBeVisible({
+          await expect(tutorPage.getByTestId("wb-session-review-mode")).toBeVisible({
             timeout: 180_000,
           });
 
@@ -3288,6 +3296,184 @@ test.describe(
         }
       }
     );
+  }
+);
+
+// ---------------------------------------------------------------------------
+// P1-WB-1: timer-anchor activeMs oracle + replay mixdown invariant
+//        (@wb-sync @wb-recording)
+// ---------------------------------------------------------------------------
+
+const P1_WB_TEST_SECRET =
+  process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
+
+type TimerAnchorPayload = {
+  bothConnectedAt: string | null;
+  activeMs: number;
+  lastActiveAt: string | null;
+};
+
+async function fetchTimerAnchor(
+  page: import("@playwright/test").Page,
+  sessionId: string
+): Promise<TimerAnchorPayload> {
+  const res = await page.request.get(
+    `/api/whiteboard/${sessionId}/timer-anchor`
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  expect(res.headers()["cache-control"]).toBe("no-store");
+  return (await res.json()) as TimerAnchorPayload;
+}
+
+async function fetchSessionRecordingCount(
+  page: import("@playwright/test").Page,
+  sessionId: string
+) {
+  const res = await page.request.get(
+    `/api/test/whiteboard/${sessionId}/recording-count`,
+    { headers: { Authorization: `Bearer ${P1_WB_TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()) as { count: number; byStream: Record<string, number> };
+}
+
+test.describe(
+  "P1-WB-1 — timer-anchor activeMs + replay mixdown invariant",
+  { tag: [TAG.WB_SYNC, TAG.WB_RECORDING] },
+  () => {
+    test("both-connected ACTIVE session — timer-anchor activeMs tracks wall clock and is monotonic", async ({
+      browser,
+    }) => {
+      /**
+       * Oracle: poll GET /timer-anchor (server DB reader) and compare activeMs
+       * delta to an independent wall-clock hold — NOT the on-screen wb-session-timer
+       * pill (which interpolates client-side between heartbeats).
+       *
+       * Red-before (2026-07-05): temporarily asserting activeMs === 999_000 failed.
+       */
+      test.setTimeout(240_000);
+
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        ensureFollow: false,
+      });
+      try {
+        // Billing arms on bothPartiesInRoom && phaseActive; allow first active-ping.
+        await peers.tutorPage.waitForTimeout(4_000);
+
+        const wall0 = Date.now();
+        const anchor0 = await fetchTimerAnchor(
+          peers.tutorPage,
+          session.whiteboardSessionId
+        );
+
+        const HOLD_MS = 15_000;
+        await peers.tutorPage.waitForTimeout(HOLD_MS);
+
+        const wall1 = Date.now();
+        const anchor1 = await fetchTimerAnchor(
+          peers.tutorPage,
+          session.whiteboardSessionId
+        );
+
+        const wallElapsed = wall1 - wall0;
+        const activeDelta = anchor1.activeMs - anchor0.activeMs;
+
+        expect(
+          anchor1.activeMs,
+          "activeMs must not decrease while both parties remain connected"
+        ).toBeGreaterThanOrEqual(anchor0.activeMs);
+
+        // Lower bound: first heartbeat credits 0; allow ~50% slack for ping alignment.
+        // Upper bound: cannot bill more than wall elapsed + one heartbeat interval.
+        const lowerBound = Math.floor(wallElapsed * 0.45);
+        const upperBound = wallElapsed + 12_000;
+        expect(
+          activeDelta,
+          `activeMs delta ${activeDelta}ms vs wall ${wallElapsed}ms`
+        ).toBeGreaterThanOrEqual(lowerBound);
+        expect(activeDelta).toBeLessThanOrEqual(upperBound);
+
+        // Monotonic non-decrease across three consecutive polls (~4s apart).
+        let prev = anchor1.activeMs;
+        for (let i = 0; i < 3; i++) {
+          await peers.tutorPage.waitForTimeout(4_000);
+          const next = await fetchTimerAnchor(
+            peers.tutorPage,
+            session.whiteboardSessionId
+          );
+          expect(
+            next.activeMs,
+            `poll ${i + 1}: activeMs regressed ${prev} → ${next.activeMs}`
+          ).toBeGreaterThanOrEqual(prev);
+          prev = next.activeMs;
+        }
+      } finally {
+        await peers.close();
+      }
+    });
+
+    test("End session — SessionRecording replay set is tutor:mic mixdown only (REPLAY-MIX)", async ({
+      browser,
+    }) => {
+      /**
+       * Oracle: test-env recording-count groups persisted SessionRecording rows
+       * by streamId — the replay source after finalize. REPLAY-MIX requires ONLY
+       * tutor:mic rows; no student:peer-* lanes and no transcription-only leaks.
+       *
+       * Red-before (2026-07-05): temporarily allowing student:peer-* in byStream failed.
+       */
+      test.setTimeout(360_000);
+
+      test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
+
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        ensureFollow: false,
+      });
+      try {
+        await peers.tutorPage.waitForTimeout(6_000);
+
+        await peers.tutorPage.getByTestId("wb-end-session").click();
+        await expect(
+          peers.tutorPage.getByTestId("wb-end-session-confirm")
+        ).toBeVisible({ timeout: 10_000 });
+        await peers.tutorPage.getByTestId("wb-end-session-confirm-yes").click();
+
+        await expect(peers.tutorPage.getByTestId("wb-session-review-mode")).toBeVisible({
+          timeout: 180_000,
+        });
+
+        await expect
+          .poll(
+            async () => {
+              const replay = await fetchSessionRecordingCount(
+                peers.tutorPage,
+                session.whiteboardSessionId
+              );
+              return replay.count;
+            },
+            { timeout: 180_000, intervals: [1000, 2000, 3000] }
+          )
+          .toBeGreaterThanOrEqual(1);
+
+        const replay = await fetchSessionRecordingCount(
+          peers.tutorPage,
+          session.whiteboardSessionId
+        );
+
+        expect(replay.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(1);
+        for (const streamId of Object.keys(replay.byStream)) {
+          expect(
+            streamId,
+            "REPLAY-MIX: replay rows must be tutor:mic mixdown only"
+          ).toBe("tutor:mic");
+          expect(streamId.startsWith("student:peer-")).toBe(false);
+        }
+      } finally {
+        await peers.close();
+      }
+    });
   }
 );
 
