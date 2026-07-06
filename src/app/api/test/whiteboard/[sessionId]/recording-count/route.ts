@@ -32,7 +32,7 @@ export async function GET(
   const { sessionId } = await ctx.params;
   const rows = await db.sessionRecording.findMany({
     where: { whiteboardSessionId: sessionId },
-    select: { streamId: true },
+    select: { streamId: true, blobUrl: true },
   });
 
   const byStream: Record<string, number> = {};
@@ -40,5 +40,13 @@ export async function GET(
     byStream[row.streamId] = (byStream[row.streamId] ?? 0) + 1;
   }
 
-  return NextResponse.json({ count: rows.length, byStream });
+  const blobUrls = rows.map((r) => r.blobUrl);
+  const distinctBlobUrlCount = new Set(blobUrls).size;
+
+  return NextResponse.json({
+    count: rows.length,
+    byStream,
+    blobUrls,
+    distinctBlobUrlCount,
+  });
 }
