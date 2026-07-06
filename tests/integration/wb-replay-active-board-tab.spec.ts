@@ -1,9 +1,12 @@
 /**
- * WS-E E4 (BUG-5) — replay board tab strip reflects which board was active
- * at the scrubbed timeline position (page-switch WBEvents).
+ * P1-WB-4 / WS-E E4 (BUG-5) — replay board tab strip reflects which board was
+ * active at the scrubbed timeline position (page-switch WBEvents).
+ *
+ * Independent oracle: page-switch event timestamps from GET /events API;
+ * scrub ratio = targetMs / durationMs computed before scrub — NOT from replay hook.
  *
  * Run:
- *   npx playwright test tests/integration/wb-replay-active-board-tab.spec.ts --project=integration --workers=1
+ *   npx playwright test tests/integration/wb-replay-active-board-tab.spec.ts --project=wb-regression --workers=1
  */
 
 import { test, expect } from "./fixtures";
@@ -23,6 +26,55 @@ type EventsBody = {
   events?: Array<{ t: number; type: string; pageId?: string }>;
   durationMs?: number;
 };
+
+async function muteReplayAudioWhenPresent(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    const muteIfPresent = () => {
+      const el = document.querySelector(
+        '[data-testid="wb-replay-audio"]'
+      ) as HTMLAudioElement | null;
+      if (el && !el.dataset.mutedByTest) {
+        el.muted = true;
+        el.dataset.mutedByTest = "1";
+      }
+    };
+    const obs = new MutationObserver(muteIfPresent);
+    obs.observe(document.body, { childList: true, subtree: true });
+    muteIfPresent();
+  });
+}
+
+/** Drag scrubber to `ratio` ∈ (0,1) — same contract as wb-replay-scrub-seek.spec.ts. */
+async function scrubToRatio(
+  page: import("@playwright/test").Page,
+  ratio: number
+) {
+  const track = page.getByTestId("wb-replay-global-seek");
+  await expect(track).toBeVisible();
+  const box = await track.boundingBox();
+  expect(box).not.toBeNull();
+  const thumbRadius = 8;
+  const travel = Math.max(box!.width - thumbRadius * 2, 1);
+  const x = box!.x + thumbRadius + travel * ratio;
+  const y = box!.y + box!.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y);
+  await page.mouse.up();
+  await page.waitForTimeout(600);
+}
+
+function computeTimelineDurationMs(
+  eventsBody: EventsBody,
+  switches: Array<{ t: number }>
+): number {
+  const lastEventT = (eventsBody.events ?? []).reduce(
+    (max, e) => Math.max(max, e.t),
+    0
+  );
+  const lastSwitchT = switches[switches.length - 1]?.t ?? 0;
+  return Math.max(eventsBody.durationMs ?? 0, lastEventT, lastSwitchT + 500, 5_000);
+}
 
 async function assertReplayBoardTabSelected(
   page: import("@playwright/test").Page,
@@ -114,6 +166,9 @@ test.describe("WS-E E4 replay active board tab", { tag: [TAG.WB_RECORDING] }, ()
     const lastSwitchT = switches[switches.length - 1]!.t;
     expect(lastSwitchT).toBeGreaterThan(firstSwitchT);
 
+    const durationMs = computeTimelineDurationMs(eventsBody, switches);
+
+    await muteReplayAudioWhenPresent(page);
     await page.getByTestId("wb-review-enter-replay").click();
     await expect(page.getByTestId("wb-replay-in-frame")).toBeVisible({
       timeout: 30_000,
@@ -127,6 +182,16 @@ test.describe("WS-E E4 replay active board tab", { tag: [TAG.WB_RECORDING] }, ()
         .getByRole("tab", { name: "Board 2", exact: true })
     ).toBeVisible();
 
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector(
+          '[data-testid="wb-replay-audio"]'
+        ) as HTMLAudioElement | null;
+        return el != null && Number.isFinite(el.duration) && el.duration > 0;
+      },
+      { timeout: 90_000 }
+    );
+
     const playBtn = page.getByTestId("wb-replay-play-toggle");
     if ((await playBtn.textContent())?.includes("Pause")) {
       await playBtn.click();
@@ -135,6 +200,7 @@ test.describe("WS-E E4 replay active board tab", { tag: [TAG.WB_RECORDING] }, ()
     const seekSlider = page.getByTestId("wb-replay-global-seek");
     await expect(seekSlider).toBeVisible();
 
+    // ── Boundary seeks (Home / End) ─────────────────────────────────────────
     await seekSlider.focus();
     await page.keyboard.press("Home");
     await page.waitForTimeout(400);
@@ -144,6 +210,25 @@ test.describe("WS-E E4 replay active board tab", { tag: [TAG.WB_RECORDING] }, ()
     await seekSlider.focus();
     await page.keyboard.press("End");
     await page.waitForTimeout(400);
+    await assertReplayBoardTabSelected(page, "Board 2", true);
+    await assertReplayBoardTabSelected(page, "Board 1", false);
+
+    // ── Mid-timeline scrub seeks (independent event-timestamp oracle) ─────────
+    const targetBoard1Ms = Math.min(
+      firstSwitchT + 400,
+      lastSwitchT - 300
+    );
+    const targetBoard2Ms = lastSwitchT + 400;
+    const ratioBoard1 = Math.max(0.05, Math.min(0.45, targetBoard1Ms / durationMs));
+    const ratioBoard2 = Math.min(0.95, targetBoard2Ms / durationMs);
+
+    expect(ratioBoard1).toBeLessThan(ratioBoard2);
+
+    await scrubToRatio(page, ratioBoard1);
+    await assertReplayBoardTabSelected(page, "Board 1", true);
+    await assertReplayBoardTabSelected(page, "Board 2", false);
+
+    await scrubToRatio(page, ratioBoard2);
     await assertReplayBoardTabSelected(page, "Board 2", true);
     await assertReplayBoardTabSelected(page, "Board 1", false);
   });
