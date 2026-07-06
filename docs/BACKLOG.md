@@ -140,6 +140,26 @@ Andrew is **not** executing the *"look through the console for `clock_*` logs"* 
 
 ---
 
+## wb-wave5-polish full-suite baseline / relay-unblock findings (2026-07-06)
+
+> Context: full-suite baseline + relay-unblock effort fixed harness flakes and restored the merge-gate relay (which had silently stopped completing due to an `auth.setup` flake). Harness fixes landed: [`3cb9a7b`](https://github.com/Arangarx/tutoring-notes/commit/3cb9a7b) (shared globally-unique `uniq()` test helper — cross-test fixture email collisions), [`8a381ce`](https://github.com/Arangarx/tutoring-notes/commit/8a381ce) (auth.setup erasure-admin leg → NextAuth API-credentials login), [`0118359`](https://github.com/Arangarx/tutoring-notes/commit/0118359) (wb-wave5 item13 stale oracle `/live/i`→`/solo rehearsal|recording/i`). Cross-ref WS-T tally #10–#11 in [`wb-wave5-execution-queue.md`](handoff/wb-wave5-execution-queue.md).
+
+### Reliability gaps (branch-only — must fix before WS-I merges to master)
+
+| Item | Notes |
+|------|-------|
+| **WS-I-PRESTART-MUTE — tutor mute before audio graph arms records at full gain** | **REAL product defect, branch-only (`wb-wave5-polish`).** `wb-tutor-recording-mute.spec.ts` › "mute before graph ready" fails: recording-branch gain stays **1** (expected 0) when tutor mutes before the audio graph arms → tutor recorded at full gain when they expected muted. Root cause: WS-I mute contract at hook layer (`tutorRecordingMutedRef` + `useAudioRecorder.ts:1136`), but real UI path (`WbTopBarMicControl.tsx:63` awaits `onAcquireMic()` before `onToggleMute()`) delivers mute intent only via async effect (`WhiteboardWorkspaceClient.tsx:2582`); mount `acquireMic` completes during the await and `createMicAudioGraph` hardcodes gain 1 (`mic-recorder-audio.ts:387`) with ref still false. **Branch-introduced with WS-I [`f748ef7`](https://github.com/Arangarx/tutoring-notes/commit/f748ef7); NOT on master** (master has no recording mute gate) → not Sarah-facing today, but a **completeness gap that MUST be fixed before WS-I merges to master.** Fix (fragile surface): synchronous `setTutorRecordingMute` on mute click (not effect-only) and/or reorder toggle-before-acquire; optional `createMicAudioGraph` init-muted param; workspace-bridge DOM test. Tier: Composer step-back plan → Sonnet review if changing acquire ordering. **Do not merge without green `wb-tutor-recording-mute.spec.ts`.** |
+
+### Known follow-ups — test / harness (not product bugs)
+
+| Item | Notes |
+|------|-------|
+| **WS-E2-APPLY-REMOTE-PDF-STROKE-LEAK-SPEC — mistimed oracle** | **Test-only.** `wb-e2-apply-remote-pdf-stroke-leak.spec.ts` failed at L159 (`fingerprintActive=true`) and intermittently L146 (`every type==="image"`). L159 = stale oracle (fingerprint cleared by design after PDF import settles; spec checks too late); L146 = intermittent test-setup timing. Canonical guard spec `wb-e2-pdf-stroke-leak.spec.ts` passed 3/3 isolated → **no real onChange stroke leak.** Apply-path fingerprint guard [`ef5fb1a`](https://github.com/Arangarx/tutoring-notes/commit/ef5fb1a) is sound. Follow-up: realign spec to inject during fingerprint window, drop mistimed steady-state check (Composer, test-only). Branch-only (spec+fix both in `ef5fb1a`, not on master). |
+| **RELAY-MARATHON-SHARDS — `test:wb-sync` must shard, not one serial marathon** | **Infra.** Single ~20-min serial Playwright run manufactures ~18 false-red timeouts via dev-server exhaustion (`ECONNRESET`, blob/transcribe 500s, ffmpeg-unavailable, webpack cache `ENOENT` accumulate). Of 22 hard reds in a full marathon, ~18 environmental (passed in isolation on fresh server). Follow-up: run wb-regression gate as serial **SHARDS/batches** (fresh dev server per shard) so exhaustion stops masking real signal. |
+| **JEST-ISOLATION-CLASS-2 — per-test DB cleanup beyond email collisions** | **Infra.** Shared `uniq()` fix [`3cb9a7b`](https://github.com/Arangarx/tutoring-notes/commit/3cb9a7b) eliminated fixture email-collision class; residual non-email cross-test DB pollution remains (~1 flake/run in DB-integration tests: upload-outbox, share-audio-proxy, erasure-lifecycle, etc.) — the "no per-test DB cleanup" gap. Follow-up: per-test/per-suite DB cleanup (transactional rollback or targeted truncate) so `npx jest --workers=1` holds consecutive greens. Cross-ref execution-queue GATE/HARNESS (d) widening. |
+
+---
+
 ## Login-friction thread follow-ups (2026-06-14)
 
 | Item | Priority | Notes |
