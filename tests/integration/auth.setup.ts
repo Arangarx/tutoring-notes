@@ -90,25 +90,35 @@ setup("authenticate tutor storageState + seed learner credentials", async ({
     await parentCtx.dispose();
   }
 
-  // --- Erasure ADMIN: sign out tutor, NextAuth login → erasure-admin.json ---
-  await page.getByRole("button", { name: /sign out/i }).click();
-  await page.waitForURL((url) => url.pathname === "/login" || url.pathname === "/", {
-    timeout: 15_000,
-  });
-  if (!page.url().includes("/login")) {
-    await page.goto("/login");
+  // --- Erasure ADMIN: API credentials login (no UI signout) → erasure-admin.json ---
+  const erasureCtx = await request.newContext({ baseURL: "http://localhost:3100" });
+  try {
+    const csrfRes = await erasureCtx.get("/api/auth/csrf");
+    if (!csrfRes.ok()) {
+      const body = await csrfRes.text().catch(() => "<no body>");
+      throw new Error(`Erasure admin CSRF fetch failed (${csrfRes.status()}): ${body}`);
+    }
+    const { csrfToken } = (await csrfRes.json()) as { csrfToken?: string };
+    if (!csrfToken) {
+      throw new Error("Erasure admin CSRF fetch returned no csrfToken");
+    }
+    const loginRes = await erasureCtx.post("/api/auth/callback/credentials", {
+      form: {
+        csrfToken,
+        email: TEST_ERASURE_ADMIN.email,
+        password: TEST_ERASURE_ADMIN.password,
+        callbackUrl: "/admin",
+        json: "true",
+      },
+    });
+    if (!loginRes.ok()) {
+      const body = await loginRes.text().catch(() => "<no body>");
+      throw new Error(`Erasure admin setup login failed (${loginRes.status()}): ${body}`);
+    }
+    const cookies = await erasureCtx.storageState();
+    fs.mkdirSync(path.dirname(erasureAdminAuthFile), { recursive: true });
+    fs.writeFileSync(erasureAdminAuthFile, JSON.stringify(cookies, null, 2), "utf-8");
+  } finally {
+    await erasureCtx.dispose();
   }
-  await page.locator("#email").waitFor({ state: "visible", timeout: 30_000 });
-  await page.locator("#email").fill(TEST_ERASURE_ADMIN.email);
-  await page.locator("#password").fill(TEST_ERASURE_ADMIN.password);
-  await page.getByRole("button", { name: /sign in|log in/i }).click();
-  await page.waitForURL(
-    (url) =>
-      url.pathname.startsWith("/admin") &&
-      !url.pathname.startsWith("/admin/settings/2fa") &&
-      url.pathname !== "/admin/pending-approval",
-    { timeout: 30_000 }
-  );
-  fs.mkdirSync(path.dirname(erasureAdminAuthFile), { recursive: true });
-  await page.context().storageState({ path: erasureAdminAuthFile });
 });
