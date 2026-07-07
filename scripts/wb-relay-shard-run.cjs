@@ -17,7 +17,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { freePort } = require("./free-wb-dev-server-ports.cjs");
+const { cleanupWbDevServerPorts } = require("./free-wb-dev-server-ports.cjs");
 
 const ROOT = path.resolve(__dirname, "..");
 const PROJECT = "wb-regression";
@@ -26,6 +26,9 @@ const PROJECT_FLAG = `--project=${PROJECT}`;
 const LIFECYCLE_BASENAME = "wb-session-lifecycle.spec.ts";
 const DEFAULT_TARGET_SHARDS = 6;
 const MERGE_BLOB_DIR = path.join(ROOT, "test-results", "wb-shard-blobs");
+const MERGED_JSON_REPORT = path.join(ROOT, "test-results", "wb-shard-merged.json");
+/** Pause between shards so prior dev-server memory/handles can be reclaimed. */
+const INTER_SHARD_COOLDOWN_MS = 8000;
 
 function parseArgs(argv) {
   const args = { manifestOnly: false, targetShards: DEFAULT_TARGET_SHARDS };
@@ -273,11 +276,70 @@ function printManifest(shards, enrolledFiles, allTests) {
 }
 
 async function freeDevServerPorts() {
-  await freePort(3100);
-  await freePort(3101);
+  await cleanupWbDevServerPorts();
 }
 
-function parseFailures(output) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Walk a Playwright JSON report (merge-reports / json reporter) and collect only
+ * wb-regression tests whose final outcome is `unexpected` (genuine failure).
+ * Skips passed/expected, skipped, and flaky (passed on retry).
+ */
+function extractUnexpectedFailuresFromJsonReport(report) {
+  const failures = [];
+  const seen = new Set();
+
+  function addFailure(spec, fullTitle) {
+    const relFile = (spec.file || "").replace(/\\/g, "/");
+    const file = relFile.startsWith("tests/") ? relFile : `tests/${relFile}`;
+    const id = `${file}:${spec.line} › ${fullTitle}`;
+    if (seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    failures.push({ file, grep: fullTitle, id });
+  }
+
+  function walkSuites(suites, titlePrefix) {
+    for (const suite of suites || []) {
+      const isFileSuite = Boolean(suite.file) && !suite.line;
+      const nextPrefix = isFileSuite
+        ? titlePrefix
+        : titlePrefix
+          ? `${titlePrefix} › ${suite.title}`
+          : suite.title;
+      walkSuites(suite.suites, nextPrefix);
+      for (const spec of suite.specs || []) {
+        for (const test of spec.tests || []) {
+          if (test.projectName !== PROJECT) {
+            continue;
+          }
+          if (test.status !== "unexpected") {
+            continue;
+          }
+          const titleParts = [];
+          if (nextPrefix) {
+            titleParts.push(nextPrefix);
+          }
+          titleParts.push(spec.title);
+          addFailure(spec, titleParts.join(" › "));
+        }
+      }
+    }
+  }
+
+  walkSuites(report.suites, "");
+  return failures;
+}
+
+/**
+ * @deprecated stdout line parsing — kept for shard exit diagnostics only.
+ * Do NOT use for isolation collection (matches progress lines for passed tests).
+ */
+function parseFailuresFromStdout(output) {
   const failures = [];
   const seen = new Set();
   const lines = output.split(/\r?\n/);
@@ -330,6 +392,7 @@ async function runShard(shard, index) {
     [
       "test",
       PROJECT_FLAG,
+      "--no-deps",
       ...shard.files.map(toCliTestArg),
       "--workers=1",
       "--reporter=line,blob",
@@ -347,7 +410,8 @@ async function runShard(shard, index) {
   return {
     shard: shardLabel,
     exitCode: result.status ?? 1,
-    failures: result.status === 0 ? [] : parseFailures(`${result.stdout}\n${result.stderr}`),
+    blobZipName: `${shardLabel}-report.zip`,
+    stdoutFailures: result.status === 0 ? [] : parseFailuresFromStdout(`${result.stdout}\n${result.stderr}`),
   };
 }
 
@@ -355,12 +419,12 @@ function mergeBlobReports() {
   console.log("\n=== merge-reports ===");
   if (!fs.existsSync(MERGE_BLOB_DIR)) {
     console.warn("No blob report directory found — skipping merge-reports");
-    return { exitCode: 0 };
+    return { exitCode: 0, failures: [] };
   }
   const zips = fs.readdirSync(MERGE_BLOB_DIR).filter((f) => f.endsWith(".zip"));
   if (zips.length === 0) {
     console.warn("No blob zip files found — skipping merge-reports");
-    return { exitCode: 0 };
+    return { exitCode: 0, failures: [] };
   }
 
   const result = spawnSync(
@@ -369,7 +433,7 @@ function mergeBlobReports() {
       "playwright",
       "merge-reports",
       MERGE_BLOB_DIR,
-      "--reporter=html,json",
+      "--reporter=html",
     ],
     {
       cwd: ROOT,
@@ -380,7 +444,44 @@ function mergeBlobReports() {
   );
   process.stdout.write(result.stdout || "");
   process.stderr.write(result.stderr || "");
-  return { exitCode: result.status ?? 1 };
+
+  const jsonResult = spawnSync(
+    "npx",
+    [
+      "playwright",
+      "merge-reports",
+      MERGE_BLOB_DIR,
+      "--reporter=json",
+    ],
+    {
+      cwd: ROOT,
+      encoding: "utf8",
+      shell: process.platform === "win32",
+      env: {
+        ...process.env,
+        PLAYWRIGHT_JSON_OUTPUT_FILE: MERGED_JSON_REPORT,
+      },
+    },
+  );
+  if (jsonResult.status !== 0) {
+    console.warn(
+      `merge-reports json failed (exit ${jsonResult.status}):\n${jsonResult.stdout}\n${jsonResult.stderr}`,
+    );
+    return { exitCode: result.status ?? 1, failures: [] };
+  }
+
+  let failures = [];
+  if (fs.existsSync(MERGED_JSON_REPORT)) {
+    const report = JSON.parse(fs.readFileSync(MERGED_JSON_REPORT, "utf8"));
+    failures = extractUnexpectedFailuresFromJsonReport(report);
+    console.log(
+      `[wb-relay-shard-run] merged JSON: ${report.stats?.unexpected ?? "?"} unexpected wb-regression failure(s) for isolation`,
+    );
+  } else {
+    console.warn(`Expected merged JSON at ${MERGED_JSON_REPORT} — isolation list empty`);
+  }
+
+  return { exitCode: result.status ?? 1, failures };
 }
 
 async function runIsolationPass(failures) {
@@ -400,6 +501,7 @@ async function runIsolationPass(failures) {
       [
         "test",
         PROJECT_FLAG,
+        "--no-deps",
         toCliTestArg(failure.file),
         "-g",
         failure.grep,
@@ -427,7 +529,9 @@ function printFinalSummary(shardResults, isolation) {
   console.log("WB-REGRESSION SHARDED GATE SUMMARY");
   console.log("========================================");
   for (const result of shardResults) {
-    console.log(`${result.shard}: exit ${result.exitCode}, failures ${result.failures.length}`);
+    console.log(
+      `${result.shard}: exit ${result.exitCode}, stdout failure lines ${result.stdoutFailures.length}`,
+    );
   }
   console.log(`\nIsolation re-runs: ${isolation.realFailures.length + isolation.envFlakes.length}`);
   console.log(`  REAL-FAIL: ${isolation.realFailures.length}`);
@@ -476,19 +580,19 @@ async function main() {
 
   const shardResults = [];
   for (let i = 0; i < shards.length; i++) {
+    if (i > 0) {
+      console.log(
+        `\n[wb-relay-shard-run] inter-shard cooldown ${INTER_SHARD_COOLDOWN_MS}ms before ${shards[i].name}...`,
+      );
+      await sleep(INTER_SHARD_COOLDOWN_MS);
+    }
     const result = await runShard(shards[i], i);
     shardResults.push(result);
+    await freeDevServerPorts();
   }
 
-  mergeBlobReports();
-
-  const failedById = new Map();
-  for (const result of shardResults) {
-    for (const failure of result.failures) {
-      failedById.set(failure.id, failure);
-    }
-  }
-  const isolation = await runIsolationPass([...failedById.values()]);
+  const mergeResult = mergeBlobReports();
+  const isolation = await runIsolationPass(mergeResult.failures);
   printFinalSummary(shardResults, isolation);
 
   const gateExitCode = isolation.realFailures.length > 0 ? 1 : 0;
@@ -504,6 +608,7 @@ if (require.main === module) {
 
 module.exports = {
   buildShards,
+  extractUnexpectedFailuresFromJsonReport,
   loadWbRegressionProject,
   listProjectTests,
   parseListOutput,

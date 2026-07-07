@@ -123,6 +123,60 @@ async function freePort(port) {
   }
 }
 
+/**
+ * Find node.exe processes whose command line targets an allowlisted dev-server port
+ * (e.g. `npm run dev -- --port 3100`). Catches orphans that no longer hold LISTEN.
+ */
+function getOrphanedWbDevServerPids() {
+  const pids = new Set();
+  if (process.platform === "win32") {
+    const ps = spawnSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        "Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" -ErrorAction SilentlyContinue | " +
+          "Where-Object { $_.CommandLine -match '--port\\s+3100\\b' -or $_.CommandLine -match '--port\\s+3101\\b' } | " +
+          "Select-Object -ExpandProperty ProcessId -Unique",
+      ],
+      { encoding: "utf8" },
+    );
+    for (const line of (ps.stdout || "").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (/^\d+$/.test(trimmed)) {
+        pids.add(Number(trimmed));
+      }
+    }
+    return [...pids];
+  }
+  try {
+    const out = execSync(
+      "ps -ax -o pid=,command= 2>/dev/null | grep -E 'node.*--port[[:space:]]+(3100|3101)\\b' || true",
+      { encoding: "utf8" },
+    );
+    for (const line of out.split(/\r?\n/)) {
+      const match = line.trim().match(/^(\d+)/);
+      if (match) {
+        pids.add(Number(match[1]));
+      }
+    }
+  } catch {
+    // no-op
+  }
+  return [...pids];
+}
+
+/** Kill orphaned wb dev-server node processes, then free allowlisted listener ports. */
+async function cleanupWbDevServerPorts() {
+  const orphanPids = getOrphanedWbDevServerPids();
+  for (const pid of orphanPids) {
+    killPid(pid, "orphan");
+  }
+  for (const port of ALLOWED_PORTS) {
+    await freePort(port);
+  }
+}
+
 async function main() {
   const cliPorts = process.argv.slice(2).map((arg) => Number(arg));
   const ports = cliPorts.length > 0 ? cliPorts : [...ALLOWED_PORTS];
@@ -138,4 +192,10 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ALLOWED_PORTS, freePort, freeAllAllowedPorts: main };
+module.exports = {
+  ALLOWED_PORTS,
+  cleanupWbDevServerPorts,
+  freePort,
+  freeAllAllowedPorts: main,
+  getOrphanedWbDevServerPids,
+};
