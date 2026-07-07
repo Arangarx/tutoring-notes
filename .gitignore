@@ -8,6 +8,7 @@ test.db
 pw.db
 test-results/
 playwright-report/
+wb-shard-blobs/
 
 # Defensive: legacy props-flyout debug screenshots must never be committed
 docs/handoff/assets/wb-props-flyout-open-*.png

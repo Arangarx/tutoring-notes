@@ -25,7 +25,14 @@ const PROJECT = "wb-regression";
 const PROJECT_FLAG = `--project=${PROJECT}`;
 const LIFECYCLE_BASENAME = "wb-session-lifecycle.spec.ts";
 const DEFAULT_TARGET_SHARDS = 6;
-const MERGE_BLOB_DIR = path.join(ROOT, "test-results", "wb-shard-blobs");
+/**
+ * Per-shard blob zips for merge-reports. MUST live outside Playwright's
+ * outputDir (`test-results/`) — createRemoveOutputDirsTask wipes outputDir at
+ * the start of every `playwright test` invocation, so in-test-results blobs
+ * from prior shards are deleted before merge. Also set PWTEST_BLOB_DO_NOT_REMOVE
+ * on shard runs: BlobReporter removes PLAYWRIGHT_BLOB_OUTPUT_DIR by default.
+ */
+const MERGE_BLOB_DIR = path.join(ROOT, "wb-shard-blobs");
 const MERGED_JSON_REPORT = path.join(ROOT, "test-results", "wb-shard-merged.json");
 /** Pause between shards so prior dev-server memory/handles can be reclaimed. */
 const INTER_SHARD_COOLDOWN_MS = 8000;
@@ -399,6 +406,7 @@ async function runShard(shard, index) {
     ],
     {
       WB_SKIP_3101_WEBSERVER: "1",
+      PWTEST_BLOB_DO_NOT_REMOVE: "1",
       PLAYWRIGHT_BLOB_OUTPUT_DIR: blobOutputDir,
       PLAYWRIGHT_BLOB_OUTPUT_NAME: `${shardLabel}-report.zip`,
     },
