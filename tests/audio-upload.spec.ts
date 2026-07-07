@@ -77,10 +77,62 @@ async function gotoSeededStudent(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: SEEDED_STUDENT_NAME })).toBeVisible({
     timeout: 15_000,
   });
+  // Desktop shell uses scroll-spy section nav — scroll the Notes block into view instead of
+  // relying on aria-selected on the section tab (smooth-scroll + spy can leave it false).
+  const notesSection = page.locator("#student-section-notes");
+  await notesSection.scrollIntoViewIfNeeded();
+  await expect(notesSection.getByTestId("ai-assist-panel")).toBeVisible({ timeout: 15_000 });
 }
 
 function notesPanel(page: import("@playwright/test").Page) {
   return page.getByRole("tabpanel", { name: "Notes & email" });
+}
+
+/** Same harness-aware stub as wb-tab-kill-audio-durability.spec.ts `installControllableUploadStub`. */
+function installControllableUploadStub(
+  context: import("@playwright/test").BrowserContext,
+  opts: { block: boolean; delayMs: number }
+) {
+  let uploadSeq = 0;
+  return context.route("**/api/upload/audio**", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    if (opts.block) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "upload blocked for tab-kill test" }),
+      });
+      return;
+    }
+    if (opts.delayMs > 0) {
+      await new Promise((r) => setTimeout(r, opts.delayMs));
+    }
+    uploadSeq += 1;
+    // Let the real handleUpload mint a token when BLOB harness is configured;
+    // fall back to a minimal JSON body for environments without Blob.
+    try {
+      await route.continue();
+    } catch {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          url: `https://test.public.blob.vercel-storage.com/audio-upload-${uploadSeq}.webm`,
+        }),
+      });
+    }
+  });
+}
+
+async function switchToUploadTab(panel: ReturnType<typeof notesPanel>) {
+  const uploadTab = panel.getByTestId("tab-upload");
+  await expect(uploadTab).toBeVisible();
+  await uploadTab.scrollIntoViewIfNeeded();
+  await uploadTab.click();
+  await expect(panel.getByTestId("audio-tab-upload-pane")).toBeVisible({ timeout: 10_000 });
 }
 
 test("Audio upload: Upload tab is visible and shows dropzone", { tag: [TAG.WB_RECORDING] }, async ({ page }) => {
@@ -92,9 +144,7 @@ test("Audio upload: Upload tab is visible and shows dropzone", { tag: [TAG.WB_RE
   const panel = notesPanel(page);
   await expect(panel.getByTestId("ai-assist-panel")).toBeVisible();
 
-  const uploadTab = panel.getByTestId("tab-upload");
-  await expect(uploadTab).toBeVisible();
-  await uploadTab.click();
+  await switchToUploadTab(panel);
   await expect(panel.getByTestId("audio-upload-dropzone")).toBeVisible();
 });
 
@@ -107,25 +157,9 @@ test("Audio upload: transcribe + generate populates note form", { tag: [TAG.WB_R
   const panel = notesPanel(page);
   await expect(panel.getByTestId("ai-assist-panel")).toBeVisible();
 
-  const uploadTab = panel.getByTestId("tab-upload");
-  await expect(uploadTab).toBeVisible();
-  await uploadTab.click();
+  await switchToUploadTab(panel);
 
-  await page.route("**/api/upload/audio**", async (route) => {
-    if (route.request().method() === "POST") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          url: "https://test.public.blob.vercel-storage.com/test-session.webm",
-          contentType: "audio/webm",
-          size: 1024,
-        }),
-      });
-    } else {
-      await route.continue();
-    }
-  });
+  await installControllableUploadStub(page.context(), { block: false, delayMs: 0 });
 
   await page.route("**", async (route) => {
     const request = route.request();
@@ -140,7 +174,10 @@ test("Audio upload: transcribe + generate populates note form", { tag: [TAG.WB_R
     let body = "";
     try { body = request.postData() ?? ""; } catch { /* ignore */ }
 
-    if (!body.includes("blob.vercel-storage.com")) {
+    const isStubbedBlobUpload =
+      body.includes("blob.vercel-storage.com") ||
+      body.includes("/api/test/blob/object/");
+    if (!isStubbedBlobUpload) {
       await route.continue();
       return;
     }
@@ -160,22 +197,20 @@ test("Audio upload: transcribe + generate populates note form", { tag: [TAG.WB_R
     buffer: Buffer.from("fake-audio-data"),
   });
 
-  await expect(
-    panel.getByTestId("audio-upload-done").or(panel.getByTestId("ai-transcribe-btn"))
-  ).toBeVisible({ timeout: 15_000 });
+  // Upload success remounts AudioInputTabs (audio-upload-done is transient); pending list + enabled btn are stable.
+  await expect(panel.getByTestId("pending-segment-list")).toBeVisible({ timeout: 15_000 });
 
   const transcribeBtn = panel.getByTestId("ai-transcribe-btn");
-  if (await transcribeBtn.isVisible()) {
-    await transcribeBtn.click();
+  await expect(transcribeBtn).toBeEnabled({ timeout: 15_000 });
+  await transcribeBtn.click();
 
-    await expect(
-      panel.getByTestId("ai-filled-hint").or(panel.locator('textarea[name="topics"]'))
-    ).toBeVisible({ timeout: 20_000 });
+  await expect(
+    panel.getByTestId("ai-filled-hint").or(panel.locator('textarea[name="topics"]'))
+  ).toBeVisible({ timeout: 20_000 });
 
-    if (await panel.getByTestId("ai-filled-hint").isVisible()) {
-      const topicsValue = await panel.locator('textarea[name="topics"]').inputValue();
-      expect(topicsValue.length).toBeGreaterThan(0);
-    }
+  if (await panel.getByTestId("ai-filled-hint").isVisible()) {
+    const topicsValue = await panel.locator('textarea[name="topics"]').inputValue();
+    expect(topicsValue.length).toBeGreaterThan(0);
   }
 });
 
