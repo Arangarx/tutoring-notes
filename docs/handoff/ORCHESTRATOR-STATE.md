@@ -8,7 +8,23 @@
 
 ## HEAD
 
-**✅ F2 relay-shards (F2a build + F2b attended validation) DONE + VALIDATED (2026-07-07). Merge-gate #1 now runs end-to-end and its verdict is trustworthy.** Three attended runs to get here:
+**🚨 CRITICAL CORRECTION (2026-07-07, confirming relay run tip `995466e`, `terminals/363549.txt`): the sharded runner's GATE VERDICT ONLY EVER REFLECTED SHARD 6 — every "validated" claim below for shards 1–5 is HOLLOW.** Root cause: each shard's Playwright run cleans `test-results/` (the outputDir), which wipes the prior shard's blob zip; `MERGE_BLOB_DIR = test-results/wb-shard-blobs` lives *inside* that cleaned dir, so at merge time ONLY `shard-6-report.zip` survives. **Proof:** merged JSON (`test-results/wb-shard-merged.json`) `stats = {expected:22, unexpected:0, flaky:0, skipped:0}`, 8 suites = shard-6 exactly. So `merge-reports` + the isolation/REAL-FAIL classifier have NEVER seen shards 1–5. The "F2 DONE/validated", "CLEAN GATE VERDICT / 163 across 6 shards", and "REAL-FAIL: 3" claims only ever classified shard 6 (whose 3 reds — audio-upload:86/:101, apply-remote:83 — coincidentally were all in shard 6, so they surfaced; everything else was invisible).
+
+**TRUE per-shard results this run (read from raw Playwright stdout summaries, ANSI-stripped):**
+- **lifecycle (shard 1): 48 passed, exit 0 ✓**
+- **shard-2: 2 failed** — `wb-chrome-interactions.spec.ts:528` (selected-chip `toHaveClass` on hover) + **`wb-e2-pdf-stroke-leak.spec.ts:74`** (canonical PDF-leak spec — "board-3 strokes stay on board-3", `toBe` — the spec we believed passes 3/3!)
+- **shard-3: 1 failed** — `wb-replay-active-board-tab.spec.ts:95` (scrub updates active replay board tab, `toHaveAttribute`)
+- **shard-4: 1 failed** — **`wb-tutor-recording-mute.spec.ts:70` = BUG A (WS-I-PRESTART-MUTE), gain 0 at init**
+- **shard-5: 3 failed** — `wb-notes-shimmer.spec.ts:209` (overlay `toHaveText`) + `wb-student-mic-persistence.spec.ts:150` (persisted mic pre-selected `toBeVisible`) + `smoke/whiteboard-workspace.spec.ts:107` (`createWhiteboardSession` `toHaveURL`, needs BLOB)
+- **shard-6: 22 passed, exit 0 ✓** — **audio-upload:86/:101 (`a12d1da`) + apply-remote:83 (`abfbe9a`) fixes CONFIRMED GREEN**
+
+**⇒ 9 UNCLASSIFIED reds across shards 2–5** (isolation never ran on them). Several likely ENV-FLAKE (blob/transcribe/dev-server-exhaustion noise — notes-shimmer "real pipeline", whiteboard-workspace "needs BLOB", possibly mic-persistence/replay/chrome timing), but **Bug A (`wb-tutor-recording-mute:70`) is a KNOWN-REAL branch-only product defect** (see A4 root-cause `81813fa3`) and the **canonical `wb-e2-pdf-stroke-leak:74` failing is notable** (needs isolated confirm — may be exhaustion). **Bug A was NEVER "non-repro": it lives in shard 4, which the runner never captured.**
+
+**NEXT (revised):** (a) **FIX the runner blob-preservation defect** (Composer, test-infra, well-patterned): write each shard's blob to a distinct dir OUTSIDE Playwright's cleaned `test-results/` (or set `preserveOutput`/move each shard's zip aside after its run) so `merge-reports` ingests ALL 6 and the isolation classifier covers every shard. (b) **Re-run the gate** → get the real REAL-FAIL/ENV-FLAKE classification for the 9. (c) **Triage the REAL ones** (Bug A already confirmed-real → its fix is the fragile plan-mode→Sonnet path below; canonical pdf-leak:74 needs isolated confirm). NOTE: the audio-upload + apply-remote (F3) fixes are independently CONFIRMED green in shard 6, so those stay done.
+
+---
+
+**⚠️ SUPERSEDED by the correction above — retained for audit trail:** ~~F2 relay-shards DONE + VALIDATED; merge-gate verdict trustworthy~~ (verdict only covered shard 6):
 - **Run #1** aborted instantly — F2a runner gave Playwright spec paths where it expected `--project=wb-regression` (Windows `spawnSync shell:true` arg-concat) → **FIXED [`38ce3c3`](https://github.com/Arangarx/tutoring-notes/commit/38ce3c3)** (combined `--project=wb-regression` + positional filters).
 - **Run #2** — shards 1–5 clean (135 pass/0 fail on fresh per-shard :3100 servers; WS-T #7 lifecycle confirmed green), but surfaced two runner defects: shard-6 collapsed (0 pass — the 6th shard re-ran `integration-setup` which timed out under cumulative load → dependency-skipped all 22) and the isolation pass OVER-COLLECTED ("99" — `parseFailures` matched every `[wb-regression]` stdout progress line, not just reds). Runaway stopped safely (:3002 untouched).
 - **Round-2 runner fixes [`e535cca`](https://github.com/Arangarx/tutoring-notes/commit/e535cca):** isolation now reads merged **blob JSON**, collecting only `projectName=wb-regression && status=unexpected` (no passed/skipped/flaky); shards + isolation run `--no-deps` (setup runs once upfront, not per shard); + 8s inter-shard cooldown + orphaned :3100/:3101 node cleanup.
