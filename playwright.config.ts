@@ -56,14 +56,19 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
-    {
-      command:
-        `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set WB_E2E_HARNESS=1&& set PLAYWRIGHT_TEST=1&& set PLAYWRIGHT_TEST_SECRET=playwright-test-secret&& set BLOB_HARNESS_LOCAL=1&& set BLOB_READ_WRITE_TOKEN=playwright-harness&& set NEXT_PUBLIC_PLAYWRIGHT_TEST=1&& set NEXT_PUBLIC_BLOB_HARNESS_LOCAL=1&& set NEXTAUTH_URL=http://localhost:3101&& set LEARNER_SESSION_HMAC_SECRET=pw-wb-test-hmac-secret-regression-2026&& set AH_SESSION_HMAC_SECRET=pw-wb-test-ah-hmac-secret-regression-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& npm run dev -- --port 3101"`,
-      url: "http://localhost:3101",
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
-  ],
+  ].concat(
+    process.env.WB_SKIP_3101_WEBSERVER
+      ? []
+      : [
+          {
+            command:
+              `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set WB_E2E_HARNESS=1&& set PLAYWRIGHT_TEST=1&& set PLAYWRIGHT_TEST_SECRET=playwright-test-secret&& set BLOB_HARNESS_LOCAL=1&& set BLOB_READ_WRITE_TOKEN=playwright-harness&& set NEXT_PUBLIC_PLAYWRIGHT_TEST=1&& set NEXT_PUBLIC_BLOB_HARNESS_LOCAL=1&& set NEXTAUTH_URL=http://localhost:3101&& set LEARNER_SESSION_HMAC_SECRET=pw-wb-test-hmac-secret-regression-2026&& set AH_SESSION_HMAC_SECRET=pw-wb-test-ah-hmac-secret-regression-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& npm run dev -- --port 3101"`,
+            url: "http://localhost:3101",
+            reuseExistingServer: !process.env.CI,
+            timeout: 120_000,
+          },
+        ],
+  ),
 
   projects: [
     {
@@ -135,6 +140,7 @@ export default defineConfig({
     {
       name: "wb-regression",
       dependencies: ["integration-setup"],
+      workers: 1,
       retries: 1,
       use: {
         ...devices["Desktop Chrome"],
