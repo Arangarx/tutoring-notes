@@ -36,6 +36,12 @@ jest.mock("@/lib/blob", () => ({
   fetchPrivateBlobBytes: (...args: unknown[]) => mockFetchPrivateBlobBytes(...args),
 }));
 
+// Fire-and-forget map phase in the worker must not leak real extract-chunk /
+// notes-enqueue async work after test teardown.
+jest.mock("@/lib/recording/extract-chunk", () => ({
+  extractChunkMap: jest.fn().mockResolvedValue("done"),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
@@ -84,9 +90,11 @@ describe("processChunkTranscribeJob", () => {
     jest.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Restore fetch if overridden.
     jest.restoreAllMocks();
+    // Flush fire-and-forget map phase microtasks from the worker.
+    await new Promise<void>((r) => setImmediate(r));
   });
 
   // -------------------------------------------------------------------------
