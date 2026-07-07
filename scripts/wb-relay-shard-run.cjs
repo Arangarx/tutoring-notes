@@ -21,6 +21,8 @@ const { freePort } = require("./free-wb-dev-server-ports.cjs");
 
 const ROOT = path.resolve(__dirname, "..");
 const PROJECT = "wb-regression";
+/** Combined flag — required on Windows (shell:true mangles separate `--project` + name + file paths). */
+const PROJECT_FLAG = `--project=${PROJECT}`;
 const LIFECYCLE_BASENAME = "wb-session-lifecycle.spec.ts";
 const DEFAULT_TARGET_SHARDS = 6;
 const MERGE_BLOB_DIR = path.join(ROOT, "test-results", "wb-shard-blobs");
@@ -122,7 +124,7 @@ function parseListOutput(output) {
 }
 
 function listProjectTests(extraArgs = []) {
-  const result = npxPlaywright(["test", "--project", PROJECT, "--list", ...extraArgs]);
+  const result = npxPlaywright(["test", PROJECT_FLAG, "--list", ...extraArgs]);
   if (result.status !== 0) {
     throw new Error(
       `playwright --list failed (exit ${result.status}):\n${result.stdout}\n${result.stderr}`,
@@ -305,7 +307,7 @@ function parseFailures(output) {
 async function runIntegrationSetup() {
   console.log("\n=== integration-setup (once) ===");
   await freeDevServerPorts();
-  const result = npxPlaywright(["test", "--project", "integration-setup"]);
+  const result = npxPlaywright(["test", "--project=integration-setup"]);
   process.stdout.write(result.stdout || "");
   process.stderr.write(result.stderr || "");
   if (result.status !== 0) {
@@ -327,8 +329,7 @@ async function runShard(shard, index) {
   const result = npxPlaywright(
     [
       "test",
-      "--project",
-      PROJECT,
+      PROJECT_FLAG,
       ...shard.files.map(toCliTestArg),
       "--workers=1",
       "--reporter=line,blob",
@@ -398,8 +399,7 @@ async function runIsolationPass(failures) {
     const result = npxPlaywright(
       [
         "test",
-        "--project",
-        PROJECT,
+        PROJECT_FLAG,
         toCliTestArg(failure.file),
         "-g",
         failure.grep,
