@@ -850,6 +850,13 @@ export function WhiteboardWorkspaceClient({
       ) => Promise<RemoteSceneIngestLogHint | void>)
     | null
   >(null);
+  /**
+   * TEST SEAM — one-shot callback registered via window.__WBX_ON_GUARD_RELEASE__.
+   * Fired synchronously inside selectTutorPage's releaseGuard when
+   * pageSwitchProgrammaticRef drops to 0 and the fingerprint is still active
+   * for the target page. Only active when NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1".
+   */
+  const onGuardReleaseCallbackRef = useRef<((pageId: string) => void) | null>(null);
   /** In-memory per-tab scene (Excalidraw only shows one at a time). */
   const pageDataRef = useRef<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>(
     Object.create(null)
@@ -3144,6 +3151,7 @@ export function WhiteboardWorkspaceClient({
       __WBX_FORCE_LIVE_SCENE__?: (els: unknown) => void;
       __WBX_FINGERPRINT_HAS__?: (pageId: string) => boolean;
       __WBX_GET_ACTIVE_PAGE_ID__?: () => string;
+      __WBX_ON_GUARD_RELEASE__?: (cb: (pageId: string) => void) => void;
     };
     win.__WBX_INJECT_APPLY_REMOTE__ = async (pageId, elsRaw) => {
       const invoke = e2eApplyRemoteInvokerRef.current;
@@ -3168,11 +3176,15 @@ export function WhiteboardWorkspaceClient({
     win.__WBX_FINGERPRINT_HAS__ = (pageId) =>
       pageSceneSetFingerprintRef.current.has(pageId);
     win.__WBX_GET_ACTIVE_PAGE_ID__ = () => activePageIdRef.current;
+    win.__WBX_ON_GUARD_RELEASE__ = (cb) => {
+      onGuardReleaseCallbackRef.current = cb;
+    };
     return () => {
       delete win.__WBX_INJECT_APPLY_REMOTE__;
       delete win.__WBX_FORCE_LIVE_SCENE__;
       delete win.__WBX_FINGERPRINT_HAS__;
       delete win.__WBX_GET_ACTIVE_PAGE_ID__;
+      delete win.__WBX_ON_GUARD_RELEASE__;
     };
   }, [role, scheduleDocumentBroadcast, recorderOnCanvasChange, studentOnCanvasChange]);
 
@@ -3388,6 +3400,21 @@ export function WhiteboardWorkspaceClient({
             0,
             pageSwitchProgrammaticRef.current - 1
           );
+          // TEST SEAM (E2E only) — fire the one-shot guard-release callback
+          // synchronously while the fingerprint is still active. The callback
+          // can call __WBX_FORCE_LIVE_SCENE__ + __WBX_INJECT_APPLY_REMOTE__ to
+          // reproduce the applyRemote-during-fingerprint-window race.
+          if (
+            process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1" &&
+            pageSwitchProgrammaticRef.current === 0 &&
+            pageSceneSetFingerprintRef.current.has(nextId)
+          ) {
+            const cb = onGuardReleaseCallbackRef.current;
+            if (cb) {
+              onGuardReleaseCallbackRef.current = null;
+              cb(nextId);
+            }
+          }
         };
         if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
           window.requestAnimationFrame(() =>

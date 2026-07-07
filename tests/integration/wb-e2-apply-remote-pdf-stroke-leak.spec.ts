@@ -46,6 +46,7 @@ type WbxTestWindow = Window & {
   __WBX_FORCE_LIVE_SCENE__?: (els: unknown) => void;
   __WBX_FINGERPRINT_HAS__?: (pageId: string) => boolean;
   __WBX_GET_ACTIVE_PAGE_ID__?: () => string;
+  __WBX_ON_GUARD_RELEASE__?: (cb: (pageId: string) => void) => void;
   __TN_WB_E2E__?: Record<
     string,
     { getElements: () => Array<{ id: string; type?: string }> }
@@ -113,53 +114,11 @@ test.describe("WS-X applyRemote PDF stroke leak — fingerprint guard", () => {
           15_000
         );
 
-        await peers.tutorPage.getByTestId("wb-insert-asset-btn").click();
-        await expect(peers.tutorPage.getByTestId("wb-insert-dialog")).toBeVisible();
-        await peers.tutorPage.getByTestId("wb-insert-pick-file").click();
-        await peers.tutorPage
-          .getByTestId("wb-insert-file-input")
-          .setInputFiles(pdfPath);
-        await expect(
-          peers.tutorPage.getByTestId("wb-pdf-pick-continue")
-        ).toBeVisible({ timeout: 30_000 });
-        await peers.tutorPage.getByTestId("wb-pdf-pick-continue").click();
-        await expect(
-          peers.tutorPage.getByTestId("wb-insert-progress")
-        ).toBeVisible({ timeout: 15_000 });
-        await expect(
-          peers.tutorPage.getByTestId("wb-insert-progress")
-        ).toBeHidden({ timeout: 120_000 });
-
-        const pdfTab = peers.tutorPage
-          .getByTestId("wb-tutor-page-strip")
-          .getByRole("tab", { name: "Board 4" });
-        await expect(pdfTab).toBeVisible({ timeout: 60_000 });
-        await expect(pdfTab).toHaveAttribute("aria-selected", "true", {
-          timeout: 15_000,
-        });
-
-        const pdfBoardSummaryBefore = await readSceneElementSummary(
-          peers.tutorPage,
-          "tutor"
-        );
-        expect(pdfBoardSummaryBefore.length).toBeGreaterThan(0);
-        expect(pdfBoardSummaryBefore.every((e) => e.type === "image")).toBe(
-          true
-        );
-
-        const { pdfPageId, fingerprintActive } = await peers.tutorPage.evaluate(
-          () => {
-            const win = window as WbxTestWindow;
-            const pageId = win.__WBX_GET_ACTIVE_PAGE_ID__?.() ?? "";
-            const hasFp = win.__WBX_FINGERPRINT_HAS__?.(pageId) ?? false;
-            return { pdfPageId: pageId, fingerprintActive: hasFp };
-          }
-        );
-        expect(pdfPageId.length).toBeGreaterThan(0);
-        expect(fingerprintActive).toBe(true);
-
-        // Simulate the transitional live canvas still carrying board-3 elements
-        // after pageSwitchProgrammaticRef drops to 0 (the real race window).
+        // Pre-arm the guard-release seam BEFORE starting the PDF import.
+        // The callback fires synchronously inside selectTutorPage's releaseGuard
+        // (when pageSwitchProgrammaticRef drops to 0 with the fingerprint still
+        // active for the PDF page), injecting a stale board-3 stroke into the
+        // live canvas at exactly the moment the applyRemote guard must defend.
         await peers.tutorPage.evaluate(
           ({ strokeId }) => {
             const win = window as WbxTestWindow;
@@ -195,28 +154,56 @@ test.describe("WS-X applyRemote PDF stroke leak — fingerprint guard", () => {
                 [120, 120],
               ],
             };
-            win.__WBX_FORCE_LIVE_SCENE__?.([staleLine]);
+            win.__WBX_ON_GUARD_RELEASE__?.((pageId) => {
+              // Poison the live canvas so it carries the stale board-3 line.
+              win.__WBX_FORCE_LIVE_SCENE__?.([staleLine]);
+              // Trigger applyRemote during the fingerprint window; the empty
+              // remote payload means any leak comes solely from the wrong
+              // local merge baseline (live canvas vs. pageDataRef).
+              void win.__WBX_INJECT_APPLY_REMOTE__?.(pageId, []);
+            });
           },
           { strokeId: board3StrokeId }
         );
 
-        // Deterministic applyRemote during fingerprint window — empty remote
-        // payload; the leak comes from the wrong local merge baseline.
-        await peers.tutorPage.evaluate(
-          async ({ pageId }) => {
-            const win = window as WbxTestWindow;
-            await win.__WBX_INJECT_APPLY_REMOTE__?.(pageId, []);
-          },
-          { pageId: pdfPageId }
-        );
+        await peers.tutorPage.getByTestId("wb-insert-asset-btn").click();
+        await expect(peers.tutorPage.getByTestId("wb-insert-dialog")).toBeVisible();
+        await peers.tutorPage.getByTestId("wb-insert-pick-file").click();
+        await peers.tutorPage
+          .getByTestId("wb-insert-file-input")
+          .setInputFiles(pdfPath);
+        await expect(
+          peers.tutorPage.getByTestId("wb-pdf-pick-continue")
+        ).toBeVisible({ timeout: 30_000 });
+        await peers.tutorPage.getByTestId("wb-pdf-pick-continue").click();
+        await expect(
+          peers.tutorPage.getByTestId("wb-insert-progress")
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(
+          peers.tutorPage.getByTestId("wb-insert-progress")
+        ).toBeHidden({ timeout: 120_000 });
 
-        const pdfBoardSummary = await readSceneElementSummary(
-          peers.tutorPage,
-          "tutor"
-        );
-        expect(pdfBoardSummary.length).toBeGreaterThan(0);
-        expect(pdfBoardSummary.every((e) => e.type === "image")).toBe(true);
-        expect(pdfBoardSummary.map((e) => e.id)).not.toContain(board3StrokeId);
+        const pdfTab = peers.tutorPage
+          .getByTestId("wb-tutor-page-strip")
+          .getByRole("tab", { name: "Board 4" });
+        await expect(pdfTab).toBeVisible({ timeout: 60_000 });
+        await expect(pdfTab).toHaveAttribute("aria-selected", "true", {
+          timeout: 15_000,
+        });
+
+        // Allow the guard-release injection (2×rAF + setTimeout after
+        // commitPdfBatch) and its async applyRemoteToCanvas to settle.
+        // Using toPass so a slow initial reconcileElements dynamic import
+        // doesn't cause a spurious failure while the guard IS blocking.
+        await expect(async () => {
+          const pdfBoardSummary = await readSceneElementSummary(
+            peers.tutorPage,
+            "tutor"
+          );
+          expect(pdfBoardSummary.length).toBeGreaterThan(0);
+          expect(pdfBoardSummary.every((e) => e.type === "image")).toBe(true);
+          expect(pdfBoardSummary.map((e) => e.id)).not.toContain(board3StrokeId);
+        }).toPass({ timeout: 10_000 });
 
         await clickBoardPageTab(peers.tutorPage, "tutor", "Board 3");
         const board3Ids = await readSceneElementIds(peers.tutorPage, "tutor");
