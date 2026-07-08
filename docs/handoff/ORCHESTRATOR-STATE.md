@@ -8,6 +8,12 @@
 
 ## HEAD
 
+**✅ 4 STALE-ORACLE SPECS REALIGNED (2026-07-07 ~19:24, [Composer](c02885e8-e2b7-42ca-96bb-e18c55a80ff9), `6dce3b5`, test-only/zero `src/`, each green isolated under `wb-regression`).** #1 chrome-interactions:528 → activate **Rectangle** (not pencil) before Sharp-chip hover assert. #2 notes-shimmer → `waitForNotesGeneratingUiWithShimmer()` asserts `"Preparing your notes..."`/`"Writing notes…"` + shimmer atomically inside active window (WS-K fast-finalize race fixed). #3 mic-persistence → `openStudentMicPicker` uses waiting-overlay (PENDING) / `wb-student-overflow-av-pickers` (ACTIVE) + **narrow 1000×800 student viewport** (overflow ⋯ hidden >1100px). #4 whiteboard-workspace smoke → **React-hydration wait before Start click** + `waitForURL` race — session IS created (**correction: `actions.ts` still `redirect()`s to `/workspace`; RW-6 removed the consent modal, NOT the redirect; the real bug was pre-hydration clicks, not a stale redirect oracle or missing session**). No skip-gating added; BLOB gate untouched.
+
+**➡️ SOLE REMAINING for merge-gate #1: Bug A** `wb-tutor-recording-mute:70` — genuine PRODUCT bug on fragile recorder surface (WS-I pre-start mute, recording-branch gain stays 1 vs 0; root-cause `81813fa3`, branch `f748ef7`). Path: **plan-mode step-back → Sonnet 5-axis → fix**; green spec (isolated + in full relay gate) = merge bar. **Good swap point** — start fresh chat, `@`-ref this + this doc, pick up Bug A cold.
+
+---
+
 **✅ TRIAGE VERDICT (2026-07-07 ~18:40, [explore](1a7cec86-5133-4533-8d27-585241c89b93)) — 4 of 5 REAL reds are STALE ORACLES, NO new product regressions. Only Bug A is a genuine product bug.** Each of the 4 is a test that never got realigned after an intentional, already-RESOLVED on-branch product change:
 - **#1 `wb-chrome-interactions:528`** — STALE ORACLE. WS-R (`8e23324`) intentionally hides the roughness/Sharp chip for **pencil**; test activates pencil then looks for "Sharp" (never mounted). `WbStrokePropsPanel` still renders Sharp for rectangle/ellipse/diamond. **Realign:** activate Rectangle (not pencil) before asserting Sharp hover (mirror `wb-roughness-style.spec.ts:57-79`).
 - **#2 `wb-notes-shimmer:209`** — STALE ORACLE (+ minor timing). WS-K (`859f695`) changed pending copy `"Waiting for transcript…"` → `"Preparing your notes..."`; unit tests already locked new copy. **Realign:** L229 expected copy → `"Preparing your notes..."`; assert inside `recordShortSoloSession` active window (WS-K fast-finalize can race the footer away).
