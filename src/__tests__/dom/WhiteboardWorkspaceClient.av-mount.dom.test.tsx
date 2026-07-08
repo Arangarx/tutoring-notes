@@ -385,13 +385,35 @@ const addRemoteAudioSpy = jest.fn();
 const addRemoteAudioUnsubs: jest.Mock[] = [];
 const setRemoteRecordingGainSpy = jest.fn();
 const setTutorRecordingMuteSpy = jest.fn();
+
+// Mutable so individual tests can control localMicStream identity to
+// simulate "graph not yet ready → stream appears" timing (stomp test).
+const _defaultFakeLocalMicStream = {
+  id: "fake-local-mic-stream",
+  getAudioTracks: () => [],
+  getVideoTracks: () => [],
+  getTracks: () => [],
+} as unknown as MediaStream;
+let mockLocalMicStream: MediaStream | null = _defaultFakeLocalMicStream;
+
 jest.mock("@/hooks/useAudioRecorder", () => {
-  const fakeLocalMicStream = {
-    id: "fake-local-mic-stream",
-    getAudioTracks: () => [],
-    getVideoTracks: () => [],
-    getTracks: () => [],
-  } as unknown as MediaStream;
+  // Stable function references — mirrors production where these are useCallback(fn,[]).
+  // Without stable refs, every render creates new function identities which causes
+  // reconciliation effects to fire on every render regardless of dep-array contents,
+  // masking stream-dep regressions (the stomp test relies on this distinction).
+  const stableAddRemoteAudio = (stream: MediaStream) => {
+    addRemoteAudioSpy(stream);
+    const unsub = jest.fn();
+    addRemoteAudioUnsubs.push(unsub);
+    return unsub;
+  };
+  const stableSetRemoteRecordingGain = (stream: MediaStream, gain: number) => {
+    setRemoteRecordingGainSpy(stream, gain);
+  };
+  const stableSetTutorRecordingMute = (muted: boolean) => {
+    setTutorRecordingMuteSpy(muted);
+  };
+
   return {
     useAudioRecorder: () => ({
       isRecording: false,
@@ -423,19 +445,10 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       // effect on localMicStream becoming non-null AND uses
       // addRemoteAudio to attach each remote participant's stream
       // to the recording mixdown.
-      localMicStream: fakeLocalMicStream,
-      addRemoteAudio: (stream: MediaStream) => {
-        addRemoteAudioSpy(stream);
-        const unsub = jest.fn();
-        addRemoteAudioUnsubs.push(unsub);
-        return unsub;
-      },
-      setRemoteRecordingGain: (stream: MediaStream, gain: number) => {
-        setRemoteRecordingGainSpy(stream, gain);
-      },
-      setTutorRecordingMute: (muted: boolean) => {
-        setTutorRecordingMuteSpy(muted);
-      },
+      localMicStream: mockLocalMicStream,
+      addRemoteAudio: stableAddRemoteAudio,
+      setRemoteRecordingGain: stableSetRemoteRecordingGain,
+      setTutorRecordingMute: stableSetTutorRecordingMute,
     }),
   };
 });
@@ -581,6 +594,9 @@ beforeEach(() => {
   evaluateLifecycleCalls.length = 0;
   receivedLocalPeerId = undefined;
   receivedLiveAvOpts = undefined;
+  // Reset localMicStream to the default non-null value so existing tests
+  // that depend on the graph being "ready" continue to work.
+  mockLocalMicStream = _defaultFakeLocalMicStream;
   liveAvState = {
     participants: [],
     localAudioStream: null,
@@ -728,6 +744,66 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     const firstToggleMicIdx = callOrder.indexOf("toggleMic");
     expect(firstSetMuteIdx).toBeGreaterThanOrEqual(0);
     expect(firstToggleMicIdx).toBeGreaterThan(firstSetMuteIdx);
+  });
+
+  test("WS-I stomp: reconcile effect firing on stream-appearance does NOT regress a synchronously-muted ref", async () => {
+    // Reproduces the stomp: mute before graph ready, then graph appears.
+    //
+    // Setup: localMicStream starts null (graph not yet built). liveAv.isMicMuted
+    // stays false throughout — simulating the async React state lag where
+    // toggleMic() has been called but the state batch hasn't rendered yet.
+    //
+    // Before the fix: workspaceAudioLocalMicStream was in the reconciliation
+    // effect's dep array. When localMicStream changed null→non-null, the
+    // effect fired with stale isMicMuted=false and called
+    // setTutorRecordingMute(false), stomping the correctly-set ref=true.
+    // After the fix: stream-appearance does NOT fire the reconciliation effect;
+    // only real isMicMuted state changes do. The graph-build itself applies
+    // the ref (useAudioRecorder.ts graph.setTutorRecordingMute(ref.current)).
+    mockLocalMicStream = null;
+
+    const { rerender } = await renderWorkspace({ initialSessionPhase: "PENDING" });
+    const mod = await import(
+      "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient"
+    );
+
+    const overlay = screen.getByTestId("wb-waiting-overlay");
+    const micToggle = overlay.querySelector<HTMLElement>("[data-testid='wb-topbar-mic-toggle']");
+    expect(micToggle).toBeTruthy();
+
+    // Click mute — handleToggleMicWithRecordingMute sets ref synchronously.
+    // isMicMuted stays false (toggleMicSpy is a no-op mock).
+    await act(async () => {
+      fireEvent.click(micToggle!);
+    });
+
+    // The wrapper must have called setTutorRecordingMute(true).
+    expect(setTutorRecordingMuteSpy).toHaveBeenCalledWith(true);
+
+    // Now clear and simulate the graph becoming ready (stream appears).
+    // isMicMuted is STILL false (simulating the React state lag).
+    setTutorRecordingMuteSpy.mockClear();
+
+    mockLocalMicStream = {
+      id: "fake-local-mic-stream-appeared",
+      getAudioTracks: () => [],
+      getVideoTracks: () => [],
+      getTracks: () => [],
+    } as unknown as MediaStream;
+
+    // Re-render with the same props — this causes the workspace to re-render
+    // and pick up the new mockLocalMicStream from the mock, exactly as the
+    // real acquireMic path would cause setLocalMicStream() to trigger a render.
+    await act(async () => {
+      rerender(<mod.WhiteboardWorkspaceClient {...baseProps} initialSessionPhase="PENDING" />);
+      await Promise.resolve();
+    });
+
+    // The reconciliation effect must NOT have called setTutorRecordingMute(false).
+    // If the stream dep were still present, it would have fired with
+    // isMicMuted=false and stomped the mute intent.
+    const falseCalls = setTutorRecordingMuteSpy.mock.calls.filter((c) => c[0] === false);
+    expect(falseCalls).toHaveLength(0);
   });
 
   test("3-peer canary: tutor + 2 students render distinct tiles AND each remote audioStream is attached to the tutor's recording mixdown", async () => {

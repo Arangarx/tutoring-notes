@@ -1440,6 +1440,18 @@ export function WhiteboardWorkspaceClient({
     initialUserWantsRecording
   );
 
+  // WS-I hydration gate: React event handlers are not attached until after
+  // client-side hydration. Without this, Playwright (and any other automation)
+  // can click the mic button from SSR HTML before the React onClick fires —
+  // the click is a DOM-level no-op, tutorRecordingMutedRef stays false, and
+  // the graph builds with ref=false → gain=1 (the pre-hydration click bug).
+  // clientMounted starts false (matching SSR), becomes true in the first
+  // useEffect. Mic controls are disabled until then, so Playwright's
+  // actionability check waits for the button to enable (which happens before
+  // the mic graph is built), ensuring the click fires post-hydration.
+  const [clientMounted, setClientMounted] = useState(false);
+  useEffect(() => { setClientMounted(true); }, []);
+
   // Session phase gate — PENDING = waiting room (A/V mesh live, but
   // capture + billing timer inert); ACTIVE = tutor has clicked Start.
   // Tutor flips PENDING→ACTIVE via activateSessionLive (below).
@@ -2588,10 +2600,28 @@ export function WhiteboardWorkspaceClient({
     workspaceAudio.setTutorRecordingMute;
   useEffect(() => {
     if (role !== "tutor") return;
+    // WS-I stomp fix — two-part guard:
+    //
+    // (1) workspaceAudioLocalMicStream is intentionally NOT a dep. When the
+    //     audio graph becomes ready, graph-build already applies
+    //     tutorRecordingMutedRef.current directly (useAudioRecorder.ts
+    //     graph.setTutorRecordingMute(ref.current)). The stream dep made this
+    //     effect re-fire on graph-ready with stale isMicMuted React state and
+    //     stomp the ref back to false.
+    //
+    // (2) Only push mute=true from this effect. When isMicMuted is false —
+    //     whether from initial mount, a legitimate unmute, or a spurious reset
+    //     that useLiveAV can emit when externalAudioStream changes identity
+    //     (the publish stream appears after graph-build) — we do NOT call
+    //     setTutorRecordingMute(false). The click wrapper
+    //     (handleToggleMicWithRecordingMute) owns the false/unmute path: it
+    //     calls workspaceAudio.setTutorRecordingMute(nextMuted) synchronously
+    //     before liveAv.toggleMic(), so any isMicMuted=false transition that
+    //     matters has already been applied. Gating here prevents the spurious
+    //     useLiveAV reset from undoing a pre-start mute.
+    if (!liveAv.isMicMuted) return;
     try {
-      // Always sync mute intent — even before localMicStream/graph exist — so
-      // useAudioRecorder can apply it at graph-build time (WS-I pre-start mute).
-      workspaceAudioSetTutorRecordingMute(liveAv.isMicMuted);
+      workspaceAudioSetTutorRecordingMute(true);
     } catch (err) {
       console.warn(
         `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} setTutorRecordingMute failed`,
@@ -2602,7 +2632,6 @@ export function WhiteboardWorkspaceClient({
     role,
     liveAv.isMicMuted,
     workspaceAudioSetTutorRecordingMute,
-    workspaceAudioLocalMicStream,
     whiteboardSessionId,
   ]);
 
@@ -6110,7 +6139,7 @@ export function WhiteboardWorkspaceClient({
         void liveAv.setMicDeviceBySlot(slot, { force: true })
       }
       onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
-      disabled={role === "student" ? studentAvPickerDisabled : endingBusy}
+      disabled={!clientMounted || (role === "student" ? studentAvPickerDisabled : endingBusy)}
     />
   );
 
@@ -6507,7 +6536,7 @@ export function WhiteboardWorkspaceClient({
             onPickMicSlot={(slot) =>
               void liveAv.setMicDeviceBySlot(slot, { force: true })
             }
-            disabled={endingBusy}
+            disabled={!clientMounted || endingBusy}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}
