@@ -384,6 +384,7 @@ jest.mock(
 const addRemoteAudioSpy = jest.fn();
 const addRemoteAudioUnsubs: jest.Mock[] = [];
 const setRemoteRecordingGainSpy = jest.fn();
+const setTutorRecordingMuteSpy = jest.fn();
 jest.mock("@/hooks/useAudioRecorder", () => {
   const fakeLocalMicStream = {
     id: "fake-local-mic-stream",
@@ -431,6 +432,9 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       },
       setRemoteRecordingGain: (stream: MediaStream, gain: number) => {
         setRemoteRecordingGainSpy(stream, gain);
+      },
+      setTutorRecordingMute: (muted: boolean) => {
+        setTutorRecordingMuteSpy(muted);
       },
     }),
   };
@@ -572,6 +576,8 @@ beforeEach(() => {
   addRemoteAudioSpy.mockClear();
   addRemoteAudioUnsubs.length = 0;
   setRemoteRecordingGainSpy.mockClear();
+  setTutorRecordingMuteSpy.mockClear();
+  toggleMicSpy.mockClear();
   evaluateLifecycleCalls.length = 0;
   receivedLocalPeerId = undefined;
   receivedLiveAvOpts = undefined;
@@ -668,6 +674,60 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     expect(screen.getByTestId("wb-topbar-mic")).toBeTruthy();
     expect(screen.getByTestId("wb-topbar-mic-toggle")).toBeTruthy();
     expect(countMeterBarRefHosts()).toBe(1);
+  });
+
+  test("WS-I: tutor mic click calls setTutorRecordingMute(nextMuted) before toggleMic (overlay, PENDING)", async () => {
+    // Guards against the pre-start mute gap: the recording-mute ref must be
+    // set synchronously in the same wrapper turn as toggleMic so that
+    // the mount-effect acquireMic graph-build reads the correct value.
+    await renderWorkspace({ initialSessionPhase: "PENDING" });
+
+    const overlay = screen.getByTestId("wb-waiting-overlay");
+    const micToggle = overlay.querySelector<HTMLElement>("[data-testid='wb-topbar-mic-toggle']");
+    expect(micToggle).toBeTruthy();
+
+    // Track call ordering only for calls that happen during the click interaction.
+    // (The effect at 2589 also calls setTutorRecordingMute on each render, so we
+    // don't assert exact call count — we assert the handler's pair is ordered correctly.)
+    const callOrder: string[] = [];
+    setTutorRecordingMuteSpy.mockImplementation(() => { callOrder.push("setTutorRecordingMute"); });
+    toggleMicSpy.mockImplementation(() => { callOrder.push("toggleMic"); });
+
+    await act(async () => {
+      fireEvent.click(micToggle!);
+    });
+
+    // The wrapper must have called setTutorRecordingMute(true) at least once.
+    expect(setTutorRecordingMuteSpy).toHaveBeenCalledWith(true);
+    // toggleMic must have been called.
+    expect(toggleMicSpy).toHaveBeenCalled();
+    // The FIRST setTutorRecordingMute in the callOrder is before the toggleMic
+    // — this verifies the synchronous wrapper fires before the liveAv toggle.
+    const firstSetMuteIdx = callOrder.indexOf("setTutorRecordingMute");
+    const firstToggleMicIdx = callOrder.indexOf("toggleMic");
+    expect(firstSetMuteIdx).toBeGreaterThanOrEqual(0);
+    expect(firstToggleMicIdx).toBeGreaterThan(firstSetMuteIdx);
+  });
+
+  test("WS-I: tutor mic click calls setTutorRecordingMute(nextMuted) before toggleMic (top-bar, ACTIVE)", async () => {
+    await renderWorkspace({ initialSessionPhase: "ACTIVE" });
+
+    const micToggle = screen.getByTestId<HTMLElement>("wb-topbar-mic-toggle");
+
+    const callOrder: string[] = [];
+    setTutorRecordingMuteSpy.mockImplementation(() => { callOrder.push("setTutorRecordingMute"); });
+    toggleMicSpy.mockImplementation(() => { callOrder.push("toggleMic"); });
+
+    await act(async () => {
+      fireEvent.click(micToggle);
+    });
+
+    expect(setTutorRecordingMuteSpy).toHaveBeenCalledWith(true);
+    expect(toggleMicSpy).toHaveBeenCalled();
+    const firstSetMuteIdx = callOrder.indexOf("setTutorRecordingMute");
+    const firstToggleMicIdx = callOrder.indexOf("toggleMic");
+    expect(firstSetMuteIdx).toBeGreaterThanOrEqual(0);
+    expect(firstToggleMicIdx).toBeGreaterThan(firstSetMuteIdx);
   });
 
   test("3-peer canary: tutor + 2 students render distinct tiles AND each remote audioStream is attached to the tutor's recording mixdown", async () => {

@@ -198,13 +198,16 @@ export function WbTopBarMicControlLive({
 
     if (disabled || micUnavailable) return;
 
+    // WS-I fix: call onToggleMute BEFORE the async acquire so any recording-mute
+    // ref update (in the wrapper) is synchronously committed before the graph
+    // can be built during the getUserMedia await.
+    onToggleMute();
+
     if (!hasMicStream) {
 
       await onAcquireMic();
 
     }
-
-    onToggleMute();
 
   }, [disabled, hasMicStream, micUnavailable, onAcquireMic, onToggleMute]);
 

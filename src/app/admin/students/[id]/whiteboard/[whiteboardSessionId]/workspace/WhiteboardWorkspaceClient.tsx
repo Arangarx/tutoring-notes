@@ -4958,6 +4958,16 @@ export function WhiteboardWorkspaceClient({
     }
   }, [workspaceAudio.localMicStream]);
 
+  // WS-I fix: synchronously write recording-mute intent before any async
+  // boundary so the mount-effect acquireMic graph-build reads the correct
+  // tutorRecordingMutedRef value. The ref update + graph call in
+  // setTutorRecordingMute happen in the same JS turn as the live-AV toggle.
+  const handleToggleMicWithRecordingMute = useCallback(() => {
+    const nextMuted = !liveAvRef.current.isMicMuted;
+    workspaceAudio.setTutorRecordingMute(nextMuted);
+    liveAvRef.current.toggleMic();
+  }, [workspaceAudio.setTutorRecordingMute]);
+
   const handleTopBarCam = useCallback(async () => {
     if (!liveAvRef.current.localVideoStream) {
       // requestCam() already sets isCamMuted=false on success.
@@ -6094,7 +6104,7 @@ export function WhiteboardWorkspaceClient({
           ? overlayRecorderMicControls
           : overlayStudentMicControls
       }
-      onToggleMute={liveAv.toggleMic}
+      onToggleMute={role === "tutor" ? handleToggleMicWithRecordingMute : liveAv.toggleMic}
       onAcquireMic={handleAcquireMic}
       onPickMicSlot={(slot) =>
         void liveAv.setMicDeviceBySlot(slot, { force: true })
@@ -6492,7 +6502,7 @@ export function WhiteboardWorkspaceClient({
           <WbTopBarMicControl
             audio={workspaceAudio}
             isMicMuted={liveAv.isMicMuted}
-            onToggleMute={liveAv.toggleMic}
+            onToggleMute={handleToggleMicWithRecordingMute}
             onAcquireMic={handleAcquireMic}
             onPickMicSlot={(slot) =>
               void liveAv.setMicDeviceBySlot(slot, { force: true })

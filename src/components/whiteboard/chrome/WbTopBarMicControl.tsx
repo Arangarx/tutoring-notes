@@ -62,10 +62,13 @@ export function WbTopBarMicControl({
 
   const handleMainClick = useCallback(async () => {
     if (disabled) return;
+    // WS-I fix: call onToggleMute (which synchronously sets tutorRecordingMutedRef)
+    // BEFORE the async acquire so the graph-build reads the correct mute intent
+    // even if the mount acquireMic completes during the await.
+    onToggleMute();
     if (!audio.isLive && !audio.localMicStream) {
       await onAcquireMic();
     }
-    onToggleMute();
   }, [audio.isLive, audio.localMicStream, disabled, onAcquireMic, onToggleMute]);
 
   const micControls = {
