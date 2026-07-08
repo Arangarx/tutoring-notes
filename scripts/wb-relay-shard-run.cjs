@@ -302,12 +302,16 @@ function extractUnexpectedFailuresFromJsonReport(report) {
   function addFailure(spec, fullTitle) {
     const relFile = (spec.file || "").replace(/\\/g, "/");
     const file = relFile.startsWith("tests/") ? relFile : `tests/${relFile}`;
-    const id = `${file}:${spec.line} › ${fullTitle}`;
+    const line = spec.location?.line ?? spec.line;
+    if (!line) {
+      return;
+    }
+    const id = `${file}:${line} › ${fullTitle}`;
     if (seen.has(id)) {
       return;
     }
     seen.add(id);
-    failures.push({ file, grep: fullTitle, id });
+    failures.push({ file, line, grep: fullTitle, id });
   }
 
   function walkSuites(suites, titlePrefix) {
@@ -366,6 +370,7 @@ function parseFailuresFromStdout(output) {
     seen.add(key);
     failures.push({
       file: normalizedFile,
+      line: Number(lineNo),
       grep: title.trim(),
       id: `${normalizedFile}:${lineNo} › ${title.trim()}`,
     });
@@ -505,14 +510,13 @@ async function runIsolationPass(failures) {
   for (const failure of failures) {
     console.log(`\n--- isolate: ${failure.id} ---`);
     await freeDevServerPorts();
+    const testSelector = `${toCliTestArg(failure.file)}:${failure.line}`;
     const result = npxPlaywright(
       [
         "test",
         PROJECT_FLAG,
         "--no-deps",
-        toCliTestArg(failure.file),
-        "-g",
-        failure.grep,
+        testSelector,
         "--workers=1",
         "--reporter=line",
       ],
