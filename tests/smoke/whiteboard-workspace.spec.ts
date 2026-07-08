@@ -13,6 +13,8 @@ import {
 import { TAG } from "../test-tags";
 import { PrismaClient } from "@prisma/client";
 
+const { applyWbRegressionLocalDatabaseEnv } = require("../../scripts/wb-regression-local-db.cjs");
+
 /**
  * Whiteboard Playwright smoke (WHITEBOARD-STATUS §1.12).
  *
@@ -111,6 +113,8 @@ test("whiteboard — createWhiteboardSession starts session (needs BLOB)", { tag
 
   test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
+  applyWbRegressionLocalDatabaseEnv();
+
   const prisma = new PrismaClient();
   try {
     await prisma.whiteboardSession.updateMany({
@@ -126,9 +130,28 @@ test("whiteboard — createWhiteboardSession starts session (needs BLOB)", { tag
     waitUntil: "domcontentloaded",
   });
 
-  await guardedPage.getByTestId("start-whiteboard-session-btn").first().click();
+  const startBtn = guardedPage.getByTestId("start-whiteboard-session-btn").first();
+  await expect(startBtn).toBeEnabled();
+  await startBtn.scrollIntoViewIfNeeded();
+  // Client component must hydrate before server-action onClick fires.
+  await guardedPage.waitForFunction(() => {
+    const el = document.querySelector(
+      "[data-testid='start-whiteboard-session-btn']"
+    );
+    if (!el) return false;
+    return Object.keys(el).some(
+      (k) => k.startsWith("__reactFiber") || k.startsWith("__reactProps")
+    );
+  });
 
-  await expect(guardedPage).toHaveURL(/\/workspace$/, { timeout: 45_000 });
+  // RW-6: createWhiteboardSession still redirect()s to workspace after the row
+  // is durable; wait for hydration so the server-action onClick actually fires.
+  await Promise.all([
+    guardedPage.waitForURL(/\/whiteboard\/[^/]+\/workspace$/, {
+      timeout: 45_000,
+    }),
+    startBtn.click(),
+  ]);
 
   await expect(
     guardedPage.getByTestId("tutor-whiteboard-canvas-mount")

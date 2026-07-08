@@ -200,9 +200,54 @@ async function recordShortSoloSession(
   await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
     timeout: 180_000,
   });
+}
 
-  // Tight poll begins immediately — notes can finish before slower UI assertions run.
-  await waitForNotesPipelineActiveState(page, whiteboardSessionId, 90_000);
+async function waitForNotesGeneratingUiWithShimmer(
+  page: import("@playwright/test").Page,
+  timeoutMs = 90_000
+): Promise<{
+  generatingWrap: import("@playwright/test").Locator;
+  overlay0: ShimmerOverlayState;
+  overlay1: ShimmerOverlayState;
+}> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const generatingWrap = page.getByTestId("tutor-notes-generating");
+    if (!(await generatingWrap.isVisible().catch(() => false))) {
+      await page.waitForTimeout(100);
+      continue;
+    }
+    const statusFooter = page.getByTestId("tutor-notes-status");
+    if (!(await statusFooter.isVisible().catch(() => false))) {
+      await page.waitForTimeout(100);
+      continue;
+    }
+    const text = ((await statusFooter.textContent()) ?? "").trim();
+    const phase = await generatingWrap.getAttribute("data-note-phase");
+    const copyOk =
+      phase === "generating"
+        ? text === "Writing notes…"
+        : text === "Preparing your notes...";
+    if (!copyOk) {
+      await page.waitForTimeout(100);
+      continue;
+    }
+
+    // WS-K fast-finalize: capture shimmer in the same turn as copy validation.
+    const overlay0 = await readShimmerOverlayState(page, generatingWrap);
+    await page.waitForTimeout(800);
+    if (!(await generatingWrap.isVisible().catch(() => false))) {
+      await page.waitForTimeout(100);
+      continue;
+    }
+    const overlay1 = await readShimmerOverlayState(page, generatingWrap);
+    return { generatingWrap, overlay0, overlay1 };
+  }
+
+  throw new Error(
+    "Timed out waiting for notes generating UI with WS-K status copy + shimmer overlay"
+  );
 }
 
 test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_RECORDING] }, () => {
@@ -216,18 +261,8 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await recordShortSoloSession(page, studentId, whiteboardSessionId);
 
-    const generatingWrap = page.getByTestId("tutor-notes-generating");
-    await expect(generatingWrap).toBeVisible();
-
-    const statusFooter = page.getByTestId("tutor-notes-status");
-    await expect(statusFooter).toBeVisible();
-
-    const phase = await generatingWrap.getAttribute("data-note-phase");
-    if (phase === "generating") {
-      await expect(statusFooter).toHaveText("Writing notes…");
-    } else {
-      await expect(statusFooter).toHaveText("Waiting for transcript…");
-    }
+    const { generatingWrap, overlay0, overlay1 } =
+      await waitForNotesGeneratingUiWithShimmer(page, 90_000);
 
     const recordings = await fetchRecordingCount(page, whiteboardSessionId);
     expect(recordings.count).toBeGreaterThanOrEqual(1);
@@ -238,14 +273,10 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_
     await expect(topicsField).toBeEditable({ editable: false });
 
     // Shimmer is a wrapper ::after ON TOP of fields — not an invisible div behind textareas.
-    const overlay0 = await readShimmerOverlayState(page, generatingWrap);
     expect(overlay0.content, "wrapper ::after shimmer overlay is present").not.toBe("none");
     expect(Number.parseInt(overlay0.zIndex, 10)).toBeGreaterThanOrEqual(2);
     expect(Number.parseFloat(overlay0.opacity)).toBeGreaterThan(0.4);
 
-    await page.waitForTimeout(800);
-
-    const overlay1 = await readShimmerOverlayState(page, generatingWrap);
     expect(
       overlay1.backgroundPosition,
       "shimmer background-position moves over ~800ms (real animation, not static paint)"
@@ -266,6 +297,7 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await recordShortSoloSession(page, studentId, whiteboardSessionId);
+    await waitForNotesPipelineActiveState(page, whiteboardSessionId, 90_000);
 
     const generatingWrap = page.getByTestId("tutor-notes-generating");
     await expect(generatingWrap).toBeVisible();

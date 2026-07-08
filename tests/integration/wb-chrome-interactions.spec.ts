@@ -534,16 +534,21 @@ test.describe("wb chrome — interactive controls", () => {
     const page = await context.newPage();
     await loadTutorBoard(page, session);
 
-    // Activate pencil to show props chrome
-    await page.getByRole("button", { name: "Pencil (P)" }).click();
+    // WS-R: Sharp chip is absent for pencil — use rectangle (see wb-roughness-style.spec.ts).
+    const shapesTrigger = page.getByRole("button", { name: /Shapes/i });
+    await shapesTrigger.click();
+    await page
+      .locator(".mynk-wb-shapes-dropdown")
+      .getByRole("menuitem", { name: /Rectangle/i })
+      .click();
+
     const trigger = page.getByTestId("wb-props-compact-trigger");
     await trigger.click();
     const panel = page.getByTestId("wb-props-panel");
     await expect(panel).toBeVisible({ timeout: 3_000 });
 
     // Open More styles to reveal Edge sharpness chips
-    const moreBtn = panel.getByRole("button", { name: /More styles/i });
-    await moreBtn.click();
+    await panel.getByTestId("wb-more-styles-btn").click();
 
     // The "Sharp" chip should be active by default (DD-02)
     const sharpChip = panel.getByRole("button", { name: "Sharp" });

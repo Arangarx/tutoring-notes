@@ -131,14 +131,25 @@ export function installDualMicHarness(
 }
 
 async function openStudentMicPicker(studentPage: import("@playwright/test").Page) {
-  const micSettings = studentPage.getByTestId("wb-topbar-mic-settings");
-  if (await micSettings.isVisible().catch(() => false)) {
-    await micSettings.click();
-    return studentPage
-      .getByTestId("wb-topbar-mic")
-      .getByTestId("audio-device-select");
+  // WS-M: student top-bar mic uses hideDevicePicker — pickers live in waiting
+  // overlay (PENDING) or overflow AV menu (ACTIVE).
+  const waitingPickers = studentPage.getByTestId(
+    "wb-waiting-overlay-device-pickers"
+  );
+  if (await waitingPickers.isVisible().catch(() => false)) {
+    return waitingPickers.getByTestId("audio-device-select");
   }
-  return studentPage.getByTestId("audio-device-select").first();
+
+  const dropdown = studentPage.getByTestId("wb-topbar-overflow-dropdown");
+  if (!(await dropdown.isVisible().catch(() => false))) {
+    const overflowBtn = studentPage.getByTestId("wb-student-topbar-overflow");
+    await expect(overflowBtn).toBeVisible({ timeout: 30_000 });
+    await overflowBtn.click();
+  }
+  await expect(dropdown).toBeVisible({ timeout: 30_000 });
+  const avPickers = dropdown.getByTestId("wb-student-overflow-av-pickers");
+  await expect(avPickers).toBeVisible({ timeout: 30_000 });
+  return avPickers.getByTestId("audio-device-select");
 }
 
 /**
@@ -171,7 +182,8 @@ test.describe("student mic persistence (BUG-7)", { tag: [TAG.WB_AV] }, () => {
       : undefined;
 
     const studentContext = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
+      // <1100px reveals student overflow ⋯ (device pickers live there post-WS-M).
+      viewport: { width: 1000, height: 800 },
       permissions: ["microphone", "camera"],
       ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
     });
