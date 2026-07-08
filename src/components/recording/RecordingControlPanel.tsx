@@ -16,6 +16,7 @@ export type RecordingControlPanelProps = {
    * `useLiveAV.setMicDevice` so WebRTC and the recorder graph stay in sync.
    */
   onMicDeviceChange?: (deviceId: string) => void | Promise<void>;
+  onPickMicSlot?: (slotIndex: number) => void | Promise<void>;
   /**
    * Live label offset — set when the host already shows prior segments (e.g.
    * pending list) while the hook reset `segmentNumber` to 1 for a new take.
@@ -33,12 +34,22 @@ export default function RecordingControlPanel({
   disabled,
   onMicDeviceChange,
   segmentDisplayBase = 0,
+  onPickMicSlot,
 }: RecordingControlPanelProps) {
   const micControls: MicControlsProps = {
     meterBarRef: r.meterBarRef,
     devices: r.devices,
-    selectedDeviceId: r.selectedDeviceId,
-    onDeviceChange: onMicDeviceChange ?? r.handleDeviceChange,
+    selectedPickerSlot: r.pickedMicSlot,
+    onPickMicSlot: (slot) => {
+      if (onPickMicSlot) {
+        void onPickMicSlot(slot);
+      } else if (onMicDeviceChange) {
+        const id = r.devices[slot]?.deviceId;
+        if (id) void onMicDeviceChange(id);
+      } else {
+        void r.handleMicSlotChange(slot);
+      }
+    },
     gainLinear: r.gainLinear,
     onGainChange: r.setGainLinear,
     isLive: r.isLive,
@@ -91,6 +102,7 @@ export default function RecordingControlPanel({
       segmentNumber={r.segmentNumber}
       segmentDisplayBase={segmentDisplayBase}
       elapsed={r.elapsed}
+      sessionElapsed={r.sessionElapsed}
       isWarning={r.isWarning}
       micControls={{ ...micControls, hint }}
       onStart={r.handleStartRecording}

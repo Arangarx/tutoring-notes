@@ -213,12 +213,24 @@ async function loadReferenceSet(prisma, label, log) {
       }),
     log
   );
+  const chunks = await withConnectionRetry(
+    prisma,
+    `${label}.transcriptChunk`,
+    () =>
+      prisma.transcriptChunk.findMany({
+        select: { chunkBlobUrl: true },
+      }),
+    log
+  );
   for (const r of recs) {
     if (r.blobUrl) set.add(r.blobUrl);
   }
   for (const b of boards) {
     if (b.eventsBlobUrl) set.add(b.eventsBlobUrl);
     if (b.snapshotBlobUrl) set.add(b.snapshotBlobUrl);
+  }
+  for (const c of chunks) {
+    if (c.chunkBlobUrl) set.add(c.chunkBlobUrl);
   }
   return set;
 }

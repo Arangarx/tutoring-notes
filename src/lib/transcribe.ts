@@ -7,6 +7,7 @@ import {
   logCostEvent,
   type CostEventProvenance,
 } from "@/lib/observability/cost-events";
+import { LEGACY_TRANSCRIBE_MODEL } from "@/lib/ai-models";
 
 export { WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
 
@@ -74,7 +75,7 @@ async function transcribeSinglePart(
   ctx: PartCtx
 ): Promise<TranscribeResult> {
   const client = new OpenAI({ apiKey: env.OPENAI_API_KEY! });
-  const modelRequested = "whisper-1";
+  const modelRequested = LEGACY_TRANSCRIBE_MODEL;
   const ridLog = ctx.rid ? ` rid=${ctx.rid}` : "";
 
   for (let attempt = 0; attempt <= WHISPER_CREATE_MAX_RETRIES; attempt++) {

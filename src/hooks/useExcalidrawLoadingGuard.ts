@@ -59,8 +59,11 @@ export function useExcalidrawLoadingGuard({
         clearTimeout(watchdogRef.current);
         watchdogRef.current = null;
       }
+      const api = excalidrawAPI as WbChromeApiExt | null;
+      api?.updateScene?.({ appState: { isLoading: false } });
+      setStuckLoading(false);
     },
-    [wjgLog]
+    [excalidrawAPI, wjgLog]
   );
 
   useEffect(() => {
@@ -68,6 +71,15 @@ export function useExcalidrawLoadingGuard({
     wjgLog("excalidraw_api_ready");
 
     const api = excalidrawAPI as WbChromeApiExt;
+
+    // Sync/scene may have cleared loading before the API ref landed — still
+    // dismiss Excalidraw's isLoading spinner (Andrew 2026-06-24 phone smoke).
+    if (clearedRef.current) {
+      api.updateScene?.({ appState: { isLoading: false } });
+      setStuckLoading(false);
+      return;
+    }
+
     const appState = api.getAppState?.() as { isLoading?: boolean } | undefined;
     const isLoading = appState?.isLoading;
     if (isLoading === false) {
@@ -76,6 +88,7 @@ export function useExcalidrawLoadingGuard({
     }
 
     watchdogRef.current = setTimeout(() => {
+      if (clearedRef.current) return;
       const stillAppState = api.getAppState?.() as { isLoading?: boolean } | undefined;
       const stillLoading = stillAppState?.isLoading;
       if (stillLoading !== true) {

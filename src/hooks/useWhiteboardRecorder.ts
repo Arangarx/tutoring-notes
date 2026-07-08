@@ -52,10 +52,10 @@
  *
  *   7. **Resume from crash**: on mount we call
  *      `findCheckpoint("whiteboard", ownerKey)` for THIS session id
- *      AND a fallback `findLatestCheckpointForOwner` keyed on
- *      tutor+student so a brand-new session id can recover from a
- *      session id that crashed without ever ending. The workspace
- *      component decides whether to actually surface the prompt.
+ *      only. A brand-new session URL must start with a blank board —
+ *      cross-session recovery is via that session's own URL, not by
+ *      importing another session's IndexedDB row. Stale rows for ended
+ *      sessions are garbage-collected silently on mount.
  *
  *   8. **wbsid logging**: every console line is tagged
  *      `[useWhiteboardRecorder] wbsid=<sessionId> ...` to mirror the
@@ -82,6 +82,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   appendEvent,
   createEmptyEventLog,
+  reconstructSceneAt,
   WB_EVENT_LOG_SCHEMA_VERSION,
   type WBElement,
   type WBEvent,
@@ -112,6 +113,22 @@ import {
   isWhiteboardBoardDocumentV1,
   type WhiteboardBoardDocumentV1,
 } from "@/lib/whiteboard/board-document-snapshot";
+import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
+import {
+  mergeServerStateWithIdbTail,
+  shouldSuppressIdbPrompt,
+} from "@/lib/whiteboard/idb-recovery-predicate";
+import {
+  computeBackoffMs,
+  nextConsecutiveFailures,
+  SERVER_PERSIST_MAX_RETRIES,
+  SERVER_PERSIST_WARNING_MESSAGE,
+  shouldAdvanceCursorOnResponse,
+  shouldRetryPersist,
+  shouldShowPersistWarning,
+  shouldSkipPersistTick,
+  shouldStopPersistOnResponse,
+} from "@/lib/whiteboard/server-persist-policy";
 
 void _audioOwnerKey;
 
@@ -148,6 +165,9 @@ const DIFF_INTERVAL_MS = 100;
 
 /** IndexedDB checkpoint cadence. */
 const IDB_CHECKPOINT_INTERVAL_MS = 30_000;
+
+/** WS-B: ~1s server-side event-batch persist cadence. */
+const SERVER_PERSIST_INTERVAL_MS = 1_000;
 
 /**
  * Minimal contract the recorder needs from the live-sync client.
@@ -270,6 +290,13 @@ export type UseWhiteboardRecorderOptions = {
    */
   getBoardDocumentForCheckpoint?: () => WhiteboardBoardDocumentV1 | null;
   /**
+   * WS-D: server-assembled state for ACTIVE session resume. When batches
+   * exist, Section F hydrates from here and skips the IDB prompt.
+   */
+  initialPersistedState?: InitialPersistedWhiteboardState | null;
+  /** Session phase at mount — gates server hydrate vs IDB Section F. */
+  sessionPhase?: "PENDING" | "ACTIVE";
+  /**
    * Local client id — broadcast on every `add` event so replay can
    * colour-tag strokes by author. Defaults to a random uuid.
    */
@@ -308,6 +335,11 @@ export type UseWhiteboardRecorderReturn = {
    * (kind="whiteboard-events"). Does NOT clear local state.
    */
   buildFinalEventsJson: () => string;
+  /**
+   * Await server-side event-batch persist catch-up before End finalization.
+   * Waits for any in-flight persist, then flushes remaining events.
+   */
+  flushServerPersist: () => Promise<void>;
   /**
    * Call AFTER the workspace component successfully persists the
    * events.json to Vercel Blob and updates `WhiteboardSession.eventsBlobUrl`.
@@ -361,16 +393,18 @@ export type UseWhiteboardRecorderReturn = {
     viewportWidth?: number,
     viewportHeight?: number
   ) => void;
+  /** Record a tutor board-tab switch for replay active-tab tracking (E4). */
+  recordPageSwitch: (pageId: string, title: string) => void;
 };
 
 export type ResumeAvailability = {
   /** Where the checkpoint was found ("this-session" = exact id match). */
-  source: "this-session" | "latest-for-owner";
+  source: "this-session";
   /** ISO 8601 wall-clock of the original startedAt. */
   startedAt: string;
   /** Approximate "minutes recorded" for the prompt copy. */
   durationMs: number;
-  /** Underlying sessionId of the checkpoint (may differ from the live one). */
+  /** Underlying sessionId of the checkpoint (this session). */
   sessionId: string;
 };
 
@@ -507,6 +541,30 @@ export function useWhiteboardRecorder(
     boardDocument?: WhiteboardBoardDocumentV1;
   } | null>(null);
 
+  /** WS-B: monotonic event index cursor for server persist (never advance on error). */
+  const lastPersistedIndexRef = useRef(0);
+  /** Next batchSeq to assign; incremented only after a successful 2xx persist. */
+  const nextBatchSeqRef = useRef(1);
+  const persistInProgressRef = useRef(false);
+  const persistCompletionRef = useRef<Promise<void> | null>(null);
+  const serverPersistConsecutiveFailuresRef = useRef(0);
+  const serverPersistWarningActiveRef = useRef(false);
+
+  /**
+   * WS-D ordering guard: remote scene ingest is deferred until Section F
+   * (server hydrate / IDB scan) finishes seeding `logRef`. Prevents a
+   * live-sync packet from racing ahead of backend hydrate and clobbering
+   * or duplicating recovered state. Released in Section F `finally`.
+   */
+  const mountHydrateCompleteRef = useRef(false);
+  const deferredRemoteIngestsRef = useRef<
+    Array<{
+      peerId: string;
+      elements: ReadonlyArray<ExcalidrawLikeElement>;
+      details?: WhiteboardWireRemoteDetails;
+    }>
+  >([]);
+
   /**
    * Loads `cachedResumeRef` into `logRef` / `prevElementsRef` and returns the
    * same shape as `acceptResume`. Used by the manual "Load draft" control and
@@ -542,6 +600,64 @@ export function useWhiteboardRecorder(
       );
       return { log: cached.log, elements, boardDocument: bd };
     }, [whiteboardSessionId]);
+
+  /**
+   * WS-D: apply backend-assembled log + board document into memory.
+   * Server wins over IDB when both exist for ACTIVE sessions (unless IDB
+   * tail extends beyond `lastPersistedToIndex` — see Section F merge).
+   */
+  const hydrateFromServer = useCallback(
+    (
+      state: InitialPersistedWhiteboardState,
+      mergedLog?: WBEventLog,
+      mergedBoardDocument?: WhiteboardBoardDocumentV1
+    ): ResumeResult => {
+      const log = mergedLog ?? state.log;
+      logRef.current = log;
+      setEventCount(log.events.length);
+      setDurationMs(log.durationMs);
+      lastPersistedIndexRef.current = Math.max(0, state.lastPersistedToIndex);
+      nextBatchSeqRef.current = Math.max(1, state.lastPersistedBatchSeq + 1);
+
+      const bd =
+        (mergedBoardDocument ?? state.boardDocument) &&
+        isWhiteboardBoardDocumentV1(
+          mergedBoardDocument ?? state.boardDocument
+        )
+          ? (mergedBoardDocument ?? state.boardDocument)!
+          : undefined;
+
+      let elements: WBElement[];
+      if (bd) {
+        const raw =
+          (bd.pages[bd.activePageId] as ExcalidrawLikeElement[] | undefined) ??
+          [];
+        elements = canonicalizeScene(raw);
+      } else {
+        const sceneMap = reconstructSceneAt(log, log.durationMs);
+        elements = Array.from(sceneMap.values());
+      }
+      prevElementsRef.current = elements;
+
+      const mergedTail =
+        mergedLog && mergedLog.events.length > state.log.events.length;
+      console.log(
+        `[wbr] wbr=${whiteboardSessionId} action=hydrate_server events=${log.events.length} boardPages=${bd ? bd.pageList.length : 1} lastPersistedTo=${state.lastPersistedToIndex} batchSeq=${state.lastPersistedBatchSeq}${mergedTail ? " idb_tail_merged=true" : ""}`
+      );
+
+      return { log, elements, boardDocument: bd };
+    },
+    [whiteboardSessionId]
+  );
+
+  const initialPersistedStateRef = useRef(opts.initialPersistedState);
+  useEffect(() => {
+    initialPersistedStateRef.current = opts.initialPersistedState;
+  }, [opts.initialPersistedState]);
+  const sessionPhaseRef = useRef(opts.sessionPhase ?? "ACTIVE");
+  useEffect(() => {
+    sessionPhaseRef.current = opts.sessionPhase ?? "ACTIVE";
+  }, [opts.sessionPhase]);
 
   /** Push an event, refresh derived UI state. Single point of mutation. */
   const pushEvent = useCallback((ev: WBEvent) => {
@@ -675,13 +791,6 @@ export function useWhiteboardRecorder(
       viewportHeight?: number
     ) => {
       if (!recordingActiveRef.current) {
-        // Diagnostic only — fires on every pan/zoom that happens before
-        // the student joins / solo-rehearsal allows. Confirms whether
-        // the workspace's recordViewport call site reached the recorder
-        // (smoke debugging for replay-viewport-empty cases).
-        console.info(
-          `[pvs] action=record-viewport skip=recording-inactive panX=${panX} panY=${panY} zoom=${zoom}`
-        );
         return;
       }
       if (!Number.isFinite(panX) || !Number.isFinite(panY)) return;
@@ -725,6 +834,24 @@ export function useWhiteboardRecorder(
     [pushEvent]
   );
 
+  const recordPageSwitch = useCallback(
+    (pageId: string, title: string) => {
+      if (!recordingActiveRef.current) return;
+      if (!pageId) return;
+      const t = Math.max(0, Math.floor(getAudioMsRef.current()));
+      pushEvent({
+        t,
+        type: "page-switch",
+        pageId,
+        title: title || "Board",
+      });
+      console.info(
+        `[pvs] action=record-page-switch append t=${t} pageId=${pageId} title=${title} totalEvents=${logRef.current.events.length}`
+      );
+    },
+    [pushEvent]
+  );
+
   // Recording-start hook: when the FSM flips to active, reset the
   // de-dupe ref so the next recordViewport call always emits at least
   // once (anchoring the timeline at t≈0 with whatever viewport the
@@ -736,7 +863,7 @@ export function useWhiteboardRecorder(
     }
   }, [recordingActive]);
 
-  const ingestRemote = useCallback(
+  const ingestRemoteImpl = useCallback(
     async (
       peerId: string,
       elements: ReadonlyArray<ExcalidrawLikeElement>,
@@ -799,6 +926,29 @@ export function useWhiteboardRecorder(
       }
     },
     [flushPendingDiff, whiteboardSessionId]
+  );
+
+  const flushDeferredRemoteIngests = useCallback(() => {
+    const queue = deferredRemoteIngestsRef.current;
+    deferredRemoteIngestsRef.current = [];
+    for (const item of queue) {
+      void ingestRemoteImpl(item.peerId, item.elements, item.details);
+    }
+  }, [ingestRemoteImpl]);
+
+  const ingestRemote = useCallback(
+    (
+      peerId: string,
+      elements: ReadonlyArray<ExcalidrawLikeElement>,
+      details?: WhiteboardWireRemoteDetails
+    ) => {
+      if (!mountHydrateCompleteRef.current) {
+        deferredRemoteIngestsRef.current.push({ peerId, elements, details });
+        return;
+      }
+      void ingestRemoteImpl(peerId, elements, details);
+    },
+    [ingestRemoteImpl]
   );
 
   // ---------------------------------------------------------------
@@ -872,6 +1022,7 @@ export function useWhiteboardRecorder(
         // Immediate checkpoint flush — the tab might never come back
         // (iOS can kill backgrounded tabs aggressively).
         void runCheckpoint();
+        void runServerPersist();
       } else {
         pushEvent({ t, type: "tab-visible" });
       }
@@ -984,6 +1135,153 @@ export function useWhiteboardRecorder(
     return () => clearInterval(id);
   }, [runCheckpoint]);
 
+  const runServerPersist = useCallback(
+    async (options?: { waitIfInFlight?: boolean }) => {
+      if (persistInProgressRef.current) {
+        if (options?.waitIfInFlight && persistCompletionRef.current) {
+          await persistCompletionRef.current;
+        } else if (shouldSkipPersistTick(persistInProgressRef.current)) {
+          console.log(
+            `[wbp] wbp=0 action=skip_inflight wbsid=${whiteboardSessionId}`
+          );
+          return;
+        }
+      }
+
+      const events = logRef.current.events;
+      const fromIndex = lastPersistedIndexRef.current;
+      const toIndex = events.length;
+
+      if (fromIndex >= toIndex) {
+        console.log(
+          `[wbp] wbp=0 action=skip_empty wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex}`
+        );
+        return;
+      }
+
+      const boardDocument = getBoardDocumentForCheckpointRef.current?.();
+      if (!boardDocument) {
+        console.warn(
+          `[wbp] wbp=0 action=error wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex} reason=missing_board_document`
+        );
+        return;
+      }
+
+      const batchSeq = nextBatchSeqRef.current;
+      const slice = events.slice(fromIndex, toIndex);
+      const eventsJson = JSON.stringify(slice);
+
+      persistInProgressRef.current = true;
+
+      const doPersist = async () => {
+        let attempt = 0;
+        let lastStatus = 0;
+        try {
+          while (true) {
+            try {
+              const res = await fetch(
+                `/api/whiteboard/${encodeURIComponent(whiteboardSessionId)}/checkpoint`,
+                {
+                  method: "POST",
+                  credentials: "same-origin",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    batchSeq,
+                    fromEventIndex: fromIndex,
+                    toEventIndex: toIndex,
+                    eventsJson,
+                    boardDocumentJson: boardDocument,
+                    schemaVersion: WB_EVENT_LOG_SCHEMA_VERSION,
+                  }),
+                }
+              );
+              lastStatus = res.status;
+
+              if (shouldAdvanceCursorOnResponse(res.status)) {
+                lastPersistedIndexRef.current = toIndex;
+                nextBatchSeqRef.current = batchSeq + 1;
+                serverPersistConsecutiveFailuresRef.current =
+                  nextConsecutiveFailures(
+                    serverPersistConsecutiveFailuresRef.current,
+                    true
+                  );
+                if (serverPersistWarningActiveRef.current) {
+                  serverPersistWarningActiveRef.current = false;
+                  setCheckpointStatus("saved");
+                  setCheckpointError(null);
+                }
+                console.log(
+                  `[wbp] wbp=${batchSeq} action=append wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex}`
+                );
+                return;
+              }
+
+              if (shouldStopPersistOnResponse(res.status)) {
+                console.warn(
+                  `[wbp] wbp=${batchSeq} action=error wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex} status=409`
+                );
+                return;
+              }
+
+              if (!shouldRetryPersist(res.status, attempt, SERVER_PERSIST_MAX_RETRIES)) {
+                break;
+              }
+            } catch {
+              lastStatus = 0;
+              if (!shouldRetryPersist(0, attempt, SERVER_PERSIST_MAX_RETRIES)) {
+                break;
+              }
+            }
+
+            await new Promise((resolve) =>
+              setTimeout(resolve, computeBackoffMs(attempt))
+            );
+            attempt += 1;
+          }
+
+          serverPersistConsecutiveFailuresRef.current = nextConsecutiveFailures(
+            serverPersistConsecutiveFailuresRef.current,
+            false
+          );
+          if (
+            shouldShowPersistWarning(serverPersistConsecutiveFailuresRef.current)
+          ) {
+            serverPersistWarningActiveRef.current = true;
+            setCheckpointStatus("error");
+            setCheckpointError(SERVER_PERSIST_WARNING_MESSAGE);
+          }
+          console.warn(
+            `[wbp] wbp=${batchSeq} action=error wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex} status=${lastStatus}`
+          );
+        } finally {
+          persistInProgressRef.current = false;
+          persistCompletionRef.current = null;
+        }
+      };
+
+      persistCompletionRef.current = doPersist();
+      await persistCompletionRef.current;
+    },
+    [whiteboardSessionId]
+  );
+
+  const flushServerPersist = useCallback(async () => {
+    for (let i = 0; i < 5; i++) {
+      const before = lastPersistedIndexRef.current;
+      await runServerPersist({ waitIfInFlight: true });
+      const after = lastPersistedIndexRef.current;
+      if (after >= logRef.current.events.length) break;
+      if (after === before && !persistInProgressRef.current) break;
+    }
+  }, [runServerPersist]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      void runServerPersist();
+    }, SERVER_PERSIST_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [runServerPersist]);
+
   // ---------------------------------------------------------------
   // Section F — Resume-from-crash detection on mount
   // ---------------------------------------------------------------
@@ -992,13 +1290,67 @@ export function useWhiteboardRecorder(
     let cancelled = false;
     void (async () => {
       try {
-        // Try the exact session id first (workspace re-mount on the
-        // same session url) — that's the highest-fidelity recovery.
+        const serverState = initialPersistedStateRef.current;
+        const phase = sessionPhaseRef.current;
+
+        // Fetch IDB checkpoint up front — needed for server-vs-IDB coverage
+        // comparison (WS-D BLOCKER) and for the IDB-only recovery path.
         const exact = await findCheckpoint<CheckpointPayload>(
           "whiteboard",
           ownerKey
         );
         if (cancelled) return;
+
+        // WS-D: ACTIVE sessions with server batches hydrate from backend when
+        // server coverage ≥ IDB; when IDB is ahead, merge the unpersisted tail.
+        if (
+          phase === "ACTIVE" &&
+          serverState?.source === "batches" &&
+          serverState.log.events.length > 0
+        ) {
+          const idbEventCount = exact?.payload.log.events.length ?? 0;
+          const suppress = shouldSuppressIdbPrompt({
+            serverLastPersistedToIndex: serverState.lastPersistedToIndex,
+            idbEventCount,
+          });
+
+          if (suppress) {
+            const hydrated = hydrateFromServer(serverState);
+            if (!cancelled) {
+              setPostGateAutoCanvas(hydrated);
+            }
+            return;
+          }
+
+          if (exact && exact.sessionId === whiteboardSessionId) {
+            const { mergedLog, boardDocument } = mergeServerStateWithIdbTail(
+              serverState,
+              exact.payload
+            );
+            const hydrated = hydrateFromServer(
+              serverState,
+              mergedLog,
+              boardDocument ?? undefined
+            );
+            if (!cancelled) {
+              setPostGateAutoCanvas(hydrated);
+            }
+            console.log(
+              `[wbr] wbr=${whiteboardSessionId} action=hydrate_idb_tail serverEvents=${serverState.log.events.length} idbEvents=${idbEventCount} mergedEvents=${mergedLog.events.length}`
+            );
+            return;
+          }
+
+          // IDB ahead but no same-session checkpoint — hydrate server only.
+          const hydrated = hydrateFromServer(serverState);
+          if (!cancelled) {
+            setPostGateAutoCanvas(hydrated);
+          }
+          return;
+        }
+
+        // Try the exact session id first (workspace re-mount on the
+        // same session url) — that's the highest-fidelity recovery.
         if (exact) {
           // Server may have ended this session from another tab / the
           // student-page list; IndexedDB still holds a local checkpoint
@@ -1037,16 +1389,19 @@ export function useWhiteboardRecorder(
           });
           return;
         }
-        // Fallback — a brand-new session url for a tutor + student
-        // who has an unfinalised checkpoint elsewhere. The workspace
-        // can decide whether to surface this (it's a softer prompt).
+        // Cross-session hygiene only — never prompt on a new session URL.
+        // Orphan checkpoints for ended sessions are cleared; unfinalised
+        // work is recovered by reopening THAT session's workspace URL.
         const latest = await findLatestCheckpointForOwner<CheckpointPayload>(
           "whiteboard",
           adminUserId,
           studentId
         );
         if (cancelled) return;
-        if (latest) {
+        if (
+          latest &&
+          latest.sessionId !== whiteboardSessionId
+        ) {
           const serverEnded = await fetchSessionEndedOnServer(latest.sessionId);
           if (cancelled) return;
           if (serverEnded) {
@@ -1054,22 +1409,12 @@ export function useWhiteboardRecorder(
               "whiteboard",
               whiteboardOwnerKey(adminUserId, studentId, latest.sessionId)
             );
-            return;
           }
-          cachedResumeRef.current = {
-            log: latest.payload.log,
-            sessionId: latest.sessionId,
-            boardDocument: latest.payload.boardDocument,
-          };
-          setResumePrompt({
-            source: "latest-for-owner",
-            startedAt: latest.startedAt,
-            durationMs: latest.payload.log.durationMs,
-            sessionId: latest.sessionId,
-          });
         }
       } finally {
         if (!cancelled) {
+          mountHydrateCompleteRef.current = true;
+          flushDeferredRemoteIngests();
           setCheckpointMountResolved(true);
         }
       }
@@ -1077,7 +1422,7 @@ export function useWhiteboardRecorder(
     return () => {
       cancelled = true;
     };
-  }, [adminUserId, ownerKey, studentId, applyResumeFromCachedCheckpoint, whiteboardSessionId]);
+  }, [adminUserId, ownerKey, studentId, applyResumeFromCachedCheckpoint, flushDeferredRemoteIngests, hydrateFromServer, whiteboardSessionId]);
 
   const acceptResume = useCallback(async (): Promise<ResumeResult | null> => {
     if (!cachedResumeRef.current) return null;
@@ -1095,8 +1440,7 @@ export function useWhiteboardRecorder(
     setResumePrompt(null);
     if (cached) {
       // Best-effort: clear the offered checkpoint so we don't keep
-      // re-prompting on every page load. Use the cached sessionId
-      // (may differ from this session's id in the latest-for-owner case).
+      // re-prompting on every page load.
       await clearCheckpoint(
         "whiteboard",
         whiteboardOwnerKey(adminUserId, studentId, cached.sessionId)
@@ -1153,6 +1497,7 @@ export function useWhiteboardRecorder(
     acceptResume,
     declineResume,
     buildFinalEventsJson,
+    flushServerPersist,
     markPersisted,
     checkpointMountResolved,
     postGateAutoCanvas,
@@ -1160,5 +1505,6 @@ export function useWhiteboardRecorder(
     flushThrottledFrameNow,
     broadcastScenePageSnapshot,
     recordViewport,
+    recordPageSwitch,
   };
 }

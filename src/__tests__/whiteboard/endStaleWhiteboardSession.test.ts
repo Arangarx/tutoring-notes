@@ -34,6 +34,8 @@
 const txWhiteboardUpdateMock = jest.fn();
 const txTokenUpdateManyMock = jest.fn();
 const txWhiteboardFindUniqueMock = jest.fn();
+const txSessionParticipantUpdateManyMock = jest.fn();
+const dbWhiteboardFindUniqueMock = jest.fn();
 const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
   fn({
     whiteboardSession: {
@@ -43,12 +45,18 @@ const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
     whiteboardJoinToken: {
       updateMany: txTokenUpdateManyMock,
     },
+    sessionParticipant: {
+      updateMany: txSessionParticipantUpdateManyMock,
+    },
   })
 );
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
+    whiteboardSession: {
+      findUnique: (...args: unknown[]) => dbWhiteboardFindUniqueMock(...args),
+    },
     $transaction: (fn: (tx: unknown) => unknown) => dbTransactionMock(fn),
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
@@ -77,6 +85,8 @@ beforeEach(() => {
   txWhiteboardUpdateMock.mockReset();
   txTokenUpdateManyMock.mockReset();
   txWhiteboardFindUniqueMock.mockReset();
+  txSessionParticipantUpdateManyMock.mockReset();
+  dbWhiteboardFindUniqueMock.mockReset();
   dbTransactionMock.mockClear();
   assertOwnsWhiteboardSessionMock.mockReset();
   revalidatePathMock.mockReset();
@@ -90,6 +100,7 @@ function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
     adminUserId: "admin_1",
     endedAt: null,
   });
+  dbWhiteboardFindUniqueMock.mockResolvedValue({ sessionPhase: "PENDING" });
   txWhiteboardFindUniqueMock.mockResolvedValue({ startedAt });
   txWhiteboardUpdateMock.mockImplementation(async (args: { data: { endedAt: Date } }) => ({
     id: "wb_42",
@@ -97,6 +108,7 @@ function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
     durationSeconds: 1800,
   }));
   txTokenUpdateManyMock.mockResolvedValue({ count: 2 });
+  txSessionParticipantUpdateManyMock.mockResolvedValue({ count: 1 });
   return { startedAt };
 }
 
@@ -152,6 +164,19 @@ describe("endStaleWhiteboardSession", () => {
       revokedAt: null,
     });
     expect(tokenArgs.data.revokedAt).toBeInstanceOf(Date);
+  });
+
+  it("stamps leftAt on open SessionParticipant rows in the same transaction", async () => {
+    setupActiveSession();
+
+    await endStaleWhiteboardSession("wb_42");
+
+    expect(txSessionParticipantUpdateManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { whiteboardSessionId: "wb_42", leftAt: null },
+        data: { leftAt: expect.any(Date) },
+      })
+    );
   });
 
   it("does NOT touch eventsBlobUrl (key diff from endWhiteboardSession)", async () => {

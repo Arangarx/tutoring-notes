@@ -91,6 +91,7 @@ export async function POST(
           activeMs: true,
           lastActiveAt: true,
           bothConnectedAt: true,
+          sessionPhase: true,
         },
       }),
     { label: "activePing.read" }
@@ -99,6 +100,23 @@ export async function POST(
     return NextResponse.json(
       { error: "Session not found.", debugId: rid },
       { status: 404 }
+    );
+  }
+
+  // Do not stamp activeMs / bothConnectedAt during PENDING phase — the timer
+  // must not run until the tutor explicitly starts the session (ACTIVE).
+  if (before.sessionPhase !== "ACTIVE") {
+    return NextResponse.json(
+      {
+        ok: true,
+        activeMs: before.activeMs,
+        lastActiveAt: before.lastActiveAt?.toISOString() ?? null,
+        bothConnectedAt: before.bothConnectedAt?.toISOString() ?? null,
+        skipped: true,
+        reason: "not_active_phase",
+        debugId: rid,
+      },
+      { headers: { "Cache-Control": "no-store" } }
     );
   }
 

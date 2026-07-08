@@ -1,7 +1,7 @@
 # Quick-wins re-smoke — waiting-room A/V parity + adult-join auth (delta on top of round-5) — smoke runbook
 
 **Branch:** `wb-wave5-waiting-polish`
-**Tip commit:** `[575f876](https://github.com/Arangarx/tutoring-notes/commit/575f876)`
+**Tip commit:** [`575f876`](https://github.com/Arangarx/tutoring-notes/commit/575f876)
 **Preview:** [quick-wins re-smoke preview](https://tutoring-notes-git-wb-wave5-wait-a507fa-arangarx-5209s-projects.vercel.app)
 
 Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTIAL items that we fixed today. Do NOT re-prove already-passing round-5 items. The live-board student-chrome regression, mic-device persistence, and tutor-meter-stuck-at-2-bars are deliberately OUT of scope (tracked as Thread A); parent→self-learner toggle, claim name/PIN gating, and signup convergence are Thread B.

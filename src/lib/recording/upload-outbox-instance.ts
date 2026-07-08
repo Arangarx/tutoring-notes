@@ -42,7 +42,16 @@ import {
   type UploadOutbox,
 } from "@/lib/recording/upload-outbox";
 import { uploadAudioDirect, uploadAudioWithRetry } from "@/lib/recording/upload";
-import type { EndSessionSegment } from "@/app/admin/students/[id]/whiteboard/actions";
+import {
+  registerWhiteboardSessionAudioSegmentAction,
+  enqueueChunkTranscriptionAction,
+  type EndSessionSegment,
+} from "@/app/admin/students/[id]/whiteboard/actions";
+import {
+  resolveSpeakerId,
+  speakerTranscriptStreamId,
+} from "@/lib/recording/perspeaker-identity";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 
 export type { OutboxObserverState };
 
@@ -77,6 +86,7 @@ export function getOrCreateUploadOutbox(): UploadOutbox {
   }
   singleton = createUploadOutbox({
     upload: defaultUploader,
+    onSegmentUploaded: handleSegmentUploaded,
   });
   return singleton;
 }
@@ -121,6 +131,85 @@ function extForMime(mimeType: string): string {
   if (base === "audio/mpeg") return "mp3";
   if (base === "audio/wav") return "wav";
   return base.split("/")[1] ?? "bin";
+}
+
+function peerIdFromStudentMicStreamId(streamId: string): string | null {
+  const match = /^student:peer-(.+):mic$/.exec(streamId);
+  return match ? match[1] : null;
+}
+
+async function handleSegmentUploaded(row: OutboxRow): Promise<void> {
+  if (row.transcriptionOnly === true) {
+    if (!row.blobRemoteUrl) return;
+    const shortObx = row.id.slice(0, 8);
+    const peerId = peerIdFromStudentMicStreamId(row.streamId);
+    const identityKey = peerId ? resolveSpeakerId(peerId) : row.speakerId ?? "unknown";
+    const transcriptStreamId = speakerTranscriptStreamId(identityKey);
+    try {
+      await enqueueChunkTranscriptionAction(row.sessionId, {
+        chunkBlobUrl: row.blobRemoteUrl,
+        recordingTimeOffsetMs: row.recordingTimeOffsetMs ?? 0,
+        streamId: transcriptStreamId,
+        speakerId: row.speakerId ?? null,
+      });
+      console.log(
+        `[psc] psc=${row.streamId} action=enqueue wbsid=${row.sessionId} obx=${shortObx} transcriptStreamId=${transcriptStreamId} speakerId=${row.speakerId ?? "null"} offsetMs=${row.recordingTimeOffsetMs ?? 0}`
+      );
+    } catch (err) {
+      console.warn(
+        `[psc] psc=${row.streamId} action=enqueue_failed wbsid=${row.sessionId} obx=${shortObx} err=${(err as Error)?.message ?? String(err)}`
+      );
+    }
+    return;
+  }
+  if (!row.blobRemoteUrl) return;
+
+  const shortObx = row.id.slice(0, 8);
+  const result = await registerWhiteboardSessionAudioSegmentAction(row.sessionId, {
+    blobUrl: row.blobRemoteUrl,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    streamId: row.streamId,
+    speakerId: row.speakerId,
+    audioStartedAtMs: row.audioStartedAtMs,
+    ...(typeof row.durationSeconds === "number" &&
+      row.durationSeconds > 0 && { durationSeconds: row.durationSeconds }),
+  });
+
+  if (result.ok) {
+    console.log(
+      `[obx] obx=${shortObx} action=register_mid_session wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} recordingId=${result.recordingId} orderIndex=${result.orderIndex}`
+    );
+    // Tutor:mic transcription — fires once the worker has a remote URL
+    // (enqueue-at-cut path) or after inline-upload register-only drain.
+    if (row.streamId === TUTOR_MIC_STREAM_ID) {
+      try {
+        await enqueueChunkTranscriptionAction(row.sessionId, {
+          chunkBlobUrl: row.blobRemoteUrl,
+          recordingTimeOffsetMs: row.recordingTimeOffsetMs ?? 0,
+        });
+        console.log(
+          `[obx] obx=${shortObx} action=txc_enqueue wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} offsetMs=${row.recordingTimeOffsetMs ?? 0}`
+        );
+      } catch (err) {
+        console.warn(
+          `[obx] obx=${shortObx} action=txc_enqueue_failed wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} err=${(err as Error)?.message ?? String(err)}`
+        );
+      }
+    }
+    return;
+  }
+
+  if (result.sessionEnded) {
+    console.log(
+      `[obx] obx=${shortObx} action=register_mid_session_skipped_ended wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId}`
+    );
+    return;
+  }
+
+  console.warn(
+    `[obx] obx=${shortObx} action=register_mid_session_failed wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} error=${result.error}`
+  );
 }
 
 // ----------------------------------------------------------------
@@ -186,6 +275,10 @@ export async function drainOutboxOrTimeout(
  * Rows without a `blobRemoteUrl` (i.e. uploads that never landed) are
  * skipped — drainOutboxOrTimeout's caller already decided whether to
  * abort or proceed in that case.
+ *
+ * Rows with `transcriptionOnly === true` are also skipped — per-speaker
+ * transcription blobs must never become replay `SessionRecording` rows
+ * (see commit 89e0fe1; tutor:mic mixdown remains the sole replay source).
  */
 export async function assembleEndSessionSegments(
   whiteboardSessionId: string
@@ -194,6 +287,15 @@ export async function assembleEndSessionSegments(
   const outbox = getOrCreateUploadOutbox();
   const rows = await outbox.listUploadedSegments(whiteboardSessionId);
   return rows
+    .filter((r) => {
+      if (r.transcriptionOnly === true) {
+        console.log(
+          `[upload-outbox-instance] obx action=skip_transcription_only_at_end wbsid=${whiteboardSessionId} streamId=${r.streamId} segmentId=${r.segmentId}`
+        );
+        return false;
+      }
+      return true;
+    })
     .filter((r): r is OutboxRow & { blobRemoteUrl: string } =>
       typeof r.blobRemoteUrl === "string" && r.blobRemoteUrl.length > 0
     )
@@ -204,6 +306,8 @@ export async function assembleEndSessionSegments(
       audioStartedAtMs: r.audioStartedAtMs,
       streamId: r.streamId,
       segmentId: r.segmentId,
+      ...(typeof r.durationSeconds === "number" &&
+        r.durationSeconds > 0 && { durationSeconds: r.durationSeconds }),
     }));
 }
 

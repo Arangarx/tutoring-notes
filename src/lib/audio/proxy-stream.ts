@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  isBlobHarnessActive,
+  isHarnessBlobUrl,
+  streamHarnessBlobWithRangeSupport,
+} from "@/lib/blob-harness";
 
 /**
  * Stream a private Vercel Blob audio file through our origin with
@@ -46,6 +51,10 @@ export async function streamBlobWithRangeSupport(
   mimeType: string,
   options: { fetchImpl?: typeof fetch } = {}
 ): Promise<Response> {
+  if (isBlobHarnessActive() && isHarnessBlobUrl(blobUrl)) {
+    return streamHarnessBlobWithRangeSupport(req, blobUrl, mimeType);
+  }
+
   const fetchImpl = options.fetchImpl ?? fetch;
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN ?? "";
 

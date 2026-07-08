@@ -242,6 +242,26 @@ export function clearLearnerSessionCookie(): string {
   return `${LEARNER_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
 }
 
+/** Prisma client or interactive-transaction client (E2 erasure tombstone). */
+export type LearnerSessionDbClient =
+  | typeof db
+  | Parameters<Parameters<typeof db.$transaction>[0]>[0];
+
+/**
+ * Bulk-revoke all active device sessions for a LearnerProfile.
+ * Mirrors revokeAllAccountHolderSessions — called on learner tombstone.
+ */
+export async function revokeAllLearnerDeviceSessions(
+  learnerProfileId: string,
+  client: LearnerSessionDbClient = db
+): Promise<number> {
+  const result = await client.learnerDeviceSession.updateMany({
+    where: { learnerProfileId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  return result.count;
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------

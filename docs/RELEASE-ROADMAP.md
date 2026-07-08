@@ -1,6 +1,6 @@
 # Release roadmap — solo tutor floor → university pitch readiness
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-07-01
 
 > Audience: orchestrators, executors, and Andrew sequencing work across
 > the tutoring-notes pilot through Aug 2026. This doc is a **thin
@@ -310,6 +310,20 @@ deployment alias on `master`; no UI-skin feature flag exists). Build on
    § 1.4. **Not yet started — v1-required.** Both A5 and A6 embody the
    north-star reliability bar (no backup recorder alongside our app).
 
+8. **Part 3 reliability spine (pre-Sarah session experience)** — **active on
+   `wb-wave5-polish`** (worktree `tutoring-notes-polishwt`); **single merge to
+   `v1-redesign` only after full live-session arc passes both-themes hardware
+   smoke (no interim merge). Enumerated spine:
+   `p3-clock` → `p3-perspeaker-capture` → `p3-vad-chunking` →
+   `p3-consent-recording` → `p3-incremental-map` → `p3-model-abstraction` →
+   `p3-finalize` → `p3-replay-scrub` → `p3-video-seam` (video seam
+   design-only for Sarah). Precedes the final Sarah gate; consent/erasure
+   checkpoint re-smoke is **not** a merge trigger. Plan:
+   [`whiteboard_reliability_remaining_b082882.plan.md`](../../../../.cursor/plans/whiteboard_reliability_remaining_b082882.plan.md);
+   orchestrator spine summary:
+   [`docs/handoff/ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) §
+   Session-experience build status + Current Wave focus.
+
 **Design note:** waiting room, live board, and Pass-2 review = **one session
 shell, three modes** — design together
 ([`session-lifecycle-consent-design-2026-05-31.md`](handoff/session-lifecycle-consent-design-2026-05-31.md)).
@@ -503,5 +517,6 @@ Master plan body can lag shipped reality. Treat **plan status block
 
 ## Changelog
 
+- **2026-07-01:** Added Gate A item 8 — Part 3 reliability spine on `wb-wave5-polish` (enumerated p3-* todos; single merge at full-arc Sarah gate; cross-ref active plan + ORCHESTRATOR-STATE).
 - **2026-06-12:** Added "Strategic refresh — Experience-Driven Wedge" overlay (top). Compass refined (not pivoted): publicity-driven re-sequencing de-emphasized; wedge named (experience-driven competition, tutor-first); founding principle (no dark patterns / total honesty + transparency); program-to-wave mapping (Phase 1 = Gate A2/A5/A6 + audio-clock; Phases 2-3 continuity + note-quality = new moat overlay; Phase 4 = first-party instrumentation reframing Phase 11a). Rolling-wave cadence.
 - **2026-05-20:** Initial roadmap committed during release-pivot orchestration session.

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
@@ -61,10 +62,10 @@ function DisabledTbBtn({
   );
 }
 
-const REPLAY_BOARD_TAB = {
+const REPLAY_BOARD_TAB_FALLBACK = {
   id: "replay-board-1",
   title: "Board 1",
-  section: "board",
+  section: "board" as const,
   isPdf: false,
 };
 
@@ -74,6 +75,14 @@ export type ReplayReadOnlyChromeSlotsProps = {
   onHideReplay?: () => void;
   canvas: ReactNode;
   timelineStrip: ReactNode;
+  /** Board tabs derived from page-switch events (E4). */
+  replayPageList?: Array<{
+    id: string;
+    title: string;
+    section?: string;
+    isPdf?: boolean;
+  }>;
+  activeReplayPageId?: string | null;
   drawerSlot?: ReactNode;
   nonVisualMounts?: ReactNode;
 };
@@ -85,6 +94,8 @@ export function buildReplayReadOnlyChromeSlots({
   onHideReplay,
   canvas,
   timelineStrip,
+  replayPageList,
+  activeReplayPageId,
   nonVisualMounts,
 }: Omit<ReplayReadOnlyChromeSlotsProps, "drawerSlot">) {
   const topBar = (
@@ -94,9 +105,9 @@ export function buildReplayReadOnlyChromeSlots({
       aria-label="Replay controls"
       onClick={(e) => e.stopPropagation()}
     >
-      <span className="mynk-wb-wordmark" aria-label="Mynk">
+      <Link href="/" className="mynk-wb-wordmark" aria-label="Mynk">
         Mynk<span className="mynk-wb-wordmark__dot">·</span>
-      </span>
+      </Link>
       <span className="mynk-wb-topbar__sep" aria-hidden />
 
       <div className="mynk-wb-topbar__zone">
@@ -139,7 +150,7 @@ export function buildReplayReadOnlyChromeSlots({
             type="button"
             className="mynk-wb-tb-btn"
             data-testid="wb-replay-hide"
-            title="Hide replay"
+            title="Pause and hide replay"
             onClick={(e) => {
               e.stopPropagation();
               onHideReplay();
@@ -148,7 +159,7 @@ export function buildReplayReadOnlyChromeSlots({
             <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>
               ‹
             </span>
-            Hide replay
+            Pause and hide replay
           </button>
         ) : null}
       </div>
@@ -194,11 +205,20 @@ export function buildReplayReadOnlyChromeSlots({
     </div>
   );
 
+  const pageList =
+    replayPageList && replayPageList.length > 0
+      ? replayPageList
+      : [REPLAY_BOARD_TAB_FALLBACK];
+  const activePageId =
+    activeReplayPageId && pageList.some((p) => p.id === activeReplayPageId)
+      ? activeReplayPageId
+      : pageList[0]!.id;
+
   const boardTabStrip = (
   <div className="mynk-wb-pagestrip">
       <BoardTabStrip
-        pageList={[REPLAY_BOARD_TAB]}
-        activePageId={REPLAY_BOARD_TAB.id}
+        pageList={pageList}
+        activePageId={activePageId}
         disabled
         testId="wb-replay-board-tabs"
       />
@@ -212,10 +232,10 @@ export function buildReplayReadOnlyChromeSlots({
     canvas: canvasSlot,
     bottomToolbar,
     boardTabStrip: (
-      <>
+      <div className="mynk-wb-replay-footer" data-testid="wb-replay-footer">
         {timelineStrip}
         {boardTabStrip}
-      </>
+      </div>
     ),
   };
 }

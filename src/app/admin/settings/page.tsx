@@ -11,6 +11,11 @@ const settingsLinks = [
     description: "Your name, password, and account email.",
   },
   {
+    href: "/admin/settings/billing",
+    label: "Billing",
+    description: "Time rounding increment, direction, and timezone for new sessions.",
+  },
+  {
     href: "/admin/settings/email",
     label: "Email",
     description:
@@ -21,6 +26,12 @@ const settingsLinks = [
     label: "Calendar integrations",
     description:
       "Connect Apple Calendar or Google Calendar to mirror scheduled sessions outward.",
+  },
+  {
+    href: "/admin/settings/known-issues",
+    label: "Known issues & roadmap",
+    description:
+      "Recent improvements, honest known issues, and what's coming next.",
   },
   {
     href: "/admin/settings/2fa",

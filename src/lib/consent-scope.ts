@@ -1,14 +1,12 @@
 /**
  * Consent enforcement guards — Gate B2 parent privacy consent.
  *
- * All BLOCKING logic is behind the `CONSENT_ENFORCEMENT` flag (default OFF).
- * When OFF: assertEffectiveConsent returns void (current stub behavior).
- * When ON: full enforcement — session-scoped snapshot read, self-learner pass,
- * permission check, ConsentError throw on denial.
+ * Enforcement is UNCONDITIONAL (the `CONSENT_ENFORCEMENT` flag has been
+ * removed). assertEffectiveConsent always enforces: session-scoped snapshot
+ * read, self-learner pass, permission check, ConsentError throw on denial.
  *
- * Schema writes (ConsentRecord, SessionConsentSnapshot) are NOT flag-gated:
- * we always collect consent data and freeze snapshots even when enforcement
- * is off, so the data exists when the flag is flipped.
+ * Schema writes (ConsentRecord, SessionConsentSnapshot) were never flag-gated:
+ * we always collect consent data and freeze snapshots at session creation.
  *
  * Log prefix: [cns] (see AGENTS.md § Conventions)
  *
@@ -25,10 +23,13 @@ import { db, withDbRetry } from "@/lib/db";
 export type ConsentPermission =
   | "allowAudioRecording"
   | "allowWhiteboardRecording"
+  /** Dormant — schema retained; not enforced in product paths pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
   | "allowNoteSending"
   | "allowMessaging"
   | "allowVideoRecording"
-  | "allowLiveSession";
+  | "allowLiveSession"
+  /** CC-1 — a ConsentRecord must exist before session create/start (record existence, not permission value). */
+  | "consentRecord";
 
 /**
  * Thrown when a required consent is not present.
@@ -42,20 +43,6 @@ export class ConsentError extends Error {
     super(message ?? `${permission} not consented for this session`);
     this.name = "ConsentError";
   }
-}
-
-// ---------------------------------------------------------------------------
-// Flag helper
-// ---------------------------------------------------------------------------
-
-/**
- * Returns true when consent enforcement is active.
- * Read once per request; never memoize across requests.
- * Mirror of isNotesAuthWallEnabled() — same dormant-then-flip pattern.
- */
-export function isConsentEnforcementEnabled(): boolean {
-  const val = process.env.CONSENT_ENFORCEMENT;
-  return val === "true" || val === "1";
 }
 
 // ---------------------------------------------------------------------------
@@ -75,10 +62,9 @@ const NOT_SHIPPING_PERMISSIONS = new Set<ConsentPermission>([
  * Assert that the required consent permission is granted for the given session.
  *
  * Fast-path exits (return void without throwing):
- *   1. Flag OFF — dormant enforcement; identical to today's behavior.
- *   2. Permission is allowMessaging or allowVideoRecording — not shipping in V1.
- *   3. No snapshot (unclaimed learner / pre-B2 session) — tutor-acknowledged fallback.
- *   4. Self-learner (adult, outside COPPA) — auto-pass (D-5).
+ *   1. Permission is allowMessaging or allowVideoRecording — not shipping in V1.
+ *   2. No snapshot (unclaimed learner / pre-B2 session) — tutor-acknowledged fallback.
+ *   3. Self-learner (adult, outside COPPA) — auto-pass (D-5).
  *
  * Throw path:
  *   - Snapshot exists + relevant Boolean is false → ConsentError.
@@ -91,13 +77,6 @@ export async function assertEffectiveConsent(
   whiteboardSessionId: string,
   permission: ConsentPermission
 ): Promise<void> {
-  if (!isConsentEnforcementEnabled()) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=flag_off`
-    );
-    return;
-  }
-
   if (NOT_SHIPPING_PERMISSIONS.has(permission)) {
     console.log(
       `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=not_shipping`
@@ -156,6 +135,128 @@ export async function assertEffectiveConsent(
   console.log(
     `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=granted`
   );
+}
+
+// ---------------------------------------------------------------------------
+// resolveModeAwareAudioRecordingConsent (Block B server gates — B-5/B-6/H-6/M-6)
+// ---------------------------------------------------------------------------
+
+export type ModeAwareAudioConsentDenyReason =
+  | "consent_denied_inperson"
+  | "no_snapshot_fail_closed";
+
+export type ModeAwareAudioConsentDecision =
+  | { allow: true }
+  | { allow: false; reason: ModeAwareAudioConsentDenyReason };
+
+/**
+ * Mode-aware allow/deny for audio recording, transcription, and segment
+ * registration. Single source of truth for server-side Block B gates.
+ *
+ * Semantics (session's frozen snapshot + activated sessionMode):
+ *   - allowAudioRecording=true → allow (any mode)
+ *   - allowAudioRecording=false + IN_PERSON → deny (inseparable mic)
+ *   - allowAudioRecording=false + LIVE → allow (tutor-only mixdown)
+ *   - no snapshot + claimed non-self learner → deny (M-6 fail-closed)
+ *   - no snapshot + unclaimed or self-learner → allow (legacy compat)
+ *
+ * Does NOT throw ConsentError — callers log and skip/early-return.
+ * Generic assertEffectiveConsent no_snapshot→PASS is unchanged.
+ */
+export async function resolveModeAwareAudioRecordingConsent(
+  whiteboardSessionId: string
+): Promise<ModeAwareAudioConsentDecision> {
+  const row = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: {
+          sessionMode: true,
+          consentSnapshot: {
+            select: {
+              allowAudioRecording: true,
+              consentRecordId: true,
+            },
+          },
+          student: {
+            select: {
+              learnerProfileId: true,
+              learnerProfile: { select: { isSelfLearner: true } },
+            },
+          },
+        },
+      }),
+    { label: "resolveModeAwareAudioRecordingConsent" }
+  );
+
+  if (!row) {
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=no_snapshot_fail_closed detail=session_not_found`
+    );
+    return { allow: false, reason: "no_snapshot_fail_closed" };
+  }
+
+  const { sessionMode, consentSnapshot, student } = row;
+  const learnerProfileId = student?.learnerProfileId ?? null;
+
+  if (consentSnapshot) {
+    if (consentSnapshot.consentRecordId) {
+      const record = await withDbRetry(
+        () =>
+          db.consentRecord.findUnique({
+            where: { id: consentSnapshot.consentRecordId! },
+            include: {
+              learnerProfile: { select: { isSelfLearner: true } },
+            },
+          }),
+        { label: "resolveModeAwareAudioRecordingConsent.record" }
+      );
+      if (record?.learnerProfile?.isSelfLearner) {
+        console.log(
+          `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=self_learner`
+        );
+        return { allow: true };
+      }
+    }
+
+    if (consentSnapshot.allowAudioRecording) {
+      console.log(
+        `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=granted`
+      );
+      return { allow: true };
+    }
+
+    if (sessionMode === "IN_PERSON") {
+      console.log(
+        `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=consent_denied_inperson mode=${sessionMode}`
+      );
+      return { allow: false, reason: "consent_denied_inperson" };
+    }
+
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=live_tutor_only mode=${sessionMode}`
+    );
+    return { allow: true };
+  }
+
+  if (!learnerProfileId) {
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=no_snapshot_unclaimed`
+    );
+    return { allow: true };
+  }
+
+  if (student?.learnerProfile?.isSelfLearner) {
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=no_snapshot_self_learner`
+    );
+    return { allow: true };
+  }
+
+  console.log(
+    `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=no_snapshot_fail_closed`
+  );
+  return { allow: false, reason: "no_snapshot_fail_closed" };
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +356,79 @@ export async function createSessionConsentSnapshot(
   );
 }
 
+const CONSENT_RECORD_REQUIRED_MESSAGE =
+  "Parent privacy preferences must be set before starting a session. Ask the parent to complete claim setup or update consent from their account.";
+
+// ---------------------------------------------------------------------------
+// assertConsentRecordExists (CC-1 — record existence gate)
+// ---------------------------------------------------------------------------
+
+/**
+ * Assert that a ConsentRecord exists for (learnerProfileId, adminUserId).
+ * CC-1 gate — record existence, not permission value.
+ *
+ * Fast-path (return void):
+ *   - isSelfLearner → return (D-5 exempt)
+ *
+ * Throw:
+ *   - learnerProfileId is null → ConsentError (unclaimed; no record possible)
+ *   - Claimed minor + no ConsentRecord → ConsentError
+ */
+export async function assertConsentRecordExists(
+  learnerProfileId: string | null,
+  adminUserId: string,
+  opts?: { studentId?: string }
+): Promise<void> {
+  if (learnerProfileId === null) {
+    console.log(
+      `[cns] learnerProfileId=null adminUserId=${adminUserId} action=record_exists_check result=unclaimed`
+    );
+    throw new ConsentError("consentRecord", CONSENT_RECORD_REQUIRED_MESSAGE);
+  }
+
+  const latestRecord = await withDbRetry(
+    () =>
+      db.consentRecord.findFirst({
+        where: { learnerProfileId, adminUserId },
+        orderBy: { version: "desc" },
+        include: { learnerProfile: { select: { isSelfLearner: true } } },
+      }),
+    { label: "assertConsentRecordExists.record" }
+  );
+
+  if (latestRecord?.learnerProfile?.isSelfLearner) {
+    console.log(
+      `[cns] learnerProfileId=${learnerProfileId} adminUserId=${adminUserId} action=record_exists_check result=self_learner`
+    );
+    return;
+  }
+
+  if (!latestRecord) {
+    const profile = await withDbRetry(
+      () =>
+        db.learnerProfile.findUnique({
+          where: { id: learnerProfileId },
+          select: { isSelfLearner: true },
+        }),
+      { label: "assertConsentRecordExists.profile" }
+    );
+    if (profile?.isSelfLearner) {
+      console.log(
+        `[cns] learnerProfileId=${learnerProfileId} adminUserId=${adminUserId} action=record_exists_check result=self_learner`
+      );
+      return;
+    }
+    console.log(
+      `[cns] learnerProfileId=${learnerProfileId} adminUserId=${adminUserId} action=record_exists_check result=denied`
+    );
+    throw new ConsentError("consentRecord", CONSENT_RECORD_REQUIRED_MESSAGE);
+  }
+
+  console.log(
+    `[cns] learnerProfileId=${learnerProfileId} adminUserId=${adminUserId} action=record_exists_check result=granted`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // assertConsentFromLiveRecord (session-less path — for sendUpdateEmail)
 // ---------------------------------------------------------------------------
@@ -267,26 +441,18 @@ export async function createSessionConsentSnapshot(
  * session to anchor against.
  *
  * Fast-path exits (return void):
- *   1. Flag OFF
- *   2. Unclaimed student (no learnerProfileId)
- *   3. Self-learner (D-5)
+ *   1. Unclaimed student (no learnerProfileId)
+ *   2. Self-learner (D-5)
  *
  * Throw path:
- *   - Flag ON + claimed + no record → ConsentError (explicit consent required)
- *   - Flag ON + record exists + permission false → ConsentError
+ *   - Claimed + no record → ConsentError (explicit consent required)
+ *   - Record exists + permission false → ConsentError
  */
 export async function assertConsentFromLiveRecord(
   studentId: string,
   adminUserId: string,
   permission: Extract<ConsentPermission, "allowNoteSending">
 ): Promise<void> {
-  if (!isConsentEnforcementEnabled()) {
-    console.log(
-      `[cns] studentId=${studentId} action=live_record_check permission=${permission} result=flag_off`
-    );
-    return;
-  }
-
   const student = await withDbRetry(
     () =>
       db.student.findUnique({

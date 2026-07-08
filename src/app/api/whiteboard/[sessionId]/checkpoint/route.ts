@@ -1,49 +1,247 @@
 import { NextResponse } from "next/server";
-import { put } from "@vercel/blob";
+import type { Prisma } from "@prisma/client";
+import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
 /**
- * Whiteboard session partial-checkpoint upload.
+ * Whiteboard session live-persist + legacy checkpoint upload.
  *
- * Whiteboard plan blocker #1 (data durability): the recorder hook
- * flushes a full event-log JSON to IndexedDB every 30 s AND uploads
- * a partial checkpoint to Vercel Blob every 5 min. The Blob upload
- * is what protects against "tutor closes tab AND clears local data
- * AND can't resume from this device" — the next device that opens
- * the workspace can pull the partial down and continue.
+ * **WS-B (~1s path):** `runServerPersist` in `useWhiteboardRecorder` POSTs
+ * incremental event slices + required `boardDocumentJson` on every batch.
+ * Rows land in `WhiteboardEventBatch`; session cursors
+ * (`lastPersistedBatchSeq`, `lastPersistedToIndex`) are the source of truth
+ * for WS-C/D finalize/resume. **No Vercel Blob `put` on this path** (SF-3) —
+ * cross-device redundancy stays on the 30s IndexedDB checkpoint loop.
  *
- * On Stop, the recorder writes a final `events.json` to the session's
- * canonical `eventsBlobUrl` (via the generalized
- * `/api/upload/blob` route, kind=`whiteboard-events`). The
- * checkpoints uploaded here are intentionally separate URLs — they
- * are NOT the canonical artifact, so we don't overwrite the slot
- * that replay reads from until Stop.
- *
- * This route accepts a JSON body (small: < 500 KB worst-case for
- * the checkpoint blob since the diff log is bounded), so we use the
- * server-action shape, not handleUpload — checkpoints fit comfortably
- * under the 4.5 MB serverless body cap and avoiding a second
- * client-direct round-trip simplifies the recorder hook.
+ * **Legacy blob shape** (`takenAt` + full `eventsJson`): optional recovery
+ * upload to `whiteboard-checkpoints/{sessionId}/` when a client still sends
+ * that body shape. Not used by the 1s sidecar.
  */
 
-type CheckpointBody = {
-  /** Schema version of the canonical event log on disk. */
+type BatchCheckpointBody = {
+  batchSeq: number;
+  fromEventIndex: number;
+  toEventIndex: number;
+  eventsJson: string;
+  boardDocumentJson: unknown;
   schemaVersion: number;
-  /** Wall-clock when this snapshot was taken (informational, for log lines). */
+};
+
+type LegacyCheckpointBody = {
+  schemaVersion: number;
   takenAt: string;
-  /** Stringified WBEventLog JSON. */
   eventsJson: string;
 };
 
-function parseBody(raw: unknown): CheckpointBody | null {
+function parseBatchBody(raw: unknown): BatchCheckpointBody | null {
   if (typeof raw !== "object" || raw === null) return null;
-  const r = raw as Partial<CheckpointBody>;
+  const r = raw as Partial<BatchCheckpointBody>;
+  if (typeof r.batchSeq !== "number") return null;
+  if (typeof r.fromEventIndex !== "number") return null;
+  if (typeof r.toEventIndex !== "number") return null;
+  if (typeof r.eventsJson !== "string") return null;
+  if (r.boardDocumentJson === undefined || r.boardDocumentJson === null) return null;
+  if (typeof r.schemaVersion !== "number") return null;
+  return r as BatchCheckpointBody;
+}
+
+function parseLegacyBody(raw: unknown): LegacyCheckpointBody | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Partial<LegacyCheckpointBody>;
   if (typeof r.schemaVersion !== "number") return null;
   if (typeof r.takenAt !== "string") return null;
   if (typeof r.eventsJson !== "string") return null;
-  return r as CheckpointBody;
+  return r as LegacyCheckpointBody;
+}
+
+function isBatchBody(raw: unknown): boolean {
+  if (typeof raw !== "object" || raw === null) return false;
+  return typeof (raw as { batchSeq?: unknown }).batchSeq === "number";
+}
+
+async function assertActiveSession(
+  sessionId: string,
+  rid: string,
+  session: { endedAt: Date | null }
+): Promise<Response | null> {
+  if (session.endedAt) {
+    console.log(
+      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} ignoring checkpoint for ended session`
+    );
+    return NextResponse.json(
+      { error: "Session already ended." },
+      { status: 409 }
+    );
+  }
+
+  const phaseRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: sessionId },
+        select: { sessionPhase: true },
+      }),
+    { label: "wbCheckpoint.phase" }
+  );
+  if (phaseRow?.sessionPhase !== "ACTIVE") {
+    console.log(
+      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} skipping checkpoint: sessionPhase=${phaseRow?.sessionPhase ?? "unknown"}`
+    );
+    return NextResponse.json(
+      { error: "Session not yet active.", debugId: rid },
+      { status: 409 }
+    );
+  }
+
+  return null;
+}
+
+async function handleBatchPersist(
+  sessionId: string,
+  rid: string,
+  parsed: BatchCheckpointBody
+): Promise<Response> {
+  if (parsed.batchSeq <= 0) {
+    return NextResponse.json(
+      { error: "batchSeq must be positive.", debugId: rid },
+      { status: 400 }
+    );
+  }
+  if (parsed.fromEventIndex < 0 || parsed.toEventIndex < parsed.fromEventIndex) {
+    return NextResponse.json(
+      { error: "Invalid event index range.", debugId: rid },
+      { status: 400 }
+    );
+  }
+
+  const sessionRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: sessionId },
+        select: {
+          lastPersistedBatchSeq: true,
+          lastPersistedToIndex: true,
+        },
+      }),
+    { label: "wbCheckpoint.batchCursor" }
+  );
+  if (!sessionRow) {
+    return NextResponse.json({ error: "Session not found." }, { status: 404 });
+  }
+
+  const existing = await withDbRetry(
+    () =>
+      db.whiteboardEventBatch.findUnique({
+        where: {
+          whiteboardSessionId_batchSeq: {
+            whiteboardSessionId: sessionId,
+            batchSeq: parsed.batchSeq,
+          },
+        },
+        select: { id: true },
+      }),
+    { label: "wbCheckpoint.batchLookup" }
+  );
+  if (existing) {
+    console.log(
+      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} batchSeq=${parsed.batchSeq} noop=duplicate`
+    );
+    return NextResponse.json({ ok: true, noop: true, debugId: rid });
+  }
+
+  if (parsed.fromEventIndex < sessionRow.lastPersistedToIndex) {
+    return NextResponse.json(
+      {
+        error: "fromEventIndex precedes lastPersistedToIndex.",
+        debugId: rid,
+      },
+      { status: 400 }
+    );
+  }
+
+  let eventsPayload: Prisma.InputJsonValue;
+  try {
+    eventsPayload = JSON.parse(parsed.eventsJson) as Prisma.InputJsonValue;
+  } catch {
+    return NextResponse.json(
+      { error: "eventsJson is not valid JSON.", debugId: rid },
+      { status: 400 }
+    );
+  }
+
+  await withDbRetry(
+    () =>
+      db.$transaction(async (tx) => {
+        await tx.whiteboardEventBatch.upsert({
+          where: {
+            whiteboardSessionId_batchSeq: {
+              whiteboardSessionId: sessionId,
+              batchSeq: parsed.batchSeq,
+            },
+          },
+          create: {
+            whiteboardSessionId: sessionId,
+            batchSeq: parsed.batchSeq,
+            fromEventIndex: parsed.fromEventIndex,
+            toEventIndex: parsed.toEventIndex,
+            eventsJson: eventsPayload,
+            boardDocumentJson: parsed.boardDocumentJson as Prisma.InputJsonValue,
+            schemaVersion: parsed.schemaVersion,
+          },
+          update: {
+            fromEventIndex: parsed.fromEventIndex,
+            toEventIndex: parsed.toEventIndex,
+            eventsJson: eventsPayload,
+            boardDocumentJson: parsed.boardDocumentJson as Prisma.InputJsonValue,
+            schemaVersion: parsed.schemaVersion,
+          },
+        });
+
+        // SF-2: monotonic cursor at DB — GREATEST avoids lost updates when WS-C
+        // also writes the cursor concurrently.
+        await tx.$executeRaw`
+          UPDATE "WhiteboardSession"
+          SET "lastPersistedBatchSeq" = GREATEST("lastPersistedBatchSeq", ${parsed.batchSeq}),
+              "lastPersistedToIndex" = GREATEST("lastPersistedToIndex", ${parsed.toEventIndex})
+          WHERE "id" = ${sessionId}
+        `;
+      }),
+    { label: "wbCheckpoint.batchUpsert" }
+  );
+
+  console.log(
+    `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} batchSeq=${parsed.batchSeq} from=${parsed.fromEventIndex} to=${parsed.toEventIndex} schemaVersion=${parsed.schemaVersion}`
+  );
+  return NextResponse.json({ ok: true, debugId: rid });
+}
+
+async function handleLegacyBlobCheckpoint(
+  sessionId: string,
+  rid: string,
+  parsed: LegacyCheckpointBody
+): Promise<Response> {
+  const { put } = await import("@vercel/blob");
+  const pathname = `whiteboard-checkpoints/${sessionId}/${Date.now()}-${parsed.takenAt.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`;
+
+  try {
+    const result = await put(pathname, parsed.eventsJson, {
+      access: "private",
+      contentType: "application/json",
+      addRandomSuffix: true,
+    });
+    console.log(
+      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} legacy_blob schemaVersion=${parsed.schemaVersion} bytes=${parsed.eventsJson.length} url=${result.url}`
+    );
+    return NextResponse.json({ ok: true, url: result.url, debugId: rid });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} put failed:`, msg);
+    return NextResponse.json(
+      { error: "Could not save checkpoint.", debugId: rid },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(
@@ -61,22 +259,13 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const parsed = parseBody(body);
-  if (!parsed) {
-    console.warn(`[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} body shape invalid`);
-    return NextResponse.json({ error: "Invalid checkpoint payload." }, { status: 400 });
-  }
-
   let session;
   try {
     session = await assertOwnsWhiteboardSession(sessionId);
   } catch (err) {
-    // assertOwnsWhiteboardSession calls notFound() which throws a
-    // NEXT_NOT_FOUND error; let Next handle it consistently.
     throw err;
   }
 
-  // B1 cost gate: WAITLISTED tutors cannot write checkpoint blobs.
   try {
     await assertTutorApproved(session.adminUserId);
   } catch (err) {
@@ -85,49 +274,25 @@ export async function POST(
     return NextResponse.json({ error: "Account pending approval." }, { status: 403 });
   }
 
-  if (session.endedAt) {
-    console.log(
-      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} ignoring checkpoint for ended session`
-    );
-    return NextResponse.json(
-      { error: "Session already ended." },
-      { status: 409 }
-    );
+  const activeGate = await assertActiveSession(sessionId, rid, session);
+  if (activeGate) return activeGate;
+
+  if (isBatchBody(body)) {
+    const parsed = parseBatchBody(body);
+    if (!parsed) {
+      console.warn(`[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} batch body shape invalid`);
+      return NextResponse.json(
+        { error: "Invalid batch checkpoint payload.", debugId: rid },
+        { status: 400 }
+      );
+    }
+    return handleBatchPersist(sessionId, rid, parsed);
   }
 
-  // Path scheme keeps checkpoints scoped under the session id so a
-  // future cleanup sweep can list-and-delete by prefix.
-  const pathname = `whiteboard-checkpoints/${sessionId}/${Date.now()}-${parsed.takenAt.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`;
-
-  try {
-    const result = await put(pathname, parsed.eventsJson, {
-      // The Vercel Blob store is configured for PRIVATE access. Even
-      // though checkpoints are tutor-only and route-gated, we MUST use
-      // "private" here because public against a private store is a
-      // hard 400 from Vercel's edge ("Cannot use public access on a
-      // private store"). When/if cross-device resume is built it'll
-      // need to fetch through a tutor-gated proxy route the same way
-      // /api/whiteboard/[id]/events does — see lib/blob.ts header.
-      access: "private",
-      contentType: "application/json",
-      addRandomSuffix: true,
-    });
-    console.log(
-      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} schemaVersion=${parsed.schemaVersion} bytes=${parsed.eventsJson.length} url=${result.url}`
-    );
-    // Note: we deliberately don't write the checkpoint URL back to the
-    // WhiteboardSession row. The session's `eventsBlobUrl` is the
-    // canonical artifact written on Stop and replay reads from there.
-    // Mid-session checkpoints are recovery-only — adding a tracking
-    // column is a follow-up if/when cross-device resume is built (see
-    // WHITEBOARD-STATUS.md follow-ups).
-    return NextResponse.json({ ok: true, url: result.url, debugId: rid });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} put failed:`, msg);
-    return NextResponse.json(
-      { error: "Could not save checkpoint.", debugId: rid },
-      { status: 500 }
-    );
+  const legacy = parseLegacyBody(body);
+  if (!legacy) {
+    console.warn(`[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} body shape invalid`);
+    return NextResponse.json({ error: "Invalid checkpoint payload." }, { status: 400 });
   }
+  return handleLegacyBlobCheckpoint(sessionId, rid, legacy);
 }

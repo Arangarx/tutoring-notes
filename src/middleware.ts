@@ -15,6 +15,7 @@ import {
   realAdminHomePath,
   tutorExperienceLandingPath,
 } from "@/lib/admin-routing";
+import { isPlaywrightHarnessActive } from "@/lib/playwright-harness";
 
 // ---------------------------------------------------------------------------
 // Security headers — applied to every response
@@ -119,23 +120,38 @@ export async function middleware(req: NextRequest) {
   // unexpectedly and redirect to its default /api/auth/error "Error" card
   // instead of returning an error object the form can display inline.
   if (
-    pathname === "/api/auth/callback/credentials" ||
-    pathname === "/api/auth/account-holder/login"
+    !isPlaywrightHarnessActive() &&
+    (pathname === "/api/auth/callback/credentials" ||
+      pathname === "/api/auth/account-holder/login")
   ) {
     const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (
-    pathname.startsWith("/admin/settings/2fa/verify") ||
-    pathname.startsWith("/admin/settings/2fa/setup") ||
-    pathname.startsWith("/admin/settings/2fa")
+    !isPlaywrightHarnessActive() &&
+    (pathname.startsWith("/admin/settings/2fa/verify") ||
+      pathname.startsWith("/admin/settings/2fa/setup") ||
+      pathname.startsWith("/admin/settings/2fa"))
   ) {
     const rl = rateLimit(`2fa:${ip}`, TOTP_RATE_LIMIT.max, TOTP_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (pathname.startsWith("/api/")) {
-    const bucket = apiRateBucketForPath(pathname);
-    const rl = rateLimit(`${bucket.prefix}:${ip}`, bucket.max, bucket.windowMs);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
-  } else if (pathname === "/setup") {
+    // TEST-ONLY bypass: when isPlaywrightHarnessActive() (WB_E2E_HARNESS=1 locally),
+    // skip all per-IP middleware API rate limits. The identity-e2e suite runs 16
+    // serial specs against one dev-server isolate (127.0.0.1) and exhausts shared
+    // buckets (share-link public-events, learner login, etc.) without this guard.
+    // WB_E2E_HARNESS=1 is set ONLY by the Playwright webServer command in
+    // playwright.config.ts; isPlaywrightHarnessActive() also requires !VERCEL so the
+    // bypass stays inert on Vercel even if the env var were misconfigured. The
+    // credential-based Neon-backed rate limits (LearnerLoginThrottle) still apply.
+    if (!isPlaywrightHarnessActive()) {
+      const bucket = apiRateBucketForPath(pathname);
+      const rl = rateLimit(`${bucket.prefix}:${ip}`, bucket.max, bucket.windowMs);
+      if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
+    }
+  } else if (
+    !isPlaywrightHarnessActive() &&
+    pathname === "/setup"
+  ) {
     const rl = rateLimit(`setup:${ip}`, SETUP_RATE_LIMIT.max, SETUP_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   }
@@ -259,16 +275,29 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // --- Learner (child) route protection (cookie-presence only) ---
-  if (pathname.startsWith("/join/") && !isPublicLearnerPath(pathname)) {
-    const learnerCookie = req.cookies.get("mynk_learner_session");
-    if (!learnerCookie) {
-      const loginUrl = req.nextUrl.clone();
-      loginUrl.pathname = "/students/login";
-      loginUrl.searchParams.set("returnTo", pathname);
-      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
-    }
-  }
+  // --- /join/* intentionally NOT redirected here — page is the authoritative gate ---
+  //
+  // DO NOT add a server-side redirect for unauthenticated /join/[sessionId] requests.
+  //
+  // The whiteboard E2E encryption key lives ONLY in the URL fragment (#k=<key>).
+  // HTTP spec: fragments are never sent to the server, so middleware and server
+  // components NEVER see the #k= value. A middleware redirect to /students/login
+  // before the page renders destroys the key permanently — the student arrives at
+  // login with no way to recover it, and the board cannot decrypt after auth.
+  //
+  // The correct path: middleware passes /join/* through → /join/[sessionId]/page.tsx
+  // renders → getLearnerSessionFromHeaders() returns null → the page returns
+  // <JoinAuthGate />, a CLIENT component that:
+  //   1. Reads window.location.hash and saves it to sessionStorage keyed by sessionId.
+  //   2. Calls router.replace("/students/login?returnTo=/join/<id>") — client-side,
+  //      so sessionStorage (same tab) is intact when the student returns after login.
+  // JoinHashRestorer restores the hash from sessionStorage on the authenticated
+  // return visit before the board key-read effect fires.
+  //
+  // Security: /join/[sessionId]/page.tsx is the real gate — it calls
+  // getLearnerSessionFromHeaders() and assertIsSessionParticipant(), both of which
+  // call notFound() on any mismatch. Middleware is not needed as a security layer
+  // here; see the /s/* block below for the same "page is authoritative" pattern.
 
   // --- Notes share page protection (NOTES_AUTH_WALL flag — cookie-presence only) ---
   //
@@ -305,11 +334,6 @@ function isPublicAccountPath(pathname: string): boolean {
   ];
   // /claim/* and /verify-email are at the root, not under /account/
   return publicPaths.some((p) => pathname === p || pathname.startsWith(p + "?"));
-}
-
-// Paths that are publicly accessible under /join/* without a learner cookie.
-function isPublicLearnerPath(pathname: string): boolean {
-  return pathname === "/students/login" || pathname.startsWith("/students/login?");
 }
 
 export const config = {

@@ -70,7 +70,7 @@ See companion docs:
 | **Audio graph + mixdown** | `src/lib/mic-recorder-audio.ts` | Web Audio fan-out: mic → gain → (recordingDest + publishDest). `addRemoteAudio(stream)` sums remote audio into recordingDest only via per-stream `GainNode`. `setRemoteGain(stream, gain)` for per-peer recording-mute. |
 | **Audio recorder hook** | `src/hooks/useAudioRecorder.ts` | Owns the audio graph + MediaRecorder. Exposes `localMicStream` (the publishStream), `addRemoteAudio`, `setRemoteRecordingGain`. |
 | **Tutor workspace integration** | `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx` | Hosts both hooks. Reconcile effects for: per-participant `addRemoteAudio` attach/detach; `mutedPeerIdsInRecording` → per-peer gain; sync-reconnect → `mesh.restart`; FSM input wiring. |
-| **Student workspace integration** | `src/app/w/[joinToken]/StudentWhiteboardClient.tsx` | Lighter — no per-peer moderation; no audio mixdown (students don't record). |
+| **Student workspace integration** | unified shell: `/w/[joinToken]/page.tsx` → `StudentWhiteboardSessionShell` → `WhiteboardSessionShell` (`role="student"`) → `WhiteboardWorkspaceClient` | Same component as the tutor, role-parameterized. Student is lighter by config — no per-peer moderation; no audio mixdown (students don't record). (Legacy parallel `StudentWhiteboardClient.tsx` was retired 2026-06-26 — Part 1D.) |
 | **Per-route bindings** | `src/middleware.ts` | Site-wide `Permissions-Policy: camera=*, microphone=*, ...`. See 4c hotfix #2 invariant below. |
 
 ---
@@ -85,7 +85,7 @@ hears her voice":
 ```text
 wife clicks join link
   ↓
-StudentWhiteboardClient mounts
+unified shell mounts (role="student": /w/[joinToken] → StudentWhiteboardSessionShell → WhiteboardWorkspaceClient)
   ↓
 syncClient connects to WHITEBOARD_SYNC_URL (encrypted with key from URL hash)
   ↓
@@ -217,6 +217,25 @@ fix for a real pilot-blocking bug.
    tutor mic AND every participant's remote audio summed into
    the same `MediaStreamAudioDestinationNode`.
 
+   **6a. Tap-before-mix per-speaker transcription lanes (Part 3
+   `p3-perspeaker-capture`, ratified 2026-06-30).** The May-15
+   rollback (`89e0fe1`) removed per-peer recorders because they
+   drove replay. Part 3 reintroduces per-speaker `MediaRecorder`
+   lanes **for transcription ONLY** — the multi-track-sync
+   metadata that #6 called for now exists (the `p3-clock`
+   monotonic `recordingTimeOffsetMs`), so per-speaker blobs are
+   merged by that offset (NEVER `createdAt`) into labeled
+   transcripts. The invariant that makes this safe: **the single
+   `tutor:mic` mixdown remains the SOLE replay source.** Per-speaker
+   lanes tap each participant's RAW `p.audioStream` (pre-gain, so a
+   student muted in the mixdown is still transcribed) and enqueue
+   outbox rows flagged `transcriptionOnly: true`; `TranscriptChunk`
+   carries `streamId`/`speakerId`. `assembleEndSessionSegments`
+   EXCLUDES `transcriptionOnly` rows, so they can never become
+   `SessionRecording` replay rows — the exact `89e0fe1` failure mode
+   is structurally prevented, not merely avoided by convention. Cap
+   ≤3–4 peers; NO mixdown fallback for transcription lanes.
+
 7. **`publishStream` is tutor-mic ONLY** (4c). Routing remote
    audio back into publishStream would feed every peer's audio
    back to every other peer through the tutor as a relay,
@@ -264,6 +283,71 @@ fix for a real pilot-blocking bug.
     `MediaStreamAudioSourceNode` in `mic-recorder-audio` so MediaRecorder
     stays on one mixdown graph. A sub-50ms audible glitch on mic swap is
     acceptable; dropping remote peers or freezing the UI is not.
+
+13. **Two independent B2 consent gates for student audio — do NOT
+    collapse when unifying mic plumbing** (Andrew 2026-06-23). Parent
+    privacy toggles are separate permissions in `SessionConsentSnapshot`:
+
+    | Toggle | What it gates | Where enforced |
+    |---|---|---|
+    | `allowLiveSession` | Student may participate in live sessions (join + WebRTC mic **send**) | `createWhiteboardSession` (flag ON); future learner join handler |
+    | `allowAudioRecording` | Tutor may **persist** student audio (mixdown + segment registration) | Tutor `addRemoteAudio` reconcile (tutor-only); `assertEffectiveConsent` on `registerWhiteboardSessionAudioSegment` / `endWhiteboardSession` |
+
+    **Mic-unification contract:** student mic may move onto a
+    **publish-only** Web Audio graph (same fan-out pattern as tutor's
+    `publishStream`) fed into `useLiveAV.externalAudioStream`. It must
+    **never** connect to `recordingDest`, `MediaRecorder`, or
+    `addRemoteAudio` on the student device. Tutor live mute
+    (`toggleMic` on publish track) and tutor recording mute
+    (`setRemoteGain(..., 0)` / `mutedPeerIdsInRecording`) stay
+    independent. Turning `allowAudioRecording` off must not block live
+    send; turning `allowLiveSession` off must not be the only recording
+    gate — server-side `allowAudioRecording` remains authoritative for
+    persistence.
+
+14. **Enumeration is single-flighted through the device-acquire mutex**
+    (`wb-wave5-polish` reliability floor, 2026-06-26). Every
+    `enumerateDevices()` call (mount, focus, `devicechange`, popover/menu
+    open, device-pick) routes through the `chainDeviceAcquire`
+    getUserMedia mutex and coalesces rapid calls — enumeration NEVER runs
+    concurrently with acquisition. On Windows, concurrent enumerate +
+    acquire corrupts the camera list ("no webcam / wrong dropdown";
+    `39bb16e`→`42c0ee8` fixed one caller, the rest are closed by Part
+    1A). **Post-acquire enumeration is authoritative; a pre-permission
+    empty list must never overwrite a known-good list.** Guard: jest
+    single-flight fakes + `@wb-av` Playwright surrogate (pick → swap).
+
+15. **First offer carries the local mic m-line + renegotiation watchdog**
+    (`wb-wave5-polish` reliability floor, 2026-06-26). The mic track
+    attaches before the first SDP offer so the audio m-line exists from
+    the start; a `pendingRenegotiation` that never flushes (PC stuck
+    non-`stable`, amplified by dual-device join) is forced through by a
+    watchdog re-offer / ICE restart in `peer-mesh.ts`. This is the root
+    of "tutor can't hear student." Evidence-first: `[peer-mesh]` logs
+    must show the student offer carrying `kind=audio` and the tutor
+    firing `event=remote-track kind=audio`. Guard: peer-mesh unit
+    (audio-in-first-offer, watchdog re-offer) + `@wb-av` surrogate
+    (join → tutor audio receiver).
+
+16. **Layout ↔ A/V firewall — a layout change never enumerates**
+    (`wb-wave5-polish` reliability floor, 2026-06-26). `layoutMode`
+    changes must NOT call `refresh*DeviceList` directly or transitively
+    (e.g. by closing a menu that re-fires a device-enumeration effect —
+    the original regression engine). Enumeration happens only on explicit
+    device-UI interaction (invariant 14). Companion: reconcile effects
+    depend on **stable primitives + stable callbacks**, never the whole
+    `liveAv` object (extends invariant 2 beyond the mesh-build effect;
+    structural via the Part 1B coordinator extraction). Guard: jest
+    (layout-mode change → NO enumerate) + `@wb-av` surrogate (resize
+    across breakpoints → mesh intact).
+
+> Invariants 14-16 are the **target contract** of the `wb-wave5-polish`
+> whiteboard reliability floor. Each is enforced by a fix commit on that
+> branch with a red-before/green-after test; until a given fix lands, the
+> invariant is the spec the fix must satisfy. See
+> [`.cursor/rules/whiteboard-av-reliability.mdc`](../.cursor/rules/whiteboard-av-reliability.mdc)
+> for the agent-facing version (incl. the CSS-scoped-under-`.mynk-wb-chrome`
+> rule, codified in Part 1C).
 
 ---
 

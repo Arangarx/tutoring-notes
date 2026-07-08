@@ -2,7 +2,10 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/auth-options";
-import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
+import {
+  getAccountHolderSessionFromHeaders,
+  getLearnerSessionFromHeaders,
+} from "@/lib/server-session";
 import { LandingPageContent } from "./LandingPageContent";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +22,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     const operatorSession = await getServerSession(authOptions);
     if (operatorSession?.user) {
       redirect("/admin");
+    }
+
+    const learnerSession = await getLearnerSessionFromHeaders();
+    if (learnerSession) {
+      redirect("/join");
     }
 
     const accountHolderSession = await getAccountHolderSessionFromHeaders();

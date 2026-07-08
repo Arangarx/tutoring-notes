@@ -126,7 +126,7 @@ export function MarketingHeader() {
           gap: 12,
         }}
       >
-        <Link href={signedIn ? "/?view=home" : "/"} aria-label="Mynk home">
+        <Link href="/" aria-label="Mynk home">
           <MynkWordmark size="sm" />
         </Link>
 

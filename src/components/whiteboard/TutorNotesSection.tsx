@@ -37,6 +37,8 @@ import {
   type TutorNoteStatusResult,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
+import "@/styles/tutor-notes-shimmer.css";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -95,6 +97,15 @@ const SKELETON_TIMEOUT_MS = 5 * 60 * 1_000;
  * Parse TutorNote.content as structured JSON.
  * Falls back gracefully for legacy markdown content (pre-bridge rows).
  */
+export function noteFieldsAreEmpty(fields: StructuredFields): boolean {
+  return (
+    !fields.topics.trim() &&
+    !fields.assessment.trim() &&
+    !fields.nextSteps.trim() &&
+    !fields.links.trim()
+  );
+}
+
 export function parseNoteContent(content: string | null): StructuredFields {
   if (!content) return { topics: "", assessment: "", nextSteps: "", links: "" };
   try {
@@ -175,9 +186,26 @@ export default function TutorNotesSection({
   const isActive =
     (note.found && (note.status === "pending" || note.status === "generating")) ||
     (!note.found && hasAudio);
+  const isPendingPhase =
+    isActive &&
+    (!note.found || note.status === "pending");
+  const isGeneratingPhase =
+    isActive && note.found && note.status === "generating";
+  const activeStatusCopy = isGeneratingPhase
+    ? "Writing notes…"
+    : "Preparing your notes...";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
+
+  useEffect(() => {
+    if (isFailed && note.found && note.error) {
+      console.error(
+        `[TutorNotesSection] wbsid=${whiteboardSessionId} note_generation_failed`,
+        note.error
+      );
+    }
+  }, [isFailed, note, whiteboardSessionId]);
 
   // Sync fields whenever a fresh note arrives from polling (S4 guard)
   useEffect(() => {
@@ -267,6 +295,10 @@ export default function TutorNotesSection({
   }, [whiteboardSessionId]);
 
   const handleSave = useCallback(async () => {
+    if (noteFieldsAreEmpty(fields)) {
+      setSaveError("Add at least one note field before saving.");
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setSavedInShell(false);
@@ -360,22 +392,11 @@ export default function TutorNotesSection({
 
       {/* Aria-live region for screen readers */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {isActive && "Generating session notes…"}
+        {isActive && activeStatusCopy}
         {isDone && "Session notes are ready."}
         {isFailed && "Note generation failed."}
         {timedOut && "Note generation timed out."}
       </div>
-
-      {/* Generating — keep form visible; inline status only */}
-      {(isActive || (isNotStarted && hasAudio)) && !timedOut && (
-        <p
-          className="muted"
-          data-testid="tutor-notes-generating"
-          style={{ margin: 0, fontSize: 13 }}
-        >
-          Generating notes…
-        </p>
-      )}
 
       {/* Timeout defeat state */}
       {timedOut && (
@@ -395,10 +416,21 @@ export default function TutorNotesSection({
         </div>
       )}
 
-      {/* Editable structured form — visible during generation and when done */}
-      {(isActive || isDone) && !timedOut && (
-        <div data-testid="tutor-notes-content">
-          {isDone && note.found && note.isPartial && (
+      {/* Notes form — visible during generating (shimmer overlay) and done states.
+          During generating: form fields are shown with a semi-transparent shimmer wave
+          overlay and read-only textareas; empty-field placeholders appear at reduced
+          opacity. During done: overlay is gone and generated content fills the fields. */}
+      {(isActive || (isDone && note.content)) && !timedOut && (
+        <div
+          data-testid={isActive ? "tutor-notes-generating" : "tutor-notes-content"}
+          aria-busy={isActive || undefined}
+          className={isActive ? "tn-notes-generating-wrap" : undefined}
+          data-note-phase={
+            isGeneratingPhase ? "generating" : isPendingPhase ? "pending" : undefined
+          }
+        >
+          {/* Partial transcript badge — done only */}
+          {isDone && note.isPartial && (
             <div
               style={{
                 display: "inline-flex",
@@ -419,13 +451,14 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className="tn-notes-fields" style={{ display: "grid", gap: 12 }}>
             <NoteField
               label="Topics covered"
               id="wb-note-topics"
               value={fields.topics}
               onChange={(v) => updateFields((f) => ({ ...f, topics: v }))}
               placeholder="e.g. Quadratics, factoring, FOIL method"
+              isGenerating={isActive}
             />
             <NoteField
               label="Assessment"
@@ -433,6 +466,7 @@ export default function TutorNotesSection({
               value={fields.assessment}
               onChange={(v) => updateFields((f) => ({ ...f, assessment: v }))}
               placeholder="Where the student stands — strengths, struggles, mastery level"
+              isGenerating={isActive}
             />
             <NoteField
               label="Plan / Next steps"
@@ -441,6 +475,7 @@ export default function TutorNotesSection({
               onChange={(v) => updateFields((f) => ({ ...f, nextSteps: v }))}
               placeholder="What to do next, including any homework"
               hint="Covers both plan and homework"
+              isGenerating={isActive}
             />
             <NoteField
               label="Links"
@@ -448,9 +483,22 @@ export default function TutorNotesSection({
               value={fields.links}
               onChange={(v) => updateFields((f) => ({ ...f, links: v }))}
               placeholder="URLs mentioned (one per line)"
+              isGenerating={isActive}
             />
           </div>
 
+          {/* Generating status footer */}
+          {isActive && (
+            <div
+              className="muted tn-notes-status-footer"
+              style={{ fontSize: 11, marginTop: 2, position: "relative", zIndex: 11 }}
+              data-testid="tutor-notes-status"
+            >
+              {activeStatusCopy}
+            </div>
+          )}
+
+          {/* Save error — done only */}
           {saveError && isDone && (
             <div
               role="alert"
@@ -468,6 +516,7 @@ export default function TutorNotesSection({
             </div>
           )}
 
+          {/* Saved confirmation — done only */}
           {savedInShell && isDone && (
             <div
               role="status"
@@ -490,6 +539,7 @@ export default function TutorNotesSection({
             </div>
           )}
 
+          {/* Save/Delete buttons — done only */}
           {isDone && (
             <div
               style={{
@@ -503,7 +553,9 @@ export default function TutorNotesSection({
                 type="button"
                 className="btn primary"
                 onClick={handleSave}
-                disabled={saving || deleting || regenerating}
+                disabled={
+                  saving || deleting || regenerating || noteFieldsAreEmpty(fields)
+                }
                 data-testid="wb-save-note"
               >
                 {saving ? "Saving…" : "Save to notes"}
@@ -521,7 +573,7 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          {showDeleteConfirm && (
+          {isDone && showDeleteConfirm && (
             <div
               role="alertdialog"
               aria-label="Confirm delete"
@@ -590,9 +642,7 @@ export default function TutorNotesSection({
           data-testid="tutor-notes-error"
         >
           <strong>Note generation failed.</strong>{" "}
-          {note.found && note.error
-            ? note.error
-            : "An unexpected error occurred."}{" "}
+          We couldn&apos;t finish your notes — you can retry.{" "}
           Click <strong>Regenerate notes</strong> above to retry.
         </div>
       )}
@@ -636,6 +686,7 @@ function NoteField({
   onChange,
   placeholder,
   hint,
+  isGenerating,
 }: {
   label: string;
   id: string;
@@ -643,6 +694,8 @@ function NoteField({
   onChange: (v: string) => void;
   placeholder?: string;
   hint?: string;
+  /** When true: textarea is read-only with the shimmer placeholder class applied. */
+  isGenerating?: boolean;
 }) {
   return (
     <div style={{ display: "grid", gap: 4 }}>
@@ -663,8 +716,10 @@ function NoteField({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        readOnly={isGenerating}
         placeholder={placeholder}
         rows={value.split("\n").length > 2 ? value.split("\n").length + 1 : 3}
+        className={isGenerating ? "tn-notes-generating-field" : undefined}
         style={{
           width: "100%",
           padding: "8px 10px",
@@ -674,7 +729,7 @@ function NoteField({
           border: "1px solid var(--border)",
           background: "var(--surface)",
           color: "var(--text)",
-          resize: "vertical",
+          resize: isGenerating ? "none" : "vertical",
           fontFamily: "inherit",
           boxSizing: "border-box",
         }}
@@ -683,52 +738,3 @@ function NoteField({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Skeleton component — pure shimmer, no spinner
-// ---------------------------------------------------------------------------
-
-function SkeletonNotes() {
-  return (
-    <div
-      aria-busy="true"
-      data-testid="tutor-notes-skeleton"
-      style={{ display: "grid", gap: 10 }}
-    >
-      {/* Section header skeleton (wider) */}
-      <div
-        style={{
-          height: 12,
-          width: "55%",
-          borderRadius: 4,
-          background:
-            "linear-gradient(90deg, var(--surface-muted) 25%, var(--surface-hover) 50%, var(--surface-muted) 75%)",
-          backgroundSize: "200% 100%",
-          animation: "shimmer 1.5s infinite",
-        }}
-        aria-hidden="true"
-      />
-      {/* Body lines */}
-      {[100, 82, 94, 68, 88, 74, 60].map((w, i) => (
-        <div
-          key={i}
-          style={{
-            height: 13,
-            width: `${w}%`,
-            borderRadius: 4,
-            background:
-              "linear-gradient(90deg, var(--surface-muted) 25%, var(--surface-hover) 50%, var(--surface-muted) 75%)",
-            backgroundSize: "200% 100%",
-            animation: `shimmer 1.5s ${i * 0.07}s infinite`,
-          }}
-          aria-hidden="true"
-        />
-      ))}
-      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-        Generating session notes — this usually takes under a minute.
-      </div>
-      <style>{`
-        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-      `}</style>
-    </div>
-  );
-}

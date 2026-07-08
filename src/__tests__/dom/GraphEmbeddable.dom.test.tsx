@@ -142,6 +142,35 @@ describe("GraphEmbeddable", () => {
     expect(screen.queryByTestId("wb-graph-pan-up")).toBeNull();
   });
 
+  it("local student mode: interactive without board persist (syncFromBoard)", async () => {
+    const user = userEvent.setup();
+    const graphStateJson = serializeGraphStateJson({
+      expressions: [],
+      bbox: [-10, 10, 10, -10],
+    });
+
+    render(
+      <GraphEmbeddable
+        element={{
+          id: "el-graph-student",
+          customData: { graphStateJson, wbType: "graph" },
+        }}
+        syncFromBoard
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-graph-expr-panel")).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByTestId("wb-graph-expr-new"), "x^2");
+    await user.click(screen.getByTestId("wb-graph-expr-add"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-graph-expr-display-0")).toHaveTextContent("x^2");
+    });
+  });
+
   it("does not clear sentinel graph link on mount/persist", async () => {
     const user = userEvent.setup();
     const element = {

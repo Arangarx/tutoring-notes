@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
-import { isConsentEnforcementEnabled } from "@/lib/consent-scope";
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { CredentialSetupForm } from "./CredentialSetupForm";
@@ -61,8 +60,8 @@ export default async function ClaimSetupPage({
     redirect("/account/dashboard");
   }
 
+  const isSelfLearner = profile.isSelfLearner;
   const credentialAlreadySet = !!profile.credential;
-  const enforcementEnabled = isConsentEnforcementEnabled();
 
   // Check if a ConsentRecord already exists for this (learner, tutor) pair
   const existingConsent = await db.consentRecord.findFirst({
@@ -74,6 +73,22 @@ export default async function ClaimSetupPage({
     select: { id: true },
   });
   const consentAlreadySaved = !!existingConsent;
+  const consentComplete = consentAlreadySaved || isSelfLearner;
+  const enforcementEnabled = !isSelfLearner;
+
+  const pendingInviteCount = await db.whiteboardSession.count({
+    where: {
+      studentId: invite.studentId,
+      endedAt: null,
+      joinTokens: {
+        some: {
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+      },
+    },
+  });
+  const hasPendingSessionInvite = pendingInviteCount > 0;
 
   return (
     <main className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center px-4 py-10">
@@ -98,13 +113,22 @@ export default async function ClaimSetupPage({
               Privacy preferences
             </CardTitle>
             <CardDescription className="text-sm">
-              {consentAlreadySaved
-                ? "Your preferences have been saved. You can update them from your account dashboard."
-                : `Control what ${invite.student.name}'s tutor may record and share.`}
+              {isSelfLearner
+                ? "As an adult managing your own learning, parental privacy preferences do not apply."
+                : consentAlreadySaved
+                  ? "Your preferences have been saved. You can update them from your account dashboard."
+                  : `Control what ${invite.student.name}'s tutor may record and share.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
-            {consentAlreadySaved ? (
+            {isSelfLearner ? (
+              <div className="rounded-md border border-border bg-muted/40 p-4">
+                <p className="text-sm text-muted-foreground">
+                  You can manage your session preferences from your account dashboard when
+                  needed.
+                </p>
+              </div>
+            ) : consentAlreadySaved ? (
               <div className="rounded-md border border-border bg-muted/40 p-4">
                 <p className="text-sm font-medium text-foreground">
                   ✓ Preferences saved
@@ -118,6 +142,7 @@ export default async function ClaimSetupPage({
                 rawToken={rawToken}
                 studentName={invite.student.name}
                 enforcementEnabled={enforcementEnabled}
+                hasPendingSessionInvite={hasPendingSessionInvite}
               />
             )}
           </CardContent>
@@ -143,18 +168,21 @@ export default async function ClaimSetupPage({
                 <p className="text-sm text-muted-foreground">
                   {`${invite.student.name}'s login is already set up. You can update it from the parent dashboard.`}
                 </p>
-                <Link
-                  href="/account/dashboard"
-                  className="inline-block text-sm text-brand underline-offset-2 hover:underline"
-                >
-                  {"Go to dashboard \u2192"}
-                </Link>
+                {consentComplete ? (
+                  <Link
+                    href="/account/dashboard"
+                    className="inline-block text-sm text-brand underline-offset-2 hover:underline"
+                  >
+                    {"Go to dashboard \u2192"}
+                  </Link>
+                ) : null}
               </div>
             ) : (
               <CredentialSetupForm
                 rawToken={rawToken}
                 learnerProfileId={profile.id}
                 studentName={invite.student.name}
+                enforcementEnabled={enforcementEnabled && !consentComplete}
               />
             )}
           </CardContent>

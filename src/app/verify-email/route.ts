@@ -49,9 +49,32 @@ export async function GET(req: NextRequest) {
   }
 
   if (tokenRow.consumedAt) {
-    // Token already used — account should already be active. Point user at login.
-    console.log(`[ahx] ahx=${tokenRow.accountHolderId} action=verify_email_already_used`);
-    return NextResponse.redirect(`${origin}/account/login?notice=link_already_used`);
+    // Token already consumed. Determine whether this is an idempotent success
+    // replay (link-scanner / email-client prefetch consumed the token before the
+    // human clicked) or a genuinely invalid re-use.
+    //
+    // Idempotent replay conditions (ALL must hold):
+    //   1. Account is now verified (emailVerifiedAt set) — the consume worked.
+    //   2. Token is still within its TTL (replay window is bounded).
+    // If any condition fails → return link_already_used.
+    if (
+      tokenRow.accountHolder.emailVerifiedAt &&
+      tokenRow.expiresAt >= now
+    ) {
+      // Success replay — skip the DB write (already done) and continue to the
+      // session-creation + handoff-token path below so the human is signed in.
+      console.log(
+        `[ahx] ahx=${tokenRow.accountHolderId} action=verify_email_idempotent_replay`
+      );
+    } else {
+      // Genuinely invalid: consumed + account not verified, or token expired.
+      console.log(
+        `[ahx] ahx=${tokenRow.accountHolderId} action=verify_email_already_used`
+      );
+      return NextResponse.redirect(
+        `${origin}/account/login?notice=link_already_used`
+      );
+    }
   }
 
   if (tokenRow.expiresAt < now) {
@@ -61,17 +84,20 @@ export async function GET(req: NextRequest) {
 
   const accountHolder = tokenRow.accountHolder;
 
-  // Mark token consumed and set emailVerifiedAt in one transaction
-  await db.$transaction([
-    db.accountHolder.update({
-      where: { id: accountHolder.id },
-      data: { emailVerifiedAt: now },
-    }),
-    db.accountHolderEmailToken.update({
-      where: { id: tokenRow.id },
-      data: { consumedAt: now },
-    }),
-  ]);
+  // Mark token consumed and set emailVerifiedAt in one transaction.
+  // Skipped for idempotent replay (tokenRow.consumedAt already set).
+  if (!tokenRow.consumedAt) {
+    await db.$transaction([
+      db.accountHolder.update({
+        where: { id: accountHolder.id },
+        data: { emailVerifiedAt: now },
+      }),
+      db.accountHolderEmailToken.update({
+        where: { id: tokenRow.id },
+        data: { consumedAt: now },
+      }),
+    ]);
+  }
 
   console.log(`[ahx] ahx=${accountHolder.id} action=email_verified`);
 

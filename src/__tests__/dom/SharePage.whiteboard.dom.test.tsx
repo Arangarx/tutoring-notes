@@ -24,6 +24,11 @@ jest.mock("@/app/s/[token]/SeenTracker", () => ({
   SeenTracker: () => null,
 }));
 
+jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
+  __esModule: true,
+  assertStudentNotErased: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Production: root layout wraps all routes in <Providers> → <ThemeProvider>.
 // ParentShareShell renders ThemeToggle (useTheme); bare render() lacks the provider.
 jest.mock("@/components/ThemeProvider", () => ({

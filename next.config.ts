@@ -80,6 +80,9 @@ const CONTENT_SECURITY_POLICY = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "development",
+  },
   eslint: { ignoreDuringBuilds: false },
   async rewrites() {
     return [{ source: "/favicon.ico", destination: "/icon" }];

@@ -20,7 +20,9 @@ export function ImpersonationBanner({ email }: ImpersonationBannerProps) {
   return (
     <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-sm text-amber-900 flex items-center justify-between">
       <span>
-        You are signed in as <strong>{email}</strong> (test account).
+        You are signed in as <strong>{email}</strong> (test account). Exiting
+        impersonation in this tab affects <strong>all tabs</strong> in this
+        browser — reload other open pages before continuing there.
       </span>
       <form action={exitImpersonation}>
         <button

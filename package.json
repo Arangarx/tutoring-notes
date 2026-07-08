@@ -19,13 +19,20 @@
     "test:regression": "jest src/__tests__/regressions",
     "test:e2e": "playwright test",
     "test:integration": "playwright test --project=integration",
+    "test:identity-e2e": "playwright test --project=integration-setup && playwright test --project=identity-e2e --workers=1",
     "relay:build": "npm run ensure:docker && docker build -t wb-relay-local ../whiteboard-sync",
     "test:wb-jest": "jest --testPathPatterns=whiteboard --testPathPatterns=sync-client --testPathPatterns=viewport-align",
     "test:wb-playwright": "playwright test --project=integration-setup && playwright test --project=wb-regression",
-    "test:wb-sync": "npm run ensure:docker && npm run test:wb-jest && npm run test:wb-playwright",
+    "test:wb-playwright:sharded": "node scripts/wb-relay-shard-run.cjs",
+    "test:wb-playwright:full": "npm run test:wb-playwright",
+    "test:wb-playwright:tags": "node scripts/wb-test-select.cjs --run",
+    "test:wb-affected": "node scripts/wb-test-select.cjs",
+    "test:wb-affected:run": "node scripts/wb-test-select.cjs --run",
+    "test:wb-sync": "npm run ensure:docker && npm run test:wb-jest && npm run test:wb-playwright:sharded",
     "test:e2e:smoke": "playwright test tests/smoke",
     "test:visual:update": "playwright test tests/visual --update-snapshots",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "erasure:resume": "npx tsx scripts/erasure-resume.ts"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",

@@ -36,11 +36,18 @@ jest.mock("@/lib/blob", () => ({
   fetchPrivateBlobBytes: (...args: unknown[]) => mockFetchPrivateBlobBytes(...args),
 }));
 
+// Fire-and-forget map phase in the worker must not leak real extract-chunk /
+// notes-enqueue async work after test teardown.
+jest.mock("@/lib/recording/extract-chunk", () => ({
+  extractChunkMap: jest.fn().mockResolvedValue("done"),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
 import { processChunkTranscribeJob } from "@/lib/recording/transcription-worker";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -83,9 +90,11 @@ describe("processChunkTranscribeJob", () => {
     jest.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Restore fetch if overridden.
     jest.restoreAllMocks();
+    // Flush fire-and-forget map phase microtasks from the worker.
+    await new Promise<void>((r) => setImmediate(r));
   });
 
   // -------------------------------------------------------------------------
@@ -140,6 +149,49 @@ describe("processChunkTranscribeJob", () => {
     expect(mockUpsertTranscriptChunk).not.toHaveBeenCalled();
     expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
     expect(mockTranscribeChunk).not.toHaveBeenCalled();
+  });
+
+  test("idempotency: chunk already transcribing → returns skipped without Whisper call", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+      id: "in-flight-chunk",
+      status: "transcribing",
+      recordingTimeOffsetMs: 0,
+    });
+
+    const outcome = await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+    });
+
+    expect(outcome).toBe("skipped");
+    expect(mockUpsertTranscriptChunk).not.toHaveBeenCalled();
+    expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
+    expect(mockTranscribeChunk).not.toHaveBeenCalled();
+  });
+
+  test("pending and failed chunks still proceed to transcription", async () => {
+    for (const status of ["pending", "failed"] as const) {
+      jest.clearAllMocks();
+      mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+        id: `chunk-${status}`,
+        status,
+        attempts: status === "failed" ? 1 : 0,
+      });
+      mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
+      mockUpsertTranscriptChunk.mockResolvedValue({ id: "chunk-row", status: "done" });
+      mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
+      mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
+
+      const outcome = await processChunkTranscribeJob({
+        sessionId: SESSION_ID,
+        chunkBlobUrl: CHUNK_URL,
+        recordingTimeOffsetMs: 0,
+      });
+
+      expect(outcome).toBe("done");
+      expect(mockTranscribeChunk).toHaveBeenCalledTimes(1);
+    }
   });
 
   test("idempotency: processing same chunk twice in sequence → one done row, no corruption", async () => {
@@ -375,5 +427,45 @@ describe("processChunkTranscribeJob", () => {
 
     expect(mockFetchPrivateBlobBytes).toHaveBeenCalledTimes(1);
     expect(mockFetchPrivateBlobBytes).toHaveBeenCalledWith(CHUNK_URL);
+  });
+
+  // -------------------------------------------------------------------------
+  // 10. Per-speaker labels — streamId / speakerId threading
+  // -------------------------------------------------------------------------
+  test("passes explicit streamId and speakerId to upsertTranscriptChunk", async () => {
+    setupHappyPath();
+
+    await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+      streamId: "student:peer-xyz:mic",
+      speakerId: "peer-xyz",
+    });
+
+    for (const call of mockUpsertTranscriptChunk.mock.calls) {
+      expect(call[0]).toMatchObject({
+        streamId: "student:peer-xyz:mic",
+        speakerId: "peer-xyz",
+      });
+    }
+  });
+
+  test("defaults streamId to tutor:mic and speakerId to null when omitted", async () => {
+    setupHappyPath();
+
+    await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+    });
+
+    const transcribingCall = mockUpsertTranscriptChunk.mock.calls.find(
+      (c) => c[0].status === "transcribing"
+    );
+    expect(transcribingCall![0]).toMatchObject({
+      streamId: TUTOR_MIC_STREAM_ID,
+      speakerId: null,
+    });
   });
 });

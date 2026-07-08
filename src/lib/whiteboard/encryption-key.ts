@@ -203,10 +203,20 @@ export function clearEncryptionKeyForSession(sessionId: string): void {
  * Returns null until the mount-time client-only code path runs
  * (server render, first hydration tick). After that the value is
  * stable for the lifetime of the workspace mount.
+ *
+ * `enabled` — when false the hook is completely inert: no read, no
+ * mint, no write, returns null. Used to make this hook a no-op for
+ * the student role, where the student has its own key-read path
+ * (readStudentKeyFromHash / sessionStorage fallback) and MUST NOT
+ * have a fresh key minted on the post-login-redirect path.
  */
-export function useEncryptionKeyInHash(sessionId: string): string | null {
+export function useEncryptionKeyInHash(
+  sessionId: string,
+  { enabled = true }: { enabled?: boolean } = {}
+): string | null {
   const [key, setKey] = useState<string | null>(null);
   useEffect(() => {
+    if (!enabled) return;
     if (typeof window === "undefined") return;
     const existing = readPersistedEncryptionKey(sessionId, window);
     if (existing) {
@@ -220,6 +230,6 @@ export function useEncryptionKeyInHash(sessionId: string): string | null {
     const fresh = generateEncryptionKeyBase64Url();
     persistEncryptionKey(sessionId, fresh, window);
     setKey(fresh);
-  }, [sessionId]);
+  }, [sessionId, enabled]);
   return key;
 }

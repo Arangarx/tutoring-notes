@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import {
+  handleHarnessBlobGenerateClientToken,
+  isBlobHarnessActive,
+} from "@/lib/blob-harness";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
@@ -75,6 +79,38 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    if (
+      isBlobHarnessActive() &&
+      body.type === "blob.generate-client-token"
+    ) {
+      const harnessResponse = await handleHarnessBlobGenerateClientToken(
+        request,
+        body,
+        async (pathname, clientPayloadRaw) => {
+          const payload = parseClientPayload(clientPayloadRaw);
+          const studentId = payload?.studentId;
+          if (!studentId || typeof studentId !== "string") {
+            console.warn(
+              `[uploadAudio.route] rid=${rid} missing studentId in clientPayload pathname=${pathname}`
+            );
+            throw new Error("Missing studentId in clientPayload.");
+          }
+          await assertOwnsStudent(studentId);
+          const audioScope = await requireStudentScope();
+          if (audioScope.kind === "admin") {
+            await assertTutorApproved(audioScope.adminId);
+          }
+          return {
+            allowedContentTypes: ["audio/*"],
+            maximumSizeInBytes: BLOB_MAX_BYTES,
+            addRandomSuffix: true,
+            tokenPayload: JSON.stringify({ studentId, rid }),
+          };
+        }
+      );
+      return NextResponse.json(harnessResponse);
+    }
+
     const jsonResponse = await handleUpload({
       request,
       body,

@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import VideoControls from "@/components/av/VideoControls";
 import { WbIconCamera } from "@/components/whiteboard/chrome/wb-icons";
+import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
 
 type Props = {
   /**
@@ -32,8 +33,10 @@ type Props = {
   selectedPickerSlot: number;
   /** Wired to liveAv.setVideoCameraBySlot — hot-swaps via replaceTrack, no mesh rebuild. */
   onPickCameraSlot: (slotIndex: number) => void;
-  /** True when the camera stream is live (used to populate picker labels). */
+  /** True when a camera stream has been acquired (picker labels + default row). */
   isLive: boolean;
+  /** Re-enumerate camera inputs when the settings popover opens. */
+  onRefreshDevices?: () => void | Promise<void>;
   disabled?: boolean;
 };
 
@@ -50,6 +53,7 @@ export function WbTopBarCamControl({
   selectedPickerSlot,
   onPickCameraSlot,
   isLive,
+  onRefreshDevices,
   disabled = false,
 }: Props) {
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -62,16 +66,20 @@ export function WbTopBarCamControl({
         setPopoverOpen(false);
       }
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
   }, [popoverOpen]);
 
-  const camUnavailable =
-    hasCamPermission === "denied" || videoDevices.length === 0;
+  useEffect(() => {
+    if (!popoverOpen) return;
+    void onRefreshDevices?.();
+  }, [popoverOpen, onRefreshDevices]);
+
+  const camUnavailable = hasCamPermission === "denied";
 
   const btnTitle = hasCamPermission === "denied"
     ? "Camera permission denied"
-    : videoDevices.length === 0
+    : hasCamPermission === "granted" && videoDevices.length === 0
       ? "No camera device found"
       : isCamMuted
         ? "Turn camera on"
@@ -99,7 +107,7 @@ export function WbTopBarCamControl({
         className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${camStateClass}`}
         title={btnTitle}
         aria-label={btnTitle}
-        onClick={onToggleCam}
+        onClick={(e) => afterToggleRefreshHover(e.currentTarget, onToggleCam)}
         disabled={disabled || camUnavailable}
         style={camUnavailable ? { opacity: 0.4 } : undefined}
       >

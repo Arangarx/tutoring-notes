@@ -5,6 +5,10 @@ import { seedTestAdmin, seedTestStudent, loginAsTestAdmin } from "./helpers";
 /**
  * Visual regression + accessibility baselines.
  *
+ * **Pixel-perfect snapshots are intentional here** — static auth/admin/marketing
+ * pages only. Do NOT use this pattern for whiteboard chrome/layout; use
+ * relational Playwright asserts instead (see `.cursor/rules/visual-layout-oracles.mdc`).
+ *
  * First run: `npm run test:visual:update` to capture baselines.
  * Subsequent runs: `npm run test:e2e` — fails if pixels drift beyond 1%.
  *

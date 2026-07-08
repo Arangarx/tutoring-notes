@@ -22,7 +22,6 @@ import { createActionCorrelationId } from "@/lib/action-correlation";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
-import { assertConsentFromLiveRecord, ConsentError } from "@/lib/consent-scope";
 
 const HALLUCINATION_MIC_MESSAGE =
   "We couldn't detect clear speech in this recording. Whisper sometimes invents text when the mic picks up silence or the wrong device. Check the browser's microphone permission, choose the correct input, speak for at least 15–20 seconds, then try again. You can also use Upload and pick a file from another recorder.";
@@ -814,33 +813,6 @@ export async function deleteStudent(studentId: string) {
   revalidatePath("/admin/students");
 }
 
-/**
- * Persist the per-student default for the whiteboard "Start recording"
- * toggle. Sarah's pilot ask (Apr 2026): some students decline being
- * recorded, so the workspace toggle should remember that across
- * sessions. The tutor can still flip the toggle per session — this
- * just biases the initial value.
- *
- * Trust posture mirrors `renameStudent`:
- *   - `assertOwnsStudent` is the multi-tenant gate.
- *   - We don't touch any session-in-progress state; the workspace
- *     reads this on its NEXT mount, not retroactively. That's
- *     intentional — flipping the default mid-session must NOT silently
- *     stop recording for the active session (the tutor would be
- *     mid-lesson and not expect that).
- */
-export async function setStudentRecordingDefault(
-  studentId: string,
-  enabled: boolean
-): Promise<void> {
-  await assertOwnsStudent(studentId);
-  await db.student.update({
-    where: { id: studentId },
-    data: { recordingDefaultEnabled: enabled },
-  });
-  revalidatePath(`/admin/students/${studentId}`);
-}
-
 export async function updateNote(noteId: string, studentId: string, formData: FormData) {
   await assertOwnsStudent(studentId);
   const existing = await db.sessionNote.findFirst({ where: { id: noteId, studentId } });
@@ -967,23 +939,6 @@ export async function sendUpdateEmail(
   await assertOwnsStudent(studentId);
   const toEmail = String(formData.get("toEmail") ?? "").trim();
   if (!studentId || !toEmail) return { ok: false, sent: false, error: "Student and email required" };
-
-  // B2: consent gate for notes email — hard-blocks when flag ON + no consent (D-7).
-  const consentScope = await getStudentScope();
-  if (consentScope?.kind === "admin") {
-    try {
-      await assertConsentFromLiveRecord(studentId, consentScope.adminId, "allowNoteSending");
-    } catch (err) {
-      if (err instanceof ConsentError) {
-        return {
-          ok: false,
-          sent: false,
-          error: "Parental consent for notes updates has not been granted. The parent can update consent preferences from their account.",
-        };
-      }
-      throw err;
-    }
-  }
 
   const activeLink =
     (await db.shareLink.findFirst({

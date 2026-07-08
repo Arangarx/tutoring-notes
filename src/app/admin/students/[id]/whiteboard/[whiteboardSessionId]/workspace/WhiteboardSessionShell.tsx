@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useState } from "react";
+import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
 import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
 import { SessionReviewMode } from "./SessionReviewMode";
@@ -31,15 +32,52 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   initialUserWantsRecording: boolean;
   syncEnabled: boolean;
   initialMode?: ShellMode;
+  /** Session phase: PENDING (waiting room) or ACTIVE (tutor has clicked Start). */
+  initialSessionPhase?: "PENDING" | "ACTIVE";
+  sessionMode?: string;
+  activatedAt?: string | null;
+  /** Frozen session consent: null = no snapshot (unclaimed / no ConsentRecord). */
+  initialAllowAudioRecording?: boolean | null;
+  /** True when SessionConsentSnapshot exists for this session. */
+  initialHasConsentSnapshot?: boolean;
+  /** Claimed student's LearnerProfile id — per-speaker lane attribution. */
+  studentLearnerProfileId?: string | null;
+  /**
+   * When "endreview": auto-bypass the resume gate and fire handleEndSession
+   * once on mount. Used by the roster "End and review" button (SSG-2 fix).
+   */
+  initialIntent?: "endreview";
+  /** WS-D: backend-persisted event log + board document for ACTIVE resume. */
+  initialPersistedState?: InitialPersistedWhiteboardState | null;
 };
 
 export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
   role: "student";
-  joinToken: string;
+  /**
+   * Join token for the legacy /w/[joinToken] path.
+   * Omit (or pass undefined) when the student joins via the authenticated
+   * /join/[sessionId] path — learner-session cookie auth is used instead.
+   */
+  joinToken?: string;
   syncUrl: string;
   tutorName: string;
   initialActiveMs: number;
   initialLastActiveAtIso: string | null;
+  /** Session phase at SSR time — allows the client to start in PENDING state. */
+  initialSessionPhase?: "PENDING" | "ACTIVE";
+  /**
+   * identity-peerid workstream: session-scoped opaque identity token
+   * (authenticated /join/[sessionId] path only). Computed server-side as
+   * sha256(learnerProfileId:sessionId)[:12hex]. Enables identity-derived
+   * peerId and dual-device takeover detection. Absent on the legacy
+   * /w/[joinToken] path (unauthenticated).
+   */
+  identityKey?: string;
+  /**
+   * Authenticated student path: the joining learner's profile id — used for
+   * learner-scoped mic device persistence in live-A/V.
+   */
+  learnerProfileId?: string;
 };
 
 export type WhiteboardSessionShellProps =
@@ -58,6 +96,9 @@ export function WhiteboardSessionShell(props: WhiteboardSessionShellProps) {
         tutorName={props.tutorName}
         initialActiveMs={props.initialActiveMs}
         initialLastActiveAtIso={props.initialLastActiveAtIso}
+        initialSessionPhase={props.initialSessionPhase}
+        identityKey={props.identityKey}
+        learnerProfileId={props.learnerProfileId}
       />
     );
   }
@@ -78,6 +119,14 @@ function TutorWhiteboardSessionShell({
   initialUserWantsRecording,
   syncEnabled,
   initialMode = "live",
+  initialSessionPhase,
+  sessionMode,
+  activatedAt,
+  initialAllowAudioRecording,
+  initialHasConsentSnapshot,
+  studentLearnerProfileId,
+  initialIntent,
+  initialPersistedState,
 }: TutorWhiteboardSessionShellProps) {
   const [mode, setMode] = useState<ShellMode>(initialMode);
 
@@ -102,6 +151,7 @@ function TutorWhiteboardSessionShell({
       startedAtIso={startedAtIso}
       initialLastActiveAtIso={initialLastActiveAtIso}
       syncEnabled={syncEnabled}
+      autoConsent={initialIntent === "endreview"}
     >
       <WhiteboardWorkspaceClient
         whiteboardSessionId={whiteboardSessionId}
@@ -115,6 +165,14 @@ function TutorWhiteboardSessionShell({
         syncUrl={syncUrl}
         initialUserWantsRecording={initialUserWantsRecording}
         onSessionEnded={handleSessionEnded}
+        initialSessionPhase={initialSessionPhase}
+        sessionMode={sessionMode}
+        activatedAt={activatedAt}
+        initialAllowAudioRecording={initialAllowAudioRecording}
+        initialHasConsentSnapshot={initialHasConsentSnapshot}
+        studentLearnerProfileId={studentLearnerProfileId}
+        initialIntent={initialIntent}
+        initialPersistedState={initialPersistedState}
       />
     </WorkspaceResumeGate>
   );

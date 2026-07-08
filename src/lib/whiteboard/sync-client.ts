@@ -248,9 +248,11 @@ export type WhiteboardWireSignal = {
 //     scene-level data races up; presence is the "I exist with id X"
 //     announcement that lets the mesh start `addPeer` calls.
 //
-// Presence is intentionally minimal: no media-state, no mute flags,
-// no cursor positions. Those would belong in a future "live-state"
-// envelope on a faster cadence; presence is identity-only.
+// Presence carries stable identity plus coarse A/V on/off flags
+// (`camOn` / `micOn`) so remote tiles can render cam-off initials
+// without relying on inbound WebRTC track `enabled`/`muted` (which
+// does not propagate reliably to the receiver). Cursor positions and
+// finer-grained live state belong in other envelopes.
 
 /**
  * Wire envelope announcing a participant's stable identity in the
@@ -271,6 +273,38 @@ export type WhiteboardWirePresence = {
    * separate "label changed" event.
    */
   label?: string;
+  /**
+   * identity-peerid workstream: opaque session-scoped identity token
+   * (student-only). sha256(learnerProfileId:sessionId)[:12hex] — same
+   * learner → same identityKey within a session; not correlatable across
+   * sessions. Enables dual-device detection without exposing the raw
+   * learnerProfileId to the relay. Tutor/legacy peers omit this field.
+   */
+  identityKey?: string;
+  /**
+   * Epoch ms when this client minted its session. Used as the "newest
+   * wins" tiebreaker in dual-device takeover detection: the client that
+   * finds another peer with the same identityKey but a strictly newer
+   * joinedAt self-bumps. Tutor/legacy peers omit this field.
+   */
+  joinedAt?: number;
+  /**
+   * When `true`, the sender is intentionally leaving the room. Receivers
+   * remove this peer immediately from presenceMap without waiting for the
+   * prune grace window. Crash-disconnects do NOT send this field (no
+   * opportunity to broadcast before the socket closes), which is why the
+   * heartbeat + cancel-on-grow fixes are also required.
+   */
+  leaving?: true;
+  /**
+   * Presence-signaled camera on/off. Omitted by legacy senders; receivers
+   * fall back to inbound track heuristics when absent.
+   */
+  camOn?: boolean;
+  /**
+   * Presence-signaled microphone on/off. Omitted by legacy senders.
+   */
+  micOn?: boolean;
 };
 
 /**
@@ -327,6 +361,22 @@ export type RoomPeer = {
   peerId: string;
   role: "tutor" | "student";
   label?: string;
+  /**
+   * identity-peerid workstream: session-scoped identity token for
+   * dual-device detection (student-only, optional). Absent for tutor
+   * and for legacy student clients that haven't been updated.
+   */
+  identityKey?: string;
+  /**
+   * Epoch ms when the remote client minted its session instance. Used
+   * to determine which device is "newest" in a dual-device conflict.
+   * Absent for tutor and legacy peers.
+   */
+  joinedAt?: number;
+  /** Presence-signaled camera on/off (see {@link WhiteboardWirePresence.camOn}). */
+  camOn?: boolean;
+  /** Presence-signaled microphone on/off (see {@link WhiteboardWirePresence.micOn}). */
+  micOn?: boolean;
 };
 
 // -----------------------------------------------------------------
@@ -384,6 +434,18 @@ export type WhiteboardSyncClientOptions = {
    * back to role-derived defaults at the UI layer.
    */
   localPeerLabel?: string;
+  /**
+   * identity-peerid workstream: session-scoped identity key for this
+   * client (student-only). Included in every presence broadcast so
+   * peers can detect dual-device conflicts. Tutor callers omit.
+   */
+  localIdentityKey?: string;
+  /**
+   * Epoch ms when this client session was minted (for dual-device
+   * "newest wins" tiebreaking). Included in every presence broadcast.
+   * Tutor callers omit.
+   */
+  localJoinedAt?: number;
   /**
    * Phase 4b — override the 5-second grace window applied before a
    * peer is dropped from the room-peer map after a `room-user-change`
@@ -534,6 +596,15 @@ export type WhiteboardSyncClient = {
   onRoomPeersChange: (
     cb: (peers: ReadonlyArray<RoomPeer>) => void
   ) => () => void;
+  /**
+   * Update local coarse A/V on/off flags carried on every presence
+   * broadcast. Call when the user toggles mic/cam so remote tiles can
+   * render cam-off initials without relying on inbound track state.
+   */
+  setLocalAvMediaState: (state: {
+    camOn?: boolean;
+    micOn?: boolean;
+  }) => void;
   /** Tear down the WS, drop subscriptions. Idempotent. */
   disconnect: () => void;
 };
@@ -730,6 +801,24 @@ function validateWirePresence(parsed: unknown): WhiteboardWirePresence {
     out.label = p.label;
   } else if (typeof p.label !== "undefined") {
     throw new Error("[sync-client] presence envelope: bad label");
+  }
+  // identity-peerid workstream: optional identity fields — drop silently
+  // if malformed (older senders don't include them; strict validation would
+  // reject their presence frames which would break backward compatibility).
+  if (typeof p.identityKey === "string" && p.identityKey.length > 0) {
+    out.identityKey = p.identityKey;
+  }
+  if (typeof p.joinedAt === "number" && Number.isFinite(p.joinedAt) && p.joinedAt > 0) {
+    out.joinedAt = p.joinedAt;
+  }
+  if (p.leaving === true) {
+    out.leaving = true;
+  }
+  if (typeof p.camOn === "boolean") {
+    out.camOn = p.camOn;
+  }
+  if (typeof p.micOn === "boolean") {
+    out.micOn = p.micOn;
   }
   return out;
 }
@@ -961,6 +1050,14 @@ const DEFAULT_BROADCAST_INTERVAL_MS = 50;
  * stable peer set across brief network blips.
  */
 const PRESENCE_PRUNE_GRACE_MS_DEFAULT = 5_000;
+/**
+ * How often a connected peer re-broadcasts its presence heartbeat.
+ * Must be strictly less than `presencePruneGraceMs` so a healthy peer
+ * that was wrongly marked `pendingPrune` (e.g. because a different peer
+ * disconnected and triggered a blanket count-shrink) re-announces and
+ * removes itself from the prune set before the grace window fires.
+ */
+const PRESENCE_HEARTBEAT_MS = 2_000;
 
 export function createWhiteboardSyncClient(
   opts: WhiteboardSyncClientOptions
@@ -975,6 +1072,8 @@ export function createWhiteboardSyncClient(
     _logger,
     onNewRemotePeer,
     localPeerLabel,
+    localIdentityKey,
+    localJoinedAt,
     presencePruneGraceMs = PRESENCE_PRUNE_GRACE_MS_DEFAULT,
   } = opts;
   const peerId = opts.peerId ?? makeRandomPeerId();
@@ -1223,6 +1322,12 @@ export function createWhiteboardSyncClient(
   let pruneTimer: unknown = null;
   let lastRoomMemberCount = 0;
   let lastRoomPeersSnapshot: ReadonlyArray<RoomPeer> = [];
+  // Belt-and-suspenders heartbeat: re-announces every PRESENCE_HEARTBEAT_MS
+  // so a healthy peer marked `pendingPrune` by another peer's disconnect
+  // rescues itself before the grace window evicts it.
+  let presenceHeartbeatInterval: ReturnType<typeof globalThis.setInterval> | null = null;
+  let localCamOn: boolean | undefined;
+  let localMicOn: boolean | undefined;
 
   function getRoomPeersSnapshot(): ReadonlyArray<RoomPeer> {
     const out: RoomPeer[] = [];
@@ -1230,6 +1335,10 @@ export function createWhiteboardSyncClient(
       if (entry.peerId === peerId) continue; // exclude self
       const peer: RoomPeer = { peerId: entry.peerId, role: entry.role };
       if (entry.label !== undefined) peer.label = entry.label;
+      if (entry.identityKey !== undefined) peer.identityKey = entry.identityKey;
+      if (entry.joinedAt !== undefined) peer.joinedAt = entry.joinedAt;
+      if (entry.camOn !== undefined) peer.camOn = entry.camOn;
+      if (entry.micOn !== undefined) peer.micOn = entry.micOn;
       out.push(peer);
     }
     out.sort((a, b) =>
@@ -1246,7 +1355,15 @@ export function createWhiteboardSyncClient(
     for (let i = 0; i < a.length; i++) {
       const x = a[i]!;
       const y = b[i]!;
-      if (x.peerId !== y.peerId || x.role !== y.role || x.label !== y.label) {
+      if (
+        x.peerId !== y.peerId ||
+        x.role !== y.role ||
+        x.label !== y.label ||
+        x.identityKey !== y.identityKey ||
+        x.joinedAt !== y.joinedAt ||
+        x.camOn !== y.camOn ||
+        x.micOn !== y.micOn
+      ) {
         return false;
       }
     }
@@ -1273,23 +1390,59 @@ export function createWhiteboardSyncClient(
     // already drops self-echoes upstream. Defensive guard here so a
     // refactor that bypasses the upstream check still stays clean.
     if (msg.peerId === peerId) return;
+    // Explicit clean departure — remove immediately, no grace window.
+    // The CRITICAL INVARIANT: only THIS peer is removed; healthy peers
+    // that happen to share the room are never touched by a leave frame.
+    if (msg.leaving) {
+      pendingPrune.delete(msg.peerId);
+      if (presenceMap.delete(msg.peerId)) {
+        log.log(
+          `kind=presence leaving recv peerId=${msg.peerId} immediate-remove remaining=${presenceMap.size}`
+        );
+        fireRoomPeersIfChanged();
+      }
+      return;
+    }
     pendingPrune.delete(msg.peerId);
     const existing = presenceMap.get(msg.peerId);
     const next: RoomPeerEntry = {
       peerId: msg.peerId,
       role: msg.role,
       ...(msg.label !== undefined ? { label: msg.label } : {}),
+      ...(msg.identityKey !== undefined ? { identityKey: msg.identityKey } : {}),
+      ...(msg.joinedAt !== undefined ? { joinedAt: msg.joinedAt } : {}),
+      // Preserve existing known camOn/micOn when the inbound frame omits them
+      // (e.g. heartbeats) — prevents a heartbeat from clearing a true value
+      // that was established by a prior frame.
+      ...(msg.camOn !== undefined
+        ? { camOn: msg.camOn }
+        : existing?.camOn !== undefined
+          ? { camOn: existing.camOn }
+          : {}),
+      ...(msg.micOn !== undefined
+        ? { micOn: msg.micOn }
+        : existing?.micOn !== undefined
+          ? { micOn: existing.micOn }
+          : {}),
       lastSeenMs: Date.now(),
     };
     presenceMap.set(msg.peerId, next);
     if (
       !existing ||
       existing.role !== next.role ||
-      existing.label !== next.label
+      existing.label !== next.label ||
+      existing.identityKey !== next.identityKey ||
+      existing.joinedAt !== next.joinedAt ||
+      existing.camOn !== next.camOn ||
+      existing.micOn !== next.micOn
     ) {
       log.log(
         `kind=presence recv peerId=${msg.peerId} role=${msg.role}${
           msg.label ? ` label=${msg.label}` : ""
+        }${msg.identityKey ? ` identityKey=${msg.identityKey}` : ""}${
+          msg.joinedAt ? ` joinedAt=${msg.joinedAt}` : ""
+        }${msg.camOn !== undefined ? ` camOn=${msg.camOn}` : ""}${
+          msg.micOn !== undefined ? ` micOn=${msg.micOn}` : ""
         } total=${presenceMap.size}`
       );
       fireRoomPeersIfChanged();
@@ -1305,13 +1458,48 @@ export function createWhiteboardSyncClient(
       peerId,
       role,
       ...(localPeerLabel !== undefined ? { label: localPeerLabel } : {}),
+      ...(localIdentityKey !== undefined ? { identityKey: localIdentityKey } : {}),
+      ...(localJoinedAt !== undefined ? { joinedAt: localJoinedAt } : {}),
+      ...(localCamOn !== undefined ? { camOn: localCamOn } : {}),
+      ...(localMicOn !== undefined ? { micOn: localMicOn } : {}),
     };
     log.log(
       `kind=presence send peerId=${peerId} role=${role}${
         localPeerLabel ? ` label=${localPeerLabel}` : ""
+      }${localIdentityKey ? ` identityKey=${localIdentityKey}` : ""}${
+        localJoinedAt ? ` joinedAt=${localJoinedAt}` : ""
+      }${localCamOn !== undefined ? ` camOn=${localCamOn}` : ""}${
+        localMicOn !== undefined ? ` micOn=${localMicOn}` : ""
       }`
     );
     void encryptAndEmitImmediate(msg);
+  }
+
+  /**
+   * Best-effort leave frame. Call BEFORE disposing the socket so the
+   * async crypto has a chance to emit before the socket closes. Uses
+   * captured references so it still works after `socket = null`.
+   *
+   * On crash-disconnect (tab kill, network drop) this is never called;
+   * the heartbeat + cancel-on-grow fixes cover that path.
+   */
+  function broadcastLeaveAsync(capSocket: typeof socket, capAesKey: CryptoKey): Promise<void> {
+    const msg: WhiteboardWirePresence = {
+      v: 1,
+      kind: "presence",
+      peerId,
+      role,
+      leaving: true,
+    };
+    log.log(`kind=presence leaving send peerId=${peerId} role=${role}`);
+    return (async () => {
+      try {
+        const { data, iv } = await encryptMessage(capAesKey, msg);
+        capSocket?.emit("server-broadcast", roomId, data, iv);
+      } catch {
+        /* best-effort — never throw from a leave frame */
+      }
+    })();
   }
 
   function schedulePruneIfShrunk(currentMemberCount: number): void {
@@ -1320,6 +1508,18 @@ export function createWhiteboardSyncClient(
     // frames, not by member count alone.
     if (currentMemberCount >= lastRoomMemberCount) {
       lastRoomMemberCount = currentMemberCount;
+      // Cancel any pending prune from a prior shrink. A prior room-user-change
+      // may have blanket-marked ALL remote peers as pendingPrune. If the
+      // room count has now recovered (a new or returning peer joined), that
+      // stale wave must not fire — it would evict healthy peers that are still
+      // connected (e.g. device B after device A briefly reconnects/rejoins).
+      if (pruneTimer !== null) {
+        clearPruneTimer();
+        pendingPrune.clear();
+        log.log(
+          `presence prune cancelled on non-shrink remaining=${presenceMap.size}`
+        );
+      }
       return;
     }
     lastRoomMemberCount = currentMemberCount;
@@ -1609,12 +1809,29 @@ export function createWhiteboardSyncClient(
     if (lastBroadcastPayload && aesKey) {
       void encryptAndEmit(lastBroadcastPayload);
     }
+    // Belt-and-suspenders heartbeat: re-announce every PRESENCE_HEARTBEAT_MS
+    // so a healthy peer that another peer's disconnect wrongly added to
+    // pendingPrune re-rescues itself before the grace window fires.
+    // PRESENCE_HEARTBEAT_MS < presencePruneGraceMs guarantees at least one
+    // re-announcement within any grace window.
+    if (presenceHeartbeatInterval !== null) {
+      globalThis.clearInterval(presenceHeartbeatInterval);
+    }
+    presenceHeartbeatInterval = globalThis.setInterval(() => {
+      if (!disposed) broadcastPresence();
+    }, PRESENCE_HEARTBEAT_MS);
   });
 
   socket.on("disconnect", (reason: string) => {
     if (disposed) return;
     connected = false;
     log.warn(`disconnected reason=${reason}`);
+    // Stop the presence heartbeat on disconnect — no point sending presence
+    // while the socket is down. The connect handler restarts it on reconnect.
+    if (presenceHeartbeatInterval !== null) {
+      globalThis.clearInterval(presenceHeartbeatInterval);
+      presenceHeartbeatInterval = null;
+    }
     // Clear any pending welcome retry so it doesn't fire after the student
     // (or tutor) has disconnected.
     clearWelcomeRetryTimer();
@@ -2073,12 +2290,29 @@ export function createWhiteboardSyncClient(
         roomPeersSubs.delete(cb);
       };
     },
+    setLocalAvMediaState: (state) => {
+      let changed = false;
+      if (state.camOn !== undefined && state.camOn !== localCamOn) {
+        localCamOn = state.camOn;
+        changed = true;
+      }
+      if (state.micOn !== undefined && state.micOn !== localMicOn) {
+        localMicOn = state.micOn;
+        changed = true;
+      }
+      if (changed) broadcastPresence();
+    },
     disconnect: () => {
       if (disposed) return;
       disposed = true;
       if (broadcastTimer !== null) {
         clearTimeout(broadcastTimer);
         broadcastTimer = null;
+      }
+      // Stop the heartbeat immediately so it can't fire during cleanup.
+      if (presenceHeartbeatInterval !== null) {
+        globalThis.clearInterval(presenceHeartbeatInterval);
+        presenceHeartbeatInterval = null;
       }
       clearWelcomeRetryTimer();
       welcomeRetryCount = 0;
@@ -2097,14 +2331,27 @@ export function createWhiteboardSyncClient(
       disconnectSubs.clear();
       peerCountSubs.clear();
       roomPeersSubs.clear();
+      // Best-effort leave frame: capture socket and key references, then fire
+      // the async crypto. We call removeAllListeners + disconnect synchronously
+      // so the existing lifecycle contract is preserved (callers can rely on
+      // the socket being torn down before the next event loop tick). The leave
+      // frame's socket.emit runs in the first microtask after disconnect() returns
+      // and emits on the captured socket reference — socket.io may or may not
+      // flush it before the transport closes, so this is truly best-effort.
+      // The heartbeat + cancel-on-grow fixes are the load-bearing guarantees.
+      const capSocket = socket;
+      const capAesKey = aesKey;
+      socket = null;
+      connected = false;
       try {
-        socket?.removeAllListeners();
-        socket?.disconnect();
+        capSocket?.removeAllListeners();
+        capSocket?.disconnect();
       } catch (err) {
         log.warn("disconnect cleanup error:", (err as Error)?.message ?? String(err));
       }
-      socket = null;
-      connected = false;
+      if (capAesKey && capSocket) {
+        void broadcastLeaveAsync(capSocket, capAesKey);
+      }
     },
   };
 }

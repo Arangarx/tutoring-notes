@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AVTilesPanel, type AVTilesPanelProps } from "@/components/av/AVTilesPanel";
-import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
 import type { WbLayoutMode } from "@/components/whiteboard/chrome/useWbLayoutMode";
 
 export type WbAVClusterProps = AVTilesPanelProps & {
@@ -21,8 +20,8 @@ const DEFAULT_SIZE = { width: 240, height: 280 };
 const MIN_SIZE = { width: 160, height: 180 };
 const MAX_SIZE = { width: 400, height: 480 };
 
-/** Chrome overhead: drag handle + tiles padding + controls row (matches whiteboard-chrome.css). */
-const CLUSTER_CHROME_HEIGHT = 14 + 8 + 45;
+/** Chrome overhead: drag handle + tiles padding (controls live on local tile). */
+const CLUSTER_CHROME_HEIGHT = 14 + 4;
 const TILE_GAP = 4;
 /** Video body height for one tile at the default cluster size (280 − chrome). */
 const PER_TILE_BODY_HEIGHT = DEFAULT_SIZE.height - CLUSTER_CHROME_HEIGHT;
@@ -30,13 +29,30 @@ const PER_TILE_BODY_HEIGHT = DEFAULT_SIZE.height - CLUSTER_CHROME_HEIGHT;
 const AUTO_GROW_MAX_HEIGHT = 560;
 const CLUSTER_TOP_INSET = 16;
 const CLUSTER_BOTTOM_MARGIN = 16;
+/** Mobile pip has no drag handle — only tiles-panel padding (4+4). */
+const MOBILE_CLUSTER_CHROME_HEIGHT = 8;
 
-/** 67 + N×213 + (N−1)×4 — symmetric grow/shrink; no highwater state. */
+/** 18 + N×262 + (N−1)×4 — symmetric grow/shrink; no highwater state. */
 function computeAutoClusterHeight(tileCount: number): number {
   if (tileCount <= 0) return DEFAULT_SIZE.height;
   const tilesBody =
     tileCount * PER_TILE_BODY_HEIGHT + Math.max(0, tileCount - 1) * TILE_GAP;
   return CLUSTER_CHROME_HEIGHT + tilesBody;
+}
+
+function mobilePerTileBody(layoutMode: WbLayoutMode): number {
+  if (layoutMode === "tablet-portrait") return 96;
+  return 72;
+}
+
+function computeMobileClusterHeight(
+  tileCount: number,
+  layoutMode: WbLayoutMode
+): number {
+  const tiles = Math.max(tileCount, 1);
+  const perTile = mobilePerTileBody(layoutMode);
+  const tilesBody = tiles * perTile + Math.max(0, tiles - 1) * TILE_GAP;
+  return MOBILE_CLUSTER_CHROME_HEIGHT + tilesBody;
 }
 
 function computeViewportCap(posY: number | null): number {
@@ -81,6 +97,10 @@ export function WbAVCluster({
 
   const tileCount =
     (tilesProps.localTile ? 1 : 0) + tilesProps.participants.length;
+  /** Fires when a remote peer's video stream id appears/changes (late cam-on). */
+  const remoteVideoSignature = tilesProps.participants
+    .map((p) => `${p.peerId}:${p.videoStream?.id ?? "none"}`)
+    .join("|");
   const autoClusterHeight = computeAutoClusterHeight(Math.max(tileCount, 1));
   const useAutoGrow =
     !isMobileLayout &&
@@ -104,27 +124,54 @@ export function WbAVCluster({
   // to an explicit inline style.height → browser recomputes layout → compositor
   // wires regardless of whether the tile holds a <video> or a placeholder <div>.
   const prevTileCountRef = useRef(0);
+  const prevRemoteVideoSigRef = useRef("");
+  const mechanismAInitializedRef = useRef(false);
 
-  useEffect(() => {
-    if (isMobileLayout) return;
-    const prev = prevTileCountRef.current;
-    prevTileCountRef.current = tileCount;
-    if (tileCount > prev && tileCount > 0) {
-      // displayHeightRef is updated synchronously during each render (see below),
-      // so it already reflects the height for the new tileCount. Setting size
-      // to this value is a no-op visually; the structural change is removing
-      // data-auto-grow and switching to explicit inline pixels.
+  const triggerPaintReflow = useCallback(
+    (reason: string) => {
       const h = displayHeightRef.current;
       setSize((s) => ({ width: s.width, height: h }));
       setPaintReflowLocked(true);
-      console.log(`[avx] WbAVCluster paint-lock tileCount=${tileCount} prev=${prev} h=${h}`);
+      console.log(`[avx] WbAVCluster paint-lock reason=${reason} tileCount=${tileCount} h=${h}`);
+    },
+    [tileCount]
+  );
+
+  useEffect(() => {
+    if (isMobileLayout) return;
+    if (!mechanismAInitializedRef.current) {
+      mechanismAInitializedRef.current = true;
+      prevTileCountRef.current = tileCount;
+      prevRemoteVideoSigRef.current = remoteVideoSignature;
+      return;
+    }
+    const prev = prevTileCountRef.current;
+    const prevSig = prevRemoteVideoSigRef.current;
+    prevTileCountRef.current = tileCount;
+    prevRemoteVideoSigRef.current = remoteVideoSignature;
+
+    if (tileCount > prev && tileCount > 0) {
+      triggerPaintReflow(`tile-add:${prev}->${tileCount}`);
+    } else if (
+      remoteVideoSignature !== prevSig &&
+      remoteVideoSignature.includes(":") &&
+      !remoteVideoSignature.endsWith(":none")
+    ) {
+      triggerPaintReflow(`remote-video:${prevSig}->${remoteVideoSignature}`);
     } else if (tileCount < prev && paintReflowLocked && !userResized) {
       setPaintReflowLocked(false);
       const h = computeAutoClusterHeight(Math.max(tileCount, 1));
       setSize((s) => ({ width: s.width, height: h }));
       console.log(`[avx] WbAVCluster paint-unlock tileCount=${tileCount} prev=${prev} h=${h}`);
     }
-  }, [isMobileLayout, tileCount, paintReflowLocked, userResized]);
+  }, [
+    isMobileLayout,
+    tileCount,
+    remoteVideoSignature,
+    paintReflowLocked,
+    userResized,
+    triggerPaintReflow,
+  ]);
 
   useLayoutEffect(() => {
     if (isMobileLayout) return;
@@ -137,19 +184,24 @@ export function WbAVCluster({
   useEffect(() => {
     if (isMobileLayout) {
       setPos(null);
-      setSize({
-        width:
-          layoutMode === "narrow" || layoutMode === "phone-landscape"
-            ? 120
-            : 180,
-        height: 200,
-      });
-    } else {
-      setSize(DEFAULT_SIZE);
+      const width =
+        layoutMode === "narrow" || layoutMode === "phone-landscape" ? 120 : 180;
+      const height = computeMobileClusterHeight(tileCount, layoutMode);
+      setSize({ width, height });
+      setUserResized(false);
+      setPaintReflowLocked(false);
+      return;
     }
+    setSize(DEFAULT_SIZE);
     setUserResized(false);
     setPaintReflowLocked(false);
   }, [isMobileLayout, layoutMode]);
+
+  useEffect(() => {
+    if (!isMobileLayout) return;
+    const height = computeMobileClusterHeight(tileCount, layoutMode);
+    setSize((s) => (s.height === height ? s : { ...s, height }));
+  }, [isMobileLayout, tileCount, layoutMode]);
 
   const onDragPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -233,8 +285,18 @@ export function WbAVCluster({
       : size.height;
   displayHeightRef.current = displayHeight;
 
+  const mobileTileBody = mobilePerTileBody(layoutMode);
+  const mobileHeight = isMobileLayout
+    ? computeMobileClusterHeight(Math.max(tileCount, 1), layoutMode)
+    : 0;
+
   const style: React.CSSProperties = isMobileLayout
-    ? { width: size.width, maxWidth: size.width }
+    ? {
+        width: size.width,
+        maxWidth: size.width,
+        height: mobileHeight,
+        ["--wb-av-tile-target-h" as string]: `${mobileTileBody}px`,
+      }
     : {
         width: size.width,
         height: displayHeight,
@@ -271,29 +333,13 @@ export function WbAVCluster({
           {...tilesProps}
           testId="av-tiles-panel"
           className="mynk-wb-av-cluster__tiles-panel"
+          localMediaControls={{
+            onToggleMic,
+            onToggleCam,
+            disabled,
+            camDisabled,
+          }}
         />
-      </div>
-      <div className="mynk-wb-av-cluster__controls" data-testid="av-controls">
-        <button
-          type="button"
-          className={`mynk-wb-av-btn${!isMicMuted ? " mynk-wb-av-btn--on" : " mynk-wb-av-btn--off"}`}
-          title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-          aria-label={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-          disabled={disabled}
-          onClick={onToggleMic}
-        >
-          <WbIconMic size={13} />
-        </button>
-        <button
-          type="button"
-          className={`mynk-wb-av-btn${!isCamMuted ? " mynk-wb-av-btn--on" : " mynk-wb-av-btn--off"}`}
-          title={camDisabled ? "Camera unavailable" : isCamMuted ? "Turn camera on" : "Turn camera off"}
-          aria-label={camDisabled ? "Camera unavailable" : isCamMuted ? "Turn camera on" : "Turn camera off"}
-          disabled={disabled || camDisabled}
-          onClick={onToggleCam}
-        >
-          <WbIconCamera size={13} />
-        </button>
       </div>
       {!isMobileLayout && (
         <div

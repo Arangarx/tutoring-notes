@@ -17,12 +17,15 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { createStudent } from "@/app/admin/students/actions";
+import { StudentErasurePendingBadge } from "@/components/admin/StudentErasureStatus";
 import { SubmitButton } from "@/components/SubmitButton";
+import type { StudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
 
 export type StudentRosterItem = {
   id: string;
   name: string;
   createdAt: string;
+  erasureState: StudentErasureDisplayState;
 };
 
 type StudentsRosterProps = {
@@ -156,8 +159,11 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
               >
                 <StudentAvatar name={s.name} size="md" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[15px] font-semibold text-foreground group-hover:text-brand">
-                    {s.name}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-[15px] font-semibold text-foreground group-hover:text-brand">
+                      {s.name}
+                    </div>
+                    <StudentErasurePendingBadge state={s.erasureState} />
                   </div>
                   <div className="label-mono mt-0.5 text-[11px] text-muted-foreground">
                     Added {new Date(s.createdAt).toLocaleDateString()}

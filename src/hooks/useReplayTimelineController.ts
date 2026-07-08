@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
+import { maxEventTimestampMs, deriveReplayPageListFromLog, findActiveReplayPageIdAt } from "@/lib/whiteboard/event-log";
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
-import { globalMsToSegmentLocal } from "@/lib/whiteboard/replay-audio-timeline";
+import { globalMsToSegmentLocal, buildEffectiveReplayTimeline } from "@/lib/whiteboard/replay-audio-timeline";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
 import { createThrottledPlayLoop } from "@/lib/whiteboard/scene-paint";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
@@ -44,6 +44,9 @@ export function useReplayTimelineController(
     audioSegments,
     audioBlobUrl,
     audioMimeType,
+    canonicalAudioBlobUrl,
+    canonicalAudioMimeType,
+    canonicalDurationSeconds,
     whiteboardSessionId,
     applySceneAtRef,
   } = options;
@@ -55,8 +58,19 @@ export function useReplayTimelineController(
         audioSegments,
         audioBlobUrl,
         audioMimeType,
+        canonicalAudioBlobUrl,
+        canonicalAudioMimeType,
+        canonicalDurationSeconds,
       }),
-    [eventsBlobUrl, audioSegments, audioBlobUrl, audioMimeType]
+    [
+      eventsBlobUrl,
+      audioSegments,
+      audioBlobUrl,
+      audioMimeType,
+      canonicalAudioBlobUrl,
+      canonicalAudioMimeType,
+      canonicalDurationSeconds,
+    ]
   );
 
   const hasAudio = effectiveSegments.length > 0;
@@ -87,6 +101,20 @@ export function useReplayTimelineController(
   const [replayExcaliRestoreReady, setReplayExcaliRestoreReady] = useState(false);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
+  /**
+   * Becomes true once the WebM duration scan resolves to a finite value (via
+   * `onDurationResolved`), or synchronously when attachWebmDurationFix finds
+   * the element already has a finite duration (properly-muxed WebM / MP4).
+   * Used by `WhiteboardReplayInFrame`'s entry effect to gate auto-play: we
+   * must not call `seek(0, {play:true})` while the 1e101 hack-seek is still
+   * in-flight, otherwise Chrome parks currentTime at the measured end and
+   * playback snaps to "done" immediately.
+   *
+   * Stored `durationSeconds` (audioTimeline.totalMs > 0) is intentionally NOT
+   * a shortcut here — scrubberMax uses that value independently; entry auto-play
+   * must wait for the real element duration to settle (WS-W).
+   */
+  const [audioDurationResolvedByWebm, setAudioDurationResolvedByWebm] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelWebmFixRef = useRef<(() => void) | null>(null);
@@ -134,6 +162,17 @@ export function useReplayTimelineController(
 
   const log = loadState.kind === "ready" ? loadState.log : null;
 
+  const replayPageList = useMemo(
+    () => (log ? deriveReplayPageListFromLog(log) : []),
+    [log]
+  );
+
+  const activeReplayPageId = useMemo(() => {
+    if (!log || replayPageList.length === 0) return null;
+    const switched = findActiveReplayPageIdAt(log, globalMs);
+    return switched ?? replayPageList[0]!.id;
+  }, [log, globalMs, replayPageList]);
+
   const totalMs = useMemo(
     () =>
       computeReplayTotalMs({
@@ -158,6 +197,52 @@ export function useReplayTimelineController(
   // stale closure (avoids adding resolvedMaxMs to seek's dep array).
   const resolvedMaxMsRef = useRef(resolvedMaxMs);
   resolvedMaxMsRef.current = resolvedMaxMs;
+
+  /** Per-segment measured durations (ms) from loadedmetadata / WebM scan. */
+  const measuredSegmentDurationsMsRef = useRef<(number | undefined)[]>([]);
+
+  const recordMeasuredSegmentDuration = useCallback(
+    (segmentIndex: number, durationMs: number) => {
+      if (segmentIndex < 0 || !Number.isFinite(durationMs) || durationMs <= 0) {
+        return;
+      }
+      const arr = measuredSegmentDurationsMsRef.current;
+      while (arr.length <= segmentIndex) arr.push(undefined);
+      arr[segmentIndex] = Math.max(arr[segmentIndex] ?? 0, durationMs);
+      const effective = buildEffectiveReplayTimeline(
+        audioTimeline,
+        measuredSegmentDurationsMsRef.current
+      );
+      if (effective.totalMs > 0) {
+        resolvedMaxMsRef.current = Math.max(
+          resolvedMaxMsRef.current,
+          effective.totalMs
+        );
+        setResolvedMaxMs((prev) => Math.max(prev, effective.totalMs));
+      }
+    },
+    [audioTimeline]
+  );
+
+  /**
+   * True once it is safe to call seek(0, {play:true}) for entry auto-play.
+   *
+   * Without this gate the entry effect in WhiteboardReplayInFrame would call
+   * seek(0,{play:true}) while the WebM 1e101 hack-seek is still scanning the
+   * file.  cancelPendingFix() is called inside applySeek, but if loadedmetadata
+   * hasn't fired yet the cancel is a noop — onLoadedMetadata fires afterwards,
+   * sets needsFix=true, and starts the scan anyway.  When the scan completes
+   * Chrome parks currentTime at the measured end (~94 s) BEFORE onDurationChange
+   * can reset it, so play() fires from the end and onEnded fires immediately.
+   *
+   * By waiting for this flag the entry effect only runs AFTER onDurationChange
+   * has already reset currentTime=savedCurrentTime=0 and set needsFix=false.
+   *
+   * Sole consumer: WhiteboardReplayInFrame entry effect. Scrubber max uses
+   * audioTimeline.totalMs / resolvedMaxMs independently — stored duration does
+   * NOT satisfy this gate (WS-W: totalMs>0 made this true before the scan).
+   */
+  const audioDurationSettled = !hasAudio || audioDurationResolvedByWebm;
 
   const activeSegment =
     effectiveSegments[activeSegmentIndex] ?? effectiveSegments[0] ?? null;
@@ -300,6 +385,81 @@ export function useReplayTimelineController(
     [whiteboardSessionId]
   );
 
+  /**
+   * Defer el.play() until currentTime is confirmed at targetSec.
+   * Entry auto-play (seek 0 + play:true) races the WebM 1e101 scan: applySeek
+   * cancels the pending fix and may call play() while Chrome's async scan seek
+   * is still completing, parking currentTime at the measured end.
+   */
+  const startPlayWhenPositionReady = useCallback(
+    (el: HTMLAudioElement, targetSec: number, reason: string) => {
+      const toleranceSec = 0.05;
+
+      const needsCorrection = () => {
+        const ct = el.currentTime;
+        if (!Number.isFinite(ct)) return true;
+        if (
+          targetSec < 0.5 &&
+          Number.isFinite(el.duration) &&
+          el.duration > 0 &&
+          ct >= el.duration - 0.5
+        ) {
+          return true;
+        }
+        return false;
+      };
+
+      const isReady = () => {
+        if (el.seeking) return false;
+        const ct = el.currentTime;
+        if (!Number.isFinite(ct)) return false;
+        if (
+          targetSec < 0.5 &&
+          Number.isFinite(el.duration) &&
+          el.duration > 0 &&
+          ct >= el.duration - 0.5
+        ) {
+          return false;
+        }
+        return Math.abs(ct - targetSec) <= toleranceSec;
+      };
+
+      const attempt = () => {
+        if (needsCorrection()) {
+          try {
+            el.currentTime = targetSec;
+          } catch {
+            // best-effort
+          }
+        }
+        if (isReady()) {
+          startPlay(el, reason);
+          return true;
+        }
+        return false;
+      };
+
+      // While WebM duration is still unresolved, an in-flight 1e101 scan may
+      // complete asynchronously and park currentTime at the measured end.
+      // Entry auto-play (seek 0 + play:true) must wait for that to settle.
+      const mayHavePendingWebmScan =
+        targetSec < 0.5 &&
+        (!Number.isFinite(el.duration) || el.duration <= 0);
+
+      if (!mayHavePendingWebmScan && attempt()) return;
+
+      const onSettled = () => {
+        if (attempt()) {
+          el.removeEventListener("seeked", onSettled);
+          el.removeEventListener("durationchange", onSettled);
+        }
+      };
+      el.addEventListener("seeked", onSettled);
+      el.addEventListener("durationchange", onSettled);
+    },
+    [startPlay]
+  );
+
   const loadSegmentAt = useCallback(
     (segmentIndex: number, localMs: number, autoplay: boolean) => {
       const el = audioRef.current;
@@ -335,7 +495,7 @@ export function useReplayTimelineController(
             el.removeEventListener("loadedmetadata", onReady);
             cancelWebmFixRef.current?.();
             try { el.currentTime = seekSec; } catch { /* best-effort */ }
-            if (autoplay) startPlay(el, "applySeek_retry");
+            if (autoplay) startPlayWhenPositionReady(el, seekSec, "applySeek_retry");
           };
           el.addEventListener("canplay", onReady);
           el.addEventListener("loadedmetadata", onReady);
@@ -345,7 +505,7 @@ export function useReplayTimelineController(
           `[avx] wbsid=${whiteboardSessionId ?? "?"} seek_after_currentTime value=${el.currentTime}`
         );
         playLoopRef.current?.seek();
-        if (autoplay) startPlay(el, "applySeek");
+        if (autoplay) startPlayWhenPositionReady(el, seekSec, "applySeek");
       };
 
       if (needsSrcSwap) {
@@ -369,7 +529,7 @@ export function useReplayTimelineController(
         applySeek();
       }
     },
-    [audioSrcMatches, effectiveSegments, startPlay, whiteboardSessionId]
+    [audioSrcMatches, effectiveSegments, startPlayWhenPositionReady, whiteboardSessionId]
   );
 
   const seek = useCallback(
@@ -413,7 +573,8 @@ export function useReplayTimelineController(
         const { segmentIndex, localMs } = globalMsToSegmentLocal(
           clamped,
           audioTimeline,
-          measured > 0 ? measured : undefined
+          measured > 0 ? measured : undefined,
+          measuredSegmentDurationsMsRef.current
         );
         // Log when both stored and measured durations are 0 so the passthrough
         // path in globalMsToSegmentLocal is visible in prod logs for diagnosis.
@@ -555,7 +716,8 @@ export function useReplayTimelineController(
         const { localMs } = globalMsToSegmentLocal(
           atMs,
           audioTimeline,
-          measured > 0 ? measured : undefined
+          measured > 0 ? measured : undefined,
+          measuredSegmentDurationsMsRef.current
         );
         const intendedSec = Math.max(0, localMs / 1000);
         const delta = Number.isFinite(el.currentTime)
@@ -653,8 +815,10 @@ export function useReplayTimelineController(
       onMetadataLoaded: () => {
         setAudioReady(true);
         if (Number.isFinite(el.duration) && el.duration > 0) {
+          const segDurMs = Math.round(el.duration * 1000);
+          recordMeasuredSegmentDuration(activeSegmentIndexRef.current, segDurMs);
           const knownEnd =
-            globalSegmentOffsetMsRef.current + Math.round(el.duration * 1000);
+            globalSegmentOffsetMsRef.current + segDurMs;
           setResolvedMaxMs((prev) => Math.max(prev, knownEnd));
         }
       },
@@ -663,12 +827,19 @@ export function useReplayTimelineController(
       // scrubberMax can be updated to reflect the actual audio length so
       // subsequent scrubs map proportionally rather than collapsing to 0.
       onDurationResolved: (durationSec: number) => {
+        const segDurMs = Math.round(durationSec * 1000);
+        recordMeasuredSegmentDuration(activeSegmentIndexRef.current, segDurMs);
         const knownEnd =
-          globalSegmentOffsetMsRef.current + Math.round(durationSec * 1000);
+          globalSegmentOffsetMsRef.current + segDurMs;
         console.log(
           `[avx] wbsid=${whiteboardSessionId ?? "?"} duration_resolved measuredTotal=${knownEnd}`
         );
         setResolvedMaxMs((prev) => Math.max(prev, knownEnd));
+        // Signal that the WebM scan finished and currentTime has been reset to
+        // savedCurrentTime (=0). From this point the entry auto-play gate in
+        // WhiteboardReplayInFrame will allow seek(0,{play:true}) to proceed
+        // without racing a still-in-flight 1e101 scan.
+        setAudioDurationResolvedByWebm(true);
       },
     });
     cancelWebmFixRef.current = cancelPendingFix;
@@ -676,21 +847,38 @@ export function useReplayTimelineController(
       cleanup();
       cancelWebmFixRef.current = null;
     };
-  }, [hasAudio, replayAudioMime, replayExcaliRestoreReady, whiteboardSessionId]);
+  }, [hasAudio, replayAudioMime, replayExcaliRestoreReady, recordMeasuredSegmentDuration, whiteboardSessionId]);
 
-  // Preload next segments
+  // Preload next segments + capture measured durations for seek fallback
   useEffect(() => {
     if (!hasAudio || effectiveSegments.length <= 1) return;
-    const preloads = effectiveSegments.slice(1).map((seg) => {
+    const preloads: HTMLAudioElement[] = [];
+    const cleanups: Array<() => void> = [];
+    effectiveSegments.slice(1).forEach((seg, offset) => {
+      const segmentIndex = offset + 1;
       const a = new Audio();
       a.preload = "auto";
       a.src = seg.url;
-      return a;
+      const onMeta = () => {
+        if (Number.isFinite(a.duration) && a.duration > 0) {
+          recordMeasuredSegmentDuration(
+            segmentIndex,
+            Math.round(a.duration * 1000)
+          );
+        }
+      };
+      a.addEventListener("loadedmetadata", onMeta);
+      if (a.readyState >= 1) onMeta();
+      preloads.push(a);
+      cleanups.push(() => {
+        a.removeEventListener("loadedmetadata", onMeta);
+        a.src = "";
+      });
     });
     return () => {
-      for (const a of preloads) a.src = "";
+      for (const cleanup of cleanups) cleanup();
     };
-  }, [effectiveSegments, hasAudio]);
+  }, [effectiveSegments, hasAudio, recordMeasuredSegmentDuration]);
 
   // Audio-driven play loop
   useEffect(() => {
@@ -787,6 +975,10 @@ export function useReplayTimelineController(
           ? Math.round(el.duration * 1000)
           : (audioTimeline.segmentDurationsMs[activeSegmentIndexRef.current] ??
             0);
+      recordMeasuredSegmentDuration(
+        activeSegmentIndexRef.current,
+        actualDurationMs
+      );
       globalSegmentOffsetMsRef.current += actualDurationMs;
       setResolvedMaxMs((prev) =>
         Math.max(prev, globalSegmentOffsetMsRef.current)
@@ -831,6 +1023,7 @@ export function useReplayTimelineController(
     hasAudio,
     loadSegmentAt,
     loadState,
+    recordMeasuredSegmentDuration,
     replayExcaliRestoreReady,
     whiteboardSessionId,
   ]);
@@ -978,6 +1171,9 @@ export function useReplayTimelineController(
     muted,
     handleVolumeChange,
     toggleMute,
+    audioDurationSettled,
+    replayPageList,
+    activeReplayPageId,
   };
 }
 

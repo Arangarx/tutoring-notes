@@ -107,6 +107,7 @@ type FakeSyncClient = {
   broadcastScene: jest.Mock;
   broadcastDocument: jest.Mock;
   flushPendingBroadcast: jest.Mock;
+  setLocalAvMediaState: jest.Mock;
   // Test-only helpers
   __triggerConnect: () => void;
   __triggerDisconnect: () => void;
@@ -148,6 +149,7 @@ const mockCreateWhiteboardSyncClient = jest.fn(
         };
       }),
       onRoomPeersChange: jest.fn(() => () => {}),
+      setLocalAvMediaState: jest.fn(),
       onRemotePointer: jest.fn(() => () => {}),
       broadcastScene: jest.fn(),
       broadcastDocument: jest.fn(),
@@ -210,6 +212,10 @@ let liveAvState: LiveAvState = {
   videoError: null,
 };
 let receivedLocalPeerId: string | undefined;
+let receivedLiveAvOpts: {
+  externalAudioStream?: MediaStream | null;
+  swapMicDevice?: unknown;
+} | undefined;
 const reconnectPeerSpy = jest.fn();
 const requestMicSpy = jest.fn().mockResolvedValue(undefined);
 const requestCamSpy = jest.fn().mockResolvedValue(undefined);
@@ -231,8 +237,16 @@ function makeFakeVideoDevice(id: string): MediaDeviceInfo {
 }
 
 jest.mock("@/hooks/useLiveAV", () => ({
-  useLiveAV: (opts: { localPeerId?: string }) => {
+  useLiveAV: (opts: {
+    localPeerId?: string;
+    externalAudioStream?: MediaStream | null;
+    swapMicDevice?: unknown;
+  }) => {
     receivedLocalPeerId = opts.localPeerId;
+    receivedLiveAvOpts = {
+      externalAudioStream: opts.externalAudioStream,
+      swapMicDevice: opts.swapMicDevice,
+    };
     return {
       ...liveAvState,
       // Compute reachableParticipants from the mock participants state
@@ -250,11 +264,19 @@ jest.mock("@/hooks/useLiveAV", () => ({
       reconnectPeer: reconnectPeerSpy,
       retryAcquire: jest.fn().mockResolvedValue(undefined),
       videoDevices: liveAvVideoDevices,
+      audioDevices: [],
+      refreshVideoDeviceList: jest.fn().mockResolvedValue(undefined),
+      refreshAudioDeviceList: jest.fn().mockResolvedValue(undefined),
       pickedVideoCameraSlot: 0,
+      pickedMicSlot: 0,
+      selectedMicDeviceId: null,
       setVideoCameraBySlot: setVideoCameraBySlotSpy,
       setVideoDevice: jest.fn().mockResolvedValue(undefined),
       setMicDevice: jest.fn().mockResolvedValue(undefined),
+      setMicDeviceBySlot: jest.fn().mockResolvedValue(undefined),
       selectedVideoDeviceId: null,
+      gainLinear: 1,
+      setGainLinear: jest.fn(),
     };
   },
 }));
@@ -339,6 +361,7 @@ jest.mock("@/hooks/useWhiteboardRecorder", () => ({
     postGateAutoCanvas: null,
     acknowledgePostGateAutoCanvas: jest.fn(),
     buildFinalEventsJson: jest.fn(),
+    flushServerPersist: jest.fn().mockResolvedValue(undefined),
     setUiContext: jest.fn(),
   }),
 }));
@@ -360,13 +383,37 @@ jest.mock(
 
 const addRemoteAudioSpy = jest.fn();
 const addRemoteAudioUnsubs: jest.Mock[] = [];
+const setRemoteRecordingGainSpy = jest.fn();
+const setTutorRecordingMuteSpy = jest.fn();
+
+// Mutable so individual tests can control localMicStream identity to
+// simulate "graph not yet ready → stream appears" timing (stomp test).
+const _defaultFakeLocalMicStream = {
+  id: "fake-local-mic-stream",
+  getAudioTracks: () => [],
+  getVideoTracks: () => [],
+  getTracks: () => [],
+} as unknown as MediaStream;
+let mockLocalMicStream: MediaStream | null = _defaultFakeLocalMicStream;
+
 jest.mock("@/hooks/useAudioRecorder", () => {
-  const fakeLocalMicStream = {
-    id: "fake-local-mic-stream",
-    getAudioTracks: () => [],
-    getVideoTracks: () => [],
-    getTracks: () => [],
-  } as unknown as MediaStream;
+  // Stable function references — mirrors production where these are useCallback(fn,[]).
+  // Without stable refs, every render creates new function identities which causes
+  // reconciliation effects to fire on every render regardless of dep-array contents,
+  // masking stream-dep regressions (the stomp test relies on this distinction).
+  const stableAddRemoteAudio = (stream: MediaStream) => {
+    addRemoteAudioSpy(stream);
+    const unsub = jest.fn();
+    addRemoteAudioUnsubs.push(unsub);
+    return unsub;
+  };
+  const stableSetRemoteRecordingGain = (stream: MediaStream, gain: number) => {
+    setRemoteRecordingGainSpy(stream, gain);
+  };
+  const stableSetTutorRecordingMute = (muted: boolean) => {
+    setTutorRecordingMuteSpy(muted);
+  };
+
   return {
     useAudioRecorder: () => ({
       isRecording: false,
@@ -383,17 +430,25 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       audioLevel: 0,
       elapsedMs: 0,
       refresh: jest.fn(),
+      meterBarRef: { current: null },
+      devices: [] as MediaDeviceInfo[],
+      pickedMicSlot: 0,
+      gainLinear: 1,
+      setGainLinear: jest.fn(),
+      isLive: false,
+      lockDevice: false,
+      chimeEnabled: false,
+      setChimeEnabled: jest.fn(),
+      chimeVolume: 0.5,
+      setChimeVolume: jest.fn(),
       // Mixdown contract — workspace gates the participants-reconcile
       // effect on localMicStream becoming non-null AND uses
       // addRemoteAudio to attach each remote participant's stream
       // to the recording mixdown.
-      localMicStream: fakeLocalMicStream,
-      addRemoteAudio: (stream: MediaStream) => {
-        addRemoteAudioSpy(stream);
-        const unsub = jest.fn();
-        addRemoteAudioUnsubs.push(unsub);
-        return unsub;
-      },
+      localMicStream: mockLocalMicStream,
+      addRemoteAudio: stableAddRemoteAudio,
+      setRemoteRecordingGain: stableSetRemoteRecordingGain,
+      setTutorRecordingMute: stableSetTutorRecordingMute,
     }),
   };
 });
@@ -421,6 +476,7 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
     .mockResolvedValue({ endedAt: "2026-05-10T00:00:00Z" }),
   issueJoinToken: jest.fn().mockResolvedValue({ token: "tok" }),
   revokeJoinTokensForSession: jest.fn().mockResolvedValue(undefined),
+  startWhiteboardSession: jest.fn().mockResolvedValue({ ok: true, phase: "active" }),
 }));
 
 // notes-actions imports next/cache (revalidatePath) which requires TextEncoder
@@ -485,7 +541,23 @@ const baseProps = {
   initialUserWantsRecording: false,
 };
 
-async function renderWorkspace() {
+/** WbTopBarMicControl hidden meter host — sole consumer of workspaceAudio.meterBarRef. */
+function countMeterBarRefHosts(root: ParentNode = document): number {
+  return root.querySelectorAll(".mynk-wb-mic-meter-hidden").length;
+}
+
+async function renderWorkspace(
+  overrides: Partial<
+    typeof baseProps & {
+      role: "tutor" | "student";
+      joinToken: string;
+      initialSessionPhase: "PENDING" | "ACTIVE";
+      sessionMode: "LIVE" | "IN_PERSON";
+      initialHasConsentSnapshot: boolean;
+      initialAllowAudioRecording: boolean | null;
+    }
+  > = {}
+) {
   const mod = await import(
     "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient"
   );
@@ -496,7 +568,9 @@ async function renderWorkspace() {
     "",
     "#k=test-integration-key-16chars-min"
   );
-  const utils = render(<mod.WhiteboardWorkspaceClient {...baseProps} />);
+  const utils = render(
+    <mod.WhiteboardWorkspaceClient {...baseProps} {...overrides} />
+  );
   // Flush the sync-client mount effect.
   await act(async () => {
     await Promise.resolve();
@@ -514,8 +588,15 @@ beforeEach(() => {
   liveAvVideoDevices = [];
   addRemoteAudioSpy.mockClear();
   addRemoteAudioUnsubs.length = 0;
+  setRemoteRecordingGainSpy.mockClear();
+  setTutorRecordingMuteSpy.mockClear();
+  toggleMicSpy.mockClear();
   evaluateLifecycleCalls.length = 0;
   receivedLocalPeerId = undefined;
+  receivedLiveAvOpts = undefined;
+  // Reset localMicStream to the default non-null value so existing tests
+  // that depend on the graph being "ready" continue to work.
+  mockLocalMicStream = _defaultFakeLocalMicStream;
   liveAvState = {
     participants: [],
     localAudioStream: null,
@@ -552,6 +633,179 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     expect(screen.getByTestId("av-controls")).toBeTruthy();
   });
 
+  test("tutor waiting room: on-page mic picker + dropdown boost/chime (no device picker in dropdown), exactly one meterBarRef host", async () => {
+    await renderWorkspace({ initialSessionPhase: "PENDING" });
+
+    expect(screen.getByTestId("wb-waiting-overlay")).toBeTruthy();
+    expect(countMeterBarRefHosts()).toBe(1);
+    // Both overlay WbTopBarMicControlLive and live top-bar WbTopBarMicControl
+    // render wb-topbar-mic during PENDING; exactly one meterBarRef host (the live top bar).
+    expect(screen.getAllByTestId("wb-topbar-mic")).toHaveLength(2);
+    const overlay = screen.getByTestId("wb-waiting-overlay");
+    expect(overlay.querySelector("[data-testid='wb-topbar-mic-toggle']")).toBeTruthy();
+    expect(overlay.querySelector(".mynk-wb-mic-meter")).toBeTruthy();
+    // Tutor: on-page AudioControls mic picker + recorder MicControls in dropdown (no device picker there).
+    expect(
+      overlay.querySelector("[data-testid='wb-waiting-overlay-device-pickers'] [data-testid='audio-device-select']")
+    ).toBeTruthy();
+    const overlaySettings = within(overlay).getByTestId("wb-topbar-mic-settings");
+    expect(overlaySettings).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(overlaySettings);
+    });
+    expect(within(overlay).getByTestId("mic-gain-slider")).toBeTruthy();
+    expect(within(overlay).getByTestId("recording-chime-enabled")).toBeTruthy();
+    expect(within(overlay).queryByTestId("mic-device-select")).toBeNull();
+  });
+
+  test("student waiting room: on-page mic picker + boost caret (no chime)", async () => {
+    await renderWorkspace({
+      role: "student",
+      joinToken: "join-tok-1",
+      initialSessionPhase: "PENDING",
+    });
+
+    const overlay = screen.getByTestId("wb-waiting-overlay");
+    expect(
+      overlay.querySelector(
+        "[data-testid='wb-waiting-overlay-device-pickers'] [data-testid='audio-device-select']"
+      )
+    ).toBeTruthy();
+    const overlaySettings = within(overlay).getByTestId("wb-topbar-mic-settings");
+    expect(overlaySettings).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(overlaySettings);
+    });
+    expect(within(overlay).getByTestId("mic-gain-slider")).toBeTruthy();
+    expect(within(overlay).queryByTestId("recording-chime-enabled")).toBeNull();
+    expect(within(overlay).queryByTestId("mic-device-select")).toBeNull();
+    // Student has no WbTopBarMicControl — no meterBarRef hidden host.
+    expect(countMeterBarRefHosts()).toBe(0);
+  });
+
+  test("tutor ACTIVE session: live top-bar mic control with meterBarRef host present", async () => {
+    await renderWorkspace({ initialSessionPhase: "ACTIVE" });
+
+    expect(screen.queryByTestId("wb-waiting-overlay")).toBeNull();
+    expect(screen.getByTestId("wb-topbar-mic")).toBeTruthy();
+    expect(screen.getByTestId("wb-topbar-mic-toggle")).toBeTruthy();
+    expect(countMeterBarRefHosts()).toBe(1);
+  });
+
+  test("WS-I: tutor mic click calls setTutorRecordingMute(nextMuted) before toggleMic (overlay, PENDING)", async () => {
+    // Guards against the pre-start mute gap: the recording-mute ref must be
+    // set synchronously in the same wrapper turn as toggleMic so that
+    // the mount-effect acquireMic graph-build reads the correct value.
+    await renderWorkspace({ initialSessionPhase: "PENDING" });
+
+    const overlay = screen.getByTestId("wb-waiting-overlay");
+    const micToggle = overlay.querySelector<HTMLElement>("[data-testid='wb-topbar-mic-toggle']");
+    expect(micToggle).toBeTruthy();
+
+    // Track call ordering only for calls that happen during the click interaction.
+    // (The effect at 2589 also calls setTutorRecordingMute on each render, so we
+    // don't assert exact call count — we assert the handler's pair is ordered correctly.)
+    const callOrder: string[] = [];
+    setTutorRecordingMuteSpy.mockImplementation(() => { callOrder.push("setTutorRecordingMute"); });
+    toggleMicSpy.mockImplementation(() => { callOrder.push("toggleMic"); });
+
+    await act(async () => {
+      fireEvent.click(micToggle!);
+    });
+
+    // The wrapper must have called setTutorRecordingMute(true) at least once.
+    expect(setTutorRecordingMuteSpy).toHaveBeenCalledWith(true);
+    // toggleMic must have been called.
+    expect(toggleMicSpy).toHaveBeenCalled();
+    // The FIRST setTutorRecordingMute in the callOrder is before the toggleMic
+    // — this verifies the synchronous wrapper fires before the liveAv toggle.
+    const firstSetMuteIdx = callOrder.indexOf("setTutorRecordingMute");
+    const firstToggleMicIdx = callOrder.indexOf("toggleMic");
+    expect(firstSetMuteIdx).toBeGreaterThanOrEqual(0);
+    expect(firstToggleMicIdx).toBeGreaterThan(firstSetMuteIdx);
+  });
+
+  test("WS-I: tutor mic click calls setTutorRecordingMute(nextMuted) before toggleMic (top-bar, ACTIVE)", async () => {
+    await renderWorkspace({ initialSessionPhase: "ACTIVE" });
+
+    const micToggle = screen.getByTestId<HTMLElement>("wb-topbar-mic-toggle");
+
+    const callOrder: string[] = [];
+    setTutorRecordingMuteSpy.mockImplementation(() => { callOrder.push("setTutorRecordingMute"); });
+    toggleMicSpy.mockImplementation(() => { callOrder.push("toggleMic"); });
+
+    await act(async () => {
+      fireEvent.click(micToggle);
+    });
+
+    expect(setTutorRecordingMuteSpy).toHaveBeenCalledWith(true);
+    expect(toggleMicSpy).toHaveBeenCalled();
+    const firstSetMuteIdx = callOrder.indexOf("setTutorRecordingMute");
+    const firstToggleMicIdx = callOrder.indexOf("toggleMic");
+    expect(firstSetMuteIdx).toBeGreaterThanOrEqual(0);
+    expect(firstToggleMicIdx).toBeGreaterThan(firstSetMuteIdx);
+  });
+
+  test("WS-I stomp: reconcile effect firing on stream-appearance does NOT regress a synchronously-muted ref", async () => {
+    // Reproduces the stomp: mute before graph ready, then graph appears.
+    //
+    // Setup: localMicStream starts null (graph not yet built). liveAv.isMicMuted
+    // stays false throughout — simulating the async React state lag where
+    // toggleMic() has been called but the state batch hasn't rendered yet.
+    //
+    // Before the fix: workspaceAudioLocalMicStream was in the reconciliation
+    // effect's dep array. When localMicStream changed null→non-null, the
+    // effect fired with stale isMicMuted=false and called
+    // setTutorRecordingMute(false), stomping the correctly-set ref=true.
+    // After the fix: stream-appearance does NOT fire the reconciliation effect;
+    // only real isMicMuted state changes do. The graph-build itself applies
+    // the ref (useAudioRecorder.ts graph.setTutorRecordingMute(ref.current)).
+    mockLocalMicStream = null;
+
+    const { rerender } = await renderWorkspace({ initialSessionPhase: "PENDING" });
+    const mod = await import(
+      "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient"
+    );
+
+    const overlay = screen.getByTestId("wb-waiting-overlay");
+    const micToggle = overlay.querySelector<HTMLElement>("[data-testid='wb-topbar-mic-toggle']");
+    expect(micToggle).toBeTruthy();
+
+    // Click mute — handleToggleMicWithRecordingMute sets ref synchronously.
+    // isMicMuted stays false (toggleMicSpy is a no-op mock).
+    await act(async () => {
+      fireEvent.click(micToggle!);
+    });
+
+    // The wrapper must have called setTutorRecordingMute(true).
+    expect(setTutorRecordingMuteSpy).toHaveBeenCalledWith(true);
+
+    // Now clear and simulate the graph becoming ready (stream appears).
+    // isMicMuted is STILL false (simulating the React state lag).
+    setTutorRecordingMuteSpy.mockClear();
+
+    mockLocalMicStream = {
+      id: "fake-local-mic-stream-appeared",
+      getAudioTracks: () => [],
+      getVideoTracks: () => [],
+      getTracks: () => [],
+    } as unknown as MediaStream;
+
+    // Re-render with the same props — this causes the workspace to re-render
+    // and pick up the new mockLocalMicStream from the mock, exactly as the
+    // real acquireMic path would cause setLocalMicStream() to trigger a render.
+    await act(async () => {
+      rerender(<mod.WhiteboardWorkspaceClient {...baseProps} initialSessionPhase="PENDING" />);
+      await Promise.resolve();
+    });
+
+    // The reconciliation effect must NOT have called setTutorRecordingMute(false).
+    // If the stream dep were still present, it would have fired with
+    // isMicMuted=false and stomped the mute intent.
+    const falseCalls = setTutorRecordingMuteSpy.mock.calls.filter((c) => c[0] === false);
+    expect(falseCalls).toHaveLength(0);
+  });
+
   test("3-peer canary: tutor + 2 students render distinct tiles AND each remote audioStream is attached to the tutor's recording mixdown", async () => {
     // May 15 redesign: instead of one MediaRecorder per peer
     // (which made the replay UI play whichever stream uploaded
@@ -571,7 +825,11 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
       ],
     };
 
-    await renderWorkspace();
+    await renderWorkspace({
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: true,
+      sessionMode: "LIVE",
+    });
 
     // (a) AVTilesPanel renders BOTH remote tiles + the local one.
     const panel = screen.getByTestId("av-tiles-panel");
@@ -592,6 +850,55 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     const attachedStreams = addRemoteAudioSpy.mock.calls.map((c) => c[0]);
     expect(attachedStreams).toContain(streamA);
     expect(attachedStreams).toContain(streamB);
+  });
+
+  test("Gate E/F: tutor_only LIVE — remote streams skip mixdown attach; gain reconcile forces 0", async () => {
+    const streamA = makeFakeAudioStream("stream-peer-A");
+    liveAvState = {
+      ...liveAvState,
+      localAudioStream: makeFakeAudioStream("local"),
+      hasMicPermission: "granted",
+      participants: [
+        makeParticipant("peer-A", { label: "Alex", audioStream: streamA }),
+      ],
+    };
+
+    await renderWorkspace({
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: false,
+      sessionMode: "LIVE",
+    });
+
+    await waitFor(() => {
+      expect(setRemoteRecordingGainSpy).toHaveBeenCalled();
+    });
+    expect(addRemoteAudioSpy).not.toHaveBeenCalled();
+    expect(setRemoteRecordingGainSpy).toHaveBeenCalledWith(streamA, 0);
+  });
+
+  test("student role: publish path only — no externalAudioStream from recorder and no addRemoteAudio mixdown", async () => {
+    const tutorStream = makeFakeAudioStream("stream-tutor-remote");
+    liveAvState = {
+      ...liveAvState,
+      localAudioStream: makeFakeAudioStream("student-local"),
+      hasMicPermission: "granted",
+      participants: [
+        makeParticipant("peer-tutor", {
+          role: "tutor",
+          label: "Sarah",
+          audioStream: tutorStream,
+        }),
+      ],
+    };
+
+    await renderWorkspace({
+      role: "student",
+      joinToken: "join-tok-1",
+    });
+
+    expect(receivedLiveAvOpts?.externalAudioStream).toBeUndefined();
+    expect(receivedLiveAvOpts?.swapMicDevice).toBeUndefined();
+    expect(addRemoteAudioSpy).not.toHaveBeenCalled();
   });
 
   test("FSM inputStreams reflects participant peerConnectionState (connected→ok, connecting→degraded, failed→failed)", async () => {
@@ -634,6 +941,40 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     // BEFORE the first onConnect fires, so a first-connect
     // doesn't fire a spurious mesh.restart. Simulate disconnect
     // then reconnect to trigger the restart path.
+    act(() => {
+      client.__triggerConnect();
+    });
+    expect(reconnectPeerSpy).not.toHaveBeenCalled();
+
+    act(() => {
+      client.__triggerDisconnect();
+    });
+    act(() => {
+      client.__triggerConnect();
+    });
+
+    expect(reconnectPeerSpy).toHaveBeenCalledTimes(2);
+    const calledIds = reconnectPeerSpy.mock.calls.map((c) => c[0]).sort();
+    expect(calledIds).toEqual(["peer-A", "peer-B"]);
+  });
+
+  test("student sync-reconnect → mesh.restart for every current peer", async () => {
+    liveAvState = {
+      ...liveAvState,
+      participants: [
+        makeParticipant("peer-A"),
+        makeParticipant("peer-B"),
+      ],
+    };
+
+    await renderWorkspace({
+      role: "student",
+      joinToken: "join-tok-1",
+    });
+    await waitFor(() => {
+      expect(createdSyncClients).toHaveLength(1);
+    });
+    const client = createdSyncClients[0];
     act(() => {
       client.__triggerConnect();
     });
@@ -845,9 +1186,9 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     liveAvVideoDevices = [makeFakeVideoDevice("cam1")];
     await renderWorkspace();
 
-    // The WbAVCluster has data-testid="av-controls" containing the cam button.
+    // Mic/cam controls overlay the local preview tile (data-testid="av-controls").
     const avControls = screen.getByTestId("av-controls");
-    const camBtn = within(avControls).getByRole("button", { name: /turn camera on/i });
+    const camBtn = within(avControls).getByRole("button", { name: /turn your camera on/i });
 
     await act(async () => {
       fireEvent.click(camBtn);
@@ -918,5 +1259,122 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe("WS-U-FRAGILE 2.4/2.5 — tutor top-bar presentation", () => {
+  test("recording pill reflects FSM pillLabel when awaiting student (not hardcoded LIVE)", async () => {
+    await renderWorkspace({
+      initialSessionPhase: "ACTIVE",
+      initialUserWantsRecording: true,
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: true,
+      sessionMode: "LIVE",
+    });
+
+    const syncClient = createdSyncClients[0]!;
+    await act(async () => {
+      syncClient.__triggerConnect();
+      await Promise.resolve();
+    });
+
+    const pill = screen.getByTestId("wb-recording-pill");
+    expect(pill).toHaveTextContent("Waiting for student");
+    expect(pill.textContent?.trim()).not.toBe("LIVE");
+    expect(pill.classList.contains("mynk-wb-live-badge--amber")).toBe(true);
+  });
+
+  test("recording pill shows Recording when actively capturing (no-sync path)", async () => {
+    await renderWorkspace({
+      initialSessionPhase: "ACTIVE",
+      initialUserWantsRecording: true,
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: true,
+      sessionMode: "IN_PERSON",
+      syncUrl: "",
+    });
+
+    const pill = screen.getByTestId("wb-recording-pill");
+    expect(pill).toHaveTextContent("Recording");
+    expect(pill.textContent?.trim()).not.toBe("LIVE");
+    expect(pill.classList.contains("mynk-wb-live-badge--amber")).toBe(false);
+    expect(pill.classList.contains("mynk-wb-live-badge--grey")).toBe(false);
+  });
+
+  test("sync pill is visually visible when sync transport is connecting", async () => {
+    await renderWorkspace({
+      initialSessionPhase: "ACTIVE",
+      initialUserWantsRecording: true,
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: true,
+      sessionMode: "LIVE",
+    });
+
+    const syncPill = screen.getByTestId("wb-sync-pill");
+    expect(syncPill).toHaveTextContent("Sync connecting…");
+    expect(syncPill.classList.contains("mynk-wb-sr-only")).toBe(false);
+    expect(syncPill.classList.contains("mynk-wb-sync-pill")).toBe(true);
+    expect(syncPill.classList.contains("mynk-wb-sync-pill--grey")).toBe(true);
+  });
+});
+
+describe("WhiteboardWorkspaceClient active-ping role guard (SMOKE-BUG-1)", () => {
+  const originalFetch = globalThis.fetch;
+  let fetchMock: jest.Mock;
+
+  function activePingCalls(): unknown[][] {
+    return fetchMock.mock.calls.filter(
+      (call) => typeof call[0] === "string" && call[0].includes("/active-ping")
+    );
+  }
+
+  beforeEach(() => {
+    fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/active-ping")) {
+        return {
+          ok: true,
+          json: async () => ({ activeMs: 0, lastActiveAt: null }),
+        } as Response;
+      }
+      if (url.includes("/timer-anchor") || url.includes("/join-timer")) {
+        return {
+          ok: true,
+          json: async () => ({ activeMs: 0, lastActiveAt: null, live: true }),
+        } as Response;
+      }
+      return { ok: false, json: async () => ({}) } as Response;
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("student does NOT POST /active-ping (uses join-timer instead)", async () => {
+    await renderWorkspace({
+      role: "student",
+      joinToken: "join-tok-1",
+      initialSessionPhase: "ACTIVE",
+    });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          (call) => typeof call[0] === "string" && call[0].includes("/join-timer")
+        )
+      ).toBe(true);
+    });
+
+    expect(activePingCalls()).toHaveLength(0);
+  });
+
+  test("tutor POSTs /active-ping on mount", async () => {
+    await renderWorkspace({ initialSessionPhase: "ACTIVE" });
+
+    await waitFor(() => {
+      expect(activePingCalls().length).toBeGreaterThan(0);
+    });
   });
 });

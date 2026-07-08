@@ -70,6 +70,21 @@ When a tripwire trips, the **first** move is NOT to recommend a model switch —
 3. **Refresh `ORCHESTRATOR-STATE.md`** head so the switched-up chat picks up cold (per the OPERATING CONTRACT above).
 4. **Tell Andrew explicitly:** *"Switch this chat to [Sonnet/Opus] and say continue."* Then stop — don't keep working.
 
+## Hard model rules (apply to EVERY dispatch, always)
+
+These are unconditional and override any convenience default:
+
+- **`composer-2.5-fast` is FORBIDDEN.** It is ~6× the cost of `composer-2.5` for latency-only benefit and buys us nothing on this codebase. Composer work is **`composer-2.5` only**, every time.
+- **Every dispatch sets `model` explicitly, plus its options.** Never rely on model inheritance/defaults (including on `resume` — see AGENTS.md § Model usage protocol, where inheritance is documented as unreliable). If a dispatch does not name its model, that is a bug.
+
+## Effort-scoped override — Whiteboard reliability floor (the Sarah merge)
+
+> **Scope:** the `wb-wave5-polish` whiteboard-reliability-floor effort (plan: `whiteboard_reliability_floor_9ba650d1`). This is a **deliberate, scoped override** of the "dispatch aggressively to Composer" default above, justified by the stakes (the Sarah merge — the live commercial session experience) and Composer's mixed track record on this exact A/V/recording code.
+
+- **Execution tier = Opus by default for this effort.** If there is ANY doubt that a lower tier will execute correctly, the work stays on Opus (this inverts the usual "capability doubt is not a reason to keep it on Opus" rule — *for this effort only*).
+- **Composer 2.5 is used ONLY for unambiguously mechanical, zero-correctness-doubt, test-gated tasks** — e.g. deleting confirmed-dead files, pure CSS file splits verified by before/after visual diff, boilerplate scaffolding. Anything touching A/V transport, the recording lifecycle, effect-dependency wiring, or layout/enumeration coupling is Opus.
+- The hard model rules above (no `-fast`; explicit `model`+options) still apply to those mechanical dispatches.
+
 ## The dispatch test (resolves the gray zone)
 
 For any action you're about to take in-chat, ask one question: **does this require Opus-grade *judgment*, or just *hands*?**
@@ -93,6 +108,10 @@ Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the r
 | 5-axis adversarial reliability review on a large diff | `Task` `subagent_type="generalPurpose"` `model="claude-4.6-sonnet-medium-thinking"` |
 
 **Smokebook dispatches:** any prompt that asks a subagent to produce a smokebook MUST reference [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](../../docs/handoff/SMOKEBOOK-TEMPLATE.md) + the fetch-don't-guess preview URL rule ([`.cursor/rules/smokebook-template.mdc`](smokebook-template.mdc)); supply the verified Vercel `branchAlias` when already known.
+
+**Bugfix dispatches:** any prompt that fixes a user-observable behavioral/visual/sync/chrome bug MUST reference [`.cursor/rules/playwright-on-fix.mdc`](playwright-on-fix.mdc) — **one named Playwright test per bug** in the same branch, enrolled in `wb-regression` when applicable, with domain **tags** from [`tests/test-tags.ts`](../../tests/test-tags.ts). Run gate via [`test-selection.mdc`](test-selection.mdc) (`test:wb-affected` inner loop; full `test:wb-sync` before `master`). Orchestrator blocks merge if the fix list has no test mapping (or an explicit documented `PLAYWRIGHT-GAP`).
+
+**Smoke dispatches:** do **not** ask Andrew to smoke until the feature **DONE** checklist in [`smoke-when-done.mdc`](smoke-when-done.mdc) passes. Smokebooks scope **human/hardware judgment only** — see [`smokebook-template.mdc`](smokebook-template.mdc).
 
 ## What in-chat tool calls in an Opus chat ARE for
 

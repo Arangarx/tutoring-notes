@@ -3,17 +3,21 @@
  */
 
 import { createRef } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MainPanel from "@/components/recording/MainPanel";
 import type { MicControlsProps } from "@/components/recording/MicControls";
+import {
+  isSessionTimeWarning,
+  SESSION_BILLING_HOUR_SECONDS,
+} from "@/lib/recording/segment-policy";
 
 function micControlsFixture(): MicControlsProps {
   return {
     meterBarRef: createRef<HTMLDivElement>(),
     devices: [],
-    selectedDeviceId: "",
-    onDeviceChange: () => {},
+    selectedPickerSlot: 0,
+    onPickMicSlot: () => {},
     gainLinear: 1,
     onGainChange: () => {},
     isLive: false,
@@ -50,7 +54,7 @@ describe("MainPanel idle/acquiring/ready", () => {
     const start = screen.getByRole("button", { name: /start recording/i });
     expect(start).toBeInTheDocument();
     expect(start).not.toBeDisabled();
-    expect(screen.getByText(/auto-save every/i)).toBeInTheDocument();
+    expect(screen.getByText(/natural pauses/i)).toBeInTheDocument();
   });
 
   test("acquiring: shows 'Connecting…' label and disables start", () => {
@@ -118,15 +122,36 @@ describe("MainPanel recording/paused", () => {
     expect(screen.getByText(/^paused$/i)).toBeInTheDocument();
   });
 
-  test("isWarning surfaces the time-left alert", () => {
-    render(
+  test("RW-B4: billing milestone banner appears in audio-record-controls when session crosses warn threshold", () => {
+    const sessionElapsed = SESSION_BILLING_HOUR_SECONDS - 60;
+    expect(isSessionTimeWarning(sessionElapsed)).toBe(true);
+
+    const { rerender } = render(
       <MainPanel
-        {...baseProps({ state: "recording", isWarning: true, elapsed: 100 })}
+        {...baseProps({
+          state: "recording",
+          isWarning: false,
+          sessionElapsed,
+          elapsed: 100,
+        })}
       />
     );
-    // role=alert is on the warning span
-    const alerts = screen.getAllByRole("alert");
-    expect(alerts.some((el) => /save & continue automatically/i.test(el.textContent || ""))).toBe(true);
+
+    const controls = screen.getByTestId("audio-record-controls");
+    expect(within(controls).queryByRole("alert")).not.toBeInTheDocument();
+
+    rerender(
+      <MainPanel
+        {...baseProps({
+          state: "recording",
+          isWarning: true,
+          sessionElapsed,
+          elapsed: 100,
+        })}
+      />
+    );
+
+    expect(within(controls).getByRole("alert")).toBeInTheDocument();
   });
 
   test("Pause/Resume/Stop/Discard each fire their handlers", async () => {

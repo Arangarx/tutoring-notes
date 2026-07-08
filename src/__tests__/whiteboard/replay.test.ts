@@ -12,6 +12,8 @@
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import {
   WB_EVENT_LOG_SCHEMA_VERSION,
+  deriveReplayPageListFromLog,
+  findActiveReplayPageIdAt,
   findLatestViewportAt,
   isSceneAffectingEvent,
   maxEventTimestampMs,
@@ -258,5 +260,55 @@ describe("viewport events (Phase 5 task 8 — replay tier-c-lite)", () => {
       viewportWidth: 1440,
       viewportHeight: 900,
     });
+  });
+
+  it("findActiveReplayPageIdAt tracks latest page-switch at or before t", () => {
+    const withPages: WBEventLog = {
+      ...log,
+      events: [
+        { t: 0, type: "snapshot", elements: [] },
+        { t: 1000, type: "page-switch", pageId: "p2", title: "Page 2" },
+        { t: 5000, type: "page-switch", pageId: "p1", title: "Page 1" },
+      ],
+    };
+    expect(findActiveReplayPageIdAt(withPages, 500)).toBeNull();
+    expect(findActiveReplayPageIdAt(withPages, 1000)).toBe("p2");
+    expect(findActiveReplayPageIdAt(withPages, 3000)).toBe("p2");
+    expect(findActiveReplayPageIdAt(withPages, 5000)).toBe("p1");
+  });
+
+  it("deriveReplayPageListFromLog seeds p1 and orders unique page-switch targets", () => {
+    const withPages: WBEventLog = {
+      ...log,
+      events: [
+        { t: 1000, type: "page-switch", pageId: "p2", title: "Page 2" },
+        { t: 5000, type: "page-switch", pageId: "p1", title: "Page 1" },
+      ],
+    };
+    const rows = deriveReplayPageListFromLog(withPages);
+    expect(rows.map((r) => r.id)).toEqual(["p1", "p2"]);
+    expect(deriveReplayPageListFromLog({ ...log, events: [] })[0]!.id).toBe("p1");
+  });
+
+  it("reconstructSceneAt ignores page-switch events (tab != scene)", () => {
+    const withPages: WBEventLog = {
+      ...log,
+      events: [
+        {
+          t: 0,
+          type: "add",
+          element: {
+            id: "a1",
+            type: "freehand",
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+          },
+        },
+        { t: 1000, type: "page-switch", pageId: "p2", title: "Page 2" },
+      ],
+    };
+    expect(reconstructSceneAt(withPages, 2000).size).toBe(1);
   });
 });

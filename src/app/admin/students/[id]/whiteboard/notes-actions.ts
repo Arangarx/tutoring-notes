@@ -22,6 +22,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db, withDbRetry } from "@/lib/db";
+import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { enqueueNotesReduce } from "@/lib/recording/notes-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
@@ -95,35 +96,48 @@ export async function kickSessionChunksAction(
  *
  * Trust: assertOwnsWhiteboardSession before enqueue.
  */
+export type TriggerNotesGenerationResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
 export async function triggerNotesGenerationAction(
   whiteboardSessionId: string
-): Promise<void> {
-  const triggerSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
-  // B1 cost gate: WAITLISTED tutors cannot trigger notes generation (OpenAI spend).
-  await assertTutorApproved(triggerSession.adminUserId);
+): Promise<TriggerNotesGenerationResult> {
+  try {
+    const triggerSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    // B1 cost gate: WAITLISTED tutors cannot trigger notes generation (OpenAI spend).
+    await assertTutorApproved(triggerSession.adminUserId);
 
-  console.log(
-    `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_generation`
-  );
-
-  // Validate session is sealed — the worker also checks, but fail fast here.
-  const session = await withDbRetry(
-    () =>
-      db.whiteboardSession.findUnique({
-        where: { id: whiteboardSessionId },
-        select: { endedAt: true },
-      }),
-    { label: "triggerNotesGenerationAction.session" }
-  );
-
-  if (!session?.endedAt) {
-    console.warn(
-      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_skip reason=session_not_sealed`
+    console.log(
+      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_generation`
     );
-    return;
-  }
 
-  await enqueueNotesReduce(whiteboardSessionId);
+    // Validate session is sealed — the worker also checks, but fail fast here.
+    const session = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { endedAt: true },
+        }),
+      { label: "triggerNotesGenerationAction.session" }
+    );
+
+    if (!session?.endedAt) {
+      console.warn(
+        `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_skip reason=session_not_sealed`
+      );
+      return { ok: false, error: "Session is not sealed yet" };
+    }
+
+    await enqueueNotesReduce(whiteboardSessionId);
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_failed err=${msg}`
+    );
+    return { ok: false, error: msg };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -437,8 +451,14 @@ export async function deleteWhiteboardSessionAndDataAction(
             where: { whiteboardSessionId },
           });
 
-          // 3. Delete WhiteboardSession (cascades: TutorNote, TranscriptChunks,
-          //    TranscriptChunkExtractions, WhiteboardJoinTokens)
+          // 3. Delete SessionConsentSnapshot (onDelete: Restrict — must delete
+          //    explicitly before the parent WhiteboardSession row).
+          await tx.sessionConsentSnapshot.deleteMany({
+            where: { whiteboardSessionId },
+          });
+
+          // 4. Delete WhiteboardSession (cascades: TutorNote, TranscriptChunks,
+          //    TranscriptChunkExtractions, WhiteboardJoinTokens, SessionParticipants)
           await tx.whiteboardSession.delete({
             where: { id: whiteboardSessionId },
           });
@@ -472,6 +492,9 @@ export type SessionReviewPayload = {
   startedAtIso: string;
   endedAtIso: string | null;
   durationSeconds: number | null;
+  billedDurationMin: number | null;
+  billedStartLocal: string | null;
+  billedEndLocal: string | null;
   hasAudio: boolean;
   /** Whiteboard event count from events.json (NOTE-1 replay gate). */
   eventCount: number;
@@ -482,6 +505,9 @@ export type SessionReviewPayload = {
     mimeType: string;
     durationSeconds: number | null;
   }>;
+  canonicalAudioBlobUrl: string | null;
+  canonicalAudioMimeType: string | null;
+  canonicalDurationSeconds: number | null;
   initialNote: TutorNoteStatusResult;
 };
 
@@ -511,8 +537,13 @@ export async function loadSessionReviewPayload(
           startedAt: true,
           endedAt: true,
           durationSeconds: true,
+          billedDurationMin: true,
+          billedStartLocal: true,
+          billedEndLocal: true,
           snapshotBlobUrl: true,
           eventsBlobUrl: true,
+          concatBlobUrl: true,
+          concatDurationSeconds: true,
           student: { select: { id: true, name: true } },
           audioRecordings: {
             select: {
@@ -565,22 +596,36 @@ export async function loadSessionReviewPayload(
     }
   }
 
+  const replayAudio = buildReplayAudioPayload({
+    whiteboardSessionId,
+    concatBlobUrl: detail.concatBlobUrl,
+    concatDurationSeconds: detail.concatDurationSeconds,
+    audioRecordings: detail.audioRecordings,
+    audience: "admin",
+  });
+
   return {
     studentName: detail.student.name,
     startedAtIso: detail.startedAt.toISOString(),
     endedAtIso: detail.endedAt?.toISOString() ?? null,
     durationSeconds: detail.durationSeconds,
-    hasAudio: detail.audioRecordings.length > 0,
+    billedDurationMin: detail.billedDurationMin,
+    billedStartLocal: detail.billedStartLocal,
+    billedEndLocal: detail.billedEndLocal,
+    hasAudio: replayAudio.hasAudio,
     eventCount,
     eventsProxyUrl: `/api/whiteboard/${whiteboardSessionId}/events`,
     snapshotProxyUrl: detail.snapshotBlobUrl
       ? `/api/whiteboard/${whiteboardSessionId}/snapshot`
       : null,
-    audioSegments: detail.audioRecordings.map((rec) => ({
-      url: `/api/audio/admin/${rec.id}`,
-      mimeType: rec.mimeType,
-      durationSeconds: rec.durationSeconds,
+    audioSegments: replayAudio.audioSegments.map((s) => ({
+      url: s.url,
+      mimeType: s.mimeType ?? "audio/webm",
+      durationSeconds: s.durationSeconds ?? null,
     })),
+    canonicalAudioBlobUrl: replayAudio.canonicalAudioBlobUrl,
+    canonicalAudioMimeType: replayAudio.canonicalAudioMimeType,
+    canonicalDurationSeconds: replayAudio.canonicalDurationSeconds,
     initialNote,
   };
 }

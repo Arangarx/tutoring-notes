@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UseAudioRecorderReturn } from "@/hooks/useAudioRecorder";
 import MicControls from "@/components/recording/MicControls";
+import { WbInlineMicMeter } from "@/components/whiteboard/chrome/WbInlineMicMeter";
 import { WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
+import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
 
 type Props = {
   audio: UseAudioRecorderReturn;
@@ -11,27 +13,10 @@ type Props = {
   onToggleMute: () => void;
   onAcquireMic: () => void | Promise<void>;
   onMicDeviceChange?: (deviceId: string) => void | Promise<void>;
+  /** Slot-aware mic pick — preferred when wired to `useLiveAV.setMicDeviceBySlot`. */
+  onPickMicSlot?: (slotIndex: number) => void | Promise<void>;
   disabled?: boolean;
 };
-
-/** Three-bar inline meter — matches session shell mock top-bar mic button. */
-function WbInlineMicMeter({ level }: { level: number }) {
-  const bars = [
-    { min: 0.05, h: "b1" },
-    { min: 0.25, h: "b2" },
-    { min: 0.55, h: "b3" },
-  ] as const;
-  return (
-    <div className="mynk-wb-mic-meter" aria-hidden>
-      {bars.map(({ min, h }) => (
-        <div
-          key={h}
-          className={`mynk-wb-mic-bar mynk-wb-mic-bar--${h}${level >= min ? " mynk-wb-mic-bar--active" : ""}`}
-        />
-      ))}
-    </div>
-  );
-}
 
 /**
  * Top-bar mic control: inline icon + 3-bar meter; device/boost/level/chime in popover.
@@ -43,6 +28,7 @@ export function WbTopBarMicControl({
   onToggleMute,
   onAcquireMic,
   onMicDeviceChange,
+  onPickMicSlot,
   disabled,
 }: Props) {
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -70,23 +56,35 @@ export function WbTopBarMicControl({
         setPopoverOpen(false);
       }
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
   }, [popoverOpen]);
 
   const handleMainClick = useCallback(async () => {
     if (disabled) return;
+    // WS-I fix: call onToggleMute (which synchronously sets tutorRecordingMutedRef)
+    // BEFORE the async acquire so the graph-build reads the correct mute intent
+    // even if the mount acquireMic completes during the await.
+    onToggleMute();
     if (!audio.isLive && !audio.localMicStream) {
       await onAcquireMic();
     }
-    onToggleMute();
   }, [audio.isLive, audio.localMicStream, disabled, onAcquireMic, onToggleMute]);
 
   const micControls = {
     meterBarRef: audio.meterBarRef,
     devices: audio.devices,
-    selectedDeviceId: audio.selectedDeviceId,
-    onDeviceChange: onMicDeviceChange ?? audio.handleDeviceChange,
+    selectedPickerSlot: audio.pickedMicSlot,
+    onPickMicSlot: (slot: number) => {
+      if (onPickMicSlot) {
+        void onPickMicSlot(slot);
+      } else if (onMicDeviceChange) {
+        const id = audio.devices[slot]?.deviceId;
+        if (id) void onMicDeviceChange(id);
+      } else {
+        void audio.handleMicSlotChange(slot);
+      }
+    },
     gainLinear: audio.gainLinear,
     onGainChange: audio.setGainLinear,
     isLive: audio.isLive,
@@ -109,7 +107,7 @@ export function WbTopBarMicControl({
         type="button"
         className={`mynk-wb-tb-btn${isMicMuted ? " mynk-wb-tb-btn--mic-off" : " mynk-wb-tb-btn--mic-on"}`}
         title={isMicMuted ? "Unmute microphone" : "Microphone — click to mute"}
-        onClick={() => void handleMainClick()}
+        onClick={(e) => afterToggleRefreshHover(e.currentTarget, handleMainClick)}
         disabled={disabled}
         data-testid="wb-topbar-mic-toggle"
       >

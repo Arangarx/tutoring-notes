@@ -10,8 +10,8 @@ function baseProps(overrides: Partial<React.ComponentProps<typeof MicControls>> 
   return {
     meterBarRef: createRef<HTMLDivElement>(),
     devices: [] as MediaDeviceInfo[],
-    selectedDeviceId: "",
-    onDeviceChange: jest.fn(),
+    selectedPickerSlot: 0,
+    onPickMicSlot: jest.fn(),
     gainLinear: 1.0,
     onGainChange: jest.fn(),
     isLive: false,
@@ -38,20 +38,20 @@ describe("MicControls", () => {
     expect(screen.getByText(/default microphone/i)).toBeInTheDocument();
   });
 
-  test("renders enumerated devices and changing fires onDeviceChange with the new id", () => {
-    const onDeviceChange = jest.fn();
+  test("renders enumerated devices and changing fires onPickMicSlot with the slot index", () => {
+    const onPickMicSlot = jest.fn();
     const devices = [
       { deviceId: "a", label: "Built-in Mic", kind: "audioinput", groupId: "g" },
       { deviceId: "b", label: "USB Mic", kind: "audioinput", groupId: "g" },
     ] as unknown as MediaDeviceInfo[];
     render(
       <MicControls
-        {...baseProps({ devices, selectedDeviceId: "a", isLive: true, onDeviceChange })}
+        {...baseProps({ devices, selectedPickerSlot: 0, isLive: true, onPickMicSlot })}
       />
     );
     const select = screen.getByRole("combobox", { name: /microphone device/i });
-    fireEvent.change(select, { target: { value: "b" } });
-    expect(onDeviceChange).toHaveBeenCalledWith("b");
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(onPickMicSlot).toHaveBeenCalledWith(1);
   });
 
   test("device picker is disabled when locked, even if devices exist", () => {
@@ -60,7 +60,7 @@ describe("MicControls", () => {
     ] as unknown as MediaDeviceInfo[];
     render(
       <MicControls
-        {...baseProps({ devices, selectedDeviceId: "a", isLive: true, lockDevice: true })}
+        {...baseProps({ devices, selectedPickerSlot: 0, isLive: true, lockDevice: true })}
       />
     );
     expect(screen.getByRole("combobox", { name: /microphone device/i })).toBeDisabled();
@@ -94,9 +94,32 @@ describe("MicControls", () => {
     expect(screen.getByRole("slider", { name: /time alert volume/i })).toBeDisabled();
   });
 
+  test("time alert volume label and interval hint use segment-policy constants", () => {
+    render(<MicControls {...baseProps()} />);
+    expect(screen.getByText("Time alert volume:")).toBeInTheDocument();
+    expect(screen.queryByText("Volume:")).toBeNull();
+    const hint = screen.getByTestId("recording-time-alert-hint");
+    expect(hint).toHaveTextContent(/5 minutes/i);
+    expect(hint).toHaveTextContent(/each hour of session time/i);
+  });
+
   test("hint text renders below the controls when provided", () => {
     render(<MicControls {...baseProps({ hint: "Mic is busy elsewhere" })} />);
     expect(screen.getByText("Mic is busy elsewhere")).toBeInTheDocument();
+  });
+
+  test("hideDevicePicker omits device select but keeps boost and chime controls", () => {
+    const devices = [
+      { deviceId: "a", label: "Built-in Mic", kind: "audioinput", groupId: "g" },
+    ] as unknown as MediaDeviceInfo[];
+    render(
+      <MicControls
+        {...baseProps({ devices, selectedPickerSlot: 0, isLive: true, hideDevicePicker: true })}
+      />
+    );
+    expect(screen.queryByTestId("mic-device-select")).toBeNull();
+    expect(screen.getByTestId("mic-gain-slider")).toBeInTheDocument();
+    expect(screen.getByTestId("recording-chime-enabled")).toBeInTheDocument();
   });
 });
 

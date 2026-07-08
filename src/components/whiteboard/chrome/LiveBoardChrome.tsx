@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import type { WbLayoutMode, WbOrientation } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import type { WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
 
@@ -26,7 +26,7 @@ export interface LiveBoardChromeProps extends LiveBoardChromeSlots {
   toolbarHidden: boolean;
   /** When `"replay"`, sets `data-mode` and replay-specific body class names. */
   chromeMode?: WbChromeMode;
-  onChromeClick?: () => void;
+  onChromeClick?: (e: MouseEvent<HTMLDivElement>) => void;
 }
 
 /**

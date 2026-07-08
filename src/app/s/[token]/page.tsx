@@ -15,6 +15,7 @@ import {
   mergeWhiteboardStubsForShareCard,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,8 @@ export default async function SharePage({
 
   // Auth gate: assertCanAccessShareLink handles revocation check + wall enforcement.
   // On wall=off (grace): passes through anonymously. On wall=on: requires session.
-  await assertCanAccessShareLink(token, `/s/${token}`);
+  const access = await assertCanAccessShareLink(token, `/s/${token}`);
+  await assertStudentNotErased(access.studentId, { salToken: token });
 
   const link = await db.shareLink.findUnique({
     where: { token },

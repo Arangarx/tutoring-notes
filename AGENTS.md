@@ -117,6 +117,15 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   writes `[wjg] wjg=<joinToken:8> wbsid=<id> action=<action> ...` — mount, key_ok,
   key_missing, sync_connect, sync_disconnect, excalidraw_api_ready, loading_cleared,
   loading_stuck, student_reload, session_ended),
+  `wtr` (waiting room — PENDING-phase overlay lifecycle; writes
+  `[wtr] wbsid=<id> role=<tutor|student> action=<action>` for:
+  `waiting_shown` (overlay first shown), `student_connected` (bothPartiesInRoom
+  flips true while PENDING), `start_clicked mode=<live|in_person>` (tutor
+  taps Start), `live_entered mode=<live|in_person>` (overlay dismissed, phase
+  flips to ACTIVE)),
+  `slc` (session lifecycle — `createWhiteboardSession` /
+  `startWhiteboardSession` / `endWhiteboardSession`; every transition writes
+  `[slc] wbsid=<id> action=session_created|session_started|session_ended ...`),
   `rol` (JWT role-refresh — auth-options jwt callback
   periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
   stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when
@@ -173,6 +182,9 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - **Chat output links use workspace-relative paths only.** Cursor's chat UI clickably resolves paths like `docs/BACKLOG.md` and `src/lib/ai.ts` but renders absolute paths (`c:/Users/...`, `/Users/...`) and `file://` URIs as plain unclickable text, breaking Andrew's workflow. Same rule applies inside any `docs/handoff/*.md` since those files are designed to be `@`-referenced in fresh chats. When citing a file, always use the workspace-relative form.
 - **Windows PowerShell: multi-line commit messages via temp file, not `-m`.** PowerShell 5.x (the default on Win10/11 without an explicit pwsh install — Andrew's setup) mangles multi-line strings, Unicode escape sequences (`\u2014`), and backtick-escaped characters when passed to `git commit -m "..."`. Safe pattern: Write the message to `.git/COMMIT_MSG_DRAFT.txt`, then `git commit -F .git/COMMIT_MSG_DRAFT.txt`, then delete the temp file in a **sequential** subsequent call (NOT a parallel tool call — a parallel `Delete` races the `commit` and the file vanishes before git reads it; this has bitten us).
 - **Composition over duplication — no bespoke code.** See [`.cursor/rules/composition-no-duplication.mdc`](.cursor/rules/composition-no-duplication.mdc) (standing architectural standard; `alwaysApply`).
+- **Playwright on every fix — no second smoke for the same bug.** Any behavioral, visual, chrome, sync, or multi-peer regression fix ships a Playwright test in the **same branch** (enrolled in `wb-regression` when applicable). Jest/jsdom does not substitute. Narrow environment-only gaps need an explicit `PLAYWRIGHT-GAP` + backlog entry — never silent omission. See [`.cursor/rules/playwright-on-fix.mdc`](.cursor/rules/playwright-on-fix.mdc) (`alwaysApply`).
+- **Selective test execution by tag.** Tagged Playwright suites + `npm run test:wb-affected` for diff-scoped runs on small branches; **full** `test:wb-sync` required before **`master`**. See [`.cursor/rules/test-selection.mdc`](.cursor/rules/test-selection.mdc) and [`tests/test-tags.ts`](tests/test-tags.ts).
+- **Andrew smokes once when DONE.** Agents complete Playwright + gates before requesting hardware smoke. See [`.cursor/rules/smoke-when-done.mdc`](.cursor/rules/smoke-when-done.mdc).
 
 ## Hard-won lessons
 
@@ -210,8 +222,15 @@ Andrew's attention is split and he frequently does not see passive prompts — a
 ### Layout / coordinates — jsdom blind spot (2026-05-30, whiteboard viewport sync)
 
 - **Coordinate and layout math is not verified in jsdom.** jsdom reports `offsetLeft`/`offsetTop` as 0 and applies transforms synchronously, so offset-contamination and version-skip bugs are **invisible** to unit tests (the buggy viewport-center formula matched the correct one for ~2 weeks). **Rule:** prove geometry on a **real browser** — on-device debug HUD, Playwright/WebKit, or tutor+student hardware — before calling viewport/sync work done.
-- **Requirement-not-code tests.** Assert the user-observable requirement via an **independent oracle** (e.g. the library's real transform), never constants back-derived from the implementation's own formula. **Canonical pattern:** vary `offsetLeft`/`offsetTop` and assert scene viewport center unchanged (offset-invariance). A green Jest suite is necessary, not sufficient, for layout.
+- **Requirement-not-code tests.** Assert the user-observable requirement via an **independent oracle** (e.g. the library's real transform), never constants back-derived from the implementation's own formula. **Canonical pattern:** vary `offsetLeft`/`offsetTop` and assert scene viewport center unchanged (offset-invariance). **Layout/chrome:** assert **relational** properties (equal inset in parent, midline alignment) — not absolute pixel positions; see [`.cursor/rules/visual-layout-oracles.mdc`](.cursor/rules/visual-layout-oracles.mdc). A green Jest suite is necessary, not sufficient, for layout.
 - **No-theater / real-render gate.** Red-before / green-after, or it does not count. Force-triggered harnesses can **mask** cadence bugs; prefer real event cadence or hardware HUD when the symptom is device-only.
+
+### Smoke-note triage anchoring + Playwright-to-spec (2026-07-03, fix-batch double-regression)
+
+In the wave5 fix batch, four smoke findings were mis-handled — two mis-scoped to the wrong surface (a top-bar note written under the *learner sign-out* test was applied to the *tutor in-session* top bar; an "End" note written under the *student-detail open-sessions* test was applied to the *in-session* End button), and two shipped as "fixed" on green Jest but **regressed on real hardware** (replay auto-play now always jumps to the scrubber end; the notes form disappeared entirely during generation).
+
+- **Lesson A — a smoke finding is `note + the test item it was written under`, never the note text alone.** Andrew anchors notes to the test where he noticed the issue. Triage MUST preserve that anchor and interpret the note *first* in the context of the test's surface. He *sometimes* files a general note under a test just because that's where he noticed it — so: (1) interpret in the test-surface context first, (2) if it's genuinely ambiguous whether the note is generic or specific to the surface-under-test, **verify with Andrew** — never resolve the ambiguity by assumption. The disambiguation is usually already encoded by placement; stripping the note out of the smokebook into a floating instruction destroys it. When dispatching a fix, the anchoring test/surface must travel with the instruction, and the orchestrator should quote the anchor back to Andrew before building.
+- **Lesson B — Playwright for everything we touch; tests to spec, never to code.** Jest/jsdom is near-worthless for this app's failure classes (replay/media timing, notes render lifecycle, layout/size) — this batch proved it: green Jest, regressed hardware, twice. Standing rule (Andrew 2026-07-03): if we touch a surface, it gets a **Playwright** test. And ALWAYS write the test to the **spec / user-observable requirement** with an independent oracle — NEVER derive it from the implementation just written (that passes by construction and proves nothing). Green Jest is necessary-not-sufficient; a real-browser/Playwright check is the gate for these classes before any fix is called done. Cross-ref **Layout / coordinates — jsdom blind spot** and **Requirement-not-code tests** above.
 
 ### In-chat model cost (Cursor UI)
 
@@ -285,6 +304,28 @@ lesson).
   run two live-stack tasks** (dev server, DB migrations,
   `npm run test:wb-sync`) against the shared services at once —
   serialize those regardless of worktree isolation.
+
+**`composer-2.5-fast` is FORBIDDEN (hard rule).** It is ~6× the cost
+of `composer-2.5` for a latency-only benefit that buys us nothing on
+this codebase. All Composer dispatches use **`composer-2.5`** — never
+`-fast`. Codified alongside the explicit-model rule below and in
+[.cursor/rules/orchestrator-discipline.mdc](.cursor/rules/orchestrator-discipline.mdc)
+§ Hard model rules.
+
+**Effort-scoped override — Whiteboard reliability floor (the Sarah
+merge, `wb-wave5-polish`).** For the whiteboard-reliability-floor
+effort (plan `whiteboard_reliability_floor_9ba650d1`), execution tier
+is **Opus by default** — a deliberate, scoped inversion of the
+"dispatch aggressively to Composer" default below, justified by the
+stakes (the live commercial session experience) and Composer's mixed
+track record on this exact A/V/recording code. Drop to `composer-2.5`
+**only** for unambiguously mechanical, zero-correctness-doubt,
+test-gated tasks (delete confirmed-dead files, pure CSS file splits
+verified by visual diff, boilerplate scaffolding). Anything touching
+A/V transport, the recording lifecycle, effect-dependency wiring, or
+layout/enumeration coupling stays on Opus. Full statement in
+[.cursor/rules/orchestrator-discipline.mdc](.cursor/rules/orchestrator-discipline.mdc)
+§ Effort-scoped override.
 
 **ALWAYS specify `model` explicitly on EVERY dispatch — including
 `resume`.** Observed 2026-05-29 (Andrew caught it): a `Task` `resume`
@@ -507,8 +548,10 @@ the always-applied authority on this.
 While the pilot is solo (just Andrew + Sarah) and there's no adversarial
 CI agent reviewing PRs automatically:
 
+- **Andrew smokes once — when the feature is DONE** ([`.cursor/rules/smoke-when-done.mdc`](.cursor/rules/smoke-when-done.mdc)). Agents own spec → implementation → **Playwright per acceptance item** → automated gates green. Andrew enters for **hardware quirks + human judgment only** — not regression re-proof. **Do not request Andrew smoke mid-wave or per-fix.**
 - Executors deliver a **smokeable branch** with the Vercel Preview URL +
-  a smoke checklist + a clear final report. Smokebooks MUST follow
+  a smoke checklist + a clear final report **after the DONE checklist passes**.
+  Smokebooks MUST follow
   [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](docs/handoff/SMOKEBOOK-TEMPLATE.md)
   (enforced by [`.cursor/rules/smokebook-template.mdc`](.cursor/rules/smokebook-template.mdc)).
   They do NOT open PRs.
@@ -520,23 +563,27 @@ CI agent reviewing PRs automatically:
   forbidden** — branch + commit + push + smoke + merge is the
   discipline; only the PR step is dropped.
 - **Whiteboard sync changes** (any file touching `src/lib/whiteboard/`,
-  `src/components/whiteboard/`, or `tests/integration/whiteboard*`) MUST
-  pass `npm run test:wb-sync` locally before `git merge --no-ff`. Pre-build
-  the local relay image once (`npm run relay:build`; requires Docker). Green
-  output proves real-browser coverage via the hermetic relay, not jsdom alone.
+  `src/components/whiteboard/`, or `tests/integration/whiteboard*`) need
+  real-browser coverage via the hermetic relay — not jsdom alone. Pre-build
+  the local relay image once (`npm run relay:build`; requires Docker).
+  - **Tagged selective gate (default inner loop, 2026-06-23).** Playwright
+    wb-regression tests carry domain tags (`@wb-graph`, `@wb-strokes`, … —
+    [`tests/test-tags.ts`](tests/test-tags.ts)). On commits and small merges,
+    run **`npm run test:wb-affected:run -- --base origin/<parent>`** (dry-run:
+    `npm run test:wb-affected`) so only adjacent/affected tags execute. Err on
+    caution — broad touches (e.g. `WhiteboardWorkspaceClient`) warrant extra
+    tags or full suite. Explicit: `npm run test:wb-playwright:tags -- @wb-graph`.
+  - **Merge to `v1-redesign` / long integration branches:** `test:wb-sync`
+    **once on the final integrated tip** before `merge --no-ff` when the branch
+    touched sync/whiteboard surfaces (existing cadence). Large stacked waves on
+    the integration branch use the full suite; per-wave relay runs are not required.
+  - **Merge to `master`:** **always full** — `npm run test:wb-sync` +
+    `npm run test:regression` + `npx next build`. No selective gate.
   - **Cadence — merge-boundary, not per-wave (Andrew 2026-06-17).** The
     ~38-min Playwright phase is a **merge gate**, not a per-commit/per-fix-wave
-    gate. On a feature branch that stacks several waves before a single
-    merge, run `test:wb-sync` **once on the final integrated tip** right
-    before `merge --no-ff` — NOT after every wave. Waves that **don't touch**
-    `src/lib/whiteboard/` / `src/components/whiteboard/` / the apply paths
-    (e.g. chrome/responsive-only, polish-only) **skip it entirely**; the jest
-    subset (`npm run test:wb-jest`, ~5s) is the inner-loop gate for those.
-    Rationale: per-wave relay runs were burning ~40 min per fix with no
-    safety gain over a single final run, and the bisect surface (only the
-    sync-touching waves on the branch) stays small. Full all-feature merges
-    into the long-running branch are NOT the right granularity — that's too
-    coarse to bisect; per-feature-branch-merge-boundary is the sweet spot.
+    gate. Waves that **don't touch** whiteboard/sync apply paths (e.g.
+    chrome/responsive-only) may use **`test:wb-affected`** only; the jest
+    subset (`npm run test:wb-jest`, ~5s) is the minimum inner-loop gate.
 - **Build-surface changes** (fonts, CSS, or build configuration — e.g.
   `src/app/fonts.ts`, `src/styles/*.css`, `eslint.config.*`, `next.config.*`,
   Tailwind/PostCSS config, `package.json` build scripts) MUST pass a real

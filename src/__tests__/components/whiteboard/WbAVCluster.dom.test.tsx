@@ -159,7 +159,7 @@ describe("WbAVCluster — Mechanism A (auto-reflow on tile count change)", () =>
       rerender(<WbAVCluster {...makeBaseProps([withVideoParticipant])} />);
     });
 
-    // Tilecount unchanged (1 remote) → Mechanism A doesn't re-fire; cluster stays locked.
+    // Tilecount unchanged but videoStream id appeared → Mechanism A re-fires for paint.
     expect(screen.getByTestId("wb-av-cluster").getAttribute("data-auto-grow")).toBeNull();
   });
 
@@ -169,11 +169,11 @@ describe("WbAVCluster — Mechanism A (auto-reflow on tile count change)", () =>
     // We verify by checking that the inline px value equals computeAutoClusterHeight(2).
     //
     // Constants from WbAVCluster:
-    //   CLUSTER_CHROME_HEIGHT = 14 + 8 + 45 = 67
-    //   PER_TILE_BODY_HEIGHT  = 280 - 67     = 213
+    //   CLUSTER_CHROME_HEIGHT = 14 + 4 = 18
+    //   PER_TILE_BODY_HEIGHT  = 280 - 18     = 262
     //   TILE_GAP              = 4
-    //   autoHeight(2)         = 67 + 2*213 + 1*4 = 497
-    const EXPECTED_2_TILE_HEIGHT = 497;
+    //   autoHeight(2)         = 18 + 2*262 + 1*4 = 546
+    const EXPECTED_2_TILE_HEIGHT = 546;
 
     const { rerender } = render(<WbAVCluster {...makeBaseProps([])} />);
 
@@ -196,7 +196,7 @@ describe("WbAVCluster — Mechanism A (auto-reflow on tile count change)", () =>
 
 describe("WbAVCluster — shrink on remote video departure (paint-reflow lock release)", () => {
   const EXPECTED_1_TILE_HEIGHT = 280;
-  const EXPECTED_2_TILE_HEIGHT = 497;
+  const EXPECTED_2_TILE_HEIGHT = 546;
 
   test("cluster returns to auto-grow and single-tile height when remote peer with video leaves", async () => {
     const remote = makeRemoteParticipant("peer-leave", true);

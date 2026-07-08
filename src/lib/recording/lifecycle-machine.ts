@@ -203,6 +203,13 @@ export type LifecycleInputs = {
    *   - `endIntent === "failed"` — terminal error; surface to UI.
    */
   endIntent?: EndIntent;
+
+  /**
+   * IN_PERSON session mode — record immediately on tutor intent with
+   * no remote peer required (treat like solo for capture gating).
+   * Fixed at session creation; host threads `sessionMode === "IN_PERSON"`.
+   */
+  inPersonMode?: boolean;
 };
 
 export type EndIntent = "stopping" | "uploading" | "done" | "failed";
@@ -405,6 +412,7 @@ export function evaluateLifecycle(inputs: LifecycleInputs): LifecycleOutputs {
     endIntent,
     participantsWithFlowingAudio,
     everHadAudioFlow = false,
+    inPersonMode,
   } = inputs;
 
   // Step 1: end-session lifecycle takes precedence.
@@ -424,6 +432,11 @@ export function evaluateLifecycle(inputs: LifecycleInputs): LifecycleOutputs {
 
   // Step 3: tutor solo mode (no live sync).
   if (!syncEnabled) {
+    return finalize("recording", undefined, undefined, inputs);
+  }
+
+  // Step 3b: IN_PERSON — record immediately on tutor intent (no remote peer needed).
+  if (inPersonMode) {
     return finalize("recording", undefined, undefined, inputs);
   }
 
@@ -587,8 +600,12 @@ export function derivePresentation(
     participants: ReadonlySet<string>;
     everHadParticipants: boolean;
     syncEnabled: boolean;
+    /** True when sync roster reports ≥1 student peer (relay), even if WebRTC is dead. */
+    syncRosterHasStudent?: boolean;
     pausedReason?: PausedReason;
     armedReason?: ArmedReason;
+    /** IN_PERSON mode — show red Recording pill even with zero participants. */
+    inPersonMode?: boolean;
   }
 ): LifecyclePresentation {
   const { tutorWantsRecording, participants, everHadParticipants, syncEnabled } = ctx;
@@ -608,7 +625,7 @@ export function derivePresentation(
   }
 
   if (out.state === "recording") {
-    if (participants.size === 0) {
+    if (participants.size === 0 && !ctx.inPersonMode) {
       // Solo rehearsal: hook is hot but no peer in the room (the
       // soloEnabled grace window).
       return {
@@ -684,6 +701,20 @@ export function derivePresentation(
         bannerMessage:
           "We're offline — recording is paused. We'll resume automatically when the connection comes back.",
         pillLabel: "Auto-paused (offline)",
+        pillColor: "amber",
+      };
+    }
+    if (
+      pausedReason === "all_participants_disconnected" &&
+      ctx.syncRosterHasStudent
+    ) {
+      return {
+        recordingActive: false,
+        autoPaused: true,
+        awaitingStart: false,
+        bannerMessage:
+          "Audio/video not connected — recording paused until the call connects.",
+        pillLabel: "Auto-paused (A/V reconnecting)",
         pillColor: "amber",
       };
     }

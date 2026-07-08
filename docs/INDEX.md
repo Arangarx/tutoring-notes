@@ -2,7 +2,7 @@
 
 > **Start here.** This is the single entry point for any new chat, agent, or human picking up work in this repo. Every canonical doc, spoke doc, and smoke runbook is mapped below by topic. For the curated reading-list with in-depth framing, see `AGENTS.md § Key docs`.
 >
-> Last updated: 2026-06-07 (whiteboard chrome design pass + INDEX entry).
+> Last updated: 2026-07-01 (Sarah merge gate + Part 3 spine index entries).
 
 ---
 
@@ -23,6 +23,8 @@ Bar to archive a doc or section: **(a)** its still-valid content is provably cap
 | Doc | What's in it | When to read |
 |---|---|---|
 | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | Canonical wave-by-wave sequencing from solo-tutor reliability floor to Aug 2026 university-pitch readiness. Re-validate quarterly or after major Sarah feedback. | Start of any session where you're deciding what to work on next |
+| [docs/handoff/ORCHESTRATOR-STATE.md](docs/handoff/ORCHESTRATOR-STATE.md) | **Living orchestrator bootstrap** — current branch/tip, Sarah merge gate, execution order, Part 3 spine status, session-experience build status | **Every fresh orchestrator chat — read HEAD first** |
+| [../../../../../.cursor/plans/whiteboard_reliability_remaining_b082882.plan.md](../../../../../.cursor/plans/whiteboard_reliability_remaining_b082882.plan.md) | **Active Sarah-merge plan** — full live-session arc gate, no interim merge; Parts 1–3 + consent/erasure on `wb-wave5-polish` | When sequencing whiteboard reliability work or confirming merge discipline |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Pilot feedback items, known follow-ups, reliability gaps audit (Axes 1–5), security recon results, and deferred phase notes | Whenever triaging new work, checking reliability posture, or looking for a deferred item |
 
 ---
@@ -41,6 +43,7 @@ Bar to archive a doc or section: **(a)** its still-valid content is provably cap
 |---|---|---|
 | [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) | **Must-read gate.** Three-pillar FSM + outbox + atomic end-session; end-session flow diagram; Phase 1c surfaces (snapshot PNG, preview-before-Start); per-session ID registry (`rid`, `wbsid`, `obx`, `snp`, `pvw`, `avx`, …) | Before touching `lifecycle-machine.ts`, `upload-outbox.ts`, `endWhiteboardSession`, or workspace `handleEndSession` |
 | [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) | Current whiteboard build status, guardrails, adversarial review, demo gate, sync-host deploy notes | Before any whiteboard feature work or smoke pass |
+| [docs/handoff/ORCHESTRATOR-STATE.md](docs/handoff/ORCHESTRATOR-STATE.md) § Session-experience build status + Current Wave focus | **Part 3 reliability spine** — enumerated `p3-*` todos, built vs unbuilt pipeline, spike branch pointer | Before Part 3 execution or when checking what's already shipped on `wb-wave5-polish` |
 | [docs/handoff/whiteboard-chrome-requirements.md](docs/handoff/whiteboard-chrome-requirements.md) | **Custom Mynk whiteboard chrome** — LOCKED decision, 63 Sarah UX requirements (toolbar, properties, defaults, mobile incl. TM-09), feasibility tags | Before any Excalidraw UI replacement work |
 | [docs/handoff/whiteboard-chrome-design-2026-06-07.md](docs/handoff/whiteboard-chrome-design-2026-06-07.md) | **Whiteboard chrome design (ratified 2026-06-07)** — hybrid tutor layout, architecture, fork resolutions, Phase 0–3 phasing + POC gate, sync invariants | Before building Phase 1 tutor-desktop chrome or reviewing POC results |
 | [docs/LIVE-AV.md](docs/LIVE-AV.md) | Live A/V architecture cheat sheet — peer-mesh, signaling, `useLiveAV`, `mic-recorder-audio`, participants-reconcile effect | Before touching `peer-mesh.ts`, `useLiveAV.ts`, `mic-recorder-audio.ts`, or anything claiming to "simplify" peer connection or audio recording |

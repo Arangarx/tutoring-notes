@@ -609,7 +609,7 @@ describe("settings page — 2FA card links to canonical management route", () =>
       "../app/admin/settings/page.tsx"
     );
     const content = fs.readFileSync(settingsPagePath, "utf-8");
-    expect(content).toContain('href="/admin/settings/2fa"');
-    expect(content).not.toContain('href="/admin/settings/2fa/setup"');
+    expect(content).toMatch(/href:\s*["']\/admin\/settings\/2fa["']/);
+    expect(content).not.toMatch(/href:\s*["']\/admin\/settings\/2fa\/setup["']/);
   });
 });

@@ -69,6 +69,32 @@ enum TutorApprovalStatus {
   APPROVED
 }
 
+enum SessionPhase {
+  PENDING
+  ACTIVE
+}
+
+enum SessionMode {
+  LIVE
+  IN_PERSON
+}
+
+/// Erasure job scope — learner profile or full account-holder family.
+enum ErasureScopeKind {
+  learner_profile
+  account_holder
+}
+
+/// Resumable erasure state machine phases (see docs/handoff/learner-erasure-plan.md §4.1).
+enum ErasureJobStatus {
+  requested
+  blobs_purging
+  db_scrubbing
+  completed
+  failed
+  canceled
+}
+
 model Student {
   id                      String              @id @default(uuid())
   name                    String
@@ -81,12 +107,9 @@ model Student {
   adminUser               AdminUser?          @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   /**
    * Per-student default for the whiteboard "Start recording" toggle
-   * (Sarah, Apr 2026 pilot ask): some students decline recording, so
-   * the workspace should remember that and show Start unticked for
-   * them next time. The tutor can still flip it per session — this is
-   * just the initial state. Defaults to true so the existing behavior
-   * is unchanged for current students until a tutor explicitly opts
-   * one out.
+   * DEPRECATED (PRESARAH-1, 2026-07): per-student "start recording by
+   * default" toggle removed — recording intent is always armed from
+   * session activation. Column retained for additive-migration rule.
    */
   recordingDefaultEnabled Boolean             @default(true)
   /// When true: this student was created by the dev-tools fixture dashboard
@@ -107,6 +130,8 @@ model Student {
   learnerProfileId String?
   learnerProfile   LearnerProfile?      @relation(fields: [learnerProfileId], references: [id], onDelete: SetNull)
   claimInvites     StudentClaimInvite[]
+  /// Set during erasure db_scrubbing; route guards check this (M-4).
+  erasedAt         DateTime?
 
   /// IAC-2: per-tutor uniqueness — a tutor cannot link the same learner profile twice;
   /// a second tutor can link the same profile under their own adminUserId.
@@ -224,7 +249,8 @@ model SessionRecording {
    * Capture-stream identifier (Phase 1b — Pillar 2). Today the only
    * value in production is `"tutor:mic"`; Phase 4 will add
    * `"student:peer-<id>:mic"` rows for live student audio capture and
-   * (later) `"tutor:cam"` / `"student:peer-<id>:cam"` for video.
+   * (post-Sarah design seam) `"tutor:video"` / `"student:peer-<id>:video"` —
+   * see `docs/RECORDER-LIFECYCLE.md` § Video capture — design seam (NOT built).
    * The default backfills every pre-Phase-1b row to `"tutor:mic"` so
    * existing recordings show up as a single tutor stream in replay,
    * which matches the pre-Phase-1b mental model exactly. Multi-stream
@@ -250,6 +276,9 @@ model SessionRecording {
    * compatibility (queries that don't filter by streamId).
    */
   @@index([whiteboardSessionId, streamId])
+  @@unique([whiteboardSessionId, orderIndex])
+  /// WS-A SF-1: close dup-row race between onSegmentUploaded and end-session createMany.
+  @@unique([whiteboardSessionId, blobUrl])
 }
 
 /**
@@ -285,6 +314,11 @@ model WhiteboardSession {
   endedAt         DateTime?
   durationSeconds Int?
 
+  sessionPhase SessionPhase @default(PENDING)
+  sessionMode  SessionMode  @default(LIVE)
+  /// When tutor clicked Start (PENDING→ACTIVE); null while pending.
+  activatedAt  DateTime?
+
   /**
    * Guardrail #4 — tutor checked the consent box before starting.
    * Server-action enforces this on create, the workspace page
@@ -316,6 +350,21 @@ model WhiteboardSession {
    * a snapshot failure to block the events.json upload.
    */
   snapshotBlobUrl String?
+
+  /**
+   * WS-G — server-side FFmpeg concat of mixdown replay segments into one
+   * seamless WebM blob. Nullable until the post-finalize `after()` job
+   * completes; when absent or failed, replay falls back to multi-segment
+   * `SessionRecording` rows (no audio lost).
+   */
+  concatBlobUrl String?
+
+  /**
+   * WS-G — duration of `concatBlobUrl` in whole seconds (from ffmpeg probe
+   * after re-encode). Feeds replay scrubber / WS-L duration path when the
+   * canonical concat blob is used.
+   */
+  concatDurationSeconds Int?
 
   /**
    * Sarah's explicit ask (blocker #24): session timer that starts when
@@ -374,12 +423,63 @@ model WhiteboardSession {
   /// B2: frozen consent snapshot at session start (legal record).
   consentSnapshot SessionConsentSnapshot?
 
+  /// WS-J — rounding rule locked at session start (copied from AdminUser defaults).
+  roundingIncrementMin Int?
+  roundingMode         String?
+
+  /// WS-J — frozen billable display at session close (immutable once set).
+  billedDurationMin Int?
+  billedStartLocal  String?
+  billedEndLocal    String?
+  sessionDateLocal  String?
+  /// IANA timezone frozen at close (copied at start, resolved with fallback at close).
+  tutorTimezone     String?
+
+  sessionParticipants SessionParticipant[]
+
+  /// WS-B: cursor for ~1s live event-batch persistence (wave 0).
+  lastPersistedBatchSeq Int @default(0)
+  lastPersistedToIndex  Int @default(-1)
+
+  whiteboardEventBatches WhiteboardEventBatch[]
+
   createdAt  DateTime    @default(now())
   costEvents CostEvent[]
 
   @@index([adminUserId])
   @@index([studentId])
   @@index([noteId])
+}
+
+/// ~1s batched whiteboard event persistence (WS-B, wave 0).
+model WhiteboardEventBatch {
+  id                  String            @id @default(cuid())
+  whiteboardSessionId String
+  whiteboardSession   WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  batchSeq            Int
+  fromEventIndex      Int
+  toEventIndex        Int
+  eventsJson          Json
+  /// Required on every batch for multi-page recovery.
+  boardDocumentJson   Json
+  schemaVersion       Int
+  createdAt           DateTime          @default(now())
+
+  @@unique([whiteboardSessionId, batchSeq])
+  @@index([whiteboardSessionId, createdAt])
+  @@index([whiteboardSessionId, toEventIndex])
+}
+
+model SessionParticipant {
+  id                  String            @id @default(uuid())
+  whiteboardSessionId String
+  whiteboardSession   WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  learnerProfileId    String
+  learnerProfile      LearnerProfile    @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  joinedAt            DateTime          @default(now())
+  leftAt              DateTime?
+
+  @@unique([whiteboardSessionId, learnerProfileId])
 }
 
 /**
@@ -409,6 +509,15 @@ model TranscriptChunk {
    * pending | transcribing | done | failed — see TranscriptChunkStatus in transcript-types.ts
    */
   status                String
+  /**
+   * Capture-stream identifier — mirrors SessionRecording.streamId.
+   * Defaults to tutor mic for backward compatibility with pre-per-speaker rows.
+   */
+  streamId              String    @default("tutor:mic")
+  /**
+   * Optional per-speaker label (e.g. peer id) for future per-lane transcription.
+   */
+  speakerId             String?
   transcribedAt         DateTime?
   error                 String?
   /**
@@ -424,6 +533,7 @@ model TranscriptChunk {
 
   @@unique([sessionId, chunkBlobUrl])
   @@index([sessionId, recordingTimeOffsetMs])
+  @@index([sessionId, streamId])
   @@index([status, updatedAt])
 }
 
@@ -480,6 +590,12 @@ model TutorNote {
   error       String?
   generatedAt DateTime?
   createdAt   DateTime  @default(now())
+
+  /// WS-K: watermark — number of done chunks included in the last live reduce.
+  /// Used at End to decide if a final LLM call is needed (fast-path skip).
+  lastReducedChunkCount Int      @default(0)
+  /// WS-K: timestamp of last live reduce. Used for time-based debounce in enqueueLiveReduce.
+  lastLiveReduceAt      DateTime?
 
   session WhiteboardSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
@@ -600,6 +716,12 @@ model AdminUser {
   consentRecords          ConsentRecord[]        @relation("TutorConsentRecords")
   /// Trusted-browser records for 30-day 2FA login skip. ADDITIVE ONLY.
   trustedDevices          AdminTrustedDevice[]
+
+  /// WS-J — tutor billing defaults for new sessions (copied onto session at start).
+  defaultRoundingIncrementMin Int?
+  defaultRoundingMode         String?
+  /// IANA timezone for billing local-time display (e.g. America/Denver).
+  tutorTimezone               String?
 }
 
 /// TOTP 2FA enrollment for AdminUser accounts (Identity Phase 1).
@@ -870,6 +992,7 @@ model LearnerProfile {
   consentRecords  ConsentRecord[]
   /// B2: optional child-narrowing restrictions (defaults all-false = no restrictions).
   consentRestriction ConsentRestriction?
+  sessionParticipants SessionParticipant[]
 
   @@index([accountHolderId])
 }
@@ -888,6 +1011,8 @@ model LearnerCredential {
   username         String
   /// bcrypt hash of the learner's PIN or password.
   secretHash       String
+  /// Soft-disable during erasure grace (Option A reversible tombstone); login fail-closed when true.
+  disabled         Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -1095,4 +1220,30 @@ model SessionConsentSnapshot {
   consentRecordId           String?
   consentRecordVersion      Int?
   frozenAt                  DateTime          @default(now())
+}
+
+/// Resumable learner/family right-to-erasure job (E1).
+/// Tombstone runs in `requested`; blob purge must not start until purgeEligibleAt (7-day grace).
+/// scopeId is a plain indexed string (LP or AH id) — no FK because targets are tombstoned, not deleted.
+/// Partial unique index erasure_job_active_scope (one active job per scope) is in migration SQL — Prisma cannot express WHERE.
+model ErasureJob {
+  id                   String            @id @default(uuid())
+  scopeKind            ErasureScopeKind
+  scopeId              String
+  status               ErasureJobStatus  @default(requested)
+  requestedAt          DateTime          @default(now())
+  /// Principal kind + opaque id, e.g. "admin:<uuid>" (v1 admin-only trigger).
+  requestedByPrincipal String
+  /// requestedAt + 7 days — worker must not advance past requested until now() >= this.
+  purgeEligibleAt      DateTime
+  blobInventoryJson    Json?
+  blobsDeletedJson     Json?
+  lastError            String?
+  completedAt          DateTime?
+  canceledAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([scopeKind, scopeId])
+  @@index([status, purgeEligibleAt])
 }

@@ -20,7 +20,7 @@
  */
 
 import "fake-indexeddb/auto";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 
 import {
   useWhiteboardRecorder,
@@ -284,6 +284,32 @@ describe("useWhiteboardRecorder", () => {
     expect(secondExtras?.page?.activePageId).toBe("p2");
   });
 
+  test("recordPageSwitch appends page-switch WBEvent with pageId (selectTutorPage contract)", () => {
+    jest.useFakeTimers();
+    const bag: Bag = { now: 0 };
+    const { result, rerender } = renderHook((p: { active: boolean }) =>
+      useWhiteboardRecorder(defaultProps(bag, { recordingActive: p.active }))
+    , { initialProps: { active: false } });
+
+    act(() => {
+      rerender({ active: true });
+    });
+
+    bag.now = 2500;
+    act(() => {
+      result.current.recordPageSwitch("p2", "Page 2");
+    });
+
+    const log = JSON.parse(result.current.buildFinalEventsJson()) as WBEventLog;
+    const sw = log.events.find((e) => e.type === "page-switch");
+    expect(sw).toEqual({
+      t: 2500,
+      type: "page-switch",
+      pageId: "p2",
+      title: "Page 2",
+    });
+  });
+
   test("on→off transition emits a pause marker and flushes pending diff at the right t", () => {
     jest.useFakeTimers();
     const bag: Bag = { now: 0 };
@@ -311,8 +337,7 @@ describe("useWhiteboardRecorder", () => {
     expect(types[types.length - 1]).toBe("pause");
   });
 
-  test("ingestRemote tags peerId on add events (replay attribution)", () => {
-    jest.useFakeTimers();
+  test("ingestRemote tags peerId on add events (replay attribution)", async () => {
     const bag: Bag = { now: 0 };
     const { result, rerender } = renderHook((p: { active: boolean }) =>
       useWhiteboardRecorder(defaultProps(bag, { recordingActive: p.active }))
@@ -321,6 +346,11 @@ describe("useWhiteboardRecorder", () => {
       rerender({ active: true });
     });
 
+    await waitFor(() => {
+      expect(result.current.checkpointMountResolved).toBe(true);
+    });
+
+    jest.useFakeTimers();
     bag.now = 1000;
     act(() => {
       result.current.ingestRemote("student-peer", [makeRect("s1", 0, 0)]);
@@ -464,6 +494,40 @@ describe("useWhiteboardRecorder", () => {
     expect(result.current.resumePrompt).toBeNull();
   });
 
+  test("new session URL does not offer cross-session IndexedDB recovery", async () => {
+    const OLD_SESSION = "wb-session-old";
+    await saveCheckpoint({
+      kind: "whiteboard",
+      ownerKey: whiteboardOwnerKey(ADMIN, STUDENT, OLD_SESSION),
+      sessionId: OLD_SESSION,
+      adminUserId: ADMIN,
+      studentId: STUDENT,
+      startedAt: "2026-06-24T11:32:45.000Z",
+      schemaVersion: 1,
+      payload: {
+        log: {
+          schemaVersion: 1,
+          startedAt: "2026-06-24T11:32:45.000Z",
+          durationMs: 1_807_000,
+          events: [{ t: 0, type: "snapshot", elements: [] }],
+        },
+      },
+    });
+
+    const bag: Bag = { now: 0 };
+    const { result } = renderHook(() =>
+      useWhiteboardRecorder(
+        defaultProps(bag, { whiteboardSessionId: "wb-session-fresh" })
+      )
+    );
+
+    await act(async () => {
+      await flushIDB();
+    });
+
+    expect(result.current.resumePrompt).toBeNull();
+  });
+
   test("markPersisted clears the IDB checkpoint", async () => {
     jest.useFakeTimers();
     const bag: Bag = { now: 0 };
@@ -504,5 +568,62 @@ describe("useWhiteboardRecorder", () => {
       whiteboardOwnerKey(ADMIN, STUDENT, SESSION)
     );
     expect(after).toBeNull();
+  });
+
+  test("defers remote ingest until Section F completes (hydrate/sync ordering guard)", async () => {
+    const bag: Bag = { now: 0 };
+    let remoteCb:
+      | ((
+          peerId: string,
+          elements: ReadonlyArray<ExcalidrawLikeElement>
+        ) => void)
+      | null = null;
+    const sync: WhiteboardSyncClientLike = {
+      isConnected: () => true,
+      onConnect: (cb) => {
+        cb();
+        return () => {};
+      },
+      onDisconnect: () => () => {},
+      onRemoteScene: (cb) => {
+        remoteCb = cb;
+        return () => {
+          remoteCb = null;
+        };
+      },
+      broadcastScene: () => {},
+    };
+
+    const { result } = renderHook(() =>
+      useWhiteboardRecorder(
+        defaultProps(bag, { recordingActive: true, sync })
+      )
+    );
+
+    expect(result.current.checkpointMountResolved).toBe(false);
+    act(() => {
+      remoteCb?.("student-peer", [makeRect("deferred-s1", 0, 0)]);
+    });
+
+    let log = JSON.parse(result.current.buildFinalEventsJson()) as WBEventLog;
+    const addBeforeMount = log.events.find(
+      (e) => e.type === "add" && e.element.id === "deferred-s1"
+    );
+    expect(addBeforeMount).toBeUndefined();
+
+    await waitFor(() => {
+      expect(result.current.checkpointMountResolved).toBe(true);
+    });
+
+    jest.useFakeTimers();
+    act(() => {
+      jest.advanceTimersByTime(120);
+    });
+    log = JSON.parse(result.current.buildFinalEventsJson()) as WBEventLog;
+    const addAfterMount = log.events.find(
+      (e) => e.type === "add" && e.element.id === "deferred-s1"
+    );
+    expect(addAfterMount).toBeDefined();
+    jest.useRealTimers();
   });
 });

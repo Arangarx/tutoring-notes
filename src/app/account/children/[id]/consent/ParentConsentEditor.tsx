@@ -14,7 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  AUDIO_RECORDING_CONSENT_COPY,
+  LIVE_SESSION_CONSENT_COPY,
+} from "@/lib/consent-toggle-copy";
 import { cn } from "@/lib/utils";
+
+import { saveParentConsentAction } from "./actions";
 
 export type TutorConsentState = {
   adminUserId: string;
@@ -23,12 +29,14 @@ export type TutorConsentState = {
   allowLiveSession: boolean;
   allowAudioRecording: boolean;
   allowWhiteboardRecording: boolean;
+  /** Dormant — retained in schema; hidden from UI pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
   allowNoteSending: boolean;
 };
 
 export type ConsentRestrictionState = {
   restrictAudioRecording: boolean;
   restrictWhiteboardRecording: boolean;
+  /** Dormant — paired with allowNoteSending; hidden pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
   restrictNoteSending: boolean;
 };
 
@@ -47,31 +55,13 @@ type PermissionToggleDef = {
 const PERMISSION_TOGGLES: ReadonlyArray<PermissionToggleDef> = [
   {
     key: "allowLiveSession",
-    label: "Allow live sessions",
-    description:
-      "Your child joins real-time whiteboard tutoring with this tutor — the core reason you use Mynk.",
+    ...LIVE_SESSION_CONSENT_COPY,
     emphasis: "critical",
   },
   {
     key: "allowAudioRecording",
-    label: "Allow audio recording",
-    description:
-      "Captures what was said so session notes reflect the actual lesson, not just what appeared on the board.",
+    ...AUDIO_RECORDING_CONSENT_COPY,
     emphasis: "recommended",
-  },
-  {
-    key: "allowWhiteboardRecording",
-    label: "Allow whiteboard replay",
-    description:
-      "Saves every stroke so you and your child can revisit the work later — most families want this on.",
-    emphasis: "recommended",
-  },
-  {
-    key: "allowNoteSending",
-    label: "Allow session notes email",
-    description:
-      "Session summary notes can be emailed to you after each session.",
-    emphasis: "standard",
   },
 ];
 
@@ -88,12 +78,6 @@ const RESTRICTION_TOGGLES = [
     description:
       "Applies to every tutor. If checked, you cannot replay saved whiteboard sessions even when a tutor's setting above is on.",
   },
-  {
-    key: "restrictNoteSending" as const,
-    label: "Always block session notes email",
-    description:
-      "Applies to every tutor. If checked, summary emails are not sent even when a tutor's setting above is on.",
-  },
 ] satisfies ReadonlyArray<{
   key: keyof ConsentRestrictionState;
   label: string;
@@ -101,19 +85,23 @@ const RESTRICTION_TOGGLES = [
 }>;
 
 type ParentConsentEditorProps = {
+  learnerProfileId: string;
   learnerName: string;
   tutors: TutorConsentState[];
   restrictions: ConsentRestrictionState;
 };
 
 export function ParentConsentEditor({
+  learnerProfileId,
   learnerName,
   tutors,
   restrictions: initialRestrictions,
 }: ParentConsentEditorProps) {
   const [tutorStates, setTutorStates] = useState(tutors);
   const [restrictions, setRestrictions] = useState(initialRestrictions);
-  const [previewSaved, setPreviewSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function updateTutorToggle(
     adminUserId: string,
@@ -123,7 +111,7 @@ export function ParentConsentEditor({
     setTutorStates((prev) =>
       prev.map((t) => (t.adminUserId === adminUserId ? { ...t, [key]: checked } : t))
     );
-    setPreviewSaved(false);
+    setSaved(false);
   }
 
   function updateRestriction(
@@ -131,11 +119,51 @@ export function ParentConsentEditor({
     checked: boolean
   ) {
     setRestrictions((prev) => ({ ...prev, [key]: checked }));
-    setPreviewSaved(false);
+    setSaved(false);
   }
 
-  function handlePreviewSave() {
-    setPreviewSaved(true);
+  async function handleSave() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await saveParentConsentAction(learnerProfileId, {
+        tutors: tutorStates.map(
+          ({
+            adminUserId,
+            allowLiveSession,
+            allowAudioRecording,
+            allowWhiteboardRecording,
+            allowNoteSending,
+          }) => ({
+            adminUserId,
+            allowLiveSession,
+            allowAudioRecording,
+            allowWhiteboardRecording,
+            allowNoteSending,
+          })
+        ),
+        restrictions,
+      });
+
+      if (!result.ok) {
+        setError(result.error ?? "save_failed");
+        return;
+      }
+
+      if (result.tutorVersions) {
+        setTutorStates((prev) =>
+          prev.map((tutor) => ({
+            ...tutor,
+            version: result.tutorVersions![tutor.adminUserId] ?? tutor.version,
+          }))
+        );
+      }
+      setSaved(true);
+    } catch {
+      setError("network");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (tutors.length === 0) {
@@ -255,21 +283,41 @@ export function ParentConsentEditor({
       <div className="space-y-3 border-t border-border pt-4">
         <Button
           type="button"
+          data-testid="parent-consent-save-btn"
           variant="accent"
           className="w-full min-h-11 sm:w-auto"
-          onClick={handlePreviewSave}
+          onClick={() => void handleSave()}
+          disabled={busy}
+          aria-busy={busy}
         >
-          Save privacy preferences
+          {busy ? "Saving…" : "Save privacy preferences"}
         </Button>
 
-        <Alert className="rounded-[10px] border-dashed">
-          <AlertTitle>Preview only</AlertTitle>
-          <AlertDescription>
-            {previewSaved
-              ? "Changes were not saved — this page is visual-first. Wire to POST /api/account/children/[id]/consent when ready."
-              : "Saving is not wired yet. Toggles reflect loaded data for review; backend route is deferred (B2 Step 6)."}
-          </AlertDescription>
-        </Alert>
+        {saved ? (
+          <Alert
+            data-testid="parent-consent-saved-alert"
+            className="rounded-[10px] border-accent/30 bg-accent-soft"
+          >
+            <AlertTitle>Preferences saved</AlertTitle>
+            <AlertDescription>
+              Your privacy choices are saved. New tutoring sessions will use
+              these settings.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {error ? (
+          <Alert className="rounded-[10px] border-destructive/30" role="alert">
+            <AlertTitle>Could not save</AlertTitle>
+            <AlertDescription>
+              {error === "network"
+                ? "Network error — please try again."
+                : error === "consent_already_saved"
+                  ? "Preferences were already saved. Refresh the page and try again."
+                  : "Something went wrong saving your preferences. Please try again."}
+            </AlertDescription>
+          </Alert>
+        ) : null}
       </div>
     </div>
   );
@@ -348,6 +396,7 @@ function PermissionToggleRow({
         </div>
         <Switch
           id={inputId}
+          data-testid={`parent-consent-toggle-${tutor.adminUserId}-${perm.key}`}
           checked={tutor[perm.key]}
           onCheckedChange={onToggle}
           aria-label={perm.label}

@@ -103,6 +103,8 @@ describe("enqueueChunkTranscribe", () => {
       chunkBlobUrl: JOB.chunkBlobUrl,
       recordingTimeOffsetMs: JOB.recordingTimeOffsetMs,
       status: "pending",
+      streamId: "tutor:mic",
+      speakerId: null,
     });
     expect(mockProcessChunkTranscribeJob).toHaveBeenCalledWith(JOB);
     expect(callOrder).toEqual(["upsert", "worker"]);
@@ -172,7 +174,27 @@ describe("enqueueChunkTranscribe", () => {
     await enqueueChunkTranscribe(jobWithoutOffset);
 
     expect(mockUpsertTranscriptChunk).toHaveBeenCalledWith(
-      expect.objectContaining({ recordingTimeOffsetMs: 0, status: "pending" })
+      expect.objectContaining({
+        recordingTimeOffsetMs: 0,
+        status: "pending",
+        streamId: "tutor:mic",
+        speakerId: null,
+      })
+    );
+  });
+
+  test("passes explicit streamId and speakerId to pending upsert", async () => {
+    await enqueueChunkTranscribe({
+      ...JOB,
+      streamId: "student:peer-abc:mic",
+      speakerId: "peer-abc",
+    });
+
+    expect(mockUpsertTranscriptChunk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        streamId: "student:peer-abc:mic",
+        speakerId: "peer-abc",
+      })
     );
   });
 

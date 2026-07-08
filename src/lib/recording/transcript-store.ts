@@ -25,6 +25,9 @@ export type UpsertTranscriptChunkInput = {
   chunkBlobUrl: string;
   recordingTimeOffsetMs: number;
   status: TranscriptChunkStatus;
+  /** Defaults to tutor:mic when omitted — backward compatible with pre-per-speaker callers. */
+  streamId?: string;
+  speakerId?: string | null;
   transcript?: string;
   durationMs?: number | null;
   error?: string | null;
@@ -78,8 +81,20 @@ function logTnt(
 export async function upsertTranscriptChunk(
   input: UpsertTranscriptChunkInput
 ): Promise<TranscriptChunk> {
-  const { sessionId, chunkBlobUrl, recordingTimeOffsetMs, status, ...rest } = input;
-  logTxc(sessionId, "upsert", { offsetMs: recordingTimeOffsetMs, status });
+  const {
+    sessionId,
+    chunkBlobUrl,
+    recordingTimeOffsetMs,
+    status,
+    streamId = "tutor:mic",
+    speakerId = null,
+    ...rest
+  } = input;
+  logTxc(sessionId, "upsert", {
+    offsetMs: recordingTimeOffsetMs,
+    status,
+    streamId,
+  });
 
   return withDbRetry(
     () =>
@@ -92,6 +107,8 @@ export async function upsertTranscriptChunk(
           chunkBlobUrl,
           recordingTimeOffsetMs,
           status,
+          streamId,
+          speakerId,
           transcript: rest.transcript ?? "",
           durationMs: rest.durationMs ?? undefined,
           error: rest.error ?? undefined,
@@ -101,6 +118,8 @@ export async function upsertTranscriptChunk(
         update: {
           recordingTimeOffsetMs,
           status,
+          streamId,
+          speakerId,
           ...(rest.transcript !== undefined ? { transcript: rest.transcript } : {}),
           ...(rest.durationMs !== undefined ? { durationMs: rest.durationMs } : {}),
           ...(rest.error !== undefined ? { error: rest.error } : {}),
@@ -276,7 +295,7 @@ export async function getTutorNoteBySessionId(sessionId: string): Promise<TutorN
 
 export async function updateTutorNote(
   sessionId: string,
-  data: Pick<Prisma.TutorNoteUpdateInput, "status" | "content" | "isPartial" | "error" | "generatedAt">
+  data: Pick<Prisma.TutorNoteUpdateInput, "status" | "content" | "isPartial" | "error" | "generatedAt" | "lastReducedChunkCount" | "lastLiveReduceAt">
 ): Promise<TutorNote> {
   const action =
     data.status === "done"

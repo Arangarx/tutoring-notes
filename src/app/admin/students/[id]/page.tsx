@@ -11,8 +11,8 @@ import { ShareLinkRow } from "./ShareLinkRow";
 import { SubmitButton } from "@/components/SubmitButton";
 import NoteEntrySection from "./NoteEntrySection";
 import { ActiveWhiteboardSessionsList } from "./whiteboard/ActiveWhiteboardSessionsList";
+import { EndedUnsavedSessionsList } from "./whiteboard/EndedUnsavedSessionsList";
 import { StartWhiteboardSession } from "./whiteboard/StartWhiteboardSession";
-import { StudentRecordingDefaultToggle } from "./StudentRecordingDefaultToggle";
 import { env } from "@/lib/env";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { getRequestBaseUrl } from "@/lib/public-url";
@@ -23,7 +23,10 @@ import {
   StudentDetailShell,
   defaultIcons,
 } from "@/components/admin/StudentDetailShell";
+import { StudentErasurePendingBanner } from "@/components/admin/StudentErasureStatus";
 import { StudentOverflowActions } from "@/components/admin/StudentOverflowActions";
+import { deriveStudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
+import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
 
 export const dynamic = "force-dynamic";
 
@@ -83,9 +86,17 @@ export default async function StudentDetailPage({
       learnerProfile: {
         select: {
           id: true,
+          isSelfLearner: true,
           displayName: true,
+          tombstonedAt: true,
           accountHolder: {
-            select: { id: true, email: true, displayName: true, emailVerifiedAt: true },
+            select: {
+              id: true,
+              email: true,
+              displayName: true,
+              emailVerifiedAt: true,
+              tombstonedAt: true,
+            },
           },
         },
       },
@@ -107,6 +118,58 @@ export default async function StudentDetailPage({
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
 
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [endedUnsavedSessions, endedUnsavedTotalCount] = await Promise.all([
+    db.whiteboardSession.findMany({
+      where: {
+        studentId: id,
+        endedAt: { gte: thirtyDaysAgo },
+        noteId: null,
+      },
+      orderBy: { endedAt: "desc" },
+      take: 20,
+      select: { id: true, startedAt: true, endedAt: true },
+    }),
+    db.whiteboardSession.count({
+      where: {
+        studentId: id,
+        endedAt: { not: null },
+        noteId: null,
+      },
+    }),
+  ]);
+
+  const lp = student.learnerProfile;
+  const lpId = lp?.id ?? null;
+  const ahId = lp?.accountHolder?.id ?? null;
+  const purgeDates = await lookupActiveErasurePurgeDates(
+    lpId ? [lpId] : [],
+    ahId ? [ahId] : []
+  );
+  const activeJobPurgeEligibleAt =
+    (lpId && purgeDates.byLearnerProfileId.get(lpId)) ??
+    (ahId && purgeDates.byAccountHolderId.get(ahId)) ??
+    null;
+  const erasureState = deriveStudentErasureDisplayState({
+    erasedAt: student.erasedAt,
+    lpTombstonedAt: lp?.tombstonedAt ?? null,
+    ahTombstonedAt: lp?.accountHolder?.tombstonedAt ?? null,
+    activeJobPurgeEligibleAt,
+  });
+  const accessSuspended =
+    erasureState.kind === "pending_grace" || erasureState.kind === "purged";
+
+  const learnerProfileId = student.learnerProfileId;
+  const isSelfLearner = student.learnerProfile?.isSelfLearner ?? false;
+  const consentRecordExists =
+    learnerProfileId && scopedAdminUserId
+      ? !!(await db.consentRecord.findFirst({
+          where: { learnerProfileId, adminUserId: scopedAdminUserId },
+          orderBy: { version: "desc" },
+          select: { id: true },
+        }))
+      : false;
+
   const activeShare = student.shareLinks[0] ?? null;
   const shareDisplayBaseUrl = activeShare ? await getRequestBaseUrl() : null;
 
@@ -127,9 +190,19 @@ export default async function StudentDetailPage({
     </>
   );
 
-  const stickyCta = (
+  const stickyCta = accessSuspended ? (
+    <p className="text-sm text-muted-foreground" role="status">
+      Sessions unavailable while erasure is pending or complete.
+    </p>
+  ) : (
     <div className="w-full md:w-auto [&_button]:h-12 [&_button]:w-full [&_button]:text-[15px] md:[&_button]:h-11 md:[&_button]:w-auto">
-      <StartWhiteboardSession studentId={student.id} />
+      <StartWhiteboardSession
+        studentId={student.id}
+        consentRecordExists={consentRecordExists}
+        isSelfLearner={isSelfLearner}
+        studentClaimed={!!student.learnerProfileId}
+        accessSuspended={false}
+      />
     </div>
   );
 
@@ -144,12 +217,13 @@ export default async function StudentDetailPage({
         studentId={student.id}
         sessions={student.whiteboardSessions}
       />
-      <div className="mt-4 border-t border-border pt-4">
-        <StudentRecordingDefaultToggle
-          studentId={student.id}
-          initialEnabled={student.recordingDefaultEnabled}
-        />
-      </div>
+      <EndedUnsavedSessionsList
+        studentId={student.id}
+        sessions={endedUnsavedSessions.flatMap((s) =>
+          s.endedAt != null ? [{ ...s, endedAt: s.endedAt }] : []
+        )}
+        totalCount={endedUnsavedTotalCount}
+      />
     </>
   );
 
@@ -287,7 +361,9 @@ export default async function StudentDetailPage({
   ];
 
   return (
-    <StudentDetailShell
+    <div className="space-y-4">
+      <StudentErasurePendingBanner state={erasureState} />
+      <StudentDetailShell
       studentId={student.id}
       studentName={student.name}
       meta={meta}
@@ -304,6 +380,7 @@ export default async function StudentDetailPage({
       }
       stickyCta={stickyCta}
       sections={sections}
-    />
+      />
+    </div>
   );
 }

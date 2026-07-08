@@ -59,6 +59,9 @@ const basePayload = {
   startedAtIso: "2026-06-01T10:00:00.000Z",
   endedAtIso: "2026-06-01T10:30:00.000Z",
   durationSeconds: 1800,
+  billedDurationMin: null as number | null,
+  billedStartLocal: null as string | null,
+  billedEndLocal: null as string | null,
   hasAudio: true,
   eventCount: 5,
   eventsProxyUrl: "/api/whiteboard/wbs-1/events",
@@ -70,6 +73,9 @@ const basePayload = {
       durationSeconds: 60,
     },
   ],
+  canonicalAudioBlobUrl: null,
+  canonicalAudioMimeType: null,
+  canonicalDurationSeconds: null,
   initialNote: {
     found: true,
     status: "done" as const,
@@ -97,6 +103,13 @@ describe("SessionReviewMode unified surface", () => {
     );
     expect(await screen.findByTestId("wb-session-review-mode")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-wb-topbar")).toBeInTheDocument();
+    const backLink = await screen.findByTestId("review-back-to-student");
+    expect(backLink).toHaveAttribute("href", "/admin/students/stu-1");
+    expect(backLink).toHaveTextContent(/Back to Alex/i);
+    expect(screen.getByTestId("review-all-notes")).toHaveAttribute(
+      "href",
+      "/admin/students/stu-1/notes"
+    );
     expect(screen.getByTestId("wb-theme-toggle")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-notes-prominent")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-hero-layout")).toBeInTheDocument();
@@ -166,6 +179,23 @@ describe("SessionReviewMode unified surface", () => {
     expect(screen.queryByTestId("wb-replay-back-to-notes")).not.toBeInTheDocument();
   });
 
+  it("shows replay CTA with no-audio note when board events exist but no audio", async () => {
+    loadSessionReviewPayload.mockResolvedValue({
+      ...basePayload,
+      hasAudio: false,
+      eventCount: 3,
+      audioSegments: [],
+    });
+    render(
+      <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
+    );
+    expect(await screen.findByTestId("wb-review-enter-replay")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-review-no-audio-note")).toHaveTextContent(
+      "No audio was recorded for this session."
+    );
+    expect(screen.queryByTestId("wb-review-no-recording")).not.toBeInTheDocument();
+  });
+
   it("shows no recording message when no audio and no events", async () => {
     loadSessionReviewPayload.mockResolvedValue({
       ...basePayload,
@@ -177,7 +207,45 @@ describe("SessionReviewMode unified surface", () => {
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
     );
     expect(await screen.findByTestId("wb-review-no-recording")).toHaveTextContent(
-      "No recording available"
+      "Nothing was recorded for this session."
     );
+    expect(screen.queryByTestId("wb-review-enter-replay")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("wb-review-no-audio-note")).not.toBeInTheDocument();
+  });
+
+  it("shows billedDurationMin minutes-only when frozen billing is present", async () => {
+    loadSessionReviewPayload.mockResolvedValue({
+      ...basePayload,
+      billedDurationMin: 55,
+      billedStartLocal: "10:00 AM",
+      billedEndLocal: "10:55 AM",
+    });
+    render(
+      <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
+    );
+    const duration = await screen.findByTestId("wb-review-duration");
+    expect(duration).toHaveTextContent("55 min");
+    expect(duration).toHaveTextContent("10:00 AM");
+    expect(duration).not.toHaveTextContent(":00:");
+  });
+
+  it("falls back to audio duration label when billedDurationMin is null", async () => {
+    loadSessionReviewPayload.mockResolvedValue({
+      ...basePayload,
+      billedDurationMin: null,
+      audioSegments: [
+        {
+          url: "/api/audio/admin/a1",
+          mimeType: "audio/webm",
+          durationSeconds: 60,
+        },
+      ],
+    });
+    render(
+      <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
+    );
+    const duration = await screen.findByTestId("wb-review-duration");
+    expect(duration).toHaveTextContent("1:00");
+    expect(duration).not.toHaveTextContent("min ·");
   });
 });

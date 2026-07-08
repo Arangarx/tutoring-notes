@@ -1,0 +1,54 @@
+---
+description: Visual/layout tests use semantic oracles (centering, alignment, visibility) — not absolute pixel positions unless Andrew explicitly requires pixel-perfect snapshots.
+alwaysApply: true
+---
+
+# Visual / layout tests — semantic oracles, not pixel perfection
+
+**Default:** assert the **user-visible property** Andrew cares about — centered, aligned, visible, not clipped — **not** fixed distances from viewport edges or full-page pixel identity under every circumstance.
+
+**Pixel-perfect** (`toHaveScreenshot` lock, exact `top: 5px` asserts) is **opt-in only** when Andrew **explicitly** requires it for a surface.
+
+## The rule in one example (Andrew 2026-06-23)
+
+**Follow pill vertical centering in the top bar:**
+
+| ❌ Brittle (forbidden by default) | ✅ Semantic (what we want) |
+|---|---|
+| Pill is 5px from top of bar AND 5px from bottom | Pill top inset from bar top **≈** pill bottom inset from bar bottom |
+| `pill.y === 44` | `(pill.y - bar.y) ≈ (bar.y + bar.height - pill.y - pill.height)` |
+| Screenshot baseline of entire top bar | Midline of pill ≈ midline of bar (or ≈ sibling control midline) |
+
+Same idea everywhere: test **the relationship**, not **the coordinates**.
+
+## Good patterns (Playwright + integration)
+
+- **Equal inset / centered in container:** compare top gap vs bottom gap (or left vs right).
+- **Aligned with sibling:** `midline(A) ≈ midline(B)` within a few px tolerance.
+- **Not clipped:** element box within scrollport / strip bounds (`scrollIntoViewIfNeeded` + box inside parent).
+- **Behavior / copy:** `toBeVisible`, `toHaveText`, click → state change.
+- **Independent oracle:** library transform, scene math, relay peer state — see AGENTS § requirement-not-code (never constants derived from the implementation under test).
+
+**Existing canonical test:** invariant 12d — follow-toggle vs match-button **midline** alignment (`tests/integration/whiteboard-live-sync-regression.spec.ts`).
+
+## Bad patterns (do not add without explicit Andrew ask)
+
+- Absolute screen or parent offsets as the **spec** (`expect(box.y).toBe(12)`).
+- Full-page or chrome `toHaveScreenshot` for layout polish on live whiteboard surfaces.
+- Jest/jsdom `offsetLeft`/`offsetTop` for geometry (blind — use Playwright relational asserts instead).
+
+## Screenshot baselines (`tests/visual/`)
+
+- Reserved for **static** surfaces (auth, marketing, admin list pages) where Andrew has asked for pixel lock.
+- **Not** the default gate for whiteboard chrome, sync UI, or responsive layout work — use tagged wb-regression relational asserts instead.
+
+## Tolerance
+
+2–4px slack on **relational** asserts is fine (fonts, subpixel rounding). Tolerance does **not** legitimize absolute-position specs.
+
+## Agent checklist (new layout test)
+
+1. Name the **property** in a comment (`// vertically centered in top bar`).
+2. Write a **relational** assert (insets, midlines, containment).
+3. Avoid screenshot unless Andrew explicitly requested pixel-perfect for that surface.
+4. Tag with `@wb-chrome` / `@wb-viewport` etc. ([`tests/test-tags.ts`](../../tests/test-tags.ts)).

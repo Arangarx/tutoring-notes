@@ -7,9 +7,6 @@
  * Log prefix: tfa= for 2FA, imp= for impersonation (AGENTS.md § Conventions).
  */
 
-import fs from "fs";
-import path from "path";
-
 // ---------------------------------------------------------------------------
 // Shared setup
 // ---------------------------------------------------------------------------
@@ -176,53 +173,5 @@ describe("Bug A fix: mintAdminSession restores twoFactorVerified=true", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Bug B: sign-out while impersonating uses exitImpersonation, not signOut
-// ---------------------------------------------------------------------------
-
-const adminNavPath = path.resolve(__dirname, "../components/AdminNav.tsx");
-
-describe("Bug B fix: AdminNav sign-out routes through exitImpersonation when impersonating", () => {
-  let adminNavSource: string;
-
-  beforeAll(() => {
-    adminNavSource = fs.readFileSync(adminNavPath, "utf-8");
-  });
-
-  it("AdminNav imports exitImpersonation from the impersonate server action", () => {
-    expect(adminNavSource).toContain('exitImpersonation');
-    expect(adminNavSource).toContain('@/app/admin/actions/impersonate');
-  });
-
-  it("AdminNav accepts isImpersonating prop", () => {
-    expect(adminNavSource).toContain("isImpersonating");
-  });
-
-  it("AdminNav uses form action={exitImpersonation} for the impersonating sign-out path", () => {
-    // The form action pattern is the standard way to call a server action from
-    // a client component without next-auth's signOut destroying the session.
-    expect(adminNavSource).toContain("action={exitImpersonation}");
-  });
-
-  it("AdminNav still imports and uses signOut for the non-impersonating path", () => {
-    // Real sign-out must still work when NOT impersonating.
-    expect(adminNavSource).toContain("signOut");
-    expect(adminNavSource).toContain('from "next-auth/react"');
-  });
-
-  it("AdminNav sign-out is conditional: both paths present in source", () => {
-    // Both branches must coexist — one for impersonating, one for real sign-out.
-    const hasExitForm = adminNavSource.includes("action={exitImpersonation}");
-    const hasSignOut = adminNavSource.includes("signOut(");
-    expect(hasExitForm).toBe(true);
-    expect(hasSignOut).toBe(true);
-  });
-
-  it("layout passes isImpersonating to AdminNav (source check)", () => {
-    const layoutPath = path.resolve(__dirname, "../app/admin/layout.tsx");
-    const layoutSource = fs.readFileSync(layoutPath, "utf-8");
-    // The layout must forward the isImpersonating state to AdminNav so it
-    // can pick the right sign-out path.
-    expect(layoutSource).toContain("isImpersonating={isImpersonating}");
-  });
-});
+// Bug B (sign-out while impersonating → exitImpersonation, not full signOut) is
+// covered by tests/integration/identity/impersonation-round-trip.spec.ts.

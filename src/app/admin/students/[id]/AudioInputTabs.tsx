@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { uploadAudioDirect, uploadAudioWithRetry } from "@/lib/recording/upload";
 import AudioUploadInput, { type UploadedAudio } from "./AudioUploadInput";
 import AudioRecordInput, { type RecordedAudio } from "./AudioRecordInput";
 
@@ -67,12 +68,44 @@ export default function AudioInputTabs({
     onAudioReady(audio);
   }
 
-  function handleRecorded(
+  async function handleRecorded(
     audio: RecordedAudio,
     meta?: { autoRollover?: boolean }
   ) {
+    let ready: AudioResult;
+    if (!audio.blobUrl && audio.blob) {
+      const result = await uploadAudioWithRetry(
+        uploadAudioDirect,
+        studentId,
+        audio.blob,
+        audio.filename,
+        audio.mimeType
+      );
+      if (!result.ok) {
+        console.error("[AudioInputTabs] rollover segment upload failed", result.error);
+        return;
+      }
+      ready = {
+        blobUrl: result.blobUrl,
+        mimeType: result.mimeType,
+        sizeBytes: result.sizeBytes,
+        filename: audio.filename,
+        previewUrl: audio.previewUrl,
+      };
+    } else if (audio.blobUrl) {
+      ready = {
+        blobUrl: audio.blobUrl,
+        mimeType: audio.mimeType,
+        sizeBytes: audio.sizeBytes,
+        filename: audio.filename,
+        previewUrl: audio.previewUrl,
+      };
+    } else {
+      console.error("[AudioInputTabs] recorded segment missing blobUrl and blob");
+      return;
+    }
     setHasAudio(true);
-    onAudioReady(audio, { keepRecorderMounted: !!meta?.autoRollover });
+    onAudioReady(ready, { keepRecorderMounted: !!meta?.autoRollover });
   }
 
   // Wrap the parent's onRecordingActive so we can also track it locally

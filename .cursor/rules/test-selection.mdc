@@ -1,0 +1,57 @@
+---
+description: Selective test execution by tag + merge tier — affected tags on small branches, full regression before master.
+alwaysApply: true
+---
+
+# Test selection — tagged suites, affected runs, merge tiers
+
+Suites grow over time. **Do not run full product regression on every commit.** Run what the diff can break; run everything before **master**.
+
+## Tags (Playwright wb-regression)
+
+Canonical registry: [`tests/test-tags.ts`](../../tests/test-tags.ts).
+
+| Tag | Domain |
+|-----|--------|
+| `@wb-sync` | Umbrella — all relay tutor+student specs |
+| `@wb-strokes` | Draw / move / page isolation |
+| `@wb-viewport` | Pan/zoom, follow oracle |
+| `@wb-assets` | Image + PDF on canvas |
+| `@wb-presence` | Join, welcome, exit/rejoin |
+| `@wb-graph` | GraphEmbeddable + graphStateJson |
+| `@wb-recording` | Recording FSM / banner copy |
+| `@wb-chrome` | Toolbars, rails, flyouts, layout |
+| `@wb-av` | Live A/V mesh / reconnect |
+
+**New tests:** add domain tag(s) on the `test()` or `test.describe()` — see [`playwright-on-fix.mdc`](playwright-on-fix.mdc).
+
+**Adjacency:** `wb-test-select` expands tags cautiously (e.g. `@wb-graph` → also `@wb-sync` + `@wb-strokes`). When in doubt, add a tag.
+
+## Commands
+
+| Command | When |
+|---------|------|
+| `npm run test:wb-affected` | Dry-run: diff → tags + commands |
+| `npm run test:wb-affected:run -- --base origin/<parent>` | Execute affected jest + Playwright |
+| `npm run test:wb-playwright:tags -- @wb-graph` | Explicit tag filter |
+| `npm run test:wb-sync` | **Full** wb jest + full wb-regression Playwright (~40 min) |
+
+Path → tag mapping lives in [`scripts/wb-test-select.cjs`](../../scripts/wb-test-select.cjs).
+
+## Merge tiers (orchestrator enforces)
+
+| Merge | Playwright / Jest gate |
+|-------|-------------------------|
+| **Commit on feature branch** | New fix's tagged test(s) must pass. Optionally `test:wb-affected:run` if touch is broader. |
+| **Small branch → parent feature / v1-redesign** | `npm run test:wb-affected:run -- --base origin/<parent>` (+ `npx next build` if build surface). **Err on caution** — if diff is ambiguous or touches `WhiteboardWorkspaceClient`, run extra tags or full `test:wb-sync`. |
+| **Large wave / long-running branch (e.g. v1-redesign) integration** | `test:wb-sync` on **final integrated tip** before merge into that branch (existing AGENTS cadence). |
+| **Any branch → `master`** | **FULL:** `npm run test:wb-sync` + `npm run test:regression` + `npx next build`. No selective gate. |
+
+**Never** merge to `master` with only affected tags.
+
+## Executor / orchestrator checklist
+
+- [ ] Diff scanned — list tags that will run (or full suite if merge tier requires it).
+- [ ] Each new Playwright test has domain tag(s).
+- [ ] Handoff states **tags run** vs **full suite** and merge target branch.
+- [ ] Andrew's smokebook = **new** UX + hardware judgment only — not re-proofing tagged regressions ([`smoke-when-done.mdc`](smoke-when-done.mdc)).

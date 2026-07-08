@@ -44,17 +44,21 @@ import { formatUserFacingActionError } from "@/lib/action-correlation";
 import { createMicAudioGraph, type MicAudioGraph } from "@/lib/mic-recorder-audio";
 import { chooseMimeType, fileExtension } from "@/lib/recording/mime";
 import {
-  SEGMENT_MAX_SECONDS,
+  SESSION_BILLING_HOUR_SECONDS,
   SESSION_SAFETY_MAX_SECONDS,
-  WARN_SEGMENT_SECONDS,
-  effectiveWarnSegmentSeconds,
-  shouldFireApproachingChime,
+  SESSION_TIME_WARN_SECONDS,
+  VAD_MAX_SEGMENT_SECONDS,
+  effectiveVadSilenceRmsThreshold,
+  clampVadSilenceAccumulationMs,
+  isSessionTimeWarning,
+  sessionChimeMilestoneIndex,
+  shouldCutOnSilence,
+  shouldFireSessionTimeChime,
+  shouldForceVadCap,
   shouldHardStopSession,
-  shouldRolloverSegment,
 } from "@/lib/recording/segment-policy";
 import {
   playApproachingMaxTimeChime,
-  playSegmentRolloverChime,
 } from "@/lib/recording/chimes";
 import {
   CHIME_VOL_DEFAULT,
@@ -63,10 +67,12 @@ import {
   loadStoredChimeVolume,
   loadStoredDeviceId,
   loadStoredGain,
+  loadStoredMicGroupId,
   saveStoredChimeEnabled,
   saveStoredChimeVolume,
   saveStoredDeviceId,
   saveStoredGain,
+  saveStoredMicGroupId,
 } from "@/lib/recording/storage";
 import {
   queryMicPermission,
@@ -82,6 +88,11 @@ import {
   draftRowKey,
   getOrCreateRecordingDraftStore,
 } from "@/lib/recording/recording-draft-store";
+import {
+  fingerprintMediaTrackSettings,
+  getUserMediaAudioForEnumerateEntry,
+  reconcilePickerSlotAfterEnumerate,
+} from "@/lib/av/enumerate-device-acquire";
 
 /** Draft checkpoint interval (W1 Surface 1) — matches design cadence. */
 const DRAFT_CHECKPOINT_INTERVAL_MS = 30_000;
@@ -89,7 +100,12 @@ const DRAFT_CHECKPOINT_INTERVAL_MS = 30_000;
 const DRAFT_TIMESLICE_MS = 30_000;
 
 export type RecordedAudio = {
-  blobUrl: string;
+  /**
+   * Remote Vercel Blob URL after inline upload (final/tail segment).
+   * Omitted on auto-rollover segments — workspace enqueues bytes to the
+   * outbox at cut and the worker uploads later (WS-N).
+   */
+  blobUrl?: string;
   mimeType: string;
   sizeBytes: number;
   filename: string;
@@ -103,6 +119,11 @@ export type RecordedAudio = {
    * truth). Optional + backward-compatible.
    */
   blob?: Blob;
+  /**
+   * Pause-aware segment duration in whole seconds at cut/stop time.
+   * Workspace outbox persists this as `SessionRecording.durationSeconds`.
+   */
+  durationSeconds?: number;
 };
 
 export type UseAudioRecorderOptions = {
@@ -148,6 +169,11 @@ export type UseAudioRecorderOptions = {
     sessionId: string;
     streamId: string;
   };
+  /**
+   * Pause-aware p3-clock (`getAudioMs` from workspace). When provided, VAD
+   * segment boundaries anchor to this clock instead of wall-clock segment timer.
+   */
+  getAudioMs?: () => number;
 };
 
 export type UseAudioRecorderReturn = {
@@ -157,6 +183,8 @@ export type UseAudioRecorderReturn = {
 
   // Timer / segment info
   elapsed: number;
+  /** Pause-aware session elapsed seconds (billing chime + warning UI). */
+  sessionElapsed: number;
   segmentNumber: number;
   doneSegmentSeconds: number;
   /**
@@ -201,9 +229,17 @@ export type UseAudioRecorderReturn = {
    */
   setRemoteRecordingGain: (stream: MediaStream, gainLinear: number) => void;
 
+  /**
+   * Gate ONLY the tutor's own mic in the recording mixdown (WS-I). Live
+   * publish + meter are unaffected; remote/learner audio stays in the mix.
+   */
+  setTutorRecordingMute: (muted: boolean) => void;
+
   // Mic + prefs
   devices: MediaDeviceInfo[];
   selectedDeviceId: string;
+  /** Index into {@link devices} for slot-based picker (duplicate `deviceId` rows). */
+  pickedMicSlot: number;
   gainLinear: number;
   setGainLinear: (n: number) => void;
   chimeEnabled: boolean;
@@ -220,7 +256,7 @@ export type UseAudioRecorderReturn = {
   isLive: boolean;
   /** Mic device picker locked only during mid-rollover segment upload. */
   lockDevice: boolean;
-  /** Show the "approaching segment cap" warning copy + colour. */
+  /** Show the approaching session billing-milestone warning copy + colour. */
   isWarning: boolean;
 
   // Refs
@@ -230,6 +266,7 @@ export type UseAudioRecorderReturn = {
   // Actions
   handleStartRecording: () => Promise<void> | void;
   handleDeviceChange: (deviceId: string) => Promise<void>;
+  handleMicSlotChange: (slotIndex: number) => Promise<void>;
   pauseRecording: () => void;
   resumeRecording: () => void;
   stopAndUpload: (mode?: "final" | "rollover") => void;
@@ -259,6 +296,8 @@ export type UseAudioRecorderReturn = {
   flushPendingUploads: () => Promise<void>;
   /** Hot-swap the mic while the Web Audio graph is live (workspace + live A/V). */
   swapMicDevice: (deviceId: string) => Promise<void>;
+  /** Slot-aware hot-swap — preferred when enumerate rows duplicate `deviceId`. */
+  swapMicDeviceBySlot: (slotIndex: number) => Promise<void>;
 };
 
 /** Decide bar colour by level — green/yellow/red zones for visible feedback. */
@@ -269,6 +308,50 @@ function meterColor(level: number): string {
   return "var(--color-muted)";
 }
 
+/**
+ * When `deviceId: { exact }` fails (stale id or transient unplug), retry with
+ * softer constraints before clearing the tutor's saved preference.
+ */
+async function attemptRelaxedMicAcquire(
+  storedDeviceId: string
+): Promise<MediaStream | null> {
+  const storedGroupId = loadStoredMicGroupId();
+  const attempts: MediaTrackConstraints[] = [];
+
+  if (storedGroupId) {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const byGroup = all.find(
+        (d) => d.kind === "audioinput" && d.groupId === storedGroupId
+      );
+      if (byGroup?.deviceId) {
+        attempts.push({
+          deviceId: { exact: byGroup.deviceId },
+          groupId: { ideal: storedGroupId },
+        });
+        attempts.push({ deviceId: { ideal: byGroup.deviceId } });
+      }
+      attempts.push({ groupId: { ideal: storedGroupId } });
+    } catch {
+      /* enumerate best-effort */
+    }
+  }
+
+  attempts.push({
+    deviceId: { ideal: storedDeviceId },
+    ...(storedGroupId ? { groupId: { ideal: storedGroupId } } : {}),
+  });
+
+  for (const audio of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio });
+    } catch {
+      /* try next relaxed constraint set */
+    }
+  }
+  return null;
+}
+
 export function useAudioRecorder({
   studentId,
   onRecorded,
@@ -276,6 +359,7 @@ export function useAudioRecorder({
   initialElapsedSeconds = 0,
   avLogSessionId,
   recordingDraft,
+  getAudioMs,
 }: UseAudioRecorderOptions): UseAudioRecorderReturn {
   const [recordState, setRecordState] = useState<RecordState>("idle");
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
@@ -284,6 +368,7 @@ export function useAudioRecorder({
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [pickedMicSlot, setPickedMicSlot] = useState(0);
   const [gainLinear, setGainLinear] = useState<number>(GAIN_DEFAULT);
   // SSR-safe defaults; the real localStorage values are read in the mount
   // effect below. Reading localStorage from the useState initializer would
@@ -305,16 +390,28 @@ export function useAudioRecorder({
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const graphRef = useRef<MicAudioGraph | null>(null);
+  /** WS-I: mute intent survives graph (re)build when set before the graph exists. */
+  const tutorRecordingMutedRef = useRef(false);
+  const devicesRef = useRef<MediaDeviceInfo[]>([]);
+  const pinnedMicEnumerateGroupRef = useRef("");
+  devicesRef.current = devices;
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(initialElapsedSeconds);
   const rafRef = useRef<number | null>(null);
   const meterBarRef = useRef<HTMLDivElement | null>(null);
   /** Tracks the latest meter colour so we don't thrash style.background every frame. */
   const meterColorRef = useRef<string>(meterColor(0));
-  /** One audible "approaching max time" cue per recording (not on pause/resume timer restarts). */
-  const approachingCapSoundPlayedRef = useRef(false);
-  /** Wall-clock session length across auto-rollovers (for safety cap). */
-  const totalSessionElapsedRef = useRef(0);
+  /** Last hourly billing milestone index that fired the session-time chime. */
+  const sessionChimeMilestoneIndexRef = useRef(-1);
+  /** Wall-clock session length across segments (for safety cap + billing chime). */
+  const totalSessionElapsedRef = useRef(initialElapsedSeconds);
+  const [sessionElapsed, setSessionElapsed] = useState(initialElapsedSeconds);
+  const getAudioMsRef = useRef(getAudioMs);
+  getAudioMsRef.current = getAudioMs;
+  /** p3-clock offset at current segment start (ms). */
+  const segmentStartOffsetMsRef = useRef(0);
+  const vadSilenceHeldMsRef = useRef(0);
+  const vadLastRafMsRef = useRef<number | null>(null);
   /** Prevents double-firing auto-rollover from the 1s timer. */
   const rolloverInProgressRef = useRef(false);
   const chimeEnabledRef = useRef(chimeEnabled);
@@ -349,6 +446,8 @@ export function useAudioRecorder({
   const timesliceDataReceivedRef = useRef(false);
   const draftPagehideHandlerRef = useRef<(() => void) | null>(null);
   const draftVisibilityHandlerRef = useRef<(() => void) | null>(null);
+  const recordStateRef = useRef<RecordState>("idle");
+  recordStateRef.current = recordState;
 
   /**
    * Synchronously add a deferred Promise to `pendingUploadsRef` and
@@ -419,6 +518,7 @@ export function useAudioRecorder({
   useEffect(() => {
     setGainLinear(loadStoredGain());
     setSelectedDeviceId(loadStoredDeviceId());
+    pinnedMicEnumerateGroupRef.current = loadStoredMicGroupId();
     setChimeEnabled(loadStoredChimeEnabled());
     setChimeVolume(loadStoredChimeVolume());
   }, []);
@@ -598,14 +698,16 @@ export function useAudioRecorder({
       elapsedRef.current += 1;
       totalSessionElapsedRef.current += 1;
       setElapsed(elapsedRef.current);
+      setSessionElapsed(totalSessionElapsedRef.current);
 
+      const milestone = sessionChimeMilestoneIndex(totalSessionElapsedRef.current);
       if (
-        shouldFireApproachingChime(
-          elapsedRef.current,
-          approachingCapSoundPlayedRef.current
+        shouldFireSessionTimeChime(
+          totalSessionElapsedRef.current,
+          sessionChimeMilestoneIndexRef.current
         )
       ) {
-        approachingCapSoundPlayedRef.current = true;
+        sessionChimeMilestoneIndexRef.current = milestone;
         const vol = chimeEnabledRef.current ? chimeVolumeRef.current : 0;
         playApproachingMaxTimeChime(vol);
       }
@@ -618,16 +720,6 @@ export function useAudioRecorder({
         rolloverInProgressRef.current = true;
         stopAndUpload("final");
         return;
-      }
-
-      if (
-        shouldRolloverSegment(elapsedRef.current) &&
-        !rolloverInProgressRef.current
-      ) {
-        rolloverInProgressRef.current = true;
-        const vol = chimeEnabledRef.current ? chimeVolumeRef.current : 0;
-        playSegmentRolloverChime(vol);
-        rolloverSegmentGapless();
       }
     }, 1000);
   }
@@ -675,7 +767,10 @@ export function useAudioRecorder({
     }
 
     const oldChunks: Blob[] = chunksRef.current;
-    const oldSegmentSeconds = elapsedRef.current;
+    const segmentDurationSeconds = Math.max(
+      1,
+      Math.round(getSegmentElapsedS())
+    );
     const oldPartIndex = segmentNumberRef.current;
     const oldMimeType = oldRecorder.mimeType || chooseMimeType();
 
@@ -713,7 +808,10 @@ export function useAudioRecorder({
     chunksRef.current = [];
     elapsedRef.current = 0;
     setElapsed(0);
-    approachingCapSoundPlayedRef.current = false;
+    vadSilenceHeldMsRef.current = 0;
+    vadLastRafMsRef.current = null;
+    segmentStartOffsetMsRef.current = getAudioMsRef.current?.() ?? 0;
+    resetVadState("open");
     segmentNumberRef.current = oldPartIndex + 1;
     setSegmentNumber(oldPartIndex + 1);
 
@@ -768,51 +866,32 @@ export function useAudioRecorder({
 
           const ext = fileExtension(oldMimeType);
           const filename = `session-${Date.now()}-part${oldPartIndex}.${ext}`;
+          const previewUrl = URL.createObjectURL(blob);
 
           try {
-            const result = await uploadAudioWithRetry(
-              uploadAudioDirect,
-              studentId,
-              blob,
-              filename,
-              oldMimeType
-            );
-
-            if (!result.ok) {
-              // Surface but keep the live recorder running. Tutor can read the
-              // error and decide whether to stop; in the meantime we don't lose
-              // the current capture.
-              setError(formatUserFacingActionError(result.error, result.debugId));
-              rolloverInProgressRef.current = false;
-              return;
-            }
-
-            const previewUrl = URL.createObjectURL(blob);
-            // `await` so flushPendingUploads truly waits for the consumer
-            // (workspace outbox enqueue) to land before returning.
+            // WS-N: durable-at-cut — pass local bytes to the workspace
+            // outbox without inline upload; the worker uploads from IDB.
+            // `await` so flushPendingUploads waits for enqueue to land.
             await onRecorded(
               {
-                blobUrl: result.blobUrl,
                 mimeType: oldMimeType,
                 sizeBytes: blob.size,
                 filename,
                 previewUrl,
                 blob,
+                durationSeconds: segmentDurationSeconds,
               },
               { autoRollover: true }
             );
             rolloverInProgressRef.current = false;
           } catch (err) {
-            const msg = err instanceof Error ? err.message : "Upload failed";
-            console.error("[useAudioRecorder] rollover upload failed:", err);
+            const msg = err instanceof Error ? err.message : "Enqueue failed";
+            console.error("[useAudioRecorder] rollover enqueue-at-cut failed:", err);
             setError(msg);
             rolloverInProgressRef.current = false;
           }
-          // oldSegmentSeconds is captured for parity with the legacy path's
-          // doneSegmentSeconds; auto-rollover doesn't surface it in the UI
-          // (state never goes to "done"), but keeping the snapshot makes
-          // future telemetry trivial.
-          void oldSegmentSeconds;
+          // segmentDurationSeconds captured for parity with legacy telemetry.
+          void segmentDurationSeconds;
         } finally {
           rolloverTracking.settle();
         }
@@ -831,15 +910,49 @@ export function useAudioRecorder({
     }
   }
 
+  function getSegmentElapsedS(): number {
+    const getMs = getAudioMsRef.current;
+    if (getMs) {
+      return Math.max(0, (getMs() - segmentStartOffsetMsRef.current) / 1000);
+    }
+    return elapsedRef.current;
+  }
+
+  function resetVadState(action: "open" | "cut" | "cap_force") {
+    vadSilenceHeldMsRef.current = 0;
+    vadLastRafMsRef.current = null;
+    const segmentId = segmentIdForDraftRef.current ?? `seg-${segmentNumberRef.current}`;
+    const wbsid = avLogSessionId ?? recordingDraft?.sessionId ?? "unknown";
+    const offsetMs = getAudioMsRef.current?.() ?? elapsedRef.current * 1000;
+    console.log(
+      `[vad] vad=${segmentId} action=${action} wbsid=${wbsid} offsetMs=${Math.round(offsetMs)}`
+    );
+  }
+
+  function triggerVadSegmentCut(reason: "cut" | "cap_force") {
+    if (rolloverInProgressRef.current) return;
+    if (recordStateRef.current !== "recording") return;
+    if (
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV !== "production" &&
+      (window as unknown as { __VAD_CUT_DISABLED?: boolean }).__VAD_CUT_DISABLED ===
+        true
+    ) {
+      return;
+    }
+    rolloverInProgressRef.current = true;
+    resetVadState(reason);
+    rolloverSegmentGapless();
+  }
+
   /**
-   * Drive the meter bar via DOM ref — never via setState. A meter that ticks
    * 60 times/sec via state would re-render the entire panel every frame; the
    * slider's drag gesture would get cancelled by the unmount, and CPU usage
    * would be embarrassing.
    */
   function startMeter(graph: MicAudioGraph) {
     stopMeter();
-    const tick = () => {
+    const tick = (rafNow: number) => {
       const level = graph.getLevel();
       const bar = meterBarRef.current;
       if (bar) {
@@ -850,6 +963,42 @@ export function useAudioRecorder({
           meterColorRef.current = next;
         }
       }
+
+      if (
+        recordStateRef.current === "recording" &&
+        !rolloverInProgressRef.current
+      ) {
+        const deltaMs =
+          vadLastRafMsRef.current === null ? 0 : rafNow - vadLastRafMsRef.current;
+        vadLastRafMsRef.current = rafNow;
+        const rmsLevel = level;
+        const segmentElapsedS = getSegmentElapsedS();
+        const silenceThreshold = effectiveVadSilenceRmsThreshold();
+        // SF-3: iOS/tab backgrounding pauses RAF; on resume deltaMs can span
+        // minutes — clamp so one tick cannot satisfy the silence-hold threshold.
+        const silenceDeltaMs = clampVadSilenceAccumulationMs(deltaMs);
+
+        if (rmsLevel < silenceThreshold) {
+          vadSilenceHeldMsRef.current += silenceDeltaMs;
+        } else {
+          vadSilenceHeldMsRef.current = 0;
+        }
+
+        if (
+          shouldCutOnSilence({
+            segmentElapsedS,
+            silenceHeldMs: vadSilenceHeldMsRef.current,
+            rmsLevel,
+          })
+        ) {
+          triggerVadSegmentCut("cut");
+        } else if (shouldForceVadCap(segmentElapsedS)) {
+          triggerVadSegmentCut("cap_force");
+        }
+      } else {
+        vadLastRafMsRef.current = null;
+      }
+
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -880,6 +1029,7 @@ export function useAudioRecorder({
       } else if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
         if (exactDeviceId) {
           saveStoredDeviceId("");
+          saveStoredMicGroupId("");
           setSelectedDeviceId("");
           msg =
             "The previously selected microphone is no longer available. Try clicking Start recording again to use the default mic.";
@@ -895,8 +1045,14 @@ export function useAudioRecorder({
 
     let stream: MediaStream;
     try {
+      const storedGrp = loadStoredMicGroupId();
       const constraints: MediaStreamConstraints = {
-        audio: opts.deviceId ? { deviceId: { exact: opts.deviceId } } : true,
+        audio: opts.deviceId
+          ? {
+              deviceId: { exact: opts.deviceId },
+              ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
+            }
+          : true,
       };
       stream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
@@ -907,21 +1063,31 @@ export function useAudioRecorder({
 
       // `deviceId: { exact }` + a stale id from localStorage (USB unplugged,
       // Bluetooth profile change, OS default swap) yields OverconstrainedError
-      // before any audio reaches the graph. Clear the preference and acquire
-      // the default mic in one step so the meter/recorder works without an
-      // extra Start click and without a scary console.error on the happy path.
+      // before any audio reaches the graph. Retry with relaxed constraints
+      // (ideal deviceId / groupId re-resolve) before clearing the preference;
+      // only fall back to default mic + wipe when the retry also fails.
       if (stalePreferredDevice) {
-        console.warn(
-          "[useAudioRecorder] stored mic device unavailable; clearing preference and using default input",
-          err
-        );
-        saveStoredDeviceId("");
-        setSelectedDeviceId("");
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (err2) {
-          applyGetUserMediaFailure(err2, undefined);
-          return;
+        const relaxedStream = await attemptRelaxedMicAcquire(opts.deviceId!);
+        if (relaxedStream) {
+          console.warn(
+            "[useAudioRecorder] stored mic device exact match failed; relaxed retry succeeded",
+            err
+          );
+          stream = relaxedStream;
+        } else {
+          console.warn(
+            "[useAudioRecorder] stored mic device unavailable; clearing preference and using default input",
+            err
+          );
+          saveStoredDeviceId("");
+          saveStoredMicGroupId("");
+          setSelectedDeviceId("");
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (err2) {
+            applyGetUserMediaFailure(err2, undefined);
+            return;
+          }
         }
       } else {
         applyGetUserMediaFailure(err, opts.deviceId);
@@ -944,6 +1110,10 @@ export function useAudioRecorder({
       saveStoredDeviceId(settings.deviceId);
       setSelectedDeviceId(settings.deviceId);
     }
+    if (settings?.groupId) {
+      saveStoredMicGroupId(settings.groupId);
+      pinnedMicEnumerateGroupRef.current = settings.groupId;
+    }
 
     // Enumerate AFTER permission so labels populate (browsers redact labels otherwise).
     try {
@@ -962,6 +1132,9 @@ export function useAudioRecorder({
       avLogSessionId ? { sessionId: avLogSessionId } : undefined
     );
     graphRef.current = graph;
+    if (graph) {
+      graph.setTutorRecordingMute(tutorRecordingMutedRef.current);
+    }
 
     // Expose the stream that downstream consumers (useLiveAV) should use.
     // Prefer the graph's publishStream (independent destination, fans out
@@ -1055,6 +1228,119 @@ export function useAudioRecorder({
         saveStoredDeviceId(settings.deviceId);
         setSelectedDeviceId(settings.deviceId);
       }
+      if (settings?.groupId) {
+        saveStoredMicGroupId(settings.groupId);
+        pinnedMicEnumerateGroupRef.current = settings.groupId;
+      }
+
+      setLocalMicStream(graph.publishStream);
+      setError(null);
+    } catch (err) {
+      for (const t of newStream.getTracks()) {
+        try {
+          t.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+      throw err;
+    }
+  }
+
+  async function swapMicDeviceBySlot(slotIndex: number): Promise<void> {
+    const entry = devicesRef.current[slotIndex];
+    if (!entry) {
+      setError(
+        "That microphone is not available. Pick a different device or reconnect the USB mic."
+      );
+      throw new Error("invalid mic slot");
+    }
+
+    const graph = graphRef.current;
+    if (!graph?.swapLocalMicSource) {
+      if (!streamRef.current) {
+        await acquireMic({
+          deviceId: entry.deviceId || undefined,
+          forRecording: false,
+        });
+        setPickedMicSlot(slotIndex);
+        return;
+      }
+      setError(
+        "Cannot switch microphone — audio processing is unavailable in this browser."
+      );
+      throw new Error("mic graph swap unavailable");
+    }
+
+    const curTrack = streamRef.current?.getAudioTracks()[0];
+    const priorFp = curTrack
+      ? fingerprintMediaTrackSettings(curTrack.getSettings?.() ?? {})
+      : null;
+
+    let newStream: MediaStream;
+    try {
+      ({ stream: newStream } = await getUserMediaAudioForEnumerateEntry(
+        navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
+        entry,
+        devicesRef.current,
+        priorFp,
+        { userPickedSlot: true }
+      ));
+    } catch (err) {
+      const name = err instanceof Error ? (err as DOMException).name : "";
+      console.error(
+        "[useAudioRecorder] swapMicDeviceBySlot getUserMedia failed:",
+        err
+      );
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setError(
+          "Microphone access denied. Check browser permissions and try again."
+        );
+      } else if (name === "NotReadableError" || name === "TrackStartError") {
+        setError(
+          "Microphone is in use by another app. Close that app or pick a different device."
+        );
+      } else if (
+        name === "OverconstrainedError" ||
+        name === "ConstraintNotSatisfiedError"
+      ) {
+        setError(
+          "That microphone is not available. Pick a different device or reconnect the USB mic."
+        );
+      } else {
+        setError(
+          `Could not switch microphone (${name || "unknown"}). Try again.`
+        );
+      }
+      throw err;
+    }
+
+    try {
+      graph.swapLocalMicSource(newStream);
+      const prev = streamRef.current;
+      if (prev) {
+        for (const t of prev.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      streamRef.current = newStream;
+
+      const audioTrack = newStream.getAudioTracks?.()[0];
+      const settings = audioTrack?.getSettings?.();
+      if (settings?.deviceId) {
+        saveStoredDeviceId(settings.deviceId);
+        setSelectedDeviceId(settings.deviceId);
+      }
+      const resolvedGroupId = settings?.groupId ?? entry.groupId ?? "";
+      if (resolvedGroupId) {
+        saveStoredMicGroupId(resolvedGroupId);
+      }
+      pinnedMicEnumerateGroupRef.current = resolvedGroupId;
+      setPickedMicSlot(slotIndex);
 
       setLocalMicStream(graph.publishStream);
       setError(null);
@@ -1082,12 +1368,19 @@ export function useAudioRecorder({
     chunksRef.current = [];
     elapsedRef.current = 0;
     setElapsed(0);
-    approachingCapSoundPlayedRef.current = false;
-    rolloverInProgressRef.current = false;
+    vadSilenceHeldMsRef.current = 0;
+    vadLastRafMsRef.current = null;
     if (!continuation) {
       setSegmentNumber(1);
       segmentNumberRef.current = 1;
-      totalSessionElapsedRef.current = 0;
+      totalSessionElapsedRef.current = initialElapsedSeconds;
+      setSessionElapsed(initialElapsedSeconds);
+      sessionChimeMilestoneIndexRef.current = -1;
+      segmentStartOffsetMsRef.current = getAudioMsRef.current?.() ?? 0;
+      resetVadState("open");
+    } else {
+      segmentStartOffsetMsRef.current = getAudioMsRef.current?.() ?? 0;
+      resetVadState("open");
     }
     if (recordingDraft) {
       segmentIdForDraftRef.current = mintDraftSegmentId();
@@ -1163,7 +1456,41 @@ export function useAudioRecorder({
     }
   }
 
+  async function handleMicSlotChange(slotIndex: number) {
+    if (recordState === "recording" || recordState === "paused") {
+      try {
+        await swapMicDeviceBySlot(slotIndex);
+      } catch {
+        /* swapMicDeviceBySlot surfaces setError */
+      }
+      return;
+    }
+    const entry = devicesRef.current[slotIndex];
+    if (entry?.deviceId) {
+      setSelectedDeviceId(entry.deviceId);
+      saveStoredDeviceId(entry.deviceId);
+    }
+    setPickedMicSlot(slotIndex);
+    if (entry?.groupId) {
+      saveStoredMicGroupId(entry.groupId);
+      pinnedMicEnumerateGroupRef.current = entry.groupId;
+    }
+    if (recordState === "ready") {
+      await acquireMic({
+        deviceId: entry?.deviceId || undefined,
+        forRecording: false,
+      });
+    }
+  }
+
   async function handleDeviceChange(newDeviceId: string) {
+    const slotIdx = devicesRef.current.findIndex(
+      (d) => d.deviceId === newDeviceId
+    );
+    if (slotIdx >= 0) {
+      await handleMicSlotChange(slotIdx);
+      return;
+    }
     if (recordState === "recording" || recordState === "paused") {
       try {
         await swapMicDevice(newDeviceId);
@@ -1174,6 +1501,11 @@ export function useAudioRecorder({
     }
     setSelectedDeviceId(newDeviceId);
     saveStoredDeviceId(newDeviceId);
+    const picked = devicesRef.current.find((d) => d.deviceId === newDeviceId);
+    if (picked?.groupId) {
+      saveStoredMicGroupId(picked.groupId);
+      pinnedMicEnumerateGroupRef.current = picked.groupId;
+    }
     if (recordState === "ready") {
       await acquireMic({ deviceId: newDeviceId || undefined, forRecording: false });
     }
@@ -1233,7 +1565,10 @@ export function useAudioRecorder({
           const mimeType = recorder.mimeType || chooseMimeType();
           const blob = new Blob(chunksRef.current, { type: mimeType });
           chunksRef.current = [];
-          const segmentSeconds = elapsedRef.current;
+          const segmentDurationSeconds = Math.max(
+            1,
+            Math.round(getSegmentElapsedS())
+          );
           // Read the live segment number via ref; the closure captured at
           // setInterval-creation time would otherwise see the stale value
           // from the render where startTimer() was first called.
@@ -1255,6 +1590,29 @@ export function useAudioRecorder({
 
             const ext = fileExtension(mimeType);
             const filename = `session-${Date.now()}-part${partIndex}.${ext}`;
+            const previewUrl = URL.createObjectURL(blob);
+
+            if (isRollover) {
+              // Legacy rollover fallback — durable-at-cut (WS-N).
+              await onRecorded(
+                {
+                  mimeType,
+                  sizeBytes: blob.size,
+                  filename,
+                  previewUrl,
+                  blob,
+                  durationSeconds: segmentDurationSeconds,
+                },
+                { autoRollover: true }
+              );
+              setUploadMode(null);
+              mediaRecorderRef.current = null;
+              segmentNumberRef.current = partIndex + 1;
+              setSegmentNumber(partIndex + 1);
+              startMediaRecorder({ continuation: true });
+              rolloverInProgressRef.current = false;
+              return;
+            }
 
             const result = await uploadAudioWithRetry(
               uploadAudioDirect,
@@ -1273,38 +1631,9 @@ export function useAudioRecorder({
               return;
             }
 
-            const previewUrl = URL.createObjectURL(blob);
-
-            if (isRollover) {
-              // `await` so flushPendingUploads waits for the consumer to
-              // finish enqueueing this segment before signalling drained.
-              await onRecorded(
-                {
-                  blobUrl: result.blobUrl,
-                  mimeType,
-                  sizeBytes: blob.size,
-                  filename,
-                  previewUrl,
-                  blob,
-                },
-                { autoRollover: true }
-              );
-              setUploadMode(null);
-              mediaRecorderRef.current = null;
-              // Update both state (for UI) and ref (for the next rollover's onstop closure).
-              segmentNumberRef.current = partIndex + 1;
-              setSegmentNumber(partIndex + 1);
-              startMediaRecorder({ continuation: true });
-              rolloverInProgressRef.current = false;
-              return;
-            }
-
-            setDoneSegmentSeconds(segmentSeconds);
+            setDoneSegmentSeconds(segmentDurationSeconds);
             setUploadMode(null);
             setRecordState("done");
-            // `await` so flushPendingUploads correctly blocks End-session
-            // until the trailing segment is in the outbox. This is the
-            // root-cause fix for the Phase 1b smoke regression.
             await onRecorded({
               blobUrl: result.blobUrl,
               mimeType,
@@ -1312,6 +1641,7 @@ export function useAudioRecorder({
               filename,
               previewUrl,
               blob,
+              durationSeconds: segmentDurationSeconds,
             });
             rolloverInProgressRef.current = false;
           } catch (err) {
@@ -1347,7 +1677,11 @@ export function useAudioRecorder({
     elapsedRef.current = 0;
     setElapsed(0);
     totalSessionElapsedRef.current = 0;
-    approachingCapSoundPlayedRef.current = false;
+    setSessionElapsed(0);
+    sessionChimeMilestoneIndexRef.current = -1;
+    vadSilenceHeldMsRef.current = 0;
+    vadLastRafMsRef.current = null;
+    segmentStartOffsetMsRef.current = 0;
     rolloverInProgressRef.current = false;
     segmentNumberRef.current = 1;
     setSegmentNumber(1);
@@ -1371,7 +1705,7 @@ export function useAudioRecorder({
     })();
   }
 
-  const isWarning = elapsed >= effectiveWarnSegmentSeconds();
+  const isWarning = isSessionTimeWarning(sessionElapsed);
   const isLive =
     recordState === "ready" ||
     recordState === "recording" ||
@@ -1407,17 +1741,42 @@ export function useAudioRecorder({
     []
   );
 
+  const setTutorRecordingMute = useCallback((muted: boolean) => {
+    tutorRecordingMutedRef.current = muted;
+    const g = graphRef.current;
+    if (!g || typeof g.setTutorRecordingMute !== "function") return;
+    g.setTutorRecordingMute(muted);
+  }, []);
+
+  useEffect(() => {
+    if (devices.length === 0) {
+      setPickedMicSlot(0);
+      return;
+    }
+    setPickedMicSlot((prev) =>
+      reconcilePickerSlotAfterEnumerate(
+        selectedDeviceId || null,
+        devices,
+        prev,
+        pinnedMicEnumerateGroupRef.current
+      )
+    );
+  }, [devices, selectedDeviceId]);
+
   return {
     state: recordState,
     uploadMode,
     elapsed,
+    sessionElapsed,
     segmentNumber,
     doneSegmentSeconds,
     localMicStream,
     addRemoteAudio,
     setRemoteRecordingGain,
+    setTutorRecordingMute,
     devices,
     selectedDeviceId,
+    pickedMicSlot,
     gainLinear,
     setGainLinear,
     chimeEnabled,
@@ -1432,14 +1791,21 @@ export function useAudioRecorder({
     meterBarRef,
     handleStartRecording,
     handleDeviceChange,
+    handleMicSlotChange,
     pauseRecording,
     resumeRecording,
     stopAndUpload,
     handleReset,
     flushPendingUploads,
     swapMicDevice,
+    swapMicDeviceBySlot,
   };
 }
 
 // Re-export segment policy constants the shell still needs for copy.
-export { SEGMENT_MAX_SECONDS, SESSION_SAFETY_MAX_SECONDS, WARN_SEGMENT_SECONDS };
+export {
+  SESSION_BILLING_HOUR_SECONDS,
+  SESSION_SAFETY_MAX_SECONDS,
+  SESSION_TIME_WARN_SECONDS,
+  VAD_MAX_SEGMENT_SECONDS,
+};

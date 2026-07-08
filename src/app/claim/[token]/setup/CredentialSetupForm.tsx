@@ -16,10 +16,12 @@ export function CredentialSetupForm({
   rawToken,
   learnerProfileId,
   studentName,
+  enforcementEnabled = false,
 }: {
   rawToken: string;
   learnerProfileId: string;
   studentName: string;
+  enforcementEnabled?: boolean;
 }) {
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
@@ -298,14 +300,16 @@ export function CredentialSetupForm({
         {busy ? "Setting up…" : "Set up login"}
       </Button>
 
-      <div className="mt-1 text-center">
-        <Link
-          href="/account/dashboard"
-          className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-        >
-          Set up later
-        </Link>
-      </div>
+      {!enforcementEnabled ? (
+        <div className="mt-1 text-center">
+          <Link
+            href="/account/dashboard"
+            className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Set up later
+          </Link>
+        </div>
+      ) : null}
     </form>
   );
 }

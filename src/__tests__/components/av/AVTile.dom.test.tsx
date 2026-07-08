@@ -21,16 +21,21 @@ import type { AvParticipant } from "@/hooks/useLiveAV";
 type FakeTrack = {
   kind: "audio" | "video";
   enabled: boolean;
+  muted?: boolean;
   readyState: "live" | "ended";
 };
 let _fakeStreamIdCounter = 0;
 function makeFakeStream(tracks: FakeTrack[]): MediaStream {
   const id = `fake-stream-${++_fakeStreamIdCounter}`;
+  const withMuted = tracks.map((t) => ({
+    ...t,
+    muted: t.muted ?? false,
+  }));
   return {
     id,
-    getAudioTracks: () => tracks.filter((t) => t.kind === "audio"),
-    getVideoTracks: () => tracks.filter((t) => t.kind === "video"),
-    getTracks: () => tracks,
+    getAudioTracks: () => withMuted.filter((t) => t.kind === "audio"),
+    getVideoTracks: () => withMuted.filter((t) => t.kind === "video"),
+    getTracks: () => withMuted,
     addTrack: jest.fn(),
     removeTrack: jest.fn(),
   } as unknown as MediaStream;
@@ -329,6 +334,65 @@ describe("AVTile — remote participant", () => {
     // No initials circle in this case — the peer's identity is
     // ambiguous (still negotiating) so we show the negotiation copy.
     expect(screen.queryByTestId("av-tile-initials-p-wait")).toBeNull();
+  });
+
+  test("disabled remote video track shows initials (muted cam), not a black video frame", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-muted-vid",
+      label: "Alex Kim",
+      videoStream: makeFakeStream([
+        { kind: "video", enabled: false, readyState: "live" },
+      ]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    const placeholder = screen.getByTestId("av-tile-cam-placeholder-p-muted-vid");
+    expect(placeholder.getAttribute("data-placeholder-kind")).toBe("initials");
+    expect(screen.getByTestId("av-tile-initials-p-muted-vid")).toHaveTextContent(
+      "AK"
+    );
+    expect(
+      (screen.getByTestId("av-tile-video-p-muted-vid") as HTMLVideoElement).style
+        .display
+    ).toBe("none");
+  });
+
+  test("presence-signaled camOn=false shows initials even when inbound video track looks active", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-presence-cam-off",
+      label: "Jamie Fox",
+      camOn: false,
+      videoStream: makeFakeStream([
+        { kind: "video", enabled: true, muted: false, readyState: "live" },
+      ]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    expect(
+      screen.getByTestId("av-tile-cam-placeholder-p-presence-cam-off")
+    ).toHaveAttribute("data-placeholder-kind", "initials");
+    expect(
+      screen.getByTestId("av-tile-initials-p-presence-cam-off")
+    ).toHaveTextContent("JF");
+    expect(
+      (screen.getByTestId("av-tile-video-p-presence-cam-off") as HTMLVideoElement)
+        .style.display
+    ).toBe("none");
+  });
+
+  test("muted remote video track shows initials (black-frame cam-off)", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-muted-frame",
+      label: "Sam Lee",
+      videoStream: makeFakeStream([
+        { kind: "video", enabled: true, muted: true, readyState: "live" },
+      ]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    expect(
+      screen.getByTestId("av-tile-cam-placeholder-p-muted-frame")
+    ).toHaveAttribute("data-placeholder-kind", "initials");
   });
 
   test("Phase 4d: cam-off placeholder for a connected peer with no label falls back to the role initial", () => {
@@ -793,11 +857,21 @@ describe("AVTile — local preview tile", () => {
     expect(screen.getByTestId("av-tile-state-self").textContent).toMatch(/You/);
   });
 
-  test("local mic-muted overlay appears when localMicMuted=true", () => {
+  test("local mic-off control when localMicMuted=true and localMediaControls set", () => {
     render(
-      <AVTile participant={localDescriptor()} isLocal localMicMuted />
+      <AVTile
+        participant={localDescriptor()}
+        isLocal
+        localMicMuted
+        localMediaControls={{
+          onToggleMic: jest.fn(),
+          onToggleCam: jest.fn(),
+        }}
+      />
     );
-    expect(screen.getByTestId("av-tile-local-mic-muted-self")).toBeTruthy();
+    const micBtn = screen.getByTestId("av-controls-toggle-mic");
+    expect(micBtn.className).toContain("mynk-wb-tb-btn--mic-off");
+    expect(micBtn.getAttribute("aria-pressed")).toBe("false");
   });
 
   test("local cam placeholder appears when localCamMuted=true (even if stream has tracks)", () => {

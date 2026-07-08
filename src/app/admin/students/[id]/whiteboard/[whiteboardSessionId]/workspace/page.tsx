@@ -4,6 +4,7 @@ import { db, withDbRetry } from "@/lib/db";
 import { env } from "@/lib/env";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
+import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persisted-state";
 import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
 
 /**
@@ -12,9 +13,6 @@ import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
  * Trust posture (re-read before changing):
  *   - `assertOwnsWhiteboardSession` re-checks the logged-in tutor
  *     owns this session. Multi-tenant gate.
- *   - Re-validates `consentAcknowledged === true` belt-and-suspenders
- *     (the action enforces it on create; this re-check defends
- *     against a row mutated outside the action layer).
  *   - Ended sessions render the in-frame notes-hero review surface
  *     (SessionReviewMode) so End Session + any RSC refresh converge.
  *   - We bounce env-only logins to the admin home with an explanation
@@ -46,13 +44,19 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 type RouteParams = { id: string; whiteboardSessionId: string };
+type SearchParams = Record<string, string | string[] | undefined>;
 
 export default async function WhiteboardWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<RouteParams>;
+  searchParams?: Promise<SearchParams>;
 }) {
   const { id: studentId, whiteboardSessionId } = await params;
+  const sp = searchParams ? await searchParams : {};
+  const rawIntent = typeof sp.intent === "string" ? sp.intent : undefined;
+  const initialIntent = rawIntent === "endreview" ? ("endreview" as const) : undefined;
 
   const scope = await requireStudentScope();
   if (scope.kind !== "admin") {
@@ -66,9 +70,6 @@ export default async function WhiteboardWorkspacePage({
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
   if (session.studentId !== studentId) {
-    notFound();
-  }
-  if (!session.consentAcknowledged) {
     notFound();
   }
 
@@ -86,8 +87,17 @@ export default async function WhiteboardWorkspacePage({
           activeMs: true,
           lastActiveAt: true,
           eventsBlobUrl: true,
+          sessionPhase: true,
+          sessionMode: true,
+          activatedAt: true,
           student: {
-            select: { id: true, name: true, recordingDefaultEnabled: true },
+            select: { id: true, name: true, learnerProfileId: true },
+          },
+          consentSnapshot: {
+            select: {
+              allowAudioRecording: true,
+              consentRecordId: true,
+            },
           },
         },
       }),
@@ -96,6 +106,18 @@ export default async function WhiteboardWorkspacePage({
   if (!detail) notFound();
 
   const syncEnabled = Boolean(env.WHITEBOARD_SYNC_URL);
+
+  const initialHasConsentSnapshot = detail.consentSnapshot != null;
+  const initialAllowAudioRecording =
+    detail.consentSnapshot?.allowAudioRecording ?? null;
+
+  const initialPersistedState =
+    detail.sessionPhase === "ACTIVE" && !detail.endedAt
+      ? await assembleInitialPersistedState(
+          detail.id,
+          detail.startedAt.toISOString()
+        )
+      : null;
 
   return (
     <WhiteboardSessionShell
@@ -109,9 +131,17 @@ export default async function WhiteboardWorkspacePage({
       initialActiveMs={detail.activeMs}
       initialLastActiveAtIso={detail.lastActiveAt?.toISOString() ?? null}
       syncUrl={syncEnabled ? env.WHITEBOARD_SYNC_URL! : null}
-      initialUserWantsRecording={detail.student.recordingDefaultEnabled}
+      initialUserWantsRecording={true} // PRESARAH-1: always-on recording intent
+      initialSessionPhase={detail.sessionPhase}
+      sessionMode={detail.sessionMode}
+      activatedAt={detail.activatedAt?.toISOString() ?? null}
       syncEnabled={syncEnabled}
       initialMode={detail.endedAt ? "review" : "live"}
+      initialAllowAudioRecording={initialAllowAudioRecording}
+      initialHasConsentSnapshot={initialHasConsentSnapshot}
+      studentLearnerProfileId={detail.student.learnerProfileId}
+      initialIntent={initialIntent}
+      initialPersistedState={initialPersistedState}
     />
   );
 }

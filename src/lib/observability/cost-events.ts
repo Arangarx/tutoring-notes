@@ -68,6 +68,9 @@ function isWhisperModel(model: string): boolean {
 /**
  * Rough USD estimate from usage × rate-card. Returns `undefined` when the model
  * is unknown or required usage fields are missing.
+ *
+ * Swapped models via OPENAI_*_MODEL env vars may log `estimatedCostUsd: undefined`
+ * until the rate-card in rate-card.ts is extended for the new model family.
  */
 export function estimateCostUsd(params: EstimateCostUsdInput): number | undefined {
   const m = params.model.trim().toLowerCase();

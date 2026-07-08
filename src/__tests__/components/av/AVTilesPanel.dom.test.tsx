@@ -165,9 +165,15 @@ describe("AVTilesPanel — layout + empty / populated states", () => {
           isMicMuted: true,
           isCamMuted: true,
         }}
+        localMediaControls={{
+          onToggleMic: jest.fn(),
+          onToggleCam: jest.fn(),
+        }}
       />
     );
-    expect(screen.getByTestId("av-tile-local-mic-muted-self")).toBeTruthy();
+    expect(screen.getByTestId("av-controls-toggle-mic").className).toContain(
+      "mynk-wb-tb-btn--mic-off"
+    );
     expect(screen.getByTestId("av-tile-cam-placeholder-self")).toBeTruthy();
   });
 

@@ -20,13 +20,29 @@ import "server-only";
  */
 
 import { after } from "next/server";
-import { upsertTutorNotePending, getTutorNoteBySessionId } from "@/lib/recording/transcript-store";
-import { processNotesReduceJob } from "@/lib/recording/notes-worker";
+import {
+  upsertTutorNotePending,
+  getTutorNoteBySessionId,
+  getTranscriptChunksBySessionId,
+} from "@/lib/recording/transcript-store";
+import { processNotesReduceJob, processLiveReduceJob } from "@/lib/recording/notes-worker";
 
 /** Max time to poll for chunk completion inside the after() callback (ms). */
 const AFTER_POLL_DEADLINE_MS = 4.5 * 60 * 1000; // 4.5 min
-/** Interval between completion-gate polls inside the after() callback (ms). */
-const AFTER_POLL_INTERVAL_MS = 5_000;
+/**
+ * WS-K: shortened from 5s → 1s so the tail-chunk reduce (last segment still
+ * transcribing at End) completes within the 2–3s post-End budget.
+ */
+const AFTER_POLL_INTERVAL_MS = 1_000;
+
+// ---------------------------------------------------------------------------
+// WS-K live-reduce debounce constants (tunable named constants)
+// ---------------------------------------------------------------------------
+
+/** Fire a live reduce after this many new done chunks since last reduce. */
+const LIVE_REDUCE_CHUNK_THRESHOLD = 5;
+/** Fire a live reduce after this many ms since last reduce (time-based debounce). */
+const LIVE_REDUCE_TIME_MS = 2 * 60 * 1000; // 2 minutes
 
 function fireAndForgetReduce(sessionId: string): void {
   // Use `after()` so Vercel keeps the function alive until notes are generated.
@@ -71,6 +87,67 @@ function fireAndForgetReduce(sessionId: string): void {
       );
     }
   });
+}
+
+/**
+ * WS-K: Fire a live incremental reduce for a mid-session chunk map completion.
+ *
+ * Called after each chunk extraction (map step) completes. Debounced:
+ * only fires when EITHER:
+ *   (a) LIVE_REDUCE_CHUNK_THRESHOLD new done chunks exist since last reduce, OR
+ *   (b) LIVE_REDUCE_TIME_MS have elapsed since the last reduce AND ≥1 new chunk.
+ *
+ * The live reduce runs the FULL reduce (same content as finalize) and stores
+ * the output in TutorNote.content + updates lastReducedChunkCount watermark.
+ * TutorNote.status stays "pending" — this is COMPUTE not display.
+ *
+ * Cost note: debounce bounds live-reduce calls to ≤1 per LIVE_REDUCE_CHUNK_THRESHOLD
+ * chunks. A 2h session with 30s chunks (~240 chunks) fires ≤48 live reduces.
+ *
+ * Never throws.
+ */
+export async function enqueueLiveReduce(sessionId: string): Promise<void> {
+  try {
+    const [note, chunks] = await Promise.all([
+      getTutorNoteBySessionId(sessionId),
+      getTranscriptChunksBySessionId(sessionId),
+    ]);
+
+    const doneCount = chunks.filter((c) => c.status === "done").length;
+    if (doneCount === 0) return;
+
+    const watermark = note?.lastReducedChunkCount ?? 0;
+    const lastAt = note?.lastLiveReduceAt ?? null;
+    const newChunks = doneCount - watermark;
+
+    const chunkThresholdMet = newChunks >= LIVE_REDUCE_CHUNK_THRESHOLD;
+    const timeThresholdMet =
+      newChunks > 0 &&
+      (!lastAt || Date.now() - lastAt.getTime() >= LIVE_REDUCE_TIME_MS);
+
+    if (!chunkThresholdMet && !timeThresholdMet) {
+      console.log(
+        `[tnt] wbsid=${sessionId} action=live_reduce_debounce_skip newChunks=${newChunks} watermark=${watermark} doneCount=${doneCount}`
+      );
+      return;
+    }
+
+    console.log(
+      `[tnt] wbsid=${sessionId} action=live_reduce_enqueued newChunks=${newChunks} trigger=${chunkThresholdMet ? "chunk" : "time"}`
+    );
+
+    // Fire-and-forget: runs within the same after() lifetime as the enclosing
+    // transcription worker. Best-effort; errors do not affect the caller.
+    void processLiveReduceJob(sessionId).catch((err: unknown) => {
+      console.error(
+        `[tnt] wbsid=${sessionId} action=live_reduce_unexpected_throw err=${err instanceof Error ? err.message : String(err)}`
+      );
+    });
+  } catch (err: unknown) {
+    console.error(
+      `[tnt] wbsid=${sessionId} action=live_reduce_enqueue_error err=${err instanceof Error ? err.message : String(err)}`
+    );
+  }
 }
 
 /**

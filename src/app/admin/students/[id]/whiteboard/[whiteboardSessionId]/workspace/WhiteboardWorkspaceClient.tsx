@@ -39,7 +39,13 @@
  */
 
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
+import { setCaptureDeferActive } from "@/lib/deploy/capture-defer-registry";
+import {
+  formatConsentActionError,
+  parseConsentActionError,
+} from "@/lib/consent-action-error";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useWindowScrollToTopOnMount } from "@/hooks/useWindowScrollToTopOnMount";
 import { useTheme } from "@/components/ThemeProvider";
 import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds";
@@ -53,6 +59,7 @@ import {
   clearEncryptionKeyForSession,
   useEncryptionKeyInHash,
 } from "@/lib/whiteboard/encryption-key";
+import { JOIN_HASH_STORAGE_PREFIX } from "@/app/join/[sessionId]/JoinAuthGate";
 import {
   ACTIVE_PING_STALE_MS,
   computeDisplayActiveMs,
@@ -63,9 +70,23 @@ import {
   TUTOR_MIC_STREAM_ID,
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
+import {
+  deriveAudioCapturePolicy,
+  deriveWbCaptureActive,
+  resolveRemoteRecordingGainLinear,
+  shouldAttachRemoteStreamToRecordingMixdown,
+} from "@/lib/recording/audio-capture-policy";
+import {
+  createSessionMsClock,
+  type SessionMsClock,
+} from "@/lib/recording/session-clock";
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
-import { useLiveAV } from "@/hooks/useLiveAV";
+import { useLiveAV, type AvParticipant } from "@/hooks/useLiveAV";
+import { useLiveAvCoordinator } from "@/hooks/useLiveAvCoordinator";
+import AudioControls from "@/components/av/AudioControls";
+import VideoControls from "@/components/av/VideoControls";
+import { AVTilesPanel } from "@/components/av/AVTilesPanel";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import { useExcalidrawLoadingGuard, excalidrawBoardBgHex } from "@/hooks/useExcalidrawLoadingGuard";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
@@ -73,7 +94,13 @@ import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicCo
 import { WbTopBarMicControlLive } from "@/components/whiteboard/chrome/WbTopBarMicControlLive";
 import { WbToolBtn } from "@/components/whiteboard/chrome/WbToolBtn";
 import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamControl";
+import { WbTopBarCamControlLive } from "@/components/whiteboard/chrome/WbTopBarCamControlLive";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
+import { WbExitButton } from "@/components/whiteboard/chrome/WbExitButton";
+import { LearnerSignOutButton } from "@/components/student/LearnerSignOutButton";
+import { WbStudentConnectionStatus } from "@/components/whiteboard/chrome/WbStudentConnectionStatus";
+import { WbUndoRedoButtons } from "@/components/whiteboard/chrome/WbUndoRedoButtons";
+import { WbToolbarToggle } from "@/components/whiteboard/chrome/WbToolbarToggle";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -86,18 +113,20 @@ import {
 import { generateSessionSnapshotPng } from "@/lib/whiteboard/snapshot-png";
 import { resolveParticipantLabel } from "@/lib/whiteboard/participant-label";
 import { deriveSyncPillState } from "@/lib/whiteboard/sync-pill-presentation";
-import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import {
-  endWhiteboardSession,
-  enqueueChunkTranscriptionAction,
+  getOrCreateLocalPeerId,
+  parseStudentPeerId,
+} from "@/lib/whiteboard/local-peer-id";
+import {
+  finalizeWhiteboardSessionFromBackend,
   issueJoinToken,
   revokeJoinTokensForSession,
+  startWhiteboardSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
-import {
-  kickSessionChunksAction,
-  triggerNotesGenerationAction,
-} from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { LEGACY_INTENT_ENDREVIEW_AUTO_END } from "@/lib/whiteboard/finalize-flags";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { useRemoteMicRecorders } from "@/hooks/useRemoteMicRecorders";
 import {
   assembleEndSessionSegments,
   drainOutboxOrTimeout,
@@ -140,13 +169,21 @@ import {
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
-import { WbRoleProvider, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
+import { WbRoleProvider, deriveWbCapabilities, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
+import {
+  WaitingRoomOverlay,
+  type WtrSessionMode,
+} from "@/components/whiteboard/chrome/WaitingRoomOverlay";
 import {
   shapeIconFor,
   WbIconCamera,
   WbIconCollapse,
   WbIconEndSession,
   WbIconEraser,
+  WbIconFollowSync,
+  WbIconGrid,
+  WbIconMatchView,
+  WbIconMic,
   WbIconMore,
   WbIconPencil,
   WbIconRedo,
@@ -217,6 +254,7 @@ import {
   restoreAndSanitizeForPaint,
 } from "@/lib/whiteboard/scene-paint";
 import type { PageViewState, WhiteboardBoardDocumentV1 } from "@/lib/whiteboard/board-document-snapshot";
+import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 import { enrichPageStripRow } from "@/lib/whiteboard/page-strip-pdf";
 import {
   clearSessionSceneDraft,
@@ -244,14 +282,36 @@ type Props = {
   initialLastActiveAtIso: string | null;
   syncUrl: string | null;
   /**
-   * Per-student "Start whiteboard recording on by default" preference.
-   * Sarah's pilot ask (Apr 2026): the workspace toggle should ship in
-   * the right initial position for each student so she's not unticking
-   * Start every time for students who declined recording. The tutor
-   * can still flip mid-session — this is the initial state only.
-   * Not required for student role.
+   * Recording intent at mount (PRESARAH-1: always true for tutor path;
+   * SSR passes true; prop kept for testability). Consent still gates
+   * actual audio capture — this is intent only. Not used on student role.
    */
   initialUserWantsRecording?: boolean;
+  /**
+   * Session phase from DB at SSR time.
+   * PENDING = tutor has not clicked Start (waiting room — A/V mesh
+   * is live but capture + billing timer are inert).
+   * ACTIVE  = tutor has clicked Start (capture + billing timer run).
+   * Defaults to ACTIVE so callers that predate this field (tests,
+   * student shell) behave exactly as before.
+   */
+  initialSessionPhase?: "PENDING" | "ACTIVE";
+  /** Session mode (LIVE | IN_PERSON) — passed through for future use. */
+  sessionMode?: string;
+  /** ISO timestamp of PENDING→ACTIVE flip, or null. */
+  activatedAt?: string | null;
+  /**
+   * Frozen session audio-recording consent from SessionConsentSnapshot.
+   * null = no snapshot (unclaimed / no ConsentRecord). Consumed in Block B Commit 2+.
+   */
+  initialAllowAudioRecording?: boolean | null;
+  /** True when SessionConsentSnapshot exists for this session. Consumed in Block B Commit 2+. */
+  initialHasConsentSnapshot?: boolean;
+  /**
+   * Claimed student's LearnerProfile id (tutor path). Required for per-speaker
+   * transcription lane attribution — omitted when student is unclaimed.
+   */
+  studentLearnerProfileId?: string | null;
   /**
    * A3 in-shell review: called in place of router.replace/refresh once
    * the atomic end-session pipeline completes. The shell's handler sets
@@ -271,6 +331,27 @@ type Props = {
   joinToken?: string;
   /** Tutor display name for student chrome — reserved for Wave 1b+. */
   tutorName?: string;
+  /**
+   * identity-peerid workstream: session-scoped opaque identity token
+   * (student path only). sha256(learnerProfileId:sessionId)[:12hex].
+   * When provided, the student peerId is derived as
+   * `student-<identityKey>-<deviceId>` (stable per browser, detectable
+   * across devices for dual-device takeover). Tutor callers omit.
+   */
+  identityKey?: string;
+  /**
+   * Authenticated student path: joining learner's profile id for mic persistence.
+   */
+  learnerProfileId?: string;
+  /**
+   * When "endreview": auto-invoke handleEndSession exactly once on mount.
+   * Used by the roster "End and review" button (SSG-2 anti-orphan fix).
+   * The ref guard ensures it never fires twice, and only fires for
+   * the tutor role (student path never sets this).
+   */
+  initialIntent?: "endreview";
+  /** WS-D: server-assembled log + board document for ACTIVE resume. */
+  initialPersistedState?: InitialPersistedWhiteboardState | null;
 };
 
 // Phase 4d Commit 6: stable empty Set so the FSM's
@@ -296,11 +377,6 @@ function upsertPageStripViewState(
 // trade-off (more dead air at the top of replays) — see
 // `docs/PHASE-PDF-SMOKE-1.md` smoke-4 section.
 const AUDIO_FLOW_GATE_TIMEOUT_MS = 10_000;
-// Debounce window for the "both parties reachable" loss transition.
-// When reachableParticipants drops to 0 (WebRTC dies), we wait this
-// long before reporting the loss to the billing timer. Avoids a
-// momentary 1-2s ICE reconnect blip briefly pausing the timer.
-const REACHABLE_LOSS_DEBOUNCE_MS = 8_000;
 
 function CanvasPlaceholder({ label }: { label: string }) {
   return (
@@ -328,30 +404,35 @@ function CanvasPlaceholder({ label }: { label: string }) {
 // module docblock for full lifecycle + threat-model notes.
 
 /**
- * Audio-clock surrogate. The plan calls for `MediaRecorder.getElapsedAudioMs()`
- * (blocker #2) — the audio recorder doesn't expose that yet (tracked
- * in `docs/BACKLOG.md` "Reliability gaps"). Until it lands, we drive
- * `getAudioMs` off `performance.now()` deltas, accumulating across
- * pauses. ms precision; doesn't account for iOS background-tab clock
- * throttling (the BACKLOG item covers that follow-up).
+ * The single monotonic session clock (p3-clock). `active` is wired to the
+ * FSM recording gate (`wbSignal`): the clock accrues elapsed ms while
+ * recording and FREEZES while paused (stable student disconnect), resuming
+ * from the frozen value on reconnect. Its `getAudioMs()` is the ONE t=0
+ * epoch threaded into WB event `t`, the FSM `audioClockMs`, and the
+ * transcription `recordingTimeOffsetMs`.
+ *
+ * The accrual math lives in `createSessionMsClock` (pure + unit-tested in
+ * `session-clock.test.ts`); this hook is the thin React binding. iOS
+ * background-tab `performance.now()` throttling is a documented follow-up
+ * (`docs/BACKLOG.md` "Reliability gaps"); a refresh mid-session re-anchors
+ * t=0 (segment ordering stays refresh-durable via wall-clock
+ * `audioStartedAtMs`).
  */
-function useAudioMsClock(active: boolean): () => number {
-  const startedAtRef = useRef<number | null>(null);
-  const accruedMsRef = useRef(0);
+function useAudioMsClock(active: boolean, initialMs = 0): () => number {
+  const clockRef = useRef<SessionMsClock | null>(null);
+  if (clockRef.current === null) {
+    clockRef.current = createSessionMsClock(undefined, initialMs);
+  }
   useEffect(() => {
+    const clock = clockRef.current;
+    if (!clock) return;
     if (active) {
-      startedAtRef.current = performance.now();
-    } else if (startedAtRef.current !== null) {
-      accruedMsRef.current += performance.now() - startedAtRef.current;
-      startedAtRef.current = null;
+      clock.start();
+    } else {
+      clock.pause();
     }
   }, [active]);
-  return useCallback(() => {
-    if (startedAtRef.current === null) return Math.floor(accruedMsRef.current);
-    return Math.floor(
-      accruedMsRef.current + (performance.now() - startedAtRef.current)
-    );
-  }, []);
+  return useCallback(() => clockRef.current?.readMs() ?? 0, []);
 }
 
 /**
@@ -398,11 +479,21 @@ export function WhiteboardWorkspaceClient({
   initialActiveMs,
   initialLastActiveAtIso,
   syncUrl,
-  initialUserWantsRecording = false,
+  initialUserWantsRecording = true,
   onSessionEnded,
   role = "tutor",
   joinToken,
   tutorName = "your tutor",
+  initialSessionPhase = "ACTIVE",
+  sessionMode: initialSessionMode,
+  activatedAt: _activatedAt,
+  initialAllowAudioRecording = null,
+  initialHasConsentSnapshot = false,
+  studentLearnerProfileId = null,
+  identityKey,
+  learnerProfileId,
+  initialIntent,
+  initialPersistedState = null,
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
@@ -424,7 +515,14 @@ export function WhiteboardWorkspaceClient({
   // Encryption key + sync client lifecycle
   // ---------------------------------------------------------------
 
-  const encryptionKey = useEncryptionKeyInHash(whiteboardSessionId);
+  // Tutor-only: mint/persist the encryption key in localStorage + URL hash.
+  // Students have their own key-read path (readStudentKeyFromHash /
+  // sessionStorage fallback below). When enabled=false the hook is a
+  // complete no-op — it must NOT mint a fresh key for students on the
+  // post-login-redirect path (which has an empty hash + empty localStorage).
+  const encryptionKey = useEncryptionKeyInHash(whiteboardSessionId, {
+    enabled: role !== "student",
+  });
   const syncClientRef = useRef<WhiteboardSyncClient | null>(null);
   const [syncReady, setSyncReady] = useState(false);
 
@@ -502,11 +600,16 @@ export function WhiteboardWorkspaceClient({
   // component instance. HMR remounts produce a new id along with a
   // new sync-client; both layers agree.
   const localPeerId = useMemo(
-    () => getOrCreateLocalPeerId(whiteboardSessionId, role),
-    // role is stable per-mount (prop default "tutor"); including for completeness.
+    () => getOrCreateLocalPeerId(whiteboardSessionId, role, identityKey),
+    // role and identityKey are stable per-mount; including for completeness.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [whiteboardSessionId, role]
+    [whiteboardSessionId, role, identityKey]
   );
+  // Epoch ms when this client minted its session — used as the "newest wins"
+  // tiebreaker in dual-device takeover detection (identity-peerid workstream).
+  // Minted once per component mount; changes on page reload (new timestamp).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const localJoinedAt = useMemo(() => Date.now(), []);
   // Display label for the tutor's own presence frame. Server-side
   // doesn't pass the tutor's display name through props today; fall
   // back to "Tutor" so we don't block hook usage on the label being
@@ -561,6 +664,9 @@ export function WhiteboardWorkspaceClient({
    */
   const recorderRecordViewportRef = useRef<
     ((panX: number, panY: number, zoom: number) => void) | null
+  >(null);
+  const recorderRecordPageSwitchRef = useRef<
+    ((pageId: string, title: string) => void) | null
   >(null);
   /** `flushViewportPersistNow` is declared before `useTutorLiveDocumentWire`. */
   const scheduleDocumentBroadcastRef = useRef<() => void>(() => undefined);
@@ -632,13 +738,23 @@ export function WhiteboardWorkspaceClient({
   const [studentEncryptionKey, setStudentEncryptionKey] = useState<string | null>(null);
   const [studentKeyMissing, setStudentKeyMissing] = useState(false);
   const [hasLeft, setHasLeft] = useState(false);
+  const [studentAvGeneration, setStudentAvGeneration] = useState(0);
   const [joinUnavailableReason, setJoinUnavailableReason] =
     useState<JoinUnavailableReason | null>(null);
   const [studentSyncClient, setStudentSyncClient] =
     useState<WhiteboardSyncClient | null>(null);
   const [studentConnected, setStudentConnected] = useState(false);
   const [studentOtherPeerCount, setStudentOtherPeerCount] = useState(0);
-  const hasAutoRequestedAvRef = useRef(false);
+  /**
+   * identity-peerid workstream: becomes true when another device in the room
+   * is detected as the "newer" session for the same learner identity. When
+   * true, the student sees a "you joined on another device" takeover screen
+   * and sync/A/V is torn down.
+   */
+  const [deviceSuperseded, setDeviceSuperseded] = useState(false);
+  /** Student mic/cam pickers stay enabled while sync connects — only block after leave / bad link. */
+  const studentAvPickerDisabled =
+    hasLeft || joinUnavailableReason !== null;
 
   // Student server-side timer state (mirrors tutor's timer for student chrome)
   const [studentServerActiveMs, setStudentServerActiveMs] = useState(
@@ -707,6 +823,40 @@ export function WhiteboardWorkspaceClient({
    * from writing old-page elements into the newly-active same-named page.
    */
   const boardGenerationRef = useRef(0);
+  /**
+   * BUG-3 / WS-X content-identity guard.
+   *
+   * Maps pageId → Set of anchor element IDs placed by the most recent
+   * programmatic `updateScene` in `selectTutorPage`. In
+   * `handleExcalidrawChange`, any incoming onChange that lacks ALL anchor
+   * IDs is treated as a stale foreign scene (from a different board that
+   * fired its debounced onChange after the guard released) and dropped.
+   * `applyRemoteToCanvas` also consults this map: during the post-switch
+   * fingerprint window, merge reads `pageDataRef[targetId]` (clean bucket)
+   * instead of the transitional live canvas. Cleared on the first confirmed
+   * legitimate onChange. Not set for blank-page switches (`next.length === 0`).
+   */
+  const pageSceneSetFingerprintRef = useRef<Map<string, Set<string>>>(new Map());
+  /**
+   * TEST SEAM — BUG-3 applyRemote bypass injection.
+   * Holds the current `applyRemoteToCanvas` closure for
+   * `window.__WBX_INJECT_APPLY_REMOTE__`. Only written when
+   * `NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1"`.
+   */
+  const e2eApplyRemoteInvokerRef = useRef<
+    | ((
+        elements: ReadonlyArray<ExcalidrawLikeElement>,
+        details?: Pick<WhiteboardWireRemoteDetails, "page" | "scenePageId">
+      ) => Promise<RemoteSceneIngestLogHint | void>)
+    | null
+  >(null);
+  /**
+   * TEST SEAM — one-shot callback registered via window.__WBX_ON_GUARD_RELEASE__.
+   * Fired synchronously inside selectTutorPage's releaseGuard when
+   * pageSwitchProgrammaticRef drops to 0 and the fingerprint is still active
+   * for the target page. Only active when NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1".
+   */
+  const onGuardReleaseCallbackRef = useRef<((pageId: string) => void) | null>(null);
   /** In-memory per-tab scene (Excalidraw only shows one at a time). */
   const pageDataRef = useRef<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>(
     Object.create(null)
@@ -748,7 +898,6 @@ export function WhiteboardWorkspaceClient({
   // Opening any menu closes all others; outside-click/Esc handled per-menu.
   const [openMenu, setOpenMenu] = useState<
     | "share"
-    | "view"
     | "shapes"
     | "more"
     | "props"
@@ -757,7 +906,6 @@ export function WhiteboardWorkspaceClient({
     | null
   >(null);
   const shareMenuOpen = openMenu === "share";
-  const viewMenuOpen = openMenu === "view";
   const shapesDropdownOpen = openMenu === "shapes";
   const morePopoverOpen = openMenu === "more";
   const propsCompactOpen = openMenu === "props";
@@ -766,27 +914,37 @@ export function WhiteboardWorkspaceClient({
   const toggleMenu = (
     menu:
       | "share"
-      | "view"
       | "shapes"
       | "more"
       | "props"
       | "theme"
       | "topbar-more"
   ) => setOpenMenu((p) => (p === menu ? null : menu));
+  // Anchor positions for rail flyouts rendered as position:fixed portals.
+  // Captured in onClickCapture before the toggle fires; batched together.
+  const [propsFlyoutAnchor, setPropsFlyoutAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [shapesFlyoutAnchor, setShapesFlyoutAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [moreFlyoutAnchor, setMoreFlyoutAnchor] = useState<{ top: number; left: number } | null>(null);
   const dismissTouchSheets = useCallback(() => {
     setOpenMenu(null);
   }, []);
   const touchSheetOpen =
     openMenu === "props" ||
     openMenu === "shapes" ||
-    openMenu === "more" ||
-    openMenu === "topbar-more";
+    openMenu === "more";
   const [gridEnabled, setGridEnabled] = useState(false);
   const [roughness, setRoughness] = useState(0);
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
   const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
   const [toolbarHidden, setToolbarHidden] = useState(false);
+  // Wave5 #3 — freeze fix: when the layout switches (window resized past the
+  // inline/touch breakpoint) close any open menu so the ⋯ overflow dropdown
+  // cannot stay open after its trigger is CSS-hidden. An open dropdown while the
+  // trigger is not rendered caused a listener/render loop that froze the page.
+  useEffect(() => {
+    setOpenMenu(null);
+  }, [layoutMode]);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
   // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
@@ -891,7 +1049,8 @@ export function WhiteboardWorkspaceClient({
       //     the `onChange` → `getElementsIncludingDeleted` path).
       const onTargetReadTime =
         activePageIdRef.current === targetId &&
-        pageSwitchProgrammaticRef.current === 0;
+        pageSwitchProgrammaticRef.current === 0 &&
+        !pageSceneSetFingerprintRef.current.has(targetId);
       const localForMerge: ReadonlyArray<ExcalidrawLikeElement> =
         onTargetReadTime
           ? (((api.getSceneElementsIncludingDeleted?.() ?? api.getSceneElements()) as ReadonlyArray<ExcalidrawLikeElement>))
@@ -993,10 +1152,53 @@ export function WhiteboardWorkspaceClient({
   // Student sync client lifecycle (role="student" only)
   // ---------------------------------------------------------------
 
-  // Step 1: read encryption key from URL hash (student-only; tutor uses useEncryptionKeyInHash)
+  // Step 1: read encryption key (student-only; tutor uses useEncryptionKeyInHash above).
+  //
+  // Primary: URL hash (#k=…). This is the happy path — student arrived
+  // with the link the tutor shared.
+  //
+  // Fallback: sessionStorage[JOIN_HASH_STORAGE_PREFIX + whiteboardSessionId].
+  // JoinAuthGate saves the hash here before redirecting to /students/login
+  // so that the post-login-redirect path (where the browser strips the
+  // fragment) can still recover the key. React runs child effects before
+  // parent effects, so this effect fires BEFORE JoinHashRestorer (parent)
+  // can restore the hash — we must read sessionStorage ourselves here.
   useEffect(() => {
     if (role !== "student") return;
-    const k = readStudentKeyFromHash();
+
+    // --- primary: URL hash ---
+    let k = readStudentKeyFromHash();
+    let keySource: "hash" | "sessionStorage" | "missing" = "missing";
+    if (k) {
+      keySource = "hash";
+    } else {
+      // --- fallback: sessionStorage (post-login-redirect path) ---
+      try {
+        const stored = sessionStorage.getItem(
+          JOIN_HASH_STORAGE_PREFIX + whiteboardSessionId
+        );
+        if (stored) {
+          const ssParams = new URLSearchParams(
+            stored.startsWith("#") ? stored.slice(1) : stored
+          );
+          const fromSs = ssParams.get("k");
+          if (fromSs && fromSs.length >= 16) {
+            k = fromSs;
+            keySource = "sessionStorage";
+            // Consume the entry so a subsequent refresh doesn't re-read it.
+            sessionStorage.removeItem(JOIN_HASH_STORAGE_PREFIX + whiteboardSessionId);
+            // Restore the hash so that any code that reads window.location.hash
+            // later (including JoinHashRestorer, which will find a non-empty hash
+            // and skip) sees the canonical key.
+            window.location.hash = stored.startsWith("#") ? stored.slice(1) : stored;
+          }
+        }
+      } catch {
+        /* sessionStorage unavailable — stay on missing path */
+      }
+    }
+
+    wjgLog("key_read", { key_source: keySource });
     if (!k) {
       setStudentKeyMissing(true);
       wjgLog("key_missing");
@@ -1004,7 +1206,7 @@ export function WhiteboardWorkspaceClient({
     }
     setStudentEncryptionKey(k);
     wjgLog("key_ok");
-  }, [role, wjgLog]);
+  }, [role, wjgLog, whiteboardSessionId]);
 
   useEffect(() => {
     if (role !== "student") return;
@@ -1026,6 +1228,10 @@ export function WhiteboardWorkspaceClient({
       role: "student",
       peerId: localPeerId,
       localPeerLabel: syncPresenceLabel,
+      // identity-peerid workstream: broadcast identity fields so peers can
+      // detect dual-device conflicts (tutor sees one tile; older device self-bumps).
+      ...(identityKey !== undefined ? { localIdentityKey: identityKey } : {}),
+      localJoinedAt,
     });
     setStudentSyncClient(client);
     setStudentConnected(client.isConnected());
@@ -1059,6 +1265,46 @@ export function WhiteboardWorkspaceClient({
     wjgLog,
   ]);
 
+  // identity-peerid workstream: dual-device takeover detection.
+  // Subscribe to room peer changes and detect when another device with the
+  // same identityKey has a strictly newer joinedAt (or lexicographically
+  // greater peerId as a tiebreak). When true, this device is stale —
+  // disconnect sync/A/V and show the "you joined on another device" screen.
+  //
+  // Invariant: same peerId = same device (sessionStorage-backed OR
+  // localStorage-derived deterministic id) = reload = NOT a takeover.
+  // Only a DIFFERENT peerId with same identityKey triggers takeover.
+  useEffect(() => {
+    if (role !== "student" || !studentSyncClient) return;
+    const myParsed = parseStudentPeerId(localPeerId);
+    if (!myParsed) return; // Not identity-derived — no identity features, skip.
+
+    const unsub = studentSyncClient.onRoomPeersChange((peers) => {
+      for (const peer of peers) {
+        if (peer.role !== "student") continue;
+        if (peer.peerId === localPeerId) continue; // skip self (shouldn't appear; guard)
+        if (!peer.identityKey || peer.identityKey !== myParsed.identityKey) continue;
+        // Same identityKey, different peerId = different device, same learner.
+        const peerJoinedAt = peer.joinedAt ?? 0;
+        const isNewerDevice =
+          peerJoinedAt > localJoinedAt ||
+          (peerJoinedAt === localJoinedAt && peer.peerId > localPeerId);
+        if (isNewerDevice) {
+          console.log(
+            `[wjg] wjg=${localPeerId.slice(-8)} wbsid=${whiteboardSessionId} action=device_superseded by=${peer.peerId} theirJoinedAt=${peerJoinedAt} myJoinedAt=${localJoinedAt}`
+          );
+          setDeviceSuperseded(true);
+          // Disconnect from sync to stop competing for presence.
+          // The A/V mesh (useLiveAV) will naturally quiesce once sync is torn
+          // down (no more onRoomPeersChange callbacks for new peer additions).
+          studentSyncClient.disconnect();
+          return; // No need to check other peers.
+        }
+      }
+    });
+    return unsub;
+  }, [role, studentSyncClient, localPeerId, localJoinedAt, whiteboardSessionId]);
+
   // Student clock tick (drives student timer display)
   useEffect(() => {
     if (role !== "student") return;
@@ -1066,7 +1312,7 @@ export function WhiteboardWorkspaceClient({
     return () => clearInterval(id);
   }, [role]);
 
-  // Student join-timer poll
+  // Student join-timer poll — token path (legacy /w/[joinToken] and redirect bridge)
   useEffect(() => {
     if (role !== "student") return;
     if (!pathJoinToken) return;
@@ -1088,6 +1334,7 @@ export function WhiteboardWorkspaceClient({
           reason?: string;
           activeMs?: number;
           lastActiveAt?: string | null;
+          sessionPhase?: string;
         };
         if (data.live === false) {
           const r = data.reason;
@@ -1113,6 +1360,65 @@ export function WhiteboardWorkspaceClient({
             data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
           );
         }
+        // PENDING→ACTIVE transition: update local phase when the server reports ACTIVE.
+        if (data.sessionPhase === "ACTIVE") {
+          setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
+        }
+      } catch {
+        //
+      }
+    };
+    void refresh();
+    const t = setInterval(() => void refresh(), 3_500);
+    return () => clearInterval(t);
+  }, [role, pathJoinToken, whiteboardSessionId, joinUnavailableReason, wjgLog]);
+
+  // Student join-timer poll — learner-session path (/join/[sessionId], no join token)
+  useEffect(() => {
+    if (role !== "student") return;
+    if (pathJoinToken) return; // token path handles this case
+    if (joinUnavailableReason !== null) return;
+    const refresh = async () => {
+      try {
+        const res = await fetch(
+          `/api/whiteboard/${encodeURIComponent(whiteboardSessionId)}/join-timer`,
+          { cache: "no-store", credentials: "same-origin" }
+        );
+        if (!res.ok) {
+          if (res.status === 404) {
+            setJoinUnavailableReason((prev) => prev ?? "link_invalid");
+          }
+          return;
+        }
+        const data = (await res.json()) as {
+          live?: boolean;
+          reason?: string;
+          activeMs?: number;
+          lastActiveAt?: string | null;
+          sessionPhase?: string;
+        };
+        if (data.live === false) {
+          const r = data.reason;
+          const mapped: JoinUnavailableReason =
+            r === "session_ended" ? "session_ended" : "link_invalid";
+          setJoinUnavailableReason(mapped);
+          wjgLog("session_ended", { reason: mapped });
+          return;
+        }
+        const treatAsLive =
+          data.live === true ||
+          (data.live === undefined && typeof data.activeMs === "number");
+        if (!treatAsLive) return;
+        if (typeof data.activeMs === "number") setStudentServerActiveMs(data.activeMs);
+        if (data.lastActiveAt !== undefined) {
+          setStudentServerLastActiveAtMs(
+            data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
+          );
+        }
+        // PENDING→ACTIVE transition: update local phase when the server reports ACTIVE.
+        if (data.sessionPhase === "ACTIVE") {
+          setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
+        }
       } catch {
         //
       }
@@ -1126,31 +1432,98 @@ export function WhiteboardWorkspaceClient({
   // Recording lifecycle (audio + whiteboard composed)
   // ---------------------------------------------------------------
   //
-  // The workspace "Start recording" / "Pause recording" buttons gate BOTH
-  // `WhiteboardWorkspaceAudioBridge` (real mic → Blob → SessionRecording rows)
-  // and `useWhiteboardRecorder` via the same `recordingActive` presence gate.
-  //
-  // What's wired:
-  //   - `recordingActive` → useWhiteboardRecorder + audio pause/resume ✔
-  //   - `getAudioMs`      → performance.now()-based surrogate (clock tracks
-  //                         the same pauses as strokes; optional refinement:
-  //                         read live elapsed from the audio hook).
-  //   - Mic picker / meter / timer → `RecordingControlPanel` in the bridge ✔
+  // `userWantsRecording` is recording intent (PRESARAH-1: always armed at
+  // session activation; cleared only on end-session). Actual `recordingActive`
+  // is the AND of intent + phase + consent + presence — see derivations below.
 
-  // `userWantsRecording` is the tutor's explicit intent (Start / Pause
-  // button). The actual `recordingActive` we hand to the recorder hook
-  // is the AND of intent + presence so the recorder pauses itself
-  // when the student drops — see `deriveRecordingPresence` below.
-  // Sarah's pilot ask (Apr 2026): "I don't think the recording needs
-  // to keep going if the student isn't connected."
-  //
-  // The initial value comes from `Student.recordingDefaultEnabled`
-  // (also Sarah's ask): students who declined recording ship the
-  // toggle off so the tutor doesn't have to untick Start every time.
-  // The tutor can still flip mid-session.
   const [userWantsRecording, setUserWantsRecording] = useState(
     initialUserWantsRecording
   );
+
+  // WS-I hydration gate: React event handlers are not attached until after
+  // client-side hydration. Without this, Playwright (and any other automation)
+  // can click the mic button from SSR HTML before the React onClick fires —
+  // the click is a DOM-level no-op, tutorRecordingMutedRef stays false, and
+  // the graph builds with ref=false → gain=1 (the pre-hydration click bug).
+  // clientMounted starts false (matching SSR), becomes true in the first
+  // useEffect. Mic controls are disabled until then, so Playwright's
+  // actionability check waits for the button to enable (which happens before
+  // the mic graph is built), ensuring the click fires post-hydration.
+  const [clientMounted, setClientMounted] = useState(false);
+  useEffect(() => { setClientMounted(true); }, []);
+
+  // Session phase gate — PENDING = waiting room (A/V mesh live, but
+  // capture + billing timer inert); ACTIVE = tutor has clicked Start.
+  // Tutor flips PENDING→ACTIVE via activateSessionLive (below).
+  // Default is ACTIVE so all pre-phase callers (tests, student path)
+  // are unaffected.
+  const [sessionPhase, setSessionPhase] = useState<"PENDING" | "ACTIVE">(
+    initialSessionPhase
+  );
+  const phaseActive = sessionPhase === "ACTIVE";
+
+  // Waiting-room mode — LIVE (remote) or IN_PERSON (student beside tutor).
+  // Initialized from the prop (DB value at SSR time); tutor can toggle
+  // before clicking Start. Persisted to DB at activation time.
+  const [sessionMode, setSessionMode] = useState<WtrSessionMode>(
+    initialSessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE"
+  );
+
+  // M-3: derive policy from locally-selected mode (waiting-room flips) + frozen consent.
+  const audioCapturePolicy = useMemo(
+    () =>
+      deriveAudioCapturePolicy({
+        allowAudioRecording: initialAllowAudioRecording,
+        hasConsentSnapshot: initialHasConsentSnapshot,
+        sessionMode,
+      }),
+    [initialAllowAudioRecording, initialHasConsentSnapshot, sessionMode]
+  );
+
+  const audioConsentBannerMessage = useMemo(() => {
+    if (role !== "tutor") return null;
+    if (audioCapturePolicy === "full") return null;
+    if (audioCapturePolicy === "none") {
+      if (!initialHasConsentSnapshot) {
+        return (
+          <>
+            <strong>Recording &amp; notes off</strong> — no audio consent on
+            file for this student. Whiteboard and live conversation continue.
+            Parent setup may be required before audio can be saved.
+          </>
+        );
+      }
+      return (
+        <>
+          <strong>Audio not recorded</strong> — this student&apos;s parent has
+          not allowed session audio. Whiteboard and live conversation continue.
+        </>
+      );
+    }
+    if (audioCapturePolicy === "tutor_only" && phaseActive) {
+      return (
+        <>
+          <strong>Student audio not recorded</strong> — only your microphone is
+          included in the recording and notes.
+        </>
+      );
+    }
+    return null;
+  }, [
+    role,
+    audioCapturePolicy,
+    initialHasConsentSnapshot,
+    phaseActive,
+  ]);
+
+  const [audioConsentDraftCleared, setAudioConsentDraftCleared] =
+    useState(false);
+
+  // True while startWhiteboardSession is in-flight (prevents double-tap).
+  const [isStarting, setIsStarting] = useState(false);
+  const [sessionStartError, setSessionStartError] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const sync = syncReady ? syncClientRef.current : null;
 
@@ -1221,6 +1594,7 @@ export function WhiteboardWorkspaceClient({
     activePageIdRef: studentActivePageIdRef,
     applyingRemoteRef: studentApplyingRemoteRef,
     tutorStreamReady,
+    followViewLockContainerRef,
   } = useStudentWhiteboardCanvas(
     // For role="tutor", null keeps this hook inert (mutually exclusive with recorder sync-ingest)
     role === "student" ? studentSyncClient : null,
@@ -1234,6 +1608,16 @@ export function WhiteboardWorkspaceClient({
           followDebugTelemetry,
         }
       : undefined
+  );
+
+  const setWbCanvasRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      wbCanvasRef.current = node;
+      if (role === "student") {
+        followViewLockContainerRef(node);
+      }
+    },
+    [followViewLockContainerRef, role]
   );
 
   // Board-wait banner: student connected but no tutor stream after 8s
@@ -1250,6 +1634,20 @@ export function WhiteboardWorkspaceClient({
     const t = window.setTimeout(() => setBoardWaitElapsed(true), 8000);
     return () => clearTimeout(t);
   }, [role, studentConnected, studentOtherPeerCount, tutorStreamReady]);
+
+  useEffect(() => {
+    if (role !== "student") return;
+    if (studentConnected && studentOtherPeerCount >= 1) {
+      markLoadingCleared("remote_scene");
+    }
+  }, [role, studentConnected, studentOtherPeerCount, markLoadingCleared]);
+
+  useEffect(() => {
+    if (role !== "student") return;
+    if (tutorStreamReady) {
+      markLoadingCleared("remote_scene");
+    }
+  }, [role, tutorStreamReady, markLoadingCleared]);
 
   // Gate laser pointer origin by role (tutor uses tutor refs; student uses student refs)
   useCollaboratorPointers(
@@ -1275,12 +1673,6 @@ export function WhiteboardWorkspaceClient({
   const bothPartiesInRoomSync = tutorSyncConnected && peerCount >= 1;
 
   const [bothPartiesInRoom, setBothPartiesInRoom] = useState(false);
-  // Timer ref for debouncing the loss of WebRTC reachability.
-  // The useEffect that drives setBothPartiesInRoom lives below liveAv
-  // (after `const liveAv = useLiveAV(...)`) because it reads
-  // liveAv.reachableParticipants. React rules allow the state + ref to
-  // be declared here; only the effect must follow the dep's declaration.
-  const reachableLossTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sticky latch: once both parties have truly established a WebRTC call
   // this session, future "auto-pauses" are reconnect waits, not first-join
@@ -1292,6 +1684,16 @@ export function WhiteboardWorkspaceClient({
   // declared) because it reads liveAv.reachableParticipants. Placing the
   // ref declaration here keeps the render-order constraints visible.
   const everBothPresentRef = useRef(false);
+
+  // Start-button latch: once the student achieves real A/V reachability
+  // (bothPartiesInRoom), keep Start enabled even if ICE briefly flaps.
+  // Without this, a transient ICE drop re-disables the button while the
+  // student is genuinely present — "dead Start button" on real hardware.
+  // Written synchronously in the render body (idempotent latch — only
+  // ever set to true, never cleared) so no separate effect is needed.
+  // The write appears below in the overlay-props section where
+  // bothPartiesInRoom and phaseActive are both in scope.
+  const studentHasConnectedOnceRef = useRef(false);
 
   // UI-honesty: "Student connected — syncing board…" for a brief window
   // after a student joins. The relay socket being up does NOT mean the
@@ -1374,15 +1776,31 @@ export function WhiteboardWorkspaceClient({
   const [audioDraftRecovery, setAudioDraftRecovery] =
     useState<DraftSegmentRow | null>(null);
   const [audioDraftRecoveryBusy, setAudioDraftRecoveryBusy] = useState(false);
+  const [audioDraftDiscardConfirmOpen, setAudioDraftDiscardConfirmOpen] =
+    useState(false);
 
   /**
-   * Wall-clock ms when the first audio segment was handed off to the outbox.
-   * Used to compute a Phase 1 approximate recording-time offset for the
-   * slice 2b transcription producer.
-   *
-   * // Phase 1 approx — D3/D4 monotonic clock supersedes
+   * p3-clock: monotonic-clock accessor, read by callbacks that are defined
+   * BEFORE the clock itself. `useAudioMsClock` depends on `wbSignal`, which
+   * depends on the FSM, which is declared far below `useAudioRecorder`; this
+   * ref breaks that ordering cycle (same pattern as
+   * `recorderRecordViewportRef`). Assigned once `getAudioMs` exists.
    */
-  const firstSegmentWallClockMsRef = useRef<number | null>(null);
+  const getAudioMsRef = useRef<() => number>(() => 0);
+
+  /**
+   * p3-clock: monotonic session-clock offset (ms) at the START of the
+   * audio segment currently being recorded. Carried forward as each
+   * segment finishes so the transcription producer stamps a real
+   * `recordingTimeOffsetMs` off the single session clock — superseding the
+   * Phase-1 wall-clock approximation (which advanced during pauses). Because
+   * the clock is pause-aware, a disconnect gap collapses to a single offset.
+   */
+  const audioSegmentStartOffsetMsRef = useRef(
+    initialPersistedState && initialPersistedState.recordingSegmentCount > 0
+      ? Math.max(0, initialActiveMs)
+      : 0
+  );
 
   /**
    * Hand `useAudioRecorder` a callback that drops every finished
@@ -1391,20 +1809,20 @@ export function WhiteboardWorkspaceClient({
    * outbox owns the segment lifecycle and the audio bridge observes
    * outbox state directly to drive End-session UI copy.
    *
-   * The hook already uploaded the Blob to Vercel Blob by the time it
-   * calls us (see `useAudioRecorder.onstop`), so we pass `blobRemoteUrl`
-   * through on enqueue. The local Blob still gets stored in IDB as
-   * the recovery anchor — if the tab refreshes after the outbox row
-   * lands but before End-session, the worker can re-upload from the
-   * persisted Blob rather than losing the segment.
+   * On auto-rollover (VAD cuts), the hook passes local bytes only — the
+   * outbox persists them at cut (`blobRemoteUrl: null`) and the worker
+   * uploads from IndexedDB (WS-N, mirrors remote-stream-recorder). On the
+   * final/tail segment the hook still uploads inline and passes
+   * `blobRemoteUrl` through on enqueue.
    */
   const onWorkspaceAudioRecorded = useCallback(
     async (
       audioSeg: {
-        blobUrl: string;
+        blobUrl?: string;
         mimeType: string;
         sizeBytes: number;
         blob?: Blob;
+        durationSeconds?: number;
       },
       _meta?: { autoRollover?: boolean }
     ) => {
@@ -1412,6 +1830,20 @@ export function WhiteboardWorkspaceClient({
         typeof globalThis.crypto?.randomUUID === "function"
           ? globalThis.crypto.randomUUID()
           : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+      // p3-clock: capture THIS segment's start offset and advance the
+      // carried-forward anchor SYNCHRONOUSLY at callback entry — before any
+      // `await`. Two callbacks can be in flight at once (an autoRollover
+      // segment and the final End-session segment), and doing the read +
+      // advance across an `await` boundary would let them interleave and
+      // invert their offsets. Reading here (segment END, pre-upload-latency)
+      // also gives a tighter end value than reading after enqueue. On enqueue
+      // failure the offset is still consumed, which is correct: the segment
+      // occupied real session time regardless of upload outcome, so the next
+      // segment's start is unaffected. First segment = 0.
+      const recordingTimeOffsetMs = audioSegmentStartOffsetMsRef.current;
+      audioSegmentStartOffsetMsRef.current = getAudioMsRef.current();
+
       try {
         const outbox = getOrCreateUploadOutbox();
         await outbox.enqueue({
@@ -1423,9 +1855,23 @@ export function WhiteboardWorkspaceClient({
           streamId: TUTOR_MIC_STREAM_ID,
           segmentId,
           blobLocalRef: audioSeg.blob ?? null,
-          blobRemoteUrl: audioSeg.blobUrl,
+          blobRemoteUrl: audioSeg.blobUrl ?? null,
           mimeType: audioSeg.mimeType,
           sizeBytes: audioSeg.sizeBytes,
+          recordingTimeOffsetMs,
+          ...(typeof audioSeg.durationSeconds === "number" &&
+            audioSeg.durationSeconds > 0 && {
+              durationSeconds: audioSeg.durationSeconds,
+            }),
+          // Outbox segment ordering key stays WALL-CLOCK on purpose: it is
+          // the sort key for the single mixdown replay stream (End-session
+          // orders by audioStartedAtMs), it must stay consistent with the
+          // draft-recovery path (which persists a wall-clock firstChunkMs and
+          // survives refresh), and per-speaker transcription lanes — not the
+          // mixdown — carry the monotonic offset (recordingTimeOffsetMs) that
+          // p3-finalize merges by. Switching this to the monotonic clock is
+          // deferred until cross-stream replay ordering needs it (would
+          // require converting the draft path in lockstep).
           audioStartedAtMs: Date.now(),
         });
         try {
@@ -1437,35 +1883,6 @@ export function WhiteboardWorkspaceClient({
             clearErr
           );
         }
-
-        // Slice 2b — producer wedge: trigger the backend transcription
-        // pipeline now that the segment blob is confirmed uploaded.
-        //
-        // MUST be fire-and-forget: a transcription-enqueue failure must
-        // never block or disrupt the recording/upload UX.
-        //
-        // Offset approximation (Phase 1 approx — D3/D4 monotonic clock supersedes):
-        // We track the wall-clock ms of the first segment and derive
-        // subsequent offsets as delta from that anchor. This is approximate
-        // because wall-clock advances during pauses (D4 collapses them);
-        // the worker's derived-from-durationMs fallback is equivalent quality.
-        const nowMs = Date.now();
-        if (firstSegmentWallClockMsRef.current === null) {
-          firstSegmentWallClockMsRef.current = nowMs;
-        }
-        // Phase 1 approx — D3/D4 monotonic clock supersedes
-        const recordingTimeOffsetMs = nowMs - firstSegmentWallClockMsRef.current;
-        Promise.resolve(
-          enqueueChunkTranscriptionAction(whiteboardSessionId, {
-            chunkBlobUrl: audioSeg.blobUrl,
-            recordingTimeOffsetMs,
-          })
-        ).catch((txcErr: unknown) => {
-          console.warn(
-            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} txc enqueue failed (non-blocking)`,
-            txcErr
-          );
-        });
       } catch (err) {
         // Never throw — useAudioRecorder.onRecorded swallows the
         // return value; surfacing this as a banner would race with
@@ -1483,20 +1900,48 @@ export function WhiteboardWorkspaceClient({
     studentId,
     onRecorded: onWorkspaceAudioRecorded,
     avLogSessionId: whiteboardSessionId,
-    recordingDraft: {
-      sessionId: whiteboardSessionId,
-      streamId: TUTOR_MIC_STREAM_ID,
-    },
+    recordingDraft:
+      audioCapturePolicy !== "none"
+        ? {
+            sessionId: whiteboardSessionId,
+            streamId: TUTOR_MIC_STREAM_ID,
+          }
+        : undefined,
     // Seed the displayed recording timer at the session's already-elapsed
     // time so a page refresh doesn't reset it to 0 while the session
     // timer stays at e.g. "12:34". Uses the server-truth value from SSR.
     initialElapsedSeconds: Math.floor(initialActiveMs / 1000),
+    getAudioMs: () => getAudioMsRef.current(),
   });
   const workspaceAudioRef = useRef(workspaceAudio);
   workspaceAudioRef.current = workspaceAudio;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (audioCapturePolicy !== "none") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const draftStore = getOrCreateRecordingDraftStore();
+        await draftStore.clear(whiteboardSessionId, TUTOR_MIC_STREAM_ID);
+        if (!cancelled) {
+          setAudioConsentDraftCleared(true);
+        }
+      } catch (err) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} consent-denied draft clear failed`,
+          err
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [audioCapturePolicy, whiteboardSessionId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (audioCapturePolicy === "none") return;
     let cancelled = false;
     void (async () => {
       try {
@@ -1518,7 +1963,7 @@ export function WhiteboardWorkspaceClient({
     return () => {
       cancelled = true;
     };
-  }, [whiteboardSessionId]);
+  }, [whiteboardSessionId, audioCapturePolicy]);
 
   const handleAudioDraftKeep = useCallback(async () => {
     if (!audioDraftRecovery) return;
@@ -1564,6 +2009,7 @@ export function WhiteboardWorkspaceClient({
         `[WhiteboardWorkspaceClient] dft=${dft} discard wbsid=${whiteboardSessionId} streamId=${TUTOR_MIC_STREAM_ID}`
       );
       setAudioDraftRecovery(null);
+      setAudioDraftDiscardConfirmOpen(false);
     } catch (err) {
       console.error(
         `[WhiteboardWorkspaceClient] dft=${dft} discard failed wbsid=${whiteboardSessionId}`,
@@ -1585,73 +2031,45 @@ export function WhiteboardWorkspaceClient({
   // so workspace mount alone does NOT prompt the tutor for camera
   // access. This is a 4b realignment contract.
   //
-  // externalAudioStream: we pass the recording's mic stream here so
-  // useLiveAV doesn't call getUserMedia a second time. Two simultaneous
-  // acquisitions from the same hardware mic trigger Chrome's shared
-  // audio-processing pipeline in a way that can suppress the source
-  // signal in BOTH streams via echo-cancellation cross-talk, causing the
-  // tutor's voice to be missing from both the recording and the WebRTC
-  // send. The hook clones the stream so live-AV mute stays independent
-  // of the recording's own track.
+  // externalAudioStream: tutor passes the recorder's publishStream so
+  // useLiveAV doesn't call getUserMedia a second time (see LIVE-AV.md
+  // invariant 8). Student stays undefined today (raw getUserMedia via
+  // requestMic); future mic unification may wire a publish-ONLY graph
+  // here — never recordingDest / MediaRecorder (invariant 13: live
+  // send gated by allowLiveSession, persistence by allowAudioRecording).
   const liveAv = useLiveAV({
     syncClient: role === "student" ? studentSyncClient : sync,
     localPeerId,
     sessionId: whiteboardSessionId,
-    // externalAudioStream: tutor shares the recording mic to avoid two getUserMedia calls.
-    // Student does not record, so no external stream needed.
     externalAudioStream: role === "tutor" ? workspaceAudio.localMicStream : undefined,
     swapMicDevice: role === "tutor" ? workspaceAudio.swapMicDevice : undefined,
+    swapMicDeviceBySlot:
+      role === "tutor" ? workspaceAudio.swapMicDeviceBySlot : undefined,
+    learnerProfileId: role === "student" ? learnerProfileId : undefined,
+    learnerAvGeneration: role === "student" ? studentAvGeneration : undefined,
   });
 
-  // Student A/V auto-request (role="student" only; tutor uses explicit UI).
-  // Fix 2.5: gate on studentSyncClient being ready so cam/mic acquisition does
-  // not race the mesh attach on cold start. Serialize mic → cam (mic first)
-  // to avoid concurrent getUserMedia calls on iOS/mobile.
-  useEffect(() => {
-    if (role !== "student") return;
-    if (!studentSyncClient) return;  // wait for sync client before acquiring media
-    if (hasAutoRequestedAvRef.current) return;
-    hasAutoRequestedAvRef.current = true;
-    // Serialize: mic first so the mesh can be built (hasEverHadLocalMedia latches
-    // on first stream), then cam once mic is settled.
-    void liveAv.requestMic().then(() => void liveAv.requestCam());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, studentSyncClient]);
+  // Stable handle to the latest liveAv return so reconcile effects and A/V
+  // callbacks can read participants/methods without depending on the whole
+  // hook object (which changes identity each render). This removes listener
+  // re-subscription churn and is the stable-primitive seam the
+  // useLiveAvCoordinator extraction threads in.
+  const liveAvRef = useRef(liveAv);
+  liveAvRef.current = liveAv;
 
-  useEffect(() => {
-    if (role !== "student") return;
-    if (liveAv.hasCamPermission !== "granted") return;
-    if (liveAv.localVideoStream) return;
-    void liveAv.requestCam();
-  }, [role, liveAv.hasCamPermission, liveAv.localVideoStream, liveAv]);
-
-  // Student reconnect: replay ICE for all peers after sync reconnect
-  const sawStudentDisconnectRef = useRef(false);
-  useEffect(() => {
-    if (role !== "student" || !studentSyncClient) {
-      sawStudentDisconnectRef.current = false;
-      return;
+  const handleStudentExit = useCallback(() => {
+    wjgLog("student_exit");
+    liveAv.leaveAllPeers();
+    try {
+      studentSyncClient?.disconnect();
+    } catch (err) {
+      console.warn(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} student_exit disconnect failed`,
+        err
+      );
     }
-    const offConnect = studentSyncClient.onConnect(() => {
-      const shouldRestart = sawStudentDisconnectRef.current;
-      sawStudentDisconnectRef.current = false;
-      if (!shouldRestart) return;
-      for (const p of liveAv.participants) {
-        try {
-          liveAv.reconnectPeer(p.peerId);
-        } catch {
-          //
-        }
-      }
-    });
-    const offDisconnect = studentSyncClient.onDisconnect(() => {
-      sawStudentDisconnectRef.current = true;
-    });
-    return () => {
-      offConnect();
-      offDisconnect();
-    };
-  }, [role, studentSyncClient, liveAv]);
+    setHasLeft(true);
+  }, [wjgLog, liveAv, studentSyncClient, whiteboardSessionId]);
 
   // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
   // reachability rather than sync-join. This prevents the false
@@ -1678,19 +2096,6 @@ export function WhiteboardWorkspaceClient({
   const [lifecycleParticipants, setLifecycleParticipants] = useState<ReadonlySet<string>>(
     () => new Set<string>()
   );
-  const lifecycleParticipantsRef = useRef<Set<string>>(new Set<string>());
-  const lcpRemovalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const lcpDisposedRef = useRef(false);
-
-  useEffect(() => {
-    lcpDisposedRef.current = false;
-    const timers = lcpRemovalTimersRef.current;
-    return () => {
-      lcpDisposedRef.current = true;
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-    };
-  }, []);
 
   const reachablePeerIdsKey = useMemo(
     () =>
@@ -1701,81 +2106,58 @@ export function WhiteboardWorkspaceClient({
     [liveAv.reachableParticipants]
   );
 
-  useEffect(() => {
-    if (lcpDisposedRef.current) return;
-    const timers = lcpRemovalTimersRef.current;
-    const nowReachableIds = new Set(liveAv.reachableParticipants.map((p) => p.peerId));
-    for (const [id, timer] of [...timers]) {
-      if (nowReachableIds.has(id)) {
-        clearTimeout(timer);
-        timers.delete(id);
-      }
-    }
-    const current = lifecycleParticipantsRef.current;
-    const next = new Set(current);
-    let addedAny = false;
-    for (const id of nowReachableIds) {
-      if (!next.has(id)) {
-        next.add(id);
-        addedAny = true;
-        console.log(
-          `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
-            ` event=lifecycle-participant-added peer=${id}`
-        );
-      }
-    }
-    if (addedAny) {
-      lifecycleParticipantsRef.current = next;
-      setLifecycleParticipants(next);
-    }
-    for (const id of next) {
-      if (!nowReachableIds.has(id) && !timers.has(id)) {
-        timers.set(
-          id,
-          setTimeout(() => {
-            if (lcpDisposedRef.current) return;
-            timers.delete(id);
-            lifecycleParticipantsRef.current.delete(id);
-            setLifecycleParticipants(new Set(lifecycleParticipantsRef.current));
-            console.log(
-              `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
-                ` event=lifecycle-participant-drop-debounced peer=${id} windowMs=${REACHABLE_LOSS_DEBOUNCE_MS}`
-            );
-          }, REACHABLE_LOSS_DEBOUNCE_MS)
-        );
-        console.log(
-          `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
-            ` event=lifecycle-participant-removal-scheduled peer=${id} delayMs=${REACHABLE_LOSS_DEBOUNCE_MS}`
-        );
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- reachablePeerIdsKey is a stable useMemo of liveAv.reachableParticipants; whiteboardSessionId is session-lifetime stable
-  }, [reachablePeerIdsKey]);
+  // A/V reconcile effects extracted into useLiveAvCoordinator (p1b): student
+  // bootstrap, device-list refresh, symmetric sync-reconnect mesh-restart
+  // (student + tutor), tutor roster-rejoin restart, per-session latch reset,
+  // camera-on-by-default, the lifecycle-participant debounce (FSM input), and
+  // the bothPartiesInRoom WebRTC-reachable gate. Behavior-preserving move — see
+  // the hook. Placed after lifecycleParticipants/reachablePeerIdsKey so their
+  // setter + memo are in scope.
+  useLiveAvCoordinator({
+    role,
+    sync,
+    studentSyncClient,
+    peerCount,
+    whiteboardSessionId,
+    liveAvRef,
+    studentHasConnectedOnceRef,
+    joinUnavailableReason,
+    hasLeft,
+    openMenu,
+    hasCamPermission: liveAv.hasCamPermission,
+    reachablePeerIdsKey,
+    reachableParticipantsCount: liveAv.reachableParticipants.length,
+    tutorSyncConnected,
+    studentConnected,
+    setLifecycleParticipants,
+    setBothPartiesInRoom,
+  });
 
-  // bothPartiesInRoom — WebRTC-reachable gate (split-brain fix).
+  // -----------------------------------------------------------------------
+  // Waiting-room telemetry (wtr prefix)
+  // -----------------------------------------------------------------------
+  // Log overlay_shown once on mount when phase is PENDING.
+  const wtrShownLoggedRef = useRef(false);
   useEffect(() => {
-    const nowReachable = tutorSyncConnected && liveAv.reachableParticipants.length >= 1;
-    if (nowReachable) {
-      if (reachableLossTimerRef.current !== null) {
-        clearTimeout(reachableLossTimerRef.current);
-        reachableLossTimerRef.current = null;
-      }
-      setBothPartiesInRoom(true);
-    } else {
-      if (reachableLossTimerRef.current === null) {
-        reachableLossTimerRef.current = setTimeout(() => {
-          reachableLossTimerRef.current = null;
-          setBothPartiesInRoom(false);
-        }, REACHABLE_LOSS_DEBOUNCE_MS);
-      }
-    }
-    return () => {
-      if (reachableLossTimerRef.current !== null) {
-        clearTimeout(reachableLossTimerRef.current);
-        reachableLossTimerRef.current = null;
-      }
-    };
-  }, [tutorSyncConnected, liveAv.reachableParticipants.length]);
+    if (phaseActive) return;
+    if (wtrShownLoggedRef.current) return;
+    wtrShownLoggedRef.current = true;
+    console.info(
+      `[wtr] wbsid=${whiteboardSessionId} role=${role} action=waiting_shown`
+    );
+  }, [phaseActive, whiteboardSessionId, role]);
+
+  // Log student_connected when bothPartiesInRoom first becomes true while PENDING.
+  const wtrStudentConnectedLoggedRef = useRef(false);
+  useEffect(() => {
+    if (phaseActive) return;
+    if (!bothPartiesInRoom) return;
+    if (wtrStudentConnectedLoggedRef.current) return;
+    wtrStudentConnectedLoggedRef.current = true;
+    console.info(
+      `[wtr] wbsid=${whiteboardSessionId} role=${role} action=student_connected`
+    );
+  }, [phaseActive, bothPartiesInRoom, whiteboardSessionId, role]);
 
   // -----------------------------------------------------------------
   // Diagnostic: AV mount phases — surfaces the gap between
@@ -1841,58 +2223,11 @@ export function WhiteboardWorkspaceClient({
     [whiteboardSessionId]
   );
 
-  // Phase 4c: sync-reconnect → mesh.restart(peerId) for each current
-  // peer (the 4b deferral). Sync-client reconnects automatically on
-  // socket-level disconnects; peer-mesh's auto-restart only fires on
-  // ICE-failed (longer timeout). Restarting on sync re-connect
-  // recovers in-flight negotiations that lost their SDP mid-flight.
-  //
-  // We track "saw a disconnect since the last connect" rather than
-  // raw connected state because the FIRST `onConnect` after mount
-  // is the natural socket handshake — peer-mesh is being set up for
-  // the first time and there's no prior in-flight negotiation to
-  // recover. Only the disconnect→reconnect transition needs
-  // mesh.restart.
-  const sawDisconnectSinceLastConnectRef = useRef(false);
-  useEffect(() => {
-    if (!sync) {
-      sawDisconnectSinceLastConnectRef.current = false;
-      return;
-    }
-    const offConnect = sync.onConnect(() => {
-      const shouldRestart = sawDisconnectSinceLastConnectRef.current;
-      sawDisconnectSinceLastConnectRef.current = false;
-      if (!shouldRestart) return;
-      const current = liveAv.participants;
-      if (current.length === 0) return;
-      console.log(
-        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} sync-reconnect peers=${current.length}`
-      );
-      for (const p of current) {
-        try {
-          liveAv.reconnectPeer(p.peerId);
-        } catch (err) {
-          console.warn(
-            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} mesh.restart threw peer=${p.peerId}`,
-            err
-          );
-        }
-      }
-    });
-    const offDisconnect = sync.onDisconnect(() => {
-      sawDisconnectSinceLastConnectRef.current = true;
-    });
-    return () => {
-      offConnect();
-      offDisconnect();
-    };
-  }, [sync, liveAv, whiteboardSessionId]);
-
   const lifecycleInputStreams = useMemo<
     ReadonlyMap<string, StreamHealth>
   >(() => {
     const map = new Map<string, StreamHealth>();
-    if (userWantsRecording) {
+    if (userWantsRecording && audioCapturePolicy !== "none") {
       map.set(TUTOR_MIC_STREAM_ID, "ok");
     }
     // Phase 4c: one input-stream entry per live participant audio
@@ -1922,7 +2257,7 @@ export function WhiteboardWorkspaceClient({
       map.set(studentMicStreamId(p.peerId), health);
     }
     return map;
-  }, [userWantsRecording, liveAv.participants]);
+  }, [userWantsRecording, audioCapturePolicy, liveAv.participants]);
 
   // Phase 4d Commit 6: audio-flow gate. Detects per-peer whether the
   // remote audio track is actually carrying frames (not just
@@ -2080,16 +2415,22 @@ export function WhiteboardWorkspaceClient({
     gateTimeoutFired;
 
   const lifecycle = evaluateLifecycle({
-    tutorWantsRecording: userWantsRecording,
+    tutorWantsRecording:
+      userWantsRecording && phaseActive && audioCapturePolicy !== "none",
     participants: lifecycleParticipants,
     everHadParticipants: everBothPresentRef.current,
     soloEnabled: allowRecordSoloUntilStudentJoin,
     syncEnabled: !!syncUrl,
     inputStreams: lifecycleInputStreams,
     networkOk: true,
-    audioClockMs: 0,
+    // p3-clock: thread the single session clock so the FSM's wbClockMs
+    // output reflects the real epoch (read via ref — the clock is declared
+    // below this call; see getAudioMsRef). Passthrough-only in the FSM
+    // today (no decision reads it), so a first-render 0 is harmless.
+    audioClockMs: getAudioMsRef.current(),
     participantsWithFlowingAudio,
     everHadAudioFlow: sessionGateReleased,
+    inPersonMode: sessionMode === "IN_PERSON",
   });
 
   const presence = derivePresentation(lifecycle, {
@@ -2097,8 +2438,34 @@ export function WhiteboardWorkspaceClient({
     participants: lifecycleParticipants,
     everHadParticipants: everBothPresentRef.current,
     syncEnabled: !!syncUrl,
+    syncRosterHasStudent: bothPartiesInRoomSync,
+    inPersonMode: sessionMode === "IN_PERSON",
   });
   const recordingActive = presence.recordingActive;
+
+  // CF-2/MB-4: whiteboard event capture is decoupled from audio-capture policy.
+  // FSM `tutorWantsRecording` still gates audio (`audioCapturePolicy !== "none"`);
+  // replayable stroke logs must persist for IN_PERSON + denied (policy=none).
+  const wbEventsActive =
+    role !== "student" && phaseActive && userWantsRecording;
+  const wbSignal =
+    audioCapturePolicy !== "none" ? recordingActive : wbEventsActive;
+
+  // p3-clock (disconnect pause/freeze): the WB-recorder capture gate. It is
+  // BROADER than `wbSignal` during a pause — on a stable student disconnect
+  // (FSM `paused`) audio recording + the session clock freeze, but the tutor
+  // keeps drawing; those strokes stay captured and stamp at the FROZEN clock
+  // (getAudioMs is driven by wbSignal, which is false while paused), so they
+  // collapse to the pause instant on replay (ratified 2026-07-02). Armed /
+  // idle still gate WB capture OFF (CF-2.1 armed-gate preserved). Audio
+  // recording itself is unaffected — the AudioBridge keys off FSM
+  // recordingActive, not this.
+  const wbCaptureActive = deriveWbCaptureActive({
+    policy: audioCapturePolicy,
+    recordingActive,
+    isPaused: lifecycle.state === "paused",
+    wbEventsActive,
+  });
 
   // Split-brain detection: sync says the student is present (peerCount ≥ 1)
   // but WebRTC reachability is 0 (media path dead). After the first real
@@ -2157,6 +2524,11 @@ export function WhiteboardWorkspaceClient({
   const workspaceAudioAddRemoteAudio = workspaceAudio.addRemoteAudio;
   const workspaceAudioLocalMicStream = workspaceAudio.localMicStream;
   useEffect(() => {
+    // Gate E: remote streams attach to recordingDest only when policy is
+    // full. tutor_only/none skip attach — live A/V playback is separate.
+    if (role !== "tutor") return;
+    const attachRemoteToMixdown =
+      shouldAttachRemoteStreamToRecordingMixdown(audioCapturePolicy);
     const subs = remoteAudioSubsRef.current;
     if (!workspaceAudioLocalMicStream) {
       // Graph not ready (mic not acquired yet) or graph just got
@@ -2178,7 +2550,7 @@ export function WhiteboardWorkspaceClient({
     for (const p of liveAv.participants) {
       if (!p.audioStream) continue;
       seen.add(p.audioStream);
-      if (subs.has(p.audioStream)) continue;
+      if (!attachRemoteToMixdown || subs.has(p.audioStream)) continue;
       try {
         const unsub = workspaceAudioAddRemoteAudio(p.audioStream);
         subs.set(p.audioStream, unsub);
@@ -2193,7 +2565,7 @@ export function WhiteboardWorkspaceClient({
       }
     }
     for (const [stream, unsub] of [...subs.entries()]) {
-      if (seen.has(stream)) continue;
+      if (attachRemoteToMixdown && seen.has(stream)) continue;
       try {
         unsub();
       } catch {
@@ -2202,16 +2574,18 @@ export function WhiteboardWorkspaceClient({
       subs.delete(stream);
     }
   }, [
+    role,
+    audioCapturePolicy,
     liveAv.participants,
     workspaceAudioAddRemoteAudio,
     workspaceAudioLocalMicStream,
     whiteboardSessionId,
   ]);
 
-  // Phase 4d Commit 7: per-peer recording-mute reconcile. After the
-  // attach effect above ensures every participant's audioStream is
-  // wired into the graph, this effect flips each stream's GainNode
-  // to 0 (muted) or 1 (live) based on `mutedPeerIdsInRecording`.
+  // Phase 4d Commit 7 + Gate F: per-peer recording-mute reconcile. After
+  // the attach effect above wires participant streams into the graph
+  // (when policy is full), this effect flips each stream's GainNode to
+  // 0 or 1 based on `mutedPeerIdsInRecording` OR tutor_only consent.
   // Replay sees a clean silence during the muted window (not a gap)
   // because the source stays connected — important for the single-
   // blob / single-row replay pipeline.
@@ -2222,13 +2596,57 @@ export function WhiteboardWorkspaceClient({
   // AVTile is independent of the recording graph). Only the
   // recording mixdown is affected.
   const workspaceAudioSetRemoteGain = workspaceAudio.setRemoteRecordingGain;
+  const workspaceAudioSetTutorRecordingMute =
+    workspaceAudio.setTutorRecordingMute;
   useEffect(() => {
+    if (role !== "tutor") return;
+    // WS-I stomp fix — two-part guard:
+    //
+    // (1) workspaceAudioLocalMicStream is intentionally NOT a dep. When the
+    //     audio graph becomes ready, graph-build already applies
+    //     tutorRecordingMutedRef.current directly (useAudioRecorder.ts
+    //     graph.setTutorRecordingMute(ref.current)). The stream dep made this
+    //     effect re-fire on graph-ready with stale isMicMuted React state and
+    //     stomp the ref back to false.
+    //
+    // (2) Only push mute=true from this effect. When isMicMuted is false —
+    //     whether from initial mount, a legitimate unmute, or a spurious reset
+    //     that useLiveAV can emit when externalAudioStream changes identity
+    //     (the publish stream appears after graph-build) — we do NOT call
+    //     setTutorRecordingMute(false). The click wrapper
+    //     (handleToggleMicWithRecordingMute) owns the false/unmute path: it
+    //     calls workspaceAudio.setTutorRecordingMute(nextMuted) synchronously
+    //     before liveAv.toggleMic(), so any isMicMuted=false transition that
+    //     matters has already been applied. Gating here prevents the spurious
+    //     useLiveAV reset from undoing a pre-start mute.
+    if (!liveAv.isMicMuted) return;
+    try {
+      workspaceAudioSetTutorRecordingMute(true);
+    } catch (err) {
+      console.warn(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} setTutorRecordingMute failed`,
+        (err as Error)?.message ?? String(err)
+      );
+    }
+  }, [
+    role,
+    liveAv.isMicMuted,
+    workspaceAudioSetTutorRecordingMute,
+    whiteboardSessionId,
+  ]);
+
+  useEffect(() => {
+    if (role !== "tutor") return;
     if (!workspaceAudioLocalMicStream) return;
     for (const p of liveAv.participants) {
       if (!p.audioStream) continue;
-      const muted = mutedPeerIdsInRecording.has(p.peerId);
+      const gain = resolveRemoteRecordingGainLinear(
+        audioCapturePolicy,
+        p.peerId,
+        mutedPeerIdsInRecording
+      );
       try {
-        workspaceAudioSetRemoteGain(p.audioStream, muted ? 0 : 1);
+        workspaceAudioSetRemoteGain(p.audioStream, gain);
       } catch (err) {
         console.warn(
           `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} setRemoteRecordingGain failed peer=${p.peerId}`,
@@ -2237,6 +2655,8 @@ export function WhiteboardWorkspaceClient({
       }
     }
   }, [
+    role,
+    audioCapturePolicy,
     liveAv.participants,
     mutedPeerIdsInRecording,
     workspaceAudioSetRemoteGain,
@@ -2273,7 +2693,96 @@ export function WhiteboardWorkspaceClient({
     registerSessionStudentId(whiteboardSessionId, studentId);
   }, [whiteboardSessionId, studentId]);
 
-  const getAudioMs = useAudioMsClock(recordingActive);
+  const getAudioMs = useAudioMsClock(wbSignal, initialActiveMs);
+  // p3-clock: publish the clock to callbacks/FSM declared above this point.
+  getAudioMsRef.current = getAudioMs;
+
+  // WS-A A3: per-speaker transcription lanes (tap-before-mix, transcriptionOnly).
+  // Gated on full consent policy + claimed LearnerProfile — replay stays tutor:mic mixdown.
+  const uploadOutboxForPerSpeaker = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return getOrCreateUploadOutbox();
+    } catch {
+      return null;
+    }
+  }, []);
+  const perSpeakerLanesEnabled =
+    role === "tutor" &&
+    audioCapturePolicy === "full" &&
+    studentLearnerProfileId != null &&
+    studentLearnerProfileId.length > 0;
+  const resolveSpeakerIdForPeer = useCallback(
+    (p: AvParticipant) => {
+      if (!studentLearnerProfileId || p.role !== "student") return undefined;
+      return studentLearnerProfileId;
+    },
+    [studentLearnerProfileId]
+  );
+  useRemoteMicRecorders({
+    participants: liveAv.participants,
+    sessionId: whiteboardSessionId,
+    shouldCapture: lifecycle.shouldCapture,
+    mutedPeerIdsInRecording,
+    outbox: uploadOutboxForPerSpeaker,
+    enabled: perSpeakerLanesEnabled && uploadOutboxForPerSpeaker != null,
+    resolveSpeakerIdForPeer,
+    getRecordingTimeOffsetMs: getAudioMs,
+  });
+
+  // p3-clock: emit the single-session-clock anchor once, when the clock
+  // first starts advancing (FSM enters recording / MediaRecorder.start() —
+  // same gate = same t=0 epoch for WB events, FSM, and transcription).
+  const clockStartLoggedRef = useRef(false);
+  useEffect(() => {
+    if (!wbSignal || clockStartLoggedRef.current) return;
+    clockStartLoggedRef.current = true;
+    const clockStartMode =
+      sessionMode === "IN_PERSON"
+        ? "in_person"
+        : !syncUrl
+          ? "solo"
+          : "live";
+    console.log(
+      `[WhiteboardWorkspaceClient] rid=${whiteboardSessionId} wbsid=${whiteboardSessionId} action=clock_start t0=${getAudioMs()} mode=${clockStartMode}`
+    );
+  }, [wbSignal, whiteboardSessionId, getAudioMs, sessionMode, syncUrl]);
+
+  // p3-clock: log the freeze/resume transitions of the single session clock.
+  // The clock freezes whenever `wbSignal` drops while the FSM is `paused`
+  // (the disconnect / network-gap window driven by
+  // REACHABLE_LOSS_DEBOUNCE_MS). Without these lines a "WB timestamps look
+  // wrong after a reconnect" prod ticket is un-debuggable: we log the frozen
+  // clock value + pause reason on freeze, and the resume clock value + the
+  // wall-clock gap that elapsed while frozen on resume. `gap_ms` is wall
+  // time (Date.now) because the whole point is to measure the real gap the
+  // monotonic clock deliberately did NOT count. Guarded on an actual state
+  // change so it fires once per transition, not every render.
+  const clockFrozenPrevRef = useRef(false);
+  const clockFreezeWallMsRef = useRef<number | null>(null);
+  useEffect(() => {
+    const frozen = !wbSignal && lifecycle.state === "paused";
+    if (frozen === clockFrozenPrevRef.current) return;
+    clockFrozenPrevRef.current = frozen;
+    if (frozen) {
+      clockFreezeWallMsRef.current = Date.now();
+      console.log(
+        `[WhiteboardWorkspaceClient] rid=${whiteboardSessionId} wbsid=${whiteboardSessionId} action=clock_paused t_frozen=${getAudioMs()} reason=${lifecycle.pausedReason ?? "unknown"}`
+      );
+    } else if (clockFreezeWallMsRef.current !== null) {
+      const gapMs = Date.now() - clockFreezeWallMsRef.current;
+      clockFreezeWallMsRef.current = null;
+      console.log(
+        `[WhiteboardWorkspaceClient] rid=${whiteboardSessionId} wbsid=${whiteboardSessionId} action=clock_resumed t_resume=${getAudioMs()} gap_ms=${gapMs}`
+      );
+    }
+  }, [
+    wbSignal,
+    lifecycle.state,
+    lifecycle.pausedReason,
+    whiteboardSessionId,
+    getAudioMs,
+  ]);
 
   const getWireBroadcastExtras = useCallback(():
     | WhiteboardWireBroadcastExtras
@@ -2455,9 +2964,11 @@ export function WhiteboardWorkspaceClient({
           : source === "page-switch-preflush"
             ? "page-switch"
             : "visibility";
-      console.info(
-        `[pvs] pvs=${pid} action=flush source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
-      );
+      if (role !== "student") {
+        console.info(
+          `[pvs] pvs=${pid} action=flush source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+        );
+      }
       if (sync && syncUrl) {
         sync.broadcastPageViewState({
           pageId: pid,
@@ -2465,22 +2976,25 @@ export function WhiteboardWorkspaceClient({
           panY: vs.panY,
           zoom: vs.zoom,
         });
-        console.info(
-          `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
-        );
+        if (role !== "student") {
+          console.info(
+            `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+          );
+        }
         // v3 document carries `follow` + per-row viewState; pageViewState alone
         // is not enough for first-time origin-aligned follow on the student.
         scheduleDocumentBroadcastRef.current();
       }
-      // Phase 5 task 8 (replay tier-c-lite): also append to the event log
-      // so replay's camera tracks the same cadence as live. No-op when
-      // recording isn't active (gated inside recorder.recordViewport).
-      recorderRecordViewportRef.current?.(vs.panX, vs.panY, vs.zoom);
+      // Replay viewport log is tutor-only (student recordingActive is always false).
+      if (role !== "student") {
+        recorderRecordViewportRef.current?.(vs.panX, vs.panY, vs.zoom);
+      }
       flushSessionBoardDocumentNow();
     },
     [
       clearViewportPersistTimer,
       flushSessionBoardDocumentNow,
+      role,
       sync,
       syncUrl,
     ]
@@ -2506,8 +3020,14 @@ export function WhiteboardWorkspaceClient({
     const onPageHide = () => {
       flushViewportPersistNow("visibility");
     };
-    const onBeforeUnload = () => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
       flushViewportPersistNow("visibility");
+      if (phaseActive && recordingActive) {
+        e.preventDefault();
+        e.returnValue =
+          "You have an active recording. Leaving now may interrupt your session.";
+        return e.returnValue;
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
@@ -2517,7 +3037,7 @@ export function WhiteboardWorkspaceClient({
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
-  }, [flushViewportPersistNow]);
+  }, [flushViewportPersistNow, phaseActive, recordingActive]);
 
   useEffect(() => {
     return () => clearViewportPersistTimer();
@@ -2584,40 +3104,16 @@ export function WhiteboardWorkspaceClient({
     });
   scheduleDocumentBroadcastRef.current = scheduleDocumentBroadcast;
 
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
-    registerWbE2eSceneMutationHook("tutor", () => {
-      const api = excalidrawAPIRef.current;
-      if (!api) return;
-      pageDataRef.current[activePageIdRef.current] = [
-        ...(api.getSceneElements() as ExcalidrawLikeElement[]),
-      ];
-      // Drive the REAL production cadence: a tutor scene change schedules a
-      // throttled/debounced document broadcast exactly as `handleExcalidrawChange`
-      // does on every onChange. NO manual `flushDocumentBroadcastNow()` — that
-      // force-flush is the page-swap equivalent that masked the live-sync bug.
-      scheduleDocumentBroadcast();
-    });
-  }, [scheduleDocumentBroadcast]);
-
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
-    if (role !== "student") return;
-    registerWbE2eSceneMutationHook("student", () => {
-      const api = excalidrawAPIRef.current;
-      if (!api) return;
-      studentOnCanvasChange(api.getSceneElements());
-    });
-  }, [role, studentOnCanvasChange]);
-
   const recorder = useWhiteboardRecorder({
     whiteboardSessionId,
     adminUserId,
     studentId,
     startedAtIso,
     getAudioMs,
-    // Student role: recording is never active; sync-ingest is off (student uses useStudentWhiteboardCanvas)
-    recordingActive: role === "student" ? false : recordingActive,
+    // Student role: recording is never active; sync-ingest is off (student uses useStudentWhiteboardCanvas).
+    // Tutor: wbCaptureActive (not wbSignal) so WB strokes keep recording at
+    // the frozen clock through a disconnect pause (p3-clock).
+    recordingActive: role === "student" ? false : wbCaptureActive,
     sync: role === "student" ? null : sync,
     applyRemoteToCanvas,
     getScenePageIdForBroadcast: () => activePageIdRef.current,
@@ -2625,6 +3121,8 @@ export function WhiteboardWorkspaceClient({
     /** v3 full-document path owns tutor → student live bytes; v2 from recorder is off. */
     includeLiveSyncBroadcast: !sync,
     getBoardDocumentForCheckpoint: buildBoardDocumentForCheckpoint,
+    initialPersistedState,
+    sessionPhase: initialSessionPhase,
   });
   const { flushThrottledFrameNow, onCanvasChange: recorderOnCanvasChange } =
     recorder;
@@ -2633,17 +3131,106 @@ export function WhiteboardWorkspaceClient({
   // (flushViewportPersistNow, selectTutorPage) can append viewport
   // events without circular hook-ordering.
   recorderRecordViewportRef.current = recorder.recordViewport;
+  recorderRecordPageSwitchRef.current = recorder.recordPageSwitch;
   tutorResyncOnNewRemotePeerRef.current = async () => {
     flushThrottledFrameNow();
     flushDocumentBroadcastNow();
   };
+
+  useEffect(() => {
+    if (recorder.checkpointStatus !== "error" || !recorder.checkpointError) {
+      return;
+    }
+    console.warn(
+      `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} checkpoint_save_failed`,
+      recorder.checkpointError
+    );
+  }, [recorder.checkpointStatus, recorder.checkpointError, whiteboardSessionId]);
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
+    if (role === "student") {
+      registerWbE2eSceneMutationHook("student", () => {
+        const api = excalidrawAPIRef.current;
+        if (!api) return;
+        studentOnCanvasChange(api.getSceneElements());
+      });
+      return;
+    }
+    registerWbE2eSceneMutationHook("tutor", () => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      pageDataRef.current[activePageIdRef.current] = [
+        ...(api.getSceneElements() as ExcalidrawLikeElement[]),
+      ];
+      scheduleDocumentBroadcast();
+      recorderOnCanvasChange(
+        api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>
+      );
+    });
+    // BUG-3 / WS-X — deterministic applyRemote bypass injection seam.
+    // Playwright calls `window.__WBX_INJECT_APPLY_REMOTE__(pageId, elements)`
+    // during the post-page-switch fingerprint window to reproduce the
+    // transitional-live-canvas merge leak without relying on wire timing.
+    const win = window as Window & {
+      __WBX_INJECT_APPLY_REMOTE__?: (
+        pageId: string,
+        els: unknown
+      ) => Promise<void>;
+      __WBX_FORCE_LIVE_SCENE__?: (els: unknown) => void;
+      __WBX_FINGERPRINT_HAS__?: (pageId: string) => boolean;
+      __WBX_GET_ACTIVE_PAGE_ID__?: () => string;
+      __WBX_ON_GUARD_RELEASE__?: (cb: (pageId: string) => void) => void;
+    };
+    win.__WBX_INJECT_APPLY_REMOTE__ = async (pageId, elsRaw) => {
+      const invoke = e2eApplyRemoteInvokerRef.current;
+      if (!invoke) return;
+      await invoke(elsRaw as ReadonlyArray<ExcalidrawLikeElement>, {
+        scenePageId: pageId,
+      });
+    };
+    win.__WBX_FORCE_LIVE_SCENE__ = (elsRaw) => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      (api as typeof api & {
+        updateScene: (s: {
+          elements: ReadonlyArray<unknown>;
+          captureUpdate?: string;
+        }) => void;
+      }).updateScene({
+        elements: elsRaw as ReadonlyArray<unknown>,
+        captureUpdate: "NEVER",
+      });
+    };
+    win.__WBX_FINGERPRINT_HAS__ = (pageId) =>
+      pageSceneSetFingerprintRef.current.has(pageId);
+    win.__WBX_GET_ACTIVE_PAGE_ID__ = () => activePageIdRef.current;
+    win.__WBX_ON_GUARD_RELEASE__ = (cb) => {
+      onGuardReleaseCallbackRef.current = cb;
+    };
+    return () => {
+      delete win.__WBX_INJECT_APPLY_REMOTE__;
+      delete win.__WBX_FORCE_LIVE_SCENE__;
+      delete win.__WBX_FINGERPRINT_HAS__;
+      delete win.__WBX_GET_ACTIVE_PAGE_ID__;
+      delete win.__WBX_ON_GUARD_RELEASE__;
+    };
+  }, [role, scheduleDocumentBroadcast, recorderOnCanvasChange, studentOnCanvasChange]);
+
+  // BUG-3 / WS-X test seam: keep e2eApplyRemoteInvokerRef current so the
+  // window.__WBX_INJECT_APPLY_REMOTE__ hook always calls the latest
+  // applyRemoteToCanvas closure (useCallback deps change over time).
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1" || role !== "tutor") return;
+    e2eApplyRemoteInvokerRef.current = applyRemoteToCanvas;
+  }, [applyRemoteToCanvas, role]);
 
   // Phase 5 task 8 — anchor replay's camera at t≈0 by emitting one
   // viewport event when recording becomes active. Without this, replay's
   // first frames have no viewport event ≤ currentTime and fall back to
   // camera-fit, which would jump on the first tutor pan/zoom afterwards.
   useEffect(() => {
-    if (!recordingActive) return;
+    if (!wbSignal) return;
     const api = excalidrawAPIRef.current;
     if (!api) return;
     try {
@@ -2668,7 +3255,7 @@ export function WhiteboardWorkspaceClient({
         (err as Error)?.message ?? err
       );
     }
-  }, [recordingActive, recorder, whiteboardSessionId]);
+  }, [wbSignal, recorder, whiteboardSessionId]);
 
   const selectTutorPage = useCallback(
     async (nextId: string) => {
@@ -2812,6 +3399,21 @@ export function WhiteboardWorkspaceClient({
             `[pvs] pvs=${nextId} action=restore source=page-switch viewState=absent`
           );
         }
+        // BUG-3 / WS-X: record anchor element IDs for the content-identity guard.
+        // `handleExcalidrawChange` uses this to reject stale foreign onChanges
+        // (carrying elements from the page we just LEFT) that fire after the
+        // pageSwitchProgrammaticRef guard drops to 0. Blank-page switches are
+        // excluded (next.length === 0 → no anchors to validate against).
+        if (next.length > 0) {
+          pageSceneSetFingerprintRef.current.set(
+            nextId,
+            new Set(
+              (next as ReadonlyArray<{ id?: string }>)
+                .map((e) => e.id ?? "")
+                .filter(Boolean)
+            )
+          );
+        }
         // Scope undo/redo history to the current board. Excalidraw's history
         // stack is global to the single instance — without clearing it on every
         // board switch, undo on Board 2 can replay Board 1 operations and inject
@@ -2827,6 +3429,21 @@ export function WhiteboardWorkspaceClient({
             0,
             pageSwitchProgrammaticRef.current - 1
           );
+          // TEST SEAM (E2E only) — fire the one-shot guard-release callback
+          // synchronously while the fingerprint is still active. The callback
+          // can call __WBX_FORCE_LIVE_SCENE__ + __WBX_INJECT_APPLY_REMOTE__ to
+          // reproduce the applyRemote-during-fingerprint-window race.
+          if (
+            process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1" &&
+            pageSwitchProgrammaticRef.current === 0 &&
+            pageSceneSetFingerprintRef.current.has(nextId)
+          ) {
+            const cb = onGuardReleaseCallbackRef.current;
+            if (cb) {
+              onGuardReleaseCallbackRef.current = null;
+              cb(nextId);
+            }
+          }
         };
         if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
           window.requestAnimationFrame(() =>
@@ -2839,6 +3456,11 @@ export function WhiteboardWorkspaceClient({
         }
       }
       if (!committed) return;
+      const pageMeta = pageListRef.current.find((p) => p.id === nextId);
+      recorderRecordPageSwitchRef.current?.(
+        nextId,
+        pageMeta?.title ?? `Page ${pageListRef.current.findIndex((p) => p.id === nextId) + 1}`
+      );
       setActivePageId(nextId);
       flushDocumentBroadcastNow();
     },
@@ -2928,6 +3550,7 @@ export function WhiteboardWorkspaceClient({
       activePageIdRef.current = newId;
     }
     setActivePageId(newId);
+    recorderRecordPageSwitchRef.current?.(newId, `Page ${nextN}`);
     if (api) {
       flushDocumentBroadcastNow();
     }
@@ -2993,6 +3616,13 @@ export function WhiteboardWorkspaceClient({
         firstPageId,
       }) => {
         if (rows.length === 0) return;
+        // E2 (BUG-3): abandon any in-flight selectTutorPage hydrate and
+        // suppress handleExcalidrawChange BEFORE bucket writes — the step-7
+        // guard alone left a window where stale onChange from the anchor
+        // tab could stamp board-3 strokes into the new PDF page buckets.
+        tutorSwitchTokenRef.current += 1;
+        pageSwitchProgrammaticRef.current += 1;
+        flushThrottledFrameNow();
         // 1. Freeze the anchor page's scene so its drawings can't be
         // overwritten by any onChange that arrives during the commit.
         const api = excalidrawAPIRef.current;
@@ -3044,15 +3674,10 @@ export function WhiteboardWorkspaceClient({
           );
         }
         // 7. Navigate to first imported page IF tutor still on anchor.
-        // Hold the bleed guard from entry through the full tail of
-        // selectTutorPage (including its 2×rAF+timeout release) so any
-        // remote apply arriving between commitPdfBatch steps and
-        // selectTutorPage's own guard increment cannot write to the
-        // live scene mid-switch. selectTutorPage adds its own +1 on
-        // top; total is 2 during hydrate, drops to 1 after selectTutorPage
-        // inner release, then to 0 after our outer release.
-        pageSwitchProgrammaticRef.current += 1;
-        flushThrottledFrameNow();
+        // Entry guard (+1 above) covers steps 1–6; selectTutorPage adds
+        // its own +1 during hydrate. Release the entry guard after
+        // selectTutorPage's 2×rAF+timeout tail (or immediately if we
+        // skip navigation).
         const releasePdfBatchGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
             0,
@@ -3151,20 +3776,23 @@ export function WhiteboardWorkspaceClient({
   // Fire a ping immediately whenever overlap flips, and run a
   // ~10s heartbeat while it stays true.
   useEffect(() => {
+    if (role !== "tutor") return; // billable timer is tutor-only; student uses join-timer
     if (!syncUrl) return; // tutor-solo mode — no billable timer
-    void pingActive(bothPartiesInRoom);
-    if (!bothPartiesInRoom) return;
+    const billingActive = bothPartiesInRoom && phaseActive;
+    void pingActive(billingActive);
+    if (!billingActive) return;
     const HEARTBEAT_MS = 10_000;
     const id = setInterval(() => {
       void pingActive(true);
     }, HEARTBEAT_MS);
     return () => clearInterval(id);
-  }, [bothPartiesInRoom, pingActive, syncUrl]);
+  }, [role, bothPartiesInRoom, phaseActive, pingActive, syncUrl]);
 
   // Best-effort "I'm leaving" beacon. sendBeacon is the only way to
   // get a reliable POST off during pagehide on most browsers; we fall
   // back to fetch with keepalive when sendBeacon is unavailable.
   useEffect(() => {
+    if (role !== "tutor") return; // billable timer is tutor-only; student uses join-timer
     if (!syncUrl) return;
     const url = `/api/whiteboard/${whiteboardSessionId}/active-ping`;
     const beacon = () => {
@@ -3199,7 +3827,7 @@ export function WhiteboardWorkspaceClient({
       window.removeEventListener("pagehide", beacon);
       window.removeEventListener("beforeunload", beacon);
     };
-  }, [syncUrl, whiteboardSessionId]);
+  }, [role, syncUrl, whiteboardSessionId]);
 
   // Periodic refetch of the server-truth state. Catches: another
   // device for the same tutor wrote (cross-device sessions are
@@ -3273,13 +3901,15 @@ export function WhiteboardWorkspaceClient({
     setCopyState("copying");
     setCopyError(null);
     try {
-      const { token } = await issueJoinToken(whiteboardSessionId);
+      // Full retirement: authenticated /join path always. No join token needed
+      // in the link — the student's learner session is the auth credential.
+      // issueJoinToken is no longer called here; existing tokens remain valid
+      // for the /w/[joinToken] redirect bridge (old in-flight links).
       const origin =
         typeof window !== "undefined" ? window.location.origin : "";
-      const link = `${origin}/w/${token}#k=${encryptionKey}`;
-      // Clipboard API often fails after the `await issueJoinToken` above (user
-      // activation / document focus). `copyTextToClipboard` falls back to
-      // execCommand + prompt so we do not show a false error when copy works.
+      const link = `${origin}/join/${whiteboardSessionId}#k=${encryptionKey}`;
+      // Clipboard API can fail silently on some browsers. `copyTextToClipboard`
+      // falls back to execCommand + prompt so we do not show a false error.
       await copyTextToClipboard(link);
       setCopyState("copied");
       setTimeout(() => setCopyState("idle"), 3000);
@@ -3301,6 +3931,7 @@ export function WhiteboardWorkspaceClient({
     "idle" | "uploading" | "registering" | "failed"
   >("idle");
   const [endingError, setEndingError] = useState<string | null>(null);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const audioBridgeRef = useRef<WhiteboardWorkspaceAudioBridgeHandle | null>(
     null
   );
@@ -3328,7 +3959,100 @@ export function WhiteboardWorkspaceClient({
     });
   }, [endingState, whiteboardSessionId]);
 
+  useEffect(() => {
+    if (role !== "tutor") {
+      setCaptureDeferActive("wwc", false);
+      return;
+    }
+    const shouldDefer =
+      ["recording", "paused", "stopping", "uploading"].includes(lifecycle.state) ||
+      endingState === "finalizing" ||
+      endingState === "ending" ||
+      endingState === "error";
+    setCaptureDeferActive("wwc", shouldDefer);
+  }, [role, lifecycle.state, endingState]);
+
+  useEffect(() => {
+    return () => setCaptureDeferActive("wwc", false);
+  }, []);
+
+  // Tutor Start affordance — transitions the session from PENDING to ACTIVE.
+  // Called from the WaitingRoomOverlay Start button with the chosen mode.
+  const activateSessionLive = useCallback(async (mode: WtrSessionMode) => {
+    if (isStarting) return;
+    setIsStarting(true);
+    setSessionStartError(null);
+    console.info(
+      `[slc] wbsid=${whiteboardSessionId} action=session_activate_clicked phase=pending->active`
+    );
+    console.info(
+      `[wtr] wbsid=${whiteboardSessionId} role=${role} action=start_clicked mode=${mode.toLowerCase()}`
+    );
+    try {
+      await startWhiteboardSession(whiteboardSessionId, mode);
+      setSessionStartError(null);
+      setSessionPhase("ACTIVE");
+      console.info(
+        `[wtr] wbsid=${whiteboardSessionId} role=${role} action=live_entered mode=${mode.toLowerCase()}`
+      );
+    } catch (err) {
+      const consentErr = parseConsentActionError(err);
+      if (consentErr) {
+        setSessionStartError(formatConsentActionError(consentErr));
+      } else {
+        // Mirror StartWhiteboardSession.tsx — generic tutor copy + digest for
+        // log correlation (ownership/notFound, redacted prod errors, etc.).
+        const digest =
+          err && typeof err === "object" && "digest" in err
+            ? String((err as { digest?: unknown }).digest ?? "")
+            : "";
+        const friendlyBase =
+          "Couldn't start the session. Please refresh and try again — if you recently switched or exited an impersonated account in another tab, reload this page first.";
+        setSessionStartError(
+          digest
+            ? `${friendlyBase}\n\nError ID: ${digest}\n(copy this and send it back so we can find the failure in the server logs).`
+            : friendlyBase
+        );
+      }
+      // Log the failure so a future hardware repro is debuggable.
+      // The button re-enables via the finally block — no stuck state.
+      console.error(
+        `[wtr] wbsid=${whiteboardSessionId} role=${role} action=start_failed mode=${mode.toLowerCase()}`,
+        err
+      );
+    } finally {
+      setIsStarting(false);
+    }
+  }, [whiteboardSessionId, role, isStarting]);
+
+  const handleCancelPendingSession = useCallback(async () => {
+    if (isCancelling) return;
+    setIsCancelling(true);
+    setCancelError(null);
+    console.log(
+      `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending`
+    );
+    const rosterUrl = `/admin/students/${studentId}`;
+    try {
+      const result = await deleteWhiteboardSessionAndDataAction(whiteboardSessionId);
+      if (!result.ok) {
+        setCancelError(result.error ?? "Could not cancel the session. Please try again.");
+        setIsCancelling(false);
+        return;
+      }
+      window.location.assign(rosterUrl);
+    } catch (err: unknown) {
+      console.error(
+        `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
+        err
+      );
+      setCancelError("Could not cancel the session. Please try again.");
+      setIsCancelling(false);
+    }
+  }, [whiteboardSessionId, studentId, isCancelling]);
+
   const handleEndSession = useCallback(async () => {
+    setShowEndConfirm(false);
     setEndingState("finalizing");
     setEndingError(null);
     setFinalizingSegmentCount(0);
@@ -3389,9 +4113,7 @@ export function WhiteboardWorkspaceClient({
         );
         setEndingState("error");
         setEndingError(
-          drainResult.lastError
-            ? `Couldn't finalize — ${remaining} audio segment${remaining === 1 ? "" : "s"} still saving. Last error: ${drainResult.lastError}. Try again once your connection is healthy — your data isn't lost.`
-            : `Couldn't finalize — ${remaining} audio segment${remaining === 1 ? "" : "s"} still saving. Try again in a moment, your data isn't lost.`
+          "Still saving audio — your work is safe. Try again once your connection is healthy."
         );
         return;
       }
@@ -3408,6 +4130,7 @@ export function WhiteboardWorkspaceClient({
       // and so a flaky events upload doesn't double-bill the tutor's
       // patience clock.
       setEndingState("ending");
+      await recorder.flushServerPersist();
       const eventsJson = recorder.buildFinalEventsJson();
       const upload = await uploadWhiteboardEvents({
         whiteboardSessionId,
@@ -3459,16 +4182,19 @@ export function WhiteboardWorkspaceClient({
         );
       }
 
-      // Step 6 — one atomic server transaction: stamp endedAt, swap
-      // eventsBlobUrl, register every outbox segment, revoke join
-      // tokens. Plan Pillar 3. Phase 1c: now also persists
-      // `snapshotBlobUrl` when the snapshot pipeline above produced
-      // one — the action treats it as optional so a null value is
-      // a no-op on the column.
-      await endWhiteboardSession(whiteboardSessionId, upload.blobUrl, {
-        segments,
-        snapshotBlobUrl,
-      });
+      // Step 6 — WS-C server finalize: assemble from backend + delegate to
+      // endWhiteboardSession (consent/erasure/token revoke inherited).
+      const finalizeResult = await finalizeWhiteboardSessionFromBackend(
+        whiteboardSessionId,
+        {
+          finalEventsBlobUrl: upload.ok ? upload.blobUrl : undefined,
+          snapshotBlobUrl,
+          extraSegments: segments,
+        }
+      );
+      if (!finalizeResult.ok) {
+        throw new Error(finalizeResult.error);
+      }
 
       // Step 7 — drop the persisted outbox rows. Server has them; we
       // don't want the next mount of this workspace to find them
@@ -3485,19 +4211,9 @@ export function WhiteboardWorkspaceClient({
         );
       }
 
-      // Slice 3 — post-end notes pipeline (fire-and-forget, never blocks navigation).
-      // (a) Kick any straggler non-done chunks so transcription completes before reduce.
-      void kickSessionChunksAction(whiteboardSessionId).catch((sweepErr: unknown) => {
-        console.warn(
-          `[txc] wbsid=${whiteboardSessionId} action=session_sweep_fire_error err=${(sweepErr as Error)?.message ?? sweepErr}`
-        );
-      });
-      // (c) Trigger notes generation — upserts pending TutorNote + fires reduce.
-      void triggerNotesGenerationAction(whiteboardSessionId).catch((notesErr: unknown) => {
-        console.warn(
-          `[tnt] wbsid=${whiteboardSessionId} action=trigger_fire_error err=${(notesErr as Error)?.message ?? notesErr}`
-        );
-      });
+      // Slice 3 — post-end notes pipeline is triggered server-side by C1
+      // (`finalizeWhiteboardSessionFromBackend`). Surface only if C1 reported
+      // a notes failure via logs; client no longer duplicates the fire.
 
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);
@@ -3526,7 +4242,7 @@ export function WhiteboardWorkspaceClient({
       if (onSessionEnded) {
         onSessionEnded();
       } else {
-        const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
+        const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`;
         router.replace(reviewHref);
         router.refresh();
       }
@@ -3550,13 +4266,47 @@ export function WhiteboardWorkspaceClient({
     } catch (err) {
       setEndingState("error");
       const msg = (err as Error)?.message ?? "Could not end the session.";
+      console.error(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} end-session failed:`,
+        msg
+      );
       setEndingError(
-        `Could not end session: ${msg}. Your work is still in progress — retry "End session".`
+        "Still saving audio — your work is safe. Try \"End session\" again in a moment."
       );
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
     }
   }, [onSessionEnded, recorder, router, studentId, whiteboardSessionId]);
+
+  // ---------------------------------------------------------------
+  // SSG-2 anti-orphan: auto-end-once when intent=endreview.
+  //
+  // When the tutor clicks "End and review" from the student-detail roster,
+  // the workspace URL carries ?intent=endreview. The WorkspaceResumeGate
+  // auto-consents so this component mounts. We then fire handleEndSession
+  // exactly ONCE — the ref guard prevents double-fire on strict-mode
+  // double-mount and on any subsequent re-renders.
+  //
+  // This is intentionally NOT in handleEndSession's deps because we want
+  // it to fire at mount using the then-current handleEndSession. The
+  // handleEndSessionRef keeps the closure fresh.
+  // ---------------------------------------------------------------
+  const autoEndFiredRef = useRef(false);
+  const handleEndSessionRef = useRef(handleEndSession);
+  handleEndSessionRef.current = handleEndSession;
+
+  useEffect(() => {
+    if (!LEGACY_INTENT_ENDREVIEW_AUTO_END) return;
+    if (initialIntent !== "endreview" || role !== "tutor") return;
+    if (autoEndFiredRef.current) return;
+    autoEndFiredRef.current = true;
+    console.log(
+      `[wjg] wbsid=${whiteboardSessionId} action=auto_end_fired intent=endreview`
+    );
+    void handleEndSessionRef.current();
+    // initialIntent and role are stable (from props, never changed after mount).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialIntent, role]);
 
   // ---------------------------------------------------------------
   // After refresh: (1) auto-paint after stale-room "Resume session" when
@@ -3955,6 +4705,31 @@ export function WhiteboardWorkspaceClient({
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
       const pageId = activePageIdRef.current;
+      // BUG-3 / WS-X content-identity guard — reject stale foreign onChanges
+      // that carry elements from the page we just LEFT (debounced onChange
+      // firing after pageSwitchProgrammaticRef drops to 0).
+      const fingerprint = pageSceneSetFingerprintRef.current.get(pageId);
+      if (fingerprint && fingerprint.size > 0) {
+        const incomingIds = new Set(
+          (els as ReadonlyArray<{ id?: string }>)
+            .map((e) => e.id ?? "")
+            .filter(Boolean)
+        );
+        const allAnchorsPresent = Array.from(fingerprint).every((anchorId) =>
+          incomingIds.has(anchorId)
+        );
+        if (!allAnchorsPresent) {
+          const anchorIds = Array.from(fingerprint);
+          console.info(
+            `[wba] wbsid=${whiteboardSessionId} action=stale_foreign_scene_rejected pageId=${pageId} anchors=${anchorIds.join(",")}`
+          );
+          return;
+        }
+        // First confirmed legitimate onChange — clear the fingerprint so
+        // subsequent edits (including deletes of anchor elements) are
+        // never gated.
+        pageSceneSetFingerprintRef.current.delete(pageId);
+      }
       // PR-01 Option A: store raw elements ref — no per-move clone.
       // preserveImageAssetUrlsOnSceneWrite now runs only at wire/checkpoint build time.
       pageDataRef.current[pageId] = els as ExcalidrawLikeElement[];
@@ -4095,6 +4870,16 @@ export function WhiteboardWorkspaceClient({
     ]
   );
 
+  const handleGraphPersisted = useCallback(() => {
+    const api = excalidrawAPIRef.current;
+    if (!api) return;
+    if (role === "student") {
+      studentOnCanvasChange(api.getSceneElements());
+    } else if (sync && syncUrl) {
+      scheduleDocumentBroadcast();
+    }
+  }, [role, scheduleDocumentBroadcast, studentOnCanvasChange, sync, syncUrl]);
+
   const renderGraphEmbeddable = useCallback((element: unknown) => {
     const el = element as {
       link?: string;
@@ -4102,15 +4887,21 @@ export function WhiteboardWorkspaceClient({
     };
     if (el.link === GRAPH_EMBED_LINK || el.customData?.wbType === "graph") {
       return (
+        // Wave5 #4 — bidirectional graph sync for tutor and student.
+        // excalidrawAPI state (not ref) so GraphEmbeddable mounts with a live API
+        // and persistGraphElementState can write graphStateJson back to the scene.
         <GraphEmbeddable
           element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
-          excalidrawAPI={role === "student" ? undefined : excalidrawAPIRef.current}
-          readOnly={role === "student"}
+          excalidrawAPI={excalidrawAPI}
+          excalidrawAPIRef={excalidrawAPIRef}
+          readOnly={false}
+          syncFromBoard
+          onAfterPersist={handleGraphPersisted}
         />
       );
     }
     return undefined;
-  }, [role]);
+  }, [excalidrawAPI, handleGraphPersisted]);
 
   const handleExcalidrawLinkOpen = useCallback(
     (
@@ -4171,7 +4962,10 @@ export function WhiteboardWorkspaceClient({
       appState.currentItemRoughness = updates.roughness;
       setRoughness(updates.roughness);
     }
-    api.updateScene?.({ appState });
+    api.updateScene?.({
+      appState,
+      captureUpdate: "IMMEDIATELY",
+    } as Parameters<NonNullable<typeof api.updateScene>>[0]);
   }, []);
 
   const updateRoundness = useCallback((value: "sharp" | "round") => {
@@ -4188,38 +4982,54 @@ export function WhiteboardWorkspaceClient({
   }, []);
 
   const handleAcquireMic = useCallback(async () => {
-    if (!workspaceAudio.localMicStream && !liveAv.localAudioStream) {
-      await liveAv.requestMic();
+    if (!workspaceAudio.localMicStream && !liveAvRef.current.localAudioStream) {
+      await liveAvRef.current.requestMic();
     }
-  }, [workspaceAudio.localMicStream, liveAv]);
+  }, [workspaceAudio.localMicStream]);
+
+  // WS-I fix: synchronously write recording-mute intent before any async
+  // boundary so the mount-effect acquireMic graph-build reads the correct
+  // tutorRecordingMutedRef value. The ref update + graph call in
+  // setTutorRecordingMute happen in the same JS turn as the live-AV toggle.
+  const handleToggleMicWithRecordingMute = useCallback(() => {
+    const nextMuted = !liveAvRef.current.isMicMuted;
+    workspaceAudio.setTutorRecordingMute(nextMuted);
+    liveAvRef.current.toggleMic();
+  }, [workspaceAudio.setTutorRecordingMute]);
 
   const handleTopBarCam = useCallback(async () => {
-    if (!liveAv.localVideoStream) {
+    if (!liveAvRef.current.localVideoStream) {
       // requestCam() already sets isCamMuted=false on success.
       // Do NOT call toggleCam() after — that would immediately re-mute.
-      await liveAv.requestCam();
+      await liveAvRef.current.requestCam();
       return;
     }
-    liveAv.toggleCam();
-  }, [liveAv]);
+    liveAvRef.current.toggleCam();
+  }, []);
 
-  // Camera-on-by-default: auto-enable the camera when the browser
-  // Permissions API confirms it was already granted (e.g. on a
-  // subsequent session in the same browser). Runs at most once per
-  // mount. Does NOT nag if permission is denied or unknown.
-  const hasAutoRequestedCamRef = useRef(false);
-  useEffect(() => {
-    if (liveAv.hasCamPermission !== "granted") return;
-    if (liveAv.localVideoStream) return;
-    if (hasAutoRequestedCamRef.current) return;
-    hasAutoRequestedCamRef.current = true;
-    void liveAv.requestCam();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveAv.hasCamPermission]);
+  const handleTopBarMic = useCallback(async () => {
+    if (!liveAvRef.current.localAudioStream) {
+      await liveAvRef.current.requestMic();
+      return;
+    }
+    liveAvRef.current.toggleMic();
+  }, []);
 
   const roughnessLabel =
     roughness === 0 ? "Architect" : roughness === 1 ? "Artist" : "Cartoon";
   const roundnessLabel = roundness === "sharp" ? "Sharp" : "Round";
+
+  // WS-R: mirror Excalidraw hasStrokeStyle / canChangeRoundness — hide dead knobs.
+  const showRoughnessChrome =
+    activeToolType === "rectangle" ||
+    activeToolType === "ellipse" ||
+    activeToolType === "diamond" ||
+    activeToolType === "arrow" ||
+    activeToolType === "line";
+  const showRoundnessChrome =
+    activeToolType === "rectangle" ||
+    activeToolType === "ellipse" ||
+    activeToolType === "diamond";
 
   const showPropsChrome =
     activeToolType !== "selection" &&
@@ -4235,6 +5045,15 @@ export function WhiteboardWorkspaceClient({
       className={`mynk-wb-props-sidebar mynk-wb-props-compact${propsCompactOpen ? " mynk-wb-props-compact--open" : ""}`}
       data-testid="wb-props-popover"
       onPointerDown={(e) => e.stopPropagation()}
+      onClickCapture={(e) => {
+        // Capture the trigger button's viewport rect before the toggle fires
+        // so the portal panel can be positioned via position:fixed.
+        const btn = (e.target as Element).closest(".mynk-wb-props-compact__summary");
+        if (btn) {
+          const rect = btn.getBoundingClientRect();
+          setPropsFlyoutAnchor({ top: rect.top, left: rect.right + 4 });
+        }
+      }}
     >
       <button
         type="button"
@@ -4260,45 +5079,63 @@ export function WhiteboardWorkspaceClient({
             }
           />
         </span>
-        <span
-          className="mynk-wb-summary-chip"
-          title={roughnessLabel}
-          aria-label={roughnessLabel}
-          style={{ padding: "2px 4px", background: "transparent" }}
-        >
-          <RoughnessIcon level={roughness as 0 | 1 | 2} />
-        </span>
-        <span
-          className="mynk-wb-summary-chip"
-          title={roundnessLabel}
-          aria-label={roundnessLabel}
-          style={{ padding: "2px 4px", background: "transparent" }}
-        >
-          <SharpnessIcon type={roundness} />
-        </span>
+        {showRoughnessChrome && (
+          <span
+            className="mynk-wb-summary-chip"
+            title={roughnessLabel}
+            aria-label={roughnessLabel}
+            style={{ padding: "2px 4px", background: "transparent" }}
+          >
+            <RoughnessIcon level={roughness as 0 | 1 | 2} />
+          </span>
+        )}
+        {showRoundnessChrome && (
+          <span
+            className="mynk-wb-summary-chip"
+            title={roundnessLabel}
+            aria-label={roundnessLabel}
+            style={{ padding: "2px 4px", background: "transparent" }}
+          >
+            <SharpnessIcon type={roundness} />
+          </span>
+        )}
       </button>
-      <div
-        className="mynk-wb-props-compact__panel"
-        role="dialog"
-        aria-label="Stroke properties"
-        data-testid="wb-props-panel"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <WbStrokePropsPanel
-          strokeColor={strokeColor}
-          strokeWidth={strokeWidth}
-          opacity={opacity}
-          roughness={roughness}
-          roundness={roundness}
-          moreStylesOpen={moreStylesOpen}
-          inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
-          onStrokeChange={updateStrokeStyle}
-          onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
-          onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
-          onRoundnessChange={updateRoundness}
-        />
-      </div>
+      {/* Panel is portaled to document.body as position:fixed so it escapes
+          the rail's overflow:hidden without any overflow-clip-margin tricks. */}
+      {propsCompactOpen && propsFlyoutAnchor && createPortal(
+        <div
+          className="mynk-wb-props-compact__panel"
+          role="dialog"
+          aria-label="Stroke properties"
+          data-testid="wb-props-panel"
+          style={{
+            display: "block",
+            position: "fixed",
+            left: propsFlyoutAnchor.left,
+            top: propsFlyoutAnchor.top,
+            zIndex: 200,
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <WbStrokePropsPanel
+            strokeColor={strokeColor}
+            strokeWidth={strokeWidth}
+            opacity={opacity}
+            roughness={roughness}
+            roundness={roundness}
+            moreStylesOpen={moreStylesOpen}
+            inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
+            onStrokeChange={updateStrokeStyle}
+            onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
+            onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
+            onRoundnessChange={updateRoundness}
+            showRoughness={showRoughnessChrome}
+            showRoundness={showRoundnessChrome}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 
@@ -4417,11 +5254,79 @@ export function WhiteboardWorkspaceClient({
   const studentShowWaitingForOther =
     studentServerActiveMs === 0 && !studentBothPresentForTimer && studentConnected;
 
+  const renderGridToggleButton = (extraClassName = "mynk-wb-topbar__desktop-only") => (
+    <button
+      type="button"
+      className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${gridEnabled ? " mynk-wb-tb-btn--grid-on" : ""}${extraClassName ? ` ${extraClassName}` : ""}`}
+      title={gridEnabled ? "Hide canvas grid" : "Show canvas grid"}
+      aria-label={gridEnabled ? "Hide canvas grid" : "Show canvas grid"}
+      aria-pressed={gridEnabled}
+      data-testid="wb-grid-toggle"
+      onClick={(e) => {
+        e.stopPropagation();
+        toggleGrid(!gridEnabled);
+      }}
+    >
+      <WbIconGrid size={14} />
+    </button>
+  );
+
+  const renderGridOverflowMenuItem = () => (
+    <button
+      type="button"
+      className={`mynk-wb-menu-item${gridEnabled ? " mynk-wb-menu-item--active" : ""}`}
+      aria-pressed={gridEnabled}
+      data-testid="wb-overflow-grid-toggle"
+      onClick={() => toggleGrid(!gridEnabled)}
+    >
+      <span className="mynk-wb-menu-item__icon" aria-hidden>
+        <WbIconGrid size={14} />
+      </span>
+      <span>{gridEnabled ? "Hide canvas grid" : "Show canvas grid"}</span>
+    </button>
+  );
+
+  const renderTopbarOverflowControl = (testId: string) => (
+    <div className="mynk-wb-topbar-overflow-wrap" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
+        title="More session options"
+        aria-label="More session options"
+        aria-expanded={topbarMoreOpen}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleMenu("topbar-more");
+        }}
+        data-testid={testId}
+      >
+        <WbIconMore size={14} />
+      </button>
+      {topbarMoreOpen && (
+        <div
+          className="mynk-wb-topbar-overflow-dropdown"
+          role="dialog"
+          aria-label="More session options"
+          data-testid="wb-topbar-overflow-dropdown"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mynk-wb-topbar-overflow-dropdown__scroll">
+            {renderTopBarOverflowItems()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   const renderTopBarOverflowItems = () => {
     const undoRedoDisabled = role === "student" ? !studentConnected : endingBusy;
+    const micDisabled =
+      role === "student"
+        ? studentAvPickerDisabled || liveAv.hasMicPermission === "denied"
+        : endingBusy || liveAv.hasMicPermission === "denied";
     const camDisabled =
       role === "student"
-        ? !studentConnected ||
+        ? studentAvPickerDisabled ||
           liveAv.hasCamPermission === "denied" ||
           (liveAv.videoDevices?.length ?? 1) === 0
         : endingBusy ||
@@ -4445,6 +5350,48 @@ export function WhiteboardWorkspaceClient({
               : formatTimerMinutesOnly(studentLiveTimerMs)}
           </p>
           <div className="mynk-wb-popover-sep" />
+          {layoutMode === "narrow" && (
+            <>
+              <button
+                type="button"
+                className="mynk-wb-menu-item"
+                data-testid="wb-overflow-toolbar-toggle"
+                onClick={() => {
+                  setToolbarHidden((hidden) => !hidden);
+                  setOpenMenu(null);
+                }}
+              >
+                <span>
+                  {toolbarHidden ? "Show tools" : "Hide tools"}
+                </span>
+              </button>
+              <div className="mynk-wb-popover-sep" />
+            </>
+          )}
+          <div
+            className="mynk-wb-overflow-av-pickers"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AudioControls
+              devices={liveAv.audioDevices ?? []}
+              selectedPickerSlot={liveAv.pickedMicSlot}
+              onPickMicSlot={(slot) =>
+                void liveAv.setMicDeviceBySlot(slot, { force: true })
+              }
+              isLive={liveAv.localAudioStream !== null}
+              disabled={studentAvPickerDisabled}
+            />
+            <VideoControls
+              devices={liveAv.videoDevices ?? []}
+              selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+              onPickCameraSlot={(slot) =>
+                void liveAv.setVideoCameraBySlot(slot, { force: true })
+              }
+              isLive={liveAv.localVideoStream !== null}
+              disabled={studentAvPickerDisabled}
+            />
+          </div>
+          <div className="mynk-wb-popover-sep" />
         </>
       )}
       {role === "student" && !touchLayout && (
@@ -4460,7 +5407,10 @@ export function WhiteboardWorkspaceClient({
               checked={!independentView}
               onChange={(e) => setIndependentView(!e.target.checked)}
             />
-            Follow tutor view
+            <span className="mynk-wb-menu-item__icon" aria-hidden>
+              <WbIconFollowSync size={14} />
+            </span>
+            <span>Follow tutor view</span>
           </label>
           <button
             type="button"
@@ -4469,8 +5419,39 @@ export function WhiteboardWorkspaceClient({
             onClick={() => snapToTutorView()}
             data-testid="wb-overflow-match-view"
           >
+            <span className="mynk-wb-menu-item__icon" aria-hidden>
+              <WbIconMatchView size={14} />
+            </span>
             <span>Match tutor&apos;s view</span>
           </button>
+          <div className="mynk-wb-popover-sep" />
+          {/* 8b: device pickers always available in student overflow regardless of
+              touch/desktop, so narrow-desktop students can change mic/cam when
+              the inline controls are hidden by the responsive compaction CSS. */}
+          <div
+            className="mynk-wb-overflow-av-pickers"
+            data-testid="wb-student-overflow-av-pickers"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AudioControls
+              devices={liveAv.audioDevices ?? []}
+              selectedPickerSlot={liveAv.pickedMicSlot}
+              onPickMicSlot={(slot) =>
+                void liveAv.setMicDeviceBySlot(slot, { force: true })
+              }
+              isLive={liveAv.localAudioStream !== null}
+              disabled={studentAvPickerDisabled}
+            />
+            <VideoControls
+              devices={liveAv.videoDevices ?? []}
+              selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+              onPickCameraSlot={(slot) =>
+                void liveAv.setVideoCameraBySlot(slot, { force: true })
+              }
+              isLive={liveAv.localVideoStream !== null}
+              disabled={studentAvPickerDisabled}
+            />
+          </div>
           <div className="mynk-wb-popover-sep" />
         </>
       )}
@@ -4525,6 +5506,20 @@ export function WhiteboardWorkspaceClient({
       <button
         type="button"
         className="mynk-wb-menu-item"
+        disabled={micDisabled}
+        onClick={() => {
+          void handleTopBarMic();
+        }}
+        data-testid="wb-overflow-mic"
+      >
+        <WbIconMic size={14} />
+        <span>
+          {liveAv.isMicMuted ? "Turn microphone on" : "Turn microphone off"}
+        </span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
         disabled={camDisabled}
         onClick={() => {
           void handleTopBarCam();
@@ -4545,7 +5540,10 @@ export function WhiteboardWorkspaceClient({
               checked={!independentView}
               onChange={(e) => setIndependentView(!e.target.checked)}
             />
-            Follow tutor view
+            <span className="mynk-wb-menu-item__icon" aria-hidden>
+              <WbIconFollowSync size={14} />
+            </span>
+            <span>Follow tutor view</span>
           </label>
           <button
             type="button"
@@ -4554,19 +5552,15 @@ export function WhiteboardWorkspaceClient({
             onClick={() => snapToTutorView()}
             data-testid="wb-overflow-match-view"
           >
+            <span className="mynk-wb-menu-item__icon" aria-hidden>
+              <WbIconMatchView size={14} />
+            </span>
             <span>Match tutor&apos;s view</span>
           </button>
         </>
       )}
       <div className="mynk-wb-popover-sep" />
-      <label className="mynk-wb-view-item mynk-wb-menu-item">
-        <input
-          type="checkbox"
-          checked={gridEnabled}
-          onChange={(e) => toggleGrid(e.target.checked)}
-        />
-        Show canvas grid
-      </label>
+      {renderGridOverflowMenuItem()}
       <div className="mynk-wb-popover-sep" />
       <div className="mynk-wb-topbar-overflow-theme" role="group" aria-label="Theme">
         {(
@@ -4622,7 +5616,16 @@ export function WhiteboardWorkspaceClient({
 
   const renderMoreOverflowMenu = (iconSize = 16) => (
     <>
-      <div className="mynk-wb-more-menu">
+      <div
+        className="mynk-wb-more-menu"
+        onClickCapture={(e) => {
+          const btn = (e.target as Element).closest(".mynk-wb-tool-btn");
+          if (btn) {
+            const rect = btn.getBoundingClientRect();
+            setMoreFlyoutAnchor({ top: rect.top, left: rect.right + 4 });
+          }
+        }}
+      >
         <WbToolBtn
           icon={<WbIconMore size={iconSize} />}
           label="More — z-order, delete, hand"
@@ -4631,18 +5634,25 @@ export function WhiteboardWorkspaceClient({
             toggleMenu("more");
           }}
         />
-        {!touchLayout && morePopoverOpen && (
-          <div
-            className="mynk-wb-more-popover"
-            role="dialog"
-            aria-label="More drawing options"
-            data-testid="wb-more-popover"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {renderOverflowMenuItems(false)}
-          </div>
-        )}
       </div>
+      {!touchLayout && morePopoverOpen && moreFlyoutAnchor && createPortal(
+        <div
+          className="mynk-wb-more-popover"
+          role="dialog"
+          aria-label="More drawing options"
+          data-testid="wb-more-popover"
+          style={{
+            position: "fixed",
+            left: moreFlyoutAnchor.left,
+            top: moreFlyoutAnchor.top,
+            zIndex: 200,
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {renderOverflowMenuItems(false)}
+        </div>,
+        document.body
+      )}
     </>
   );
 
@@ -4671,7 +5681,16 @@ export function WhiteboardWorkspaceClient({
   );
 
   const renderShapesMenu = (iconSize: number) => (
-    <div className="mynk-wb-shapes-menu">
+    <div
+      className="mynk-wb-shapes-menu"
+      onClickCapture={(e) => {
+        const btn = (e.target as Element).closest(".mynk-wb-tool-btn");
+        if (btn) {
+          const rect = btn.getBoundingClientRect();
+          setShapesFlyoutAnchor({ top: rect.top, left: rect.right + 4 });
+        }
+      }}
+    >
       <WbToolBtn
         icon={shapeIconFor(
           WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
@@ -4691,8 +5710,18 @@ export function WhiteboardWorkspaceClient({
         pulldown
         onPulldown={() => toggleMenu("shapes")}
       />
-      {!touchLayout && shapesDropdownOpen && (
-        <div className="mynk-wb-shapes-dropdown" role="menu">
+      {!touchLayout && shapesDropdownOpen && shapesFlyoutAnchor && createPortal(
+        <div
+          className="mynk-wb-shapes-dropdown"
+          role="menu"
+          style={{
+            position: "fixed",
+            left: shapesFlyoutAnchor.left,
+            top: shapesFlyoutAnchor.top,
+            zIndex: 200,
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           {WB_SHAPE_TOOLS.map(({ type, label, Icon }) => (
             <button
               key={type}
@@ -4712,7 +5741,8 @@ export function WhiteboardWorkspaceClient({
               {label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -4891,6 +5921,18 @@ export function WhiteboardWorkspaceClient({
     boardSyncing,
   });
 
+  // Cloned mic stream for inline metering on the student overlay — never tap the
+  // publish stream (Web Audio on the WebRTC track can silence the peer).
+  const overlayMicMeterStream = useMemo(() => {
+    const track = liveAv.localAudioStream?.getAudioTracks()[0];
+    if (!track) return null;
+    try {
+      return new MediaStream([track.clone()]);
+    } catch {
+      return null;
+    }
+  }, [liveAv.localAudioStream]);
+
   // ---------------------------------------------------------------
   // Student early-return gates (Slice 5: join gate states)
   // Must be AFTER all hooks; conditional returns are only allowed here.
@@ -4901,10 +5943,47 @@ export function WhiteboardWorkspaceClient({
         <div className="container" style={{ maxWidth: 720, padding: 24 }}>
           <div className="card" role="status">
             <h1 style={{ marginTop: 0 }}>You left the session</h1>
-            <p style={{ marginBottom: 0 }}>
+            <p>
               You can close this tab. If you need to rejoin, ask {tutorName} for
               the link again.
             </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="wb-student-rejoin"
+              onClick={() => {
+                setHasLeft(false);
+                setStudentAvGeneration((g) => g + 1);
+              }}
+            >
+              Rejoin session
+            </button>
+          </div>
+        </div>
+      </WbRoleProvider>
+    );
+  }
+
+  // identity-peerid workstream: takeover screen — another device (same learner,
+  // newer joinedAt) has taken over. Show a gentle explanation and let the
+  // learner rejoin by reloading (which mints a new joinedAt, making THIS
+  // device the newest one and completing the takeover cycle).
+  if (role === "student" && deviceSuperseded) {
+    return (
+      <WbRoleProvider role={role}>
+        <div className="container" style={{ maxWidth: 720, padding: 24 }}>
+          <div className="card">
+            <h1 style={{ marginTop: 0 }}>You joined on another device</h1>
+            <p>
+              It looks like you opened this session on a different device or browser.
+              Only one connection is active at a time — your other device is now live.
+            </p>
+            <button
+              className="button button--primary"
+              onClick={() => window.location.reload()}
+            >
+              Rejoin on this device
+            </button>
           </div>
         </div>
       </WbRoleProvider>
@@ -4921,6 +6000,20 @@ export function WhiteboardWorkspaceClient({
               This link is missing the encryption key. Please ask {tutorName} for
               a fresh link.
             </p>
+            <button
+              type="button"
+              className="button button--primary"
+              data-testid="wb-student-key-missing-close"
+              onClick={() => {
+                try {
+                  window.close();
+                } catch {
+                  // Browsers may block close for tabs not opened by script.
+                }
+              }}
+            >
+              Close this page
+            </button>
           </div>
         </div>
       </WbRoleProvider>
@@ -4934,7 +6027,21 @@ export function WhiteboardWorkspaceClient({
         <div className="container" style={{ maxWidth: 720, padding: 24 }}>
           <div className="card" role="status">
             <h1 style={{ marginTop: 0 }}>{title}</h1>
-            <p style={{ marginBottom: 0 }}>{body}</p>
+            <p>{body}</p>
+            <button
+              type="button"
+              className="button button--primary"
+              data-testid="wb-student-join-unavailable-close"
+              onClick={() => {
+                try {
+                  window.close();
+                } catch {
+                  // Browsers may block close for tabs not opened by script.
+                }
+              }}
+            >
+              Close this page
+            </button>
           </div>
         </div>
       </WbRoleProvider>
@@ -4945,6 +6052,161 @@ export function WhiteboardWorkspaceClient({
     boardWaitElapsed && !dismissedBoardWaitNotice && !stuckLoading;
   const chromeLocalTileLabel = role === "student" ? "You" : localPeerLabel;
   const chromePageList = role === "student" ? studentPageList : pageList;
+  const wbCaps = deriveWbCapabilities(role);
+
+  // ── Waiting-room overlay props ──────────────────────────────────────────
+  // Latch: once student achieved real A/V reachability, keep Start enabled
+  // even if ICE briefly flaps (prevents "dead Start button" on hardware).
+  // Writing the ref here in render is safe — it is idempotent (true-only),
+  // and the re-render is already triggered by bothPartiesInRoom state change.
+  if (!phaseActive && bothPartiesInRoom) {
+    studentHasConnectedOnceRef.current = true;
+  }
+  // LIVE: gate on latch (not instantaneous reachability) to survive ICE flaps.
+  const overlayStudentConnected =
+    studentHasConnectedOnceRef.current || bothPartiesInRoom;
+  // LIVE: gate on student connected (latched). IN_PERSON: always startable.
+  const overlayCantStart =
+    sessionMode === "LIVE" ? !overlayStudentConnected : false;
+  const overlayCanStart = !overlayCantStart;
+
+  // Pre-built mic control for the overlay. Both tutor and student use
+  // WbTopBarMicControlLive with a cloned overlayMicMeterStream for inline
+  // metering — NOT WbTopBarMicControl, which binds workspaceAudio.meterBarRef.
+  // The live top bar (WbTopBarMicControl, ~line 6143) remains the sole
+  // meterBarRef host; the overlay's stream-based metering is independent.
+  // Tutor dropdown: full MicControls (recorder panel) via hideLevelMeter.
+  const overlayRecorderMicControls =
+    role === "tutor"
+      ? {
+          meterBarRef: workspaceAudio.meterBarRef,
+          devices: workspaceAudio.devices,
+          selectedPickerSlot: workspaceAudio.pickedMicSlot,
+          onPickMicSlot: (slot: number) =>
+            void liveAv.setMicDeviceBySlot(slot, { force: true }),
+          gainLinear: workspaceAudio.gainLinear,
+          onGainChange: workspaceAudio.setGainLinear,
+          isLive: workspaceAudio.isLive,
+          lockDevice: workspaceAudio.lockDevice,
+          chimeEnabled: workspaceAudio.chimeEnabled,
+          onChimeEnabledChange: workspaceAudio.setChimeEnabled,
+          chimeVolume: workspaceAudio.chimeVolume,
+          onChimeVolumeChange: workspaceAudio.setChimeVolume,
+          hideLevelMeter: true as const,
+          hideDevicePicker: true as const,
+        }
+      : undefined;
+  const overlayStudentMicControls =
+    role === "student"
+      ? {
+          meterBarRef: { current: null },
+          devices: liveAv.audioDevices ?? [],
+          selectedPickerSlot: liveAv.pickedMicSlot,
+          onPickMicSlot: () => {},
+          gainLinear: liveAv.gainLinear,
+          onGainChange: liveAv.setGainLinear,
+          isLive: liveAv.localAudioStream !== null,
+          lockDevice: false,
+          chimeEnabled: false,
+          onChimeEnabledChange: () => {},
+          chimeVolume: 0.75,
+          onChimeVolumeChange: () => {},
+          hideLevelMeter: true as const,
+          hideDevicePicker: true as const,
+          hideChime: true as const,
+        }
+      : undefined;
+  const overlayMicNode = (
+    <WbTopBarMicControlLive
+      isMicMuted={liveAv.isMicMuted}
+      hasMicPermission={liveAv.hasMicPermission}
+      hasMicStream={liveAv.localAudioStream !== null}
+      audioDevices={liveAv.audioDevices ?? []}
+      selectedPickerSlot={liveAv.pickedMicSlot}
+      isAcquiring={liveAv.isAcquiring}
+      showInlineMeter
+      micStream={overlayMicMeterStream}
+      showDevicePickerInDropdown
+      dropdownVariant="recorder"
+      recorderMicControls={
+        role === "tutor"
+          ? overlayRecorderMicControls
+          : overlayStudentMicControls
+      }
+      onToggleMute={role === "tutor" ? handleToggleMicWithRecordingMute : liveAv.toggleMic}
+      onAcquireMic={handleAcquireMic}
+      onPickMicSlot={(slot) =>
+        void liveAv.setMicDeviceBySlot(slot, { force: true })
+      }
+      onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
+      disabled={!clientMounted || (role === "student" ? studentAvPickerDisabled : endingBusy)}
+    />
+  );
+
+  // Pre-built cam control node for the overlay — chip-toggle pattern (same CSS
+  // as follow-toggle). Top-bar cam controls are unchanged.
+  const overlayAVTilesNode = (
+    <AVTilesPanel
+      participants={liveAv.participants}
+      localTile={{
+        peerId: localPeerId,
+        role,
+        label: chromeLocalTileLabel,
+        audioStream: liveAv.localAudioStream,
+        videoStream: liveAv.localVideoStream,
+        isMicMuted: liveAv.isMicMuted,
+        isCamMuted: liveAv.isCamMuted,
+      }}
+      onReconnect={liveAv.reconnectPeer}
+      resolveLabel={(participant) =>
+        resolveParticipantLabel(participant, {
+          studentName,
+          totalRemotePeers: liveAv.participants.length,
+        })
+      }
+      testId="wb-waiting-room-av-tiles"
+    />
+  );
+
+  const overlayCamNode = (
+    <WbTopBarCamControlLive
+      isCamMuted={liveAv.isCamMuted}
+      hasCamPermission={liveAv.hasCamPermission}
+      hasCamStream={liveAv.localVideoStream !== null}
+      onToggleCam={() => void handleTopBarCam()}
+      onAcquireCam={() => void handleTopBarCam()}
+      disabled={role === "student" ? studentAvPickerDisabled : endingBusy}
+    />
+  );
+
+  // Device pickers (AudioControls / VideoControls) surfaced in the overlay.
+  // Reuses the same wired-up components from the top-bar overflow menu — no
+  // new bespoke pickers, no new A/V coupling. Switching device here calls
+  // the same setMicDeviceBySlot / setVideoCameraBySlot handlers that the
+  // overflow menu uses, so the active track changes immediately.
+  const overlayMicPickerNode = (
+    <AudioControls
+      devices={liveAv.audioDevices ?? []}
+      selectedPickerSlot={liveAv.pickedMicSlot}
+      onPickMicSlot={(slot) =>
+        void liveAv.setMicDeviceBySlot(slot, { force: true })
+      }
+      isLive={liveAv.localAudioStream !== null}
+      disabled={studentAvPickerDisabled}
+    />
+  );
+  const overlayCamPickerNode = (
+    <VideoControls
+      devices={liveAv.videoDevices ?? []}
+      selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+      onPickCameraSlot={(slot) =>
+        void liveAv.setVideoCameraBySlot(slot, { force: true })
+      }
+      isLive={liveAv.localVideoStream !== null}
+      disabled={studentAvPickerDisabled}
+    />
+  );
+  // ────────────────────────────────────────────────────────────────────────
 
   return (
     <WbRoleProvider role={role}>
@@ -4953,18 +6215,31 @@ export function WhiteboardWorkspaceClient({
       orientation={orientation}
       role={role}
       toolbarHidden={toolbarHidden}
-      onChromeClick={() => setOpenMenu(null)}
+      onChromeClick={(e) => {
+        const target = e.target as HTMLElement;
+        if (!target.closest?.(".mynk-wb-end-confirm-wrap")) {
+          setShowEndConfirm(false);
+        }
+        if (target.closest?.(".mynk-wb-topbar")) return;
+        setOpenMenu(null);
+      }}
       nonVisualMounts={
+      <>
       <WhiteboardWorkspaceAudioBridge
         ref={audioBridgeRef}
         audio={workspaceAudio}
         whiteboardSessionId={whiteboardSessionId}
         userWantsRecording={userWantsRecording}
         recordingActive={recordingActive}
+        audioCapturePolicy={audioCapturePolicy}
         panelDisabled={endingBusy || !userWantsRecording || audioDraftRecovery !== null}
         onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
         showPanel={false}
       />
+      {audioConsentDraftCleared ? (
+        <span data-testid="wb-audio-consent-draft-cleared" hidden aria-hidden />
+      ) : null}
+      </>
       }
       topBar={
       role === "student" ? (
@@ -4976,6 +6251,34 @@ export function WhiteboardWorkspaceClient({
         onClick={(e) => e.stopPropagation()}
         data-testid="wb-student-topbar"
       >
+        {layoutMode === "narrow" ? (
+          <>
+            <span className="mynk-wb-wordmark" aria-label="Mynk">
+              Mynk<span className="mynk-wb-wordmark__dot">·</span>
+            </span>
+            <div className="mynk-wb-topbar__zone">
+              <WbStudentConnectionStatus
+                connectionPillOk={studentConnectionPillOk}
+                connectionPillLabel={studentConnectionPillLabel}
+                liveTimerMs={studentLiveTimerMs}
+                showWaitingForOther={studentShowWaitingForOther}
+                formatTimerMinutesOnly={formatTimerMinutesOnly}
+              />
+            </div>
+            <div className="mynk-wb-topbar__spacer" aria-hidden />
+            <div
+              className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <LearnerSignOutButton />
+              {renderTopbarOverflowControl("wb-student-topbar-overflow")}
+              {wbCaps.showLeaveInsteadOfEnd && (
+                <WbExitButton onExit={handleStudentExit} />
+              )}
+            </div>
+          </>
+        ) : (
+        <>
         <span className="mynk-wb-wordmark" aria-label="Mynk">
           Mynk<span className="mynk-wb-wordmark__dot">·</span>
         </span>
@@ -4986,17 +6289,13 @@ export function WhiteboardWorkspaceClient({
 
         {/* Zone 2: Connected pill + timer + disclosure (disclosure hides on touch via desktop-only) */}
         <div className="mynk-wb-topbar__zone">
-          <span
-            className={`mynk-wb-status-pill${studentConnectionPillOk ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
-            data-testid="wb-student-sync-pill"
-          >
-            {studentConnectionPillLabel}
-          </span>
-          <span className="mynk-wb-timer" data-testid="wb-student-timer">
-            {studentShowWaitingForOther
-              ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
-              : formatTimerMinutesOnly(studentLiveTimerMs)}
-          </span>
+          <WbStudentConnectionStatus
+            connectionPillOk={studentConnectionPillOk}
+            connectionPillLabel={studentConnectionPillLabel}
+            liveTimerMs={studentLiveTimerMs}
+            showWaitingForOther={studentShowWaitingForOther}
+            formatTimerMinutesOnly={formatTimerMinutesOnly}
+          />
           <span
             className="mynk-wb-student-disclosure mynk-wb-topbar__desktop-only"
             data-testid="wb-student-recording-disclosure"
@@ -5006,31 +6305,24 @@ export function WhiteboardWorkspaceClient({
           </span>
         </div>
 
-        <button
-          type="button"
-          className="mynk-wb-toolbar-toggle"
-          data-testid="wb-student-toolbar-toggle"
-          aria-pressed={toolbarHidden}
-          title={toolbarHidden ? "Show tools" : "Hide tools"}
-          onClick={(e) => {
+        <WbToolbarToggle
+          testId="wb-student-toolbar-toggle"
+          toolbarHidden={toolbarHidden}
+          onToggle={(e) => {
             e.stopPropagation();
             setToolbarHidden((hidden) => !hidden);
           }}
-        >
-          <span className="mynk-wb-toolbar-toggle__label">
-            {toolbarHidden ? "Show tools" : "Hide tools"}
-          </span>
-          <span className="mynk-wb-toolbar-toggle__chev" aria-hidden>
-            {toolbarHidden ? "▴" : "▾"}
-          </span>
-        </button>
+        />
 
         <div style={{ flex: 1, minWidth: 0 }} />
 
         <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
           {/* Follow toggle — desktop-only (overflow sheet on touch via renderTopBarOverflowItems) */}
+          {wbCaps.showFollowControls && (
           <div className="mynk-wb-student-follow mynk-wb-topbar__desktop-only">
-            <label className="mynk-wb-follow-toggle mynk-wb-chip">
+            <label
+              className={`mynk-wb-follow-toggle mynk-wb-chip${!independentView ? " mynk-wb-follow-toggle--synced" : ""}`}
+            >
               <input
                 type="checkbox"
                 checked={!independentView}
@@ -5038,17 +6330,24 @@ export function WhiteboardWorkspaceClient({
                 data-testid="wb-student-follow-toggle"
                 onChange={(e) => setIndependentView(!e.target.checked)}
               />
+              <span className="mynk-wb-menu-item__icon" aria-hidden>
+                <WbIconFollowSync size={12} />
+              </span>
               <span className="mynk-wb-follow-toggle__label">Follow tutor view</span>
             </label>
             <button
               type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--compact"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-tb-btn--match-view"
               data-testid="wb-student-match-view"
+              aria-label="Match tutor's view"
+              title="Match tutor's view"
+              disabled={!studentConnected}
               onClick={() => snapToTutorView()}
             >
-              Match view
+              <WbIconMatchView size={14} />
             </button>
           </div>
+          )}
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
@@ -5056,10 +6355,20 @@ export function WhiteboardWorkspaceClient({
             isMicMuted={liveAv.isMicMuted}
             hasMicPermission={liveAv.hasMicPermission}
             hasMicStream={liveAv.localAudioStream !== null}
+            audioDevices={liveAv.audioDevices ?? []}
+            selectedPickerSlot={liveAv.pickedMicSlot}
+            isAcquiring={liveAv.isAcquiring}
+            showInlineMeter
+            micStream={overlayMicMeterStream}
+            dropdownVariant="recorder"
+            recorderMicControls={overlayStudentMicControls}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
-            onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
-            disabled={!studentConnected}
+            onPickMicSlot={(slot) =>
+              void liveAv.setMicDeviceBySlot(slot, { force: true })
+            }
+            onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
+            disabled={studentAvPickerDisabled}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}
@@ -5068,68 +6377,24 @@ export function WhiteboardWorkspaceClient({
             videoDevices={liveAv.videoDevices ?? []}
             selectedPickerSlot={liveAv.pickedVideoCameraSlot}
             onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
-            isLive={!liveAv.isCamMuted && !!liveAv.localVideoStream}
-            disabled={!studentConnected}
+            isLive={liveAv.localVideoStream !== null}
+            onRefreshDevices={() => void liveAv.refreshVideoDeviceList()}
+            disabled={studentAvPickerDisabled}
           />
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
-            title="Undo (Ctrl+Z)"
-            aria-label="Undo"
+          <WbUndoRedoButtons
+            undoTestId="wb-student-undo"
+            redoTestId="wb-student-redo"
             disabled={!studentConnected}
-            data-testid="wb-student-undo"
-            onClick={() => triggerUndo()}
-          >
-            <WbIconUndo />
-          </button>
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
-            title="Redo (Ctrl+Shift+Z)"
-            aria-label="Redo"
-            disabled={!studentConnected}
-            data-testid="wb-student-redo"
-            onClick={() => triggerRedo()}
-          >
-            <WbIconRedo />
-          </button>
+            onUndo={() => triggerUndo()}
+            onRedo={() => triggerRedo()}
+          />
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <div className="mynk-wb-view-menu mynk-wb-topbar__desktop-only">
-            <button
-              type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
-              title="View options"
-              aria-label="View options"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMenu("view");
-              }}
-            >
-              <WbIconMore size={14} />
-            </button>
-            {viewMenuOpen && (
-              <div
-                className="mynk-wb-view-dropdown"
-                role="menu"
-                aria-label="View options"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <label className="mynk-wb-view-item">
-                  <input
-                    type="checkbox"
-                    checked={gridEnabled}
-                    onChange={(e) => toggleGrid(e.target.checked)}
-                  />
-                  Show canvas grid
-                </label>
-              </div>
-            )}
-          </div>
+          {renderGridToggleButton()}
 
           <div className="mynk-wb-topbar__desktop-only">
             <WbThemeToggle
@@ -5140,32 +6405,14 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
-            title="More session options"
-            aria-label="More session options"
-            aria-expanded={topbarMoreOpen}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleMenu("topbar-more");
-            }}
-            data-testid="wb-student-topbar-overflow"
-          >
-            <WbIconMore size={14} />
-          </button>
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--leave"
-            data-testid="wb-student-exit"
-            onClick={() => {
-              wjgLog("student_exit");
-              setHasLeft(true);
-            }}
-          >
-            Exit
-          </button>
+          <LearnerSignOutButton />
+          {renderTopbarOverflowControl("wb-student-topbar-overflow")}
+          {wbCaps.showLeaveInsteadOfEnd && (
+            <WbExitButton onExit={handleStudentExit} />
+          )}
         </div>
+        </>
+        )}
       </header>
       ) : (
       <header
@@ -5180,16 +6427,30 @@ export function WhiteboardWorkspaceClient({
         <span className="mynk-wb-topbar__sep" aria-hidden />
 
         <div className="mynk-wb-topbar__zone">
-          <div className="mynk-wb-live-badge" data-testid="wb-recording-pill">
-            <span className="mynk-wb-live-badge__dot" aria-hidden />
-            LIVE
+          <div
+            className={`mynk-wb-live-badge${
+              presence.pillColor === "red"
+                ? ""
+                : ` mynk-wb-live-badge--${presence.pillColor}`
+            }`}
+            data-testid="wb-recording-pill"
+          >
+            <span
+              className={`mynk-wb-live-badge__dot${
+                presence.pillColor === "red"
+                  ? ""
+                  : ` mynk-wb-live-badge__dot--${presence.pillColor}`
+              }`}
+              aria-hidden
+            />
+            {presence.pillLabel}
           </div>
           <span className="mynk-wb-timer" data-testid="wb-timer">
             {formatTimerMinutesOnly(liveTimerMs)}
           </span>
           {syncPill.show && (
             <span
-              className="mynk-wb-sr-only"
+              className={`mynk-wb-sync-pill mynk-wb-sync-pill--${syncPill.color}`}
               data-testid="wb-sync-pill"
               aria-live="polite"
             >
@@ -5198,29 +6459,20 @@ export function WhiteboardWorkspaceClient({
           )}
         </div>
 
-        <button
-          type="button"
-          className="mynk-wb-toolbar-toggle"
-          data-testid="wb-toolbar-toggle"
-          aria-pressed={toolbarHidden}
-          title={toolbarHidden ? "Show tools" : "Hide tools"}
-          onClick={(e) => {
+        <WbToolbarToggle
+          testId="wb-toolbar-toggle"
+          toolbarHidden={toolbarHidden}
+          onToggle={(e) => {
             e.stopPropagation();
             setToolbarHidden((hidden) => !hidden);
           }}
-        >
-          <span className="mynk-wb-toolbar-toggle__label">
-            {toolbarHidden ? "Show tools" : "Hide tools"}
-          </span>
-          <span className="mynk-wb-toolbar-toggle__chev" aria-hidden>
-            {toolbarHidden ? "▴" : "▾"}
-          </span>
-        </button>
+        />
 
         <div style={{ flex: 1, minWidth: 0 }} />
 
         <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
           {/* Share + Copied — desktop top bar; touch uses overflow sheet */}
+          {wbCaps.canShareLink && (
           <div className="mynk-wb-share-wrap mynk-wb-topbar__desktop-only">
             <button
               type="button"
@@ -5270,16 +6522,21 @@ export function WhiteboardWorkspaceClient({
               </div>
             )}
           </div>
+          )}
 
+          {wbCaps.canShareLink && (
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
+          )}
 
           <WbTopBarMicControl
             audio={workspaceAudio}
             isMicMuted={liveAv.isMicMuted}
-            onToggleMute={liveAv.toggleMic}
+            onToggleMute={handleToggleMicWithRecordingMute}
             onAcquireMic={handleAcquireMic}
-            onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
-            disabled={endingBusy}
+            onPickMicSlot={(slot) =>
+              void liveAv.setMicDeviceBySlot(slot, { force: true })
+            }
+            disabled={!clientMounted || endingBusy}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}
@@ -5288,35 +6545,23 @@ export function WhiteboardWorkspaceClient({
             videoDevices={liveAv.videoDevices ?? []}
             selectedPickerSlot={liveAv.pickedVideoCameraSlot}
             onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
-            isLive={!liveAv.isCamMuted && !!liveAv.localVideoStream}
+            isLive={liveAv.localVideoStream !== null}
+            onRefreshDevices={() => void liveAv.refreshVideoDeviceList()}
             disabled={endingBusy}
           />
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
-            title="Undo (Ctrl+Z)"
-            aria-label="Undo"
+          <WbUndoRedoButtons
+            undoTestId="wb-undo"
+            redoTestId="wb-redo"
             disabled={endingBusy}
-            data-testid="wb-undo"
-            onClick={() => triggerUndo()}
-          >
-            <WbIconUndo />
-          </button>
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
-            title="Redo (Ctrl+Shift+Z)"
-            aria-label="Redo"
-            disabled={endingBusy}
-            data-testid="wb-redo"
-            onClick={() => triggerRedo()}
-          >
-            <WbIconRedo />
-          </button>
+            onUndo={() => triggerUndo()}
+            onRedo={() => triggerRedo()}
+          />
 
+          {wbCaps.canInsertAssets && (
+          <>
           <span
             className="mynk-wb-topbar__sep mynk-wb-topbar__inserts mynk-wb-topbar__desktop-only"
             aria-hidden
@@ -5346,40 +6591,12 @@ export function WhiteboardWorkspaceClient({
               chrome
             />
           </div>
+          </>
+          )}
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <div className="mynk-wb-view-menu mynk-wb-topbar__desktop-only">
-            <button
-              type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
-              title="View options"
-              aria-label="View options"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMenu("view");
-              }}
-            >
-              <WbIconMore size={14} />
-            </button>
-            {viewMenuOpen && (
-              <div
-                className="mynk-wb-view-dropdown"
-                role="menu"
-                aria-label="View options"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <label className="mynk-wb-view-item">
-                  <input
-                    type="checkbox"
-                    checked={gridEnabled}
-                    onChange={(e) => toggleGrid(e.target.checked)}
-                  />
-                  Show canvas grid
-                </label>
-              </div>
-            )}
-          </div>
+          {renderGridToggleButton()}
 
           <div className="mynk-wb-topbar__desktop-only">
             <WbThemeToggle
@@ -5390,50 +6607,78 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
-            title="More session options"
-            aria-label="More session options"
-            aria-expanded={topbarMoreOpen}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleMenu("topbar-more");
-            }}
-            data-testid="wb-topbar-overflow"
-          >
-            <WbIconMore size={14} />
-          </button>
-
-          {(() => {
+          {renderTopbarOverflowControl("wb-topbar-overflow")}
+          {wbCaps.canEndSession && (() => {
             const endSessionLabel =
               endingState === "finalizing"
                 ? finalizingOutboxState === "uploading" &&
                   finalizingSegmentCount > 0
-                  ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+                  ? "Saving your recording…"
                   : "Finalizing…"
                 : endingState === "ending"
                   ? "Finalizing…"
                   : "End session";
             return (
-              <button
-                type="button"
-                className={`mynk-wb-tb-btn mynk-wb-tb-btn--primary${touchLayout ? " mynk-wb-tb-btn--end-touch" : ""}`}
-                onClick={handleEndSession}
-                disabled={endingBusy}
-                data-testid="wb-end-session"
-                aria-label={endSessionLabel}
-                title={endSessionLabel}
-              >
-                {touchLayout ? (
-                  <>
-                    <WbIconEndSession size={14} />
-                    <span className="mynk-wb-sr-only">{endSessionLabel}</span>
-                  </>
-                ) : (
-                  endSessionLabel
+              <div className="mynk-wb-end-confirm-wrap">
+                <button
+                  type="button"
+                  className={`mynk-wb-tb-btn mynk-wb-tb-btn--primary${touchLayout ? " mynk-wb-tb-btn--end-touch" : ""}`}
+                  onClick={() => {
+                    if (endingBusy) return;
+                    setShowEndConfirm(true);
+                  }}
+                  disabled={endingBusy}
+                  data-testid="wb-end-session"
+                  aria-label={endSessionLabel}
+                  title={endSessionLabel}
+                  aria-expanded={showEndConfirm}
+                  aria-haspopup="dialog"
+                >
+                  {touchLayout ? (
+                    <>
+                      <WbIconEndSession size={14} />
+                      <span className="mynk-wb-sr-only">{endSessionLabel}</span>
+                    </>
+                  ) : (
+                    endSessionLabel
+                  )}
+                </button>
+                {showEndConfirm && !endingBusy && (
+                  <div
+                    role="alertdialog"
+                    aria-labelledby="wb-end-confirm-title"
+                    aria-describedby="wb-end-confirm-body"
+                    className="mynk-wb-end-confirm"
+                    data-testid="wb-end-session-confirm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p id="wb-end-confirm-title" className="mynk-wb-end-confirm__title">
+                      End this session?
+                    </p>
+                    <p id="wb-end-confirm-body" className="mynk-wb-end-confirm__body">
+                      You&apos;ll go to review to save your notes.
+                    </p>
+                    <div className="mynk-wb-end-confirm__actions">
+                      <button
+                        type="button"
+                        className="mynk-wb-tb-btn mynk-wb-tb-btn--primary"
+                        data-testid="wb-end-session-confirm-yes"
+                        onClick={() => void handleEndSession()}
+                      >
+                        End session
+                      </button>
+                      <button
+                        type="button"
+                        className="mynk-wb-tb-btn"
+                        data-testid="wb-end-session-confirm-cancel"
+                        onClick={() => setShowEndConfirm(false)}
+                      >
+                        Keep going
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </button>
+              </div>
             );
           })()}
         </div>
@@ -5475,7 +6720,7 @@ export function WhiteboardWorkspaceClient({
       }
       canvas={
         <div
-          ref={wbCanvasRef}
+          ref={setWbCanvasRef}
           className="mynk-wb-canvas"
           data-testid={role === "student" ? "student-whiteboard-canvas-mount" : "tutor-whiteboard-canvas-mount"}
           onClick={() => {
@@ -5574,6 +6819,11 @@ export function WhiteboardWorkspaceClient({
                   </button>
                 </div>
               )}
+            {audioConsentBannerMessage && (
+              <Banner tone="warning" testId="wb-audio-consent-banner">
+                {audioConsentBannerMessage}
+              </Banner>
+            )}
             {audioDraftRecovery && (
               <Banner tone="warning" testId="wb-audio-draft-recovery-banner">
                 <span>
@@ -5596,11 +6846,50 @@ export function WhiteboardWorkspaceClient({
                     className="btn"
                     disabled={audioDraftRecoveryBusy}
                     data-testid="wb-audio-draft-discard"
-                    onClick={() => void handleAudioDraftDiscard()}
+                    onClick={() => setAudioDraftDiscardConfirmOpen(true)}
                   >
                     Discard
                   </button>
                 </span>
+                {audioDraftDiscardConfirmOpen && (
+                  <div
+                    role="alertdialog"
+                    aria-label="Confirm discard recovered audio"
+                    data-testid="wb-audio-draft-discard-confirm"
+                    style={{
+                      marginTop: 8,
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                      border: "1px solid var(--error-border)",
+                      background: "var(--error-soft)",
+                      fontSize: 13,
+                    }}
+                  >
+                    <p style={{ margin: "0 0 8px" }}>
+                      Discard this recovered recording? This cannot be undone.
+                    </p>
+                    <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={audioDraftRecoveryBusy}
+                        data-testid="wb-audio-draft-discard-confirm-yes"
+                        onClick={() => void handleAudioDraftDiscard()}
+                      >
+                        Yes, discard
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={audioDraftRecoveryBusy}
+                        data-testid="wb-audio-draft-discard-confirm-cancel"
+                        onClick={() => setAudioDraftDiscardConfirmOpen(false)}
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  </div>
+                )}
               </Banner>
             )}
             {presence.bannerMessage && (
@@ -5612,7 +6901,7 @@ export function WhiteboardWorkspaceClient({
               <Banner tone="warning" testId="wb-split-brain-banner">
                 {recordingActive
                   ? "Student's video connection lost — recording paused until the call reconnects."
-                  : "Student's video connection lost — waiting for WebRTC to reconnect."}
+                  : "Student's video connection lost — Waiting for your student's connection to come back."}
               </Banner>
             )}
             {copyState === "error" && copyError && (
@@ -5652,15 +6941,17 @@ export function WhiteboardWorkspaceClient({
             )}
             {recorder.checkpointStatus === "error" && recorder.checkpointError && (
               <Banner tone="warning">
-                Checkpoint save failed: {recorder.checkpointError}. Still recording in memory; retrying.
+                We couldn&apos;t save a backup of your board — still recording in
+                this tab. We&apos;ll try again automatically.
               </Banner>
             )}
-            {role === "tutor" && recorder.resumePrompt && (
-              <Banner tone="info">
-                <strong>Browser recovery (IndexedDB):</strong> a whiteboard
-                event draft from{" "}
+            {role === "tutor" &&
+              recorder.resumePrompt &&
+              !initialPersistedState && (
+              <Banner tone="info" testId="wb-board-draft-recovery-banner">
+                We found an unsaved draft of your board from{" "}
                 {new Date(recorder.resumePrompt.startedAt).toLocaleString()} (~
-                {formatDuration(recorder.resumePrompt.durationMs)} of logged time).{" "}
+                {formatDuration(recorder.resumePrompt.durationMs)} of work).{" "}
                 <button
                   type="button"
                   className="btn"
@@ -5738,8 +7029,8 @@ export function WhiteboardWorkspaceClient({
             isCamMuted={liveAv.isCamMuted}
             onToggleMic={liveAv.toggleMic}
             onToggleCam={() => void handleTopBarCam()}
-            disabled={role === "student" ? !studentConnected : endingBusy}
-            camDisabled={liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0}
+            disabled={role === "student" ? studentAvPickerDisabled : endingBusy}
+            camDisabled={liveAv.hasCamPermission === "denied"}
             participants={liveAv.participants}
             localTile={{
               peerId: localPeerId,
@@ -5797,29 +7088,33 @@ export function WhiteboardWorkspaceClient({
                 }
               />
             </span>
-            <span
-              className="mynk-wb-summary-chip"
-              title={roughnessLabel}
-              aria-label={roughnessLabel}
-              style={{ padding: "2px 4px", background: "transparent" }}
-            >
-              <RoughnessIcon level={roughness as 0 | 1 | 2} />
-            </span>
-            <span
-              className="mynk-wb-summary-chip"
-              title={roundnessLabel}
-              aria-label={roundnessLabel}
-              style={{ padding: "2px 4px", background: "transparent" }}
-            >
-              <SharpnessIcon type={roundness} />
-            </span>
+            {showRoughnessChrome && (
+              <span
+                className="mynk-wb-summary-chip"
+                title={roughnessLabel}
+                aria-label={roughnessLabel}
+                style={{ padding: "2px 4px", background: "transparent" }}
+              >
+                <RoughnessIcon level={roughness as 0 | 1 | 2} />
+              </span>
+            )}
+            {showRoundnessChrome && (
+              <span
+                className="mynk-wb-summary-chip"
+                title={roundnessLabel}
+                aria-label={roundnessLabel}
+                style={{ padding: "2px 4px", background: "transparent" }}
+              >
+                <SharpnessIcon type={roundness} />
+              </span>
+            )}
             <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
               Colors &amp; styles
             </span>
           </button>
         </div>
       ) : null}
-      bottomToolbar={
+      bottomToolbar={touchLayout ? (
       <nav
         className="mynk-wb-bottom-toolbar"
         aria-label="Drawing tools (mobile)"
@@ -5828,7 +7123,7 @@ export function WhiteboardWorkspaceClient({
       >
         {renderToolStripButtons(true)}
       </nav>
-      }
+      ) : undefined}
       boardTabStrip={
       <footer
         className="mynk-wb-pagestrip bg-card border-t border-border"
@@ -5869,6 +7164,8 @@ export function WhiteboardWorkspaceClient({
                 onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
                 onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
                 onRoundnessChange={updateRoundness}
+                showRoughness={showRoughnessChrome}
+                showRoundness={showRoundnessChrome}
               />
             </WbActionSheet>
             <WbActionSheet
@@ -5887,18 +7184,40 @@ export function WhiteboardWorkspaceClient({
             >
               <div className="mynk-wb-action-sheet__menu-list">{renderOverflowMenuItems(true)}</div>
             </WbActionSheet>
-            <WbActionSheet
-              open={openMenu === "topbar-more"}
-              onDismiss={dismissTouchSheets}
-              ariaLabel="More session options"
-              testId="wb-topbar-more-sheet"
-            >
-              {renderTopBarOverflowItems()}
-            </WbActionSheet>
           </>
         </WbChromeErrorBoundary>
       ) : null}
     />
+    {/* Waiting-room overlay — rendered OVER the board; board stays mounted so
+        A/V mesh is continuous. Dismissed when phaseActive flips to true
+        (tutor clicks Start → activateSessionLive sets sessionPhase=ACTIVE). */}
+    {!phaseActive && (
+      <WaitingRoomOverlay
+        role={role}
+        sessionMode={sessionMode}
+        studentConnected={overlayStudentConnected}
+        tutorName={tutorName}
+        studentLabel={studentName || "your student"}
+        canStart={overlayCanStart}
+        isStarting={isStarting}
+        startError={sessionStartError}
+        onStart={() => void activateSessionLive(sessionMode)}
+        onSessionModeChange={(m) => setSessionMode(m)}
+        micControlNode={overlayMicNode}
+        camControlNode={overlayCamNode}
+        micPickerNode={overlayMicPickerNode}
+        camPickerNode={overlayCamPickerNode}
+        avTilesNode={overlayAVTilesNode}
+        onCopyStudentLink={role === "tutor" ? handleCopyStudentLink : undefined}
+        copyStudentLinkState={copyState}
+        copyStudentLinkDisabled={!syncUrl || copyState === "copying"}
+        themeToggleNode={<WbThemeToggle />}
+        onCancel={role === "tutor" ? handleCancelPendingSession : undefined}
+        onLeave={role === "student" ? handleStudentExit : undefined}
+        cancelError={cancelError}
+        isCancelling={isCancelling}
+      />
+    )}
     </WbRoleProvider>
   );
 }

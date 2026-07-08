@@ -5,7 +5,7 @@
  *
  * Wraps the live workspace UI. On mount it computes a decision via
  * `deriveResumeGateState`; if the session is stale, it renders a
- * full-card prompt with Resume / End buttons and HIDES the workspace
+ * full-card prompt with three actions and HIDES the workspace
  * children until the tutor consents to reconnect. This means the sync
  * client never opens its WebSocket while the gate is showing — a
  * stale student tab can't ghost-join.
@@ -14,17 +14,18 @@
  * tutor-solo mode), the gate is invisible and renders children
  * directly so first-load latency is unchanged.
  *
- * "End" calls `endStaleWhiteboardSession` (no events.json blob URL
- * required) and redirects to the student detail page. We use a
- * router push — the workspace's own server component re-renders the
- * student page next, so the now-ended session shows up in the
- * history list.
+ * Actions:
+ *   - Resume → sets consented=true, workspace mounts and reconnects.
+ *   - End and review → server-side finalize (WS-C) then navigate to review
+ *     overlay — no live workspace mount / waiting-room flash.
+ *   - Cancel and delete → confirm-guarded destructive delete via
+ *     deleteWhiteboardSessionAndDataAction; returns to student detail.
  */
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
-import { endStaleWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { finalizeWhiteboardSessionWithOutbox } from "@/lib/recording/finalize-whiteboard-session-client";
+import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";import { Button } from "@/components/ui/button";
 import {
   deriveResumeGateState,
   describeResumeGate,
@@ -43,11 +44,19 @@ export type WorkspaceResumeGateProps = {
   /** The actual workspace UI to render once consent is granted. */
   children: React.ReactNode;
   /**
+   * When true, bypass the stale-session prompt and render children immediately.
+   * Used by the "End and review" roster action so the workspace mounts and the
+   * auto-end effect can fire without the tutor having to click "Resume session".
+   */
+  autoConsent?: boolean;
+  /**
    * Inject a Date.now() override + auto-consent skip for tests.
    * Production callers should leave both undefined.
    */
   __testOverrides?: {
     nowMs?: number;
+    /** Override the hard-navigation for End and review (avoids jsdom window.location issues). */
+    onEndAndReview?: (url: string) => void;
   };
 };
 
@@ -58,6 +67,7 @@ export function WorkspaceResumeGate({
   initialLastActiveAtIso,
   syncEnabled,
   children,
+  autoConsent,
   __testOverrides,
 }: WorkspaceResumeGateProps) {
   const router = useRouter();
@@ -75,13 +85,27 @@ export function WorkspaceResumeGate({
     [startedAtIso, initialLastActiveAtIso, syncEnabled, __testOverrides?.nowMs]
   );
 
-  // Once the tutor clicks Resume, we never re-evaluate — we don't
-  // want a second `useMemo` tick to drag them back into the gate
-  // mid-session.
-  const [consented, setConsented] = useState(decision.kind === "fresh");
-  const [endError, setEndError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  // Once the tutor clicks Resume (or autoConsent is set), we never
+  // re-evaluate — we don't want a second `useMemo` tick to drag them
+  // back into the gate mid-session.
+  const [consented, setConsented] = useState(
+    decision.kind === "fresh" || Boolean(autoConsent)
+  );
 
+  // When `autoConsent` prop changes to true (e.g. after router.push adds
+  // ?intent=endreview and the RSC re-renders with autoConsent={true}),
+  // update consented so the workspace mounts without requiring a full hard reload.
+  useEffect(() => {
+    if (autoConsent) {
+      setConsented(true);
+    }
+  }, [autoConsent]);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const [deleting, startDeleteTransition] = useTransition();
+  const [finalizing, startFinalizeTransition] = useTransition();
   if (consented) {
     return <>{children}</>;
   }
@@ -91,19 +115,38 @@ export function WorkspaceResumeGate({
     decision as Exclude<typeof decision, { kind: "fresh" }>
   );
 
-  const handleEnd = () => {
-    setEndError(null);
-    startTransition(async () => {
-      try {
-        await endStaleWhiteboardSession(whiteboardSessionId);
-        router.push(`/admin/students/${studentId}`);
-      } catch (err) {
-        setEndError(
-          err instanceof Error
-            ? err.message
-            : "Could not end the session. Please try again."
-        );
+  const handleEndAndReview = () => {
+    setFinalizeError(null);
+    startFinalizeTransition(async () => {
+      const result = await finalizeWhiteboardSessionWithOutbox(
+        whiteboardSessionId,
+        studentId
+      );
+      if (!result.ok) {
+        setFinalizeError(result.error);
+        return;
       }
+      const url = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`;
+      if (__testOverrides?.onEndAndReview) {
+        __testOverrides.onEndAndReview(url);
+      } else if (typeof window !== "undefined" && window.location.pathname.endsWith("/workspace")) {
+        // Already on workspace (gate visible) — soft router.push is a no-op for same URL.
+        window.location.assign(url);
+      } else {
+        router.push(url);
+      }
+    });
+  };
+  const handleDelete = () => {
+    setShowDeleteConfirm(false);
+    setDeleteError(null);
+    startDeleteTransition(async () => {
+      const result = await deleteWhiteboardSessionAndDataAction(whiteboardSessionId);
+      if (!result.ok) {
+        setDeleteError(result.error ?? "Could not delete the session. Please try again.");
+        return;
+      }
+      router.push(`/admin/students/${studentId}`);
     });
   };
 
@@ -131,29 +174,95 @@ export function WorkspaceResumeGate({
             markSkipIndexedDbResumeAfterGate(whiteboardSessionId);
             setConsented(true);
           }}
-          disabled={pending}
+          disabled={deleting}
           data-testid="wb-resume-gate-resume"
           autoFocus
         >
           Resume session
         </Button>
+
         <Button
           type="button"
           variant="outline"
-          onClick={handleEnd}
-          disabled={pending}
-          data-testid="wb-resume-gate-end"
+          onClick={handleEndAndReview}
+          disabled={deleting || finalizing || showDeleteConfirm}
+          data-testid="wb-resume-gate-end-and-review"
         >
-          {pending ? "Ending…" : "End session"}
+          {finalizing ? "Finalizing…" : "End and review"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setShowDeleteConfirm(true)}
+          disabled={deleting || showDeleteConfirm}
+          data-testid="wb-resume-gate-cancel-delete"
+          style={{ color: "var(--sign-out)" }}
+        >
+          {deleting ? "Deleting…" : "Cancel and delete"}
         </Button>
       </div>
 
-      {endError && (
+      {showDeleteConfirm && (
+        <div
+          role="alertdialog"
+          aria-label="Confirm cancel and delete"
+          className="rounded-md border p-3 text-sm"
+          style={{
+            marginTop: 12,
+            background: "var(--error-soft)",
+            border: "1px solid var(--error-border)",
+            maxWidth: 380,
+          }}
+          data-testid="wb-resume-gate-cancel-delete-confirm"
+        >
+          <p className="m-0 mb-2 font-semibold" style={{ color: "var(--sign-out)" }}>
+            Delete this session and its recording?
+          </p>
+          <p className="m-0 mb-3 text-xs text-muted-foreground">
+            This removes the session row, any audio recording, and any draft notes.
+            This can&apos;t be undone.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn"
+              style={{
+                background: "var(--sign-out)",
+                color: "white",
+                borderColor: "var(--sign-out)",
+              }}
+              onClick={handleDelete}
+              data-testid="wb-resume-gate-cancel-delete-confirm-yes"
+            >
+              Yes, delete
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setShowDeleteConfirm(false)}
+              data-testid="wb-resume-gate-cancel-delete-confirm-cancel"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {finalizeError && (
         <p
           role="alert"
           style={{ color: "var(--color-error)", marginTop: 12, fontSize: 13 }}
+          data-testid="wb-resume-gate-finalize-error"
         >
-          {endError}
+          {finalizeError}
+        </p>
+      )}
+
+      {deleteError && (        <p
+          role="alert"
+          style={{ color: "var(--color-error)", marginTop: 12, fontSize: 13 }}
+        >
+          {deleteError}
         </p>
       )}
 

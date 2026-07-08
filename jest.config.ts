@@ -24,12 +24,14 @@ const createJestConfig = nextJest({ dir: "./" });
 
 const customJestConfig = {
   testEnvironment: "node",
+  setupFiles: ["<rootDir>/jest.setup-env.ts"],
   setupFilesAfterEnv: ["<rootDir>/jest.setup-dom.ts"],
   testPathIgnorePatterns: [
     "<rootDir>/.next/",
     "<rootDir>/node_modules/",
     "<rootDir>/tests/",
     "<rootDir>/test-results/",
+    "<rootDir>/src/__tests__/helpers/",
   ],
   globalSetup: "<rootDir>/jest.global-setup.ts",
   moduleNameMapper: {

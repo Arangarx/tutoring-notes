@@ -27,9 +27,12 @@
 const txWhiteboardUpdateMock = jest.fn();
 const txWhiteboardFindUniqueMock = jest.fn();
 const txTokenUpdateManyMock = jest.fn();
+const txSessionParticipantUpdateManyMock = jest.fn();
 const txSessionRecordingFindManyMock = jest.fn();
 const txSessionRecordingAggregateMock = jest.fn();
 const txSessionRecordingCreateManyMock = jest.fn();
+const dbWhiteboardFindUniqueMock = jest.fn();
+const dbAdminUserFindUniqueMock = jest.fn();
 const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
   fn({
     whiteboardSession: {
@@ -38,6 +41,9 @@ const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
     },
     whiteboardJoinToken: {
       updateMany: txTokenUpdateManyMock,
+    },
+    sessionParticipant: {
+      updateMany: txSessionParticipantUpdateManyMock,
     },
     sessionRecording: {
       findMany: txSessionRecordingFindManyMock,
@@ -50,6 +56,17 @@ const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
+    whiteboardSession: {
+      findUnique: (...args: unknown[]) => dbWhiteboardFindUniqueMock(...args),
+    },
+    adminUser: {
+      findUnique: (...args: unknown[]) => dbAdminUserFindUniqueMock(...args),
+    },
+    // assertEffectiveConsent (now unconditional) reads sessionConsentSnapshot.
+    // Default null → no-snapshot fallback (consent granted for unclaimed sessions).
+    sessionConsentSnapshot: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     $transaction: (fn: (tx: unknown) => unknown) => dbTransactionMock(fn),
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
@@ -59,6 +76,13 @@ const assertOwnsWhiteboardSessionMock = jest.fn();
 jest.mock("@/lib/whiteboard-scope", () => ({
   __esModule: true,
   assertOwnsWhiteboardSession: (id: string) => assertOwnsWhiteboardSessionMock(id),
+}));
+
+const shouldShortCircuitEndSessionForErasureMock = jest.fn();
+jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
+  __esModule: true,
+  shouldShortCircuitEndSessionForErasure: (studentId: string) =>
+    shouldShortCircuitEndSessionForErasureMock(studentId),
 }));
 
 jest.mock("@/lib/action-correlation", () => ({
@@ -72,10 +96,26 @@ jest.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => revalidatePathMock(...args),
 }));
 
+jest.mock("@/lib/billing/freeze-at-close", () => {
+  const actual = jest.requireActual<typeof import("@/lib/billing/freeze-at-close")>(
+    "@/lib/billing/freeze-at-close"
+  );
+  return {
+    __esModule: true,
+    computeBillingFreezeFields: jest.fn(actual.computeBillingFreezeFields),
+  };
+});
+
 import {
   endWhiteboardSession,
   type EndSessionSegment,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import { computeBillingFreezeFields } from "@/lib/billing/freeze-at-close";
+
+const computeBillingFreezeFieldsMock =
+  computeBillingFreezeFields as jest.MockedFunction<
+    typeof computeBillingFreezeFields
+  >;
 
 const FINAL_EVENTS_URL =
   "https://abc.blob.vercel-storage.com/whiteboard-sessions/admin_1/stu_1/123-events.json";
@@ -93,8 +133,25 @@ function makeSegment(overrides: Partial<EndSessionSegment> = {}): EndSessionSegm
   };
 }
 
-function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
+function setupActiveSession(
+  opts: {
+    startedAtAgoMs?: number;
+    billing?: Partial<{
+      sessionMode: "LIVE" | "IN_PERSON";
+      activeMs: number;
+      lastActiveAt: Date | null;
+      bothConnectedAt: Date | null;
+      activatedAt: Date | null;
+      roundingIncrementMin: number | null;
+      roundingMode: string | null;
+      tutorTimezone: string | null;
+      billedDurationMin: number | null;
+    }>;
+  } = {}
+) {
   const startedAt = new Date(Date.now() - (opts.startedAtAgoMs ?? 30 * 60_000));
+  const activatedAt = new Date(startedAt.getTime() + 5 * 60_000);
+  const billing = opts.billing ?? {};
   assertOwnsWhiteboardSessionMock.mockResolvedValue({
     id: "wb_42",
     studentId: "stu_1",
@@ -103,7 +160,20 @@ function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
     eventsBlobUrl: "placeholder",
     consentAcknowledged: true,
   });
-  txWhiteboardFindUniqueMock.mockResolvedValue({ startedAt });
+  dbWhiteboardFindUniqueMock.mockResolvedValue({ sessionPhase: "ACTIVE" });
+  dbAdminUserFindUniqueMock.mockResolvedValue({ tutorTimezone: "America/Denver" });
+  txWhiteboardFindUniqueMock.mockResolvedValue({
+    startedAt,
+    activatedAt: billing.activatedAt ?? activatedAt,
+    sessionMode: billing.sessionMode ?? "LIVE",
+    activeMs: billing.activeMs ?? 0,
+    lastActiveAt: billing.lastActiveAt ?? null,
+    bothConnectedAt: billing.bothConnectedAt ?? null,
+    roundingIncrementMin: billing.roundingIncrementMin ?? 5,
+    roundingMode: billing.roundingMode ?? "nearest",
+    tutorTimezone: billing.tutorTimezone ?? null,
+    billedDurationMin: billing.billedDurationMin ?? null,
+  });
   txWhiteboardUpdateMock.mockImplementation(
     async (args: { data: { endedAt: Date } }) => ({
       id: "wb_42",
@@ -112,6 +182,7 @@ function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
     })
   );
   txTokenUpdateManyMock.mockResolvedValue({ count: 2 });
+  txSessionParticipantUpdateManyMock.mockResolvedValue({ count: 1 });
   txSessionRecordingFindManyMock.mockResolvedValue([]);
   txSessionRecordingAggregateMock.mockResolvedValue({ _max: { orderIndex: null } });
   txSessionRecordingCreateManyMock.mockResolvedValue({ count: 0 });
@@ -122,12 +193,22 @@ beforeEach(() => {
   txWhiteboardUpdateMock.mockReset();
   txWhiteboardFindUniqueMock.mockReset();
   txTokenUpdateManyMock.mockReset();
+  txSessionParticipantUpdateManyMock.mockReset();
   txSessionRecordingFindManyMock.mockReset();
   txSessionRecordingAggregateMock.mockReset();
   txSessionRecordingCreateManyMock.mockReset();
+  dbWhiteboardFindUniqueMock.mockReset();
+  dbAdminUserFindUniqueMock.mockReset();
   dbTransactionMock.mockClear();
   assertOwnsWhiteboardSessionMock.mockReset();
   revalidatePathMock.mockReset();
+  shouldShortCircuitEndSessionForErasureMock.mockReset();
+  shouldShortCircuitEndSessionForErasureMock.mockResolvedValue(false);
+  computeBillingFreezeFieldsMock.mockImplementation(
+    jest.requireActual<typeof import("@/lib/billing/freeze-at-close")>(
+      "@/lib/billing/freeze-at-close"
+    ).computeBillingFreezeFields
+  );
 });
 
 describe("endWhiteboardSession — events-only end (no segments)", () => {
@@ -147,6 +228,12 @@ describe("endWhiteboardSession — events-only end (no segments)", () => {
       expect.objectContaining({
         where: { whiteboardSessionId: "wb_42", revokedAt: null },
         data: { revokedAt: expect.any(Date) },
+      })
+    );
+    expect(txSessionParticipantUpdateManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { whiteboardSessionId: "wb_42", leftAt: null },
+        data: { leftAt: expect.any(Date) },
       })
     );
     expect(txSessionRecordingCreateManyMock).not.toHaveBeenCalled();
@@ -347,6 +434,60 @@ describe("endWhiteboardSession — payload validation", () => {
   });
 });
 
+describe("endWhiteboardSession — erasure short-circuit (E6 / H-2)", () => {
+  it("skips segment registration and content blob swap when erasure short-circuits", async () => {
+    setupActiveSession();
+    shouldShortCircuitEndSessionForErasureMock.mockResolvedValue(true);
+    const segments: EndSessionSegment[] = [
+      makeSegment({
+        blobUrl: `${SEG_BASE_URL}/seg-1.webm`,
+        audioStartedAtMs: 100,
+        segmentId: "seg-1",
+      }),
+    ];
+    const snapshotUrl =
+      "https://abc.blob.vercel-storage.com/whiteboard-snapshots/snap.png";
+
+    const result = await endWhiteboardSession("wb_42", FINAL_EVENTS_URL, {
+      segments,
+      snapshotBlobUrl: snapshotUrl,
+    });
+
+    expect(shouldShortCircuitEndSessionForErasureMock).toHaveBeenCalledWith(
+      "stu_1"
+    );
+    expect(txSessionRecordingCreateManyMock).not.toHaveBeenCalled();
+    expect(result.registeredSegments).toBe(0);
+
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.endedAt).toBeInstanceOf(Date);
+    expect(updateArgs.data.eventsBlobUrl).toBe("placeholder");
+    expect(updateArgs.data.snapshotBlobUrl).toBeUndefined();
+    expect(txTokenUpdateManyMock).toHaveBeenCalled();
+  });
+
+  it("registers segments and swaps eventsBlobUrl when erasure short-circuit is false", async () => {
+    setupActiveSession();
+    shouldShortCircuitEndSessionForErasureMock.mockResolvedValue(false);
+    const segments: EndSessionSegment[] = [
+      makeSegment({
+        blobUrl: `${SEG_BASE_URL}/seg-ok.webm`,
+        audioStartedAtMs: 100,
+        segmentId: "seg-ok",
+      }),
+    ];
+
+    const result = await endWhiteboardSession("wb_42", FINAL_EVENTS_URL, {
+      segments,
+    });
+
+    expect(txSessionRecordingCreateManyMock).toHaveBeenCalledTimes(1);
+    expect(result.registeredSegments).toBe(1);
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.eventsBlobUrl).toBe(FINAL_EVENTS_URL);
+  });
+});
+
 describe("endWhiteboardSession — idempotency safeguards", () => {
   it("a second call with the same payload re-detects existing rows and inserts nothing new", async () => {
     setupActiveSession();
@@ -371,5 +512,90 @@ describe("endWhiteboardSession — idempotency safeguards", () => {
 
     expect(txSessionRecordingCreateManyMock).not.toHaveBeenCalled();
     expect(result.registeredSegments).toBe(0);
+  });
+});
+
+describe("endWhiteboardSession — WS-J billing freeze", () => {
+  it("freezes billed* fields from LIVE activeMs in the close transaction", async () => {
+    const bothConnectedAt = new Date(Date.now() - 50 * 60_000);
+    setupActiveSession({
+      billing: {
+        sessionMode: "LIVE",
+        activeMs: 55 * 60_000,
+        bothConnectedAt,
+        roundingIncrementMin: 5,
+        roundingMode: "nearest",
+      },
+    });
+
+    await endWhiteboardSession("wb_42", FINAL_EVENTS_URL);
+
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.billedDurationMin).toBe(55);
+    expect(updateArgs.data.billedStartLocal).toEqual(expect.any(String));
+    expect(updateArgs.data.billedEndLocal).toEqual(expect.any(String));
+    expect(updateArgs.data.sessionDateLocal).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(updateArgs.data.tutorTimezone).toBe("America/Denver");
+    expect(updateArgs.data.activeMs).toBeUndefined();
+  });
+
+  it("IN_PERSON uses ACTIVE-phase elapsed when activeMs is ~0", async () => {
+    setupActiveSession({
+      startedAtAgoMs: 40 * 60_000,
+      billing: {
+        sessionMode: "IN_PERSON",
+        activeMs: 0,
+        bothConnectedAt: null,
+        roundingIncrementMin: 5,
+        roundingMode: "nearest",
+      },
+    });
+
+    await endWhiteboardSession("wb_42", FINAL_EVENTS_URL);
+
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.billedDurationMin).toBeGreaterThan(0);
+    expect(updateArgs.data.activeMs).toBeUndefined();
+  });
+
+  it("skips billing recompute when billedDurationMin is already set", async () => {
+    setupActiveSession({
+      billing: {
+        billedDurationMin: 60,
+        sessionMode: "LIVE",
+        activeMs: 10 * 60_000,
+        bothConnectedAt: new Date(),
+      },
+    });
+
+    await endWhiteboardSession("wb_42", FINAL_EVENTS_URL);
+
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.billedDurationMin).toBeUndefined();
+    expect(updateArgs.data.billedStartLocal).toBeUndefined();
+  });
+
+  it("finalizes when billing freeze throws (billing failure is non-fatal)", async () => {
+    setupActiveSession({
+      billing: {
+        sessionMode: "LIVE",
+        activeMs: 30 * 60_000,
+        bothConnectedAt: new Date(Date.now() - 35 * 60_000),
+      },
+    });
+    computeBillingFreezeFieldsMock.mockImplementation(() => {
+      throw new RangeError("Invalid time zone specified: Not/AZone");
+    });
+
+    await expect(
+      endWhiteboardSession("wb_42", FINAL_EVENTS_URL)
+    ).resolves.toBeDefined();
+
+    expect(dbTransactionMock).toHaveBeenCalledTimes(1);
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.endedAt).toBeInstanceOf(Date);
+    expect(updateArgs.data.billedDurationMin).toBeUndefined();
+    expect(updateArgs.data.billedStartLocal).toBeUndefined();
+    expect(txTokenUpdateManyMock).toHaveBeenCalled();
   });
 });

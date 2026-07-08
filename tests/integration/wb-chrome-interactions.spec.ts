@@ -6,6 +6,8 @@ import {
   readSceneElementIds,
   clickBoardPageTab,
   waitForElementOnPeer,
+  openTutorAndStudent,
+  assertControlFullyInViewport,
 } from "./whiteboard-live-sync.helpers";
 
 /**
@@ -272,6 +274,8 @@ test.describe("wb chrome — interactive controls", () => {
     await page.waitForTimeout(300);
 
     // Step 4: Undo twice — removes b2-stroke-2, then b2-stroke-1.
+    // Bridge drawTestStroke uses captureUpdate:"IMMEDIATELY" so strokes are in the
+    // undo stack; Ctrl+Z here targets the focused Excalidraw document root.
     await page.keyboard.press("Control+Z");
     await page.waitForTimeout(300);
     await page.keyboard.press("Control+Z");
@@ -530,16 +534,21 @@ test.describe("wb chrome — interactive controls", () => {
     const page = await context.newPage();
     await loadTutorBoard(page, session);
 
-    // Activate pencil to show props chrome
-    await page.getByRole("button", { name: "Pencil (P)" }).click();
+    // WS-R: Sharp chip is absent for pencil — use rectangle (see wb-roughness-style.spec.ts).
+    const shapesTrigger = page.getByRole("button", { name: /Shapes/i });
+    await shapesTrigger.click();
+    await page
+      .locator(".mynk-wb-shapes-dropdown")
+      .getByRole("menuitem", { name: /Rectangle/i })
+      .click();
+
     const trigger = page.getByTestId("wb-props-compact-trigger");
     await trigger.click();
     const panel = page.getByTestId("wb-props-panel");
     await expect(panel).toBeVisible({ timeout: 3_000 });
 
     // Open More styles to reveal Edge sharpness chips
-    const moreBtn = panel.getByRole("button", { name: /More styles/i });
-    await moreBtn.click();
+    await panel.getByTestId("wb-more-styles-btn").click();
 
     // The "Sharp" chip should be active by default (DD-02)
     const sharpChip = panel.getByRole("button", { name: "Sharp" });
@@ -617,25 +626,32 @@ test.describe("wb chrome — interactive controls", () => {
     const bgColor = await inkSwatch.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgColor).toBe("rgb(255, 255, 255)");
 
-    // Draw a stroke and read back the element's strokeColor from the Excalidraw scene
-    await drawTestStrokeOnRole(page, "tutor", "ink-dark-stroke", 300, 300, 400, 400);
-    await waitForElementOnPeer(page, "tutor", "ink-dark-stroke");
-
-    const strokeColorOnCanvas = await page.evaluate((strokeId) => {
+    // The bridge's drawTestStroke hardcodes strokeColor:"blue" on the element, so we
+    // cannot validate the draw path by reading back a bridge-drawn element's strokeColor.
+    // Instead, assert the real signal: currentItemStrokeColor in Excalidraw's appState.
+    //
+    // Design note: the ink swatch ALWAYS stores EXCALIDRAW_STROKE_HEX (#1e293b) regardless
+    // of theme. Excalidraw's dark-mode CSS filter (invert+hue-rotate) renders #1e293b as
+    // visually white on the dark canvas — the swatch itself shows white (display path), but
+    // the DRAWN stroke color stored in appState is #1e293b. Storing #ffffff would invert to
+    // black on the dark canvas. So the correct assertion here is #1e293b.
+    const currentStrokeColor = await page.evaluate(() => {
       const bridge = (
         window as Window & {
           __TN_WB_E2E__?: Record<
             string,
-            { getElements: () => Array<{ id: string; strokeColor?: string }> }
+            { getAppState: () => Record<string, unknown> }
           >;
         }
       ).__TN_WB_E2E__?.tutor;
-      if (!bridge?.getElements) return null;
-      const el = bridge.getElements().find((e) => e.id === strokeId);
-      return el?.strokeColor ?? null;
-    }, "ink-dark-stroke");
+      if (!bridge?.getAppState) return null;
+      const appState = bridge.getAppState();
+      return (appState.currentItemStrokeColor as string) ?? null;
+    });
 
-    expect(strokeColorOnCanvas).toBe("#ffffff");
+    // #1e293b = EXCALIDRAW_STROKE_HEX: the stored ink color in both light and dark mode.
+    // Excalidraw's CSS filter renders this as white in dark mode (visual display path).
+    expect(currentStrokeColor).toBe("#1e293b");
 
     await context.close();
   });
@@ -748,5 +764,311 @@ test.describe("wb chrome — interactive controls", () => {
     await expect(page.locator(".mynk-wb-board-tab-del")).not.toBeVisible();
 
     await context.close();
+  });
+
+  /**
+   * PP-06 flyout visual-unclip gate (2026-06-22, wb-wave5-polish fix).
+   *
+   * ROOT CAUSE HISTORY:
+   *   Wave 5 commit 14a72f9 added overflow-x:hidden to .mynk-wb-strip so the
+   *   rail could scroll vertically on short viewports. This clipped the right-
+   *   opening flyouts to zero width. Commit 06ce763 tried
+   *   overflow-clip-margin: 0 280px 0 0 (4-value) — INVALID; the browser drops
+   *   the whole declaration, leaving effective clip-margin: 0 → flyout invisible.
+   *
+   * MECHANISM:
+   *   overflow-clip-margin accepts a SINGLE <length> only. The correct value is
+   *   overflow-clip-margin: 280px — this extends the clip edge 280 px to the
+   *   right of the 48px strip, allowing the 260px-wide panel to paint.
+   *
+   * RED on broken code: elementFromPoint at the panel's centre returns a canvas
+   *   element (panel paint is clipped at the strip right edge; canvas shows through).
+   * GREEN after fix:    elementFromPoint at the panel's centre returns an element
+   *   contained within [data-testid="wb-props-panel"].
+   *
+   * Run: npm run test:integration -- tests/integration/wb-chrome-interactions.spec.ts
+   */
+  test("PP-06 props flyout is visually unclipped — elementFromPoint hit + viewport bounds (regression gate)", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    // Activate pencil — shows the PP-06 props chrome in the left rail.
+    await page.getByRole("button", { name: "Pencil (P)" }).click();
+
+    const trigger = page.getByTestId("wb-props-compact-trigger");
+    await expect(trigger).toBeVisible({ timeout: 5_000 });
+    await trigger.click();
+
+    const panel = page.getByTestId("wb-props-panel");
+    // Basic DOM visibility (was already passing; doesn't catch overflow clipping).
+    await expect(panel).toBeVisible({ timeout: 3_000 });
+
+    // --- KEY ASSERTION: visual unclip ---
+    // The panel is position:absolute; left:100% relative to its containing
+    // block (~36px wide), so its left edge is ~46px from the viewport left
+    // and its right edge ~306px. The strip right edge is 48px.
+    //
+    // BROKEN (clip-margin:0):  panel clipped at x=48; at x=176 only the
+    //   canvas paints → elementFromPoint returns canvas element → NOT the panel.
+    // FIXED  (clip-margin:280px): panel visible out to 328px; at x=176 the
+    //   panel element is the top-most rendered surface → IS the panel.
+
+    const panelBox = await panel.boundingBox();
+    expect(panelBox, "panel must have a non-zero bounding box").not.toBeNull();
+    expect(panelBox!.width).toBeGreaterThan(50);
+    expect(panelBox!.height).toBeGreaterThan(50);
+
+    const cx = panelBox!.x + panelBox!.width / 2;
+    const cy = panelBox!.y + panelBox!.height / 2;
+
+    // cx must be well to the right of the strip (48px wide) — confirms the
+    // panel is positioned outside the strip's layout box.
+    const strip = page.getByTestId("wb-tool-strip");
+    const stripBox = await strip.boundingBox();
+    expect(stripBox).not.toBeNull();
+    expect(cx).toBeGreaterThan(stripBox!.x + stripBox!.width);
+
+    // Panel must not extend past the viewport right edge.
+    expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(1280 + 1);
+
+    // The REAL visual check: elementFromPoint at the panel's painted centre
+    // must resolve to an element inside [data-testid="wb-props-panel"].
+    // When overflow:clip clips the panel, the canvas renders behind it at
+    // this coordinate and closest('…') returns null.
+    const panelIsTopMost = await page.evaluate(
+      ([x, y]) => {
+        const el = document.elementFromPoint(x as number, y as number);
+        if (!el) return false;
+        return (el as Element).closest('[data-testid="wb-props-panel"]') !== null;
+      },
+      [cx, cy]
+    );
+    expect(
+      panelIsTopMost,
+      `elementFromPoint(${Math.round(cx)}, ${Math.round(cy)}) must resolve to an element inside wb-props-panel — ` +
+        "if it resolves to a canvas element the flyout is being overflow-clipped"
+    ).toBe(true);
+
+    // --- Screenshot proof (per-test output dir under gitignored test-results/) ---
+    const shotPath = test.info().outputPath("wb-props-flyout-open.png");
+    await page.screenshot({ path: shotPath });
+    await test.info().attach("props-flyout-screenshot", {
+      path: shotPath,
+      contentType: "image/png",
+    });
+    console.log(`[screenshot] saved: ${shotPath}`);
+
+    await context.close();
+  });
+
+  /**
+   * Constraint B: left-rail collapse button remains reachable on a short viewport.
+   *
+   * .mynk-wb-strip uses overflow-y:auto to scroll the rail on constrained heights.
+   * This test verifies the collapse button can be scrolled into view even when
+   * the viewport is too short to show all tools without scrolling.
+   *
+   * GREEN = button is reachable via scroll (overflow-y:auto working).
+   * RED   = overflow-y reverted to visible → strip doesn't scroll →
+   *         scrollIntoViewIfNeeded has no ancestor scroll container → button
+   *         remains outside the fixed chrome → bounding-box y exceeds viewport.
+   */
+  test("Left rail collapse button is reachable at short viewport height (constraint B)", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 500 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    const collapseBtn = page.getByRole("button", { name: /Collapse tools/ });
+    // Element must be in the DOM (not removed by layout).
+    await expect(collapseBtn).toBeAttached({ timeout: 10_000 });
+
+    // Scroll the rail so the collapse button comes into view.
+    // If overflow-y:auto is intact, the strip scrolls and the button is reachable.
+    await collapseBtn.scrollIntoViewIfNeeded();
+
+    const box = await collapseBtn.boundingBox();
+    expect(box, "collapse button must have a bounding box after scroll").not.toBeNull();
+    // Must be within the 500px viewport.
+    expect(
+      box!.y + box!.height,
+      "collapse button bottom must be ≤ viewport height (500px)"
+    ).toBeLessThanOrEqual(500);
+
+    await context.close();
+  });
+});
+
+/**
+ * WB-LIVEBOARD-STUDENT-CHROME regressions (2026-06-29)
+ *
+ * 8a — student narrow-desktop compaction: recording-disclosure must be hidden
+ *       at <1100px so the bar doesn't overflow (regression gate).
+ * 8b — device pickers reachable in overflow for non-touch narrow-desktop student.
+ * 8c — student live-board mic button must include the inline volume-meter DOM node.
+ * 8d — meter calibration unit-tested (calibrateMicLevel); Playwright-GAP for live
+ *       animation (requires real microphone input — see PLAYWRIGHT-GAP below).
+ */
+test.describe("WB-LIVEBOARD-STUDENT-CHROME @wb-chrome @wb-viewport @wb-av @wb-presence", () => {
+  /**
+   * 8a — student narrow-desktop compaction.
+   *
+   * The recording-disclosure (long text) must not be visible when the viewport
+   * is narrower than 1100px (non-touch desktop), so the top bar doesn't
+   * overflow. The exit button and overflow button must remain reachable.
+   *
+   * RED before fix: disclosure text always visible → bar overflows → exit btn
+   * pushed off-screen.
+   * GREEN after fix: disclosure hidden at <1100px, bar fits in 700px viewport.
+   */
+  test("8a: student top bar compacts at narrow desktop — exit + overflow reachable, no horizontal overflow @wb-chrome @wb-viewport", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const pages = await openTutorAndStudent(browser, session, {
+      // Non-touch 700px-wide desktop: exactly the regression viewport.
+      studentViewport: { width: 700, height: 700 },
+      studentHasTouch: false,
+      // Follow toggle is desktop-only hidden at this width; chrome layout test
+      // does not need viewport sync.
+      ensureFollow: false,
+    });
+    const { studentPage } = pages;
+
+    try {
+      // Student is in live board (ACTIVE session). Wait for canvas.
+      await expect(
+        studentPage.getByTestId("student-whiteboard-canvas-mount")
+      ).toBeVisible({ timeout: 90_000 });
+
+      // data-layout must be "desktop" (non-touch window even at 700px).
+      const chrome = studentPage.locator(".mynk-wb-chrome");
+      await expect(chrome).toHaveAttribute("data-layout", "desktop", { timeout: 10_000 });
+
+      // Top bar must not cause horizontal scroll — bar width ≤ viewport width.
+      const topbar = studentPage.getByTestId("wb-student-topbar");
+      const topbarBox = await topbar.boundingBox();
+      expect(topbarBox, "student topbar must have a bounding box").not.toBeNull();
+      // bar right edge must not exceed viewport (relational: width ≤ innerWidth)
+      const viewportWidth = await studentPage.evaluate(() => window.innerWidth);
+      expect(
+        topbarBox!.x + topbarBox!.width,
+        "student topbar right edge must be within viewport (no horizontal overflow)"
+      ).toBeLessThanOrEqual(viewportWidth + 1);
+
+      // Exit button and overflow button must both be fully within viewport.
+      await assertControlFullyInViewport(studentPage, "wb-student-exit");
+      await assertControlFullyInViewport(studentPage, "wb-student-topbar-overflow");
+
+      // The disclosure text must be hidden (display:none) at this narrow viewport.
+      const disclosure = studentPage.getByTestId("wb-student-recording-disclosure");
+      await expect(disclosure).not.toBeVisible();
+    } finally {
+      await pages.close();
+    }
+  });
+
+  /**
+   * 8b — device pickers reachable in overflow at narrow desktop.
+   *
+   * The student overflow (⋯) menu must contain mic + cam device pickers even
+   * when data-layout="desktop" (non-touch). Previously they were only included
+   * for touchLayout, leaving a narrow-desktop student with no way to switch
+   * devices.
+   *
+   * RED before fix: overflow menu opens but only shows follow/match-view — no
+   *   AudioControls / VideoControls.
+   * GREEN after fix: overflow menu contains wb-student-overflow-av-pickers.
+   */
+  test("8b: student overflow menu includes device pickers at narrow desktop @wb-chrome", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const pages = await openTutorAndStudent(browser, session, {
+      studentViewport: { width: 700, height: 700 },
+      studentHasTouch: false,
+      ensureFollow: false,
+    });
+    const { studentPage } = pages;
+
+    try {
+      await expect(
+        studentPage.getByTestId("student-whiteboard-canvas-mount")
+      ).toBeVisible({ timeout: 90_000 });
+
+      // Ensure desktop layout.
+      await expect(studentPage.locator(".mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "desktop",
+        { timeout: 10_000 }
+      );
+
+      // Open the overflow (⋯) menu.
+      const overflowBtn = studentPage.getByTestId("wb-student-topbar-overflow");
+      await expect(overflowBtn).toBeVisible();
+      await overflowBtn.click();
+
+      // The AV pickers container must be present in the open dropdown.
+      const avPickers = studentPage.getByTestId("wb-student-overflow-av-pickers");
+      await expect(avPickers).toBeVisible({ timeout: 3_000 });
+    } finally {
+      await pages.close();
+    }
+  });
+
+  /**
+   * 8c — student live-board mic inline meter presence.
+   *
+   * The student's WbTopBarMicControlLive on the LIVE board (not the waiting-room
+   * overlay) must render the .mynk-wb-mic-meter DOM element (showInlineMeter prop
+   * wired). This fails before the fix (null render) and passes after.
+   *
+   * NOTE: meter bar activity (bar-1/2/3 lit) requires a real microphone stream —
+   * verified via unit test (calibrateMicLevel in src/__tests__/mic-recorder-audio.test.ts)
+   * and smoke. This Playwright test validates the DOM structure only.
+   *
+   * // PLAYWRIGHT-GAP: live bar animation (bar-1/2/3 lighting in response to
+   * // real mic input) cannot be hermetically driven in Playwright without
+   * // injecting a synthetic audio track. The calibration is covered by the
+   * // calibrateMicLevel unit test. Hardware smoke verifies bar animation.
+   * // See docs/BACKLOG.md WB-LIVEBOARD-STUDENT-CHROME 8d.
+   */
+  test("8c: student live-board mic control contains inline meter DOM node @wb-chrome @wb-av @wb-presence", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const pages = await openTutorAndStudent(browser, session, {
+      // Wide viewport so the mic control is inline-visible (not hidden by 660px rule).
+      studentViewport: { width: 1280, height: 700 },
+      studentHasTouch: false,
+    });
+    const { studentPage } = pages;
+
+    try {
+      await expect(
+        studentPage.getByTestId("student-whiteboard-canvas-mount")
+      ).toBeVisible({ timeout: 90_000 });
+
+      // desktop layout confirmed.
+      await expect(studentPage.locator(".mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "desktop",
+        { timeout: 10_000 }
+      );
+
+      // The student live-board mic wrapper must be present.
+      const micWrap = studentPage.getByTestId("wb-topbar-mic");
+      await expect(micWrap).toBeVisible({ timeout: 10_000 });
+
+      // The inline meter DOM node must exist inside the mic control.
+      // Before fix (showInlineMeter not wired): .mynk-wb-mic-meter absent.
+      // After fix: .mynk-wb-mic-meter rendered inside wb-topbar-mic.
+      const meterEl = micWrap.locator(".mynk-wb-mic-meter");
+      await expect(meterEl).toBeAttached({ timeout: 5_000 });
+    } finally {
+      await pages.close();
+    }
   });
 });

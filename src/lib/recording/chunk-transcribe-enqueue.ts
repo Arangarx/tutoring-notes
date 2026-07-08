@@ -27,6 +27,7 @@ import {
 } from "@/lib/recording/transcript-store";
 import { processChunkTranscribeJob, type ChunkTranscribeInput } from "@/lib/recording/transcription-worker";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 
 export type { ChunkTranscribeInput };
 
@@ -86,9 +87,11 @@ function fireAndForgetWorker(job: ChunkTranscribeInput): void {
  */
 export async function enqueueChunkTranscribe(job: ChunkTranscribeInput): Promise<void> {
   const { sessionId, chunkBlobUrl } = job;
+  const streamId = job.streamId ?? TUTOR_MIC_STREAM_ID;
+  const speakerId = job.speakerId ?? null;
 
   console.log(
-    `[txc] wbsid=${sessionId} action=enqueue chunkBlobUrl=${chunkBlobUrl} offsetMs=${job.recordingTimeOffsetMs ?? "n/a"}`
+    `[txc] wbsid=${sessionId} action=enqueue chunkBlobUrl=${chunkBlobUrl} offsetMs=${job.recordingTimeOffsetMs ?? "n/a"} streamId=${streamId}`
   );
 
   try {
@@ -105,6 +108,8 @@ export async function enqueueChunkTranscribe(job: ChunkTranscribeInput): Promise
           chunkBlobUrl,
           recordingTimeOffsetMs,
           status: "pending",
+          streamId,
+          speakerId,
         });
         console.log(
           `[txc] wbsid=${sessionId} action=enqueue_pending_upsert chunkBlobUrl=${chunkBlobUrl}`

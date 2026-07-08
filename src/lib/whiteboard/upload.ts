@@ -31,6 +31,26 @@ async function uploadGeneric(
   contentType: string,
   clientPayload: Record<string, unknown> & { joinToken?: string }
 ): Promise<WhiteboardUploadResult> {
+  const { shouldUseBlobHarnessClientUpload, uploadViaBlobHarness } =
+    await import("@/lib/blob-harness-client-upload");
+  if (shouldUseBlobHarnessClientUpload()) {
+    try {
+      const result = await uploadViaBlobHarness({
+        pathname,
+        blob,
+        contentType,
+        handleUploadUrl: "/api/upload/blob",
+        clientPayload: JSON.stringify(clientPayload),
+      });
+      return { ok: true, blobUrl: result.url, sizeBytes: blob.size };
+    } catch (err) {
+      const lastRaw = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: `Could not upload to whiteboard storage. Please try again. (${lastRaw})`,
+      };
+    }
+  }
   const { upload } = await import("@vercel/blob/client");
   // Long PDF runs issue many back-to-back token requests; Vercel can
   // occasionally fail a single "retrieve the client token" call — retry

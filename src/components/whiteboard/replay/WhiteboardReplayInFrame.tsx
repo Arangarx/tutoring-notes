@@ -17,6 +17,9 @@ export type WhiteboardReplayInFrameProps = {
   audioSegments?: readonly ReplayAudioSegment[] | null;
   audioBlobUrl?: string | null;
   audioMimeType?: string | null;
+  canonicalAudioBlobUrl?: string | null;
+  canonicalAudioMimeType?: string | null;
+  canonicalDurationSeconds?: number | null;
   whiteboardSessionId?: string;
   studentName?: string;
   durationSeconds?: number | null;
@@ -24,6 +27,11 @@ export type WhiteboardReplayInFrameProps = {
   embedded?: boolean;
   /** Collapse in-frame replay back to notes-prominent layout. */
   onHideReplay?: () => void;
+  /**
+   * In-shell review toggles hero↔replay via CSS while keeping this component
+   * mounted. When false, entry auto-play is suppressed and state resets.
+   */
+  isReviewActive?: boolean;
 };
 
 export function WhiteboardReplayInFrame({
@@ -31,10 +39,14 @@ export function WhiteboardReplayInFrame({
   audioSegments,
   audioBlobUrl,
   audioMimeType,
+  canonicalAudioBlobUrl,
+  canonicalAudioMimeType,
+  canonicalDurationSeconds,
   whiteboardSessionId,
   studentName,
   embedded = false,
   onHideReplay,
+  isReviewActive = true,
 }: WhiteboardReplayInFrameProps) {
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -65,6 +77,9 @@ export function WhiteboardReplayInFrame({
     audioSegments,
     audioBlobUrl,
     audioMimeType,
+    canonicalAudioBlobUrl,
+    canonicalAudioMimeType,
+    canonicalDurationSeconds,
     whiteboardSessionId,
     applySceneAtRef,
   });
@@ -94,6 +109,9 @@ export function WhiteboardReplayInFrame({
     muted,
     handleVolumeChange,
     toggleMute,
+    audioDurationSettled,
+    replayPageList,
+    activeReplayPageId,
   } = controller;
 
   // Pause audio before collapsing back to notes-hero so the audio doesn't
@@ -104,14 +122,36 @@ export function WhiteboardReplayInFrame({
     // entry paint effect runs). This prevents any edge-case crash during mount
     // from inadvertently triggering the hero↔replay loop (FIX 2).
     if (!replaySettledRef.current) return;
+    entryPaintDoneRef.current = false;
+    replaySettledRef.current = false;
     pause();
+    seek(0, { paint: false, play: false });
     onHideReplay?.();
-  }, [pause, onHideReplay]);
+  }, [pause, seek, onHideReplay]);
+
+  // Reset entry auto-play when replay is hidden (hero↔replay CSS toggle).
+  useEffect(() => {
+    if (isReviewActive) return;
+    entryPaintDoneRef.current = false;
+    replaySettledRef.current = false;
+    pause();
+    seek(0, { paint: false, play: false });
+  }, [isReviewActive, pause, seek]);
 
   useEffect(() => {
+    if (!isReviewActive) return;
     if (loadState.kind !== "ready" || !log) return;
     if (entryPaintDoneRef.current) return;
     if (!replayExcaliRestoreReady) return;
+    // Wait for the WebM duration scan to complete before starting auto-play.
+    // Without this guard, seek(0,{play:true}) races the in-flight 1e101 scan:
+    // Chrome parks currentTime at the measured end and play() fires from there,
+    // snapping the scrubber to "done" instantly. audioDurationSettled becomes
+    // true once onDurationResolved fires (scan complete, currentTime=0 already
+    // reset by onDurationChange) — or synchronously when the element already
+    // has a finite duration (no scan needed). Stored durationSeconds alone is
+    // NOT sufficient (WS-W).
+    if (hasAudio && !audioDurationSettled) return;
     const needsCanvas = log.events.length > 0 || hasAudio;
     if (!needsCanvas) {
       setPaintReady(true);
@@ -119,7 +159,7 @@ export function WhiteboardReplayInFrame({
       replaySettledRef.current = true;
       return;
     }
-    seek(0, { paint: true, play: false });
+    seek(0, { paint: true, play: true });
     entryPaintDoneRef.current = true;
     replaySettledRef.current = true;
   }, [
@@ -129,6 +169,8 @@ export function WhiteboardReplayInFrame({
     replayExcaliRestoreReady,
     seek,
     setPaintReady,
+    isReviewActive,
+    audioDurationSettled,
   ]);
 
   if (loadState.kind === "loading") {
@@ -217,6 +259,8 @@ export function WhiteboardReplayInFrame({
     onHideReplay: handleHideReplay,
     canvas: replayCanvas,
     timelineStrip,
+    replayPageList,
+    activeReplayPageId,
     nonVisualMounts:
       hasAudio ? (
         <audio

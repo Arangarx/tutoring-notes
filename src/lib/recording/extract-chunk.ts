@@ -23,21 +23,34 @@ import {
 } from "@/lib/recording/transcript-store";
 import { estimateCostUsd, logCostEvent } from "@/lib/observability/cost-events";
 import type { ChunkExtractionPayload } from "@/lib/recording/transcript-types";
-
-const EXTRACT_MODEL = "gpt-4o-mini";
+import { MAP_MODEL } from "@/lib/ai-models";
+import { enqueueLiveReduce } from "@/lib/recording/notes-enqueue";
 
 const EXTRACT_SYSTEM_PROMPT = `You extract structured information from tutoring session audio transcripts.
+
 Given a transcript segment, identify:
-- topics: mathematics or other subject topics introduced or discussed
-- studentQuestions: questions the student asked (verbatim or paraphrased)
-- corrections: errors or misconceptions the tutor corrected
+- topics: subject topics introduced or discussed (math, science, etc.)
+- studentQuestions: questions the student asked (verbatim or tight paraphrase)
+- corrections: errors or misconceptions the tutor corrected, including those signaled by in-session reactions ("almost!" / "not quite" / "try again" imply wrestling; "yes!" / "got it" / "perfect" imply mastery on that point)
 - followUps: homework, practice problems, or next-session items mentioned
 
-Respond in JSON only. Use empty arrays when nothing was found.
-Format: {"topics":[],"studentQuestions":[],"corrections":[],"followUps":[]}`;
+STRICT RULES:
+(1) Only include information supported by the transcript — explicit statements or clear in-session reactions. Do not invent or fabricate content.
+(2) Be terse — short phrases, not full sentences.
+(3) Use empty arrays when nothing was found for a field.
+
+Respond in JSON only — no markdown fences, no commentary:
+{"topics":[],"studentQuestions":[],"corrections":[],"followUps":[]}`;
 
 function buildExtractPrompt(transcript: string): string {
-  return `Extract structured information from this tutoring session transcript segment:\n\n${transcript}\n\nRespond with JSON only.`;
+  return `Extract structured information from this tutoring session transcript segment.
+
+Rules: include only what the transcript supports; map tutor reactions to corrections when they signal misunderstanding or mastery; use terse phrases.
+
+Transcript:
+${transcript}
+
+Respond with JSON only.`;
 }
 
 /**
@@ -126,7 +139,7 @@ export async function extractChunkMap(
   try {
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     const response = await client.chat.completions.create({
-      model: EXTRACT_MODEL,
+      model: MAP_MODEL,
       messages: [
         { role: "system", content: EXTRACT_SYSTEM_PROMPT },
         { role: "user", content: buildExtractPrompt(transcript) },
@@ -138,17 +151,21 @@ export async function extractChunkMap(
     const text = response.choices[0]?.message?.content ?? "";
     const inputTokens = response.usage?.prompt_tokens;
     const outputTokens = response.usage?.completion_tokens;
+    const modelId =
+      typeof response.model === "string" && response.model.trim().length > 0
+        ? response.model.trim()
+        : MAP_MODEL;
 
     // Log cost event (best-effort — never blocks on failure).
     const est = estimateCostUsd({
       kind: "GPT_NOTES_GENERATION",
-      model: EXTRACT_MODEL,
+      model: modelId,
       inputTokens: inputTokens ?? 0,
       outputTokens: outputTokens ?? 0,
     });
     await logCostEvent({
       kind: "GPT_NOTES_GENERATION",
-      model: EXTRACT_MODEL,
+      model: modelId,
       inputTokens,
       outputTokens,
       estimatedCostUsd: est,
@@ -187,6 +204,13 @@ export async function extractChunkMap(
     console.log(
       `[tnt] wbsid=${sessionId} action=map_done chunkId=${chunkId} topics=${payload.topics.length} questions=${payload.studentQuestions.length} corrections=${payload.corrections.length} followUps=${payload.followUps.length}`
     );
+
+    // WS-K: fire live reduce after each map completion (debounced in enqueueLiveReduce)
+    void enqueueLiveReduce(sessionId).catch((err: unknown) => {
+      console.warn(
+        `[tnt] wbsid=${sessionId} action=live_reduce_enqueue_failed chunkId=${chunkId} err=${err instanceof Error ? err.message : String(err)}`
+      );
+    });
 
     return "done";
   } catch (err: unknown) {

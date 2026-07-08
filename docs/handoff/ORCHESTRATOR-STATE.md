@@ -1,72 +1,105 @@
 # ORCHESTRATOR STATE — canonical living bootstrap
 
-> **READ THIS FIRST.** This file is the **single source of current orchestrator state** for tutoring-notes. We keep it current continuously (lightweight head every material turn; full restructure at milestones). A **brand-new orchestrator chat** must read it before dispatching work and must **NOT** ask Andrew for catch-up on what's done, where we are, what's next, or how we work — this doc, its reading list, and `git log` are authoritative.
-
-> **Operating contract (`.cursor/rules/orchestrator-discipline.mdc`, explicit @ [`7341ff9`](https://github.com/Arangarx/tutoring-notes/commit/7341ff9)):** State durability is a **primary reliability obligation**, not a nicety. Andrew offloads project memory to the orchestrator on purpose — at any moment a session can be lost and a fresh orchestrator must resume with **minimal re-guidance** (ideally just "continue"). Keep this file continuously current; treat "I'll update state later" as a silent failure.
+> **READ THIS FIRST.** Single source of current orchestrator state for tutoring-notes. A **brand-new orchestrator chat** reads this + its reading list + `git log` — **no catch-up from Andrew** on what's done, where we are, what's next, or how we work.
+>
+> **Operating contract** ([`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc)): state durability is a **primary reliability obligation**. Sessions can be lost at any moment; keep this file continuously current. Treat "I'll update state later" as a silent failure.
 
 ---
 
-## ⏩ HEAD — 2026-06-21 Wave 4 (student responsive parity) MERGED → `v1-redesign` @ `a166f6c`
+## HEAD
 
-> Integration base is now `v1-redesign` @ [`a166f6c`](https://github.com/Arangarx/tutoring-notes/commit/a166f6c). Wave 4 done; next thread = **Wave 5** chrome/polish (non-merge-gating) + W1-3 backlog burndown.
+**✅ 4 STALE-ORACLE SPECS REALIGNED (2026-07-07 ~19:24, [Composer](c02885e8-e2b7-42ca-96bb-e18c55a80ff9), `6dce3b5`, test-only/zero `src/`, each green isolated under `wb-regression`).** #1 chrome-interactions:528 → activate **Rectangle** (not pencil) before Sharp-chip hover assert. #2 notes-shimmer → `waitForNotesGeneratingUiWithShimmer()` asserts `"Preparing your notes..."`/`"Writing notes…"` + shimmer atomically inside active window (WS-K fast-finalize race fixed). #3 mic-persistence → `openStudentMicPicker` uses waiting-overlay (PENDING) / `wb-student-overflow-av-pickers` (ACTIVE) + **narrow 1000×800 student viewport** (overflow ⋯ hidden >1100px). #4 whiteboard-workspace smoke → **React-hydration wait before Start click** + `waitForURL` race — session IS created (**correction: `actions.ts` still `redirect()`s to `/workspace`; RW-6 removed the consent modal, NOT the redirect; the real bug was pre-hydration clicks, not a stale redirect oracle or missing session**). No skip-gating added; BLOB gate untouched.
+
+**➡️ SOLE REMAINING for merge-gate #1: Bug A** `wb-tutor-recording-mute:70` — genuine PRODUCT bug on fragile recorder surface (WS-I pre-start mute, recording-branch gain stays 1 vs 0; root-cause `81813fa3`, branch `f748ef7`). Path: **plan-mode step-back → Sonnet 5-axis → fix**; green spec (isolated + in full relay gate) = merge bar. **Good swap point** — start fresh chat, `@`-ref this + this doc, pick up Bug A cold.
+
+---
+
+**✅ TRIAGE VERDICT (2026-07-07 ~18:40, [explore](1a7cec86-5133-4533-8d27-585241c89b93)) — 4 of 5 REAL reds are STALE ORACLES, NO new product regressions. Only Bug A is a genuine product bug.** Each of the 4 is a test that never got realigned after an intentional, already-RESOLVED on-branch product change:
+- **#1 `wb-chrome-interactions:528`** — STALE ORACLE. WS-R (`8e23324`) intentionally hides the roughness/Sharp chip for **pencil**; test activates pencil then looks for "Sharp" (never mounted). `WbStrokePropsPanel` still renders Sharp for rectangle/ellipse/diamond. **Realign:** activate Rectangle (not pencil) before asserting Sharp hover (mirror `wb-roughness-style.spec.ts:57-79`).
+- **#2 `wb-notes-shimmer:209`** — STALE ORACLE (+ minor timing). WS-K (`859f695`) changed pending copy `"Waiting for transcript…"` → `"Preparing your notes..."`; unit tests already locked new copy. **Realign:** L229 expected copy → `"Preparing your notes..."`; assert inside `recordShortSoloSession` active window (WS-K fast-finalize can race the footer away).
+- **#3 `wb-student-mic-persistence:150`** — STALE ORACLE. WS-M (`39477285`) set `hideDevicePicker:true` on student top-bar mic; device select moved to `wb-waiting-overlay-device-pickers` (PENDING) / `wb-student-overflow-av-pickers` (ACTIVE). **Realign:** `openStudentMicPicker` targets overflow/overlay picker, not `wb-topbar-mic > audio-device-select`.
+- **#4 `smoke/whiteboard-workspace:107`** — STALE ORACLE (NOT harness — BLOB gate at L112 passes under `wb-regression`). Consent-modal removal (RW-6, `2faecd8` stack) killed the `/workspace` redirect; `eb3fb5d` made the spec run at gate. **Realign per RW-6:** drop `/workspace` redirect oracle, assert session row on student detail (or navigate explicitly). **Caveat:** if realigned test STILL shows no session row, escalate to PRODUCT-REGRESSION on `createWhiteboardSession`.
+- **#3(Bug A) `wb-tutor-recording-mute:70`** — genuine PRODUCT-REGRESSION (WS-I pre-start mute; recording gain stays 1, root-cause `81813fa3`, branch `f748ef7`). Fragile recorder surface → plan-mode → Sonnet 5-axis path; green spec = merge bar.
+
+**NEXT:** (a) dispatch 4 test-realignments (Composer, test-only, verify each green in isolation; #4 must assert session actually created); (b) Bug A via fragile-surface escalation (plan-mode step-back → Sonnet). Then re-run full relay gate for clean merge #1.
+
+---
+
+**✅ RELAY GATE NOW TRUSTWORTHY — all 3 runner defects fixed; trustworthy classification of the 6 reds done (2026-07-07 ~18:37).** Runner defects all resolved: (1) `--project` arg [`38ce3c3`], (2) blob-merge only-last-shard [`fb3c039`], (3) isolation `-g` grep-arg crash [`956e235`](https://github.com/Arangarx/tutoring-notes/commit/956e235) — isolation now selects by **`file:line`** (no regex/shell-split fragility). **Direct fresh-server isolation of the 6 genuine failures ([Composer](4ca66c31-d75f-4f42-9519-a1a1a529b812), ~9min):**
+- **1 ENV-FLAKE:** `wb-replay-active-board-tab:95` (passes isolated — only fails under marathon exhaustion).
+- **5 REAL (deterministic, fail initial+retry):** (#1) `wb-chrome-interactions.spec.ts:528/550` — "Sharp" roughness chip button NOT FOUND in `wb-props-panel` (`toHaveClass` unreachable); (#3) **`wb-tutor-recording-mute.spec.ts:70/106` = Bug A** — recording-branch gain **1 ≠ 0** on mute-before-graph (KNOWN real product gap, sanity-check ✓); (#4) `wb-notes-shimmer.spec.ts:223/229` — `tutor-notes-status` not found / copy mismatch (**got "Preparing your notes..." vs expected "Waiting for transcript…"** — smells STALE ORACLE); (#5) `wb-student-mic-persistence.spec.ts:213` — `audio-device-select` not found in `wb-topbar-mic` (30s timeout); (#6) `smoke/whiteboard-workspace.spec.ts:131` — after Start, URL stuck on student page not `/workspace` (needs BLOB — possible harness).
+
+**⚠️ "REAL" = deterministic, spans PRODUCT-REGRESSION vs STALE-ORACLE vs HARNESS-SETUP** — NOT auto product bugs. Failure signatures suggest several are stale oracles from wave-5 UI/notes/chrome work (#1 chip, #4 copy, #5 device-select) + Bug A real + #6 possibly harness. **NEXT:** (a) **TRIAGE the 5 REAL** (explore: per-spec regression-vs-stale-oracle-vs-harness, cite product code + git blame master..HEAD, recommend product-fix vs test-realign); (b) fix accordingly (Bug A = fragile plan-mode→Sonnet path). Shard-6 (audio-upload+apply-remote) stays green. Merge-gate #1 = green once the 5 REAL are resolved (fix or justified test-realign).
+
+---
+
+**🟨 RE-RUN with blob fix (2026-07-07 ~18:23, tip `6c96016`, `terminals/472990.txt`) — SUPERSEDED by the trustworthy classification above (isolation grep-arg since fixed `956e235`).** Was: blob-merge FIX CONFIRMED, but a 3rd runner defect (isolation grep-arg) corrupts classification. ✅ **Blob fix works:** merge now extracts ALL 6 shard blobs (`lifecycle`+`shard-2..6`); aggregate found **6 unexpected failures** across all shards (cross-shard blindness gone). ❌ **"REAL-FAIL: 6" is UNTRUSTWORTHY** — the isolation pass builds `-g <raw test title>` without regex-escaping or a `--` options-terminator, so titles with `--word`, em-dash `—`, or `(...)` crash the isolation subprocess on ARG PARSING (not a real test failure) → false REAL-FAIL. Confirmed ≥4 of 6 never ran a test: `wb-chrome-interactions:528` (`unknown option '--active'`), `wb-replay-active-board-tab:95` (`Invalid regex /(2/`), `wb-student-mic-persistence:150` (`non-ascii dash —`), `whiteboard-workspace:107` (`Invalid regex /(needs/`). Only `wb-tutor-recording-mute:70` (Bug A) + `wb-notes-shimmer:209` MIGHT have run. **The 6 genuine first-attempt failures (from the trustworthy merged JSON) are:** wb-chrome-interactions:528, wb-replay-active-board-tab:95, wb-tutor-recording-mute:70 (Bug A, known-real), wb-notes-shimmer:209, wb-student-mic-persistence:150, smoke/whiteboard-workspace:107. **REAL vs ENV-FLAKE still UNKNOWN** (strong prior: most are ENV-FLAKE marathon-exhaustion per the full-suite baseline + 22-red triage; Bug A is the one confirmed-real). **NEXT:** (a) FIX isolation grep-arg bug (Composer, test-infra — regex-escape title + `--` terminator, or select by file+escaped `--grep`); (b) directly isolate-classify the 6 known specs (fresh server each, correct invocation) — faster than another full gate; (c) fix the confirmed-real ones (Bug A fragile path). Shard-6 (audio-upload+apply-remote fixes) = 22 passed, exit 0 — stays green.
+
+**🚨 CRITICAL CORRECTION (2026-07-07, confirming relay run tip `995466e`, `terminals/363549.txt`): the sharded runner's GATE VERDICT ONLY EVER REFLECTED SHARD 6 — every "validated" claim below for shards 1–5 is HOLLOW.** Root cause: each shard's Playwright run cleans `test-results/` (the outputDir), which wipes the prior shard's blob zip; `MERGE_BLOB_DIR = test-results/wb-shard-blobs` lives *inside* that cleaned dir, so at merge time ONLY `shard-6-report.zip` survives. **Proof:** merged JSON (`test-results/wb-shard-merged.json`) `stats = {expected:22, unexpected:0, flaky:0, skipped:0}`, 8 suites = shard-6 exactly. So `merge-reports` + the isolation/REAL-FAIL classifier have NEVER seen shards 1–5. The "F2 DONE/validated", "CLEAN GATE VERDICT / 163 across 6 shards", and "REAL-FAIL: 3" claims only ever classified shard 6 (whose 3 reds — audio-upload:86/:101, apply-remote:83 — coincidentally were all in shard 6, so they surfaced; everything else was invisible).
+
+**TRUE per-shard results this run (read from raw Playwright stdout summaries, ANSI-stripped):**
+- **lifecycle (shard 1): 48 passed, exit 0 ✓**
+- **shard-2: 2 failed** — `wb-chrome-interactions.spec.ts:528` (selected-chip `toHaveClass` on hover) + **`wb-e2-pdf-stroke-leak.spec.ts:74`** (canonical PDF-leak spec — "board-3 strokes stay on board-3", `toBe` — the spec we believed passes 3/3!)
+- **shard-3: 1 failed** — `wb-replay-active-board-tab.spec.ts:95` (scrub updates active replay board tab, `toHaveAttribute`)
+- **shard-4: 1 failed** — **`wb-tutor-recording-mute.spec.ts:70` = BUG A (WS-I-PRESTART-MUTE), gain 0 at init**
+- **shard-5: 3 failed** — `wb-notes-shimmer.spec.ts:209` (overlay `toHaveText`) + `wb-student-mic-persistence.spec.ts:150` (persisted mic pre-selected `toBeVisible`) + `smoke/whiteboard-workspace.spec.ts:107` (`createWhiteboardSession` `toHaveURL`, needs BLOB)
+- **shard-6: 22 passed, exit 0 ✓** — **audio-upload:86/:101 (`a12d1da`) + apply-remote:83 (`abfbe9a`) fixes CONFIRMED GREEN**
+
+**⇒ 9 UNCLASSIFIED reds across shards 2–5** (isolation never ran on them). Several likely ENV-FLAKE (blob/transcribe/dev-server-exhaustion noise — notes-shimmer "real pipeline", whiteboard-workspace "needs BLOB", possibly mic-persistence/replay/chrome timing), but **Bug A (`wb-tutor-recording-mute:70`) is a KNOWN-REAL branch-only product defect** (see A4 root-cause `81813fa3`) and the **canonical `wb-e2-pdf-stroke-leak:74` failing is notable** (needs isolated confirm — may be exhaustion). **Bug A was NEVER "non-repro": it lives in shard 4, which the runner never captured.**
+
+**NEXT (revised):** (a) **✅ DONE — runner blob-preservation FIXED ([Composer](58e6f546-7bf1-43ff-83de-a224293e08b0), [`fb3c039`](https://github.com/Arangarx/tutoring-notes/commit/fb3c039)):** TWO wipe mechanisms found — (1) Playwright `createRemoveOutputDirsTask` cleans `test-results/` at each run start → moved `MERGE_BLOB_DIR` to repo-root `wb-shard-blobs/` (sibling, not under test-results); (2) BlobReporter `_prepareOutputFile()` self-cleans its own output dir each run → set `PWTEST_BLOB_DO_NOT_REMOVE=1` on shard env. + one-time clear at run start + `.gitignore`. Minimal 2-shard proof: merged JSON covered BOTH spec files (not just last); `node --check` clean; manifest 163/163. (b) **⏳ AWAIT ANDREW GO — attended re-run** (`test:wb-sync`, ~35-50min) → real REAL-FAIL/ENV-FLAKE classification for the 9 shard-2–5 reds. (c) **Triage the REAL ones** (Bug A already confirmed-real → fragile plan-mode→Sonnet path below; canonical pdf-leak:74 + the others need the isolation classification). NOTE: audio-upload:86/:101 + apply-remote:83 (F3) fixes are independently CONFIRMED green in shard 6 — those stay done.
+
+---
+
+**⚠️ SUPERSEDED by the correction above — retained for audit trail:** ~~F2 relay-shards DONE + VALIDATED; merge-gate verdict trustworthy~~ (verdict only covered shard 6):
+- **Run #1** aborted instantly — F2a runner gave Playwright spec paths where it expected `--project=wb-regression` (Windows `spawnSync shell:true` arg-concat) → **FIXED [`38ce3c3`](https://github.com/Arangarx/tutoring-notes/commit/38ce3c3)** (combined `--project=wb-regression` + positional filters).
+- **Run #2** — shards 1–5 clean (135 pass/0 fail on fresh per-shard :3100 servers; WS-T #7 lifecycle confirmed green), but surfaced two runner defects: shard-6 collapsed (0 pass — the 6th shard re-ran `integration-setup` which timed out under cumulative load → dependency-skipped all 22) and the isolation pass OVER-COLLECTED ("99" — `parseFailures` matched every `[wb-regression]` stdout progress line, not just reds). Runaway stopped safely (:3002 untouched).
+- **Round-2 runner fixes [`e535cca`](https://github.com/Arangarx/tutoring-notes/commit/e535cca):** isolation now reads merged **blob JSON**, collecting only `projectName=wb-regression && status=unexpected` (no passed/skipped/flaky); shards + isolation run `--no-deps` (setup runs once upfront, not per shard); + 8s inter-shard cooldown + orphaned :3100/:3101 node cleanup.
+- **Run #3 (post-fix) — CLEAN GATE VERDICT:** jest pre-gate **856/856**; all 163 ran across **6 fully-completing shards** (lifecycle 47+1flaky, shard-2 21, shard-3 21, shard-4 22, shard-5 18, shard-6 19 — shard-6 no longer collapses); isolation correctly narrowed to **3 genuine `unexpected` failures (not 99)** → classified **REAL-FAIL: 3, ENV-FLAKE: 0**. Full log: `terminals/889258.txt`.
+
+**🔴 The 3 REAL-FAILs are GENUINE deterministic failures (NOT exhaustion) — confirmed by a fresh/idle-machine isolated re-run (`terminals/193129.txt`, 3 failed / 1 passed):**
+1. **`audio-upload.spec.ts:86`** — "Upload tab visible + dropzone": the `audio-upload-dropzone` element is PRESENT in the DOM but `hidden` after clicking the Upload tab (8× resolved hidden, 5s timeout). Real, repeatable.
+2. **`audio-upload.spec.ts:101`** — "transcribe + generate populates note form": the `ai-transcribe-btn` ("Transcribe & generate notes") is **`disabled`** so the click times out (120s). Real, repeatable. **⚠️ notes/transcribe surface — Ship-to-Sarah-gate-adjacent.**
+3. **`wb-e2-apply-remote-pdf-stroke-leak.spec.ts:83`** — WS-X fingerprint-guard = **known test-only Bug B** (F3; stale/mistimed oracle — spec dies at preconditions, guard proven sound 3/3; see A4 WS-X row).
+
+**Bug A `wb-tutor-recording-mute` did NOT appear in the failure set** (run #2 shard-4 23/23; run #3 shard-4 22 pass) — consistent non-repro; mute-before-graph-ready race is timing/environment-sensitive; **re-confirm reproduction before touching that fragile surface.**
+
+**✅ TRIAGE DONE ([explore](ec500d9d-e4de-475f-b34b-9da8ec6ec28c)) — all 3 relay reds are TEST-ONLY; ZERO tutor-facing product regressions on `wb-wave5-polish`** (mirrors the earlier full-suite finding: product clean, harness needed hardening). (1) **`audio-upload:86`** = stale oracle — B3 always-mount upload pane is `display:none` until `activeTab==="upload"` (default `"record"`); test clicks tab but doesn't wait for pane visible. Behavior pre-exists on `master`; only *exposed* by harness-gate `eb3fb5d`. Fix = test realignment (wait for `audio-tab-upload-pane` visible / `aria-selected`; scroll Notes section into view). (2) **`audio-upload:101`** = stale oracle / already-tracked **RW-7** (`wb-wave5-execution-queue.md` item (b)) — test's upload stub returns legacy Vercel JSON, but harness uses mint+PUT blob flow (`a1cc2bd`/`2278013`) → upload never completes → `pendingAudios` empty → transcribe btn correctly disabled; weak `.or(ai-transcribe-btn)` assertion. Fix = harness-aware stub + assert `toBeEnabled()`. **GUARDRAIL: do NOT enable the transcribe btn without an upload — that breaks real gating.** (3) **`apply-remote:83`** = known **test-only Bug B / F3** (WS-X) — keep its own careful/attended pass (A4 WS-X row: settle L146 onChange-leak question first, then realign).
+
+**✅ audio-upload realignment DONE (test-only, [`a12d1da`](https://github.com/Arangarx/tutoring-notes/commit/a12d1da), Composer):** :86 → scroll `#student-section-notes` + `switchToUploadTab()` waits for `audio-tab-upload-pane` visible before dropzone assert; :101 (RW-7) → harness-aware upload stub (`route.continue()` mint+PUT) + assert `pending-segment-list` visible + `ai-transcribe-btn` `toBeEnabled()`. Green: 3 passed, 1 retry-recovered flake on :101 (`switchToUploadTab` first-try scroll-spy timing — watch in relay). Product unchanged. Dedup debt logged (BACKLOG: `installControllableUploadStub` now 3× inline → extract).
+
+**F3 STEP-BACK DONE ([explore](50bc5027-340d-4f04-81c9-eede3f5e41a5)) — verdict: NO product bug; both reds test-only, BUT realignment touches a WS-X product seam.** L159 (`fingerprintActive===true`) = deterministic **stale oracle** (fingerprint cleared by design on first legit post-switch onChange, WWC L4672-4675; spec checks seconds too late). L146 (`every type==="image"`) = **duplicate** of canonical `wb-e2-pdf-stroke-leak.spec.ts` (passes 3/3) — not a real leak. `ef5fb1a` applyRemote guard is sound-by-review, all in `WhiteboardWorkspaceClient.tsx` (NO `src/lib/whiteboard/` change). **CATCH:** the spec's real oracle (`__WBX_INJECT_APPLY_REMOTE__` L205-219) has NEVER executed (spec dies at L159 precondition); current injection fires *after* fingerprint clears → doesn't exercise the guard. Correct realignment = retime injection to fire *inside* the fingerprint window → needs a NEW E2E-gated test seam inside WWC `selectTutorPage`/`releaseGuard` (restore the parked `5d80ea8` pre-arm pattern). That's a product-file seam on the most-fragile surface → per WS-X doctrine NOT a blind Composer edit. **AWAIT ANDREW: pick approach — (A rec) Sonnet-authored seam + realignment, attended, red-before/green-after proof (revert WWC L1046 guard → oracle must fail) — properly discharges A4; (B) minimal test-only drop L146+L159 (risk: injection oracle fires post-clear → misleading pass or confusing red, leaves guard unproven); (C) quarantine spec for go-to-Sarah cut as tracked post-Sarah follow-up (guard sound-by-review + canonical covers steady-state) → unblocks merge gate now.**
+
+**✅ F3 DONE — approach A ([Sonnet](73feb166-e9e4-4f35-8a3b-414776fbc734), [`abfbe9a`](https://github.com/Arangarx/tutoring-notes/commit/abfbe9a)):** additive E2E-gated `__WBX_ON_GUARD_RELEASE__` seam in WWC `releaseGuard` (27 ins / **0 del** — verified purely additive + prod-inert, guard clause L1053 confirmed present in commit); spec retimed to inject *inside* the fingerprint window; dropped L141-159 stale/duplicate asserts; oracle `toPass({10_000})`. **Red-before/green-after PROVEN** (guard intact → 2 passed; revert `!has(targetId)` → board-3 stroke leaks, fail both attempts) → `ef5fb1a` guard now test-proven, discharges A4 WS-X.
+
+**✅ ALL 3 RELAY REDS RESOLVED — all test-only realignments, ZERO product regressions** (audio-upload:86 + :101 `a12d1da`; apply-remote:83 `abfbe9a`). Merge-gate #1 is ready for a confirming clean run.
+
+**NEXT:** (a) **Confirming attended relay run** (`test:wb-sync`, full 6-shard, ~50min) — should now go fully green; watch the audio-upload :101 retry-covered flake. This is the orchestrator's attended job (needs Andrew's go — 50min + live-stack monitoring). (b) **Bug A** `wb-tutor-recording-mute` (WS-I-PRESTART-MUTE, BACKLOG reliability-gap — REAL branch-only product defect, must fix before WS-I→master) — NOTE non-repro in relay runs #2/#3; **re-confirm reproduction first**, then fragile: plan-mode → Sonnet 5-axis → fix; green spec = merge bar. (c) Then **Tranche E** (P2-WB-2 → P3).
 
 | Field | Value |
 |---|---|
-| **Last action completed (2026-06-21)** | **`merge --no-ff` `wb-wave4-responsive` → `v1-redesign`** @ [`a166f6c`](https://github.com/Arangarx/tutoring-notes/commit/a166f6c) (pushed `c37f08f..a166f6c`). **Wave 4 = student responsive parity.** After rounds 1-5 of bespoke-patch attempts kept regressing (global-CSS churn / jsdom-blind), the **student top bar was REBUILT @ `64108cf`** to REUSE the tutor's exact chrome zone structure + same `desktop-only`/overflow-⋯ responsive mechanism, layering in only **6 documented deltas** (Exit, Connected pill, recording disclosure, follow-tutor toggle, no Share/inserts, tutor name); ALL tutor-affecting shared CSS reverted to `5d56f49` baseline; bespoke student override pile + the ResizeObserver/JS compaction engine removed. **Round-6 hardware smoke (Andrew):** student desktop no longer collapses; **R6-3 phone-portrait PASS, R6-4 phone-landscape PASS**; tutor not regressed by these changes; remaining items = polish only (→ Wave 5). Gates: tsc/eslint/jest clean; **`npx next build` PASS** (41/41 routes) [`79c5579d`](79c5579d-94ef-4ef6-a388-78d58323534f); **wb-sync N/A** (chrome-only, no `src/lib/whiteboard/` touched). Merge conflict = smokebook add/add → kept `v1-redesign` side (424-line version w/ Andrew R1-R6 notes; branch side was 137-line stub). Waves 1–4 + fix waves = **done**. |
-| **Next action(s)** | (1) **Wave 5** — chrome polish, all deferred from Wave-4 round-6 smoke + earlier. Captured in [`BACKLOG.md`](../BACKLOG.md) **WB-WAVE5-CHROME-POLISH**: (a) **coral Exit button** (student); (b) **follow-toggle / "Match tutor's view" alignment** — Andrew clarified (2026-06-21) his wife's alignment comments were about the controls **INSIDE the "More" overflow sheet**, not the top bar: make control alignment consistent within the More sheet + add a clear **scroll affordance** there ("wasn't clear there was more to scroll"); (c) **overflow ⋯ menu drops DOWN, not up**; (d) **grid toggle as an icon**; (e) **tutor phone-landscape over-compaction + never-finished left rail** (R6-1 PARTIAL — pre-existing, not a Wave-4 regression). Also still open from plan: 2 design Qs (highlight non-clickable student tab? / allow student graph entry?), student view-lock-while-synced — see [`wb-unify-stabilization-plan-2026-06-17.md`](wb-unify-stabilization-plan-2026-06-17.md) § Waves 4–5. **Wave 5 = do the polished progressive contraction PROPERLY in a tested component pass (WB-STUDENT-TOPBAR-CONTRACTION), not bespoke per-surface CSS/JS.** (2) **`docs/phase3-consent-model` @ `4f9dbcd`** → union-merge to `v1-redesign` (conflict risk — see lesson below). (3) `phase1/wb-reliability-floor` @ `d63ac22` — awaits DESKTOP smoke. (4) Gate A→A6 + Ship-to-Sarah gate burndown per table below. |
-| **Open Andrew-confirms** | **Sarah primary device** — assumed Windows desktop (Chromium); verify on next call ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)). **Ship-to-Sarah gate** (notes path, end/continue save discipline, single-segment seek) — still open. **iOS student WB/A/V** — zero real-device coverage; Android test-student only ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
-| **In-flight subagents** | **None.** (Wave 4 `next build` gate subagent completed PASS.) |
-| **Uncommitted / unmerged** | **None uncommitted** on `v1-redesign` (orchestrator parked here @ `a166f6c`). `wb-wave4-responsive` @ `64108cf` **merged** (branch preserved for cleanup). **`docs/phase3-consent-model` @ `4f9dbcd`** (pushed) — awaits `merge --no-ff` into `v1-redesign`; **conflict risk** on P3 handoff docs (union-merge required). **`phase1/wb-reliability-floor` @ `d63ac22`** — awaits DESKTOP smoke. `phase2/wb-student-new-shell` **superseded + absorbed** by wb-unify merge. |
-| **P1 replay-in-frame (MERGED 2026-06-16 — thread CLOSED)** | **MERGED** `phase1/wb-review-correct` → `v1-redesign` @ [`f68053c`](https://github.com/Arangarx/tutoring-notes/commit/f68053c). In-frame unified review + replay timeline scrubber + full A/V fix chain. Video-paint **RESOLVED** — bandaid @ [`1cc268d`](https://github.com/Arangarx/tutoring-notes/commit/1cc268d) (= [`3b996ae`](https://github.com/Arangarx/tutoring-notes/commit/3b996ae) AV code). Pre-merge: build green, wb-sync green, jest 659/659 @ [`6440ea7`](https://github.com/Arangarx/tutoring-notes/commit/6440ea7). Smokebook [`phase-1-wb-floor-replay-in-frame-smokebook-2026-06-14.md`](phase-1-wb-floor-replay-in-frame-smokebook-2026-06-14.md) — Andrew actively entering results (**do NOT edit**). Branch preserved for cleanup. |
-| **P2 student-on-new-shell (SUPERSEDED → MERGED via wb-unify 2026-06-18)** | Absorbed into **`wb-unify-stabilize` → `v1-redesign` @ `f66aa4b`**. Student shell is now role-gated `WhiteboardWorkspaceClient`; legacy smokebook [`phase-2-student-new-shell-smokebook-2026-06-16.md`](phase-2-student-new-shell-smokebook-2026-06-16.md) retained for audit only. Active smokebook: [`wb-unify-stabilize-smokebook-2026-06-17.md`](wb-unify-stabilize-smokebook-2026-06-17.md). |
-| **Ship-to-Sarah gate (CONFIRMED by Andrew 2026-06-16)** | Andrew wants to swap Sarah off `master` ("old & busted") onto the `v1-redesign`/`phase1` line **once waiting room → WB → end session is stable for tutor AND student — backend data pipeline INCLUDED** (per-segment flush + per-chunk transcription reliably producing notes, not just UI flow). Triggered by Sarah's 2026-06-16 prod chat (3 bugs; capture [`sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](sarah-pilot-feedback-2026-06-16-orchestrator-report.md) @ [`931e8f7`](https://github.com/Arangarx/tutoring-notes/commit/931e8f7); BACKLOG SSG-1/2/3 + F1 elevated). **Confirmed gate items:** **(1)** notes — legacy monolithic "Generate notes from session" path GONE from new surface (the button she clicked), per-chunk auto-notes the only path, verify up-to-50-min-segment transcribes clean; exact "too large to split" error structurally avoided (residual >25MB-per-segment risk = backlog SSG-1). **(2)** End/Continue on **student-detail open-sessions list** never silently deletes recording — save-then-end or explicit "Discard" label+behavior (SSG-2 / F1; `endStaleWhiteboardSession` currently stamps `endedAt` w/o flush). **(3)** single-segment seek (her actual case) works at EVERY review entry point she'd use — incl. not landing on the unfixed legacy standalone `WhiteboardReplay` (fix-for-single-seg or route to in-frame). **Multi-segment (>50-min) seek EXPLICITLY DEFERRED by Andrew → backlog SSG-3 only.** Items 1–3 fold into P2/P3 + a targeted backend pass; NOT separate threads. **Pre-master smoke deferral (Andrew 2026-06-16): relaxed strict "smoke-all-before-master" — some items OK post-master, but data-loss/security/backup-recorder items stay PRE-MASTER (not deferred).** Durable ledger [`pre-master-smoke-deferral-ledger-2026-06-16.md`](pre-master-smoke-deferral-ledger-2026-06-16.md) @ [`b7b2071`](https://github.com/Arangarx/tutoring-notes/commit/b7b2071) (35 keep / 11 defer-safe / 5 already-deferred). **Borderlines RESOLVED (Andrew 2026-06-16):** (a) MAP-ACC notes *quality* → DEFER post-master but it's the **#1 post-master follow-up — start immediately at cut** so Sarah generates feedback + real examples to tune against; (b) A1 freedraw latency → DEFER ("doesn't feel like an issue right now, we'll see") — watch, not a blocker. |
-| **Live-A/V tutor video regression (RESOLVED 2026-06-16)** | **CLOSED — bandaid shipped @ [`1cc268d`](https://github.com/Arangarx/tutoring-notes/commit/1cc268d)** (merged @ `f68053c`). [`caaabf2`](https://github.com/Arangarx/tutoring-notes/commit/caaabf2) CSS-only fix failed on-device; Mechanisms A+B from [`3b996ae`](https://github.com/Arangarx/tutoring-notes/commit/3b996ae) restored. LV-1 + LV-2 satisfied (byte-identical to Andrew-confirmed checkpoint). Real fix → **WB-AV-VIDEO-PAINT-REAL-FIX** backlog. |
+| **Last action completed** | **✅ Tranche F / F1 RESOLVED-via-defer (Andrew 2026-07-06, Option A).** Diagnosis-recommended global per-test `afterEach` `TRUNCATE ... CASCADE` on `tutoring_notes_test` **FAILED** (~40 failed suites/run × 3 consecutive `jest --workers=1` runs vs ~1-flake baseline) — `40P01` deadlocks + FK / "Engine is not yet connected" races. **Reframed root cause:** TRUNCATE's `AccessExclusiveLock` collides with **in-flight fire-and-forget async DB work that outlives test bodies** (same stragglers behind `Cannot log after tests are done` + `CostEvent_..._fkey` leaks). Failed attempt preserved in `git stash@{0}` on `wb-wave5-polish` (message: "F1 truncate attempt (FAILED...)"). **Salvaged + committed [`647ec35`](https://github.com/Arangarx/tutoring-notes/commit/647ec35):** `transcription-worker.test.ts` — `jest.mock("@/lib/recording/extract-chunk")` + `afterEach` microtask flush (stops map-phase async leak past teardown; green in isolation; tsc clean). **Dropped (reverted, stays in stash):** `upload-outbox.test.ts` observation-timing change (5000ms wait budget = Jest default timeout → timed out before diagnostic; T1+S1 markers never appeared). **Heavy jest-isolation DEFERRED** as tracked debt; merge-gate jest stays `--workers=1` + retry (~1-flake = loud stale-red, NOT false-green). **Standing gate convention (6)** added to execution-queue test doctrine (docs `971af78`). **✅ F2a BUILT + COMMITTED [`13c7522`](https://github.com/Arangarx/tutoring-notes/commit/13c7522):** serial sharded `wb-regression` relay runner (`scripts/wb-relay-shard-run.cjs` — fresh dev server per shard, manifest-from-config, union-asserted == `--list`, isolation re-run REAL-FAIL/ENV-FLAKE classifier) + safety port helper (`scripts/free-wb-dev-server-ports.cjs` — frozen allowlist [3100,3101], throws on any other incl. CLI, **never :3002**) + `test:wb-sync`→sharded (monolithic `test:wb-playwright` kept for bisect) + `playwright.config.ts` (`workers:1` on wb-regression, `:3101` webServer gated on `WB_SKIP_3101_WEBSERVER`). **163 enrollment verified static** (manifest union == `--list`); node --check + tsc clean. Orchestrator-reviewed: port allowlist safe, enrollment preserved. **NOT yet validated with a live relay run (F2b, attended).** Caveat to confirm in F2b: per-shard blob output env-var names (`PLAYWRIGHT_BLOB_OUTPUT_DIR/NAME`) — `merge-reports` may need adjustment; the gate VERDICT (shard exit + isolation re-run) does NOT depend on the merged HTML report. |
+| **🟨 FULL-SUITE BASELINE result (2026-07-06, tip `c941247`, [run](8dbb2ff3-3ebd-47c8-831a-1af13d6e91d5))** | **NO product bugs / regressions / stale oracles found** beyond those already fixed (reassuring for product quality). **BUT the harness cannot currently run clean end-to-end** — a genuine confidence + merge-gate blocker, NOT product rot: (1) **jest `--workers=1` is NOT reliably green** — `claim-setup-consent-decline.test.ts` H-1 red on a **fixture email unique-constraint collision** (`createClaimedInviteFixture`), i.e. cross-test DB pollution even single-worker (wider than the previously-documented parallel-only "record not found" race); suite now 288/3083 (grew from the stale 283/3062 claim). (2) **`test:wb-sync` never reached the relay** — its wb-jest pre-gate flaked on the SAME fixture-email pattern (`register-audio-segment-action` `seedActiveSession` adminUser email). (3) **`auth.setup.ts` timed out** (signout/`/api/auth/csrf` `Unexpected end of JSON input`) → blocked ALL 163 wb-regression specs → **`wb-session-lifecycle` (our WS-T #7 fix) UNVERIFIED this run**; this is a RECURRENCE of the known harness-health flake (queue § (c)), now gating the entire relay. **Conclusion:** the test INFRA (fixture email uniqueness + no per-test cleanup + flaky auth.setup) — not product code — is what blocks "trust the suite wholesale" + merge-gate #1. Elevates **Tranche D jest-isolation + auth.setup hardening** to highest-leverage confidence work. |
+| **🟥 HARNESS-HARDENING result (2026-07-06, [exec run](2f615c58-260f-4962-aca5-686cb2cacb12)) — partial + a NEW headline finding** | **Committed `3cb9a7b`** (shared globally-unique `uniq()` helper `src/__tests__/helpers/unique-test-token.ts` → 28 files; email-collision class GONE) + **`8a381ce`** (auth.setup erasure-admin leg now uses NextAuth **API-credentials** login, not flaky UI-signout — deviation from the diagnosed `clearCookies()` which itself hung on `/setup-required`; API-login matches parent/learner legs, verified 3×, auth.setup passes ~7.7s). Both pushed. **TWO open problems, NEITHER caused by these test-only changes:** (1) **jest `--workers=1` still can't hold 2 consecutive greens** — email red gone, but a SECOND isolation class remains (~1 flake/run, different DB-integration test each time: upload-outbox, share-audio-proxy, erasure-lifecycle, whiteboard-public-concat-audio, claim-setup — consistent with the diagnosis's un-done option (ii) "no per-test DB cleanup"). (2) **🚨 relay now RUNS and shows 22 HARD wb-regression failures + 14 flaky** (124 pass / 4 skip); `wb-session-lifecycle` itself = 48 pass/1 skip (4 flaky-passed-on-retry, WS-T #7 fix holds). These 22 were **MASKED** for an unknown period because auth.setup aborted all 163 specs — so the merge-gate relay has NOT been green. **Provably not from this session:** email fix is jest-only (can't touch Playwright specs); auth.setup passes (124 specs ran). ⇒ 22 reds are **pre-existing-masked and/or environmental** — under triage. |
+| **22-red triage DONE ([classify run](88c2d0a2-eb37-46ec-a165-c6d20184b47e))** | **~65-75% ENVIRONMENTAL** (dev-server exhaustion over the 20-min serial marathon: log full of `ECONNRESET`, blob/transcribe 500s, ffmpeg-unavailable, `webpack.cache ENOENT`; 10/22 share the SAME `wb-session-review-mode`-never-renders-after-End symptom; smoke-workspace 2 = login `waitForURL` stalls). **NOT a branch-wide functional regression.** But **6 specs have concrete assertion failures** worth isolated confirmation, 2 on fragile surfaces: `wb-end-from-roster` (#9 `endedAt=null` after finalize — END-SESSION), `wb-tutor-recording-mute` (#19 gain 1≠0), `wb-review-overlay-3paths` roster-VAD (#17 "No audio" shown when VAD seeded), `wb-wave5-polish` item13 (#20 pill "Solo rehearsal" vs `/live/i` — LIKELY STALE ORACLE), `wb-e2-apply-remote-pdf-stroke-leak` (#7 fingerprint invariant false — WB SYNC), `audio-upload` dropzone (#1 hidden). |
+| **🟥 6-spec isolated re-run DONE ([run](62b75c67-aa14-492f-a176-5b83c7d513f2)) — DEFINITIVE** | Fresh dev server per spec, `--workers=1`. **2 CONFIRMED REAL bugs** (deterministic, fail initial+retry — both FRAGILE surfaces, STOP before fixing): **(A) `wb-tutor-recording-mute` #19 — CONFIRMED REAL ([root-cause 81813fa3](81813fa3-b908-4363-8a48-600387a70c50)).** Mute BEFORE audio graph ready leaves recording-branch gain=**1** (expected 0) → tutor recorded at full gain when they expected muted. Root cause: WS-I mute contract lives at hook layer (`tutorRecordingMutedRef` + `useAudioRecorder.ts:1136`), but real UI path (`WbTopBarMicControl.tsx:63` awaits `onAcquireMic()` before `onToggleMute()`) delivers mute intent only via an async effect (`WhiteboardWorkspaceClient.tsx:2582`), while mount `acquireMic` finishes during the await and graph init hardcodes gain 1 (`mic-recorder-audio.ts:387`) with ref still false. **Branch-introduced (WS-I `f748ef7`, NOT on master — master has no recording mute gate at all ⇒ not Sarah-facing today), but means WS-I is INCOMPLETE for pre-start mute (a real completeness gap before WS-I merges).** Fix (fragile): synchronous `setTutorRecordingMute` on the mute click (not effect-only) and/or reorder toggle-before-acquire; optional `createMicAudioGraph` init param; add workspace-bridge DOM test. Composer step-back plan → Sonnet review if changing acquire ordering; do NOT merge without green `wb-tutor-recording-mute.spec.ts`. **(B) `wb-e2-apply-remote-pdf-stroke-leak` #7 — REFINED by root-cause ([83b45842](83b45842-d250-4c37-99fa-ffb4a661a3ad)): NOT a confirmed product bug.** The `fingerprintActive=false` (L159) failure is a **stale/mistimed TEST ORACLE** — the fingerprint is cleared by design once PDF import settles, so `false` is correct steady state; product guard (`ef5fb1a`) is logically sound but the spec never reaches its real `__WBX_INJECT_APPLY_REMOTE__` oracle (fix-a unproven, not disproven). **Branch-introduced (spec + fix both in `ef5fb1a`, NOT on master ⇒ not Sarah-facing).** L146 RESOLVED ([fda8a070](fda8a070-3faa-423b-a41e-43fa877d711f)): canonical guard spec `wb-e2-pdf-stroke-leak.spec.ts` passed **3/3 isolated** (fresh server each) → NO real onChange stroke leak; L146 was intermittent test-setup timing. **⇒ Bug B is ENTIRELY test-only** (guard/apply-path sound). Fix = realign `wb-e2-apply-remote-pdf-stroke-leak.spec.ts` (Composer, test-only: inject during fingerprint window / drop mistimed steady-state L159 check). **1 STALE ORACLE** (test-only): **`wb-wave5-polish` item13 #20** — expects `/live/i` but product correctly shows **"Solo rehearsal"** during solo grace (verified vs `lifecycle-machine.ts:627` + its unit test); oracle should assert "Solo rehearsal"/"Recording". **3 ENVIRONMENTAL** (pass in isolation): #1 audio-upload dropzone, #3 review-overlay roster-VAD, #9 wb-end-from-roster `endedAt`. **⇒ FINAL tally of 22 relay reds: exactly 1 REAL product bug (A, mute-gain — branch-only WS-I gap, confirmed [81813fa3]); Bug B = test-only (L159 stale oracle + L146 test-timing, guard proven sound 3/3); stale oracle #20 FIXED (`0118359`); ~18 environmental (marathon exhaustion).** Net: the relay-unblock surfaced ONE genuine product defect (WS-I pre-start mute), and it's not on master. |
+| **Next action(s)** | **✅ F2a DONE (`13c7522`).** **🎯 IMMEDIATE — F2b, Andrew approved attended-run 2026-07-07 (do this first in the fresh chat):** run the first live sharded relay validation. Command: `npm run test:wb-sync` (or `node scripts/wb-relay-shard-run.cjs`; run `node scripts/wb-relay-shard-run.cjs --manifest-only` first to eyeball the 6-shard split). **Preconditions:** Docker relay :3002 + Postgres :5432 UP; **NEVER free/kill :3002** (only :3100/:3101). **Watch for:** (a) each shard gets a FRESH :3100 dev server (proves no marathon exhaustion — the whole point), (b) isolation re-run classifies REAL-FAIL vs ENV-FLAKE correctly, (c) **blob-output caveat** — if `merge-reports` finds no zips, fix the per-shard blob env-var names (`PLAYWRIGHT_BLOB_OUTPUT_DIR/NAME`) in `wb-relay-shard-run.cjs`; the gate VERDICT (shard exit + isolation) is unaffected. **Expected 1 real red:** `wb-tutor-recording-mute` (Bug A, WS-I pre-start mute). **Then F3 (Bug B — apply-remote spec realignment; author + red→green IN this same relay session, test-only, Composer)** → then **Bug A** (fragile; plan-mode → Sonnet 5-axis → fix; Andrew GO given; green `wb-tutor-recording-mute.spec.ts` = merge bar) → then **Tranche E** (P2-WB-2 → P3-J1..5). **F1 jest-isolation-class-2:** heavy straggler-elimination pass **DEFERRED** (tracked in BACKLOG + GATE/HARNESS § (f)); correct fix = await/mock all fire-and-forget DB paths across ~45 integration suites, THEN per-suite/per-test cleanup works; medium alt = scoped `afterAll` on aggressive-deleter suites only (`note-and-share.test.ts`, erasure-lifecycle, student-crud cascade deletes). **Merge-gate jest:** `--workers=1` + retry; any RED must be re-run in isolation and classified per standing doctrine rule (6) before merge. **Still owed pre-master (gated):** Bug A WS-I pre-start mute fix (Andrew go; fragile surface), Bug B apply-remote spec realignment (test-only), A4 WS-X relay red/green (deferred), WS-T #9 outbox self-heal (design-first), Tranche C WS-G-A poll. Docker relay :3002 + Postgres :5432 UP. |
+| **Open Andrew-confirms** | Known-issues in-app page [`89d8d02`](https://github.com/Arangarx/tutoring-notes/commit/89d8d02) — **tone/copy sign-off** + remaining content calls (WS-I/WS-N inclusion, WS-O minor-ness). **RESOLVED 2026-07-05:** WS-G concat-lag → **OMIT** from the Sarah-facing page. **Governing principle (Andrew):** *don't call attention to a transient unless it's a bug we intend to fix* (concat-lag is being fixed by WS-G-A → not a standing issue → omit). **WS-U13-a likely MOOT:** in-person fix `3bf3a7e` starts recording on Start w/o a peer, so in-person no longer sits in `awaiting_first_participant` → the "Waiting for your student…" copy WS-U13-a targeted is unreachable for in-person (confirm-and-close, not pick-wording). **WS-P O3 (FYI):** `endingState==="error"` keeps deferring reload; unmount clears — flag if disagree. Prior standing: map/reduce wording sign-off; SMOKE-PRIV-2; VERIFY-ACCT-1; **Vercel Skew-Protection dashboard toggle (Andrew action).** |
+| **🟡 A4 WS-X relay RED → verdict SPEC/SEAM (~90%), fix (a) UNPROVEN (2026-07-05)** | `wb-e2-apply-remote-pdf-stroke-leak.spec.ts` **RED 0/3** ([run](a1f7ec5b-11c6-440d-bdfc-dc8bb0e7f758)). **Root-cause ([verdict](05e8b160-af6e-46d7-985b-3ceae9d62b14)): shipped fix `ef5fb1a` (fix (a) applyRemote fingerprint-guard) NEITHER proven nor disproven** — spec dies at preconditions, never reaches the `__WBX_INJECT_APPLY_REMOTE__` oracle. **(1) Spec mistimed (~95%):** L159 checks `fingerprintActive===true` AFTER import UI settles, but Excalidraw's onChange clears the fingerprint by design (WWC L4678) → `false` is expected steady state. Spec (authored WITH `ef5fb1a`) dropped WIP `5d80ea8`'s pre-armed `releaseGuard`-synchronous injection for post-import `page.evaluate` which can't observe an active fingerprint. Realign: restore synchronous-injection timing / add `__WBX_ON_GUARD_RELEASE__` seam; split steady-state oracle into `wb-e2-pdf-stroke-leak.spec.ts`. **(2) L146 ~60% SEPARATE onChange-path leak** (live board-3 `line` on PDF board pre-injection, NOT tombstone artifact — `getSceneElements()` excludes deleted) — orthogonal to fix (a); if real = genuine BUG-3 recurrence → needs own instrumented steady-state run. **WS-X = most fragile surface + multi-attempt history → NO blind 3rd fix; both parts = attended + careful (Andrew + Sonnet on any product seam).** **🅿️ DEFERRED per Andrew 2026-07-05 to a dedicated attended session / design pass** (order: instrumented steady-state run to settle the L146 onChange-leak question FIRST → then realign the apply-remote spec to actually prove fix (a)). **§6 WS-X proof NOT discharged; WS-X NOT proven.** |
+| **A2 WS-P fix — ✅ DONE (5-axis SHIP)** | Prod-inert PW-gated reload seam in `triggerDeployReload()` (`capture-defer-registry.ts` L47-52) + spec tidy (dropped redundant `Location.prototype.reload` patch) — [impl](d4b5c4a3-fa52-4352-8083-18556e782c6a). **A2 Playwright PASSES 2/2** (confirms WS-P reload path genuinely fires — seam verdict validated, NOT product bug). tsc clean; 25/25 deploy jest. **Sonnet 5-axis = SHIP, no fixes** ([review](bc6ca5be-4182-432f-a239-ffa4269a4949)): prod-inert (build-time gate; `location.reload()` unconditional), no security surface, test now structurally false-green-proof (flag set by product, not test). **COMMITTED [`4b085db`](https://github.com/Arangarx/tutoring-notes/commit/4b085db). §6 A2 proof DISCHARGED.** |
+| **WS-T #8/#9 bug context (P1-WB-8)** | **✅ WS-T #8 FIXED [`a37e9b3`](https://github.com/Arangarx/tutoring-notes/commit/a37e9b3) + PUSHED (2026-07-06).** Option B 3-state honest overlay: (1) `hasAudio` → "▶ Replay session"; (2) `!hasAudio && eventCount>0` → CTA + `wb-review-no-audio-note`; (3) nothing → `wb-review-no-recording`. Sonnet 5-axis = SHIP [sa](cfc78841-f623-493b-95b5-86ccc90107c2). jest 8/8; relay 6-pass/1-skip (gate no-VAD stays fixme=WS-T #9). **MINOR follow-up (verify-not-fix):** roster no-VAD state-2 branch possibly test-unreachable — reconcile if needed. **✅ WS-T #9 gate-IDB-crash investigation [sa](2094ba5a-4669-4ace-9d08-0d9353a3c204) DONE (root-cause):** crash **DOMINANTLY test-harness poison** — spec helper `countUploadedTutorMicOutbox` (+ `wb-end-from-gate.spec.ts:76-85`) opens `tutoring-notes-upload-outbox` v1 WITHOUT `onupgradeneeded` → empty-v1 DB poisons subsequent product open; intermittency = shared Playwright IDB. **Real product fragility (narrower):** `upload-outbox.ts` lazy schema assumes first opener runs `onupgradeneeded`; gate-only End is first opener (no mount) → any v1-empty outbox DB bricks gate/roster finalize. **Fix (design-first, DEFERRED):** version-bump self-heal in `upload-outbox.ts openDb` (additive, NEVER drop rows — Pillar 2) + gate finalize try/catch + de-poison test helpers. Store: `tutoring-notes-upload-outbox`/`rows`/v1. **WS-T #7 (`d9a6c4d`):** 4 pre-existing `wb-session-lifecycle` reds, triage owed before master-cut. |
+| **⚠️ Relay re-run gotcha (2026-07-05, learned the hard way)** | **NEVER kill/free port :3002** to unblock a Playwright webServer — :3002 is the **persistent Docker relay / Docker backend pipe**; killing its process wedges Docker Desktop (needs manual restart) AND takes Postgres down. Correct pattern: **leave :3002 alone**, use `$env:CI='1'` (fresh webServer lifecycle w/ `reuseExistingServer` off) or only free dev-server ports **:3100/:3101** between serial runs. Re-dispatch A2→A3→A4 with this constraint after Docker is healthy. |
+| **Uncommitted / unmerged** | Branch **`wb-wave5-polish`** @ tip [`13c7522`](https://github.com/Arangarx/tutoring-notes/commit/13c7522) (F2a sharded runner), worktree **`tutoring-notes-polishwt`**; tree **CLEAN**, **fully pushed (0 ahead / 0 behind origin)**. **NOT merged** to `v1-redesign`/`master` (Andrew hard stop). Failed F1 truncate attempt preserved in **`git stash@{0}`** (recoverable; not applied). **Merge-gate proofs:** A1 `next build` ✅, A2 WS-P defer-reload seam ✅, A3 in-person relay ✅; **A4 WS-X relay OWED/deferred; full sharded `test:wb-sync` (F2b) OWED on integrated tip.** |
 
-**Strategic posture (Andrew 2026-06-12, market-review thread):** De-emphasize **publicity-driven re-sequencing** — existing backlog is **~1 month from complete**; remaining work is **re-doing previously-solved problems + validation, not inventing**. Market-analysis PDF + [strategic review companion](../research/market-analysis-strategic-review-2026-06-12.md) committed ([`f885d8a`](https://github.com/Arangarx/tutoring-notes/commit/f885d8a)); its sequencing open-questions (move-X-ahead-of-Wave-6 for pitch optics) are largely **moot** under the ~1-month horizon. **What survives the filter:** (1) **notes _quality_** (not notes-shipped) is a genuine product-quality bar — bad notes that merely *exist* still refute the core wedge; (2) **positioning language** — when we market/pitch, lead with "the session becomes structured, searchable memory" (the moat) + compliance/session-log differentiation, not "we have a whiteboard"; coexist-with-Wyzant (don't trigger anti-disintermediation during pilot). **CRITICAL — reliability is NOT cleared:** the hardest WB problems were solved in prior implementations (so not *novel* risk) BUT WB wiring is **mid-re-hookup** — **two-way sync, student-on-same-board-different-mode, save segmentation, and same-WB-page notes review are all unvalidated/unfinished**; **Gate A5/A6 squarely open.** The de-emphasis applies to *pitch-driven feature sequencing*, **NOT** to reliability validation (the market review's #1 point: a *broken* whiteboard is worse than Zoom+OneNote).
+**Autonomy posture (2026-07-05):** **LIMITED** — proceed unattended only on safe non-fragile work (jest-isolation, state/docs, pure-jest batches). **Park** anything fragile/gated for Andrew.
 
-**🧭 Experience-Driven Wedge program (defined 2026-06-12):** A multi-turn strategy brainstorm **refined the compass** (refinement, NOT pivot — original sequencing was market-research-aligned and remains so). The wedge is now named: **experience-driven competition** — WB + reliability = **ground floor (a GATE, earns no applause but blocks everything)**; the WIN = an **accreting, honest, transparent, seamless** experience the **tutor first** (then parent/student) can't imagine working without. **Founding principle (supersedes all): no dark patterns, total honesty + total transparency** — engagement claims are *derived from evidence* with drilldowns; a claim with no backing cannot render. Program: `~/.cursor/plans/experience-driven_wedge_ae2776e1.plan.md` — **Phase 1** WB reliability floor → **Phase 2** continuity engine V1 (tutor carryover loops + "would you agree?" three-state confirm) → **Phase 3** note-quality (the moat) → **Phase 4** first-party learner-type-keyed instrumentation. Engagement/dopamine + parent progress arc + marketplace = **design-compatible-for now, NOT near-term scope**. Full rationale (triple-moat, durability A/B, transparency-as-invariant, deliverability discipline, tutor-first/org/marketplace timing): [continuity-wedge brainstorm](../research/continuity-wedge-brainstorm-2026-06-12.md). **Cadence: rolling-wave** — only the next phase gets detailed; deep-planning ahead is wasted (Andrew + orchestrator ratified). **TODO (out of plan mode):** elevate the founding principle into `AGENTS.md`/a rule.
+**Andrew decisions ledger (2026-07-06):** approved Tranche E → then chose fix+baseline → then harden-now → then root-cause-both-bugs → then swap → **(post-swap) approved Tranche F infra-first:** F1 jest-isolation-2 → F2 relay-shards → F3 Bug B (test-only); **Bug A = GO** with plan-mode design → Sonnet 5-axis → fix (green `wb-tutor-recording-mute.spec.ts` = merge bar); then resume Tranche E (P2-WB-2 → P3). **F1 scope decision (Andrew, Option A):** salvage good test-only fix(es), revert truncate, **DEFER** heavy jest-isolation as tracked debt, keep merge-gate jest at `--workers=1`+retry → **F2 relay-shards** then Tranche E. **(2026-07-07) F2a built+committed+pushed (`13c7522`, orchestrator-reviewed); Andrew approved: run the attended sharded `test:wb-sync` validation NOW (F2b) + swap to a fresh chat.** F2b is conductor-tier Composer/Sonnet (known-loop attended validation, not Opus).
 
-**Hard-won lesson — CSS `@layer` cascade (RESOLVED 2026-06-12):** Root cause of multiple "unreadable text" bugs: legacy base CSS (`src/app/globals.css` element rules + `src/styles/typography.css`) is **entirely unlayered**, so it beats Tailwind `@layer utilities` regardless of specificity — silently overriding component token/utility colors. One-off fixes landed: `.label-mono` eyebrow → `@layer base`/`:where` + measured `--brand-eyebrow` ([`9783e42`](https://github.com/Arangarx/tutoring-notes/commit/9783e42)); `.heading`/`.ai-prose` rogue `color` stripped so brand-card headline utility wins ([`8c173e2`](https://github.com/Arangarx/tutoring-notes/commit/8c173e2), 10.9:1/6.6:1); eyebrow render flip ([`3ad5a62`](https://github.com/Arangarx/tutoring-notes/commit/3ad5a62), 10.5:1/7.3:1); global `label {}` wrapped in `@layer base` ([`25e3050`](https://github.com/Arangarx/tutoring-notes/commit/25e3050) — CheckboxField centering + every shadcn `<Label>` app-wide). **Systemic end-state** (wrap ALL legacy base CSS in `@layer base`) logged to [`docs/BACKLOG.md`](../BACKLOG.md) under Component-duplication audit (Gate A1) — **not yet done**.
+**✅ F1 RESOLVED-via-defer (2026-07-06, post-swap) — global per-test TRUNCATE mechanism FAILED; Andrew chose Option A.** Diagnosis ([b638f945](b638f945-7db5-4ac6-88f0-c3c3a93a3497)) recommended a global `afterEach` `TRUNCATE ... CASCADE` on `tutoring_notes_test`; implementation produced **~40 failed suites/run × 3** consecutive `jest --workers=1` runs (vs ~1-flake baseline) — `40P01` deadlocks + FK/"Engine is not yet connected" races. **Reframed root cause:** TRUNCATE's `AccessExclusiveLock` collides with **in-flight fire-and-forget async DB work that outlives test bodies** (same stragglers as `Cannot log after tests are done` + `CostEvent_..._fkey` leaks) → *any* between-test cleanup races them. **Correct fix (deferred):** eliminate stragglers (await/mock all fire-and-forget DB paths across ~45 integration suites), THEN simple per-suite/per-test cleanup works. **Medium alt:** scoped per-suite `afterAll` on aggressive-deleter suites only (`note-and-share.test.ts` unscoped `deleteMany`, erasure-lifecycle, student-crud cascade deletes). Failed attempt in `git stash@{0}` on `wb-wave5-polish` ("F1 truncate attempt (FAILED...)") — `reset-test-database.ts` + `jest.setup-db-cleanup.ts` + `jest.config.ts` wiring + `note-and-share.test.ts` cleanup removal (NOT committed). **Salvaged [`647ec35`](https://github.com/Arangarx/tutoring-notes/commit/647ec35):** transcription-worker extract-chunk mock + microtask flush only. **Dropped:** upload-outbox observation-timing (5000ms wait = Jest timeout; T1+S1 never appeared; not shippable). Baseline restored; tree clean @ [`647ec35`](https://github.com/Arangarx/tutoring-notes/commit/647ec35).
 
-**⚠️ Pre-existing bug (unchanged):** `test:wb-sync` jest half: `sync-client.test.ts › broadcastSignal bypasses the scene throttle` fails deterministically (expects 1 broadcast, gets 2). **`git diff 300ef0b HEAD` for `src/lib/whiteboard/**` is EMPTY** → pre-existing, NOT redesign regression. Route to WB/sync (Phase 4a live-AV) thread. Playwright sync invariants green.
+**Worktree discipline:** execute on **`tutoring-notes-polishwt`** / **`wb-wave5-polish`**. Default checkout `tutoring-notes` is on `v1-redesign` — do not use it for wave-5 work.
 
-**Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware.
-
-**Hard-won lesson — RSC cookie-write no-op masked by fail-closed catch (2026-06-14, 2FA remember-device):** The trusted-device login-skip silently never fired in prod despite green jest. Root cause: it re-minted the session via `cookies().set()` **inside a Server Component page render**, which **throws in Next 15** ("cookies only modifiable in a Server Action / Route Handler") — and that throw was **swallowed by the feature's own fail-closed try-catch**, so the skip just returned false forever with no error surfaced. Jest could not reproduce it (no RSC cookie-write restriction in the test env) → same class as the jsdom layout blind-spot. **Rules:** (1) **never write cookies / mutate auth session from an RSC render** — only Server Actions, Route Handlers, or middleware; a page that needs to set a cookie must redirect to a handler. (2) A **fail-closed catch can hide a wiring bug as "working safely"** — when a security/skip path can fail closed, add a test that asserts the SUCCESS path actually fires (cookie set on the response), not just that failure denies. (3) Verify auth cookie/session behavior on a **real runtime** (Route Handler test or live preview), never jest alone.
-
-**Hard-won lesson — tombstone resurrection via non-deleted reconcile baseline (2026-06-18, wb-unify engine fix):** Tutor `applyRemoteToCanvas` built its reconcile baseline from `getSceneElements()` (= Excalidraw non-deleted elements only). Erased/undone strokes leave `isDeleted:true` tombstones in the full scene; when those tombstones were absent from the baseline, a student's stale broadcast could resurrect deleted elements ("flash then reappear"). **Rule:** any remote-apply reconcile path that merges against local state must use `getSceneElementsIncludingDeleted()` (or equivalent full-scene including tombstones), not the visible-only subset. Andrew's "force-sync" hypothesis was the right mental model.
-
-**Hard-won lesson — reused MediaStream id blocks video remount on reconnect (2026-06-18, wb-unify A/V fix):** On peer reconnect, `applyRemoteTrack` reused the same `MediaStream` object. React keyed `<video>` on `stream.id` → same id → no remount → black/frozen tile until a manual window resize forced layout. **Rule:** on video-track re-arrival after disconnect/rejoin, wrap tracks in a **fresh** `MediaStream` so `videoKey` changes and `AVTile` remounts; proactively reset stale streams on `onPeerLeave` / `rejoin-detected` before re-adding the peer.
-
-**Hard-won lesson — mobile backgrounding must not trigger full mesh rebuild (2026-06-18, wb-unify A/V fix):** `onPeerLeave` reset `peerConnectionState` and called `rebuild()` on transient mobile disconnects (screen-off / backgrounding) — false "foregrounded disconnects" that tore down healthy peers. **Rule:** deliberate leave vs transient suspend are different events; do not full-rebuild the mesh on backgrounding churn. Complement with wake-recovery reconnect on `visibilitychange`/`pageshow`. Validated on **Android** student (Chrome-Blink); iOS student path still **untested**.
-
-**Hard-won lesson — doc-heavy merges into `v1-redesign` produce add/add conflicts (2026-06-18, merge `f66aa4b`):** Long-running `v1-redesign` accrues docs-only commits while feature branches accrue their own handoff docs (smokebook, plan, STATE, BACKLOG) → merge hits **add/add** conflicts on the same paths. **Rule:** resolve by **union**, never blind `--theirs`/`--ours` — preserve Andrew's hand-entered smoke notes AND folded 5-axis blockers. Evidence @ `f66aa4b`: P2 smokebook had notes only on feature side; P3 had 5-axis blockers on `v1-redesign` + Andrew's 2026-06-17 notes on feature side — **both** required.
-
-**Hard-won lesson — flag-gated feature + test-injected flag = synthetic green (2026-06-17, P2 student shell):** The new student shell passed every gate incl. `test:wb-sync`, yet on Andrew's smoke students still hit the LEGACY page. Root cause: the real route `/w/[joinToken]/page.tsx` gated the new shell on `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL` (unset on Preview/prod), and `test:wb-sync` only reached the new path because Playwright's `webServer` injected the flag — so green proved the shell works WHEN flagged, never that the **default route** was wired. **Rules:** (1) a test that injects a feature flag does NOT prove the production default — add an assertion against the route's **flag-unset** behavior, or verify the entry-point file directly. (2) Orchestrator: treat "executor says the gate passed" with suspicion for **headline-route wiring** — open the page/route the user actually hits and confirm it renders the new thing; green alone is necessary, not sufficient. (3) For one-way migrations, prefer a **hard switch over a flag** (Andrew's call) — a flag you never intend to turn off is just an un-exercised legacy path waiting to ship by default.
-
-**Product decisions (Andrew 2026-06-14):** **(1) Live WB stays SINGLE-TAB by default** — no auto-opening the fullscreen board in a separate tab; the WB tab is the live recorder (audio + sync + upload outbox); separate tab raises accidental-close risk and — critically on iOS Safari (Sarah) — background-tab suspension wedges the AudioContext/recorder (the 1b wedge failure mode). Separate-tab = possible FUTURE desktop-only opt-in, never a mobile default (BL-WB-SEPARATE-TAB-OPTIN). **(2) WB wordmark → student detail page** — while a session is LIVE the wordmark is a guarded leave-session action (confirm / route via end-session), not free nav (BL-WB-WORDMARK-NAV).
-
-**Process directive (Andrew 2026-06-14) — preview links come in PAIRS:** when surfacing a branch's preview (chat or smokebook), give **two** links: (1) the **always-works per-branch Vercel branch alias** (`tutoring-notes-git-<slug>-...vercel.app`, fetched via Vercel MCP `list_deployments` → `meta.branchAlias` — never guessed) and (2) the **stable `https://preview.usemynk.com`** which lands Andrew already-logged-in *once he's repointed it to that branch* (preview-SSO via the usemynk.com subdomain cookie carry-over). The alias is the safe fallback + the only option during multi-branch smoke parties; the stable domain is the stay-logged-in convenience for single-branch focus.
-
----
-
-## Branch layering
-
-```
-master  ←  v1-redesign  (active base @ f66aa4b; P1 + wb-unify merged)
-          (Gate A +
-           re-smoke
-           held)
-
-wb-unify-stabilize — MERGED into v1-redesign @ f66aa4b
-v1-design-system   — MERGED into v1-redesign @ 36727ea
-                     (branch refs still exist as ancestors / historical)
-```
-
-- **`v1-redesign`:** **Active integration base** @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b) — P1 replay-in-frame + **wb-unify-stabilize** (Waves 1–3 + fix waves) merged. Smoke round 1 **8/8** @ [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db); design-system epic @ [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea). **Not yet merged to `master`** — held for Gate A + comprehensive re-smoke + Ship-to-Sarah gate.
-- **`v1-design-system`:** Historical — fully merged into `v1-redesign` @ [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea). Branch ref still exists locally/remotely as ancestor; no longer the active overnight layer. Branched off `v1-redesign` @ [`1456581`](https://github.com/Arangarx/tutoring-notes/commit/1456581).
-
-**Decisions ledger + sub-pass tracker:** [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — do not duplicate the full ledger here.
+**Wave-5 queue (authoritative backlog):** [`wb-wave5-execution-queue.md`](wb-wave5-execution-queue.md). **Andrew's smoke results:** [`go-to-sarah-master-cut-smokebook.md`](go-to-sarah-master-cut-smokebook.md) (do not edit).
 
 ---
 
@@ -74,333 +107,149 @@ v1-design-system   — MERGED into v1-redesign @ 36727ea
 
 Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGENTS.md): *"People need to use the app with confidence. Sarah is being patient, but that won't last forever."* Reliability bar: [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc).
 
+**Strategic posture:** Experience-driven wedge — WB + reliability = ground floor (GATE); the win = accreting honest tutor-first continuity. [`experience-driven_wedge_ae2776e1.plan.md`](../../../../.cursor/plans/experience-driven_wedge_ae2776e1.plan.md).
+
+**Active execution:** **go-to-Sarah master-cut** on `wb-wave5-polish` — durability pillars WS-A..D landed; P1/P2 fix trains largely complete; fragile-fix train done; parked at **merge gate** for Andrew hardware re-smoke + relay proofs. **Ship-to-Sarah gate** governs cut to `v1-redesign → master` (see below).
+
 ---
 
-## Current Wave focus
+## Branch layering
 
-**Active:** **`v1-redesign` @ `f66aa4b`** — **Waves 4–5** wb-unify chrome/polish (next thread; **not** merge-gating). Plan: [`wb-unify-stabilization-plan-2026-06-17.md`](wb-unify-stabilization-plan-2026-06-17.md).
+```
+master  ←  v1-redesign  (integration base; Wave 4 merged; held for Sarah gate)
+              ↑
+                    └── wb-wave5-polish @ 8ff2553  (active; worktree tutoring-notes-polishwt)
+                    ├── wb-av-reachability-detection-fix @ a962171  (isolated; PARKED)
+                    └── wb-wave5-ws-x-wip @ 5d80ea8  (WIP seam preserved; superseded by ef5fb1a on polish)
+```
 
-**Just closed:** `wb-unify-stabilize` Waves 1–3 + fix waves — merged @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b).
+| Branch | Role | Tip |
+|---|---|---|
+| **`v1-redesign`** | Integration base; not yet merged to `master` | [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3) |
+| **`wb-wave5-polish`** | **Active** — Wave 5 + master-cut plan + Part-2 test buildout | [`8ff2553`](https://github.com/Arangarx/tutoring-notes/commit/8ff2553) (code tip; state-doc [`b357ebb`](https://github.com/Arangarx/tutoring-notes/commit/b357ebb)) |
+| **`wb-av-reachability-detection-fix`** | SMOKE-BLOCK-1 reachability; Andrew parked 2026-07-03 | [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171) |
 
-**Integration base:** `v1-redesign` @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b).
+**Merge discipline:** single `merge --no-ff` to `v1-redesign` only after comprehensive both-theme master-cut smoke PASS. No interim merge. Ledger: [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md).
 
-**Parallel:** `phase1/wb-reliability-floor` desktop smoke; `docs/phase3-consent-model` merge (conflict-aware); Gate A→A6 + Ship-to-Sarah gate → `v1-redesign → master` cut.
+---
 
-### Waves 4–5 scope (next thread — from unify plan)
+## Wave-5 status (reconciled with execution queue)
 
-| Wave | Scope |
+### Landed on branch (do not re-do)
+
+| Area | Status | Tip / note |
+|---|---|---|
+| **Durability pillars** | ✅ WS-A (VAD + per-speaker + outbox mid-session register `234c6d7`), WS-B (~1s persist), WS-C (end→review), WS-D (resume-from-backend) | Overnight wave; relay @ `c2ca8f5` workers=4 honest |
+| **P1 fix train** | ✅ WS-I, WS-N/N4, WS-L, WS-G (`d20ea9a`), WS-K (`859f695`), WS-W (`610ee90`), WS-P 1/3/4 (`b386ef6`), **WS-P 2** (`9ca410e`→`2c7a7bd`, 5-axis'd) | Each fragile item 5-axis reviewed |
+| **P2 UX train** | ✅ WS-F, WS-H, WS-J (`1d23fc6`), WS-M, WS-Q copy, WS-R, WS-U-COPY (`dfe1bf4`), WS-U-FRAGILE 2.4+2.5 (`65f6a93`) | P2 train **COMPLETE** |
+| **Fragile-fix train** | ✅ In-person audio `3bf3a7e`; WS-X BUG-3 `ef5fb1a` | See § Fragile-fix outcomes |
+| **Known-issues page** | ✅ In-app `/admin/settings/known-issues` | `89d8d02`; FOR ANDREW: copy/tone |
+| **PART-2 pure-jest tranche** | ✅ P1-J1..J8, P2-J2/J3/J4, RW-B1/B3/B4 | `jest --workers=1` green (283 suites / 3062); parallel-DB flake debt |
+| **Blob-gate harness** | ✅ Phase 1+2 (`a1cc2bd`→`eb3fb5d`); build-green `2278013` | 5-axis SHIP-WITH-FIXES; SF applied |
+| **Master-cut smokebook** | ✅ Authored; CUT-3 filled | PARKED at merge gate |
+
+### Open / next tranche
+
+| Item | Priority | Notes |
+|---|---|---|
+| **WS-P deliverable 2** | P1 | Version poll + capture-defer registry; WS-P-A tutor-only defer + WS-P-B WWC read-only `useEffect` **acknowledged** — implementation queued |
+| **WS-G-A** | P1 polish | "Preparing seamless replay…" poll when concat async; default was ship core + defer UX |
+| **WS-A F-1** | Pre-merge SHOULD-FIX | Outbox register-failure attempt cap (~10 lines); own 5-axis before merge |
+| **WS-N5** | P1 follow-up | Resume FSM armed stroke window |
+| **WS-U-FRAGILE 1.2** | PARKED | Dead Start / SMOKE-BLOCK-1 reachability — hardest; peer-mesh surface |
+| **WS-U-FRAGILE 1.3 copy** | PARKED | In-person waiting copy mooted by in-person fix (no longer sits in `awaiting_first_participant`) |
+| **PART-2 relay/identity** | In flight | P1-WB-1..10, P1-ID-*, RW-B2, P2/P3 batches — **serial**, attended + Docker |
+| **Jest isolation** | Infra | `--workers=1` gate until dedicated pass; do not rush unattended |
+| **PART 3 slim smokebook** | After PART-2 | Human-only surfaces |
+
+**Standing rules:** new teeth specs → enroll in `wb-regression.testMatch` + `@wb-*` tag + `--list` verify. Merge-gate jest → `--workers=1` until isolation pass lands.
+
+---
+
+## Fragile-fix train outcomes (durable)
+
+### In-person audio — BACKLOG SMOKE-BLOCK-5 resolved
+
+- **Product call (Andrew):** treat IN_PERSON like solo — start tutor mic on Start, no remote peer required.
+- **Implementation [`9740b1b`](https://github.com/Arangarx/tutoring-notes/commit/9740b1b) + fold [`3bf3a7e`](https://github.com/Arangarx/tutoring-notes/commit/3bf3a7e):** additive `LifecycleInputs.inPersonMode?` + step-3b in `lifecycle-machine.ts` (after `!syncEnabled`, before `!networkOk`); `derivePresentation` guard; two WWC call-site lines. **No engine rewrite.**
+- **Teeth:** 4 jest units (authoritative); Playwright `wb-in-person-audio-start.spec.ts` in **`wb-in-person-unmasked`** project (port 3101, no solo env flag) — **not** `wb-regression` (solo flag masks → synthetic green).
+- **5-axis:** SHIP-WITH-FIXES; SHOULD-FIXes folded (`clock_start` log `mode=`, spec enrollment fix).
+- **Owed:** relay run for `wb-in-person-unmasked` at attended merge boundary.
+
+### WS-X BUG-3 — PDF stroke leak resolved
+
+- **Root cause:** stale scene merged via `applyRemoteToCanvas` during post-page-switch fingerprint window; v3 broadcast tombstone rebroadcast class (filter-isDeleted on broadcast was **rejected** — breaks erasure propagation).
+- **Fix [`ef5fb1a`](https://github.com/Arangarx/tutoring-notes/commit/ef5fb1a):** additive guard — `onTargetReadTime` also requires `!pageSceneSetFingerprintRef.current.has(targetId)` → falls back to clean `pageDataRef[targetId]` during window. Prerequisite infra from WIP branch (`pageSceneSetFingerprintRef`, stale-onChange rejection). **No v3 broadcast filter change.**
+- **Teeth:** `wb-e2-apply-remote-pdf-stroke-leak.spec.ts` + `__WBX_*` seams (prod-inert double-gate).
+- **5-axis:** **CLEAN** — no over-suppression; tombstone/erase path unchanged.
+- **Owed:** relay red/green at attended `test:wb-sync`.
+
+**Serialize rule preserved:** in-person, WS-X, and WS-P deliverable-2 all touch WWC — never two code-writers at once.
+
+---
+
+## Settled Andrew decisions (2026-07-05)
+
+Resolved FOR-ANDREW batch — treat as facts, not open questions:
+
+| Topic | Resolution |
 |---|---|
-| **4 — Chrome / responsive + residual wiring** | Role-distinct **local** laser colors (tutor vs student CSS/`laserColor`); responsive layout — verify inherited tutor responsive covers student desktop+mobile; fix residual overflow; mobile rearrange parity (smoke item 11). **Gate:** desktop + mobile student smoke. |
-| **5 — Polish** | Coral Exit button + exit icon; smaller "Match tutor's view" button + better sync iconography; design Q (a) highlight non-clickable student board tab?; design Q (b) student graph-expression entry on embeds?; **WB-STUDENT-VIEW-LOCK-WHEN-SYNCED** — block pan/zoom while synced (vs move-then-snap-back). |
-
-Plus **W1-3 backlog burndown** (11 IDs in [`BACKLOG.md`](../BACKLOG.md) § wb-unify W1-3 smoke triage) — image importer, student board tabs, mic-muted activity, etc.
-
-**Deferred / re-verify opportunistically:** student canvas stuck on "Loading scene…" (intermittent; [`BACKLOG.md`](../BACKLOG.md) — re-verify when join path is touched).
-
----
-
-## Latest committed state (`v1-redesign`)
-
-| Commit | Summary |
-|---|---|
-| [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b) | **Merge tip** — `wb-unify-stabilize` into `v1-redesign` (Waves 1–3 + fix waves; role-unified student shell) |
-| [`ae249f7`](https://github.com/Arangarx/tutoring-notes/commit/ae249f7) | Wake-recovery reconnect on student `visibilitychange`/`pageshow` (Android-validated) |
-| [`4a07cfa`](https://github.com/Arangarx/tutoring-notes/commit/4a07cfa) | Engine: tombstone baseline, per-page `history.clear()`, `captureUpdate:NEVER` gap |
-| [`f68053c`](https://github.com/Arangarx/tutoring-notes/commit/f68053c) | `phase1/wb-review-correct` into `v1-redesign` (P1 replay-in-frame) |
-| [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea) | `v1-design-system` epic into `v1-redesign` (119 files, build green) |
-| [`17ae7dd`](https://github.com/Arangarx/tutoring-notes/commit/17ae7dd) | Delete student button parity — box at rest (post-merge smoke fix) |
-| [`25e3050`](https://github.com/Arangarx/tutoring-notes/commit/25e3050) | Systemic `label {}` → `@layer base` (CheckboxField + shadcn Label app-wide) |
-| [`9783e42`](https://github.com/Arangarx/tutoring-notes/commit/9783e42) | Eyebrow WCAG — `.label-mono` cascade fix |
-| [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db) | Smoke round 1 complete — 8/8 branches merged |
-| [`950d13a`](https://github.com/Arangarx/tutoring-notes/commit/950d13a) | Recording/replay invariant matrix I1–I5/M1–M6 ratified |
-| [`1456581`](https://github.com/Arangarx/tutoring-notes/commit/1456581) | Platform→tutor metering = wall-clock (cash + tokens) |
-| [`300ef0b`](https://github.com/Arangarx/tutoring-notes/commit/300ef0b) | Frozen v1 component-library foundation (27 primitives) |
+| **IN_PERSON audio** | Start recording on Start without remote peer (`inPersonMode` boolean; LIVE→IN_PERSON mid-session toggle N/A — mode fixed at creation) |
+| **WS-K/G tuning** | No pre-flush; 5-chunk/2min debounce; full reduce; libopus re-encode; cap 400; duration free-ride |
+| **WS-G-A** | **POLL** — "preparing seamless replay…" when concat ready (follow-up, not blocking core) |
+| **WS-N4** | Defaults ratified; NO concurrent-tab End-block |
+| **WS-J** | Nearest/5 + `America/Denver`; IN_PERSON wall-elapsed incl. pauses; ≥1-increment min; prod migration apply = merge HARD STOP |
+| **WS-P-A/B** | Tutor-only defer; read-only-of-FSM `useEffect` in WWC approved → deliverable 2 unblocked |
+| **WS-X** | Fix (a) fingerprint-guard approved (filter-isDeleted reversal accepted) — **shipped `ef5fb1a`** |
+| **Known-issues** | IN-APP (Help/Settings); internal WS-* appendix excluded |
+| **`.env` → preview-dev** | Informational; prod verified clean for WS-K/G/J migrations |
 
 ---
 
-## In-flight overnight fan-out (Groups A–G)
+## Merge-gate items owed (before master)
 
-Surface agents **CONSUME** the frozen library and may **not** edit it (log gaps → consolidated foundation follow-up). Isolated worktrees (`best-of-n-runner`), branched off `300ef0b`, file-disjoint → safe true parallelism. Each merges `--no-ff` into `v1-design-system` with **`npx next build` exit 0** gate between merges.
+1. **`npm run test:wb-sync`** once on integrated tip — branch cumulatively touches whiteboard/apply-adjacent surfaces. **Component proofs (2026-07-06):** A2 WS-P defer-reload seam ✅ **DISCHARGED** (committed [`4b085db`](https://github.com/Arangarx/tutoring-notes/commit/4b085db)); in-person `wb-in-person-unmasked` ✅ **PROVEN** (A3); **WS-X `wb-e2-apply-remote-pdf-stroke-leak` ❌ RED (A4) — deferred, NOT proven**. Full-suite `test:wb-sync` still owed on integrated tip.
+2. ~~**`npx next build`** — build-surface touched (`next.config.ts` WS-P).~~ **✅ DISCHARGED 2026-07-05** — exit 0 on code-tip `2c7a7bd`/`21378c9` (no TS/ESLint errors; `/api/version` + `/admin/settings/billing` present). Re-run only if the tip advances with further build-surface edits.
+3. **WS-M** — two-device real-hardware A/V smoke (jsdom cannot verify tutor hears student).
+4. **WS-A F-1** — outbox register attempt cap (~10 lines) + own 5-axis (SHOULD-FIX deferred from `234c6d7` review).
+5. **Migrations** — WS-K/G/J additive nullable authored; applied on preview-dev only; **prod apply = Andrew greenlight** at cut.
+6. **Andrew hardware re-smoke** — master-cut smokebook [`go-to-sarah-master-cut-smokebook.md`](go-to-sarah-master-cut-smokebook.md).
 
-| Group | Scope | Notes |
-|---|---|---|
-| **A** | Public/legal/feedback: `/`, `/features`, `/privacy`, `/terms`, `/feedback` | Heavy LEGACY |
-| **B** | Parent share: `/s/[token]`, `/s/[token]/all`, `/s/[token]/whiteboard/[wsid]` | Faithful to parent-share mock |
-| **C** | Admin/tutor: students, settings, outbox, cost, operator lists | Mocks: student-list, detail, settings |
-| **D** | Account/parent: dashboard, children, **new parent consent-edit page** | |
-| **E** | Student: `/students/login`, `/join` → **waiting room (Gate A2)**, sub-options page | |
-| **F** | Scheduling | Visual-only per [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md); net-new, no mock |
-| **G** | WB phone-landscape bars-to-left | Sync-fenced; `npm run test:wb-sync`-gated; best-effort |
+**HARD STOPS:** merge to master; Neon/prod migrations; account reset; force-push.
 
-Auth pages (`/login`, `/signup`, `/account/*` auth, claim flow) already **V1** — minor polish only.
-
-**Whiteboard fence (do NOT touch in visual pass):** `src/lib/whiteboard/**`, `useLiveAV.ts`, `WhiteboardWorkspaceClient.tsx`, `StudentWhiteboardClient.tsx`, recording components, etc. Safe chrome boundary: `src/components/whiteboard/chrome/**` only (Group G exception).
+**Harness note:** Playwright workers 14→4 recommended (contention resolved at w=4 on `c2ca8f5`); not yet applied to config.
 
 ---
 
-## Foundation deferred library gaps
+## Ship-to-Sarah gate (governing)
 
-Surface agents need these; log for consolidated foundation follow-up:
+Andrew wants Sarah on `v1-redesign` once waiting room → WB → end is stable for tutor **and** student — backend pipeline included. Capture: [`sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](sarah-pilot-feedback-2026-06-16-orchestrator-report.md).
 
-- `AdminSidebarNav` composed component **not built** — use `AdminPageShell` `sidebar`/`sidebarWidth` props + §1A.8 patterns.
-- `FormattedNotesBody` / `RecapEditor` (B4) **not built**.
-- No `rounded-panel` Tailwind alias — use `rounded-[10px]` until config extends.
-- Legacy `.btn`/`.card`/`.container` still in `globals.css` — delete only after surfaces migrate.
-- `next-themes` dep pulled by shadcn CLI but unused — removable in cleanup pass.
-- 27 primitives in `src/components/ui/`; `Providers` mounts `TooltipProvider` + `Toaster` app-wide; `/admin/pending-approval` duplicate-nav fixed.
+**Confirmed gate items:** per-chunk notes only (no legacy monolithic); End/Continue never silently deletes recording; single-segment seek at every review entry; consent UI honesty (`CONSENT-HONESTY-SARAH-MERGE-BLOCKER`). Deferral ledger: [`pre-master-smoke-deferral-ledger-2026-06-16.md`](pre-master-smoke-deferral-ledger-2026-06-16.md).
+
+Sarah remains on production `master` until gate passes.
 
 ---
 
-## Recently ratified (on `v1-redesign`, 2026-06-11)
-
-### Recording/replay invariant matrix @ [`950d13a`](https://github.com/Arangarx/tutoring-notes/commit/950d13a)
-
-Canonized in [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md) § Recording & Replay Invariant Matrix (I1–I5/M1–M6). D3/D4 SUPERSEDED/CLARIFIED notes preserve audit trail.
-
-**Fix path B for replay:** build consolidation + restore native single-stream + defer-on-release scrub (M2); **don't polish the stitcher**.
-
-### Platform→tutor metering @ [`1456581`](https://github.com/Arangarx/tutoring-notes/commit/1456581)
-
-**Wall-clock** for both cash + tokens. Distinct from tutor→student billing (already settled). See [`docs/BACKLOG.md`](../BACKLOG.md) § Pricing; break-forgiveness = optional future grace layer.
-
----
-
-## Parked threads (after the redesign)
-
-| Thread | Notes |
-|---|---|
-| **Recording consolidation slice** | Fix path B implementing I1–I5/M1–M6 matrix |
-| **Map/reduce auto-notes ACCURACY** | Currently poor — own design+eval pass |
-| **Student-WB migration steps 3–9** | **Absorbed** by wb-unify merge @ `f66aa4b`; (c) KEEP hybrid + (e) self-view ON **resolved** @ [`71b2c3e`](https://github.com/Arangarx/tutoring-notes/commit/71b2c3e) |
-| **Learner-swap design** | Learner-scoped tokens, per-learner privacy/consent + notes finalization |
-| **VIDEO recording + replay** | Top post-smoke build candidate — designed, not built |
-| **A6-1 replay player (R1/R2)** | Multi-segment regression — dedicated fix thread |
-| **Live AV (X1)** | Tutor remote-video paint **resolved** @ P1 merge (bandaid); student A/V validated Android via wb-unify; **iOS student = zero coverage** |
-
----
-
-## Queued dispatches (post wb-unify merge)
-
-1. **Waves 4–5** wb-unify chrome/polish on `v1-redesign` (laser colors, responsive, Exit/Match-view polish, view-lock)
-2. **W1-3 backlog burndown** — 11 IDs from wb-unify smoke triage ([`BACKLOG.md`](../BACKLOG.md))
-3. **`docs/phase3-consent-model` @ `4f9dbcd`** → merge to `v1-redesign` (union-merge handoff docs; may conflict with P3 notes folded @ `f66aa4b`)
-4. Gate A→A6 burndown → comprehensive pre-master smoke (both themes) → `v1-redesign → master` cut
-5. Ship-to-Sarah gate items (notes path, end/continue, single-segment seek)
-6. Foundation follow-up for deferred library gaps
-7. Functional wiring: waiting room (A2), parent consent-edit (B2 Step 6), scheduler + Google OAuth
-8. Recording consolidation slice (fix path B); Map/reduce accuracy workstream
-
----
-
-## Smoke round 1 — COMPLETE (merged to `v1-redesign` @ [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db))
-
-> **Andrew — start here for next pass:** comprehensive re-smoke of **single merged `v1-redesign` preview** (full app). Per-branch smokebooks remain under `docs/handoff/` for reference; findings ledger: [`smoke-round-1-findings-2026-06-11.md`](smoke-round-1-findings-2026-06-11.md).
-
-| # | Branch | Merge commit | What landed + fix applied |
-|---|---|---|---|
-| 1 | `feat/component-dry-mechanical` | [`f6e2f23`](https://github.com/Arangarx/tutoring-notes/commit/f6e2f23) | Mechanical DRY consolidation — no visual change (smoke base). |
-| 2 | `feat/parent-create-learner` | [`8b196a5`](https://github.com/Arangarx/tutoring-notes/commit/8b196a5) | Parents create learners + child PIN login. **FIXED P1** (weak-PIN `123456` now rejected) + **P2** (username `no spaces` now rejected) via shared `src/lib/learner-credential-validation.ts` (claim + parent-create share it); root cause was missing client validation in `SetupLoginForm`. |
-| 3 | `feat/security-tier-b` | [`6395771`](https://github.com/Arangarx/tutoring-notes/commit/6395771) | Chunk-transcribe auth guard, upload sanitization. **FIXED S1** (consume path now deletes superseded reset tokens — closes race; "3 links open the form" is expected client render, only newest completes) + **SHOULD-FIX-2 option A** (`CRON_SECRET` server-side bearer on F&F chunk-transcribe). **NOTE (email):** password-reset emails send via LEGACY tutor realm using tutor's connected Gmail ("from Andrew" intentional); account-holder realm only stubs/logs — parent-facing email (claim/notes/AH reset) NOT wired for real send; email flows untestable on previews (preview→prod loopback). |
-| 4 | `feat/signup-waitlist` | [`f0b9667`](https://github.com/Arangarx/tutoring-notes/commit/f0b9667) | **Gate B1** — tutor approval gate. **FIXED W1/TFA1** (pending-approval ↔ 2FA-setup redirect loop: `/admin/pending-approval` now 2FA-exempt; predicates extracted to `src/lib/admin-routing.ts`; 429 was loop symptom; 20/min TOTP limit kept) + **W2** (signup button no longer ghosts on invalid email) + **W4** (deleted dup `/admin/waitlist` + nav link). |
-| 5 | `feat/wb-laser-sync` | [`6f861ea`](https://github.com/Arangarx/tutoring-notes/commit/6f861ea) | Tutor→student laser broadcast. **FIXED L1** (coral both sides: student-remote already coral; tutor-local Excalidraw-native red overridden via CSS since `DEFAULT_LASER_COLOR` is not API-controllable). **L2/L3 position DEFERRED** (confounded by old-vs-new-WB interface skew — re-smoke after WB interface unified). |
-| 6 | `feat/wb-end-session-review` | [`5922c6f`](https://github.com/Arangarx/tutoring-notes/commit/5922c6f) | **Gate A3** in-shell end-session review. **FIXED E1** (BLOCKER: End was navigating to old replay instead of flipping shell in-place — root cause was `revalidatePath('/workspace')` in `endWhiteboardSession` triggering RSC replacement that unmounted the shell mid-await; removed that call; de-theatered DOM test with real no-nav oracle). Reconciled cleanly with laser in `WhiteboardWorkspaceClient.tsx`. |
-| 7 | `feat/wb-replay-a6-slice` | [`e150e86`](https://github.com/Arangarx/tutoring-notes/commit/e150e86) | JSXGraph embeddables render in replay (graph fix verified in smoke). **R1/R2** (multi-segment player: audio not synced, plays past scrubber end, scrub restarts audio) is a **SEPARATE replay-player regression thread (A6-1)** — NOT fixed here. |
-| 8 | `feat/b2-consent` | [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db) | **Gate B2** consent schema/snapshot/claim Panel A, **DORMANT** behind `CONSENT_ENFORCEMENT` (default OFF; dormancy invariant confirmed = pre-B2 behavior). Reconciled B1 approval gate + B2 consent gate in `createWhiteboardSession` (order: approval → consent → Blob put). Schema has both B1 + B2 additions; both migrations coexist. |
-
-**Post-smoke top build candidate (NOT built overnight):** VIDEO recording + replay integration — designed, flagged for sequencing, deferred as riskiest/least-defined per Andrew ("riskiest last").
-
----
-
-## Open threads / carry-forward (from smoke round 1)
-
-> Finding IDs reference [`smoke-round-1-findings-2026-06-11.md`](smoke-round-1-findings-2026-06-11.md).
-
-### Before flipping `CONSENT_ENFORCEMENT`
-
-| ID | Thread | Disposition |
-|---|---|---|
-| **C1** | Consent denial surfaces to tutor as generic 500 "Error ID …" instead of actionable "consent not granted" | Must catch `ConsentError` at UI boundary |
-| **C2** | No parent UI to view/change consent (deferred B2 Step 6) | Build or defer past V1 |
-| **C3** | Claim page: login-setup above privacy; frame "Allow live sessions" as base contract | UX/copy pass |
-| **C4** | Consent×retention principle: if WB recording not consented, we cannot retain | Strongly-encourage + warn |
-
-### Dedicated fix / investigation threads
-
-| ID | Thread | Disposition |
-|---|---|---|
-| **R1/R2** | Replay multi-segment custom-player regression (A6-1) — audio not synced, plays past scrubber end, scrub restarts audio | Dedicated fix thread |
-| **X1** | Live video capture/display broken (won't turn on; student video tile never appears) | Dedicated investigation |
-| **L2/L3** | Laser + replay **position** | Re-smoke once tutor & student both run the **NEW** WB interface |
-| **X2** | **v1-design-application via shared components** | **COMPLETE** — merged into `v1-redesign` @ [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea) |
-
-### Polish / design backlog (see `docs/BACKLOG.md`)
-
-C5/N1 billable-minutes display · X4 echo-cancellation/capture-start · X5 student-initials UX · X7 button text color · P1 interactive PIN strength feedback
-
----
-
-## Open decisions — Andrew confirms
-
-### B2 parent privacy consent (`feat/b2-consent`)
-
-| Item | Status | Andrew action |
-|---|---|---|
-| **D-1** — `events.json` always uploaded; `allowWhiteboardRecording` gates **parent replay access**, not upload | Built — confirm in smoke | Confirm or override in [`b2-consent-smokebook-2026-06-11.md`](b2-consent-smokebook-2026-06-11.md) § Design decisions |
-| **D-2** — `ConsentRestriction` schema built; all-false defaults; **no child UI** in V1 | Built — confirm | Confirm child-narrowing deferred is acceptable |
-| **D-5** — Self-learners (`isSelfLearner`) auto-pass all consent | Built — confirm | Confirm adult self-learner bypass |
-| **When to flip `CONSENT_ENFORCEMENT=true`** | Not decided | Same dormant-then-flip playbook as `NOTES_AUTH_WALL` — pilot families must set consent at claim **before** production flip |
-| **Step 6 deferred** — parent per-tutor consent management `/account/children/[id]` + update route + tutor workspace toggle display | **Not built** | Schedule follow-up build or defer past V1 |
-
-### B1 tutor waitlist (`feat/signup-waitlist`)
-
-Deferred TODOs (not in overnight scope): REJECTED status, revocation UI, approval email, Google OAuth auto-provision, marketing-waitlist separation, pagination.
-
-### Security Tier B (`feat/security-tier-b`)
-
-**SHOULD-FIX-2 — RESOLVED (option A):** `CRON_SECRET` server-side bearer on F&F chunk-transcribe — merged @ [`6395771`](https://github.com/Arangarx/tutoring-notes/commit/6395771). See [`security-tier-b-findings-2026-06-11.md`](security-tier-b-findings-2026-06-11.md).
-
-### Other standing confirms
+## Parked / deferred (not blocking next tranche)
 
 | Item | Notes |
 |---|---|
-| **N-2 semantics** | Parent dashboard shows child notes regardless of share-link revocation (ownership-based access?) — awaiting confirm/override |
-| **A3 Phase B** | Visual polish for in-shell review deferred to Andrew post-smoke |
-| **Laser bidirectional** | Student wand → tutor deferred; tutor→student merged @ [`6f861ea`](https://github.com/Arangarx/tutoring-notes/commit/6f861ea) |
+| **E3 reconnect pill** | PARKED — conflicts with Andrew 2026-07-03 park of `a962171`; BUG-8/BUG-9 fragile A/V; needs hardware |
+| **Reachability branch** | `wb-av-reachability-detection-fix` @ `a962171` — revisit only if base at risk |
+| **WS-U-FRAGILE 1.2** | SMOKE-BLOCK-1 dead Start — peer-mesh/presence |
+| **Post-Sarah** | SMOKE-NOTES-2 live notes display; SMOKE-UX-3 ±10s scrub; perspeaker-C runtime wiring; eval harness |
+| **SEC** | `tutor-asset/route.ts` any-origin blob URL — pre-existing; backlog |
 
 ---
 
-### Overnight push 2026-06-11 — COMPLETE (smoke + merge to `v1-redesign`)
+## How we work (pointers)
 
-**Andrew directive (2026-06-11):** drive hard toward V1→master cut. Overnight wave **delivered 8 branches**; smoke round 1 triaged; **all 8 merged to `v1-redesign`** @ [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db).
-
-| Rule | Detail |
-|---|---|
-| **Branch discipline** | ✅ Each target on separate branch + smokebook/findings doc |
-| **Merge gate** | ✅ Andrew smoke → fixes on branch → `merge --no-ff` to `v1-redesign` (8/8 complete) |
-| **Not built overnight (smoke wave)** | VIDEO recording + replay; A2 waiting room; B2 Step 6 parent consent management UI; laser bidirectional; A6 multi-segment player regression fix |
-
-**Component reuse standard (ratified 2026-06-11):** [`V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.12, [`.cursor/rules/component-reuse.mdc`](../../.cursor/rules/component-reuse.mdc), `BACKLOG.md` audit. `feat/component-dry-mechanical` is the mechanical pass — smoke for no visual drift.
-
-### Pre-master gates — two-tier checklist (RATIFIED Andrew 2026-06-08)
-
-> **Canonical operational list** — `BACKLOG.md`, `RELEASE-ROADMAP.md`, and `v1-redesign-STATUS.md` cross-reference here.
-
-**Vocabulary:** **V1** = master cut (Gate A). **Release** = recruiting new pilots (Gate B era complete).
-
-#### Gate A — blocks master cut
-
-| # | Gate | Status (post smoke-round-1 merge) |
-|---|---|---|
-| A1 | Visual redesign + chrome + theme + component reuse | **MERGED** @ `36727ea` — full design-system epic on `v1-redesign`; systemic `@layer base` cleanup still in BACKLOG (Gate A1) |
-| A2 | Waiting room | **Visual shell merged** (Group E); admit/presence/`getUserMedia` wiring deferred to live-AV thread |
-| A3 | Pass-2 in-context end-session | **MERGED** @ `5922c6f` — Phase A functional (E1 fixed); Phase B polish deferred |
-| A3a | PDF page-tab indicator | **MERGED** to `v1-redesign` @ `c05d939` |
-| A3b | SR-04a video-tile sizing | **MERGED** to `v1-redesign` @ `c05d939` |
-| A5 | Live bidirectional sync completeness | **Partial** — tutor→student laser MERGED @ `6f861ea` (L1 fixed; L2/L3 position deferred); student laser deferred |
-| A6 | Replay fidelity + AV/timer sync | **Partial** — JSXGraph replay MERGED @ `e150e86`; 🔴 multi-segment player regression (R1/R2, A6-1) **not fixed** |
-
-#### Gate B — post-V1 / pre-release
-
-| # | Gate | Status (post smoke-round-1 merge) |
-|---|---|---|
-| B1 | Approval-gating / waitlist | **MERGED** @ `f0b9667` — W1/TFA1/W2/W4 fixed |
-| B2 | Parent privacy consent | **MERGED** @ `27ac5db` — dormant `CONSENT_ENFORCEMENT`; C1/C2/C3/C4 block flag flip |
-| B3 | Security Tier B | **MERGED** @ `6395771` — S1 + SHOULD-FIX-2 option A shipped |
-| B4 | Scheduling + calendar | Requirements captured @ `37c114e`; **visual-only IN FLIGHT** (Group F); wiring post-V1 |
-
-**Scope trap:** `Student.recordingDefaultEnabled` ≠ parent privacy consent. See `BACKLOG.md`.
-
-**Cross-domain email collision — RESOLVED (Andrew 2026-06-07):** one email = one account (Option A).
-
-**Open v1 requirements:** Theme-agnostic token-driven components (§2.11); single-source reuse (§2.12). **Notes-login cutover:** no grace — claim Sarah's pilot family before `NOTES_AUTH_WALL=true` at master. **Phase 1 notes-login: MERGED** @ `d3a9e8b`.
-
-**Component pass:** `v1-component-spine` MERGED. **`v1-design-system` overnight build** is the cohesive visual application pass.
-
-**Deferred reliability (slice-3 review):** S3 orphan DRAFT race, N1–N4 → `BACKLOG.md`.
-
----
-
-**Process directive — runbook legend (Andrew 2026-06-07):** every smoke runbook opens with `[x]` = PASSED; per-target `- [ ] PASS` / `- [ ] FAIL` verdict at end. Embed concrete check items inline.
-
-### ✅ Slice-3 save-bridge — Pass-1 rework MERGED (2026-06-07)
-
-**Pass 1 complete** @ [`0fa2363`](https://github.com/Arangarx/tutoring-notes/commit/0fa2363) → **MERGED `--no-ff` → `v1-redesign` @ [`3f62b58`](https://github.com/Arangarx/tutoring-notes/commit/3f62b58)**. Target A smoke PASS. B4 Save-model LOCKED.
-
-**Pass 2 (session-end UX — Gate A3):** **MERGED** @ `5922c6f` (Phase A; E1 fixed). Pass-1 INTERIM redirect still the fallback when `onSessionEnded` not wired.
-
-**DEFERRED — MUST NOT MISS:** native `confirm()`/`alert()` → in-site modals (component pass); notes quality / Regenerate thread.
-
----
-
-## Recording P1 Slice 3 — SHIPPED (on `v1-redesign`)
-
-Merged on `v1-redesign`. Map-reduce auto-notes, end-session sweep, manual transcribe button retired. See [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md).
-
----
-
-## Recording transport thread — CLOSED (2026-06-07)
-
-DB-as-queue + cron sweep ratified and shipped. Q1 `gpt-4o-mini-transcribe` PASS.
-
----
-
-## Known follow-ups (non-blocking)
-
-| Item | Notes |
-|---|---|
-| **`durationMs` null on Vercel** | ffmpeg probe in serverless — revisit with recording-clock work |
-| **Preview cron limitation** | [`PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §1.6 |
-| **Cost-event durability hardening** | Ratified, NOT BUILT — [`cost-observability-design-2026-06-06.md`](cost-observability-design-2026-06-06.md) |
-| **Sarah WB bugs (FROZEN)** | Ctrl+Z, copy-link, "Loading scene" — `BACKLOG.md` |
-| **VIDEO recording + replay** | Top post-smoke build candidate — designed, not built |
-
----
-
-## Standing ratified decisions (condensed)
-
-Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md). Platform→tutor metering = wall-clock @ `1456581`. Replay invariant matrix I1–I5/M1–M6 @ `950d13a`.
-
----
-
-## Parallel standing work (do not lose)
-
-| Thread | Status |
-|---|---|
-| **v1 design-system overnight (X2)** | **IN FLIGHT** — `v1-design-system` branch, Groups A–G fan-out |
-| **Identity / access** | Parent-create-learner + B1 + B2 **merged**; IAC-13 disconnect build open |
-| **Replay player (A6-1)** | R1/R2 multi-segment regression — dedicated fix thread |
-| **Live AV (X1)** | Tutor remote-video paint **resolved** @ P1 merge (bandaid); student A/V validated Android via wb-unify; **iOS student = zero coverage** |
-| **Phase 2 authed session chrome** | Notes page inside parent/child shell — post-overnight |
-| **Sarah forward-migration** | `feature/sarah-forward-migration-q6` parked |
-| **Master / pilot** | Sarah on `tutoring-notes.vercel.app` |
-
----
-
-## Pilot context (Sarah — 2026-06-06)
-
-[`sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md). Laser pointer (B9) merged @ `6f861ea`. **Apple Calendar integration** — Sarah's explicit scheduling request (captured @ `37c114e`).
-
----
-
-## Open questions still in flight
-
-| Question | Status |
-|---|---|
-| Two-way calendar sync (webhooks/subscriptions)? | **Unresolved** — see [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) |
-| Learner-swap design (d) | Awaiting Andrew |
-| Student URL keep vs retire (c) | **RESOLVED** — KEEP hybrid @ [`71b2c3e`](https://github.com/Arangarx/tutoring-notes/commit/71b2c3e) |
-| Student camera default (e) | **RESOLVED** — self-view ON @ [`71b2c3e`](https://github.com/Arangarx/tutoring-notes/commit/71b2c3e) |
-| Map/reduce auto-notes accuracy | Poor today — needs design+eval pass |
-
----
-
-## How we work (process — pointers only)
-
-- **Orchestration model:** [`AGENTS.md`](../../AGENTS.md) § "Model usage protocol"
-- **Dispatch boundary:** [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc)
-- **Merging (solo pilot):** smokeable branch → Andrew smoke → `merge --no-ff` into integration branch; WB sync → `npm run test:wb-sync`; build-surface → `npx next build`
-- **Overnight constraints:** one tree-writer at a time in main working tree; true parallelism = isolated worktrees; library FROZEN during surface fan-out
-- **Commits on Windows/PowerShell:** `.git/COMMIT_MSG_DRAFT.txt` + `git commit -F`
+- **Orchestration:** [`AGENTS.md`](../../AGENTS.md) § Model usage protocol; dispatch boundary [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc)
+- **Conductor tier:** Opus for fragile durability design + judgment; Composer 2.5 executes; Sonnet 5-axis on fragile diffs. **Fragile-serial** in one worktree.
+- **Merging:** smokeable branch → Andrew smoke → `merge --no-ff`; WB sync at merge boundary; build-surface → `npx next build`
+- **Smokebooks:** [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md); preview URL via Vercel MCP (never guessed)
+- **Process:** preview links in pairs (Vercel `branchAlias` + `preview.usemynk.com` when repointed); behavior tests to spec not code; swap chats ~60–70% context
 
 ---
 
@@ -409,21 +258,20 @@ Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recor
 Fresh orchestrator — read in order:
 
 1. [`AGENTS.md`](../../AGENTS.md)
-2. [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) (this file) — **HEAD + merge status + open threads**
-3. [`docs/handoff/overnight-v1-design-system-handoff-2026-06-11.md`](overnight-v1-design-system-handoff-2026-06-11.md) — **most current re: overnight run**
-4. [`docs/handoff/scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) — Group F scheduler requirements (visual-only tonight)
-5. [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) — frozen library catalog
-6. [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — V1 epic ledger
-7. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — before touching `handleEndSession`
-8. [`docs/handoff/b2-consent-design-2026-06-11.md`](b2-consent-design-2026-06-11.md) — B2 consent design (merged on `v1-redesign`)
-9. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
-10. [`docs/BACKLOG.md`](../BACKLOG.md)
-11. [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md)
+2. **This file** — HEAD first
+3. [`wb-wave5-execution-queue.md`](wb-wave5-execution-queue.md) — wave-5 backlog
+4. [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md) — executor spec
+5. [`part2-test-buildout-plan.md`](part2-test-buildout-plan.md) — Part-2 test batches
+6. [`docs/LIVE-AV.md`](../LIVE-AV.md) — before A/V / per-speaker
+7. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — before FSM/outbox/end-session
+8. [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md)
+9. [`docs/BACKLOG.md`](../BACKLOG.md)
+10. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
 
 ---
 
 ## History / audit trail
 
-Updated in place; `git log -p docs/handoff/ORCHESTRATOR-STATE.md`. Template: [`docs/handoff/orchestrator-state-template.md`](orchestrator-state-template.md).
+Updated in place; `git log -p docs/handoff/ORCHESTRATOR-STATE.md`. Heavy-restructure template: [`orchestrator-state-template.md`](orchestrator-state-template.md). Commit truth: `git log --oneline -30 wb-wave5-polish`.
 
-Deep history: `git log --oneline v1-redesign` and `git log --oneline v1-design-system`.
+**2026-07-05 crash recovery (resolved):** Andrew's machine crash zeroed loose ref `refs/heads/wb-wave5-polish` (41 null bytes); recovered via reflog to `970aa18`, no committed work lost. CRLF-flip artifact on `EndedUnsavedSessionsList.tsx` later reverted; tree clean.

@@ -16,6 +16,14 @@ export const CHIME_VOL_MAX = 1;
 export const CHIME_VOL_DEFAULT = 0.75;
 
 export const STORAGE_DEVICE_KEY = "tn-mic-device-id";
+/** Optional correlate when OEMs reuse `deviceId` across reconnects. */
+export const STORAGE_MIC_GROUP_KEY = "tn-mic-group-id";
+/** Learner-scoped mic device id — suffix is `LearnerProfile.id` (student live-A/V). */
+export const STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX = "tn-mic-device-id:";
+/** Optional group correlate for learner mic when OEM rows share a `deviceId`. */
+export const STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX = "tn-mic-group-id:";
+/** Learner-scoped publish-path mic boost (student live-A/V self-boost). */
+export const STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX = "tn-mic-gain:";
 /** Stored preferred camera (same semantics as mic device id). */
 export const STORAGE_VIDEO_DEVICE_KEY = "tn-cam-device-id";
 /** Optional correlate when OEMs reuse `deviceId` across multiple lenses. */
@@ -71,6 +79,121 @@ export function saveStoredDeviceId(id: string): void {
   }
 }
 
+export function loadStoredMicGroupId(): string {
+  const s = getStorage();
+  if (!s) return "";
+  return s.getItem(STORAGE_MIC_GROUP_KEY) ?? "";
+}
+
+export function saveStoredMicGroupId(id: string): void {
+  const s = getStorage();
+  if (!s) return;
+  if (!id) {
+    try {
+      s.removeItem(STORAGE_MIC_GROUP_KEY);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    s.setItem(STORAGE_MIC_GROUP_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+function learnerMicDeviceStorageKey(learnerProfileId: string): string {
+  return `${STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX}${learnerProfileId}`;
+}
+
+function learnerMicGroupStorageKey(learnerProfileId: string): string {
+  return `${STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX}${learnerProfileId}`;
+}
+
+export function loadStoredLearnerMicDeviceId(learnerProfileId: string): string {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return "";
+  return s.getItem(learnerMicDeviceStorageKey(learnerProfileId)) ?? "";
+}
+
+export function saveStoredLearnerMicDeviceId(
+  learnerProfileId: string,
+  id: string
+): void {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return;
+  const key = learnerMicDeviceStorageKey(learnerProfileId);
+  if (!id) {
+    try {
+      s.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    s.setItem(key, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadStoredLearnerMicGroupId(learnerProfileId: string): string {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return "";
+  return s.getItem(learnerMicGroupStorageKey(learnerProfileId)) ?? "";
+}
+
+export function saveStoredLearnerMicGroupId(
+  learnerProfileId: string,
+  id: string
+): void {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return;
+  const key = learnerMicGroupStorageKey(learnerProfileId);
+  if (!id) {
+    try {
+      s.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    s.setItem(key, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+function learnerMicGainStorageKey(learnerProfileId: string): string {
+  return `${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}${learnerProfileId}`;
+}
+
+export function loadStoredLearnerMicGain(learnerProfileId: string): number {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return GAIN_DEFAULT;
+  const raw = s.getItem(learnerMicGainStorageKey(learnerProfileId));
+  if (!raw) return GAIN_DEFAULT;
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n) || n < GAIN_MIN || n > GAIN_MAX) return GAIN_DEFAULT;
+  return n;
+}
+
+export function saveStoredLearnerMicGain(
+  learnerProfileId: string,
+  value: number
+): void {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return;
+  try {
+    s.setItem(learnerMicGainStorageKey(learnerProfileId), String(value));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function loadStoredVideoDeviceId(): string {
   const s = getStorage();
   if (!s) return "";
@@ -80,6 +203,14 @@ export function loadStoredVideoDeviceId(): string {
 export function saveStoredVideoDeviceId(id: string): void {
   const s = getStorage();
   if (!s) return;
+  if (!id) {
+    try {
+      s.removeItem(STORAGE_VIDEO_DEVICE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
   try {
     s.setItem(STORAGE_VIDEO_DEVICE_KEY, id);
   } catch {

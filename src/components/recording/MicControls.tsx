@@ -6,6 +6,7 @@ import {
   CHIME_VOL_MAX,
   CHIME_VOL_MIN,
 } from "@/lib/recording/storage";
+import { formatTimeAlertHint } from "@/lib/recording/segment-policy";
 
 /**
  * Phase 4 of the recorder refactor extracted this from AudioRecordInput.tsx so
@@ -32,9 +33,10 @@ export function meterColor(level: number): string {
 export type MicControlsProps = {
   /** Reference to the meter fill <div> so we can update its width/colour without re-rendering. */
   meterBarRef: React.RefObject<HTMLDivElement | null>;
-  devices: MediaDeviceInfo[];
-  selectedDeviceId: string;
-  onDeviceChange: (deviceId: string) => void;
+  devices: ReadonlyArray<MediaDeviceInfo>;
+  /** Index into {@link devices} — unique per enumerated row / label. */
+  selectedPickerSlot: number;
+  onPickMicSlot: (slotIndex: number) => void;
   gainLinear: number;
   onGainChange: (gain: number) => void;
   /** True when mic is hot (graph running) — controls are enabled, meter is live. */
@@ -45,6 +47,10 @@ export type MicControlsProps = {
   hint?: string;
   /** When true, omit the full-width level meter (host shows inline meter elsewhere). */
   hideLevelMeter?: boolean;
+  /** When true, omit the device picker (host shows on-page picker elsewhere). */
+  hideDevicePicker?: boolean;
+  /** When true, omit recording time-alert chime controls (student live-A/V boost only). */
+  hideChime?: boolean;
   /** Play a short sound (and vibrate on mobile) when approaching max recording length. */
   chimeEnabled: boolean;
   onChimeEnabledChange: (enabled: boolean) => void;
@@ -56,8 +62,8 @@ export type MicControlsProps = {
 export default function MicControls({
   meterBarRef,
   devices,
-  selectedDeviceId,
-  onDeviceChange,
+  selectedPickerSlot,
+  onPickMicSlot,
   gainLinear,
   onGainChange,
   isLive,
@@ -68,12 +74,19 @@ export default function MicControls({
   chimeVolume,
   onChimeVolumeChange,
   hideLevelMeter,
+  hideDevicePicker,
+  hideChime,
 }: MicControlsProps) {
   const pickerDisabled = lockDevice || (!isLive && devices.length === 0);
   const sliderDisabled = !isLive;
   const gainPct = ((gainLinear - GAIN_MIN) / (GAIN_MAX - GAIN_MIN)) * 100;
   const chimeVolPct =
     ((chimeVolume - CHIME_VOL_MIN) / (CHIME_VOL_MAX - CHIME_VOL_MIN)) * 100;
+  const safeSlot =
+    devices.length === 0
+      ? 0
+      : Math.min(Math.max(0, selectedPickerSlot), devices.length - 1);
+  const selectedLabel = devices[safeSlot]?.label ?? "";
 
   return (
     <div
@@ -90,58 +103,65 @@ export default function MicControls({
       }}
     >
       {/* Device picker */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span
-          style={{
-            minWidth: 92,
-            fontSize: 13,
-            color: "var(--muted)",
-            fontWeight: 500,
-          }}
-        >
-          Mic:
-        </span>
-        <select
-          data-testid="mic-device-select"
-          aria-label="Microphone device"
-          value={selectedDeviceId}
-          disabled={pickerDisabled}
-          onChange={(e) => onDeviceChange(e.target.value)}
-          title={
-            devices.find((d) => d.deviceId === selectedDeviceId)?.label || undefined
-          }
-          style={{
-            flex: 1,
-            // `min-width: 0` lets a flex item shrink below its content size —
-            // without this, a long device name (e.g. "Microphone (Brio 101)
-            // (046d:094d)") forces the select wider than its slot and overflows
-            // the panel. The `max-width: 100%` is belt-and-suspenders for older
-            // engines that don't honour min-width: 0 on selects.
-            minWidth: 0,
-            maxWidth: "100%",
-            width: "auto", // override globals.css `select { width: 100% }`
-            padding: "6px 10px",
-            fontSize: 13,
-            margin: 0,
-            borderRadius: 6,
-            textOverflow: "ellipsis",
-            overflow: "hidden",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {devices.length === 0 ? (
-            <option value="">
-              {isLive ? "(default microphone)" : "(allow mic access to choose)"}
-            </option>
-          ) : (
-            devices.map((d, i) => (
-              <option key={d.deviceId || `default-${i}`} value={d.deviceId}>
-                {d.label || `Microphone ${i + 1}`}
+      {!hideDevicePicker && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            style={{
+              minWidth: 92,
+              fontSize: 13,
+              color: "var(--muted)",
+              fontWeight: 500,
+            }}
+          >
+            Mic:
+          </span>
+          <select
+            data-testid="mic-device-select"
+            className="mynk-wb-native-select"
+            aria-label="Microphone device"
+            value={devices.length === 0 ? "" : String(safeSlot)}
+            disabled={pickerDisabled}
+            onChange={(e) => {
+              const idx = Number(e.target.value);
+              if (Number.isFinite(idx)) onPickMicSlot(idx);
+            }}
+            title={selectedLabel || undefined}
+            style={{
+              flex: 1,
+              // `min-width: 0` lets a flex item shrink below its content size —
+              // without this, a long device name (e.g. "Microphone (Brio 101)
+              // (046d:094d)") forces the select wider than its slot and overflows
+              // the panel. The `max-width: 100%` is belt-and-suspenders for older
+              // engines that don't honour min-width: 0 on selects.
+              minWidth: 0,
+              maxWidth: "100%",
+              width: "auto", // override globals.css `select { width: 100% }`
+              padding: "6px 10px",
+              fontSize: 13,
+              margin: 0,
+              borderRadius: 6,
+              textOverflow: "ellipsis",
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {devices.length === 0 ? (
+              <option value="">
+                {isLive ? "(default microphone)" : "(allow mic access to choose)"}
               </option>
-            ))
-          )}
-        </select>
-      </div>
+            ) : (
+              devices.map((d, i) => (
+                <option
+                  key={`${d.groupId}|${d.deviceId}|${i}`}
+                  value={String(i)}
+                >
+                  {d.label || `Microphone ${i + 1}`}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+      )}
 
       {/* Gain slider */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -228,7 +248,8 @@ export default function MicControls({
         </div>
       )}
 
-      {/* Approaching max time — sound + volume (this recorder only; persisted locally). */}
+      {/* Approaching max time — sound + volume (recorder only; omitted for student boost). */}
+      {!hideChime && (
       <div
         style={{
           display: "flex",
@@ -262,7 +283,9 @@ export default function MicControls({
           Time alert sound
         </label>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 160px", minWidth: 0 }}>
-          <span style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}>Volume:</span>
+          <span style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}>
+            Time alert volume:
+          </span>
           <input
             type="range"
             className="mic-chime-slider"
@@ -277,7 +300,14 @@ export default function MicControls({
             style={{ ["--chime-pct" as string]: `${chimeVolPct}%` } as React.CSSProperties}
           />
         </div>
+        <p
+          style={{ margin: 0, fontSize: 11, color: "var(--muted)", lineHeight: 1.4, flex: "1 1 100%" }}
+          data-testid="recording-time-alert-hint"
+        >
+          {formatTimeAlertHint()}
+        </p>
       </div>
+      )}
 
       {hint && (
         <p style={{ margin: 0, fontSize: 11, color: "var(--muted)", lineHeight: 1.4 }}>

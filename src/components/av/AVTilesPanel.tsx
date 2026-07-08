@@ -16,7 +16,7 @@
 import { useMemo } from "react";
 
 import type { AvParticipant } from "@/hooks/useLiveAV";
-import { AVTile } from "@/components/av/AVTile";
+import { AVTile, type AVTileLocalMediaControls } from "@/components/av/AVTile";
 
 export type AVLocalTileDescriptor = {
   /**
@@ -71,6 +71,8 @@ export type AVTilesPanelProps = {
    * Pure read-only — never mutated by the panel.
    */
   resolveLabel?: (participant: AvParticipant) => string | undefined;
+  /** Mic/cam toggles on the local preview tile only (see AVTile). */
+  localMediaControls?: AVTileLocalMediaControls;
 };
 
 /**
@@ -86,6 +88,7 @@ export function AVTilesPanel({
   testId,
   onReconnect,
   resolveLabel,
+  localMediaControls,
 }: AVTilesPanelProps) {
   const remote = useMemo(() => [...participants], [participants]);
   const isEmpty = !localTile && remote.length === 0;
@@ -122,6 +125,7 @@ export function AVTilesPanel({
           isLocal
           localMicMuted={localTile.isMicMuted}
           localCamMuted={localTile.isCamMuted}
+          localMediaControls={localMediaControls}
           participant={{
             peerId: localTile.peerId ?? "self",
             role: localTile.role,

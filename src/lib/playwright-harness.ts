@@ -14,6 +14,9 @@
  * blocks the bypass at runtime.
  */
 export const PLAYWRIGHT_HARNESS_ADMIN_EMAIL = "playwright@test.local";
+/** Identity e2e erasure operator — paired with tests/integration/identity/identity.helpers.ts */
+export const PLAYWRIGHT_HARNESS_ERASURE_ADMIN_EMAIL =
+  "playwright-erasure-admin@test.local";
 
 export function isPlaywrightHarnessActive(): boolean {
   // WB_E2E_HARNESS must be explicitly set (server-only, not inlined into client bundle).
@@ -25,5 +28,8 @@ export function isPlaywrightHarnessActive(): boolean {
 export function isPlaywrightHarnessAdminEmail(
   email: string | undefined | null
 ): boolean {
-  return email === PLAYWRIGHT_HARNESS_ADMIN_EMAIL;
+  return (
+    email === PLAYWRIGHT_HARNESS_ADMIN_EMAIL ||
+    email === PLAYWRIGHT_HARNESS_ERASURE_ADMIN_EMAIL
+  );
 }

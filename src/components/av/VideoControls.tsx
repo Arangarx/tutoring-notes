@@ -61,6 +61,7 @@ export default function VideoControls({
         </span>
         <select
           data-testid="video-device-select"
+          className="mynk-wb-native-select"
           aria-label="Camera device"
           value={devices.length === 0 ? "" : String(safeSlot)}
           disabled={pickerDisabled}

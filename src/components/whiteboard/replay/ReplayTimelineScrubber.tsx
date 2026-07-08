@@ -47,9 +47,8 @@ export function ReplayTimelineScrubber({
       <div className="mynk-wb-replay-timeline__controls">
         <button
           type="button"
-          className="btn"
+          className="mynk-wb-replay-play-btn"
           data-testid="wb-replay-play-toggle"
-          style={{ minWidth: 72 }}
           onClick={onTogglePlay}
         >
           {playing ? "Pause" : "Play"}

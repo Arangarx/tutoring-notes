@@ -16,6 +16,12 @@ jest.mock("@/lib/recording/transcript-store", () => ({
   getChunkExtractionsBySessionId: jest.fn(),
 }));
 
+// WS-K: mock notes-enqueue so the fire-and-forget enqueueLiveReduce call
+// doesn't produce async-after-test warnings in the extract-chunk test suite.
+jest.mock("@/lib/recording/notes-enqueue", () => ({
+  enqueueLiveReduce: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock("@/lib/env", () => ({
   env: { OPENAI_API_KEY: "test-key" },
 }));
@@ -201,18 +207,46 @@ describe("extractChunkMap — no API key", () => {
   });
 });
 
-describe("extractChunkMap — cost logging", () => {
-  it("logs a cost event on success", async () => {
+describe("extractChunkMap — prompt shape", () => {
+  it("sends anti-fabrication and reaction-mapping rules in the system prompt", async () => {
     mockOpenAISuccess(JSON.stringify({ topics: [], studentQuestions: [], corrections: [], followUps: [] }));
+
+    await extractChunkMap(SESSION_ID, CHUNK_ID, "Tutor: almost! try again.");
+
+    const callArgs = mockChatCreate.mock.calls[0][0];
+    const systemMsg = callArgs.messages.find((m: { role: string }) => m.role === "system").content as string;
+    expect(systemMsg).toContain("Do not invent");
+    expect(systemMsg).toContain("almost!");
+  });
+});
+
+describe("extractChunkMap — cost logging", () => {
+  it("logs a cost event on success with response.model when present", async () => {
+    mockChatCreate.mockResolvedValueOnce({
+      model: "gpt-4o-mini-2024-07-18",
+      choices: [{ message: { content: JSON.stringify({ topics: [], studentQuestions: [], corrections: [], followUps: [] }) } }],
+      usage: { prompt_tokens: 50, completion_tokens: 80 },
+    });
+
     await extractChunkMap(SESSION_ID, CHUNK_ID, "A session.");
 
     expect(mockLogCostEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "GPT_NOTES_GENERATION",
-        model: "gpt-4o-mini",
+        model: "gpt-4o-mini-2024-07-18",
         whiteboardSessionId: SESSION_ID,
         metadata: expect.objectContaining({ phase: "map" }),
       })
+    );
+  });
+
+  it("calls OpenAI with MAP_MODEL from ai-models config", async () => {
+    mockOpenAISuccess(JSON.stringify({ topics: [], studentQuestions: [], corrections: [], followUps: [] }));
+
+    await extractChunkMap(SESSION_ID, CHUNK_ID, "A session.");
+
+    expect(mockChatCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-4o-mini" })
     );
   });
 });

@@ -56,7 +56,7 @@
   overflow: hidden;
 }
 
-/* ΓöÇΓöÇ Top bar (44px) ΓöÇΓöÇ */
+/* ── Top bar (44px) ── */
 .mynk-wb-topbar {
   height: 44px;
   flex-shrink: 0;
@@ -115,13 +115,20 @@
   align-items: center;
   padding: 8px 0;
   gap: 2px;
-  /* overflow: visible — shapes flyout, more-popover, and props panel
-     all open to the RIGHT of the strip; overflow-x:hidden clips them.
-     The tool count is small enough that y-scroll is not needed. */
-  overflow: visible;
+  /* overflow-y:auto scrolls the rail on short viewports so the collapse
+     button stays reachable. Right-opening flyouts (PP-06 props panel, shapes
+     pulldown, more popover) use createPortal + position:fixed so they escape
+     this overflow container entirely — no overflow-clip-margin trickery
+     needed. overflow-x:hidden hides any stray horizontal overflow from
+     collapsed-state transitions. min-height:0 lets the flex body constrain
+     height. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
   position: relative;
   /* Raised from z-10 to match topbar stacking context level (z-30). */
   z-index: 30;
+  scrollbar-width: none;  /* keep the rail slim on Firefox */
 }
 
 .mynk-wb-strip::-webkit-scrollbar {
@@ -336,6 +343,51 @@
   flex-shrink: 0;
 }
 
+.mynk-wb-live-badge--amber {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.mynk-wb-live-badge__dot--amber {
+  background: var(--warning);
+  animation: none;
+}
+
+.mynk-wb-live-badge--grey {
+  background: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
+}
+
+.mynk-wb-live-badge__dot--grey {
+  background: var(--badge-neutral-dot);
+  animation: none;
+}
+
+.mynk-wb-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mynk-wb-sync-pill--green {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.mynk-wb-sync-pill--amber {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.mynk-wb-sync-pill--grey {
+  background: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
+}
+
 @keyframes mynk-wb-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.65; }
@@ -370,13 +422,13 @@
   flex-shrink: 0;
 }
 
-.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied) {
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied):not(.mynk-wb-tb-btn--mic-on):not(.mynk-wb-tb-btn--mic-off):not(.mynk-wb-tb-btn--cam-on):not(.mynk-wb-tb-btn--cam-off) {
   background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
   color: var(--foreground);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
 }
 
-.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied) svg {
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied):not(.mynk-wb-tb-btn--mic-on):not(.mynk-wb-tb-btn--mic-off):not(.mynk-wb-tb-btn--cam-on):not(.mynk-wb-tb-btn--cam-off) svg {
   filter: brightness(1.12);
 }
 
@@ -405,6 +457,50 @@
   padding: 0;
   justify-content: center;
   flex-shrink: 0;
+}
+
+/* Finish & save — inline confirm anchored to top-bar CTA */
+.mynk-wb-end-confirm-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mynk-wb-end-confirm {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(280px, calc(100vw - 24px));
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.mynk-wb-end-confirm__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.mynk-wb-end-confirm__body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.mynk-wb-end-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .mynk-wb-tb-btn--copied {
@@ -714,30 +810,33 @@
   min-height: 60px;
 }
 
-.mynk-wb-av-cluster__controls {
+/* Local-tile mic/cam overlay — on self preview only (SR-04 UX). */
+.mynk-wb-av-tile-local-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
   display: flex;
+  justify-content: center;
   gap: 4px;
   padding: 6px 8px;
-  border-top: 1px solid var(--border);
-  justify-content: center;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--surface-tile-solid) 92%, transparent),
+    color-mix(in srgb, var(--surface-tile-solid) 55%, transparent) 55%,
+    transparent
+  );
+  pointer-events: auto;
 }
 
-.mynk-wb-av-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  background: transparent;
-  color: var(--foreground);
-  transition: background 0.12s;
+.mynk-wb-av-tile-local-controls .mynk-wb-tb-btn--icon {
+  width: 28px;
+  height: 28px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
-/* AV on/off — panel cluster + top-bar mic/camera (subtle accent, not stark inverse). */
-.mynk-wb-av-btn--on,
+/* AV on/off — top-bar mic/camera + local-tile overlay (same tb-btn modifiers). */
 .mynk-wb-tb-btn--cam-on,
 .mynk-wb-tb-btn--mic-on {
   background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
@@ -746,7 +845,6 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.mynk-wb-av-btn--off,
 .mynk-wb-tb-btn--cam-off,
 .mynk-wb-tb-btn--mic-off {
   color: color-mix(in srgb, var(--destructive) 85%, var(--text-muted));
@@ -762,27 +860,21 @@
 }
 
 .mynk-wb-tb-btn--cam-on:hover:not(:disabled),
-.mynk-wb-tb-btn--mic-on:hover:not(:disabled) {
+.mynk-wb-tb-btn--mic-on:hover:not(:disabled),
+.mynk-wb-tb-btn--cam-on:active:not(:disabled),
+.mynk-wb-tb-btn--mic-on:active:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 18%, var(--surface-3));
   color: var(--foreground);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--border));
 }
 
 .mynk-wb-tb-btn--cam-off:hover:not(:disabled),
-.mynk-wb-tb-btn--mic-off:hover:not(:disabled) {
+.mynk-wb-tb-btn--mic-off:hover:not(:disabled),
+.mynk-wb-tb-btn--cam-off:active:not(:disabled),
+.mynk-wb-tb-btn--mic-off:active:not(:disabled) {
   background: color-mix(in srgb, var(--destructive) 11%, var(--surface-2));
   color: color-mix(in srgb, var(--destructive) 90%, var(--foreground));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 22%, var(--border));
-}
-
-.mynk-wb-av-btn--on:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 20%, var(--surface-2));
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-
-.mynk-wb-av-btn--off:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--destructive) 11%, var(--surface-2));
-  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
 }
 
 .mynk-wb-av-cluster__resize-handle {
@@ -1069,15 +1161,36 @@
 }
 
 /* ΓöÇΓöÇ Board tab strip — SR-14 ΓöÇΓöÇ */
+.mynk-wb-board-tabs-outer {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+}
+
+.mynk-wb-board-tabs-scroll {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--text-muted);
+}
+
+.mynk-wb-board-tabs-scroll:hover:not(:disabled) {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
+}
+
 .mynk-wb-board-tabs {
   display: flex;
   align-items: stretch;
   gap: 0;
-  height: 36px;
-  padding: 0 8px 0 4px;
+  height: 100%;
+  padding: 0 4px;
   overflow-x: auto;
   scrollbar-width: none;
   flex: 1;
+  min-width: 0;
 }
 
 .mynk-wb-board-tabs::-webkit-scrollbar {
@@ -1215,6 +1328,21 @@
 .mynk-wb-board-tab--add:hover:not(:disabled) {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* Student read-only board tabs — active highlight without disabled-button styling */
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab-wrap--read-only {
+  cursor: default;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-active,
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-inactive {
+  cursor: default;
+  pointer-events: none;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-inactive {
+  opacity: 0.65;
 }
 
 /* Ghost viewport label — VP-01 (bounds rendering deferred) */
@@ -1484,6 +1612,115 @@
   display: inline-flex;
 }
 
+/*
+ * Narrow-desktop compaction — viewport @media only; does NOT change data-layout
+ * mode (non-touch windows stay data-layout="desktop" per useWbLayoutMode).
+ * Reveal the existing overflow ⋯ and progressively hide inline controls that
+ * have equivalents in renderTopBarOverflowItems — lowest priority first so the
+ * full bar is used until controls would clip.
+ */
+.mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-end-session"] {
+  flex-shrink: 0;
+}
+
+@media (max-width: 1100px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__overflow-btn {
+    display: inline-flex;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"]
+    .mynk-wb-topbar__zone:has([data-testid="wb-theme-toggle"]) {
+    display: none;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__sep.mynk-wb-topbar__desktop-only {
+    display: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-grid-toggle"] {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__inserts {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-undo"],
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-redo"] {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-share-wrap {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-topbar-cam"] {
+    display: none;
+  }
+}
+
+@media (max-width: 660px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-topbar-mic"] {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-wordmark {
+    font-size: 14px;
+    padding: 0 4px;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-timer {
+    padding: 0 4px;
+    font-size: 13px;
+  }
+}
+
+/*
+ * Student narrow-desktop compaction — restore deleted 64108cf rules (8a).
+ *
+ * Non-touch windows stay data-layout="desktop" even at half-screen widths.
+ * The generic zone:has(wb-theme-toggle) rule already hides mic/cam/follow/
+ * undo/redo at <1100px. But the recording-disclosure text sits in a SEPARATE
+ * zone (pill + timer + disclosure) and stays visible, causing the bar to
+ * overflow at viewport widths below ~800px.
+ *
+ * Fix: hide the disclosure when the overflow-btn appears (1100px). Without
+ * the disclosure the remaining fixed elements (wordmark + name + pill + timer
+ * + overflow-btn + exit-btn) total <350px and fit at any reasonable width.
+ *
+ * wb-student-undo / wb-student-redo are inside the theme-toggle zone so they
+ * ARE already hidden by the zone rule — no separate rule needed for those.
+ */
+@media (max-width: 1100px) {
+  .mynk-wb-chrome[data-layout="desktop"][data-role="student"] .mynk-wb-student-disclosure {
+    display: none;
+  }
+}
+
+/* At very narrow desktop (<660px) also truncate the tutor-name so the pill
+ * and timer stay reachable without overflow. */
+@media (max-width: 660px) {
+  .mynk-wb-chrome[data-layout="desktop"][data-role="student"] .mynk-wb-student-tutor-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 72px;
+    flex-shrink: 1;
+  }
+}
+
 .mynk-wb-topbar-overflow-inserts {
   display: flex;
   flex-wrap: wrap;
@@ -1516,21 +1753,6 @@
   font-size: 13px;
 }
 
-.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle,
-.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle {
-  padding: 0 8px;
-  max-width: 96px;
-}
-
-.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle__label,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle__label,
-.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn,
 .mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn {
   gap: 6px;
@@ -1540,65 +1762,6 @@
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke,
 .mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke {
   width: 22px;
-}
-
-/* TM-12 — persistent show/hide tools toggle (touch layouts only) */
-.mynk-wb-toolbar-toggle {
-  display: none;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--accent-strong);
-  background: var(--card);
-  color: var(--foreground);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  flex-shrink: 0;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  transition: background 0.12s, box-shadow 0.2s, color 0.12s;
-}
-
-.mynk-wb-toolbar-toggle:hover {
-  background: var(--accent-soft);
-}
-
-.mynk-wb-toolbar-toggle__chev {
-  font-size: 9px;
-  color: var(--accent-text);
-  line-height: 1;
-  transition: color 0.12s;
-}
-
-.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle,
-.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle {
-  display: inline-flex;
-}
-
-.mynk-wb-chrome[data-toolbar-hidden="true"] .mynk-wb-toolbar-toggle {
-  background: var(--accent);
-  color: var(--accent-on);
-  border-color: var(--accent-strong);
-  animation: mynk-wb-toolbar-toggle-pulse 2.4s ease-in-out infinite;
-}
-
-.mynk-wb-chrome[data-toolbar-hidden="true"] .mynk-wb-toolbar-toggle__chev {
-  color: var(--accent-on);
-}
-
-@keyframes mynk-wb-toolbar-toggle-pulse {
-  0%,
-  100% {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  }
-  50% {
-    box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent),
-      0 1px 2px rgba(0, 0, 0, 0.06);
-  }
 }
 
 /* Collapse bottom tool chrome when tools hidden — canvas regains vertical space */
@@ -1639,6 +1802,7 @@
   width: 44px;
   height: auto;
   min-height: 0;
+  max-height: 100%;
   align-self: stretch;
   padding: 6px 0;
   gap: 2px;
@@ -1646,6 +1810,14 @@
   border-right: 1px solid var(--border);
   background: var(--card);
   z-index: 20;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar .mynk-wb-tool-btn {
@@ -1802,13 +1974,8 @@
   min-height: 40px;
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.mynk-wb-pagestrip::-webkit-scrollbar {
-  display: none;
+  padding: 0 4px;
+  overflow-x: hidden;
 }
 
 /* ΓöÇΓöÇ Debug footer ΓöÇΓöÇ */
@@ -2153,13 +2320,49 @@
   flex-direction: row;
 }
 
-.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-timeline {
-  height: 48px;
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-footer {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
   z-index: 20;
+}
+
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-timeline {
+  min-height: 48px;
+  height: auto;
+  flex-shrink: 0;
+  z-index: 1;
   padding: 6px 10px;
   border-top: 1px solid var(--border);
   background: var(--card);
+}
+
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-footer .mynk-wb-pagestrip {
+  flex-shrink: 0;
+  z-index: 0;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"][data-mode="replay"] .mynk-wb-replay-footer {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: end;
+  z-index: 40;
+  padding-left: 44px;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"][data-mode="replay"] .mynk-wb-replay-footer .mynk-wb-pagestrip {
+  grid-column: unset;
+  grid-row: unset;
+  align-self: unset;
+  max-height: unset;
+  padding-left: 0;
+  background: transparent;
+  backdrop-filter: none;
+  z-index: unset;
 }
 
 .mynk-wb-replay-timeline__controls {
@@ -2167,6 +2370,29 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.mynk-wb-replay-play-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mynk-wb-replay-play-btn:hover:not(:disabled) {
+  background: var(--surface-3);
 }
 
 .mynk-wb-replay-timeline__seek-wrap {
@@ -2452,6 +2678,22 @@
   height: 100%;
 }
 
+/* Graph-only hero thumbnail (ReviewGraphOnlyThumbnail) — div, not img; needs explicit box. */
+.wb-review-board-thumbnail--graph {
+  width: min(100%, 720px);
+  aspect-ratio: 4 / 3;
+  min-height: 240px;
+  max-height: min(56vh, 540px);
+  position: relative;
+  overflow: hidden;
+}
+
+.wb-review-board-thumbnail--graph .wb-graph-root {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+}
+
 .wb-replay-canvas-host {
   flex: 1;
   min-height: 0;
@@ -2546,25 +2788,6 @@
   font-size: 11px;
   line-height: 1.35;
   color: var(--muted-foreground);
-}
-
-.mynk-wb-status-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.mynk-wb-status-pill--ok {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.mynk-wb-status-pill--warn {
-  background: var(--warning-soft);
-  color: var(--warning);
 }
 
 .mynk-wb-follow-toggle {
@@ -2677,4 +2900,234 @@
   background: var(--card);
   border: 1px solid var(--border);
   z-index: 35;
+}
+
+/* ── Wave 5 polish — shared grid icon toggle (both roles) ── */
+.mynk-wb-tb-btn--grid-on {
+  background: var(--accent-soft);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.mynk-wb-tb-btn--grid-on:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--accent) 30%);
+  color: var(--foreground);
+}
+
+/* Top-bar overflow ⋯ — dropdown below trigger (replaces bottom sheet) */
+.mynk-wb-topbar-overflow-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.mynk-wb-topbar-overflow-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 16px));
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll {
+  max-height: min(60dvh, 400px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-menu-item,
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-view-item.mynk-wb-menu-item {
+  justify-content: flex-start;
+  padding: 4px 8px;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-popover-sep {
+  margin: 2px 0;
+}
+
+.mynk-wb-overflow-av-pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mynk-wb-overflow-av-pickers [data-testid="audio-controls"],
+.mynk-wb-overflow-av-pickers [data-testid="video-controls"] {
+  margin-bottom: 0;
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-menu-item--active,
+.mynk-wb-action-sheet__menu-list .mynk-wb-menu-item--active {
+  background: var(--accent-soft);
+}
+
+.mynk-wb-menu-item__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+/* Overflow / action-sheet menu lists — consistent left alignment */
+.mynk-wb-action-sheet__menu-list .mynk-wb-menu-item,
+.mynk-wb-action-sheet__menu-list .mynk-wb-view-item.mynk-wb-menu-item {
+  justify-content: flex-start;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--match-view {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--match-view:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle--synced {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Wave5 #1 — follow-toggle pill vertical centering in the 44px topbar.
+ * The pill (height:28px) sits inside a chain of flex containers all with
+ * align-items:center. Belt-and-suspenders: force align-self:center and
+ * vertical-align:middle on the <label> (inline-flex) to clear browser
+ * baseline-alignment quirks that can push it high in the bar. */
+.mynk-wb-chrome[data-role="student"] .mynk-wb-student-follow {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  height: 44px;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  vertical-align: middle;
+  margin: 0;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle .mynk-wb-menu-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle input[type="checkbox"] {
+  position: relative;
+  top: 0;
+  vertical-align: middle;
+  margin: 0;
+}
+
+/* Native <select> in WB chrome (mic/cam device pickers).
+ * Windows Chrome paints the open list with a light system surface while
+ * inherited light --text stays light-on-dark → unreadable options (Andrew
+ * 2026-06-24 smoke). Force color-scheme + explicit option colors. */
+:root:not([data-theme="light"]) .mynk-wb-chrome .mynk-wb-native-select,
+[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select,
+:root:not([data-theme="light"]) .mynk-wb-mic-popover .mynk-wb-native-select,
+:root:not([data-theme="light"]) .mynk-wb-cam-popover .mynk-wb-native-select {
+  color-scheme: dark;
+  background-color: #142f3e;
+  color: #f0ede4;
+  border: 1px solid #1c3548;
+}
+
+:root:not([data-theme="light"]) .mynk-wb-chrome .mynk-wb-native-select option,
+[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select option,
+:root:not([data-theme="light"]) .mynk-wb-mic-popover .mynk-wb-native-select option,
+:root:not([data-theme="light"]) .mynk-wb-cam-popover .mynk-wb-native-select option {
+  background-color: #1c3548;
+  color: #f0ede4;
+}
+
+:root[data-theme="light"] .mynk-wb-chrome .mynk-wb-native-select,
+.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select,
+:root[data-theme="light"] .mynk-wb-mic-popover .mynk-wb-native-select,
+:root[data-theme="light"] .mynk-wb-cam-popover .mynk-wb-native-select {
+  color-scheme: light;
+  background-color: var(--surface-input);
+  color: var(--text-strong);
+  border: 1px solid var(--border-default);
+}
+
+:root[data-theme="light"] .mynk-wb-chrome .mynk-wb-native-select option,
+.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select option,
+:root[data-theme="light"] .mynk-wb-mic-popover .mynk-wb-native-select option,
+:root[data-theme="light"] .mynk-wb-cam-popover .mynk-wb-native-select option {
+  background-color: var(--surface-1);
+  color: var(--text-strong);
+}
+
+/* Student phone portrait — minimal top bar: wordmark + pill + timer + ⋯ + exit. */
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-wordmark {
+  padding: 0 4px;
+  font-size: 14px;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-topbar__spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* Student touch top bar — hide timer/tutor in sheet except narrow keeps inline timer. */
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-timer,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-timer {
+  display: none;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name {
+  display: none;
 }

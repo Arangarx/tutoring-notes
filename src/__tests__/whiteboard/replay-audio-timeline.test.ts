@@ -1,4 +1,5 @@
 import {
+  buildEffectiveReplayTimeline,
   buildReplayAudioTimeline,
   globalMsToSegmentLocal,
   normalizeSegmentDurationMs,
@@ -114,18 +115,59 @@ describe("replay-audio-timeline", () => {
       }
     });
 
-    it("all-null durations (unknown): totalMs is 0, every seek maps to segment 0 localMs 0 — documenting clamp behavior used by seek-with-unknown-durations path", () => {
-      // When durationSeconds is null in the DB (common for sessions created before
-      // transcription), normalizeSegmentDurationMs returns 0 and totalMs=0.
-      // The component's globalSegmentOffsetMsRef approach handles playback correctly;
-      // seeking with null durations falls back to segment 0 at t=0 (best effort).
+    it("all-null stored durations (unknown): totalMs is 0 — multi-segment passthrough until measured", () => {
       const timeline = buildReplayAudioTimeline([null, null]);
       expect(timeline.totalMs).toBe(0);
       expect(timeline.segmentDurationsMs).toEqual([0, 0]);
-      // With totalMs=0, any positive globalMs clamps to segment 0 at localMs 0.
-      const result = globalMsToSegmentLocal(30_000, timeline);
-      expect(result.segmentIndex).toBe(0);
-      expect(result.localMs).toBe(0);
+      // Without measured fallback, multi-segment passes globalMs through on seg0
+      // (not the old Math.min(globalMs, 0)=0 collapse).
+      const withoutMeasured = globalMsToSegmentLocal(30_000, timeline);
+      expect(withoutMeasured.segmentIndex).toBe(0);
+      expect(withoutMeasured.localMs).toBe(30_000);
+    });
+
+    it("WS-L regression: multi-segment null stored + measured per-segment maps scrub correctly", () => {
+      const timeline = buildReplayAudioTimeline([null, null]);
+      const measured = [20_000, 30_000]; // 20s + 30s = 50s total
+      const probes = [
+        { globalMs: 0, expected: { segmentIndex: 0, localMs: 0 } },
+        { globalMs: 10_000, expected: { segmentIndex: 0, localMs: 10_000 } },
+        { globalMs: 20_000, expected: { segmentIndex: 0, localMs: 20_000 } },
+        { globalMs: 25_000, expected: { segmentIndex: 1, localMs: 5_000 } },
+        { globalMs: 37_500, expected: { segmentIndex: 1, localMs: 17_500 } },
+        { globalMs: 49_000, expected: { segmentIndex: 1, localMs: 29_000 } },
+        { globalMs: 50_000, expected: { segmentIndex: 1, localMs: 30_000 } },
+      ];
+      for (const { globalMs, expected } of probes) {
+        const oracle = oracleGlobalToSegment(
+          globalMs,
+          buildEffectiveReplayTimeline(timeline, measured).segmentDurationsMs
+        );
+        expect(oracle).toEqual(expected);
+        expect(globalMsToSegmentLocal(globalMs, timeline, undefined, measured)).toEqual(
+          expected
+        );
+      }
+    });
+
+    it("WS-L RED-before: multi-segment null stored WITHOUT measured clamped every scrub to 0", () => {
+      // Documents pre-fix behavior that caused the regression.
+      const timeline = buildReplayAudioTimeline([null, null]);
+      const preFixClamp = Math.max(0, Math.min(30_000, timeline.totalMs));
+      expect(preFixClamp).toBe(0);
+      expect(preFixClamp).not.toBe(30_000);
+    });
+
+    it("multi-segment scrub at 25/50/75/99% with known stored durations", () => {
+      const timeline = buildReplayAudioTimeline([20, 30]); // 50s total
+      const total = timeline.totalMs;
+      const ratios = [0.25, 0.5, 0.75, 0.99];
+      for (const ratio of ratios) {
+        const globalMs = Math.round(total * ratio);
+        const expected = oracleGlobalToSegment(globalMs, timeline.segmentDurationsMs);
+        expect(globalMsToSegmentLocal(globalMs, timeline)).toEqual(expected);
+        expect(expected.localMs).not.toBe(0);
+      }
     });
 
     // ── FIX 1: seek-map with measuredTotalMs fallback ──────────────────────────

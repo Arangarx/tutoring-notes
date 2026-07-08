@@ -3,6 +3,7 @@
  */
 
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 function runBlobCli(
@@ -32,6 +33,22 @@ function runBranchSweep(argv: string[]) {
     env: process.env,
   });
 }
+
+describe("blob-cleanup.mjs loadReferenceSet", () => {
+  it("queries TranscriptChunk.chunkBlobUrl for orphan-sweep reference set (L-1 / E7)", () => {
+    const src = readFileSync(
+      path.join(process.cwd(), "scripts", "blob-cleanup.mjs"),
+      "utf-8"
+    );
+    const fn = src.slice(
+      src.indexOf("async function loadReferenceSet"),
+      src.indexOf("async function listAllBlobs")
+    );
+    expect(fn).toMatch(/transcriptChunk\.findMany/);
+    expect(fn).toMatch(/chunkBlobUrl:\s*true/);
+    expect(fn).toMatch(/c\.chunkBlobUrl\)\s*set\.add\(c\.chunkBlobUrl\)/);
+  });
+});
 
 describe("blob-cleanup.mjs CLI", () => {
   it("refuses contradictory --dry-run with --delete", () => {

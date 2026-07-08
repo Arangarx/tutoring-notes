@@ -1948,3 +1948,185 @@ describe("ICE disconnected → debounced polite restart", () => {
     }
   });
 });
+
+// =================================================================
+// Renegotiation watchdog — deferred offer that never flushes
+// (invariant 15, docs/LIVE-AV.md — "tutor can't hear student")
+//
+// Root cause this guards: a renegotiation deferred while the PC is
+// mid-negotiation (pendingRenegotiation = true) has exactly ONE flush
+// path — onsignalingstatechange → stable. If the PC never returns to
+// stable (lost answer / wedged PC, amplified by dual-device join), the
+// deferred offer — which carries the student's late-added AUDIO m-line —
+// is never sent and the tutor never hears the student. The watchdog
+// forces resolution after the timeout: an ICE restart if the PC is still
+// wedged, or a plain re-offer if the PC is stable-but-unflushed.
+// =================================================================
+
+describe("createPeerMesh — renegotiation watchdog (deferred offer never flushes)", () => {
+  test("forces an ICE-restart offer when the PC stays wedged past the watchdog timeout", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      // Drive PC into have-local-offer (in-flight negotiation). No answer
+      // ever arrives → the PC stays non-stable indefinitely.
+      pc.triggerNegotiationNeeded();
+      await flush();
+      expect(pc.signalingState).toBe("have-local-offer");
+
+      // A late track add fires a renegotiation that DEFERS (PC mid-flight).
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+      m.triggerRenegotiationOnPeers(["B"]);
+      await flush();
+      // Deferred — no new offer, no ICE restart yet.
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(
+        offersBefore
+      );
+      expect(pc.createOfferCalls.some((o) => o.iceRestart === true)).toBe(false);
+
+      // Watchdog fires — the wedged PC gets an ICE-restart offer that
+      // regenerates SDP from current senders (carrying the audio m-line).
+      jest.advanceTimersByTime(3_000);
+      await flush();
+
+      expect(
+        sig.sends.filter((s) => s.kind === "offer").length
+      ).toBeGreaterThan(offersBefore);
+      expect(pc.createOfferCalls.some((o) => o.iceRestart === true)).toBe(true);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("forces a plain re-offer when the PC is stable-but-unflushed (missed signalingstatechange)", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      pc.triggerNegotiationNeeded();
+      await flush();
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      m.triggerRenegotiationOnPeers(["B"]); // defers + arms watchdog
+      await flush();
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(
+        offersBefore
+      );
+
+      // Simulate the failure the watchdog's stable-branch backstops: the PC
+      // silently reached `stable` but onsignalingstatechange never fired, so
+      // the normal flush path was missed. Set the field directly (no event).
+      pc.signalingState = "stable";
+
+      jest.advanceTimersByTime(3_000);
+      await flush();
+
+      // Watchdog sees a stable PC → plain re-offer (NOT an ICE restart).
+      expect(
+        sig.sends.filter((s) => s.kind === "offer").length
+      ).toBeGreaterThan(offersBefore);
+      expect(pc.createOfferCalls.some((o) => o.iceRestart === true)).toBe(false);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("is cancelled when the deferred renegotiation flushes normally before the timeout", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      pc.triggerNegotiationNeeded();
+      await flush();
+      m.triggerRenegotiationOnPeers(["B"]); // defers + arms watchdog
+      await flush();
+
+      // Answer arrives → stable → normal flush fires the deferred offer
+      // AND cancels the watchdog.
+      const offersBeforeFlush = sig.sends.filter((s) => s.kind === "offer")
+        .length;
+      sig.inject("B", { type: "answer", sdp: "answer" });
+      await flush();
+      const offersAfterFlush = sig.sends.filter((s) => s.kind === "offer")
+        .length;
+      expect(offersAfterFlush).toBeGreaterThan(offersBeforeFlush);
+
+      // Advance well past the watchdog window — it must NOT fire a second,
+      // redundant forced offer, and must NOT escalate to an ICE restart.
+      jest.advanceTimersByTime(5_000);
+      await flush();
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(
+        offersAfterFlush
+      );
+      expect(pc.createOfferCalls.some((o) => o.iceRestart === true)).toBe(false);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("does not fire on a peer that was removed while the watchdog was armed", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      pc.triggerNegotiationNeeded();
+      await flush();
+      m.triggerRenegotiationOnPeers(["B"]); // defers + arms watchdog
+      await flush();
+
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+      m.removePeer("B"); // closes the entry + clears its watchdog
+
+      jest.advanceTimersByTime(5_000);
+      await flush();
+
+      // No forced offer on the closed peer.
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(
+        offersBefore
+      );
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

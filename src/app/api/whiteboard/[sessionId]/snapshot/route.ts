@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { db, withDbRetry } from "@/lib/db";
 
@@ -35,7 +36,10 @@ export async function GET(
   );
 
   // Ownership check.
-  await assertOwnsWhiteboardSession(sessionId);
+  const session = await assertOwnsWhiteboardSession(sessionId);
+
+  const erasureBlocked = await assertStudentNotErasedApi(session.studentId);
+  if (erasureBlocked) return erasureBlocked;
 
   // assertOwnsWhiteboardSession doesn't return snapshotBlobUrl, so we
   // do a targeted query for that column.

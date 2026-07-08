@@ -27,10 +27,17 @@
  */
 
 const assertOwnsMock = jest.fn();
+const assertStudentNotErasedApiMock = jest.fn();
 
 jest.mock("@/lib/whiteboard-scope", () => ({
   __esModule: true,
   assertOwnsWhiteboardSession: (id: string) => assertOwnsMock(id),
+}));
+
+jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
+  __esModule: true,
+  assertStudentNotErasedApi: (studentId: string) =>
+    assertStudentNotErasedApiMock(studentId),
 }));
 
 jest.mock("@/lib/action-correlation", () => ({
@@ -52,6 +59,8 @@ const fetchMock = jest.fn();
 
 beforeEach(() => {
   assertOwnsMock.mockReset();
+  assertStudentNotErasedApiMock.mockReset();
+  assertStudentNotErasedApiMock.mockResolvedValue(null);
   fetchMock.mockReset();
   global.fetch = fetchMock as unknown as typeof fetch;
   process.env.BLOB_READ_WRITE_TOKEN = "test_token";
@@ -65,6 +74,7 @@ describe("GET /api/whiteboard/[sessionId]/events", () => {
   it("calls assertOwnsWhiteboardSession (multi-tenant gate)", async () => {
     assertOwnsMock.mockResolvedValue({
       id: "wb_42",
+      studentId: "stu_1",
       eventsBlobUrl: "https://blob/events.json",
       endedAt: new Date(),
     });
@@ -228,5 +238,24 @@ describe("GET /api/whiteboard/[sessionId]/events", () => {
     expect(fetchArgs[1].headers).toMatchObject({
       Authorization: "Bearer secret_xyz",
     });
+  });
+
+  it("returns 404 when assertStudentNotErasedApi blocks erased student (E6 / M-4)", async () => {
+    assertOwnsMock.mockResolvedValue({
+      id: "wb_42",
+      studentId: "stu_erased",
+      eventsBlobUrl: "https://blob/events.json",
+      endedAt: new Date(),
+    });
+    assertStudentNotErasedApiMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Not found." }), { status: 404 })
+    );
+
+    const { req, ctx } = makeCtx();
+    const res = await GET(req, ctx);
+
+    expect(assertStudentNotErasedApiMock).toHaveBeenCalledWith("stu_erased");
+    expect(res.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

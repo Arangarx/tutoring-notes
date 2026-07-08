@@ -10,7 +10,7 @@
 ## Guardrails
 
 1. **Extend don't rewrite** — `WhiteboardWorkspaceClient.tsx` tutor engine is additive-only; student path is `StudentLiveWorkspaceClient.tsx` (new).
-2. **Legacy orphan** — `StudentWhiteboardClient.tsx` remains on disk (unreferenced) until Andrew live-session smoke PASS; then delete per **WB-LEGACY-STUDENT-CLIENT-DELETE** in `docs/BACKLOG.md`.
+2. **Legacy orphan** — ✅ RETIRED (2026-06-26, Part 1D): `StudentWhiteboardClient.tsx` deleted (was confirmed unreferenced; `WB-LEGACY-STUDENT-CLIENT-DELETE` closed).
 3. **Hard switch** — `/w/[joinToken]` always routes through `StudentWhiteboardSessionShell` → `WhiteboardSessionShell role="student"` (no env flag).
 4. **B1–B4 blockers** — folded into plan acceptance; see phase table below.
 

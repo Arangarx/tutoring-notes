@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 
 type Props = {
+  studentId?: string;
   studentName?: string;
   durationLabel?: string;
   noteSaved?: boolean;
@@ -10,6 +12,7 @@ type Props = {
 
 /** Persistent Mynk chrome top bar for the session review surface (hero + replay). */
 export function ReviewWbTopBar({
+  studentId,
   studentName,
   durationLabel,
   noteSaved,
@@ -21,12 +24,33 @@ export function ReviewWbTopBar({
       aria-label="Session review"
       data-testid="wb-review-wb-topbar"
     >
-      <span className="mynk-wb-wordmark" aria-label="Mynk">
+      <Link href="/" className="mynk-wb-wordmark" aria-label="Mynk">
         Mynk<span className="mynk-wb-wordmark__dot">·</span>
-      </span>
+      </Link>
       <span className="mynk-wb-topbar__sep" aria-hidden />
 
       <div className="mynk-wb-topbar__zone">
+        {studentId && studentName ? (
+          <>
+            <Link
+              href={`/admin/students/${studentId}`}
+              className="muted"
+              style={{ fontSize: 12 }}
+              data-testid="review-back-to-student"
+            >
+              ← Back to {studentName}
+            </Link>
+            <Link
+              href={`/admin/students/${studentId}/notes`}
+              className="muted"
+              style={{ fontSize: 12, marginLeft: 10 }}
+              data-testid="review-all-notes"
+            >
+              All notes
+            </Link>
+            <span className="mynk-wb-topbar__sep" aria-hidden />
+          </>
+        ) : null}
         <div
           className="mynk-wb-live-badge"
           data-testid="wb-review-session-badge"
@@ -37,11 +61,6 @@ export function ReviewWbTopBar({
         >
           Session complete
         </div>
-        {studentName ? (
-          <span className="muted" style={{ fontSize: 12, paddingLeft: 4 }}>
-            {studentName}
-          </span>
-        ) : null}
         {durationLabel ? (
           <span className="mynk-wb-timer" data-testid="wb-review-duration">
             {durationLabel}

@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
+import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
+import { formatBilledDurationLabel } from "@/lib/billing/display";
 
 export const dynamic = "force-dynamic";
 
@@ -63,10 +66,11 @@ export default async function ShareWhiteboardPage({
     `[wbShareReplay.page] wbsid=${whiteboardSessionId} token=${token.slice(0, 8)}…`
   );
 
-  await assertCanAccessShareLink(
+  const access = await assertCanAccessShareLink(
     token,
     `/s/${token}/whiteboard/${whiteboardSessionId}`
   );
+  await assertStudentNotErased(access.studentId, { salToken: token });
 
   // Validate share link.
   const link = await withDbRetry(
@@ -95,8 +99,13 @@ export default async function ShareWhiteboardPage({
           startedAt: true,
           endedAt: true,
           durationSeconds: true,
+          billedDurationMin: true,
+          billedStartLocal: true,
+          billedEndLocal: true,
           eventsSchemaVersion: true,
           snapshotBlobUrl: true,
+          concatBlobUrl: true,
+          concatDurationSeconds: true,
           audioRecordings: {
             select: {
               id: true,
@@ -131,6 +140,11 @@ export default async function ShareWhiteboardPage({
 
   const studentName = link.student.name;
   const sessionLabel = `Whiteboard with ${studentName} — ${formatDate(session.startedAt)}`;
+  const billedLabel = formatBilledDurationLabel({
+    billedDurationMin: session.billedDurationMin,
+    billedStartLocal: session.billedStartLocal,
+    billedEndLocal: session.billedEndLocal,
+  });
 
   // Build proxy URLs with the share token in the query string so the
   // client-side fetch includes the credential (same pattern as
@@ -139,11 +153,18 @@ export default async function ShareWhiteboardPage({
   const snapshotApiUrl = session.snapshotBlobUrl
     ? `/api/whiteboard/${whiteboardSessionId}/public-snapshot?token=${token}`
     : null;
-  const audioSegments = session.audioRecordings.map((rec) => ({
-    url: `/api/audio/${rec.id}?token=${token}`,
-    mimeType: rec.mimeType,
-    durationSeconds: rec.durationSeconds,
-  }));
+  const replayAudio = buildReplayAudioPayload({
+    whiteboardSessionId,
+    concatBlobUrl: session.concatBlobUrl,
+    concatDurationSeconds: session.concatDurationSeconds,
+    audioRecordings: session.audioRecordings,
+    audience: "share",
+    shareToken: token,
+  });
+
+  console.log(
+    `[wbShareReplay.page] wbsid=${whiteboardSessionId} schema v${session.eventsSchemaVersion}`
+  );
 
   return (
     <main className="min-h-dvh bg-background">
@@ -161,6 +182,13 @@ export default async function ShareWhiteboardPage({
             </h1>
             <p className="mt-1 text-[13px] text-muted-foreground">
               Whiteboard recording shared by your tutor
+              {billedLabel ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <span data-testid="wb-share-billed-duration">{billedLabel}</span>
+                </>
+              ) : null}
             </p>
           </div>
         </header>
@@ -168,14 +196,14 @@ export default async function ShareWhiteboardPage({
         {/* Replay player — fenced; page chrome only reskinned above/below */}
         <WhiteboardReplay
           eventsBlobUrl={eventsApiUrl}
-          audioSegments={audioSegments}
+          audioSegments={replayAudio.audioSegments}
+          canonicalAudioBlobUrl={replayAudio.canonicalAudioBlobUrl}
+          canonicalAudioMimeType={replayAudio.canonicalAudioMimeType}
+          canonicalDurationSeconds={replayAudio.canonicalDurationSeconds}
           snapshotBlobUrl={snapshotApiUrl}
           title={sessionLabel}
         />
 
-        <p className="mt-2 text-right font-mono text-[11px] text-muted-foreground">
-          schema v{session.eventsSchemaVersion}
-        </p>
       </div>
     </main>
   );

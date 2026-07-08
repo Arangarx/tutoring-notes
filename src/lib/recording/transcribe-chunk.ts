@@ -10,6 +10,12 @@ import {
 } from "@/lib/transcribe-ffmpeg";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { estimateCostUsd, logCostEvent } from "@/lib/observability/cost-events";
+import {
+  TRANSCRIBE_FALLBACK_MODEL,
+  TRANSCRIBE_PRIMARY_MODEL,
+} from "@/lib/ai-models";
+
+export { TRANSCRIBE_FALLBACK_MODEL, TRANSCRIBE_PRIMARY_MODEL } from "@/lib/ai-models";
 
 /**
  * Recording re-arch Phase 1, Slice 2a — D2 transcription pipeline.
@@ -32,12 +38,6 @@ import { estimateCostUsd, logCostEvent } from "@/lib/observability/cost-events";
 // ---------------------------------------------------------------------------
 // Constants / types
 // ---------------------------------------------------------------------------
-
-/** Primary transcription model — half the cost of whisper-1, comparable WER on clean audio. */
-export const TRANSCRIBE_PRIMARY_MODEL = "gpt-4o-mini-transcribe";
-
-/** Fallback model — engaged when quality guard detects hallucination on primary pass. */
-export const TRANSCRIBE_FALLBACK_MODEL = "whisper-1";
 
 const MAX_RETRIES = 3;
 const RETRY_BACKOFF_MS = [1000, 2000, 4000] as const;
@@ -68,7 +68,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** gpt-4o-mini-transcribe supports json/text only; whisper-1 supports verbose_json. */
+/**
+ * Response format is coupled to TRANSCRIBE_FALLBACK_MODEL: the fallback path
+ * (silence-hallucination guard) expects verbose_json + duration. If the resolved
+ * fallback is not whisper-1, the same rule still applies to whatever fallback is.
+ */
 function responseFormatForModel(model: string): "json" | "verbose_json" {
   return model === TRANSCRIBE_FALLBACK_MODEL ? "verbose_json" : "json";
 }

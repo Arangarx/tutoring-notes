@@ -69,6 +69,7 @@ import {
   upsertTutorNotePending,
 } from "@/lib/recording/transcript-store";
 import { processNotesReduceJob } from "@/lib/recording/notes-worker";
+import { parseNoteContent } from "@/components/whiteboard/TutorNotesSection";
 
 const mockGetSession = db.whiteboardSession.findUnique as jest.Mock;
 const mockGetNote = getTutorNoteBySessionId as jest.Mock;
@@ -281,16 +282,17 @@ describe("processNotesReduceJob — successful reduce", () => {
     expect(result.outcome).toBe("done");
     expect(mockChatCreate).toHaveBeenCalledTimes(1);
 
-    // The prompt should reference the extraction data (not raw transcript)
     const callArgs = mockChatCreate.mock.calls[0][0];
     const userMsg = callArgs.messages.find((m: { role: string }) => m.role === "user").content as string;
     expect(userMsg).toContain("extractions");
+    const systemMsg = callArgs.messages.find((m: { role: string }) => m.role === "system").content as string;
+    expect(systemMsg).toContain("do not fabricate");
   });
 
   it("falls back to raw transcripts when no extractions exist", async () => {
     const chunk = makeChunk({ id: "chunk-1", status: "done", transcript: "Student asked about area." });
     mockGetChunks.mockResolvedValue([chunk]);
-    mockGetExtractions.mockResolvedValue([]); // no extractions
+    mockGetExtractions.mockResolvedValue([]);
     mockOpenAISuccess(JSON.stringify({ topics: "Area", assessment: "", nextSteps: "", links: "" }));
 
     const result = await processNotesReduceJob(SESSION_ID);
@@ -321,6 +323,12 @@ describe("processNotesReduceJob — successful reduce", () => {
     expect(content).toBeDefined();
     const parsed = JSON.parse(content!);
     expect(parsed.topics).toBe("Pythagoras theorem");
+    expect(parseNoteContent(content!)).toEqual({
+      topics: "Pythagoras theorem",
+      assessment: "Covered well",
+      nextSteps: "Practice 3 problems",
+      links: "",
+    });
   });
 
   it("handles sessions with no chunks (no audio)", async () => {

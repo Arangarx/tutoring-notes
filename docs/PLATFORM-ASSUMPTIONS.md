@@ -94,17 +94,36 @@
 - **What breaks if violated**: orphaned `pending` chunks never transcribe if both the immediate attempt and cron are absent; cron without `CRON_SECRET` is a no-op (401). Migrating off Vercel requires replicating the schedule + authenticated HTTP trigger.
 - **Migration check**: provision EventBridge (or equivalent) on the same cadence; protect the sweep endpoint with a shared secret; confirm batch/time-budget fits the new platform's per-invocation ceiling (§1.1).
 
+### 1.9 Vercel Cron — erasure worker batch
+
+- **Capability provided**: Scheduled GA HTTP trigger (cron expression → GET to a serverless route).
+- **Why we depend on it**: Learner/family right-to-erasure (E5a) — `ErasureJob` rows in `requested` (past `purgeEligibleAt`), `blobs_purging`, or `db_scrubbing` are advanced by `processErasureBatch` at `/api/internal/erasure/process`. Tombstone is immediate at request time; cron drives blob + DB purge after the 7-day grace window and resumes partial jobs.
+- **Generic / AWS equivalent**: **Amazon EventBridge Scheduler** → HTTP/Lambda consumer with shared-secret auth.
+- **Where baked in**:
+  - `vercel.json` — `crons` entry: `0 */6 * * *` → `/api/internal/erasure/process` (every 6 hours on **Pro**).
+  - `src/app/api/internal/erasure/process/route.ts` — GET (cron) + POST (manual); auth via `ERASURE_WORKER_SECRET` or `CRON_SECRET` bearer (`src/lib/erasure/erasure-worker-auth.ts`).
+  - `src/lib/erasure/process-erasure-batch.ts` — bounded batch (`take: 10`) calling `processErasureJob` per row.
+  - `scripts/erasure-resume.ts` — CLI `npm run erasure:resume -- --jobId=<id>` for support/manual single-job resume.
+- **Env vars**:
+  - `ERASURE_WORKER_SECRET` — dedicated bearer for manual/support POST invocations. **Greenlight-gated** Vercel env setup (MCP write-safety).
+  - `CRON_SECRET` — Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`; accepted as fallback when `ERASURE_WORKER_SECRET` is unset or for cron-only deploys (same pattern as §1.6).
+- **Blob API reliance**: `processErasureJob` enumerates and `deleteBlob`s per family scope; large families depend on Vercel Blob list/delete throughput and the route's `maxDuration = 300` (§1.1) to finish a batch within one invocation. Per-job progress is persisted on `ErasureJob.blobsDeletedJson`; transient Blob API errors leave the job resumable on the next cron tick.
+- **What breaks if violated**: jobs stuck in `requested` past grace never purge without cron or CLI resume; missing secrets → 401 on worker route; Blob rate limits → prolonged `blobs_purging` (access still denied via tombstone).
+- **Migration check**: replicate schedule + authenticated HTTP trigger; set `ERASURE_WORKER_SECRET` (or equivalent) for non-cron callers; confirm batch size × per-job blob count fits target platform timeout.
+
 ### 1.8 Next.js `after()` — deferred post-response work
 
 - **Capability provided**: `after(callback)` from `next/server` schedules an async callback that runs **after** the HTTP response is sent but **before** the serverless function terminates, keeping the function alive (up to `maxDuration`) until the callback resolves.
 - **Why we depend on it**: Recording re-arch Phase 1, Slice 3 — the transcription pipeline (`enqueueChunkTranscribe`) and notes pipeline (`enqueueNotesReduce`) previously used bare `void (async () => {...})()` fire-and-forget patterns. Vercel terminates the function when the response is sent, dropping those in-flight promises. On Production the Vercel Cron sweep recovers `pending` chunks; on Preview (no cron) notes never generate. `after()` eliminates this gap.
   - `src/lib/recording/chunk-transcribe-enqueue.ts:fireAndForgetWorker` — chunk transcription worker
   - `src/lib/recording/notes-enqueue.ts:fireAndForgetReduce` — notes reduce worker (with polling loop up to 4.5 min)
-  - Both require `maxDuration = 300` on the workspace route segment.
+  - `src/lib/recording/concat-audio-enqueue.ts:enqueueReplayConcatAfterFinalize` — WS-G post-finalize replay concat (best-effort; does not delay the notes path; silent no-op on failure; no cron backstop — multi-segment replay is the fallback)
+  - All three require `maxDuration = 300` on the workspace route segment.
 - **Generic / AWS equivalent**: **Lambda extension** (lifecycle hook) or **SQS trigger** (fire a message and let Lambda consume it). The `after()` pattern is a short-cut; longer workloads should use queues. See §11.1–§11.2 for the future Queues/SQS migration path.
 - **Where baked in**:
   - `src/lib/recording/chunk-transcribe-enqueue.ts` — `import { after } from "next/server"`
   - `src/lib/recording/notes-enqueue.ts` — same
+  - `src/lib/recording/concat-audio-enqueue.ts` — same
   - `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/page.tsx` — `export const maxDuration = 300`
 - **Important limits**:
   - `after()` is stable in Next.js 15 (available as `import { after } from "next/server"`). Do NOT use the unstable `unstable_after` alias from Next.js 14.
@@ -172,6 +191,12 @@
 - **What breaks if violated**: production data loss; old deployed code can't read renamed columns; outbox-in-flight rows reference dropped fields.
 - **Migration check**: this is a policy, not a platform constraint — preserve the policy across providers.
 
+### 2.4a ErasureJob grace window (E1)
+
+- **Assumption**: Learner/family right-to-erasure is orchestrated via durable `ErasureJob` rows. Blob purge and DB scrub phases must not run until `now() >= purgeEligibleAt` (`requestedAt` + 7 days). Tombstone + access denial in the `requested` phase is immediate (service code in E2+). Partial unique index `erasure_job_active_scope` allows at most one in-flight job per `(scopeKind, scopeId)`.
+- **Where baked in**: `prisma/schema.prisma` (`ErasureJob`, `Student.erasedAt`); migration `20260701000000_erasure_job_and_student_erased_at`.
+- **Deferred follow-ups (pilot scale):** `WhiteboardAsset` inventory table (H-3), `ErasureJobBlob` child rows (M-5) — not in E1.
+
 ### 2.5 The duplicate `_prisma_migrations` row (pre-existing issue)
 
 - **Assumption**: There's a known duplicate row for `20260418000000_multi_recording` in both prod and preview-dev `_prisma_migrations` tables (one with `finished_at` set, one with NULL). Currently harmless; flagged in Phase 2 task 14 as "investigate + clean up."
@@ -231,24 +256,38 @@
 
 ## 4. External APIs
 
-### 4.1 OpenAI Whisper
+### 4.1 OpenAI transcription models
 
-- **Assumption**: Whisper `whisper-1` model. Per-call file size limit **25 MB** (`WHISPER_MAX_BYTES` in `src/lib/transcribe-constants.ts`). Rate limit: ~50 RPM at Tier 1 paid.
+- **Assumption**: Primary chunk transcription uses `gpt-4o-mini-transcribe`; fallback (silence-hallucination guard) uses `whisper-1`. Legacy single-shot transcribe (`src/lib/transcribe.ts`) uses `whisper-1`. Per-call file size limit **25 MB** (`WHISPER_MAX_BYTES` in `src/lib/transcribe-constants.ts`). Rate limit: ~50 RPM at Tier 1 paid.
+- **Env overrides** (optional; defaults above when unset — resolved in `src/lib/ai-models.ts`):
+  - `OPENAI_TRANSCRIBE_PRIMARY_MODEL` — recording chunk pipeline primary model.
+  - `OPENAI_TRANSCRIBE_FALLBACK_MODEL` — fallback engaged by quality guard in `transcribe-chunk.ts` (response format is coupled to this value: fallback path uses `verbose_json`).
+  - `OPENAI_LEGACY_TRANSCRIBE_MODEL` — legacy `transcribe.ts` single-shot path.
 - **Where baked in**:
+  - `src/lib/ai-models.ts` — resolved model names from env + defaults.
+  - `src/lib/recording/transcribe-chunk.ts` — primary + fallback transcription.
   - `src/lib/transcribe.ts:transcribeSinglePart` — calls `client.audio.transcriptions.create`.
   - `src/lib/transcribe-ffmpeg.ts:splitAudioIntoWhisperParts` — splits files over 25 MB via ffmpeg.
   - `CHUNK_TARGET_BYTES = 22 MB` — ffmpeg-split target leaves 3 MB margin.
 - **What breaks if violated**:
   - Larger files than 25 MB → 413 from OpenAI.
   - Concurrency above rate limit → 429; current code does NOT retry (Tier 1 bootstrapper adds retry).
-- **Migration check**: if switching to AWS Transcribe, Whisper.cpp self-hosted, or any other STT — file size limits + concurrency limits differ. Re-validate splitter constants.
+  - Changing `OPENAI_TRANSCRIBE_FALLBACK_MODEL` away from `whisper-1` without validating `responseFormatForModel` coupling may break duration extraction on the fallback path.
+- **Migration check**: if switching to AWS Transcribe, Whisper.cpp self-hosted, or any other STT — file size limits + concurrency limits differ. Re-validate splitter constants and update `estimateCostUsd` rate-card if model family changes.
 
-### 4.2 OpenAI Chat Completions (gpt-4o-mini)
+### 4.2 OpenAI Chat Completions (gpt-4o-mini family)
 
-- **Assumption**: `gpt-4o-mini` model for AI notes + AI form-fill. Token limits per request: 128k input / 16k output.
+- **Assumption**: `gpt-4o-mini` model for map/reduce auto-notes, legacy single-shot notes, and AI form-fill. Token limits per request: 128k input / 16k output.
+- **Env overrides** (optional; default `gpt-4o-mini` when unset — resolved in `src/lib/ai-models.ts`):
+  - `OPENAI_MAP_MODEL` — per-chunk map extraction (`extract-chunk.ts`).
+  - `OPENAI_REDUCE_MODEL` — session reduce / TutorNote generation (`notes-worker.ts`).
+  - `OPENAI_LEGACY_NOTES_MODEL` — legacy single-shot notes (`ai.ts`).
 - **Where baked in**:
-  - `src/lib/ai.ts` — main GPT call sites.
-  - `src/lib/observability/cost-events.ts:estimateCostUsd` — pricing table baked in (captured 2026-05-17). **If OpenAI changes prices, this table is stale.**
+  - `src/lib/ai-models.ts` — resolved model names from env + defaults.
+  - `src/lib/ai.ts` — legacy GPT notes call site.
+  - `src/lib/recording/extract-chunk.ts` — map phase.
+  - `src/lib/recording/notes-worker.ts` — reduce phase.
+  - `src/lib/observability/cost-events.ts:estimateCostUsd` — pricing table baked in (captured 2026-05-17). **If OpenAI changes prices or a swapped model is outside the gpt-4o-mini / whisper families, cost rows still log but `estimatedCostUsd` may be `undefined`.**
 - **What breaks if violated**: cost estimates drift from actual OpenAI invoice; long transcripts (>128k tokens, ~100k words) silently truncate.
 - **Migration check**: model changes require updating the pricing table; provider changes (Anthropic, etc.) require new estimate logic + a new `CostEvent.model` enum entry.
 
@@ -310,7 +349,7 @@
   - `src/components/whiteboard/GraphEmbeddable.tsx` + `src/lib/whiteboard/graph-state.ts` + `graph-persist.ts`
   - `src/lib/whiteboard/insert-asset.ts:GRAPH_EMBED_LINK` + `insertGraphOnCanvas`
   - `src/lib/whiteboard/validate-embeddable.ts` (sentinel-only allowlist)
-  - Tutor + student `renderEmbeddable` wiring (`WhiteboardWorkspaceClient`, `StudentWhiteboardClient`)
+  - Tutor + student `renderEmbeddable` wiring (`WhiteboardWorkspaceClient`, role-parameterized for both — the student route renders the same component via `WhiteboardSessionShell role="student"`)
   - `frame-src 'self'` only — Desmos origins removed from CSP (2026-06-10 Phase 2b)
 - **Legacy read**: Old pilot sessions may still contain Desmos iframe embeds in the event log (`type: "desmos"`). `excalidraw-adapter.ts` maps them for replay without throwing; they no longer render live (CSP blocks external iframes) — acceptable per pilot scope.
 - **What breaks if violated**: graph insert shows "Empty Web Embed" if `link`/`validateEmbeddable` drift; student board shows stale graph if `renderEmbeddable` or `graphStateJson` re-hydrate path is removed.
@@ -533,7 +572,14 @@
 
 - **Assumption**: Every state transition logs a 3-letter prefix + session-scoped ID per AGENTS.md. Registry: `rid` (audio), `wbsid` (whiteboard), `obx` (outbox), `snp` (snapshot), `pvw` (preview), `pvs` (per-page view state), `avx` (live A/V), `cev` (cost event), `blb` (blob cleanup CLI), `brs` (branch sweep CLI).
 - **What breaks if violated**: prod debugging becomes impossible. Sarah-reported bug ("my session lost audio") can't be traced without per-session IDs.
-- **Migration check**: this is a code-discipline assumption; preserve across phases. Each new feature with a state machine MUST register a prefix.
+- **Migration check**: this is a code-discipline assumption; preserve across phases. Each new feature with a state machine MUST register a prefix. WS-B adds `wbp` (live whiteboard event-batch persist).
+
+### 10.3a WS-B live whiteboard batch persist (~1s cadence)
+
+- **Assumption**: During ACTIVE sessions, the tutor client POSTs incremental event slices to `POST /api/whiteboard/[sessionId]/checkpoint` about once per second (plus on `visibilitychange` → hidden and before End). Each batch includes `boardDocumentJson` (~2–5 KB) plus a bounded event slice. Batches upsert into `WhiteboardEventBatch` — no per-second Vercel Blob writes (SF-3).
+- **Body-size / rate**: Typical batch fits comfortably under the 4.5 MB Vercel serverless body cap; sustained ~1 write/s per active session is acceptable at pilot scale on Neon + Vercel Pro.
+- **Where baked in**: `src/hooks/useWhiteboardRecorder.ts` (`runServerPersist`), `src/app/api/whiteboard/[sessionId]/checkpoint/route.ts`.
+- **What breaks if violated**: tab-kill loses strokes server-side; End-and-review finalize has nothing to assemble (WS-C). Tutor sees `checkpointStatus` warning after ≥3 consecutive persist failures.
 
 ### 10.4 TOTP_ENCRYPTION_KEY — AES-256-GCM key for 2FA secrets (Identity Phase 1)
 
@@ -637,6 +683,23 @@
 - **Auth gate** (orthogonal): operator-authenticated (`assertIsAdmin()`) required regardless of environment. Account holders and students cannot reach this surface even in preview.
 - **Hard deletion guard**: the delete path includes `isTestFixture: true` in every `WHERE` clause. This guard lives in the business logic (`dev-fixtures.ts`), not just the UI — physically incapable of deleting a real user.
 - **Migration check**: confirm `VERCEL_ENV` is NOT overridden in any production Vercel env var. The dashboard must remain inert there.
+
+### 10.11 Deploy build identity — `VERCEL_GIT_COMMIT_SHA`, client bake, `/api/version`
+
+- **Assumption**: Vercel injects `VERCEL_GIT_COMMIT_SHA` (full git commit) on **all** deployments (Production, Preview, and branch previews). Local `next dev` / `next build` without Vercel has it **unset** — code falls back to the literal `"development"`.
+- **Where baked in**:
+  - `src/lib/build-identity.ts` — `getBuildIdentity()` reads `VERCEL_GIT_COMMIT_SHA`, `VERCEL_GIT_COMMIT_REF`, `VERCEL_ENV`; single source for server deploy metadata.
+  - `next.config.ts` — `env.NEXT_PUBLIC_BUILD_SHA` bakes `VERCEL_GIT_COMMIT_SHA ?? "development"` at **build time** into the client bundle (no new secret env var; same Vercel-injected SHA).
+  - `src/app/api/version/route.ts` — public `GET` returns `{ sha, shortSha }` with `export const dynamic = "force-dynamic"` and `Cache-Control: no-store, max-age=0` (future client poll compares baked vs live).
+  - `src/app/layout.tsx` + `src/components/SiteFooter.tsx` — prod footer shows `shortSha` in all envs.
+  - `src/lib/preview-branch-badge.ts` — thin wrapper over `getBuildIdentity()`; preview pill unchanged (still `VERCEL_ENV === 'preview'` only).
+  - `src/lib/deploy/chunk-load-error.ts` + `src/components/DeployClientGuards.tsx` — global `ChunkLoadError` one-shot reload (respects capture defer via `capture-defer-registry.ts`).
+  - `src/lib/deploy/capture-defer-registry.ts` — ref-counted module-level defer registry; whiteboard workspace + standalone note recording call `setCaptureDeferActive` while live capture/end-session is in flight; poller and chunk recovery read `isCaptureDeferred()` and latch reload until all sources clear. Observability: `[dfr] source=<id> active=<bool> deferred=<bool>`.
+  - `src/hooks/useDeployFreshness.ts` — event-driven client poll of `/api/version` on `document.visibilitychange` (tab visible) and `usePathname()` change only (no background interval); compares remote `sha` to baked `NEXT_PUBLIC_BUILD_SHA`; mismatch + safe → `location.reload()`; mismatch + deferred → single `sonner` toast + reload on defer clear. Local dev guard: skips when baked SHA is `"development"` or falsy.
+- **Capability provided (Vercel)**: automatic per-deploy git SHA in the build environment without operator configuration.
+- **Generic / AWS equivalent**: CI injects `GIT_COMMIT` / `SOURCE_VERSION` at build time; expose the same via a no-store `/api/version` and bake into client at compile time.
+- **What breaks if violated**: client deploy-freshness poll (deliverable 2) and footer SHA show `"development"` or stale baked values; `/api/version` misreports the running deploy; chunk-recovery still works but users stay on skewed bundles longer without the poll.
+- **Migration check**: confirm the new platform exposes an immutable deploy commit SHA at build **and** runtime for the version endpoint; re-bake client env at compile; keep `/api/version` public and no-store.
 
 ---
 

@@ -1,7 +1,7 @@
 # WB-LIVEBOARD-STUDENT-CHROME (Thread A) — smoke runbook
 
 **Branch:** `wb-wave5-liveboard-chrome`
-**Tip commit:** `[dbdc3b0](https://github.com/Arangarx/tutoring-notes/commit/dbdc3b0bdf0b8c36a9c66e331c27e0da3d8dddce)`
+**Tip commit:** [`dbdc3b0`](https://github.com/Arangarx/tutoring-notes/commit/dbdc3b0bdf0b8c36a9c66e331c27e0da3d8dddce)
 **Preview:** [liveboard-chrome preview](https://tutoring-notes-git-wb-wave5-live-bc1168-arangarx-5209s-projects.vercel.app) *(Vercel state: BUILDING at smokebook authoring — confirm READY before run)*
 
 Thread A fixes for student LIVE-board (post-Start) narrow-desktop chrome + mic meter parity. Playwright gates cover compaction, overflow device pickers, and inline meter DOM presence; this smokebook is for **feel + real microphone animation** only.

@@ -687,4 +687,101 @@ describe("split-brain recording-gate fix (V1 master gate A4)", () => {
     expect(ui.bannerMessage).toMatch(/resume automatically/i);
     expect(ui.pillLabel).toMatch(/Auto-paused/i);
   });
+
+  test("paused presentation uses A/V copy when sync roster still has student", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set<string>(),
+        everHadParticipants: true,
+      })
+    );
+    const ui = derivePresentation(out, {
+      tutorWantsRecording: true,
+      participants: new Set<string>(),
+      everHadParticipants: true,
+      syncEnabled: true,
+      syncRosterHasStudent: true,
+    });
+    expect(ui.bannerMessage).toMatch(/audio\/video not connected/i);
+    expect(ui.bannerMessage).not.toMatch(/student disconnected/i);
+    expect(ui.pillLabel).toMatch(/A\/V reconnecting/i);
+  });
+});
+
+describe("IN_PERSON mode", () => {
+  test("sync enabled + no peer + tutor wants recording → recording (not armed)", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set<string>(),
+        everHadParticipants: false,
+        soloEnabled: false,
+        syncEnabled: true,
+        inPersonMode: true,
+      })
+    );
+    expect(out.state).toBe("recording");
+    expect(out.recordingActive).toBe(true);
+    expect(out.shouldCaptureWB).toBe(true);
+    expect(out.shouldCapture(TUTOR_MIC_STREAM_ID)).toBe(true);
+    expect(out.armedReason).toBeUndefined();
+  });
+
+  test("IN_PERSON stays recording with zero participants (no peer required)", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set<string>(),
+        everHadParticipants: false,
+        soloEnabled: false,
+        syncEnabled: true,
+        inPersonMode: true,
+      })
+    );
+    expect(out.state).toBe("recording");
+    expect(out.recordingActive).toBe(true);
+    expect(out.uiPillKind).toBe("recording");
+  });
+
+  test("LIVE path unchanged: no inPersonMode + no peer → armed awaiting_first_participant", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set<string>(),
+        everHadParticipants: false,
+        soloEnabled: false,
+        syncEnabled: true,
+      })
+    );
+    expect(out.state).toBe("armed");
+    expect(out.armedReason).toBe("awaiting_first_participant");
+    expect(out.recordingActive).toBe(false);
+  });
+
+  test("derivePresentation: IN_PERSON recording with no peer → red Recording pill (not Solo rehearsal)", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set<string>(),
+        everHadParticipants: false,
+        soloEnabled: false,
+        syncEnabled: true,
+        inPersonMode: true,
+      })
+    );
+    const ui = derivePresentation(out, {
+      tutorWantsRecording: true,
+      participants: new Set<string>(),
+      everHadParticipants: false,
+      syncEnabled: true,
+      inPersonMode: true,
+    });
+    expect(ui.recordingActive).toBe(true);
+    expect(ui.pillLabel).toBe("Recording");
+    expect(ui.pillColor).toBe("red");
+    expect(ui.bannerMessage).toBe("");
+    expect(ui.autoPaused).toBe(false);
+    expect(ui.pillLabel).not.toBe("Solo rehearsal");
+  });
 });

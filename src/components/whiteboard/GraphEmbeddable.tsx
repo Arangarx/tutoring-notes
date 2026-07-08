@@ -5,7 +5,14 @@
  * embeddable via the `renderEmbeddable` prop (tutor workspace).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import {
   addGraphExpression,
@@ -62,8 +69,17 @@ type JxgBoard = {
 type Props = {
   element: EmbeddableElementLike;
   excalidrawAPI?: GraphPersistApiLike | null;
-  /** Student / replay view: display synced state only — no edits or persist. */
+  /** Prefer ref when state may lag behind the imperative API (live workspace). */
+  excalidrawAPIRef?: RefObject<GraphPersistApiLike | null>;
+  /** Replay / strict read-only: no edits, no controls, tutor sync replots board state. */
   readOnly?: boolean;
+  /**
+   * Live workspace: re-plots from element `graphStateJson` when peer sync updates it.
+   * With `excalidrawAPI` (or ref), local edits also persist back to the board.
+   */
+  syncFromBoard?: boolean;
+  /** Fired after graphStateJson is written to the Excalidraw scene (live sync path). */
+  onAfterPersist?: () => void;
 };
 
 const JSXGRAPH_CSS_ID = "mynk-jsxgraph-css";
@@ -217,7 +233,10 @@ function stopEmbedDragCapture(event: React.SyntheticEvent): void {
 export function GraphEmbeddable({
   element,
   excalidrawAPI,
+  excalidrawAPIRef,
   readOnly = false,
+  syncFromBoard = false,
+  onAfterPersist,
 }: Props) {
   const { resolvedTheme } = useTheme();
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -255,14 +274,16 @@ export function GraphEmbeddable({
     (state: GraphState) => {
       if (readOnly) return;
       graphStateRef.current = state;
-      if (!excalidrawAPI || !elementId) return;
-      persistGraphElementState({
-        excalidrawAPI,
+      const api = excalidrawAPIRef?.current ?? excalidrawAPI;
+      if (!api || !elementId) return;
+      const changed = persistGraphElementState({
+        excalidrawAPI: api,
         elementId,
         graphState: state,
       });
+      if (changed) onAfterPersist?.();
     },
-    [excalidrawAPI, elementId, readOnly]
+    [excalidrawAPI, excalidrawAPIRef, elementId, onAfterPersist, readOnly]
   );
 
   const replot = useCallback(
@@ -549,9 +570,9 @@ export function GraphEmbeddable({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: element.id only
   }, [element.id, readOnly, scheduleBboxPersist]);
 
-  /** Student read-only: re-plot when tutor sync pushes new graphStateJson. */
+  /** Tutor sync / replay: re-plot when board element graphStateJson changes. */
   useLayoutEffect(() => {
-    if (!readOnly) return;
+    if (!readOnly && !syncFromBoard) return;
     const board = boardRef.current;
     if (!board) return;
 
@@ -572,7 +593,7 @@ export function GraphEmbeddable({
     } catch {
       // ignore during teardown
     }
-  }, [readOnly, graphStateJsonRaw]);
+  }, [readOnly, syncFromBoard, graphStateJsonRaw]);
 
   const handleAddExpression = () => {
     if (readOnly) return;

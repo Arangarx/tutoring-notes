@@ -5,6 +5,7 @@ import {
   logCostEvent,
   type CostEventProvenance,
 } from "@/lib/observability/cost-events";
+import { LEGACY_NOTES_MODEL } from "@/lib/ai-models";
 
 /**
  * Bumped from v5 → v6 in B4 for Sarah's pilot feedback:
@@ -122,8 +123,6 @@ const MAX_INPUT_TOKENS = 30000;
 /** Max tokens for the JSON response. */
 const MAX_OUTPUT_TOKENS = 800;
 
-const CHAT_MODEL = "gpt-4o-mini";
-
 export async function generateSessionNote(
   input: GenerateSessionNoteInput
 ): Promise<GenerateSessionNoteResult> {
@@ -136,7 +135,7 @@ export async function generateSessionNote(
   let raw: string;
   try {
     const response = await client.chat.completions.create({
-      model: CHAT_MODEL,
+      model: LEGACY_NOTES_MODEL,
       response_format: { type: "json_object" },
       max_tokens: MAX_OUTPUT_TOKENS,
       messages: [
@@ -152,7 +151,7 @@ export async function generateSessionNote(
     const modelId =
       typeof rawModel === "string" && rawModel.trim().length > 0
         ? rawModel.trim()
-        : CHAT_MODEL;
+        : LEGACY_NOTES_MODEL;
     const usage = response.usage;
     const inTok = usage?.prompt_tokens;
     const outTok = usage?.completion_tokens;

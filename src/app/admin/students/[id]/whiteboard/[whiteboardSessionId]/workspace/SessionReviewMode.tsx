@@ -7,6 +7,7 @@
  * Replay mounts once (persist-once) without unmounting notes or lossy transitions.
  */
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import TutorNotesSection, {
   parseNoteContent,
@@ -22,6 +23,7 @@ import {
   type SessionReviewPayload,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { formatReplayDurationMs } from "@/lib/whiteboard/replay-helpers";
+import { formatBilledDurationLabel } from "@/lib/billing/display";
 import "./whiteboard-chrome.css";
 
 type Props = {
@@ -40,6 +42,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     useState<ReviewSurfaceState>("hero");
   const [hasMountedReplay, setHasMountedReplay] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const initialParsedFieldsRef = useRef<StructuredNoteFields | null>(null);
   const [notesFields, setNotesFields] = useState<StructuredNoteFields>({
@@ -82,7 +85,11 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [whiteboardSessionId]);
+  }, [whiteboardSessionId, loadAttempt]);
+
+  const handleRetryLoad = useCallback(() => {
+    setLoadAttempt((n) => n + 1);
+  }, []);
 
   const handleNoteSaved = useCallback(() => {
     setNoteSaved(true);
@@ -147,6 +154,30 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
           }}
         >
           <strong>Could not load review data.</strong> {loadState.message}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              marginTop: 12,
+            }}
+          >
+            <Link
+              href={`/admin/students/${studentId}`}
+              className="btn"
+              data-testid="wb-review-error-back"
+            >
+              ← Back to student
+            </Link>
+            <button
+              type="button"
+              className="btn"
+              data-testid="wb-review-error-retry"
+              onClick={handleRetryLoad}
+            >
+              Try again
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -159,18 +190,22 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
       data-review-surface={reviewSurface}
     >
       <ReviewWbTopBar
+        studentId={studentId}
         studentName={payload?.studentName}
         durationLabel={(() => {
           if (!payload) return undefined;
-          // Sum stored per-segment audio durations for the recording length.
-          // Falls back to omitting the label when all durations are unknown
-          // (null/0) — better than showing the wall-clock session duration
-          // which includes idle time and disagrees with the replay scrubber.
           const storedAudioMs = (payload.audioSegments ?? []).reduce<number>(
             (sum, s) => sum + Math.round((s.durationSeconds ?? 0) * 1000),
             0
           );
-          return storedAudioMs > 0 ? formatReplayDurationMs(storedAudioMs) : undefined;
+          const fallback =
+            storedAudioMs > 0 ? formatReplayDurationMs(storedAudioMs) : undefined;
+          return formatBilledDurationLabel({
+            billedDurationMin: payload.billedDurationMin,
+            billedStartLocal: payload.billedStartLocal,
+            billedEndLocal: payload.billedEndLocal,
+            fallbackLabel: fallback,
+          });
         })()}
         noteSaved={noteSaved}
       />
@@ -210,21 +245,32 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
                 )}
               </div>
               {canReplay ? (
-                <button
-                  type="button"
-                  className="btn primary wb-review-board-cta"
-                  data-testid="wb-review-enter-replay"
-                  onClick={enterReplay}
-                >
-                  ▶ Replay session
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn primary wb-review-board-cta"
+                    data-testid="wb-review-enter-replay"
+                    onClick={enterReplay}
+                  >
+                    ▶ Replay session
+                  </button>
+                  {payload && !payload.hasAudio && payload.eventCount > 0 ? (
+                    <p
+                      className="muted wb-review-no-audio-note"
+                      data-testid="wb-review-no-audio-note"
+                      style={{ fontSize: 13, margin: 0, padding: "4px 0 0" }}
+                    >
+                      No audio was recorded for this session.
+                    </p>
+                  ) : null}
+                </>
               ) : payload ? (
                 <div
                   className="muted wb-review-board-cta"
                   data-testid="wb-review-no-recording"
                   style={{ fontSize: 13, padding: "8px 0" }}
                 >
-                  No recording available.
+                  Nothing was recorded for this session.
                 </div>
               ) : null}
             </div>
@@ -238,8 +284,12 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
             >
               <WhiteboardReplayInFrame
                 embedded
+                isReviewActive={isReplay}
                 eventsBlobUrl={payload.eventsProxyUrl}
                 audioSegments={payload.audioSegments}
+                canonicalAudioBlobUrl={payload.canonicalAudioBlobUrl}
+                canonicalAudioMimeType={payload.canonicalAudioMimeType}
+                canonicalDurationSeconds={payload.canonicalDurationSeconds}
                 whiteboardSessionId={whiteboardSessionId}
                 studentName={payload.studentName}
                 durationSeconds={payload.durationSeconds}
