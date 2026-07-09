@@ -27,9 +27,8 @@ jest.mock("@/lib/share-access-scope", () => ({
   }),
 }));
 
-jest.mock("@/components/whiteboard/WhiteboardReplay", () => ({
-  __esModule: true,
-  default: () => <div data-testid="mock-whiteboard-replay" />,
+jest.mock("@/components/whiteboard/replay/WhiteboardReplayInFrame", () => ({
+  WhiteboardReplayInFrame: () => <div data-testid="mock-wb-replay-in-frame" />,
 }));
 
 jest.mock("@/lib/db", () => ({
@@ -87,7 +86,7 @@ describe("ShareWhiteboardPage (WS-U-COPY 2.10)", () => {
     });
     render(ui);
 
-    expect(screen.getByTestId("mock-whiteboard-replay")).toBeInTheDocument();
+    expect(screen.getByTestId("mock-wb-replay-in-frame")).toBeInTheDocument();
     expect(screen.queryByText(/schema v/i)).not.toBeInTheDocument();
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringMatching(/schema v3/)

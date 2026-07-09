@@ -94,7 +94,7 @@ export function TutorStudentNoteExpandedBody(props: {
               <Link
                 key={wbId}
                 className="btn"
-                href={`/admin/students/${studentId}/whiteboard/${wbId}/workspace`}
+                href={`/admin/students/${studentId}/whiteboard/${wbId}/workspace?surface=replay`}
               >
                 Watch the whiteboard recording
               </Link>
