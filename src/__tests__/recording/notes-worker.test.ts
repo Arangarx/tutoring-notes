@@ -69,6 +69,7 @@ import {
   upsertTutorNotePending,
 } from "@/lib/recording/transcript-store";
 import { processNotesReduceJob } from "@/lib/recording/notes-worker";
+import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 import { parseNoteContent } from "@/components/whiteboard/TutorNotesSection";
 
 const mockGetSession = db.whiteboardSession.findUnique as jest.Mock;
@@ -287,6 +288,10 @@ describe("processNotesReduceJob — successful reduce", () => {
     expect(userMsg).toContain("extractions");
     const systemMsg = callArgs.messages.find((m: { role: string }) => m.role === "system").content as string;
     expect(systemMsg).toContain("do not fabricate");
+    expect(systemMsg).toContain("semantically-duplicate");
+    expect(systemMsg).toContain("distinct future action");
+    expect(systemMsg).toContain("strengths, struggles, mastery");
+    expect(systemMsg).toContain("Cluster by topic");
   });
 
   it("falls back to raw transcripts when no extractions exist", async () => {
@@ -356,6 +361,12 @@ describe("processNotesReduceJob — failure handling", () => {
       (c: unknown[]) => (c[1] as { status?: string }).status === "failed"
     );
     expect(failCall).toBeDefined();
+  });
+});
+
+describe("processNotesReduceJob — REDUCE prompt version", () => {
+  it("uses the current dated REDUCE_PROMPT_VERSION", () => {
+    expect(REDUCE_PROMPT_VERSION).toBe("2026-07-09-v3-dedup-assessment");
   });
 });
 
