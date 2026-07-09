@@ -12,16 +12,79 @@
 
 import { test, expect } from "./fixtures";
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
+import { TEST_LEARNER } from "../visual/helpers";
 import {
+  loginAccountHolderInContext,
   seedWbLiveSyncSession,
   waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
 import { resolveShareTokenForStudent } from "./share-page-audio-scrub.helpers";
 import { TAG } from "../test-tags";
+
+/** Password for TEST_LEARNER.parentEmail AH login (share wall requires entitled session). */
+const TEST_LEARNER_PARENT_AH_PASSWORD = "PlaywrightParentAh!456";
+
+async function loginOwningParentForShare(
+  context: import("@playwright/test").BrowserContext
+) {
+  const prisma = new PrismaClient();
+  try {
+    const passwordHash = await bcrypt.hash(TEST_LEARNER_PARENT_AH_PASSWORD, 10);
+    await prisma.accountHolder.update({
+      where: { email: TEST_LEARNER.parentEmail },
+      data: { passwordHash, emailVerifiedAt: new Date("2026-01-01") },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+  await loginAccountHolderInContext(
+    context,
+    TEST_LEARNER.parentEmail,
+    TEST_LEARNER_PARENT_AH_PASSWORD
+  );
+}
+
+/** Parent share card reads WhiteboardSession.noteId — end-session alone does not set it. */
+async function linkEndedWhiteboardToReadyShareNote(
+  studentId: string,
+  whiteboardSessionId: string
+) {
+  const prisma = new PrismaClient();
+  try {
+    let note = await prisma.sessionNote.findFirst({
+      where: { studentId, status: "READY" },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      select: { id: true },
+    });
+    if (!note) {
+      note = await prisma.sessionNote.create({
+        data: {
+          studentId,
+          date: new Date(),
+          topics: "Playwright ended session",
+          homework: "",
+          assessment: "",
+          nextSteps: "",
+          linksJson: "[]",
+          status: "READY",
+          shareRecordingInEmail: true,
+        },
+        select: { id: true },
+      });
+    }
+    await prisma.whiteboardSession.update({
+      where: { id: whiteboardSessionId },
+      data: { noteId: note.id },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
 
 async function endSessionOnWorkspace(
   page: import("@playwright/test").Page,
@@ -131,16 +194,21 @@ test.describe(
 
       const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
       await endSessionOnWorkspace(page, studentId, whiteboardSessionId);
+      await linkEndedWhiteboardToReadyShareNote(studentId, whiteboardSessionId);
       const shareToken = await resolveShareTokenForStudent(studentId);
 
+      // SEC-SHARE-WALL: /s/[token] requires an entitled AccountHolder (or learner) session.
+      await loginOwningParentForShare(page.context());
+
       await page.goto(`/s/${shareToken}`, { waitUntil: "domcontentloaded" });
+      await expect(page).not.toHaveURL(/\/account\/login/);
       await expect(page.getByTestId("share-wb-replay-links")).toBeVisible({
         timeout: 30_000,
       });
 
       await page
-        .getByRole("link", { name: /view whiteboard/i })
-        .first()
+        .getByTestId("share-wb-replay-links")
+        .locator(`a[href$="/whiteboard/${whiteboardSessionId}"]`)
         .click();
 
       await expect(page).toHaveURL(
