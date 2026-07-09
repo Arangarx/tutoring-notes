@@ -219,7 +219,7 @@ export function buildReplayReadOnlyChromeSlots({
       <BoardTabStrip
         pageList={pageList}
         activePageId={activePageId}
-        disabled
+        readOnly
         testId="wb-replay-board-tabs"
       />
     </div>
