@@ -86,6 +86,10 @@ export const knownIssuesItems: readonly KnownIssueItem[] = [
     body: "Very rarely, after importing a PDF onto the whiteboard, a pen stroke from another board can appear on the new page. It's intermittent and we're working on a fix; refreshing or undoing usually clears it for now.",
   },
   {
+    title: "Children without their own login can't join live sessions yet",
+    body: "If a learner doesn't have their own username + PIN, a parent signed in on the family account can't open the session join link as that child yet (a learner picker is coming). For live sessions today, set up the child's own login under Manage, or have the child sign in on the student login page. Parents can still view notes and share links.",
+  },
+  {
     title: "Student microphone boost — final check",
     body: "Students can adjust their own mic volume in the app; we're doing one more round of real two-device testing to make sure tutors consistently hear the boost before we call this fully done.",
   },

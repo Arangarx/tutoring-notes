@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
+import { ParentJoinGapCallout } from "@/components/account/ParentJoinGapCallout";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,12 @@ export default async function ChildDetailPage({
     >
       <AccountChildNav learnerId={id} />
 
+      {!fullProfile.isSelfLearner && !fullProfile.credential ? (
+        <ParentJoinGapCallout
+          setupLoginHref={`/account/children/${id}#child-login`}
+        />
+      ) : null}
+
       <div className="flex items-center gap-4 rounded-[10px] border border-accent/25 bg-accent-soft/50 p-4">
         <StudentAvatar name={fullProfile.displayName} size="lg" />
         <div className="min-w-0">
@@ -182,6 +189,7 @@ export default async function ChildDetailPage({
       </AccountSectionCard>
 
       <AccountSectionCard
+        id="child-login"
         title="Child login"
         description={
           fullProfile.credential

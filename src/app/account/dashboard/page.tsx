@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
+import { ParentJoinGapCallout } from "@/components/account/ParentJoinGapCallout";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,8 @@ export default async function AccountDashboardPage() {
 
   const childProfiles = learnerProfiles.filter((p) => !p.isSelfLearner);
   const hasChildren = childProfiles.length > 0;
+  /** Children who can't join via PIN — parent also can't join as them yet. */
+  const childrenWithoutOwnLogin = childProfiles.filter((p) => !p.credential);
 
   const sectionTitle = hasChildren
     ? "Your learners"
@@ -75,6 +78,10 @@ export default async function AccountDashboardPage() {
       }
       userEmail={email}
     >
+      {childrenWithoutOwnLogin.length > 0 ? (
+        <ParentJoinGapCallout />
+      ) : null}
+
       <AccountSectionCard
         title={sectionTitle}
         description={sectionDescription}

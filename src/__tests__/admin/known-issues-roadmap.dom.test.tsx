@@ -45,6 +45,9 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
   it("renders the known-issues list with pilot-facing items", () => {
     const list = screen.getByTestId("known-issues-list");
     expect(within(list).getByText(/PDF boards — occasional stray mark/)).toBeInTheDocument();
+    expect(
+      within(list).getByText(/Children without their own login can't join live sessions yet/)
+    ).toBeInTheDocument();
     expect(within(list).getByText(/Empty review screen/)).toBeInTheDocument();
     expect(within(list).getByText(/Student microphone boost — final check/)).toBeInTheDocument();
   });

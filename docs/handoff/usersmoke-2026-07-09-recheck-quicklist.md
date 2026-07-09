@@ -1,7 +1,7 @@
 # Recheck quicklist — Andrew, 2026-07-09 afternoon
 
 **Branch:** `v1-redesign`  
-**Tip:** [`29b01d7`](https://github.com/Arangarx/tutoring-notes/commit/29b01d7c) (includes E4 PDF bleed)  
+**Tip:** `[29b01d7](https://github.com/Arangarx/tutoring-notes/commit/29b01d7c)` (includes E4 PDF bleed)  
 **Preview:** [v1-redesign](https://tutoring-notes-git-v1-redesign-arangarx-5209s-projects.vercel.app) *(wait for READY after E4 merge)*
 
 Scannable “what’s left for your eyes.” Full triage: `[usersmoke-2026-07-08-problem-quicklist.md](usersmoke-2026-07-08-problem-quicklist.md)`.
@@ -9,8 +9,6 @@ Scannable “what’s left for your eyes.” Full triage: `[usersmoke-2026-07-08
 Legend: `- [ ]` not yet / `- [x]` done · **Must** = overnight merges you likely haven’t smoked · **Optional** = early-night greens you said you already verified · **Still open** = not fixed yet (expect fail / skip)
 
 ---
-
-
 
 ## A. Optional — early-night greens (skip if you’re sure)
 
@@ -28,32 +26,32 @@ You believed these were already verified. Spot-check only if in doubt:
 
 ---
 
-
-
 ## B. Must recheck — merged overnight, not yet smoked by you
-
-
 
 ### Integrity / Sarah path
 
 1. **Cancel strands student**
   Tutor Cancel in waiting room → student sees clear “canceled” copy and can leave (not stuck forever).
+  1. pass
 2. **Cancel → fresh join link**
   Cancel A → Start new B → Copy link is `/join/{B}` (not deleted A). Prefer: don’t use Back into the old workspace.
+  1. pass
 3. **Pending-erasure tutor gate**
   Student in erasure grace: detail page is blocked shell (no notes / share / upload / start) — banner matches reality.
+  1. pass
 4. **View whiteboard → new replay**
   From tutor notes **and** parent share: lands on **new** in-frame replay (board tabs + scrubber), not legacy tiny board + old range input.
+  1. pass
 5. **Claim: Set up later + escape**
   After consent: “Set up later” visible (no forced child login). If learner already has a login: dashboard / Continue escape without manual reload.
+  1. pass
 6. **Finish review**
   Save stays in review (chip OK). Explicit **Finish review** → student detail.
+  1. pass
 7. **Privacy / terms honesty (interim)**
   Product `/privacy` + `/terms`: no hard “24 months after closure” promise; wording matches what we actually do. (Umbrella mortensenapps.com may still differ.)
 8. **Notes quality (prompt)**
   Run one real-ish session → notes: Plan/next-steps not doubled; Assessment grounded (not inventing strengths).
-
-
 
 ### UX bundle (same tip)
 
@@ -66,28 +64,33 @@ You believed these were already verified. Spot-check only if in doubt:
 
 ---
 
-
-
 ## C. Still open — do **not** expect fixed (note if still broken)
 
 Skip or mark “still broken / known” — agents haven’t shipped these yet:
 
 
-| Area               | What’s still open                                                                                                                                                                                   |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Replay polish      | Multi-part banner still there; pause→hide→reopen restarts at 0; scrubber “audio loading” layout jump; Theme intermittent nav; disabled top-bar buttons not dimmed; PDF icons missing on replay tabs |
-| Nav / layout       | Start/end “flash reload” feel; double admin scrollbars; Known-issues still under Settings; claim-link buried; parent Manage alignment                                                               |
-| Claim interstitial | Logged-in parent AuthGate vs “signed in as…” — **first verify email claim URL host vs preview host** before treating as product bug                                                                 |
-| Audio              | Wrong student mic after cancel→rejoin (SMOKE-AUDIO-3); first-acquire meter dead (AUDIO-1); phantom unmute watch (AUDIO-2)                                                                           |
-| Perf               | “Finalizing” slow feel (PERF-1) — queued, not shipped                                                                                                                                               |
-| Intake polish      | Sign-out dimmed in overflow; PDF hard to find in More; top-bar compaction aggressive; password show/hide                                                                                            |
+| Area                        | What’s still open                                                                                                                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Replay polish               | Multi-part banner still there; pause→hide→reopen restarts at 0; scrubber “audio loading” layout jump; Theme intermittent nav; disabled top-bar buttons not dimmed; PDF icons missing on replay tabs                       |
+| Nav / layout                | Start/end “flash reload” feel; double admin scrollbars; Known-issues still under Settings; claim-link buried; parent Manage alignment                                                                                     |
+| Claim interstitial          | Logged-in parent AuthGate vs “signed in as…” — **first verify email claim URL host vs preview host** before treating as product bug                                                                                       |
+| Audio                       | Wrong student mic after cancel→rejoin (SMOKE-AUDIO-3); first-acquire meter dead (AUDIO-1); phantom unmute watch (AUDIO-2)                                                                                                 |
+| Perf                        | “Finalizing” slow feel (PERF-1) — queued, not shipped                                                                                                                                                                     |
+| Intake polish               | Sign-out dimmed in overflow; PDF hard to find in More; top-bar compaction aggressive; password show/hide                                                                                                                  |
+| Review hero + PDF           | **Known gap (not regression):** end on/with PDF → mountain/sun placeholder on “Replay session” card. Replay itself may be fine. Backlogged **WB-REVIEW-THUMBNAIL-PDF**. Click Replay to verify; don’t block on thumbnail. |
+| Share replay phone viewport | **OPEN — fix needed:** student/parent share on phone — blank blue canvas, tabs switch, must scroll; tutor phone replay strokes OK → share path broken. **WB-SHARE-REPLAY-VIEWPORT-PHONE**. Audio not checked (no mic).    |
+| Tutor phone replay layout   | **Slate for design:** notes eat half the screen → tiny canvas. Ideas: notes popup, auto-zoom. Strokes work. **WB-TUTOR-REPLAY-PHONE-LAYOUT**.                                                                             |
+| Review delete copy          | If keep delete on review: label **"Delete session data"** not "Cancel and delete…". **WB-REVIEW-DELETE-COPY**.                                                                                                            |
+| Finish review copy          | **Odd from notes link:** still says “Finish review” after review already done. Slate copy later. **WB-FINISH-REVIEW-COPY-CONTEXT**.                                                                                       |
+| Parent block live update    | **Future:** ajax/refresh Parent account on student detail soon after claim. **ADMIN-PARENT-BLOCK-LIVE**.                                                                                                                  |
+| Parent join as child        | **Post-Sarah gap (honest now):** no learner picker — child needs own login for live join. Known-issues + parent callout. **WB-PARENT-JOIN-AS-CHILD**.                                                                     |
+| Unvisited boards in replay  | Boards never visited missing from tab strip — OK post-Sarah. **WB-REPLAY-UNVISITED-BOARDS**.                                                                                                                              |
+| Student detail phone        | **OPEN:** bottom tabs half-covered by Vercel preview badge + labels too small. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER**.                                                                                                  |
 
 
 **Replay active board tab during scrub:** product was already OK on hardware; gate was a **test oracle** fix. No need to re-prove unless something looks wrong.
 
 ---
-
-
 
 ## D. One-pass suggested order (~20–30 min)
 
@@ -102,8 +105,6 @@ Skip or mark “still broken / known” — agents haven’t shipped these yet:
 9. Optional: notes quality on a throwaway session
 
 ---
-
-
 
 ## Notes (Andrew)
 
