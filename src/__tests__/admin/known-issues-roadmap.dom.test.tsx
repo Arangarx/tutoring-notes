@@ -24,7 +24,9 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
 
   it("renders recently improved subcategories with representative items", () => {
     const section = screen.getByTestId("known-issues-recently-improved");
-    expect(within(section).getByText("Session notes & replay")).toBeInTheDocument();
+    const heading = within(section).getByText("Session notes & replay");
+    expect(heading).toHaveClass("font-semibold");
+    expect(heading).toHaveClass("text-foreground");
     expect(within(section).getByText("Identity, consent & privacy")).toBeInTheDocument();
     expect(
       within(section).getByText(/session notes are ready almost immediately/)
@@ -52,6 +54,16 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
     expect(within(list).queryByText(/Status badge during a session/)).not.toBeInTheDocument();
     expect(within(list).queryByText(/Connection status visibility/)).not.toBeInTheDocument();
     expect(within(list).queryByText(/In-person sessions — waiting message/)).not.toBeInTheDocument();
+  });
+
+  it("section headings are more prominent than body bullets", () => {
+    const section = screen.getByTestId("known-issues-recently-improved");
+    const headings = within(section).getAllByTestId("known-issues-section-heading");
+    for (const heading of headings) {
+      expect(heading).toHaveClass("font-semibold");
+      expect(heading).toHaveClass("text-foreground");
+      expect(heading).not.toHaveClass("text-muted-foreground");
+    }
   });
 
   it("does not render internal engineering appendix markers", () => {

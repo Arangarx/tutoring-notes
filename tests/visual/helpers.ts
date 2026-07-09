@@ -61,6 +61,9 @@ export async function seedTestAdmin(): Promise<string> {
       },
       update: {
         approvalStatus: "APPROVED",
+        // Harness admin should always reflect current app billing defaults (null → DEFAULT_*).
+        defaultRoundingMode: null,
+        defaultRoundingIncrementMin: null,
       },
     });
     return user.id;

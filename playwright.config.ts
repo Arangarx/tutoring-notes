@@ -180,6 +180,7 @@ export default defineConfig({
         "**/integration/wb-replay-scrub-seek.spec.ts",
         "**/integration/view-whiteboard-new-replay.spec.ts",
         "**/integration/wb-board-tab-overflow.spec.ts",
+        "**/integration/ux-sarah-wave1-bundle.spec.ts",
         "**/integration/recording-resilience.spec.ts",
         "**/integration/recording-end-to-end.spec.ts",
         "**/audio-upload.spec.ts",

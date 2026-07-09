@@ -9,6 +9,7 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MARKETING_HOME_HREF } from "@/lib/marketing-routes";
 import type { AdminSessionMode } from "@/lib/admin-routing";
 
 export type AdminSidebarNavProps = {
@@ -82,7 +83,7 @@ export function AdminSidebarNav({
       className="flex h-full w-[220px] flex-col gap-5 border-r border-border bg-card p-5"
     >
       <Link
-        href="/"
+        href={MARKETING_HOME_HREF}
         className="mb-1 inline-flex shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         aria-label="Home"
       >

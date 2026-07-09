@@ -63,7 +63,13 @@ export function ReviewWbTopBar({
         </div>
         {durationLabel ? (
           <span className="mynk-wb-timer" data-testid="wb-review-duration">
-            {durationLabel}
+            <span
+              className="wb-review-billable-label"
+              data-testid="wb-review-billable-label"
+            >
+              Your billable time:
+            </span>{" "}
+            <span data-testid="wb-review-billable-value">{durationLabel}</span>
           </span>
         ) : null}
       </div>
