@@ -4,6 +4,7 @@ import { authOptions } from "@/auth-options";
 import { env } from "@/lib/env";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { db, withDbRetry } from "@/lib/db";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 
 /** Who is viewing the admin UI — DB-backed tutor, legacy env-only login, or nobody. */
 export type StudentScope =
@@ -61,4 +62,21 @@ export async function assertOwnsStudent(studentId: string): Promise<void> {
     { label: "assertOwnsStudent" }
   );
   if (!student || !canAccessStudentRow(scope, student)) notFound();
+}
+
+/**
+ * Ownership + erasure guard for student-scoped mutations and content mints.
+ *
+ * Calls assertOwnsStudent first (multi-tenant ownership), then
+ * assertStudentNotErased (erasure access suspension — tombstone OR active
+ * ErasureJob). Aligns the tutor-content gate with the session-start gate
+ * so the same predicate covers all tutor-facing affordances (ER-3 BLOCKER H).
+ *
+ * Use this instead of assertOwnsStudent on every action that creates,
+ * updates, or deletes student content (notes, share links, audio uploads,
+ * claim-invite mints, etc.).
+ */
+export async function assertOwnsMutableStudent(studentId: string): Promise<void> {
+  await assertOwnsStudent(studentId);
+  await assertStudentNotErased(studentId);
 }

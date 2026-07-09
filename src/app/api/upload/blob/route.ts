@@ -6,6 +6,7 @@ import {
 } from "@/lib/blob-harness";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import {
   assertJoinTokenAllowsWhiteboardAssetUpload,
   assertLearnerSessionAllowsWhiteboardAssetUpload,
@@ -153,6 +154,7 @@ export async function POST(request: Request): Promise<Response> {
             throw new Error("Missing studentId in clientPayload.");
           }
           await assertOwnsStudent(studentId);
+          await assertStudentNotErased(studentId);
           // B1 cost gate: WAITLISTED tutors cannot upload audio blobs.
           const audioBlobScope = await requireStudentScope();
           if (audioBlobScope.kind === "admin") {

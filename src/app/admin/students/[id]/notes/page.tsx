@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { NoteCardActions } from "../NoteCardActions";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
@@ -40,6 +41,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
 
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
+  await assertStudentNotErased(id);
 
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const pageSize = Math.min(50, Math.max(10, parseInt(size, 10) || DEFAULT_PAGE_SIZE));

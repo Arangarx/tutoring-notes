@@ -20,6 +20,7 @@ import { db } from "@/lib/db";
 import { generateRawToken, hashToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
 import { stubSendClaimInviteEmail } from "@/lib/account-holder-email";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 
 export async function POST(
   req: NextRequest,
@@ -49,6 +50,9 @@ export async function POST(
       { status: 409 }
     );
   }
+
+  const erasureBlockedResponse = await assertStudentNotErasedApi(studentId);
+  if (erasureBlockedResponse) return erasureBlockedResponse;
 
   const now = new Date();
 
