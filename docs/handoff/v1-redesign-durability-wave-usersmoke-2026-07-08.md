@@ -246,7 +246,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Very large PDF upload time; OCR/search inside PDFs.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -264,13 +264,15 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Exact list sort order; time to appear in list if a short processing delay is shown inline.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**I'm not sure I like hiding the load time behind finalizing...but I guess it's better than sitting on the session notes screen that long.  Hopefully we can improve that going forward.**
 
 ---
 
@@ -282,9 +284,9 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Notes wording quality, map accuracy, or AI phrasing; email send status.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -300,7 +302,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Sub-second scrub lag; auto-play policy on first open (item 16 is about sync, not auto-play jump-to-end).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -319,7 +321,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 **Ignore this run:** Anonymous grace-period policy details; exact share URL token format.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -336,13 +338,15 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Invite email delivery latency; exact dialog title punctuation.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**Technically pass but this flow needs to be a little smoother.**
 
 ---
 
