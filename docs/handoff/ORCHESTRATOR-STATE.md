@@ -10,24 +10,23 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `8a6ab878` — **✅ END-WINDDOWN** (`e58e0826`) + **✅ SHARE-REPLAY-PHONE** ([share phone](3662f27c-04db-4be2-b716-b9eed10fb14b) → `45236461`) merged. Recheck quicklist COMPLETE.
+**Tip:** `v1-redesign` @ `124f66c1` — **✅ END-WINDDOWN** + **✅ SHARE-REPLAY-PHONE** + **✅ AUDIO-1** ([AUDIO-1 fix](ffd330a9-38a9-4532-82c4-cd46d46b40bb) → `e3afae42`/`81836b5a`). Recheck quicklist COMPLETE.
 
-**Last action:** Merged `fix/wb-share-replay-viewport-phone` `--no-ff` → `8a6ab878`.
+**Last action:** Merged `fix/smoke-audio-1-first-acquire` `--no-ff` → `124f66c1`.
 
 **In-flight subagents:**
-- [AUDIO-1 fix](ffd330a9-38a9-4532-82c4-cd46d46b40bb) Sonnet worktree — unify first acquire + silent RMS oracle
 - [admin student mobile](0059ebbf-3c12-41dc-b040-85395b54b17a) Composer worktree — StudentDetailShell tab discoverability
 
 **Decisions locked (END-WINDDOWN):** shipped — disarm overlay + relay `session_ending`; `endedAt` + poll backup. PERF-1 follow-up.
 
-**AUDIO-1 RC (2026-07-09):** mount `{exact}` vs switch enumerate-entry; fix A+B in flight.
+**AUDIO-1:** shipped A+B (enumerate-entry first acquire + silent RMS oracle). PLAYWRIGHT-GAP: real Brio hardware. AUDIO-3 / phone reconnect re-GUM still open.
 
 **Next action(s) — pre-Sarah burndown (priority):**
-1. **SMOKE-AUDIO-1** — fix in flight
-2. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — in flight
-3. Optional A: blank Board-3 bleed + share-wall (Andrew)
+1. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — in flight
+2. Optional A: blank Board-3 bleed + share-wall (Andrew)
+3. Hardware smoke: Brio first-acquire meter without switch (AUDIO-1 gap)
 
-**Still open / pre-Sarah:** AUDIO-1 (fixing); student-detail mobile (fixing); PERF-1.
+**Still open / pre-Sarah:** student-detail mobile (fixing); PERF-1; Brio hardware oracle for AUDIO-1.
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
