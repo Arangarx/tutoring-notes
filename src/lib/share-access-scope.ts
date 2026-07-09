@@ -55,10 +55,16 @@ export interface ShareAccessResult {
 /**
  * Returns true when the notes auth wall is active.
  * Read once per request; never memoize across requests.
+ *
+ * SECURE-BY-DEFAULT: the wall is ON whenever NOTES_AUTH_WALL is unset or any value
+ * other than the explicit local-dev sentinels "false" or "0".
+ * Set NOTES_AUTH_WALL=false (or =0) ONLY in local dev to preserve anonymous /s/* access.
+ * In preview and production the env var is simply absent → wall ON.
  */
 export function isNotesAuthWallEnabled(): boolean {
   const val = process.env.NOTES_AUTH_WALL;
-  return val === "true" || val === "1";
+  // Only the two explicit local-dev sentinels disable the wall.
+  return val !== "false" && val !== "0";
 }
 
 /**
