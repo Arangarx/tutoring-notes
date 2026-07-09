@@ -1350,7 +1350,12 @@ export function WhiteboardWorkspaceClient({
         );
         if (!res.ok) {
           if (res.status === 404) {
-            setJoinUnavailableReason((prev) => prev ?? "link_invalid");
+            // 404 during PENDING = session was deleted (cancel=delete path).
+            // 404 outside PENDING = genuinely unknown/bad link.
+            const reason: JoinUnavailableReason =
+              sessionPhaseRef.current === "PENDING" ? "session_canceled" : "link_invalid";
+            setJoinUnavailableReason((prev) => prev ?? reason);
+            wjgLog("session_ended", { reason });
           }
           return;
         }
@@ -1389,8 +1394,11 @@ export function WhiteboardWorkspaceClient({
         if (data.sessionPhase === "ACTIVE") {
           setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
         }
-      } catch {
-        //
+      } catch (err) {
+        console.warn(
+          `[wjg] wjg=${studentWjgId} wbsid=${whiteboardSessionId} action=join_timer_poll_error`,
+          err
+        );
       }
     };
     void refresh();
@@ -1411,7 +1419,12 @@ export function WhiteboardWorkspaceClient({
         );
         if (!res.ok) {
           if (res.status === 404) {
-            setJoinUnavailableReason((prev) => prev ?? "link_invalid");
+            // 404 during PENDING = session was deleted (cancel=delete path).
+            // 404 outside PENDING = genuinely unknown/bad link.
+            const reason: JoinUnavailableReason =
+              sessionPhaseRef.current === "PENDING" ? "session_canceled" : "link_invalid";
+            setJoinUnavailableReason((prev) => prev ?? reason);
+            wjgLog("session_ended", { reason });
           }
           return;
         }
@@ -1444,8 +1457,11 @@ export function WhiteboardWorkspaceClient({
         if (data.sessionPhase === "ACTIVE") {
           setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
         }
-      } catch {
-        //
+      } catch (err) {
+        console.warn(
+          `[wjg] wjg=${studentWjgId} wbsid=${whiteboardSessionId} action=join_timer_poll_error`,
+          err
+        );
       }
     };
     void refresh();
@@ -1485,6 +1501,10 @@ export function WhiteboardWorkspaceClient({
   const [sessionPhase, setSessionPhase] = useState<"PENDING" | "ACTIVE">(
     initialSessionPhase
   );
+  // Mutable ref kept in sync with sessionPhase so poll callbacks can read
+  // the current phase without stale closure values (not in their deps arrays).
+  const sessionPhaseRef = useRef<"PENDING" | "ACTIVE">(initialSessionPhase);
+  sessionPhaseRef.current = sessionPhase;
   const phaseActive = sessionPhase === "ACTIVE";
 
   // Waiting-room mode — LIVE (remote) or IN_PERSON (student beside tutor).
@@ -1644,6 +1664,42 @@ export function WhiteboardWorkspaceClient({
     },
     [followViewLockContainerRef, role]
   );
+
+  // Fast-poll trigger: if the tutor disconnects from the sync room while the
+  // student is in PENDING (waiting room), immediately ping the join-timer
+  // instead of waiting up to 3.5 s. This catches cancel-while-waiting faster.
+  const tutorWasEverPresentRef = useRef(false);
+  useEffect(() => {
+    if (role !== "student") return;
+    if (sessionPhase !== "PENDING") return;
+    if (joinUnavailableReason !== null) return;
+    if (studentOtherPeerCount >= 1) {
+      tutorWasEverPresentRef.current = true;
+      return;
+    }
+    if (!tutorWasEverPresentRef.current) return; // never seen tutor — not a drop
+    // Tutor was present, now gone: immediately check whether the session was canceled.
+    void fetch(
+      `/api/whiteboard/${encodeURIComponent(whiteboardSessionId)}/join-timer`,
+      { cache: "no-store", credentials: "same-origin" }
+    ).then(async (res) => {
+      if (res.status === 404) {
+        setJoinUnavailableReason((prev) => prev ?? "session_canceled");
+        wjgLog("session_ended", { reason: "session_canceled" });
+      } else if (res.ok) {
+        const data = (await res.json()) as { live?: boolean; reason?: string };
+        if (data.live === false) {
+          const r = data.reason;
+          const mapped: JoinUnavailableReason =
+            r === "session_ended" ? "session_ended" : "session_canceled";
+          setJoinUnavailableReason((prev) => prev ?? mapped);
+          wjgLog("session_ended", { reason: mapped });
+        }
+      }
+    }).catch(() => {
+      // fast poll failure is fine — regular 3.5s poll handles recovery
+    });
+  }, [role, sessionPhase, studentOtherPeerCount, joinUnavailableReason, whiteboardSessionId, wjgLog]);
 
   // Board-wait banner: student connected but no tutor stream after 8s
   useEffect(() => {
@@ -4123,7 +4179,12 @@ export function WhiteboardWorkspaceClient({
         setIsCancelling(false);
         return;
       }
-      window.location.assign(rosterUrl);
+      // Parity with End: clear the local encryption key so a BFCache restore
+      // of this workspace cannot re-copy the deleted session id.
+      clearEncryptionKeyForSession(whiteboardSessionId);
+      // replace (not assign) removes this deleted workspace from the history
+      // stack — Back will skip it and go to the page before the workspace.
+      window.location.replace(rosterUrl);
     } catch (err: unknown) {
       console.error(
         `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
