@@ -358,7 +358,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** "Remember this device" nuances; forced password change flows not part of this test.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -376,7 +376,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Child-learner PIN login path (item 19); intentional denial when the wrong learner opens someone else's session.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -396,13 +396,19 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Exact cent-level arithmetic; timezone label formatting.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
-- [ ] SKIP
+- [x] SKIP
 
 **Notes:**
+
+**Possible pass but not sure:**
+
+**I don't know where the UI surfaces it right now, if anywhere. we might need to discuss.  It might surface it on the end session review screen, but it's not clear that's what it is.  It PROBABLY is though, because my settings currently say 5 minutes/nearest, and the time at the end of session said exactly 5 minutes.**  
+
+**we should make the billable time more clearly stick out as what it is.  Also, Rounding direction should probably be round up by default, not nearest.  I imagine 99% of tutors will round up, not down.**
 
 ---
 
@@ -414,13 +420,15 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Waiting the full 7-day purge window; cancel-erasure operator flow unless you need to restore the test learner.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**Notes queued already in chat.**
 
 ---
 
@@ -432,7 +440,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Marketing landing hero illustration colors; Excalidraw canvas theme nuances.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -452,7 +460,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
