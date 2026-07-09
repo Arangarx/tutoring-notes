@@ -59,8 +59,8 @@ jest.mock("@/lib/db", () => ({
       findMany: (...a: unknown[]) => mockSessionRecordingFindMany(...a),
     },
   },
-  // withDbRetry: assertCanAccessShareLink uses this; wall is off by default in tests
-  // so session helpers are never called — just need the DB call to work.
+  // withDbRetry: assertCanAccessShareLink uses this; wall is explicitly disabled (NOTES_AUTH_WALL=false)
+  // in these rendering tests so session helpers are never called — just need the DB call to work.
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
 
@@ -106,6 +106,10 @@ function prismaLikeNote(overrides: Partial<{
 describe("SharePage /s/[token] (Phase 0f)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Disable auth wall so assertCanAccessShareLink passes through on token alone.
+    // These tests exercise page rendering logic, not the auth wall
+    // (auth wall behavior is covered in share-access-scope.test.ts).
+    process.env.NOTES_AUTH_WALL = "false";
     mockFindUnique.mockResolvedValue({
       revokedAt: null,
       student: { id: "stu-1", name: "Alex" },

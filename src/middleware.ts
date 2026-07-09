@@ -301,14 +301,15 @@ export async function middleware(req: NextRequest) {
 
   // --- Notes share page protection (NOTES_AUTH_WALL flag — cookie-presence only) ---
   //
-  // When NOTES_AUTH_WALL=true and neither an AccountHolder nor a learner session
-  // cookie is present, redirect to parent login. This is a UX fast-path; the
-  // authoritative gate is assertCanAccessShareLink in each route handler.
+  // When the wall is ON (default: env unset or any value other than "false"/"0") and
+  // neither an AccountHolder nor a learner session cookie is present, redirect to
+  // parent login. This is a UX fast-path that avoids rendering the full page before
+  // redirecting; the authoritative gate is assertCanAccessShareLink in each handler.
   //
-  // When NOTES_AUTH_WALL=false (default, grace window): no redirect — anonymous
-  // /s/* access preserved exactly as today.
+  // Set NOTES_AUTH_WALL=false (or =0) ONLY in local dev to preserve anonymous /s/* access.
   const _notesAuthWallVal = process.env.NOTES_AUTH_WALL;
-  if (pathname.startsWith("/s/") && (_notesAuthWallVal === "true" || _notesAuthWallVal === "1")) {
+  const _notesWallOn = _notesAuthWallVal !== "false" && _notesAuthWallVal !== "0";
+  if (pathname.startsWith("/s/") && _notesWallOn) {
     const ahCookie = req.cookies.get("mynk_ah_session");
     const learnerCookie = req.cookies.get("mynk_learner_session");
     if (!ahCookie && !learnerCookie) {

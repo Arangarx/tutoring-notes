@@ -51,7 +51,9 @@ function makeAudioResponse(
 
 beforeEach(() => {
   jest.clearAllMocks();
-  delete process.env.NOTES_AUTH_WALL;
+  // Disable auth wall for these integration tests (testing route/DB/streaming logic,
+  // not the auth-wall itself — that's covered in share-access-scope.test.ts).
+  process.env.NOTES_AUTH_WALL = "false";
   streamBlobWithRangeSupportMock.mockReset();
   streamBlobWithRangeSupportMock.mockResolvedValue(makeAudioResponse(200));
 });

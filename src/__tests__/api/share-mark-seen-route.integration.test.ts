@@ -22,7 +22,9 @@ import { uniq } from "../helpers/unique-test-token";
 const originalNotesAuthWall = process.env.NOTES_AUTH_WALL;
 
 beforeEach(() => {
-  delete process.env.NOTES_AUTH_WALL;
+  // Disable auth wall for these integration tests (testing mark-seen DB logic,
+  // not the auth-wall itself — that's covered in share-access-scope.test.ts).
+  process.env.NOTES_AUTH_WALL = "false";
 });
 
 afterAll(async () => {

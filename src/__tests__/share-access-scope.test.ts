@@ -171,13 +171,18 @@ function makeRequest(): Request {
 // ---------------------------------------------------------------------------
 
 describe("isNotesAuthWallEnabled()", () => {
-  test("returns false when NOTES_AUTH_WALL is unset", () => {
+  test("returns TRUE when NOTES_AUTH_WALL is unset (secure-by-default)", () => {
     delete process.env.NOTES_AUTH_WALL;
+    expect(isNotesAuthWallEnabled()).toBe(true);
+  });
+
+  test("returns FALSE when NOTES_AUTH_WALL=false (explicit local-dev sentinel)", () => {
+    process.env.NOTES_AUTH_WALL = "false";
     expect(isNotesAuthWallEnabled()).toBe(false);
   });
 
-  test("returns false when NOTES_AUTH_WALL=false", () => {
-    process.env.NOTES_AUTH_WALL = "false";
+  test("returns FALSE when NOTES_AUTH_WALL=0 (explicit local-dev sentinel)", () => {
+    process.env.NOTES_AUTH_WALL = "0";
     expect(isNotesAuthWallEnabled()).toBe(false);
   });
 
@@ -191,9 +196,9 @@ describe("isNotesAuthWallEnabled()", () => {
     expect(isNotesAuthWallEnabled()).toBe(true);
   });
 
-  test("returns false for any other string value", () => {
+  test("returns TRUE for unrecognized string values (secure-by-default, only false/0 disables)", () => {
     process.env.NOTES_AUTH_WALL = "yes";
-    expect(isNotesAuthWallEnabled()).toBe(false);
+    expect(isNotesAuthWallEnabled()).toBe(true);
   });
 });
 
@@ -203,7 +208,9 @@ describe("isNotesAuthWallEnabled()", () => {
 
 describe("checkApiShareAccess — wall OFF (grace window, P1-AC-12)", () => {
   beforeEach(() => {
-    delete process.env.NOTES_AUTH_WALL;
+    // Wall explicitly disabled for local dev — use the sentinel value.
+    // (After the secure-by-default fix, deleting the env would turn the wall ON.)
+    process.env.NOTES_AUTH_WALL = "false";
     shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
     getAccountHolderSessionMock.mockResolvedValue(null);
     getLearnerSessionMock.mockResolvedValue(null);
@@ -218,8 +225,8 @@ describe("checkApiShareAccess — wall OFF (grace window, P1-AC-12)", () => {
     }
   });
 
-  test("wall=false also allows anonymous access", async () => {
-    process.env.NOTES_AUTH_WALL = "false";
+  test("wall=0 also allows anonymous access (both sentinels work)", async () => {
+    process.env.NOTES_AUTH_WALL = "0";
 
     const result = await checkApiShareAccess(makeRequest(), TOKEN_VALID, SHARE_PAGE_PATH);
     expect(result.allowed).toBe(true);
@@ -597,8 +604,8 @@ describe("sal= observability — all access decisions emit [sal] prefix (BLOCKER
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("[sal]"));
   });
 
-  test("emits [sal] prefix on anon grace (wall off)", async () => {
-    delete process.env.NOTES_AUTH_WALL;
+  test("emits [sal] prefix on anon grace (wall off, explicit local-dev sentinel)", async () => {
+    process.env.NOTES_AUTH_WALL = "false"; // explicit local-dev sentinel
     shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
     getAccountHolderSessionMock.mockResolvedValue(null);
     getLearnerSessionMock.mockResolvedValue(null);
@@ -631,8 +638,8 @@ describe("sal= observability — all access decisions emit [sal] prefix (BLOCKER
 // ---------------------------------------------------------------------------
 
 describe("checkApiShareAccess — revocation always applies regardless of wall state", () => {
-  test("returns 403 for revoked link when wall is off", async () => {
-    delete process.env.NOTES_AUTH_WALL;
+  test("returns 403 for revoked link when wall is off (explicit local-dev sentinel)", async () => {
+    process.env.NOTES_AUTH_WALL = "false"; // explicit local-dev sentinel
     shareLinkFindUniqueMock.mockResolvedValue({
       revokedAt: new Date(),
       studentId: STUDENT_A,
@@ -660,7 +667,8 @@ describe("checkApiShareAccess — revocation always applies regardless of wall s
   });
 
   test("returns 403 for missing link token", async () => {
-    delete process.env.NOTES_AUTH_WALL;
+    // Missing link check happens before wall check — wall state is irrelevant.
+    process.env.NOTES_AUTH_WALL = "false"; // local dev sentinel for clarity
     shareLinkFindUniqueMock.mockResolvedValue(null);
 
     const result = await checkApiShareAccess(makeRequest(), "no-such-token", SHARE_PAGE_PATH);
@@ -675,8 +683,8 @@ describe("checkApiShareAccess — revocation always applies regardless of wall s
 // ---------------------------------------------------------------------------
 
 describe("API route integration — studentId comes from access result, not re-fetched link", () => {
-  test("checkApiShareAccess returns studentId matching the ShareLink", async () => {
-    delete process.env.NOTES_AUTH_WALL;
+  test("checkApiShareAccess returns studentId matching the ShareLink (wall off, local dev)", async () => {
+    process.env.NOTES_AUTH_WALL = "false"; // explicit local-dev sentinel
     shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
 
     const result = await checkApiShareAccess(makeRequest(), TOKEN_VALID, SHARE_PAGE_PATH);
@@ -687,8 +695,8 @@ describe("API route integration — studentId comes from access result, not re-f
     }
   });
 
-  test("checkApiShareAccess returns learnerProfileId from the linked student", async () => {
-    delete process.env.NOTES_AUTH_WALL;
+  test("checkApiShareAccess returns learnerProfileId from the linked student (wall off, local dev)", async () => {
+    process.env.NOTES_AUTH_WALL = "false"; // explicit local-dev sentinel
     shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
 
     const result = await checkApiShareAccess(makeRequest(), TOKEN_VALID, SHARE_PAGE_PATH);
@@ -697,6 +705,121 @@ describe("API route integration — studentId comes from access result, not re-f
     if (result.allowed) {
       expect(result.learnerProfileId).toBe(LEARNER_PROFILE_A);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SECURE-BY-DEFAULT fix tests
+//
+// These tests document the NEW required behavior after fix/sec-share-wall-secure-default:
+//   - NOTES_AUTH_WALL unset (env not set) must behave as wall=ON, not wall=OFF.
+//   - Only explicit NOTES_AUTH_WALL="false" or "0" disables the wall (local dev).
+//
+// RED BEFORE: these assertions FAIL against the pre-fix code (env unset = wall OFF = anon
+//   access returns allowed:true / resolves without redirect).
+// GREEN AFTER: pass once isNotesAuthWallEnabled() is inverted to secure-by-default.
+// ---------------------------------------------------------------------------
+
+describe("isNotesAuthWallEnabled — SECURE-BY-DEFAULT new semantics (fix/sec-share-wall-secure-default)", () => {
+  test("returns TRUE when NOTES_AUTH_WALL is unset (secure-by-default)", () => {
+    delete process.env.NOTES_AUTH_WALL;
+    // PRE-FIX: returns false (FAIL). POST-FIX: returns true (PASS).
+    expect(isNotesAuthWallEnabled()).toBe(true);
+  });
+
+  test("returns TRUE for unrecognized value like 'yes' (only false/0 turns it off)", () => {
+    process.env.NOTES_AUTH_WALL = "yes";
+    // PRE-FIX: returns false (FAIL). POST-FIX: returns true (PASS).
+    expect(isNotesAuthWallEnabled()).toBe(true);
+  });
+
+  test("returns FALSE for NOTES_AUTH_WALL=0 (explicit local-dev override)", () => {
+    process.env.NOTES_AUTH_WALL = "0";
+    // PRE-FIX: returns false (coincidentally passes — 0 was never truthy). POST-FIX: returns false (PASS).
+    expect(isNotesAuthWallEnabled()).toBe(false);
+  });
+});
+
+describe("checkApiShareAccess — SECURE-BY-DEFAULT: env unset → wall ON (fix/sec-share-wall-secure-default)", () => {
+  test("[BLOCKER] logged-out + valid token → API returns 401 when NOTES_AUTH_WALL is unset", async () => {
+    delete process.env.NOTES_AUTH_WALL; // env unset = new secure default = wall ON
+    shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+    getAccountHolderSessionMock.mockResolvedValue(null);
+    getLearnerSessionMock.mockResolvedValue(null);
+
+    // PRE-FIX: allowed=true (anonymous grace). POST-FIX: allowed=false, status=401.
+    const result = await checkApiShareAccess(makeRequest(), TOKEN_VALID, SHARE_PAGE_PATH);
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) expect(result.status).toBe(401);
+  });
+
+  test("entitled AccountHolder → still access_granted when env is unset (regression guard)", async () => {
+    delete process.env.NOTES_AUTH_WALL;
+    shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+    getAccountHolderSessionMock.mockResolvedValue(ahSessionA);
+    getLearnerSessionMock.mockResolvedValue(null);
+    learnerProfileFindUniqueMock.mockResolvedValue(learnerProfileA);
+
+    // Should be access_granted in BOTH old and new code (different path, same outcome).
+    const result = await checkApiShareAccess(makeRequest(), TOKEN_VALID, SHARE_PAGE_PATH);
+    expect(result.allowed).toBe(true);
+  });
+
+  test("entitled Learner → still access_granted when env is unset (regression guard)", async () => {
+    delete process.env.NOTES_AUTH_WALL;
+    shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+    getAccountHolderSessionMock.mockResolvedValue(null);
+    getLearnerSessionMock.mockResolvedValue(learnerSessionA); // matches LEARNER_PROFILE_A
+
+    const result = await checkApiShareAccess(makeRequest(), TOKEN_VALID, SHARE_PAGE_PATH);
+    expect(result.allowed).toBe(true);
+  });
+
+  test("NOTES_AUTH_WALL=false → anon grace still reachable (local dev override)", async () => {
+    process.env.NOTES_AUTH_WALL = "false"; // explicit local-dev override
+    shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+    getAccountHolderSessionMock.mockResolvedValue(null);
+    getLearnerSessionMock.mockResolvedValue(null);
+
+    const result = await checkApiShareAccess(makeRequest(), TOKEN_VALID, SHARE_PAGE_PATH);
+    expect(result.allowed).toBe(true); // anon path still works in local dev
+  });
+
+  test("NOTES_AUTH_WALL=0 → anon grace still reachable (local dev override)", async () => {
+    process.env.NOTES_AUTH_WALL = "0";
+    shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+    getAccountHolderSessionMock.mockResolvedValue(null);
+    getLearnerSessionMock.mockResolvedValue(null);
+
+    const result = await checkApiShareAccess(makeRequest(), TOKEN_VALID, SHARE_PAGE_PATH);
+    expect(result.allowed).toBe(true);
+  });
+});
+
+describe("assertCanAccessShareLink — SECURE-BY-DEFAULT: env unset → wall ON (fix/sec-share-wall-secure-default)", () => {
+  test("[BLOCKER] PAGE: logged-out + valid token → redirect to login when NOTES_AUTH_WALL is unset", async () => {
+    delete process.env.NOTES_AUTH_WALL;
+    shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+    getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
+    getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+    hasAccountHolderSessionCookieMock.mockResolvedValue(false);
+    hasLearnerSessionCookieMock.mockResolvedValue(false);
+
+    // PRE-FIX: resolves successfully (anon access). POST-FIX: throws redirect.
+    await expect(
+      assertCanAccessShareLink(TOKEN_VALID, SHARE_PAGE_PATH)
+    ).rejects.toThrow(/NEXT_REDIRECT:.*\/account\/login/);
+  });
+
+  test("NOTES_AUTH_WALL=false → anon grace still works on page route (local dev override)", async () => {
+    process.env.NOTES_AUTH_WALL = "false";
+    shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+    getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
+    getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+
+    // Should resolve successfully (wall off for local dev)
+    const result = await assertCanAccessShareLink(TOKEN_VALID, SHARE_PAGE_PATH);
+    expect(result.studentId).toBe(STUDENT_A);
   });
 });
 
@@ -720,9 +843,10 @@ describe("assertCanAccessShareLink (page variant)", () => {
   // Wall OFF: anonymous grace — must pass through without auth check
   // -------------------------------------------------------------------------
 
-  describe("wall OFF — anonymous grace (no behavior change today)", () => {
+  describe("wall OFF — anonymous grace (explicit local-dev sentinel)", () => {
     beforeEach(() => {
-      delete process.env.NOTES_AUTH_WALL;
+      // Must use explicit sentinel after secure-by-default fix.
+      process.env.NOTES_AUTH_WALL = "false";
       shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
       getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
       getLearnerSessionFromHeadersMock.mockResolvedValue(null);
