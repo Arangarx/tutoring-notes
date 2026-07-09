@@ -168,3 +168,89 @@ export async function readLearnerCredentialOracle(
 export async function ensureParentForClaimWizard(): Promise<string> {
   return seedParentAccountHolder();
 }
+
+/**
+ * Claimed invite fixture with a pre-existing LearnerCredential on the profile.
+ * Used to test the attach_existing path (credential already set → consent → dashboard).
+ */
+export async function seedClaimedInviteWithCredential(opts: {
+  accountHolderId: string;
+  studentName?: string;
+}): Promise<{
+  rawToken: string;
+  inviteId: string;
+  adminUserId: string;
+  studentId: string;
+  studentName: string;
+  learnerProfileId: string;
+}> {
+  assertLocalDatabaseUrlForHarness();
+  const prisma = new PrismaClient();
+  const suffix = uniqSuffix();
+  const studentName = opts.studentName ?? `E2E Attach Existing ${suffix}`;
+
+  try {
+    const tutor = await prisma.adminUser.create({
+      data: {
+        email: `pw-attach-tutor-${suffix}@test.local`,
+        role: "TUTOR",
+        approvalStatus: "APPROVED",
+      },
+      select: { id: true },
+    });
+
+    const student = await prisma.student.create({
+      data: { name: studentName, adminUserId: tutor.id },
+      select: { id: true },
+    });
+
+    const rawToken = await generateRawToken();
+    const tokenHash = hashToken(rawToken);
+    const invite = await prisma.studentClaimInvite.create({
+      data: {
+        studentId: student.id,
+        adminUserId: tutor.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + CLAIM_INVITE_TTL_MS),
+        claimedAt: new Date(),
+        claimedByAccountHolderId: opts.accountHolderId,
+      },
+      select: { id: true },
+    });
+
+    const profile = await prisma.learnerProfile.create({
+      data: {
+        accountHolderId: opts.accountHolderId,
+        displayName: studentName,
+        isSelfLearner: false,
+      },
+      select: { id: true },
+    });
+
+    await prisma.student.update({
+      where: { id: student.id },
+      data: { learnerProfileId: profile.id },
+    });
+
+    // Pre-existing credential (attach_existing scenario — insert directly, no route validation)
+    await prisma.learnerCredential.create({
+      data: {
+        learnerProfileId: profile.id,
+        accountHolderId: opts.accountHolderId,
+        username: `existing_${Date.now().toString(36)}`,
+        secretHash: "placeholder-hash",
+      },
+    });
+
+    return {
+      rawToken,
+      inviteId: invite.id,
+      adminUserId: tutor.id,
+      studentId: student.id,
+      studentName,
+      learnerProfileId: profile.id,
+    };
+  } finally {
+    await prisma.$disconnect();
+  }
+}

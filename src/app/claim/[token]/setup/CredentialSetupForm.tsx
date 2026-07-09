@@ -138,6 +138,7 @@ export function CredentialSetupForm({
         </div>
         <Link
           href="/account/dashboard"
+          data-testid="credential-done-dashboard-link"
           className="inline-block text-sm text-brand underline-offset-2 hover:underline"
         >
           Go to dashboard →
@@ -300,16 +301,15 @@ export function CredentialSetupForm({
         {busy ? "Setting up…" : "Set up login"}
       </Button>
 
-      {!enforcementEnabled ? (
-        <div className="mt-1 text-center">
-          <Link
-            href="/account/dashboard"
-            className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            Set up later
-          </Link>
-        </div>
-      ) : null}
+      <div className="mt-1 text-center">
+        <Link
+          href="/account/dashboard"
+          data-testid="skip-credential-link"
+          className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          Set up later
+        </Link>
+      </div>
     </form>
   );
 }
