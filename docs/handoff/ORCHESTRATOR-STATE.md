@@ -10,33 +10,25 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `6a94ff54` (AUDIO-1 elevated; parent-join honesty `244846c`; E4 bleed earlier). **✅ Recheck quicklist COMPLETE** ([`usersmoke-2026-07-09-recheck-quicklist.md`](usersmoke-2026-07-09-recheck-quicklist.md)) — Wave 1–3 integrity items **PASS** (cancel, erasure, view-whiteboard, claim escapes, Finish review, privacy honesty, notes quality “WAY better”, wordmark, billing). Inline notes triaged below.
+**Tip:** `v1-redesign` @ `e58e0826` — **✅ END-WINDDOWN MERGED** ([END-WINDDOWN](608781f5-8555-4460-bb27-249f1daf1a9d) → `69eacbf6`). Recheck quicklist COMPLETE. Waves 1–3 + E4 + parent-join honesty + legal honesty hard rule landed earlier.
 
-**Decisions / standing rules from recheck notes (2026-07-09):**
-- **Legal honesty = HARD RULE** — Terms/Privacy must be honest at all times, especially `master`; slight leeway on preview only. Codified in `LEGAL-SYNC.md` + `AGENTS.md`.
-- **Notes quality:** prompt_wins PASS / much better — **do not scale back detail** without real-target feedback first.
-- **Billing copy:** pass; optional later polish after feedback.
-- **Known-issues headers:** looks better; optional later pass.
-
-**Last action:** AUDIO-1 investigate DONE — RC = first-acquire `{exact}` vs switch enumerate-entry asymmetry. Dispatching Sonnet A+B fix worktree.
+**Last action:** Merged `fix/smoke-end-winddown` `--no-ff` → `e58e0826`; PERF-1 deferred.
 
 **In-flight subagents:**
-- [share replay phone](3662f27c-04db-4be2-b716-b9eed10fb14b) Composer — `fix/wb-share-replay-viewport-phone`
-- [END-WINDDOWN](608781f5-8555-4460-bb27-249f1daf1a9d) Sonnet worktree — disarm + immediate student signal
+- [share replay phone](3662f27c-04db-4be2-b716-b9eed10fb14b) Composer — `fix/wb-share-replay-viewport-phone` (branch tip `45236461` pushed — review/merge next)
 - [AUDIO-1 fix](ffd330a9-38a9-4532-82c4-cd46d46b40bb) Sonnet worktree — unify first acquire + silent RMS oracle
 
-**Decisions locked (END-WINDDOWN):** On End confirm: (1) disarm board both sides; (2) immediate student wind-down (relay + overlay + stop A/V); atomic `endedAt` remains durable truth + poll backup. Pair PERF-1 when practical.
+**Decisions locked (END-WINDDOWN):** shipped — disarm overlay + relay `session_ending`; `endedAt` + poll backup. PERF-1 follow-up.
 
-**AUDIO-1 RC (2026-07-09):** mount `acquireMic` uses `deviceId: { exact }` only; picker switch uses `getUserMediaAudioForEnumerateEntry` + swap. Fix = A (first==switch) + B (silent oracle). Student phone reconnect = separate (no re-GUM on mesh.restart).
+**AUDIO-1 RC (2026-07-09):** mount `{exact}` vs switch enumerate-entry; fix A+B in flight.
 
 **Next action(s) — pre-Sarah burndown (priority):**
-1. **WB-SHARE-REPLAY-VIEWPORT-PHONE** — in flight
-2. **SMOKE-END-WINDDOWN** — in flight
-3. **SMOKE-AUDIO-1** — fix in flight (Sonnet A+B)
-4. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — after share / serialize
-5. Optional A: blank Board-3 bleed + share-wall spot-check (Andrew)
+1. **WB-SHARE-REPLAY-VIEWPORT-PHONE** — merge when agent complete / review tip
+2. **SMOKE-AUDIO-1** — fix in flight
+3. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER**
+4. Optional A: blank Board-3 bleed + share-wall (Andrew)
 
-**Still open / pre-Sarah:** AUDIO-1 (fixing); END-WINDDOWN (implementing); share-replay phone; student-detail mobile; PERF-1.
+**Still open / pre-Sarah:** AUDIO-1 (fixing); share-replay phone; student-detail mobile; PERF-1.
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
