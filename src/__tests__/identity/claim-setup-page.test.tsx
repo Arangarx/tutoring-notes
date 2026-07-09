@@ -40,6 +40,9 @@ jest.mock("next/navigation", () => ({
   redirect: jest.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
+  useRouter: jest.fn(() => ({
+    refresh: jest.fn(),
+  })),
 }));
 
 const headersMock = jest.fn();
@@ -249,7 +252,7 @@ describe("Claim setup page — T7 self-learner exemption (L-2)", () => {
 });
 
 describe("Claim setup page — T8 enforcement affordances", () => {
-  it("hides Set up later on credential form until consent saved", async () => {
+  it("always shows Set up later on credential form regardless of consent state", async () => {
     const fx = await createClaimedSetupFixture({
       withCredential: false,
       withConsent: false,
@@ -257,7 +260,7 @@ describe("Claim setup page — T8 enforcement affordances", () => {
 
     await renderSetupPage(fx.rawToken, fx.ah.id);
 
-    expect(screen.queryByRole("link", { name: /set up later/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /set up later/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save preferences/i })).toBeInTheDocument();
   });
 });

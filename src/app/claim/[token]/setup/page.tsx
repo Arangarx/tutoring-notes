@@ -171,6 +171,7 @@ export default async function ClaimSetupPage({
                 {consentComplete ? (
                   <Link
                     href="/account/dashboard"
+                    data-testid="credential-existing-dashboard-link"
                     className="inline-block text-sm text-brand underline-offset-2 hover:underline"
                   >
                     {"Go to dashboard \u2192"}

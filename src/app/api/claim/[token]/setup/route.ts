@@ -228,6 +228,18 @@ export async function POST(
       return NextResponse.json({ error: "profile_not_found" }, { status: 404 });
     }
 
+    // Guard: one credential per profile (learnerProfileId is @unique on LearnerCredential).
+    const existingProfileCred = await db.learnerCredential.findUnique({
+      where: { learnerProfileId },
+      select: { id: true },
+    });
+    if (existingProfileCred) {
+      return NextResponse.json(
+        { error: "credential_already_exists" },
+        { status: 409 }
+      );
+    }
+
     const existingCred = await db.learnerCredential.findUnique({
       where: {
         accountHolderId_username: {

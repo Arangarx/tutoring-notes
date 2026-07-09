@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -42,6 +44,8 @@ export function ConsentSetupForm({
   enforcementEnabled: boolean;
   hasPendingSessionInvite: boolean;
 }) {
+  const router = useRouter();
+
   // D-4: always start all-OFF on every render (no carryover)
   const [values, setValues] = useState({
     allowLiveSession: false,
@@ -71,6 +75,7 @@ export function ConsentSetupForm({
       const data = (await res.json()) as { error?: string };
       if (data.error === "consent_already_saved") {
         setSaved(true);
+        router.refresh();
         return;
       }
     }
@@ -80,6 +85,7 @@ export function ConsentSetupForm({
       return;
     }
     setSaved(true);
+    router.refresh();
   }
 
   async function handleSave() {
@@ -119,6 +125,13 @@ export function ConsentSetupForm({
         <p className="text-xs text-muted-foreground">
           You can update these preferences any time from your account dashboard.
         </p>
+        <Link
+          href="/account/dashboard"
+          data-testid="consent-saved-dashboard-link"
+          className="inline-block text-sm text-brand underline-offset-2 hover:underline"
+        >
+          {"Finish \u2014 go to dashboard \u2192"}
+        </Link>
       </div>
     );
   }
