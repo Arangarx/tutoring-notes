@@ -161,6 +161,7 @@ export default defineConfig({
         "**/integration/wb-wave5-polish.spec.ts",
         "**/integration/wb-av-mesh.spec.ts",
         "**/integration/wb-session-lifecycle.spec.ts",
+        "**/integration/wb-cancel-pending-session.spec.ts",
         "**/integration/wb-chrome-interactions.spec.ts",
         "**/integration/wb-phantom-stroke-regression.spec.ts",
         "**/integration/wb-live-persist-tab-kill.spec.ts",
