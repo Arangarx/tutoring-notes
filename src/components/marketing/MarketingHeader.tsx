@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import { MARKETING_HOME_HREF } from "@/lib/marketing-routes";
 
 const SIGN_IN_LINKS = [
   { href: "/login", label: "Tutor sign in" },
@@ -126,7 +127,7 @@ export function MarketingHeader() {
           gap: 12,
         }}
       >
-        <Link href="/" aria-label="Mynk home">
+        <Link href={signedIn ? MARKETING_HOME_HREF : "/"} aria-label="Mynk home">
           <MynkWordmark size="sm" />
         </Link>
 

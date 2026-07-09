@@ -29,7 +29,12 @@ export function KnownIssuesRoadmapView() {
         <div className="space-y-5">
           {recentlyImprovedSections.map((section) => (
             <div key={section.title}>
-              <h3 className="mb-2 text-sm font-medium text-muted-foreground">{section.title}</h3>
+              <h3
+                className="mb-2 text-sm font-semibold text-foreground"
+                data-testid="known-issues-section-heading"
+              >
+                {section.title}
+              </h3>
               <BulletList items={section.items} />
             </div>
           ))}

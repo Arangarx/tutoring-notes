@@ -11,6 +11,7 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MARKETING_HOME_HREF } from "@/lib/marketing-routes";
 import type { AdminSessionMode } from "@/lib/admin-routing";
 import type { AdminSidebarNavProps } from "@/components/admin/AdminSidebarNav";
 
@@ -103,7 +104,7 @@ export function AdminNav({
         <header className="sticky top-0 z-50 border-b border-border bg-card md:hidden">
           <div className="flex h-[52px] items-center justify-between gap-3 px-4">
             <Link
-              href="/"
+              href={MARKETING_HOME_HREF}
               className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               aria-label="Home"
             >
@@ -234,7 +235,7 @@ export function AdminNav({
       <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-4">
           <Link
-            href="/"
+            href={MARKETING_HOME_HREF}
             className="inline-flex min-h-11 min-w-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             aria-label="Home"
           >

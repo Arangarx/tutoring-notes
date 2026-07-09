@@ -2998,6 +2998,8 @@
   flex-direction: column;
   gap: 2px;
   padding: 4px;
+  /* Extra bottom padding lifts Sign out above the fade mask (touch overflow sheet). */
+  padding-bottom: 40px;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);

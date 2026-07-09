@@ -224,7 +224,10 @@ describe("SessionReviewMode unified surface", () => {
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
     );
     const duration = await screen.findByTestId("wb-review-duration");
-    expect(duration).toHaveTextContent("55 min");
+    expect(screen.getByTestId("wb-review-billable-label")).toHaveTextContent(
+      "Your billable time:"
+    );
+    expect(screen.getByTestId("wb-review-billable-value")).toHaveTextContent("55 min");
     expect(duration).toHaveTextContent("10:00 AM");
     expect(duration).not.toHaveTextContent(":00:");
   });
