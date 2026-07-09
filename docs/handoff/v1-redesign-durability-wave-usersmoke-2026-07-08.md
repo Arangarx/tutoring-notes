@@ -1,7 +1,7 @@
 # Go-to-Sarah durability wave — v1-redesign post-merge user smoke — smoke runbook
 
 **Branch:** `v1-redesign`
-**Tip commit:** [`d6b4433`](https://github.com/Arangarx/tutoring-notes/commit/d6b443351c2df5f796eb5a3668fa344732398029)
+**Tip commit:** `[d6b4433](https://github.com/Arangarx/tutoring-notes/commit/d6b443351c2df5f796eb5a3668fa344732398029)`
 **Preview:** [v1-redesign preview](https://tutoring-notes-git-v1-redesign-arangarx-5209s-projects.vercel.app) *(confirm the Vercel deployment is READY before starting — it was BUILDING at authoring time)*
 
 This is a broad, user-perspective spot-check of everything that landed in the go-to-Sarah durability wave merge on `v1-redesign`: Wave 5 whiteboard chrome and polish, consent gates CC-1/CC-2, learner identity and claim flow, billing display, data erasure surfaces, whiteboard recording reliability, and the WS-I pre-start recording-mute fix. Run top to bottom on the **Preview** URL using real devices where noted (dual-browser or phone + desktop for live A/V).
@@ -18,7 +18,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Preview-branch badge styling.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -36,7 +36,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Exact column order or avatar styling; students you have intentionally erased (see item 22).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -55,7 +55,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 **Ignore this run:** Consent-blocked students (covered in item 4); exact loading shimmer duration.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -72,13 +72,15 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Email delivery timing for claim invites; exact punctuation of callout text.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**It correctly has the message "Before you can start a session, the student's parent must claim this account and set privacy preferences."**
 
 ---
 
@@ -90,7 +92,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Brief (<5s) connection flicker; exact tile layout at very narrow widths (item 8).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -108,7 +110,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Exact avatar background color, font size, or shape.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -126,7 +128,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Exact bar width, color, or animation curve; minor lag (<1s) after unmute.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -146,7 +148,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Minor wrapping/spacing nits; devices where only one mic/camera exists (picker may be disabled — not a fail).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -164,7 +166,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Transcription wording quality; exact fade timing at mute/unmute edges.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -184,7 +186,7 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Sub-second overlay fade animation; recording banner copy details.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -204,13 +206,15 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 **Ignore this run:** Exact pen color defaults; sub-pixel stroke alignment between peers.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**General syncing passes, I already queued up the message telling you that the strokes bled again.**
 
 ---
 
@@ -223,12 +227,14 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 **Ignore this run:** Exact zoom percentage labels; maximum page count stress test.
 
 - [ ] PASS
-- [ ] FAIL
-- [ ] PARTIAL
+- [x] FAIL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**Syncing seems fine, but as mentioned strokes bled on pdf load again.**
 
 ---
 
