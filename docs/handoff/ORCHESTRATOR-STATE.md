@@ -18,13 +18,17 @@
 - **Billing copy:** pass; optional later polish after feedback.
 - **Known-issues headers:** looks better; optional later pass.
 
-**Last action:** Recheck triage durable (LEGAL honesty hard rule, NOTES-QUALITY-HOLD-DETAIL, state + quicklist Notes). Tip still `6a94ff54` until next code merge.
+**Last action:** Recheck triage committed+pushed `9920defe`. Pre-Sarah burndown started.
+
+**In-flight subagents:**
+- [share replay phone](3662f27c-04db-4be2-b716-b9eed10fb14b) Composer — `fix/wb-share-replay-viewport-phone`
+- [AUDIO-1 investigate](d9ef09d0-65a2-4e81-b1ee-f162723420d3) explore readonly — root cause for silent Brio
 
 **Next action(s) — pre-Sarah burndown (priority):**
-1. **WB-SHARE-REPLAY-VIEWPORT-PHONE** — in flight (Composer) — share shell viewport lock + `@wb-viewport` Playwright
-2. **SMOKE-AUDIO-1** — investigate → Sonnet fix (fragile live-A/V; Brio silent until switch)
-3. **SMOKE-END-WINDDOWN** — **blocked on Andrew confirm** of product rec (disarm board + immediate student signal on End confirm; pair PERF-1)
-4. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — larger bottom-tab labels / discoverability
+1. **WB-SHARE-REPLAY-VIEWPORT-PHONE** — in flight
+2. **SMOKE-AUDIO-1** — investigate in flight → then Sonnet fix (fragile live-A/V)
+3. **SMOKE-END-WINDDOWN** — **blocked on Andrew confirm** (see chat)
+4. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — after share branch lands (or worktree)
 5. Optional A: blank Board-3 bleed + share-wall spot-check (Andrew)
 
 **Still open / pre-Sarah:** AUDIO-1 SEVERE; END-WINDDOWN (await confirm); share-replay phone; student-detail mobile; PERF-1.
