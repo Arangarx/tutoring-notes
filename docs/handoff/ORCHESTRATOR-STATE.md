@@ -14,13 +14,13 @@
 
 **Decisions locked (2026-07-09):** SEC-POLICY=both (copy now + retention later); cancel=keep-delete + **new session ALWAYS fresh id**; interstitial=verify email host first; Save stays put + **"Finish review"** CTA → student detail; billing=round **up** + label tutor billable time; marketing wordmark=`/?view=home`; replay-tab gate red = likely **test/aria mismatch** (Andrew screenshot: Board 1 visually active).
 
-**Wave 1 IN FLIGHT (parallel isolated worktrees, Playwright-on-touch mandatory):**
-1. ~~notes prompt_wins~~ ✅ **MERGED** `49485ea` ([notes prompt_wins](1eceaad8-da08-4417-8d58-54bc5d447d9e) → `3779d32`)
-2. ~~SEC-ERASURE-TUTOR-GATE~~ ✅ **MERGED** `fd62272` ([SEC-ERASURE](ab6b4eca-23b0-4b9b-b4a3-eb955989be08) → `8393bff`) — `assertOwnsMutableStudent` + `[id]/layout.tsx` short-circuit; jest 14 + Playwright `erasure-tutor-gate.spec.ts`
-3. ~~View whiteboard → new replay~~ ✅ **MERGED** `a249897` ([view whiteboard](bc2b1f60-fb51-47fd-9a77-880d1c6a4c0a) → `0251030`). Jest DOM 13/13. **Playwright re-run from main checkout deferred** — shared :3100/:3101 contended by other Wave 1 agents; re-run when tree quiet (`view-whiteboard-new-replay.spec.ts` enrolled in wb-regression).
-4. [UX bundle](48187f62-85fb-4f7a-9e39-fe1de591be6f) → `fix/ux-sarah-wave1-bundle` — still in flight
+**✅ Wave 1 COMPLETE — all 4 merged to `v1-redesign` tip `969ae7d`:**
+1. notes prompt_wins `49485ea` ([notes](1eceaad8-da08-4417-8d58-54bc5d447d9e))
+2. SEC-ERASURE-TUTOR-GATE `fd62272` ([SEC-ERASURE](ab6b4eca-23b0-4b9b-b4a3-eb955989be08))
+3. View whiteboard → new replay `a249897` ([view whiteboard](bc2b1f60-fb51-47fd-9a77-880d1c6a4c0a)) — PW re-run pending when ports free
+4. UX bundle `969ae7d` ([UX bundle](48187f62-85fb-4f7a-9e39-fe1de591be6f)) — wordmark, billing up+label, known-issues headers, Sign-out clearance
 
-**Next serial after Wave 1 merges:** claim set-up-later+escape (Sonnet) → cancel+fresh-id (WWC/Sonnet) → Finish-review CTA → replay-tab aria/oracle → SEC-POLICY copy. Pre-release polish (top-bar compaction, password eye, PDF-in-More) deferred.
+**Wave 2 NEXT (serial):** claim set-up-later+escape (Sonnet) → cancel+fresh-id (WWC/Sonnet) → Finish-review CTA → replay-tab aria/oracle → SEC-POLICY copy.
 
 **Historical (collapsed):** Bug A `27d6cc5`, wave5→v1-redesign merge `d6b4433`, smoke triage trail below remains for audit until heavy restructure.
 
