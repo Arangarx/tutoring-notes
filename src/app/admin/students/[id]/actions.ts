@@ -7,7 +7,7 @@ import { db, withDbRetry, isTransientDbConnectionError } from "@/lib/db";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { sendMail } from "@/lib/email";
 import { generateShareToken, parseLinksFromTextarea } from "@/lib/security";
-import { assertOwnsStudent, getStudentScope, requireStudentScope } from "@/lib/student-scope";
+import { assertOwnsMutableStudent, assertOwnsStudent, getStudentScope, requireStudentScope } from "@/lib/student-scope";
 import { generateSessionNote, estimateTokens, MAX_INPUT_TOKENS } from "@/lib/ai";
 import { parseDateOnlyInput } from "@/lib/date-only";
 import { mapWithConcurrency, transcribeAudio } from "@/lib/transcribe";
@@ -63,7 +63,7 @@ async function resolveTutorDisplayName(): Promise<{ signer: string; fromDisplayN
 }
 
 export async function regenerateShareLink(studentId: string) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   await db.shareLink.updateMany({
     where: { studentId, revokedAt: null },
     data: { revokedAt: new Date() },
@@ -77,7 +77,7 @@ export async function regenerateShareLink(studentId: string) {
 }
 
 export async function revokeShareLink(studentId: string) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   await db.shareLink.updateMany({
     where: { studentId, revokedAt: null },
     data: { revokedAt: new Date() },
@@ -90,7 +90,7 @@ export async function createNote(
   studentId: string,
   formData: FormData
 ): Promise<{ id: string }> {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const dateStr = String(formData.get("date") ?? "");
   const date = parseDateOnlyInput(dateStr);
   if (!date) throw new Error("Invalid date");
@@ -250,7 +250,7 @@ export async function generateNoteFromTextAction(
   studentId: string,
   sessionText: string
 ): Promise<GenerateNoteResult> {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const scope = await getStudentScope();
   const adminUserId = scope.kind === "admin" ? scope.adminId : null;
 
@@ -392,7 +392,7 @@ async function _transcribeAndGenerateImpl(
     return transcribeFail(rid, "Audio features require a DB-backed tutor account.");
   }
   const tutorAdminId = scope.adminId;
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
 
   // B1 cost gate: WAITLISTED tutors cannot run transcription (Whisper + OpenAI spend).
   await assertTutorApproved(tutorAdminId);
@@ -792,7 +792,7 @@ async function _transcribeAndGenerateImpl(
 
 
 export async function setNoteStatus(noteId: string, studentId: string, status: "DRAFT" | "READY") {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const row = await db.sessionNote.findFirst({ where: { id: noteId, studentId } });
   if (!row) return;
   await db.sessionNote.update({ where: { id: noteId }, data: { status } });
@@ -800,7 +800,7 @@ export async function setNoteStatus(noteId: string, studentId: string, status: "
 }
 
 export async function renameStudent(studentId: string, formData: FormData) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required");
   await db.student.update({ where: { id: studentId }, data: { name } });
@@ -814,7 +814,7 @@ export async function deleteStudent(studentId: string) {
 }
 
 export async function updateNote(noteId: string, studentId: string, formData: FormData) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const existing = await db.sessionNote.findFirst({ where: { id: noteId, studentId } });
   if (!existing) return;
   const dateStr = String(formData.get("date") ?? "");
@@ -843,7 +843,7 @@ export async function updateNote(noteId: string, studentId: string, formData: Fo
 }
 
 export async function deleteNote(noteId: string, studentId: string) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const existing = await db.sessionNote.findFirst({ where: { id: noteId, studentId } });
   if (!existing) return;
   await db.sessionNote.delete({ where: { id: noteId } });
@@ -936,7 +936,7 @@ export async function sendUpdateEmail(
   formData: FormData
 ): Promise<SendUpdateResult> {
   const studentId = String(formData.get("studentId") ?? "").trim();
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const toEmail = String(formData.get("toEmail") ?? "").trim();
   if (!studentId || !toEmail) return { ok: false, sent: false, error: "Student and email required" };
 

@@ -26,17 +26,44 @@ jest.mock("@vercel/blob", () => ({
   put: jest.fn(),
 }));
 
+jest.mock("next/cache", () => ({
+  __esModule: true,
+  revalidatePath: jest.fn(),
+  revalidateTag: jest.fn(),
+}));
+
+jest.mock("@/lib/revalidateStudentSharePages", () => ({
+  __esModule: true,
+  revalidateStudentSharePages: jest.fn().mockResolvedValue(undefined),
+}));
+
 const requireStudentScopeMock = jest.fn();
 const getStudentScopeMock = jest.fn();
 const assertOwnsStudentMock = jest.fn();
 const assertOwnsWhiteboardSessionMock = jest.fn();
 
-jest.mock("@/lib/student-scope", () => ({
-  __esModule: true,
-  requireStudentScope: () => requireStudentScopeMock(),
-  getStudentScope: () => getStudentScopeMock(),
-  assertOwnsStudent: (id: string) => assertOwnsStudentMock(id),
-}));
+jest.mock("@/lib/student-scope", () => {
+  // Lazy require the real assertStudentNotErased so the erasure DB check
+  // still fires through the real implementation even though the ownership
+  // assertion is mocked out.
+  const { assertStudentNotErased: realAssertStudentNotErased } =
+    jest.requireActual("@/lib/erasure/assert-student-not-erased");
+
+  return {
+    __esModule: true,
+    requireStudentScope: () => requireStudentScopeMock(),
+    getStudentScope: () => getStudentScopeMock(),
+    assertOwnsStudent: (id: string) => assertOwnsStudentMock(id),
+    /**
+     * assertOwnsMutableStudent: pass ownership mock + run real erasure check
+     * so the DB-backed suspension gate fires in integration tests.
+     */
+    assertOwnsMutableStudent: async (id: string) => {
+      await assertOwnsStudentMock(id);
+      await realAssertStudentNotErased(id);
+    },
+  };
+});
 
 jest.mock("@/lib/whiteboard-scope", () => ({
   __esModule: true,
@@ -62,6 +89,15 @@ import {
 } from "@/lib/erasure/assert-student-not-erased";
 import { requestErasureByAdmin } from "@/lib/erasure/request-erasure-by-admin";
 import { cancelErasureJob } from "@/lib/erasure/process-erasure-job";
+import {
+  createNote,
+  regenerateShareLink,
+  revokeShareLink,
+  generateNoteFromTextAction,
+  setNoteStatus,
+  updateNote,
+  deleteNote,
+} from "@/app/admin/students/[id]/actions";
 import { GET as getEvents } from "@/app/api/whiteboard/[sessionId]/events/route";
 import { GET as getSnapshot } from "@/app/api/whiteboard/[sessionId]/snapshot/route";
 import { GET as getTutorAsset } from "@/app/api/whiteboard/[sessionId]/tutor-asset/route";
@@ -368,6 +404,18 @@ describe("ER-3 — content route denial during active erasure (BLOCKER H)", () =
     expect(await assertStudentNotErasedApi(student.id)).toBeNull();
   });
 
+  it("assertStudentNotErasedApi denies during purge (erasedAt set)", async () => {
+    const { student } = await createContentFixture();
+
+    await db.student.update({
+      where: { id: student.id },
+      data: { erasedAt: new Date() },
+    });
+
+    const blocked = await assertStudentNotErasedApi(student.id);
+    expect(blocked!.status).toBe(404);
+  });
+
   it("events/snapshot/tutor-asset/audio routes return 404 during active erasure", async () => {
     const fixture = await createContentFixture();
 
@@ -421,5 +469,141 @@ describe("ER-3 — content route denial during active erasure (BLOCKER H)", () =
     );
     expect(audioRes.status).toBe(404);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ER-3 TUTOR-CONTENT GATE — mutations blocked by assertOwnsMutableStudent
+// ---------------------------------------------------------------------------
+
+describe("ER-3 — tutor content mutations blocked during active erasure (BLOCKER H extension)", () => {
+  const THROW_NOT_FOUND = "NEXT_NOT_FOUND";
+
+  it("createNote throws not-found during grace period", async () => {
+    const { lp, student } = await createErasureFixture();
+    assertOwnsStudentMock.mockResolvedValue(undefined);
+
+    await requestErasureByAdmin(
+      ADMIN_ID,
+      { kind: "learner_profile", learnerProfileId: lp.id },
+      "ER3 Learner"
+    );
+
+    const formData = new FormData();
+    formData.set("date", "2026-07-09");
+    formData.set("topics", "test");
+    formData.set("homework", "");
+    formData.set("assessment", "");
+    formData.set("plan", "");
+    formData.set("links", "");
+
+    await expect(createNote(student.id, formData)).rejects.toThrow(THROW_NOT_FOUND);
+  });
+
+  it("createNote succeeds after erasure job cancelled", async () => {
+    const { lp, student } = await createErasureFixture();
+    assertOwnsStudentMock.mockResolvedValue(undefined);
+
+    const { jobId } = await requestErasureByAdmin(
+      ADMIN_ID,
+      { kind: "learner_profile", learnerProfileId: lp.id },
+      "ER3 Learner"
+    );
+
+    await cancelErasureJob(jobId);
+
+    const formData = new FormData();
+    formData.set("date", "2026-07-09");
+    formData.set("topics", "math fractions");
+    formData.set("homework", "");
+    formData.set("assessment", "");
+    formData.set("plan", "");
+    formData.set("links", "");
+
+    const result = await createNote(student.id, formData);
+    expect(result).toHaveProperty("id");
+    expect(typeof result.id).toBe("string");
+  });
+
+  it("createNote throws not-found when student is fully purged (erasedAt set)", async () => {
+    const { student } = await createErasureFixture();
+    assertOwnsStudentMock.mockResolvedValue(undefined);
+
+    await db.student.update({
+      where: { id: student.id },
+      data: { erasedAt: new Date() },
+    });
+
+    const formData = new FormData();
+    formData.set("date", "2026-07-09");
+    formData.set("topics", "test");
+    formData.set("homework", "");
+    formData.set("assessment", "");
+    formData.set("plan", "");
+    formData.set("links", "");
+
+    await expect(createNote(student.id, formData)).rejects.toThrow(THROW_NOT_FOUND);
+  });
+
+  it("regenerateShareLink throws not-found during grace period", async () => {
+    const { lp, student } = await createErasureFixture();
+    assertOwnsStudentMock.mockResolvedValue(undefined);
+
+    await requestErasureByAdmin(
+      ADMIN_ID,
+      { kind: "learner_profile", learnerProfileId: lp.id },
+      "ER3 Learner"
+    );
+
+    await expect(regenerateShareLink(student.id)).rejects.toThrow(THROW_NOT_FOUND);
+  });
+
+  it("revokeShareLink throws not-found during grace period", async () => {
+    const { lp, student } = await createErasureFixture();
+    assertOwnsStudentMock.mockResolvedValue(undefined);
+
+    await requestErasureByAdmin(
+      ADMIN_ID,
+      { kind: "learner_profile", learnerProfileId: lp.id },
+      "ER3 Learner"
+    );
+
+    await expect(revokeShareLink(student.id)).rejects.toThrow(THROW_NOT_FOUND);
+  });
+
+  it("setNoteStatus / updateNote / deleteNote throw not-found during grace", async () => {
+    const { lp, student } = await createErasureFixture();
+    assertOwnsStudentMock.mockResolvedValue(undefined);
+
+    const note = await db.sessionNote.create({
+      data: {
+        studentId: student.id,
+        date: new Date(),
+        topics: "existing topics",
+        homework: "",
+        assessment: "",
+        nextSteps: "",
+        linksJson: "[]",
+      },
+    });
+
+    await requestErasureByAdmin(
+      ADMIN_ID,
+      { kind: "learner_profile", learnerProfileId: lp.id },
+      "ER3 Learner"
+    );
+
+    await expect(setNoteStatus(note.id, student.id, "READY")).rejects.toThrow(THROW_NOT_FOUND);
+
+    const updateFormData = new FormData();
+    updateFormData.set("date", "2026-07-09");
+    updateFormData.set("topics", "updated");
+    updateFormData.set("homework", "");
+    updateFormData.set("assessment", "");
+    updateFormData.set("plan", "");
+    updateFormData.set("links", "");
+    await expect(updateNote(note.id, student.id, updateFormData)).rejects.toThrow(THROW_NOT_FOUND);
+
+    await expect(deleteNote(note.id, student.id)).rejects.toThrow(THROW_NOT_FOUND);
   });
 });

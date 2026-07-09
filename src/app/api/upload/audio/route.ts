@@ -6,6 +6,7 @@ import {
 } from "@/lib/blob-harness";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
@@ -96,6 +97,7 @@ export async function POST(request: Request): Promise<Response> {
             throw new Error("Missing studentId in clientPayload.");
           }
           await assertOwnsStudent(studentId);
+          await assertStudentNotErased(studentId);
           const audioScope = await requireStudentScope();
           if (audioScope.kind === "admin") {
             await assertTutorApproved(audioScope.adminId);
@@ -129,6 +131,7 @@ export async function POST(request: Request): Promise<Response> {
         // response on the client. The tutor sees our user-facing copy
         // surfaced by uploadAudioDirect's catch path.
         await assertOwnsStudent(studentId);
+        await assertStudentNotErased(studentId);
 
         // B1 cost gate: WAITLISTED tutors cannot upload audio (no Whisper spend).
         const audioScope = await requireStudentScope();
