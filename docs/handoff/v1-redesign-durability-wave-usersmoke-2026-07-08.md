@@ -12,11 +12,11 @@ This is a broad, user-perspective spot-check of everything that landed in the go
 
 ### 1. Tutor login — dashboard loads without auth loop
 
-**Action:** On the branch **Preview** URL, open `/login` in a fresh browser profile (or sign out first). Sign in as the **pilot tutor** via Google OAuth (or your test tutor credentials). After redirect, land on the tutor home/dashboard (`/admin` or `/admin/students` depending on your account's default). Refresh the page once.
+**Action:** On the branch **Preview** URL, open the tutor **login** page (e.g. `/login`) in a fresh browser profile (or sign out first). Sign in as the **pilot tutor** with your **email + password** credentials (Google OAuth / Google sign-in is **not** wired in the app yet — credentials only). After sign-in, land on the tutor home/dashboard (`/admin` or `/admin/students` depending on your account's default). Refresh the page once.
 
 **Expect:** Login completes in one pass — no redirect loop, no stuck spinner. Dashboard/roster shell renders with navigation usable (sidebar or top nav visible). You remain signed in after refresh.
 
-**Ignore this run:** First-time OAuth consent screen on a brand-new Google account; preview-branch badge styling.
+**Ignore this run:** Preview-branch badge styling.
 
 - [ ] PASS
 - [ ] FAIL
