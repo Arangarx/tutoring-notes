@@ -86,7 +86,8 @@ async function openShareReplayAndWaitForAudioReady(
     { waitUntil: "domcontentloaded" }
   );
   expect(response?.status(), "valid share replay page").toBe(200);
-  await expect(page.getByTestId("wb-replay")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("wb-replay-in-frame")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("wb-replay")).toHaveCount(0);
   await expect(page.getByTestId("wb-replay-audio")).toBeAttached({
     timeout: 30_000,
   });
@@ -107,15 +108,14 @@ type ShareReplayOracle = {
   audioDuration: number;
   globalMs: number;
   totalMs: number;
-  seekValueMs: number;
 };
 
-/** Share `/s/.../whiteboard/...` uses legacy WhiteboardReplay (not InFrame scrubber). */
+/** Share `/s/.../whiteboard/...` uses WhiteboardReplayInFrame (in-frame scrubber). */
 async function readShareReplayOracle(
   page: import("@playwright/test").Page
 ): Promise<ShareReplayOracle> {
   return page.evaluate(() => {
-    const parseClockLabel = (s: string) => {
+    const parseClock = (s: string) => {
       const bits = s.split(":").map(Number);
       if (bits.length === 3) return bits[0]! * 3600 + bits[1]! * 60 + bits[2]!;
       if (bits.length === 2) return bits[0]! * 60 + bits[1]!;
@@ -124,24 +124,20 @@ async function readShareReplayOracle(
     const el = document.querySelector(
       '[data-testid="wb-replay-audio"]'
     ) as HTMLAudioElement | null;
-    const seek = document.querySelector(
-      '[data-testid="wb-replay-global-seek"]'
-    ) as HTMLInputElement | null;
-    const bodyText = document.body.innerText;
-    const spanMatch = bodyText.match(/Session log span · (\d+:\d+(?::\d+)?)/);
-    const replayMatch = bodyText.match(/Replay time · t=(\d+:\d+(?::\d+)?)/);
-    const totalMs = spanMatch
-      ? parseClockLabel(spanMatch[1]!) * 1000
-      : Math.max(Number(seek?.max ?? 0), (el?.duration ?? 0) * 1000);
-    const globalMs = replayMatch
-      ? parseClockLabel(replayMatch[1]!) * 1000
-      : Math.round((el?.currentTime ?? 0) * 1000);
+    const elapsedEl = document.querySelector(".mynk-wb-replay-timeline__elapsed");
+    const elapsedLabel = elapsedEl?.textContent?.trim() ?? "";
+    const parts = elapsedLabel.split("/").map((s) => s.trim());
+    let globalMs = 0;
+    let totalMs = 1;
+    if (parts.length === 2) {
+      globalMs = parseClock(parts[0]!) * 1000;
+      totalMs = parseClock(parts[1]!) * 1000;
+    }
     return {
       audioCurrentTime: el?.currentTime ?? 0,
       audioDuration: el?.duration ?? 0,
       globalMs,
       totalMs: Math.max(totalMs, 1),
-      seekValueMs: Number(seek?.value ?? 0),
     };
   });
 }
@@ -150,18 +146,18 @@ async function scrubShareToRatio(
   page: import("@playwright/test").Page,
   ratio: number
 ) {
-  const seek = page.getByTestId("wb-replay-global-seek");
-  await expect(seek).toBeVisible();
-  await seek.evaluate((el, r) => {
-    const input = el as HTMLInputElement;
-    const max = Number(input.max) || 1;
-    const ms = Math.round(max * r);
-    input.value = String(ms);
-    input.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    input.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
-  }, ratio);
+  const track = page.getByTestId("wb-replay-global-seek");
+  await expect(track).toBeVisible();
+  const box = await track.boundingBox();
+  expect(box).not.toBeNull();
+  const thumbRadius = 8;
+  const travel = Math.max(box!.width - thumbRadius * 2, 1);
+  const x = box!.x + thumbRadius + travel * ratio;
+  const y = box!.y + box!.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y);
+  await page.mouse.up();
   await page.waitForTimeout(600);
 }
 
@@ -232,11 +228,6 @@ test.describe("P1-ID-4 — share-page audio scrub", { tag: [TAG.WB_RECORDING] },
     expect(
       Math.abs(oracle.globalMs - targetGlobalMs),
       `replay time global ms near independent target (observed=${oracle.globalMs}, target=${targetGlobalMs})`
-    ).toBeLessThanOrEqual(globalToleranceMs);
-
-    expect(
-      Math.abs(oracle.seekValueMs - targetGlobalMs),
-      `seek slider value near target ms (observed=${oracle.seekValueMs}, target=${targetGlobalMs})`
     ).toBeLessThanOrEqual(globalToleranceMs);
 
     expect(

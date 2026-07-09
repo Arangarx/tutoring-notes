@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
-import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
+import { ShareWhiteboardReplayPlayer } from "./ShareWhiteboardReplayPlayer";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
@@ -150,9 +150,6 @@ export default async function ShareWhiteboardPage({
   // client-side fetch includes the credential (same pattern as
   // `/api/audio/[id]?token=`).
   const eventsApiUrl = `/api/whiteboard/${whiteboardSessionId}/public-events?token=${token}`;
-  const snapshotApiUrl = session.snapshotBlobUrl
-    ? `/api/whiteboard/${whiteboardSessionId}/public-snapshot?token=${token}`
-    : null;
   const replayAudio = buildReplayAudioPayload({
     whiteboardSessionId,
     concatBlobUrl: session.concatBlobUrl,
@@ -193,15 +190,16 @@ export default async function ShareWhiteboardPage({
           </div>
         </header>
 
-        {/* Replay player — fenced; page chrome only reskinned above/below */}
-        <WhiteboardReplay
+        {/* In-frame replay — same stack as tutor SessionReviewMode (not legacy WhiteboardReplay). */}
+        <ShareWhiteboardReplayPlayer
           eventsBlobUrl={eventsApiUrl}
           audioSegments={replayAudio.audioSegments}
           canonicalAudioBlobUrl={replayAudio.canonicalAudioBlobUrl}
           canonicalAudioMimeType={replayAudio.canonicalAudioMimeType}
           canonicalDurationSeconds={replayAudio.canonicalDurationSeconds}
-          snapshotBlobUrl={snapshotApiUrl}
-          title={sessionLabel}
+          whiteboardSessionId={whiteboardSessionId}
+          studentName={studentName}
+          durationSeconds={session.durationSeconds}
         />
 
       </div>

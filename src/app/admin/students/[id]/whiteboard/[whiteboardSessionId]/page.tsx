@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { db, withDbRetry } from "@/lib/db";
@@ -135,6 +135,13 @@ export default async function WhiteboardReviewPage({
     { label: "wbReview.page.detail" }
   );
   if (!detail) notFound();
+
+  // Ended sessions use in-shell SessionReviewMode + WhiteboardReplayInFrame.
+  if (detail.endedAt) {
+    redirect(
+      `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace?surface=replay`
+    );
+  }
 
   const eventsApiUrl = `/api/whiteboard/${whiteboardSessionId}/events`;
   const snapshotApiUrl = `/api/whiteboard/${whiteboardSessionId}/snapshot`;

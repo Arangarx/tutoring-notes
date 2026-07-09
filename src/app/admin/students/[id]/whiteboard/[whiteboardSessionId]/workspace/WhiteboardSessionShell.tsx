@@ -47,6 +47,8 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
    * once on mount. Used by the roster "End and review" button (SSG-2 fix).
    */
   initialIntent?: "endreview";
+  /** Deep-link `?surface=replay` from notes — auto-enter in-frame replay. */
+  initialReviewSurface?: "hero" | "replay";
   /** WS-D: backend-persisted event log + board document for ACTIVE resume. */
   initialPersistedState?: InitialPersistedWhiteboardState | null;
 };
@@ -126,6 +128,7 @@ function TutorWhiteboardSessionShell({
   initialHasConsentSnapshot,
   studentLearnerProfileId,
   initialIntent,
+  initialReviewSurface,
   initialPersistedState,
 }: TutorWhiteboardSessionShellProps) {
   const [mode, setMode] = useState<ShellMode>(initialMode);
@@ -140,6 +143,7 @@ function TutorWhiteboardSessionShell({
         key={whiteboardSessionId}
         whiteboardSessionId={whiteboardSessionId}
         studentId={studentId}
+        initialReviewSurface={initialReviewSurface}
       />
     );
   }

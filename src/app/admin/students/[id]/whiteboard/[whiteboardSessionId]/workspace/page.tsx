@@ -57,6 +57,9 @@ export default async function WhiteboardWorkspacePage({
   const sp = searchParams ? await searchParams : {};
   const rawIntent = typeof sp.intent === "string" ? sp.intent : undefined;
   const initialIntent = rawIntent === "endreview" ? ("endreview" as const) : undefined;
+  const rawSurface = typeof sp.surface === "string" ? sp.surface : undefined;
+  const initialReviewSurface =
+    rawSurface === "replay" ? ("replay" as const) : undefined;
 
   const scope = await requireStudentScope();
   if (scope.kind !== "admin") {
@@ -141,6 +144,7 @@ export default async function WhiteboardWorkspacePage({
       initialHasConsentSnapshot={initialHasConsentSnapshot}
       studentLearnerProfileId={detail.student.learnerProfileId}
       initialIntent={initialIntent}
+      initialReviewSurface={initialReviewSurface}
       initialPersistedState={initialPersistedState}
     />
   );

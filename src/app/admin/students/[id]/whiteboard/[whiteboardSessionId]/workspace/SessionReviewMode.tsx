@@ -29,6 +29,8 @@ import "./whiteboard-chrome.css";
 type Props = {
   whiteboardSessionId: string;
   studentId: string;
+  /** Deep-link from notes "Watch whiteboard" — auto-enter in-frame replay. */
+  initialReviewSurface?: ReviewSurfaceState;
 };
 
 type LoadState =
@@ -36,11 +38,17 @@ type LoadState =
   | { kind: "ready"; payload: SessionReviewPayload }
   | { kind: "error"; message: string };
 
-export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
+export function SessionReviewMode({
+  whiteboardSessionId,
+  studentId,
+  initialReviewSurface = "hero",
+}: Props) {
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [reviewSurface, setReviewSurface] =
-    useState<ReviewSurfaceState>("hero");
-  const [hasMountedReplay, setHasMountedReplay] = useState(false);
+    useState<ReviewSurfaceState>(initialReviewSurface);
+  const [hasMountedReplay, setHasMountedReplay] = useState(
+    initialReviewSurface === "replay"
+  );
   const [noteSaved, setNoteSaved] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
 
