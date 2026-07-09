@@ -1,5 +1,13 @@
 # Legal sync — `/privacy` and `/terms` ↔ www.mortensenapps.com
 
+## Standing hard rule — honesty (Andrew 2026-07-09)
+
+**Terms and Privacy must be honest at all times** — especially anything that ships on **`master` / production**. Do not claim retention schedules, deletion clocks, subprocessors, or product capabilities the codebase does not implement. Prefer accurate softer wording over aspirational copy. **Preview branches** have a little more leeway (Andrew-only smoke; nobody else uses them), but still prefer truthfulness; never use preview as an excuse to leave dishonest copy on a path that will merge to master.
+
+This is **non-negotiable** and pairs with SEC-POLICY-TRUTH (interim product-facade honesty + retention lifecycle later). Umbrella `mortensenapps.com` may still differ until upstream is updated — product facade must not over-promise relative to *this* app.
+
+---
+
 **`https://www.mortensenapps.com/privacy` and `https://www.mortensenapps.com/terms`
 are the authoritative legal source for any product under the Mortensen
 Apps umbrella.** Those exact URLs (with the `www.` subdomain) are the

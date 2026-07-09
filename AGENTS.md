@@ -157,7 +157,7 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   in the same commit. Orchestrators check this during executor
   handoff review. Migration to a new compute platform reads that
   doc as the primary checklist.
-- **Legal copy stays synced with the umbrella.** `https://www.mortensenapps.com/privacy`
+- **Legal copy stays synced with the umbrella — and must stay honest.** `https://www.mortensenapps.com/privacy`
   + `https://www.mortensenapps.com/terms` are the **canonical legal
   source** and the URLs registered in the shared "Mortensen Apps" OAuth
   consent screen that Tutoring Notes uses (confirmed from Google Cloud
@@ -167,7 +167,13 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   product-specific sections (Vercel Blob audio, OpenAI Whisper,
   whiteboard data, minor-data tutor-consent specifics); they are not a
   parallel canonical source and are not registered with Google for this
-  OAuth client. Any change to either TSX file MUST follow the sync
+  OAuth client. **HARD RULE (Andrew 2026-07-09):** Terms/Privacy must be
+  **honest at all times**, especially on **`master`/production** — never
+  claim retention clocks, deletion automation, or capabilities the app
+  does not implement. Slightly more leeway on preview-only branches
+  (Andrew-only), but dishonest copy must not merge to master. See
+  [docs/LEGAL-SYNC.md](docs/LEGAL-SYNC.md) § Standing hard rule — honesty.
+  Any change to either TSX file MUST follow the sync
   protocol in [docs/LEGAL-SYNC.md](docs/LEGAL-SYNC.md): identify whether
   the edited section is umbrella-derived (must match upstream verbatim)
   or product-specific (free to edit), update the top-of-file sync date

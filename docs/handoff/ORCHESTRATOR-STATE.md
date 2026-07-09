@@ -10,9 +10,26 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `29b01d7` — **E4 PDF stroke bleed MERGED** ([PDF bleed E4](82e3a8e5-60b7-413f-b4e0-8b61e9c0e567) → `cd71cf8`). Andrew smoke FAIL 2026-07-09: Board 3 strokes on Board 4 after PDF import — distinct from blank-board E3 (`9c36cb1`). Root: post-fingerprint stale onChange; `blankBoardForbiddenIds` only armed for empty boards. Fix: generalize `pageForeignGuardRef` (forbidden+settled), arm on PDF commit/select, strip in applyRemote. Playwright `wb-e4-pdf-board-stroke-leak.spec.ts`. Recheck: [`usersmoke-2026-07-09-recheck-quicklist.md`](usersmoke-2026-07-09-recheck-quicklist.md). Decisions + intake: [`usersmoke-2026-07-08-problem-quicklist.md`](usersmoke-2026-07-08-problem-quicklist.md).
+**Tip:** `v1-redesign` @ `6a94ff54` (AUDIO-1 elevated; parent-join honesty `244846c`; E4 bleed earlier). **✅ Recheck quicklist COMPLETE** ([`usersmoke-2026-07-09-recheck-quicklist.md`](usersmoke-2026-07-09-recheck-quicklist.md)) — Wave 1–3 integrity items **PASS** (cancel, erasure, view-whiteboard, claim escapes, Finish review, privacy honesty, notes quality “WAY better”, wordmark, billing). Inline notes triaged below.
 
-**Decisions locked (2026-07-09):** SEC-POLICY=both (copy now + retention later); cancel=keep-delete + **new session ALWAYS fresh id**; interstitial=verify email host first; Save stays put + **"Finish review"** CTA → student detail; billing=round **up** + label tutor billable time; marketing wordmark=`/?view=home`; replay-tab gate red was **test oracle** (product OK; scrubberMax + Board1 switch window).
+**Decisions / standing rules from recheck notes (2026-07-09):**
+- **Legal honesty = HARD RULE** — Terms/Privacy must be honest at all times, especially `master`; slight leeway on preview only. Codified in `LEGAL-SYNC.md` + `AGENTS.md`.
+- **Notes quality:** prompt_wins PASS / much better — **do not scale back detail** without real-target feedback first.
+- **Billing copy:** pass; optional later polish after feedback.
+- **Known-issues headers:** looks better; optional later pass.
+
+**Last action:** Recheck triage durable (LEGAL honesty hard rule, NOTES-QUALITY-HOLD-DETAIL, state + quicklist Notes). Tip still `6a94ff54` until next code merge.
+
+**Next action(s) — pre-Sarah burndown (priority):**
+1. **WB-SHARE-REPLAY-VIEWPORT-PHONE** — in flight (Composer) — share shell viewport lock + `@wb-viewport` Playwright
+2. **SMOKE-AUDIO-1** — investigate → Sonnet fix (fragile live-A/V; Brio silent until switch)
+3. **SMOKE-END-WINDDOWN** — **blocked on Andrew confirm** of product rec (disarm board + immediate student signal on End confirm; pair PERF-1)
+4. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — larger bottom-tab labels / discoverability
+5. Optional A: blank Board-3 bleed + share-wall spot-check (Andrew)
+
+**Still open / pre-Sarah:** AUDIO-1 SEVERE; END-WINDDOWN (await confirm); share-replay phone; student-detail mobile; PERF-1.
+
+**Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
 **✅ Wave 1 COMPLETE — all 4 merged to `v1-redesign` tip `969ae7d` (docs `f9294ed`):**
 1. notes prompt_wins `49485ea` ([notes](1eceaad8-da08-4417-8d58-54bc5d447d9e))
