@@ -16,7 +16,7 @@
 
 **Wave 1 IN FLIGHT (parallel isolated worktrees, Playwright-on-touch mandatory):**
 1. ~~notes prompt_wins~~ ✅ **MERGED** `49485ea` ([notes prompt_wins](1eceaad8-da08-4417-8d58-54bc5d447d9e) → `3779d32`)
-2. [SEC-ERASURE-TUTOR-GATE](ab6b4eca-23b0-4b9b-b4a3-eb955989be08) → `fix/sec-erasure-tutor-gate` (Sonnet) — still in flight
+2. ~~SEC-ERASURE-TUTOR-GATE~~ ✅ **MERGED** `fd62272` ([SEC-ERASURE](ab6b4eca-23b0-4b9b-b4a3-eb955989be08) → `8393bff`) — `assertOwnsMutableStudent` + `[id]/layout.tsx` short-circuit; jest 14 + Playwright `erasure-tutor-gate.spec.ts`
 3. ~~View whiteboard → new replay~~ ✅ **MERGED** `a249897` ([view whiteboard](bc2b1f60-fb51-47fd-9a77-880d1c6a4c0a) → `0251030`). Jest DOM 13/13. **Playwright re-run from main checkout deferred** — shared :3100/:3101 contended by other Wave 1 agents; re-run when tree quiet (`view-whiteboard-new-replay.spec.ts` enrolled in wb-regression).
 4. [UX bundle](48187f62-85fb-4f7a-9e39-fe1de591be6f) → `fix/ux-sarah-wave1-bundle` — still in flight
 
