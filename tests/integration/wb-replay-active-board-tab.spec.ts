@@ -22,8 +22,15 @@ import {
 } from "../helpers/blob-gate";
 import { TAG } from "../test-tags";
 
+type PageSwitchEvent = {
+  t: number;
+  type: string;
+  pageId?: string;
+  title?: string;
+};
+
 type EventsBody = {
-  events?: Array<{ t: number; type: string; pageId?: string }>;
+  events?: PageSwitchEvent[];
   durationMs?: number;
 };
 
@@ -64,16 +71,55 @@ async function scrubToRatio(
   await page.waitForTimeout(600);
 }
 
-function computeTimelineDurationMs(
-  eventsBody: EventsBody,
-  switches: Array<{ t: number }>
-): number {
-  const lastEventT = (eventsBody.events ?? []).reduce(
-    (max, e) => Math.max(max, e.t),
-    0
+/** Read scrubber total from replay UI — same oracle as wb-replay-scrub-seek.spec.ts. */
+async function readReplayScrubberMaxMs(
+  page: import("@playwright/test").Page
+): Promise<number> {
+  const elapsedLabel = await page
+    .locator(".mynk-wb-replay-timeline__elapsed")
+    .textContent();
+  const parts = (elapsedLabel ?? "").split("/").map((s) => s.trim());
+  expect(parts.length, `elapsed label must be "cur / total" (${elapsedLabel})`).toBe(
+    2
   );
-  const lastSwitchT = switches[switches.length - 1]?.t ?? 0;
-  return Math.max(eventsBody.durationMs ?? 0, lastEventT, lastSwitchT + 500, 5_000);
+  const parseClock = (s: string) => {
+    const bits = s.split(":").map(Number);
+    if (bits.length === 3) return bits[0]! * 3600 + bits[1]! * 60 + bits[2]!;
+    if (bits.length === 2) return bits[0]! * 60 + bits[1]!;
+    return Number(bits[0]) || 0;
+  };
+  const totalMs = parseClock(parts[1]!) * 1000;
+  expect(
+    totalMs,
+    `scrubber total must be resolved before mid-timeline seeks (label=${elapsedLabel})`
+  ).toBeGreaterThan(1_000);
+  return totalMs;
+}
+
+/** Default first board id — matches event-log REPLAY_DEFAULT_FIRST_PAGE / workspace p1. */
+const BOARD1_PAGE_ID = "p1";
+
+/**
+ * Independent oracle: ms shortly after the explicit switch TO board 1 (p1),
+ * still before the next page-switch (usually back to p2).
+ */
+function computeTargetMsWhileBoard1Active(
+  switches: PageSwitchEvent[]
+): number {
+  const toBoard1Idx = switches.findIndex((s) => s.pageId === BOARD1_PAGE_ID);
+  expect(
+    toBoard1Idx,
+    "session must record a page-switch to p1 (tutor clicked Board 1 tab)"
+  ).toBeGreaterThanOrEqual(0);
+  const board1StartT = switches[toBoard1Idx]!.t;
+  const nextSwitchT = switches[toBoard1Idx + 1]?.t;
+  const board1EndT = nextSwitchT ?? board1StartT + 2_000;
+  const target = board1StartT + 400;
+  expect(
+    target,
+    `Board 1 window too narrow (start=${board1StartT} end=${board1EndT})`
+  ).toBeLessThan(board1EndT - 100);
+  return target;
 }
 
 async function assertReplayBoardTabSelected(
@@ -158,15 +204,13 @@ test.describe("WS-E E4 replay active board tab", { tag: [TAG.WB_RECORDING] }, ()
     expect(eventsRes.ok(), await eventsRes.text()).toBeTruthy();
     const eventsBody = (await eventsRes.json()) as EventsBody;
     const switches = (eventsBody.events ?? []).filter(
-      (e) => e.type === "page-switch"
+      (e): e is PageSwitchEvent => e.type === "page-switch"
     );
     expect(switches.length).toBeGreaterThanOrEqual(2);
 
-    const firstSwitchT = switches[0]!.t;
     const lastSwitchT = switches[switches.length - 1]!.t;
-    expect(lastSwitchT).toBeGreaterThan(firstSwitchT);
-
-    const durationMs = computeTimelineDurationMs(eventsBody, switches);
+    // Recorded titles are "Page N"; BoardTabStrip renders "Board N" by index.
+    expect(switches[switches.length - 1]!.pageId).not.toBe(BOARD1_PAGE_ID);
 
     await muteReplayAudioWhenPresent(page);
     await page.getByTestId("wb-review-enter-replay").click();
@@ -214,14 +258,17 @@ test.describe("WS-E E4 replay active board tab", { tag: [TAG.WB_RECORDING] }, ()
     await assertReplayBoardTabSelected(page, "Board 1", false);
 
     // ── Mid-timeline scrub seeks (independent event-timestamp oracle) ─────────
-    const targetBoard1Ms = Math.min(
-      firstSwitchT + 400,
-      lastSwitchT - 300
-    );
+    // Ratios must use the replay scrubber total (audio-driven scrubberMax), NOT
+    // events API durationMs — page-switch timestamps live on the event clock but
+    // the scrubber maps position ∝ scrubberMax (see wb-replay-scrub-seek.spec.ts).
+    const scrubberMaxMs = await readReplayScrubberMaxMs(page);
+    const targetBoard1Ms = computeTargetMsWhileBoard1Active(switches);
     const targetBoard2Ms = lastSwitchT + 400;
-    const ratioBoard1 = Math.max(0.05, Math.min(0.45, targetBoard1Ms / durationMs));
-    const ratioBoard2 = Math.min(0.95, targetBoard2Ms / durationMs);
+    const ratioBoard1 = targetBoard1Ms / scrubberMaxMs;
+    const ratioBoard2 = targetBoard2Ms / scrubberMaxMs;
 
+    expect(ratioBoard1).toBeGreaterThan(0);
+    expect(ratioBoard2).toBeLessThan(1);
     expect(ratioBoard1).toBeLessThan(ratioBoard2);
 
     await scrubToRatio(page, ratioBoard1);
