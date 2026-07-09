@@ -93,7 +93,7 @@ Not in priority order within sections — that comes when items move to a sprint
 
 | Item | Notes |
 |------|-------|
-| **SMOKE-POST-1 — ghost overlay of what the other person sees** | Item 6: Andrew recalls it was mocked; unsure if implemented. Post-Sarah fast-follow. |
+| **SMOKE-POST-1 — ghost overlay of what the other person sees** | **Pre-release required** (OK after first give to Sarah; not a Sarah-day-1 blocker). Ghosted rectangle on the canvas showing the **other end's current viewport** (tutor sees student view bounds; student sees tutor view bounds). Design already ratified: Decision K + **VP-01** role-appropriate labels ("Student view" / "Tutor view") in [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md) §5.3 + [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md). Plumbing exists (`pvs` viewport sync); rendering was deferred as Gate-A fast-follow / chrome polish. Andrew re-confirmed 2026-07-09: wants this **in before release**. |
 | **SMOKE-POST-2 — in-app text chat (Sarah request)** | Andrew 2026-07-02: Sarah has mentioned wanting a text chat; likely wanted in the **waiting room** AND available **during the live session**. **Post-Sarah, probably pre-release.** |
 | **SMOKE-POST-3 — tutor "Start anyway" override when student lacks stable A/V** | Andrew 2026-07-02 follow-up to SMOKE-BLOCK-1: consider letting the tutor start despite no stable student A/V — **but ONLY if we can be certain the student can at least see the whiteboard** (otherwise there is no point). Post-Sarah. Depends on SMOKE-BLOCK-1 detection fix landing first (so the override is a deliberate degraded-mode choice, not a workaround for a false negative). |
 

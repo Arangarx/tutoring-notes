@@ -10,7 +10,7 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `a524211` (Wave 3 complete). Decisions + intake: [`usersmoke-2026-07-08-problem-quicklist.md`](usersmoke-2026-07-08-problem-quicklist.md).
+**Tip:** `v1-redesign` @ `29b01d7` — **E4 PDF stroke bleed MERGED** ([PDF bleed E4](82e3a8e5-60b7-413f-b4e0-8b61e9c0e567) → `cd71cf8`). Andrew smoke FAIL 2026-07-09: Board 3 strokes on Board 4 after PDF import — distinct from blank-board E3 (`9c36cb1`). Root: post-fingerprint stale onChange; `blankBoardForbiddenIds` only armed for empty boards. Fix: generalize `pageForeignGuardRef` (forbidden+settled), arm on PDF commit/select, strip in applyRemote. Playwright `wb-e4-pdf-board-stroke-leak.spec.ts`. Recheck: [`usersmoke-2026-07-09-recheck-quicklist.md`](usersmoke-2026-07-09-recheck-quicklist.md). Decisions + intake: [`usersmoke-2026-07-08-problem-quicklist.md`](usersmoke-2026-07-08-problem-quicklist.md).
 
 **Decisions locked (2026-07-09):** SEC-POLICY=both (copy now + retention later); cancel=keep-delete + **new session ALWAYS fresh id**; interstitial=verify email host first; Save stays put + **"Finish review"** CTA → student detail; billing=round **up** + label tutor billable time; marketing wordmark=`/?view=home`; replay-tab gate red was **test oracle** (product OK; scrubberMax + Board1 switch window).
 
@@ -28,6 +28,8 @@
 - cancel + fresh session id `aa1da56` ([cancel + fresh id](3d87a590-f0ad-46be-b7e9-2bdc8f42832d) → `a75988a`) — PENDING 404→`session_canceled`; `location.replace` + key clear; Playwright enrolled
 - Finish review + SEC-POLICY copy `4d3e9f4` ([Finish review + policy](f971a66e-291b-49b8-84dc-5b06c0e90976) → `30c340b`)
 - replay-tab aria `508eefb` ([replay-tab aria](9d372870-f4bb-4dce-b14c-1c98bac8db45) → `ec6b67b`) + oracle follow-up `a524211` ([replay activePageId](896736f4-f5f3-468c-a838-c9b90f0fd571) → `a8870de`) — test-only; product `activeReplayPageId` was correct
+
+**✅ E4 PDF bleed (Andrew recheck FAIL → fix same day):** `29b01d7` merge of `cd71cf8` — foreign-id guard on PDF boards after fingerprint clear.
 
 **Historical (collapsed):** Bug A `27d6cc5`, wave5→v1-redesign merge `d6b4433`, smoke triage trail below remains for audit until heavy restructure.
 
