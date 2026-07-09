@@ -50,6 +50,7 @@ You believed these were already verified. Spot-check only if in doubt:
   1. pass
 7. **Privacy / terms honesty (interim)**
   Product `/privacy` + `/terms`: no hard “24 months after closure” promise; wording matches what we actually do. (Umbrella mortensenapps.com may still differ.)
+  1. Make this a standing hard, non-negotiable rule.  Terms and Privacy must be honest at all times, ESPECIALLY anything in master.  Little more leeway on preview branches since nobody uses them.
 8. **Notes quality (prompt)**
   Run one real-ish session → notes: Plan/next-steps not doubled; Assessment grounded (not inventing strengths).
 
@@ -74,7 +75,7 @@ Skip or mark “still broken / known” — agents haven’t shipped these yet:
 | Replay polish               | Multi-part banner still there; pause→hide→reopen restarts at 0; scrubber “audio loading” layout jump; Theme intermittent nav; disabled top-bar buttons not dimmed; PDF icons missing on replay tabs                       |
 | Nav / layout                | Start/end “flash reload” feel; double admin scrollbars; Known-issues still under Settings; claim-link buried; parent Manage alignment                                                                                     |
 | Claim interstitial          | Logged-in parent AuthGate vs “signed in as…” — **first verify email claim URL host vs preview host** before treating as product bug                                                                                       |
-| Audio                       | Wrong student mic after cancel→rejoin (SMOKE-AUDIO-3); first-acquire meter dead (AUDIO-1); phantom unmute watch (AUDIO-2)                                                                                                 |
+| Audio                       | **AUDIO-1 ELEVATED (2026-07-09 daughter session):** Brio selected, meter dead, student couldn’t hear tutor until mic switch-and-back. **Pre-Sarah.** Also: student reconnect after phone setting change needed **tab refresh**. AUDIO-3 wrong-mic; AUDIO-2 phantom unmute watch. |
 | Perf                        | “Finalizing” slow feel (PERF-1) — queued, not shipped                                                                                                                                                                     |
 | Intake polish               | Sign-out dimmed in overflow; PDF hard to find in More; top-bar compaction aggressive; password show/hide                                                                                                                  |
 | Review hero + PDF           | **Known gap (not regression):** end on/with PDF → mountain/sun placeholder on “Replay session” card. Replay itself may be fine. Backlogged **WB-REVIEW-THUMBNAIL-PDF**. Click Replay to verify; don’t block on thumbnail. |
