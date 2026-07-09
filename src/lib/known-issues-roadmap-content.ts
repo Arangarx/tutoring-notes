@@ -5,23 +5,71 @@ export const KNOWN_ISSUES_ROADMAP_PAGE_TITLE = "Known issues & roadmap";
 export const recentlyImprovedIntro =
   "What you'll notice in the app after this update wave.";
 
-export const recentlyImprovedItems = [
-  "Your session notes are ready almost immediately when you end a session, instead of taking a while.",
-  "Session replays now play back smoothly as one continuous recording.",
-  "Replays start from the beginning when you open them.",
-  "You can scrub through a replay and land where you drop the playhead — it no longer jumps back to the start on longer recordings.",
-  "Ending a session from your sessions list or the resume screen now saves your full recording, the same as ending from inside a live session.",
-  "You can cancel or leave from the waiting room if plans change before a session starts.",
-  "The app remembers your microphone choice more reliably, including when a device was briefly unavailable.",
-  "Students can boost their own microphone volume when they need to be heard more clearly.",
-  "When you mute yourself, your voice stays muted in the session recording too.",
-  "Billable time is rounded to your chosen increment and locked in when a session ends; you can set your defaults under billing settings.",
-  "Time-alert controls use clearer labels so you know what the alert does.",
-  "Drawing style controls now show only the options that apply to the tool you're using — no more sliders that don't change pencil strokes.",
-  "When you have more board tabs than fit on screen, you can scroll to reach the rest.",
-  "Friendlier messages throughout — clearer saving status, reconnection text, error screens with a way forward, and plain-language notes when something is still preparing.",
-  "If the app hits a loading glitch after an update, it tries to recover on its own instead of leaving you stuck.",
-  "Your recording is better protected if you accidentally close the browser tab mid-session and come back to finish.",
+export type RecentlyImprovedSection = {
+  title: string;
+  items: readonly string[];
+};
+
+export const recentlyImprovedSections: readonly RecentlyImprovedSection[] = [
+  {
+    title: "Session notes & replay",
+    items: [
+      "Your session notes are ready almost immediately when you end a session, instead of taking a while.",
+      "Session replays now play back smoothly as one continuous recording.",
+      "Replays start from the beginning when you open them.",
+      "You can scrub through a replay and land where you drop the playhead — it no longer jumps back to the start on longer recordings.",
+    ],
+  },
+  {
+    title: "Recording & ending sessions",
+    items: [
+      "Ending a session from your sessions list or the resume screen now saves your full recording, the same as ending from inside a live session.",
+      "When you mute yourself, your voice stays muted in the session recording too.",
+      "Your recording is better protected if you accidentally close the browser tab mid-session and come back to finish.",
+    ],
+  },
+  {
+    title: "Live audio & microphones",
+    items: [
+      "The app remembers your microphone choice more reliably, including when a device was briefly unavailable.",
+      "Students can boost their own microphone volume when they need to be heard more clearly.",
+    ],
+  },
+  {
+    title: "Waiting room & session flow",
+    items: [
+      "You can cancel or leave from the waiting room if plans change before a session starts.",
+    ],
+  },
+  {
+    title: "Billing & time alerts",
+    items: [
+      "Billable time is rounded to your chosen increment and locked in when a session ends; you can set your defaults under billing settings.",
+      "Time-alert controls use clearer labels so you know what the alert does.",
+    ],
+  },
+  {
+    title: "Whiteboard tools",
+    items: [
+      "Drawing style controls now show only the options that apply to the tool you're using — no more sliders that don't change pencil strokes.",
+      "When you have more board tabs than fit on screen, you can scroll to reach the rest.",
+    ],
+  },
+  {
+    title: "Reliability & clearer messaging",
+    items: [
+      "Friendlier messages throughout — clearer saving status, reconnection text, error screens with a way forward, and plain-language notes when something is still preparing.",
+      "If the app hits a loading glitch after an update, it tries to recover on its own instead of leaving you stuck.",
+    ],
+  },
+  {
+    title: "Identity, consent & privacy",
+    items: [
+      "Parent or guardian consent is now required and recorded before a minor joins a live session, with clear consent choices during account setup.",
+      "Parents can set up a learner's own login through a guided claim flow.",
+      "You can request deletion of a student's data, with a grace period before it's permanently removed.",
+    ],
+  },
 ] as const;
 
 export const knownIssuesIntro =
@@ -40,18 +88,6 @@ export const knownIssuesItems: readonly KnownIssueItem[] = [
   {
     title: "Student microphone boost — final check",
     body: "Students can adjust their own mic volume in the app; we're doing one more round of real two-device testing to make sure tutors consistently hear the boost before we call this fully done.",
-  },
-  {
-    title: "Status badge during a session",
-    body: "The top bar can still say \"LIVE\" even when you're waiting for a student or paused — we're wiring it to show the real session state.",
-  },
-  {
-    title: "Connection status visibility",
-    body: "When sync is having trouble, the indicator can be hard to see; we're making that more obvious so you're not left guessing.",
-  },
-  {
-    title: "In-person sessions — waiting message",
-    body: "Starting an in-person session can still show copy meant for waiting on a remote student; we're fixing that wording.",
   },
   {
     title: "Empty review screen",

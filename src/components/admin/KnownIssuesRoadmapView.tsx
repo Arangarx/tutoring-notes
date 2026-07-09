@@ -3,7 +3,7 @@ import {
   knownIssuesIntro,
   knownIssuesItems,
   recentlyImprovedIntro,
-  recentlyImprovedItems,
+  recentlyImprovedSections,
   roadmapIntro,
   roadmapItems,
 } from "@/lib/known-issues-roadmap-content";
@@ -26,7 +26,14 @@ export function KnownIssuesRoadmapView() {
         description={recentlyImprovedIntro}
         data-testid="known-issues-recently-improved"
       >
-        <BulletList items={recentlyImprovedItems} />
+        <div className="space-y-5">
+          {recentlyImprovedSections.map((section) => (
+            <div key={section.title}>
+              <h3 className="mb-2 text-sm font-medium text-muted-foreground">{section.title}</h3>
+              <BulletList items={section.items} />
+            </div>
+          ))}
+        </div>
       </AdminSectionCard>
 
       <AdminSectionCard

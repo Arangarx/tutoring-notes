@@ -22,10 +22,36 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
     expect(screen.getByText("Roadmap / coming soon")).toBeInTheDocument();
   });
 
+  it("renders recently improved subcategories with representative items", () => {
+    const section = screen.getByTestId("known-issues-recently-improved");
+    expect(within(section).getByText("Session notes & replay")).toBeInTheDocument();
+    expect(within(section).getByText("Identity, consent & privacy")).toBeInTheDocument();
+    expect(
+      within(section).getByText(/session notes are ready almost immediately/)
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(/Replays start from the beginning when you open them/)
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(/Parent or guardian consent is now required/)
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(/request deletion of a student's data/)
+    ).toBeInTheDocument();
+  });
+
   it("renders the known-issues list with pilot-facing items", () => {
     const list = screen.getByTestId("known-issues-list");
     expect(within(list).getByText(/PDF boards — occasional stray mark/)).toBeInTheDocument();
     expect(within(list).getByText(/Empty review screen/)).toBeInTheDocument();
+    expect(within(list).getByText(/Student microphone boost — final check/)).toBeInTheDocument();
+  });
+
+  it("does not list known issues that shipped in the durability wave", () => {
+    const list = screen.getByTestId("known-issues-list");
+    expect(within(list).queryByText(/Status badge during a session/)).not.toBeInTheDocument();
+    expect(within(list).queryByText(/Connection status visibility/)).not.toBeInTheDocument();
+    expect(within(list).queryByText(/In-person sessions — waiting message/)).not.toBeInTheDocument();
   });
 
   it("does not render internal engineering appendix markers", () => {
