@@ -20,11 +20,14 @@
 3. View whiteboard → new replay `a249897` ([view whiteboard](bc2b1f60-fb51-47fd-9a77-880d1c6a4c0a)) — tutor PW 2/2 green; **parent share PW red** (likely auth-wall: `/s/` without AH session) → fix in flight [share PW auth](c3aba2c2-c575-4391-a97e-bbc2b3c7411a)
 4. UX bundle `969ae7d` ([UX bundle](48187f62-85fb-4f7a-9e39-fe1de591be6f))
 
-**Wave 2 IN FLIGHT:**
-- ~~claim set-up-later+escape~~ ✅ **MERGED** `5b413a8` ([claim setup](379004a7-f398-4c8a-8bb2-4a46b33f0509) → `2a7b79a`) — Set up later always; `router.refresh()` after consent; 409 credential guard; Playwright identity-e2e added
-- [share replay PW auth](c3aba2c2-c575-4391-a97e-bbc2b3c7411a) → `fix/view-whiteboard-share-pw-auth` — still in flight
+**✅ Wave 2 COMPLETE:**
+- claim set-up-later+escape `5b413a8` ([claim setup](379004a7-f398-4c8a-8bb2-4a46b33f0509))
+- share replay PW auth `f4cc7ca` ([share PW](c3aba2c2-c575-4391-a97e-bbc2b3c7411a)) — 3/3 view-whiteboard PW green
 
-**Next after Wave 2:** cancel+fresh-id (WWC) → Finish-review CTA → replay-tab aria/oracle → SEC-POLICY copy.
+**Wave 3 IN FLIGHT:**
+- [cancel + fresh session id](3d87a590-f0ad-46be-b7e9-2bdc8f42832d) → `fix/cancel-fresh-session-id` (Sonnet/WWC)
+- [Finish review + SEC-POLICY copy](f971a66e-291b-49b8-84dc-5b06c0e90976) → `fix/finish-review-and-policy-copy`
+- [replay-tab aria/oracle](9d372870-f4bb-4dce-b14c-1c98bac8db45) → `fix/replay-tab-aria-oracle`
 
 **Historical (collapsed):** Bug A `27d6cc5`, wave5→v1-redesign merge `d6b4433`, smoke triage trail below remains for audit until heavy restructure.
 
