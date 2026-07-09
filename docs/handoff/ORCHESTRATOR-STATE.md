@@ -14,7 +14,13 @@
 
 **Decisions locked (2026-07-09):** SEC-POLICY=both (copy now + retention later); cancel=keep-delete + **new session ALWAYS fresh id**; interstitial=verify email host first; Save stays put + **"Finish review"** CTA → student detail; billing=round **up** + label tutor billable time; marketing wordmark=`/?view=home`; replay-tab gate red = likely **test/aria mismatch** (Andrew screenshot: Board 1 visually active).
 
-**Wave 1 IN FLIGHT (parallel isolated worktrees):** (1) notes `prompt_wins`; (2) SEC-ERASURE-TUTOR-GATE; (3) View whiteboard → new in-frame replay; (4) UX bundle (marketing wordmark, billing up+label, known-issues header weight, Sign-out sheet clearance). **Next serial:** claim set-up-later+escape → cancel+fresh-id (WWC) → Finish-review → replay-tab aria/oracle → SEC-POLICY copy. Pre-release polish (top-bar compaction, password eye, PDF-in-More) deferred.
+**Wave 1 IN FLIGHT (parallel isolated worktrees, Playwright-on-touch mandatory):**
+1. [notes prompt_wins](1eceaad8-da08-4417-8d58-54bc5d447d9e) → `fix/notes-reduce-dedup-assessment`
+2. [SEC-ERASURE-TUTOR-GATE](ab6b4eca-23b0-4b9b-b4a3-eb955989be08) → `fix/sec-erasure-tutor-gate` (Sonnet)
+3. [View whiteboard → new replay](bc2b1f60-fb51-47fd-9a77-880d1c6a4c0a) → `fix/view-whiteboard-new-replay`
+4. [UX bundle](48187f62-85fb-4f7a-9e39-fe1de591be6f) → `fix/ux-sarah-wave1-bundle` (marketing wordmark, billing up+label, known-issues headers, Sign-out clearance)
+
+**Next serial after Wave 1 merges:** claim set-up-later+escape (Sonnet) → cancel+fresh-id (WWC/Sonnet) → Finish-review CTA → replay-tab aria/oracle → SEC-POLICY copy. Pre-release polish (top-bar compaction, password eye, PDF-in-More) deferred.
 
 **Historical (collapsed):** Bug A `27d6cc5`, wave5→v1-redesign merge `d6b4433`, smoke triage trail below remains for audit until heavy restructure.
 
