@@ -25,9 +25,9 @@
 - share replay PW auth `f4cc7ca` ([share PW](c3aba2c2-c575-4391-a97e-bbc2b3c7411a)) — 3/3 view-whiteboard PW green
 
 **Wave 3 IN FLIGHT:**
-- [cancel + fresh session id](3d87a590-f0ad-46be-b7e9-2bdc8f42832d) → `fix/cancel-fresh-session-id` (Sonnet/WWC)
-- [Finish review + SEC-POLICY copy](f971a66e-291b-49b8-84dc-5b06c0e90976) → `fix/finish-review-and-policy-copy`
-- [replay-tab aria/oracle](9d372870-f4bb-4dce-b14c-1c98bac8db45) → `fix/replay-tab-aria-oracle`
+- [cancel + fresh session id](3d87a590-f0ad-46be-b7e9-2bdc8f42832d) → `fix/cancel-fresh-session-id` (Sonnet/WWC) — still in flight
+- ~~Finish review + SEC-POLICY copy~~ ✅ **MERGED** `4d3e9f4` ([Finish review + policy](f971a66e-291b-49b8-84dc-5b06c0e90976) → `30c340b`) — Finish review CTA; privacy/terms interim honesty (umbrella 24-mo still separate)
+- [replay-tab aria/oracle](9d372870-f4bb-4dce-b14c-1c98bac8db45) → `fix/replay-tab-aria-oracle` — still in flight
 
 **Historical (collapsed):** Bug A `27d6cc5`, wave5→v1-redesign merge `d6b4433`, smoke triage trail below remains for audit until heavy restructure.
 
