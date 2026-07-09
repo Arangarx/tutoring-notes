@@ -14,13 +14,17 @@
 
 **Decisions locked (2026-07-09):** SEC-POLICY=both (copy now + retention later); cancel=keep-delete + **new session ALWAYS fresh id**; interstitial=verify email host first; Save stays put + **"Finish review"** CTA → student detail; billing=round **up** + label tutor billable time; marketing wordmark=`/?view=home`; replay-tab gate red = likely **test/aria mismatch** (Andrew screenshot: Board 1 visually active).
 
-**✅ Wave 1 COMPLETE — all 4 merged to `v1-redesign` tip `969ae7d`:**
+**✅ Wave 1 COMPLETE — all 4 merged to `v1-redesign` tip `969ae7d` (docs `f9294ed`):**
 1. notes prompt_wins `49485ea` ([notes](1eceaad8-da08-4417-8d58-54bc5d447d9e))
 2. SEC-ERASURE-TUTOR-GATE `fd62272` ([SEC-ERASURE](ab6b4eca-23b0-4b9b-b4a3-eb955989be08))
-3. View whiteboard → new replay `a249897` ([view whiteboard](bc2b1f60-fb51-47fd-9a77-880d1c6a4c0a)) — PW re-run pending when ports free
-4. UX bundle `969ae7d` ([UX bundle](48187f62-85fb-4f7a-9e39-fe1de591be6f)) — wordmark, billing up+label, known-issues headers, Sign-out clearance
+3. View whiteboard → new replay `a249897` ([view whiteboard](bc2b1f60-fb51-47fd-9a77-880d1c6a4c0a)) — tutor PW 2/2 green; **parent share PW red** (likely auth-wall: `/s/` without AH session) → fix in flight [share PW auth](c3aba2c2-c575-4391-a97e-bbc2b3c7411a)
+4. UX bundle `969ae7d` ([UX bundle](48187f62-85fb-4f7a-9e39-fe1de591be6f))
 
-**Wave 2 NEXT (serial):** claim set-up-later+escape (Sonnet) → cancel+fresh-id (WWC/Sonnet) → Finish-review CTA → replay-tab aria/oracle → SEC-POLICY copy.
+**Wave 2 IN FLIGHT:**
+- [claim set-up-later+escape](379004a7-f398-4c8a-8bb2-4a46b33f0509) → `fix/claim-setup-later-escape` (Sonnet)
+- [share replay PW auth](c3aba2c2-c575-4391-a97e-bbc2b3c7411a) → `fix/view-whiteboard-share-pw-auth`
+
+**Next after Wave 2:** cancel+fresh-id (WWC) → Finish-review CTA → replay-tab aria/oracle → SEC-POLICY copy.
 
 **Historical (collapsed):** Bug A `27d6cc5`, wave5→v1-redesign merge `d6b4433`, smoke triage trail below remains for audit until heavy restructure.
 
