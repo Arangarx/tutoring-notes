@@ -19,7 +19,7 @@
  * least one platform.
  */
 
-import { triggerRedo, triggerUndo } from "@/lib/whiteboard/undo-redo";
+import { triggerFinalize, triggerRedo, triggerUndo } from "@/lib/whiteboard/undo-redo";
 
 function mountExcalidrawContainer(): {
   container: HTMLElement;
@@ -129,5 +129,33 @@ describe("triggerUndo / triggerRedo", () => {
     // completes; clicking earlier is just lost).
     const r = triggerUndo();
     expect(r).toEqual({ ok: false, reason: "excalidraw-container-not-found" });
+  });
+});
+
+describe("triggerFinalize", () => {
+  let cleanup: () => void = () => {};
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("dispatches Escape keydown on the .excalidraw container", () => {
+    const mounted = mountExcalidrawContainer();
+    cleanup = mounted.cleanup;
+    let captured: KeyboardEvent | null = null;
+    mounted.container.addEventListener("keydown", (e) => {
+      captured = e as KeyboardEvent;
+    });
+
+    const result = triggerFinalize();
+
+    expect(result).toEqual({ ok: true });
+    expect(captured).not.toBeNull();
+    const ev = captured as unknown as KeyboardEvent;
+    expect(ev.key).toBe("Escape");
+    expect(ev.code).toBe("Escape");
+    expect(ev.bubbles).toBe(true);
+    expect(ev.ctrlKey).toBe(false);
+    expect(ev.metaKey).toBe(false);
   });
 });

@@ -196,7 +196,7 @@ import {
   WB_SHAPE_TOOLS,
   type WbShapeToolType,
 } from "@/components/whiteboard/chrome/wb-icons";
-import { triggerRedo, triggerUndo } from "@/lib/whiteboard/undo-redo";
+import { triggerRedo, triggerUndo, triggerFinalize } from "@/lib/whiteboard/undo-redo";
 import {
   triggerSendToBack,
   triggerSendBackward,
@@ -937,6 +937,7 @@ export function WhiteboardWorkspaceClient({
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
   const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
+  const [multipointActive, setMultipointActive] = useState(false);
   const [toolbarHidden, setToolbarHidden] = useState(false);
   // Wave5 #3 — freeze fix: when the layout switches (window resized past the
   // inline/touch breakpoint) close any open menu so the ⋯ overflow dropdown
@@ -4650,6 +4651,10 @@ export function WhiteboardWorkspaceClient({
       _appState?: unknown,
       files?: Readonly<Record<string, BinaryFileFromExcalidraw>>
     ) => {
+      if (_appState != null && typeof _appState === "object") {
+        const multi = (_appState as { multiElement?: unknown }).multiElement;
+        setMultipointActive(multi != null);
+      }
       // ---- Student path (role="student"): student canvas sync ----
       if (role === "student") {
         if (studentApplyingRemoteRef.current) return;
@@ -5610,6 +5615,15 @@ export function WhiteboardWorkspaceClient({
           </div>
         </>
       )}
+      {role === "student" && touchLayout && (
+        <>
+          <div className="mynk-wb-popover-sep" />
+          <LearnerSignOutButton
+            variant="menu"
+            onSignOutClick={() => setOpenMenu(null)}
+          />
+        </>
+      )}
     </div>
     );
   };
@@ -6270,7 +6284,7 @@ export function WhiteboardWorkspaceClient({
               className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing"
               onClick={(e) => e.stopPropagation()}
             >
-              <LearnerSignOutButton />
+              {!touchLayout && <LearnerSignOutButton />}
               {renderTopbarOverflowControl("wb-student-topbar-overflow")}
               {wbCaps.showLeaveInsteadOfEnd && (
                 <WbExitButton onExit={handleStudentExit} />
@@ -6405,7 +6419,7 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
-          <LearnerSignOutButton />
+          {!touchLayout && <LearnerSignOutButton />}
           {renderTopbarOverflowControl("wb-student-topbar-overflow")}
           {wbCaps.showLeaveInsteadOfEnd && (
             <WbExitButton onExit={handleStudentExit} />
@@ -6735,21 +6749,26 @@ export function WhiteboardWorkspaceClient({
             if (st.multiElement == null) return;
             event.preventDefault();
             event.stopPropagation();
-            const target =
-              (event.currentTarget as HTMLElement).querySelector(".excalidraw") ??
-              event.currentTarget;
-            target.dispatchEvent(
-              new KeyboardEvent("keydown", {
-                key: "Escape",
-                code: "Escape",
-                bubbles: true,
-              })
-            );
+            triggerFinalize();
             console.debug(
               `[whiteboard] wbsid=${whiteboardSessionId} action=finalize-multipoint-line`
             );
           }}
         >
+          {touchLayout && multipointActive && (
+            <button
+              type="button"
+              className="mynk-wb-multipoint-done"
+              data-testid="wb-multipoint-done"
+              aria-label="Finish drawing"
+              onClick={(e) => {
+                e.stopPropagation();
+                triggerFinalize();
+              }}
+            >
+              Done
+            </button>
+          )}
           {/* Banners overlay */}
           <div className="mynk-wb-banners">
             {role === "student" && showLoadingGuardBanner && (

@@ -106,6 +106,32 @@ export const triggerBringForward: UndoRedoTrigger = (doc = document) =>
 export const triggerBringToFront: UndoRedoTrigger = (doc = document) =>
   dispatchShortcut(doc, { key: "]", code: "BracketRight", shiftKey: true });
 
+/**
+ * Finalize an in-progress multipoint line/arrow (same as Enter/Escape).
+ * Excalidraw has no public finalize API — synthetic key on the canvas wrapper.
+ */
+export const triggerFinalize = (
+  doc = document
+): { ok: true } | { ok: false; reason: string } => {
+  const target = findExcalidrawTarget(doc);
+  if (!target) {
+    return { ok: false, reason: "excalidraw-container-not-found" };
+  }
+  if (!target.hasAttribute("tabindex")) {
+    target.setAttribute("tabindex", "-1");
+  }
+  target.focus({ preventScroll: true });
+  target.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "Escape",
+      code: "Escape",
+      bubbles: true,
+      cancelable: true,
+    })
+  );
+  return { ok: true };
+};
+
 /** Trigger delete selected via Delete key. */
 export const triggerDeleteSelected = (doc = document): { ok: true } | { ok: false; reason: string } => {
   const target = findExcalidrawTarget(doc);

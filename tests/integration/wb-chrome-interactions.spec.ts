@@ -1181,3 +1181,194 @@ test.describe("WB-LIVEBOARD-STUDENT-CHROME @wb-chrome @wb-viewport @wb-av @wb-pr
     }
   );
 });
+
+test.describe("wb touch chrome fixes @wb-chrome", () => {
+  test.setTimeout(120_000);
+
+  async function loadTouchTutorBoard(
+    page: Page,
+    session: Awaited<ReturnType<typeof seedWbLiveSyncSession>>
+  ) {
+    await loadTutorBoard(page, session);
+    const coarse = await page.evaluate(() =>
+      window.matchMedia("(hover: none), (pointer: coarse)").matches
+    );
+    expect(
+      coarse,
+      "touch context did not emulate a coarse pointer — test setup issue"
+    ).toBe(true);
+    await expect(page.getByTestId("mynk-wb-chrome")).toHaveAttribute(
+      "data-layout",
+      /^(narrow|phone-landscape|tablet-portrait)$/,
+      { timeout: 5_000 }
+    );
+  }
+
+  async function tapCanvasAt(page: Page, relX: number, relY: number) {
+    const mount = page.getByTestId("tutor-whiteboard-canvas-mount");
+    const box = await mount.boundingBox();
+    expect(box, "canvas mount bounding box").not.toBeNull();
+    await page.mouse.click(
+      box!.x + box!.width * relX,
+      box!.y + box!.height * relY
+    );
+  }
+
+  test("P1: eraser active hides Excalidraw HintViewer on touch", async ({
+    browser,
+  }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await context.newPage();
+    try {
+      await loadTouchTutorBoard(page, session);
+
+      const eraser = page.getByRole("button", { name: /Eraser/i });
+      await expect(eraser).toBeVisible();
+      await eraser.click();
+
+      const hint = page.locator(".mynk-wb-chrome .excalidraw--mobile .HintViewer");
+      await expect(hint).toBeHidden();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("P2: multipoint Done button finalizes line on touch", async ({
+    browser,
+  }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 844, height: 390 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await context.newPage();
+    try {
+      await loadTouchTutorBoard(page, session);
+      await expect(page.getByTestId("mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "phone-landscape",
+        { timeout: 5_000 }
+      );
+
+      const rail = page.getByTestId("wb-bottom-toolbar");
+      await rail.getByRole("button", { name: /Shapes/i }).click();
+      await expect(page.getByTestId("wb-shapes-sheet")).toHaveClass(
+        /mynk-wb-action-sheet--open/,
+        { timeout: 3_000 }
+      );
+      await page
+        .getByTestId("wb-shapes-sheet")
+        .getByRole("menuitem", { name: /Line/i })
+        .click();
+
+      await tapCanvasAt(page, 0.25, 0.35);
+      await tapCanvasAt(page, 0.55, 0.45);
+
+      const doneBtn = page.getByTestId("wb-multipoint-done");
+      await expect(doneBtn).toBeVisible({ timeout: 5_000 });
+
+      await doneBtn.click();
+
+      await page.waitForFunction(() => {
+        const bridge = (
+          window as Window & {
+            __TN_WB_E2E__?: Record<
+              string,
+              { getAppState: () => Record<string, unknown> }
+            >;
+          }
+        ).__TN_WB_E2E__?.tutor;
+        return bridge?.getAppState?.().multiElement == null;
+      });
+      await expect(doneBtn).toBeHidden({ timeout: 3_000 });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("P3: student sign-out in overflow menu on touch, not inline", async ({
+    browser,
+  }) => {
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session, {
+      studentViewport: { width: 844, height: 390 },
+      studentHasTouch: true,
+      studentIsMobile: true,
+      ensureFollow: false,
+    });
+    try {
+      const { studentPage } = peers;
+      await expect(studentPage.getByTestId("mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "phone-landscape",
+        { timeout: 5_000 }
+      );
+
+      await expect(studentPage.getByTestId("learner-sign-out")).toHaveCount(0);
+
+      await studentPage.getByTestId("wb-student-topbar-overflow").click();
+      const dropdown = studentPage.getByTestId("wb-topbar-overflow-dropdown");
+      await expect(dropdown).toBeVisible({ timeout: 3_000 });
+
+      const signOut = dropdown.getByTestId("learner-sign-out");
+      await expect(signOut).toBeVisible();
+      await expect(signOut).toHaveClass(/mynk-wb-menu-item--destructive/);
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("P4: styles sheet More styles row fully in viewport on phone", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await context.newPage();
+    try {
+      await loadTutorBoard(page, session);
+      await expect(page.getByTestId("mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "narrow",
+        { timeout: 5_000 }
+      );
+
+      await page
+        .getByTestId("wb-bottom-toolbar")
+        .getByRole("button", { name: /^Styles$/i })
+        .click();
+      await expect(page.getByTestId("wb-props-sheet")).toHaveClass(
+        /mynk-wb-action-sheet--open/,
+        { timeout: 5_000 }
+      );
+      await page.waitForTimeout(300);
+
+      const moreStyles = page.getByTestId("wb-more-styles-btn");
+      await expect(moreStyles).toBeVisible();
+      await expect(moreStyles).toBeInViewport();
+
+      const scrollTop = await page.evaluate(() => {
+        const body = document.querySelector(
+          ".mynk-wb-action-sheet--open .mynk-wb-action-sheet__body"
+        );
+        return body instanceof HTMLElement ? body.scrollTop : null;
+      });
+      expect(scrollTop).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+});

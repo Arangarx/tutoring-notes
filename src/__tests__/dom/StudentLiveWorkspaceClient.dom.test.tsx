@@ -23,6 +23,22 @@ jest.mock("@/components/ThemeProvider", () => ({
   }),
 }));
 
+let mockLayoutMode: "desktop" | "narrow" = "desktop";
+
+jest.mock("@/components/whiteboard/chrome/useWbLayoutMode", () => {
+  const actual = jest.requireActual<
+    typeof import("@/components/whiteboard/chrome/useWbLayoutMode")
+  >("@/components/whiteboard/chrome/useWbLayoutMode");
+  return {
+    ...actual,
+    useWbLayoutMode: () => ({
+      layoutMode: mockLayoutMode,
+      orientation:
+        mockLayoutMode === "narrow" ? ("portrait" as const) : ("landscape" as const),
+    }),
+  };
+});
+
 jest.mock("@/components/whiteboard/PdfImageUploadButton", () => ({
   PdfImageUploadButton: () => null,
 }));
@@ -345,6 +361,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockDisconnect.mockClear();
+  mockLayoutMode = "desktop";
   window.scrollTo = jest.fn();
   globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -375,8 +392,9 @@ describe("WhiteboardWorkspaceClient role=student — behavior (RW-B1)", () => {
     expect(screen.getByTestId("student-whiteboard-canvas-mount")).toBeInTheDocument();
   });
 
-  it("sign-out control logs out learner and targets student login", async () => {
+  it("desktop layout: sign-out control is inline in the top bar", async () => {
     const user = userEvent.setup();
+    mockLayoutMode = "desktop";
     await renderStudentWorkspace();
 
     expect(screen.getByTestId("learner-sign-out")).toBeInTheDocument();
@@ -392,5 +410,26 @@ describe("WhiteboardWorkspaceClient role=student — behavior (RW-B1)", () => {
     // jsdom's Location is non-configurable and rejects non-hash navigation, so the
     // hard redirect URL cannot be read back here — see LearnerSignOutButton.dom.test.tsx
     // + P2-ID browser gate for full navigation oracle.
+  });
+
+  it("touch layout: sign-out is in the overflow menu, not inline", async () => {
+    const user = userEvent.setup();
+    mockLayoutMode = "narrow";
+    await renderStudentWorkspace();
+
+    expect(screen.queryByTestId("learner-sign-out")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("wb-student-topbar-overflow"));
+
+    const signOut = await screen.findByTestId("learner-sign-out");
+    expect(signOut).toHaveClass("mynk-wb-menu-item--destructive");
+
+    await user.click(signOut);
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith("/api/auth/learner/logout", {
+        method: "POST",
+      });
+    });
   });
 });
