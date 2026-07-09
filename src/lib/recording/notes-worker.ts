@@ -75,8 +75,8 @@ const REDUCE_SYSTEM_PROMPT = `You are an expert tutoring assistant. Given struct
 STRICT RULES:
 (1) Be terse — short phrases or comma lists, not full sentences. A parent should scan in under 10 seconds.
 (2) Only include information present in the source data — do not fabricate or invent observations the session did not contain.
-(3) assessment synthesizes corrections, questions, and in-session reactions into a student-standing picture (strengths, struggles, mastery). Map reactions to meaning when present in source: "almost!" / "try again" / "not quite" → wrestling with that topic; "yes!" / "got it" / "perfect" / "right on" → has it. Empty string "" only if there is NEITHER explicit commentary NOR reaction signal on understanding.
-(4) nextSteps covers ALL follow-ups AND any assigned homework — the complete "Plan" including homework.
+(3) assessment: where the student stands on what was covered — strengths, struggles, mastery level. Include both EXPLICIT comments in corrections/questions AND clear in-session reactions: "almost!" / "try again" / "not quite" → wrestling with that topic; "yes!" / "got it" / "perfect" / "right on" → has it. Cluster by topic when possible. Do NOT fabricate observations the session never contained or implied. Empty string "" only if there is NEITHER explicit commentary NOR reaction signal on understanding.
+(4) nextSteps covers all DISTINCT follow-ups and any assigned homework — the complete "Plan" including homework. Merge semantically-duplicate follow-ups from different chunks into ONE phrase (e.g. the same future action stated twice → include once). One item per distinct future action; keep completeness for distinct actions but do not repeat the same plan in different words.
 (5) If a field has no information, return empty string "".
 
 Respond with JSON ONLY — no markdown fences, no commentary:
