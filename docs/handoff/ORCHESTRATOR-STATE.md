@@ -21,8 +21,8 @@
 4. UX bundle `969ae7d` ([UX bundle](48187f62-85fb-4f7a-9e39-fe1de591be6f))
 
 **Wave 2 IN FLIGHT:**
-- [claim set-up-later+escape](379004a7-f398-4c8a-8bb2-4a46b33f0509) → `fix/claim-setup-later-escape` (Sonnet)
-- [share replay PW auth](c3aba2c2-c575-4391-a97e-bbc2b3c7411a) → `fix/view-whiteboard-share-pw-auth`
+- ~~claim set-up-later+escape~~ ✅ **MERGED** `5b413a8` ([claim setup](379004a7-f398-4c8a-8bb2-4a46b33f0509) → `2a7b79a`) — Set up later always; `router.refresh()` after consent; 409 credential guard; Playwright identity-e2e added
+- [share replay PW auth](c3aba2c2-c575-4391-a97e-bbc2b3c7411a) → `fix/view-whiteboard-share-pw-auth` — still in flight
 
 **Next after Wave 2:** cancel+fresh-id (WWC) → Finish-review CTA → replay-tab aria/oracle → SEC-POLICY copy.
 
