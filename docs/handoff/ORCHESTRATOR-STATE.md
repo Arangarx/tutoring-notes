@@ -18,20 +18,23 @@
 - **Billing copy:** pass; optional later polish after feedback.
 - **Known-issues headers:** looks better; optional later pass.
 
-**Last action:** Recheck triage committed+pushed `9920defe`. Pre-Sarah burndown started.
+**Last action:** Andrew confirmed END-WINDDOWN product (“go with that” 2026-07-09). Dispatching Sonnet worktree fix.
 
 **In-flight subagents:**
 - [share replay phone](3662f27c-04db-4be2-b716-b9eed10fb14b) Composer — `fix/wb-share-replay-viewport-phone`
 - [AUDIO-1 investigate](d9ef09d0-65a2-4e81-b1ee-f162723420d3) explore readonly — root cause for silent Brio
+- [END-WINDDOWN](608781f5-8555-4460-bb27-249f1daf1a9d) Sonnet worktree — disarm + immediate student signal on End confirm
+
+**Decisions locked (END-WINDDOWN):** On End confirm: (1) disarm board both sides; (2) immediate student wind-down (relay + overlay + stop A/V); atomic `endedAt` remains durable truth + poll backup. Pair PERF-1 when practical.
 
 **Next action(s) — pre-Sarah burndown (priority):**
 1. **WB-SHARE-REPLAY-VIEWPORT-PHONE** — in flight
-2. **SMOKE-AUDIO-1** — investigate in flight → then Sonnet fix (fragile live-A/V)
-3. **SMOKE-END-WINDDOWN** — **blocked on Andrew confirm** (see chat)
-4. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — after share branch lands (or worktree)
+2. **SMOKE-END-WINDDOWN** — in flight (Andrew confirmed)
+3. **SMOKE-AUDIO-1** — investigate in flight → then Sonnet fix (fragile live-A/V)
+4. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — after share / serialize
 5. Optional A: blank Board-3 bleed + share-wall spot-check (Andrew)
 
-**Still open / pre-Sarah:** AUDIO-1 SEVERE; END-WINDDOWN (await confirm); share-replay phone; student-detail mobile; PERF-1.
+**Still open / pre-Sarah:** AUDIO-1 SEVERE; END-WINDDOWN (implementing); share-replay phone; student-detail mobile; PERF-1.
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
