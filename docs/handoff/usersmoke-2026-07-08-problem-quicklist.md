@@ -75,13 +75,30 @@ Legend: ✅ fixed & merged · 🔧 fixed, on branch, awaiting your smoke · 🔴
 - 📋 Possible tutor phantom self-unmute (SMOKE-AUDIO-2, unconfirmed — watch).
 - 📋 "Finalizing" felt slow on a short session (SMOKE-PERF-1) — confirmed it does NOT scale with session length; de-await snapshot queued.
 
-## ❓ Needs your input (won't block)
+## ✅ Decisions recorded (Andrew 2026-07-09) — still collect-only until "act"
 
-- ❓ "Save to notes" destination — student detail, notes list, or stay + prominent CTA?
-- ❓ Billing (smokebook item 21) — flip default rounding **nearest → up**? And where should billable time surface (end-session review? session list?).
-- ❓ Item 3 FAIL repro — what exactly failed on "Start session / workspace mounts"?
-- ❓ Item 17 share-link FAIL repro — `/s/` vs `/join/`? had you Saved to notes first? session ended? logged-out or entitled? what did you SEE?
-- ❓ Item 24 marketing/legal PARTIAL — which surface partially failed (`/`, `/privacy`, `/terms`, logged-in `/` redirect)?
+- **1 SEC-POLICY-TRUTH → A (both):** interim copy accuracy now (grade-level, signed-URL wording, soften 24-mo claim until clock exists) + scope retention-lifecycle build for pre-release. Item 24 PARTIAL was honesty doubt on privacy/terms — same thread.
+- **2 Cancel semantics → A (keep cancel=delete)** + critical acceptance: **next Start / copy-link MUST always mint a fresh live session id** ("if a tutor clicks new session it should always be a new session. Period."). Cancel-as-delete is fine pre-start; the stranded-student exit + stale-deleted-id copy-link bugs are the real fix targets (bundle).
+- **3 Parent interstitial → B-ish / soft:** hasn't seen it recently; testing on `preview.usemynk.com`. Suspect may be email claim links still pointing at a non-preview / wrong host (he may not be rewriting URLs). **Before a big fix:** verify what host claim-invite emails actually send. If email host ≠ login host → preview/RC-A class; if same-host copy-link still AuthGate → real bug.
+- **4 Save-to-notes / review exit → REFINED (Andrew 2026-07-09):** Do **not** auto-nav on Save (keeps replay review available after save). Add an explicit **"Finish review"** (copy TBD) control that navigates to student detail — discoverable "I'm done / now what?" without surprising mid-review bounce. Save still shows confirmation chip; Finish is the escape. Open to copy variants ("Done", "Back to student", etc.).
+- **5 Billing → A:** flip default rounding **nearest → up**; surface on **end-session review**; label clearly as **the tutor's billable time** (not "we are billing you" — product doesn't bill yet).
+- **6 Marketing nav → A:** restore wordmark → `/?view=home` (Model B). Likely lost when wordmarks were unified to `/` without the logged-in-from-app exception.
+- **7 Item 3 FAIL:** Andrew believes findings already handled or queued — no new repro needed unless something still breaks in smoke.
+- **8 Item 17 / share FAIL reframed:** not "empty notes" mystery — **View whiteboard from notes lands on OLD legacy replay** (old audio scrubber + tiny board), not the new in-frame surface. = existing SMOKE-BLOCK-2 / "View whiteboard from NOTES" queued item (tutor + student/parent). Save-first unknown; destination stack is the bug.
+- **9 Item 24 PARTIAL:** honesty of privacy/terms content (not a broken page) → folded into SEC-POLICY-TRUTH (decision 1A).
+- **Master-cut talk (Andrew 2026-07-09):**
+  - **(1) `wb-replay-active-board-tab:95` REAL-FAIL → likely TEST (or CSS in wrong place), not product.** Andrew: when watching replay, Board 1 *looks* active correctly. **Visual proof 2026-07-09:** screenshot shows Board 1 with red active dot + orange underline among Boards 1–5; product looks correct. Gate assert is `aria-selected="true"`; received `false` + `disabled` on the tab. Hypothesis: visual active state ≠ `aria-selected` (CSS/class elsewhere), or oracle wrong. **When acting:** investigate visual vs aria first — do NOT treat as a product regression until proven; prefer fix test / wire aria to match visual / move active styles to the correct selector. Still must clear or consciously quarantine before master (full `test:wb-sync` gate).
+  - **(2) Sarah surface = `master` only.** She has **never** used `v1-redesign` / preview — as far as she's seen, the site is still the old UI. So **master cut = Sarah delivery**, not "optional later." Redesign preview is Andrew-only smoke. Integrity list (erasure gate, cancel/stale-id, claim escapes, old replay, policy copy, notes quality, share wall already in) is the path to *her* seeing the new product.
+
+---
+
+## Intake — 2026-07-09 review (collect only; do not act until Andrew says)
+
+- **Known issues & roadmap — section headers too muted.** Categories are good; hierarchy feels inverted — section headers read weaker than the bullets under them, so scanning for a section is hard (human perception / contrast-weight, not structure). Likely: muted `<h3>` styling vs body bullets. Fix direction when acting: strengthen section header weight/contrast (not louder bullets).
+- **Live board overflow — "Sign out" dimmed at bottom.** Placement + red destructive styling are good; last-row text still half-dimmed/clipped by the sheet bottom fade (same class as the "More styles" clearance fix). When acting: same scroll-padding / fade treatment so "Sign out" is fully readable and tappable.
+- **Live board top-bar ⋯ "More" — PDF affordance hard to find.** Knew what to look for and still struggled to spot which item is PDF; first impression was "it isn't there." Not broken, but discoverability/iconography/labeling of the More menu items (esp. PDF) needs a pass. Pre-release polish.
+- **Live board top-bar compaction too aggressive.** Collapses controls into ⋯ "More" at widths that still have room; should stay expanded longer and react more gradually to available width. Pre-release (before GA), not blocking Sarah smoke.
+- **Password fields — show/hide password affordance.** Before release, password entry fields should have a show-password control (eye toggle or similar), at least on phone. Desktop nice-to-have; phone is the priority.
 
 ---
 
