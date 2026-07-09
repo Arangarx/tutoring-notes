@@ -9,6 +9,7 @@ import {
   openTutorAndStudent,
   assertControlFullyInViewport,
 } from "./whiteboard-live-sync.helpers";
+import { TAG } from "../test-tags";
 
 /**
  * Chrome interactivity gate — each control must be clickable and return
@@ -1071,4 +1072,112 @@ test.describe("WB-LIVEBOARD-STUDENT-CHROME @wb-chrome @wb-viewport @wb-av @wb-pr
       await pages.close();
     }
   });
+
+  /**
+   * Student phone-landscape left rail — ⋮ More overflow must be in viewport
+   * without hidden-scroll discovery (regression: page-strip overlap + scrollbar
+   * hidden made the 7th rail button look missing; c88ba36 fix reverted by 64108cf).
+   */
+  test(
+    "student phone-landscape left rail: More overflow in viewport and opens sheet without scroll",
+    { tag: [TAG.WB_CHROME] },
+    async ({ browser }) => {
+      test.setTimeout(120_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentViewport: { width: 844, height: 390 },
+        studentHasTouch: true,
+        studentIsMobile: true,
+        ensureFollow: false,
+      });
+      try {
+        const { studentPage } = peers;
+
+        const coarse = await studentPage.evaluate(
+          () => window.matchMedia("(hover: none), (pointer: coarse)").matches
+        );
+        expect(
+          coarse,
+          "student context did not emulate a coarse pointer — test setup issue"
+        ).toBe(true);
+        await expect(studentPage.getByTestId("mynk-wb-chrome")).toHaveAttribute(
+          "data-layout",
+          "phone-landscape",
+          { timeout: 5_000 }
+        );
+
+        const rail = studentPage.getByTestId("wb-bottom-toolbar");
+        await expect(rail).toBeVisible();
+
+        const more = rail.getByRole("button", {
+          name: /More — z-order, delete, hand/i,
+        });
+        await expect(more).toBeVisible();
+
+        const pageStrip = studentPage.locator(".mynk-wb-pagestrip");
+        await expect(pageStrip).toBeVisible();
+
+        const innerH = await studentPage.evaluate(() => window.innerHeight);
+
+        // Oracle: ⋮ sits fully above the page-strip overlap zone (not merely in DOM).
+        const moreBox = await more.boundingBox();
+        const stripBox = await pageStrip.boundingBox();
+        expect(moreBox).not.toBeNull();
+        expect(stripBox).not.toBeNull();
+        expect(
+          moreBox!.y + moreBox!.height,
+          "More button bottom must clear the page-strip top"
+        ).toBeLessThanOrEqual(stripBox!.y + 2);
+        expect(
+          moreBox!.y + moreBox!.height,
+          "More button must be fully inside the viewport without scrolling the rail"
+        ).toBeLessThanOrEqual(innerH + 1);
+
+        const railScrollTop = await rail.evaluate((el) => el.scrollTop);
+        const railMetrics = await rail.evaluate((el) => ({
+          clientHeight: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+          top: el.getBoundingClientRect().top,
+        }));
+        expect(
+          railScrollTop,
+          "rail must not require scroll to reveal More"
+        ).toBe(0);
+
+        const moreBottomInRail = moreBox!.y + moreBox!.height - railMetrics.top;
+        expect(
+          moreBottomInRail,
+          "More must fit inside the rail's visible client box without scrolling"
+        ).toBeLessThanOrEqual(railMetrics.clientHeight + 1);
+
+        await expect(more).toBeInViewport();
+
+        const hitTarget = await studentPage.evaluate(
+          ({ x, y, yBottom }) => {
+            const centerEl = document.elementFromPoint(x, y);
+            const bottomEl = document.elementFromPoint(x, yBottom);
+            const label = (el: Element | null) =>
+              el?.closest("button")?.getAttribute("aria-label") ?? el?.className ?? null;
+            return { center: label(centerEl), bottom: label(bottomEl) };
+          },
+          {
+            x: moreBox!.x + moreBox!.width / 2,
+            y: moreBox!.y + moreBox!.height / 2,
+            yBottom: moreBox!.y + moreBox!.height - 2,
+          }
+        );
+        expect(hitTarget.center).toMatch(/More — z-order/i);
+        expect(hitTarget.bottom).toMatch(/More — z-order/i);
+
+        await more.click({ position: { x: moreBox!.width / 2, y: moreBox!.height / 2 } });
+
+        const sheet = studentPage.getByTestId("wb-more-sheet");
+        await expect(sheet).toHaveClass(/mynk-wb-action-sheet--open/, {
+          timeout: 5_000,
+        });
+      } finally {
+        await peers.close();
+      }
+    }
+  );
 });

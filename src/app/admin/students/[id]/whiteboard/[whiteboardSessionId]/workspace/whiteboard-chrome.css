@@ -1804,20 +1804,47 @@
   min-height: 0;
   max-height: 100%;
   align-self: stretch;
-  padding: 6px 0;
+  padding: 6px 0 14px;
   gap: 2px;
   border-top: none;
   border-right: 1px solid var(--border);
   background: var(--card);
-  z-index: 20;
+  z-index: 45;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;
 }
 
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::-webkit-scrollbar {
-  display: none;
+  width: 4px;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  border-radius: 999px;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Bottom fade hints when rail content overflows (paired with thin scrollbar). */
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::after {
+  content: "";
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  margin-top: -10px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--card) 88%, transparent)
+  );
 }
 
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar .mynk-wb-tool-btn {
@@ -1885,14 +1912,14 @@
   display: none;
 }
 
-/* Board tabs pinned to bottom — inset past left rail */
+/* Board tabs pinned to bottom — canvas column only (do not paint over left rail). */
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-pagestrip {
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   grid-row: 1;
   align-self: end;
   z-index: 40;
   max-height: 40px;
-  padding-left: 44px;
+  padding-left: 0;
   background: color-mix(in srgb, var(--card) 94%, transparent);
   backdrop-filter: blur(8px);
 }
