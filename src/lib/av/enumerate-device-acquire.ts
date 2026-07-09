@@ -4,6 +4,79 @@
  * sibling `audioinput` / `videoinput` rows — pick by slot + `groupId`.
  */
 
+/**
+ * Raw RMS threshold below which a track is considered silent.
+ * Truly silent tracks (wrong OS audio endpoint, hardware gain=0) report
+ * raw RMS ≈ 0.  Quiet rooms still generate ambient pickup above ~0.002.
+ * 0.0005 is safely above absolute zero and below ambient room noise.
+ */
+export const SILENT_TRACK_RAW_RMS_THRESHOLD = 0.0005;
+
+/** How long to sample audio frames before deciding silence. */
+const SILENT_TRACK_SAMPLE_MS = 250;
+
+type SilentTrackTestWindow = {
+  __VAD_TEST_SILENT_TRACK__?: boolean;
+};
+
+/**
+ * Returns true if the first audio track in `stream` appears silent
+ * (raw RMS < SILENT_TRACK_RAW_RMS_THRESHOLD after a ~250 ms sampling window).
+ *
+ * This catches the "GUM succeeds but returns a live-but-silent track" class of
+ * Logitech Brio / Windows bugs — the OS audio engine picks the wrong input
+ * endpoint when constrained by `deviceId: { exact }` alone.
+ *
+ * - Returns false (not silent) when Web Audio is unavailable (jsdom, server).
+ * - Test seam: set `window.__VAD_TEST_SILENT_TRACK__ = true|false` in
+ *   non-production environments to override the real AudioContext sampling.
+ */
+export async function isMicStreamSilent(stream: MediaStream): Promise<boolean> {
+  // Test / non-prod override — avoids AudioContext in jest/jsdom.
+  if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+    const w = window as unknown as SilentTrackTestWindow;
+    if (typeof w.__VAD_TEST_SILENT_TRACK__ === "boolean") {
+      return w.__VAD_TEST_SILENT_TRACK__;
+    }
+  }
+
+  try {
+    const audioContext = new AudioContext();
+    await audioContext.resume();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    // No smoothing: we want the raw frame values, not a time-smoothed average.
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0;
+    source.connect(analyser);
+
+    // Wait for the audio pipeline to produce frames.
+    await new Promise<void>((resolve) => setTimeout(resolve, SILENT_TRACK_SAMPLE_MS));
+
+    const data = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = data[i] ?? 0;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+
+    try {
+      source.disconnect();
+    } catch {
+      /* ignore */
+    }
+    await audioContext.close();
+
+    return rms < SILENT_TRACK_RAW_RMS_THRESHOLD;
+  } catch {
+    // AudioContext unavailable (server, jsdom without mock) — treat as non-silent
+    // so we don't block acquisition on unsupported environments.
+    return false;
+  }
+}
+
 export function mediaInputsHaveDuplicateIds(list: MediaDeviceInfo[]): boolean {
   const ids = list.map((d) => d.deviceId);
   if (ids.length >= 2 && ids.filter((id) => !id || id === "").length >= 2) {
