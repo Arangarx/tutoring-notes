@@ -858,19 +858,27 @@ export function WhiteboardWorkspaceClient({
    */
   const onGuardReleaseCallbackRef = useRef<((pageId: string) => void) | null>(null);
   /**
-   * BUG-3 blank-board guard.
+   * BUG-3 / E4 page-foreign guard (secondary defense after fingerprint).
    *
-   * When switching to a board whose bucket is empty (next.length === 0),
-   * records the LEAVING board's element IDs as "forbidden". In
-   * `handleExcalidrawChange`, any onChange that contains one or more of these
-   * forbidden IDs is rejected as a stale debounced onChange from the board we
-   * just left. Cleared when the first non-forbidden, non-empty onChange arrives
-   * (= the user's first real stroke on the blank board).
+   * When switching boards, records the LEAVING board's element IDs as
+   * `forbiddenIds` on the target page. In `handleExcalidrawChange`, any
+   * onChange carrying forbidden IDs is rejected as a stale debounced onChange
+   * from the board we just left.
    *
-   * Covers both `selectTutorPage` (switching to an existing blank board) and
-   * `addTutorPage` (auto-navigating to a newly-created empty board).
+   * `settledIds` holds element IDs already on the target at switch time.
+   * Blank boards: empty settledIds — first non-forbidden stroke clears the
+   * guard. PDF/non-blank boards: settledIds = initial content (e.g. PDF
+   * images) so PDF-image-only onChange does not clear the guard while
+   * fingerprint has already dropped.
+   *
+   * Covers `selectTutorPage`, `addTutorPage`, and PDF import via
+   * `commitPdfBatch` → `selectTutorPage`.
    */
-  const blankBoardForbiddenIdsRef = useRef<Map<string, Set<string>>>(new Map());
+  type PageForeignGuard = {
+    forbiddenIds: Set<string>;
+    settledIds: Set<string>;
+  };
+  const pageForeignGuardRef = useRef<Map<string, PageForeignGuard>>(new Map());
   /**
    * TEST SEAM — E3 blank-board onChange injection.
    * Holds the current `handleExcalidrawChange` closure for
@@ -1075,7 +1083,8 @@ export function WhiteboardWorkspaceClient({
       const onTargetReadTime =
         activePageIdRef.current === targetId &&
         pageSwitchProgrammaticRef.current === 0 &&
-        !pageSceneSetFingerprintRef.current.has(targetId);
+        !pageSceneSetFingerprintRef.current.has(targetId) &&
+        !pageForeignGuardRef.current.has(targetId);
       const localForMerge: ReadonlyArray<ExcalidrawLikeElement> =
         onTargetReadTime
           ? (((api.getSceneElementsIncludingDeleted?.() ?? api.getSceneElements()) as ReadonlyArray<ExcalidrawLikeElement>))
@@ -1089,7 +1098,22 @@ export function WhiteboardWorkspaceClient({
         appState,
         { shouldDropRemoteElement }
       );
-      pageDataRef.current[targetId] = merged;
+      let mergedToStore = merged as ReadonlyArray<ExcalidrawLikeElement>;
+      const foreignGuardAtMerge = pageForeignGuardRef.current.get(targetId);
+      if (foreignGuardAtMerge && foreignGuardAtMerge.forbiddenIds.size > 0) {
+        const hasForbiddenInMerge = mergedToStore.some(
+          (e) => e.id && foreignGuardAtMerge.forbiddenIds.has(e.id)
+        );
+        if (hasForbiddenInMerge) {
+          mergedToStore = mergedToStore.filter(
+            (e) => !e.id || !foreignGuardAtMerge.forbiddenIds.has(e.id)
+          );
+          console.info(
+            `[wba] wbsid=${whiteboardSessionId} action=stale_foreign_scene_stripped pageId=${targetId} guard=apply_remote`
+          );
+        }
+      }
+      pageDataRef.current[targetId] = mergedToStore;
 
       // Re-check at write time. `mergeScenesReconciled` has a tiny
       // microtask await (dynamic import of `reconcileElements`); in
@@ -1118,7 +1142,7 @@ export function WhiteboardWorkspaceClient({
           // apply (the remote re-adds elements the eraser just deleted).
           (api as typeof api & {
             updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
-          }).updateScene({ elements: merged as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
+          }).updateScene({ elements: mergedToStore as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
         } finally {
           applyingRemoteToCanvasRef.current = false;
         }
@@ -3360,6 +3384,25 @@ export function WhiteboardWorkspaceClient({
     }
   }, [wbSignal, recorder, whiteboardSessionId]);
 
+  /** Arm secondary foreign-element guard on a page-switch target. */
+  const armPageForeignGuard = (
+    targetPageId: string,
+    fromElements: ReadonlyArray<{ id?: string }>,
+    settledElements: ReadonlyArray<{ id?: string }>
+  ) => {
+    const forbiddenIds = new Set(
+      fromElements.map((e) => e.id ?? "").filter(Boolean)
+    );
+    if (forbiddenIds.size === 0) return;
+    const settledIds = new Set(
+      settledElements.map((e) => e.id ?? "").filter(Boolean)
+    );
+    pageForeignGuardRef.current.set(targetPageId, { forbiddenIds, settledIds });
+    console.info(
+      `[wba] wbsid=${whiteboardSessionId} action=page_foreign_guard_set pageId=${targetPageId} forbidden_count=${forbiddenIds.size} settled_count=${settledIds.size}`
+    );
+  };
+
   const selectTutorPage = useCallback(
     async (nextId: string) => {
       // Bump the token FIRST so any in-flight switch abandons even when
@@ -3398,7 +3441,8 @@ export function WhiteboardWorkspaceClient({
       // Freeze the leaving scene. Safe because activePageIdRef has NOT
       // moved yet — any prior in-flight switch is still hydrating and
       // hasn't bumped activePageIdRef either (see atomic swap below).
-      pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
+      const frozenFromElements = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
+      pageDataRef.current[from] = frozenFromElements;
       const next =
         (pageDataRef.current[nextId] as
           | ReadonlyArray<ExcalidrawLikeElement>
@@ -3517,24 +3561,12 @@ export function WhiteboardWorkspaceClient({
                 .filter(Boolean)
             )
           );
-        } else {
-          // BUG-3 blank-board guard: switching to an empty board. Record the
-          // LEAVING board's element IDs as forbidden so a stale debounced
-          // onChange from that board (carrying those IDs) is rejected even
-          // after pageSwitchProgrammaticRef drops to 0.
-          const fromElements = pageDataRef.current[from] as
-            | ReadonlyArray<{ id?: string }>
-            | undefined;
-          const forbiddenIds = new Set(
-            (fromElements ?? []).map((e) => e.id ?? "").filter(Boolean)
-          );
-          if (forbiddenIds.size > 0) {
-            blankBoardForbiddenIdsRef.current.set(nextId, forbiddenIds);
-            console.info(
-              `[wba] wbsid=${whiteboardSessionId} action=blank_board_guard_set pageId=${nextId} forbidden_count=${forbiddenIds.size}`
-            );
-          }
         }
+        // BUG-3 / E4: secondary guard for ALL page switches (blank + PDF).
+        // Fingerprint covers non-blank targets until first legitimate onChange;
+        // this guard stays active through PDF-image-only onChange so stale
+        // leaving-board onChange is still rejected after fingerprint clears.
+        armPageForeignGuard(nextId, frozenFromElements, next);
         // Scope undo/redo history to the current board. Excalidraw's history
         // stack is global to the single instance — without clearing it on every
         // board switch, undo on Board 2 can replay Board 1 operations and inject
@@ -3597,6 +3629,7 @@ export function WhiteboardWorkspaceClient({
     const from = activePageIdRef.current;
     flushThrottledFrameNow();
     flushViewportPersistNow("page-switch-preflush");
+    let frozenFromElements: ReadonlyArray<ExcalidrawLikeElement> = [];
     if (api) {
       const st = api.getAppState() as {
         scrollX: number;
@@ -3616,7 +3649,8 @@ export function WhiteboardWorkspaceClient({
       setPageList(capList);
       // Freeze the leaving scene unconditionally — see selectTutorPage
       // comment for the same guard rationale.
-      pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
+      frozenFromElements = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
+      pageDataRef.current[from] = frozenFromElements;
     }
     // Smoke-1 #5: pick the smallest unused "Page N" label so adding a
     // page after a PDF section produces a sensible "Page 2", not "Page 9".
@@ -3636,24 +3670,8 @@ export function WhiteboardWorkspaceClient({
     pageListRef.current = nextList;
     setPageList(nextList);
     pageDataRef.current[newId] = [];
-    // BUG-3 blank-board guard: same secondary guard as selectTutorPage.
-    // addTutorPage auto-navigates to a fresh empty board; record the leaving
-    // board's element IDs as forbidden so a stale debounced onChange from that
-    // board is rejected after pageSwitchProgrammaticRef drops.
-    {
-      const fromElements = pageDataRef.current[from] as
-        | ReadonlyArray<{ id?: string }>
-        | undefined;
-      const addForbiddenIds = new Set(
-        (fromElements ?? []).map((e) => e.id ?? "").filter(Boolean)
-      );
-      if (addForbiddenIds.size > 0) {
-        blankBoardForbiddenIdsRef.current.set(newId, addForbiddenIds);
-        console.info(
-          `[wba] action=blank_board_guard_set pageId=${newId} via=addTutorPage forbidden_count=${addForbiddenIds.size}`
-        );
-      }
-    }
+    // BUG-3 / E4 page-foreign guard: same secondary guard as selectTutorPage.
+    armPageForeignGuard(newId, frozenFromElements, []);
     if (api) {
       pageSwitchProgrammaticRef.current += 1;
       const apiH = api as typeof api & {
@@ -3765,9 +3783,13 @@ export function WhiteboardWorkspaceClient({
         // 1. Freeze the anchor page's scene so its drawings can't be
         // overwritten by any onChange that arrives during the commit.
         const api = excalidrawAPIRef.current;
+        const frozenAnchorElements: ReadonlyArray<ExcalidrawLikeElement> = api
+          ? (api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>)
+          : ((pageDataRef.current[anchorActivePageId] as
+              | ReadonlyArray<ExcalidrawLikeElement>
+              | undefined) ?? []);
         if (api) {
-          pageDataRef.current[anchorActivePageId] = api.getSceneElements() as
-            ReadonlyArray<ExcalidrawLikeElement>;
+          pageDataRef.current[anchorActivePageId] = frozenAnchorElements;
         }
         // 2. Seed the section registry.
         sectionsRegistryRef.current = {
@@ -3781,6 +3803,31 @@ export function WhiteboardWorkspaceClient({
         for (const row of rows) {
           pageDataRef.current[row.pageId] =
             row.elements as ReadonlyArray<ExcalidrawLikeElement>;
+        }
+        // E4: arm page-foreign guard on every new PDF board BEFORE navigation
+        // so post-fingerprint stale anchor onChange cannot stamp into buckets.
+        {
+          const forbiddenIds = new Set(
+            frozenAnchorElements
+              .map((e) => (e as { id?: string }).id ?? "")
+              .filter(Boolean)
+          );
+          if (forbiddenIds.size > 0) {
+            for (const row of rows) {
+              const settledIds = new Set(
+                (row.elements as ReadonlyArray<{ id?: string }>)
+                  .map((e) => e.id ?? "")
+                  .filter(Boolean)
+              );
+              pageForeignGuardRef.current.set(row.pageId, {
+                forbiddenIds,
+                settledIds,
+              });
+              console.info(
+                `[wba] wbsid=${whiteboardSessionId} action=page_foreign_guard_set pageId=${row.pageId} via=commitPdfBatch forbidden_count=${forbiddenIds.size} settled_count=${settledIds.size}`
+              );
+            }
+          }
         }
         // 4. Append all new page rows to the list in one shot. Carry
         // through any per-row `viewState` (Phase 5 task 8 — PDF auto-
@@ -4878,30 +4925,42 @@ export function WhiteboardWorkspaceClient({
         // never gated.
         pageSceneSetFingerprintRef.current.delete(pageId);
       }
-      // BUG-3 blank-board guard: secondary guard for switches onto boards expected
-      // to be empty. Rejects stale debounced onChange carrying the leaving board's
-      // elements when no fingerprint anchors exist (blank page ≠ no anchors to
-      // validate against). Cleared on the first non-foreign, non-empty onChange
-      // (= the user's first real stroke on the blank board).
-      const blankForbidden = blankBoardForbiddenIdsRef.current.get(pageId);
-      if (blankForbidden && blankForbidden.size > 0) {
+      // BUG-3 / E4 page-foreign guard: secondary guard for switches onto any
+      // board (blank or PDF). Rejects stale debounced onChange carrying the
+      // leaving board's elements. Cleared only when onChange introduces a
+      // genuinely new element (not forbidden, not part of settled target scene).
+      const foreignGuard = pageForeignGuardRef.current.get(pageId);
+      if (foreignGuard && foreignGuard.forbiddenIds.size > 0) {
         if (els.length === 0) {
-          // Empty onChange — Excalidraw reporting the blank scene we programmatically
-          // set. Keep the guard active; the stale Board-N onChange may fire later.
-          // Fall through so pageDataRef is updated to [] (correct + harmless).
+          // Empty onChange — Excalidraw reporting the scene we programmatically
+          // set. Keep the guard active; the stale leaving-board onChange may
+          // fire later. For PDF/non-blank targets, do not clobber settled
+          // pageDataRef with [].
+          if (foreignGuard.settledIds.size > 0) {
+            return;
+          }
+          // Blank board: fall through so pageDataRef is updated to [] (correct).
         } else {
           const hasForeignElement = (
             els as ReadonlyArray<{ id?: string }>
-          ).some((e) => e.id && blankForbidden.has(e.id));
+          ).some((e) => e.id && foreignGuard.forbiddenIds.has(e.id));
           if (hasForeignElement) {
             console.info(
-              `[wba] wbsid=${whiteboardSessionId} action=stale_foreign_scene_rejected pageId=${pageId} guard=blank_board`
+              `[wba] wbsid=${whiteboardSessionId} action=stale_foreign_scene_rejected pageId=${pageId} guard=page_foreign`
             );
             return;
           }
-          // Non-empty onChange with no forbidden IDs → first legitimate user stroke.
-          // Clear the blank-board guard so subsequent edits (including deletes) proceed.
-          blankBoardForbiddenIdsRef.current.delete(pageId);
+          const hasNewUserElement = (
+            els as ReadonlyArray<{ id?: string }>
+          ).some(
+            (e) =>
+              e.id &&
+              !foreignGuard.forbiddenIds.has(e.id) &&
+              !foreignGuard.settledIds.has(e.id)
+          );
+          if (hasNewUserElement) {
+            pageForeignGuardRef.current.delete(pageId);
+          }
         }
       }
       // PR-01 Option A: store raw elements ref — no per-move clone.
