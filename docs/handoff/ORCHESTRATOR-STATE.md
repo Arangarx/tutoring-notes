@@ -16,6 +16,7 @@
 
 **In-flight subagents:**
 - [AUDIO-1 fix](ffd330a9-38a9-4532-82c4-cd46d46b40bb) Sonnet worktree — unify first acquire + silent RMS oracle
+- [admin student mobile](0059ebbf-3c12-41dc-b040-85395b54b17a) Composer worktree — StudentDetailShell tab discoverability
 
 **Decisions locked (END-WINDDOWN):** shipped — disarm overlay + relay `session_ending`; `endedAt` + poll backup. PERF-1 follow-up.
 
@@ -23,10 +24,10 @@
 
 **Next action(s) — pre-Sarah burndown (priority):**
 1. **SMOKE-AUDIO-1** — fix in flight
-2. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — dispatch next
+2. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — in flight
 3. Optional A: blank Board-3 bleed + share-wall (Andrew)
 
-**Still open / pre-Sarah:** AUDIO-1 (fixing); student-detail mobile; PERF-1.
+**Still open / pre-Sarah:** AUDIO-1 (fixing); student-detail mobile (fixing); PERF-1.
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
