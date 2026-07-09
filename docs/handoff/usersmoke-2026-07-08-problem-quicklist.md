@@ -16,10 +16,12 @@ Legend: ✅ fixed & merged · 🔧 fixed, on branch, awaiting your smoke · 🔴
 - ✅ Landscape "Sign out" unsafe between sync/⋮ buttons — moved into overflow menu (`90762a9`)
 - ✅ "More Styles" half-dimmed at bottom on phone — styles-sheet scroll clearance (`90762a9`)
 
-## 🔧 Fixed, on a branch, awaiting your smoke
+## ✅ Merged into `v1-redesign` overnight (2026-07-09) — ready for you to smoke together
 
-- 🔴🔧 **Stroke bleed regressed AGAIN (Board 2 strokes on Board 3)** — P0 blank-board guard hole closed (`70ba1a2`, branch `fix/wb-stroke-bleed-blank-board`). Awaiting your smoke + the ~38-min relay gate → merges FIRST.
-- 🔧 **Share link allows anonymous access to notes (MAJOR)** — secure-by-default auth wall (`d06901c`, branch `fix/sec-share-wall-secure-default`). Merges AFTER P0. Smoke: logged-out `/s/` link → login; entitled parent → still sees notes.
+- 🔴✅ **Stroke bleed regressed AGAIN (Board 2 strokes on Board 3)** — P0 blank-board guard hole closed. Merged `9c36cb1`. **Relay gate (`test:wb-sync`) ran on the P0 tip: jest 860/860; all 6 Playwright shards green incl. the new `wb-e3-blank-board-stroke-leak` P0 test + every sync invariant** → confirms P0 introduces no new sync/bleed regression. Smoke: draw on Board 2, switch to blank Board 3, back — no bleed.
+- 🔧✅ **Share link allows anonymous access to notes (MAJOR)** — secure-by-default auth wall. Merged `561d7a9`. Smoke: logged-out `/s/` link → login redirect; entitled parent/learner → still sees notes. (Integrated tip passed `next build`.)
+
+> Gate caveat (not caused by either fix): one **pre-existing** relay test is red on `v1-redesign` — see the replay list below.
 
 ## 🔴 Decided, queued to dispatch the moment P0 lands
 
@@ -35,6 +37,7 @@ Legend: ✅ fixed & merged · 🔧 fixed, on branch, awaiting your smoke · 🔴
 - ⏳ Theme button in replay caused an unexpected nav to `/admin/students/<id>` (once) — hydration guard on review nav links + remove duplicate theme toggle.
 - ⏳ Replay top-bar disabled buttons need the same dimness as the sidebar disabled buttons.
 - ⏳ Replay board tabs missing the document/PDF icons that the live board tabs have.
+- ⏳ **Replay board tabs don't show active-selected state during scrub (pre-existing red, gate-surfaced).** `wb-replay-active-board-tab:95` fails on `v1-redesign` independent of the P0 fix — the Board-1 replay tab stays `aria-selected="false"` and renders `disabled` while scrubbing. Traces to `eb3fb5d` ("reds under triage"). Same replay-tab area as the missing-icons item; likely fix together.
 - ⏳ "View whiteboard" from NOTES lands on the OLD/legacy replay (tutor + student) — must land on the new in-frame replay.
 
 ### Nav / layout / UX
