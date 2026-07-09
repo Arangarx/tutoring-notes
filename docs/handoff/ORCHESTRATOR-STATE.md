@@ -10,9 +10,9 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `aa1da56` (cancel PENDING merge). Decisions + intake: [`usersmoke-2026-07-08-problem-quicklist.md`](usersmoke-2026-07-08-problem-quicklist.md).
+**Tip:** `v1-redesign` @ `a524211` (Wave 3 complete). Decisions + intake: [`usersmoke-2026-07-08-problem-quicklist.md`](usersmoke-2026-07-08-problem-quicklist.md).
 
-**Decisions locked (2026-07-09):** SEC-POLICY=both (copy now + retention later); cancel=keep-delete + **new session ALWAYS fresh id**; interstitial=verify email host first; Save stays put + **"Finish review"** CTA → student detail; billing=round **up** + label tutor billable time; marketing wordmark=`/?view=home`; replay-tab gate red = likely **test/aria mismatch** (Andrew screenshot: Board 1 visually active).
+**Decisions locked (2026-07-09):** SEC-POLICY=both (copy now + retention later); cancel=keep-delete + **new session ALWAYS fresh id**; interstitial=verify email host first; Save stays put + **"Finish review"** CTA → student detail; billing=round **up** + label tutor billable time; marketing wordmark=`/?view=home`; replay-tab gate red was **test oracle** (product OK; scrubberMax + Board1 switch window).
 
 **✅ Wave 1 COMPLETE — all 4 merged to `v1-redesign` tip `969ae7d` (docs `f9294ed`):**
 1. notes prompt_wins `49485ea` ([notes](1eceaad8-da08-4417-8d58-54bc5d447d9e))
@@ -24,10 +24,10 @@
 - claim set-up-later+escape `5b413a8` ([claim setup](379004a7-f398-4c8a-8bb2-4a46b33f0509))
 - share replay PW auth `f4cc7ca` ([share PW](c3aba2c2-c575-4391-a97e-bbc2b3c7411a)) — 3/3 view-whiteboard PW green
 
-**Wave 3 IN FLIGHT:**
-- ~~cancel + fresh session id~~ ✅ **MERGED** `aa1da56` ([cancel + fresh id](3d87a590-f0ad-46be-b7e9-2bdc8f42832d) → `a75988a`) — PENDING 404→`session_canceled`; `location.replace` + key clear; Playwright `wb-cancel-pending-session.spec.ts`
-- ~~Finish review + SEC-POLICY copy~~ ✅ **MERGED** `4d3e9f4` ([Finish review + policy](f971a66e-291b-49b8-84dc-5b06c0e90976) → `30c340b`)
-- ~~replay-tab aria/oracle~~ ✅ **MERGED** `508eefb` ([replay-tab aria](9d372870-f4bb-4dce-b14c-1c98bac8db45) → `ec6b67b`) — `readOnly` span tabs (disabled-button aria gap closed). **INSUFFICIENT:** PW still red — Board 1 has `aria-selected=false` + `--read-only-inactive` → **`activePageId` not Board 1 at scrub assert**. Follow-up IN FLIGHT [replay activePageId](896736f4-f5f3-468c-a838-c9b90f0fd571) → `fix/replay-tab-active-pageid`
+**✅ Wave 3 COMPLETE:**
+- cancel + fresh session id `aa1da56` ([cancel + fresh id](3d87a590-f0ad-46be-b7e9-2bdc8f42832d) → `a75988a`) — PENDING 404→`session_canceled`; `location.replace` + key clear; Playwright enrolled
+- Finish review + SEC-POLICY copy `4d3e9f4` ([Finish review + policy](f971a66e-291b-49b8-84dc-5b06c0e90976) → `30c340b`)
+- replay-tab aria `508eefb` ([replay-tab aria](9d372870-f4bb-4dce-b14c-1c98bac8db45) → `ec6b67b`) + oracle follow-up `a524211` ([replay activePageId](896736f4-f5f3-468c-a838-c9b90f0fd571) → `a8870de`) — test-only; product `activeReplayPageId` was correct
 
 **Historical (collapsed):** Bug A `27d6cc5`, wave5→v1-redesign merge `d6b4433`, smoke triage trail below remains for audit until heavy restructure.
 
