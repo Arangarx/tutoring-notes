@@ -2646,6 +2646,67 @@
   white-space: nowrap;
 }
 
+/* ── Share replay page shell (/s/[token]/whiteboard/[wbsid]) ──
+   Viewport-locked flex column so embedded replay gets a real height chain.
+   Without this, min-h-dvh + scrollable page → 0×0 canvas rect → blank blue board. */
+.wb-share-replay-page {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.wb-share-replay-page__header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.wb-share-replay-page__header-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 10px 12px 12px;
+}
+
+.wb-share-replay-page__title {
+  margin: 6px 0 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.wb-share-replay-page__subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.wb-share-replay-page__player {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .wb-share-replay-page__header-inner {
+    padding: 12px 20px 14px;
+  }
+
+  .wb-share-replay-page__title {
+    font-size: 1.5rem;
+  }
+}
+
 .mynk-wb-replay-root--embedded {
   flex: 1;
   min-height: 0;

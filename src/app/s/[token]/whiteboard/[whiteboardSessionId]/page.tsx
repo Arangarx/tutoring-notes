@@ -164,33 +164,36 @@ export default async function ShareWhiteboardPage({
   );
 
   return (
-    <main className="min-h-dvh bg-background">
-      <div className="mx-auto w-full max-w-[1280px] px-4 py-4 md:px-5 md:py-6">
-        <header className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-border bg-card pb-4">
-          <div className="min-w-0">
-            <Link
-              href={`/s/${token}`}
-              className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-            >
-              ← Back to {studentName}&apos;s notes
-            </Link>
-            <h1 className="heading mt-1.5 mb-0 text-xl font-bold tracking-tight md:text-2xl">
-              {sessionLabel}
-            </h1>
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              Whiteboard recording shared by your tutor
-              {billedLabel ? (
-                <>
-                  {" "}
-                  ·{" "}
-                  <span data-testid="wb-share-billed-duration">{billedLabel}</span>
-                </>
-              ) : null}
-            </p>
-          </div>
-        </header>
+    <main
+      className="wb-share-replay-page"
+      data-testid="wb-share-replay-page"
+    >
+      <header className="wb-share-replay-page__header">
+        <div className="wb-share-replay-page__header-inner">
+          <Link
+            href={`/s/${token}`}
+            className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            ← Back to {studentName}&apos;s notes
+          </Link>
+          <h1 className="heading wb-share-replay-page__title">
+            {sessionLabel}
+          </h1>
+          <p className="wb-share-replay-page__subtitle">
+            Whiteboard recording shared by your tutor
+            {billedLabel ? (
+              <>
+                {" "}
+                ·{" "}
+                <span data-testid="wb-share-billed-duration">{billedLabel}</span>
+              </>
+            ) : null}
+          </p>
+        </div>
+      </header>
 
-        {/* In-frame replay — same stack as tutor SessionReviewMode (not legacy WhiteboardReplay). */}
+      {/* Viewport-locked shell — height chain for embedded replay (phone share path). */}
+      <div className="wb-share-replay-page__player">
         <ShareWhiteboardReplayPlayer
           eventsBlobUrl={eventsApiUrl}
           audioSegments={replayAudio.audioSegments}
@@ -201,7 +204,6 @@ export default async function ShareWhiteboardPage({
           studentName={studentName}
           durationSeconds={session.durationSeconds}
         />
-
       </div>
     </main>
   );

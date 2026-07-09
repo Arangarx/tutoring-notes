@@ -183,6 +183,22 @@ export function ReplayCanvasSurface({
               zoom: aligned.zoom,
             };
           }
+        } else if (container && typeof window !== "undefined") {
+          // Share replay shell layout race: rect can be 0×0 on the first paint
+          // before flex height chain resolves — retry on rAF (same pattern as
+          // createCameraFitter in scene-paint.ts).
+          let retriesLeft = 4;
+          const retryAlign = () => {
+            if (retriesLeft <= 0) return;
+            retriesLeft -= 1;
+            const retryRect = container.getBoundingClientRect();
+            if (!(retryRect.width > 0 && retryRect.height > 0)) {
+              window.requestAnimationFrame(retryAlign);
+              return;
+            }
+            applySceneAtRef.current?.(timeMs);
+          };
+          window.requestAnimationFrame(retryAlign);
         }
       }
       const result = painter.applyAt(timeMs, {
