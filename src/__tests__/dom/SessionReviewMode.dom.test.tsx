@@ -111,6 +111,13 @@ describe("SessionReviewMode unified surface", () => {
       "/admin/students/stu-1/notes"
     );
     expect(screen.getByTestId("wb-theme-toggle")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-finish-review")).toHaveAttribute(
+      "href",
+      "/admin/students/stu-1"
+    );
+    expect(screen.getByTestId("wb-finish-review")).toHaveTextContent(
+      "Finish review"
+    );
     expect(screen.getByTestId("wb-review-notes-prominent")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-hero-layout")).toBeInTheDocument();
     expect(await screen.findByTestId("wb-review-enter-replay")).toBeInTheDocument();

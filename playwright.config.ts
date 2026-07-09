@@ -175,6 +175,7 @@ export default defineConfig({
         "**/integration/wb-e2-apply-remote-pdf-stroke-leak.spec.ts",
         "**/integration/wb-e3-blank-board-stroke-leak.spec.ts",
         "**/integration/wb-notes-shimmer.spec.ts",
+        "**/integration/wb-finish-review-cta.spec.ts",
         "**/integration/wb-roughness-style.spec.ts",
         "**/integration/wb-replay-active-board-tab.spec.ts",
         "**/integration/wb-replay-scrub-seek.spec.ts",

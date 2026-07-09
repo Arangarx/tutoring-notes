@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
  * Privacy policy — Tutoring Notes (product subordinate facade).
  *
  * SYNCED FROM https://www.mortensenapps.com/privacy as of 2026-05-31.
+ * Product-specific retention + inventory copy updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -49,7 +50,7 @@ export default function PrivacyPage() {
           <Card>
             <CardHeader>
               <CardTitle className="heading text-3xl font-normal">Privacy Policy</CardTitle>
-              <p className="text-sm text-muted-foreground">Last updated: May 31, 2026</p>
+              <p className="text-sm text-muted-foreground">Last updated: July 9, 2026</p>
             </CardHeader>
             <CardContent className="space-y-4">
         <p className="text-sm leading-relaxed text-muted-foreground">
@@ -88,7 +89,7 @@ export default function PrivacyPage() {
               <li><strong>Waitlist entries</strong> (email and optional name) submitted through interest forms or contact, retained for outreach.</li>
               <li><strong>Gmail OAuth tokens</strong> if you use &ldquo;Connect Gmail&rdquo; (see Google account and Gmail below).</li>
               <li><strong>Standard technical logs</strong> (IP address, user agent, timestamps) collected by our hosting provider for security and reliability.</li>
-              <li><strong>LearnerProfile information:</strong> a student&rsquo;s name and grade level entered when creating a student profile. For students under 13, this is personal information subject to COPPA protections.</li>
+              <li><strong>LearnerProfile information:</strong> a student&rsquo;s name entered when creating a student profile. For students under 13, this is personal information subject to COPPA protections.</li>
               <li><strong>Session transcripts</strong> automatically generated from session audio by the OpenAI transcription service (see below). Transcripts are derived from and linked to the session audio recording.</li>
               <li><strong>Parent or guardian contact information</strong> collected during the account-claim and consent flow for students, including for verifiable parental consent purposes for students under 13.</li>
             </ul>
@@ -201,8 +202,9 @@ export default function PrivacyPage() {
             <p style={{ margin: "8px 0 0" }}>
               When you upload or record a session audio file, the recording is stored in{" "}
               <strong>Vercel Blob</strong> (private, US region). Audio is never publicly
-              accessible — all playback links are short-lived signed URLs generated at
-              render time.
+              accessible — playback uses authenticated, session-scoped URLs served through
+              our application (tutor accounts and revocable parent share links), not direct
+              public blob links.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               Recordings are sent to <strong>OpenAI</strong> via the{" "}
@@ -247,18 +249,18 @@ export default function PrivacyPage() {
               promptly.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              <strong>Children&rsquo;s personal information — retention schedule (COPPA
+              <strong>Children&rsquo;s personal information — retention (COPPA
               §312.10).</strong> Session audio recordings, session transcripts, session
-              notes, LearnerProfile information (name and grade level), and parent or
-              guardian contact information for students who are minors are retained for
-              the duration of the active tutor–student relationship and for{" "}
-              <strong>24 months after the account is closed</strong>, after which they
-              are permanently deleted. We retain this information to allow tutors and
-              parents to review session history and track student progress during and
-              reasonably after the tutoring relationship.{" "}
+              notes, LearnerProfile information (name), and parent or guardian contact
+              information for students who are minors are retained for the duration of
+              the active tutor–student relationship while your account remains in use. We
+              may keep session history for a reasonable period after tutoring ends so
+              tutors and parents can review progress.{" "}
               <strong>We do not retain children&rsquo;s personal information
-              indefinitely.</strong> Verified deletion requests (see Children&rsquo;s
-              data and parental rights below) are honored before that schedule expires.
+              indefinitely.</strong> Verified deletion requests from a parent or legal
+              guardian (see Children&rsquo;s data and parental rights below) are honored
+              promptly. Automated retention schedules may be introduced in the future;
+              this policy will be updated when they take effect.
             </p>
           </div>
 
@@ -324,8 +326,7 @@ export default function PrivacyPage() {
               <li><strong>Session notes</strong> created by or for the tutor summarizing
                 session content, topics, and progress related to the student.</li>
               <li><strong>LearnerProfile information</strong> — the student&rsquo;s name
-                and grade level — to identify the student and provide contextual note
-                generation.</li>
+                — to identify the student and provide contextual note generation.</li>
               <li><strong>Parent or guardian contact information</strong> (email) collected
                 during the account-claim and consent process for communication and
                 consent purposes.</li>
@@ -356,15 +357,16 @@ export default function PrivacyPage() {
 
             <p style={{ margin: "8px 0 0" }}>
               <strong>Retention (COPPA §312.10).</strong> Session audio recordings,
-              transcripts, and notes, together with LearnerProfile information (name and
-              grade level) and parent contact information, are retained for the duration
-              of the active tutor–student relationship and for{" "}
-              <strong>24 months after the account is closed</strong>, after which they
-              are permanently deleted. We retain this information to allow tutors and
-              parents to review session history and track student progress during and
-              reasonably after the tutoring relationship.{" "}
+              transcripts, and notes, together with LearnerProfile information (name) and
+              parent contact information, are retained for the duration of the active
+              tutor–student relationship while your account remains in use. We may keep
+              session history for a reasonable period after tutoring ends so tutors and
+              parents can review progress.{" "}
               <strong>We do not retain children&rsquo;s personal information
-              indefinitely.</strong>
+              indefinitely.</strong> Verified deletion requests from a parent or legal
+              guardian are honored promptly (see Parental rights below). Automated
+              retention schedules may be introduced in the future; this policy will be
+              updated when they take effect.
             </p>
 
             <p style={{ margin: "8px 0 0" }}>
