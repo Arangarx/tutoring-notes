@@ -857,6 +857,30 @@ export function WhiteboardWorkspaceClient({
    * for the target page. Only active when NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1".
    */
   const onGuardReleaseCallbackRef = useRef<((pageId: string) => void) | null>(null);
+  /**
+   * BUG-3 blank-board guard.
+   *
+   * When switching to a board whose bucket is empty (next.length === 0),
+   * records the LEAVING board's element IDs as "forbidden". In
+   * `handleExcalidrawChange`, any onChange that contains one or more of these
+   * forbidden IDs is rejected as a stale debounced onChange from the board we
+   * just left. Cleared when the first non-forbidden, non-empty onChange arrives
+   * (= the user's first real stroke on the blank board).
+   *
+   * Covers both `selectTutorPage` (switching to an existing blank board) and
+   * `addTutorPage` (auto-navigating to a newly-created empty board).
+   */
+  const blankBoardForbiddenIdsRef = useRef<Map<string, Set<string>>>(new Map());
+  /**
+   * TEST SEAM — E3 blank-board onChange injection.
+   * Holds the current `handleExcalidrawChange` closure for
+   * `window.__WBX_INJECT_HANDLE_CHANGE__`. Only written when
+   * `NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1"`.
+   */
+  const e2eHandleChangeInvokerRef = useRef<
+    | ((elements: ReadonlyArray<ExcalidrawLikeElement>) => void)
+    | null
+  >(null);
   /** In-memory per-tab scene (Excalidraw only shows one at a time). */
   const pageDataRef = useRef<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>(
     Object.create(null)
@@ -3182,6 +3206,10 @@ export function WhiteboardWorkspaceClient({
       __WBX_FINGERPRINT_HAS__?: (pageId: string) => boolean;
       __WBX_GET_ACTIVE_PAGE_ID__?: () => string;
       __WBX_ON_GUARD_RELEASE__?: (cb: (pageId: string) => void) => void;
+      /** E3 blank-board guard seam — inject a synthetic stale onChange. */
+      __WBX_INJECT_HANDLE_CHANGE__?: (els: unknown) => void;
+      /** E3 oracle seam — read element IDs from pageDataRef[pageId] directly. */
+      __WBX_GET_PAGE_DATA_IDS__?: (pageId: string) => string[];
     };
     win.__WBX_INJECT_APPLY_REMOTE__ = async (pageId, elsRaw) => {
       const invoke = e2eApplyRemoteInvokerRef.current;
@@ -3209,12 +3237,30 @@ export function WhiteboardWorkspaceClient({
     win.__WBX_ON_GUARD_RELEASE__ = (cb) => {
       onGuardReleaseCallbackRef.current = cb;
     };
+    // E3 seam: inject a synthetic stale onChange. Calls the current
+    // handleExcalidrawChange closure directly, simulating Excalidraw's debounced
+    // onChange firing after a board switch with stale leaving-board elements.
+    win.__WBX_INJECT_HANDLE_CHANGE__ = (elsRaw) => {
+      e2eHandleChangeInvokerRef.current?.(
+        elsRaw as ReadonlyArray<ExcalidrawLikeElement>
+      );
+    };
+    // E3 oracle seam: read element IDs directly from pageDataRef[pageId].
+    // The test oracle uses this to detect contamination without relying on
+    // the live Excalidraw scene (handleExcalidrawChange only writes pageDataRef,
+    // not the live scene).
+    win.__WBX_GET_PAGE_DATA_IDS__ = (pageId) =>
+      (
+        (pageDataRef.current[pageId] ?? []) as ReadonlyArray<{ id?: string }>
+      ).map((e) => e.id ?? "").filter(Boolean);
     return () => {
       delete win.__WBX_INJECT_APPLY_REMOTE__;
       delete win.__WBX_FORCE_LIVE_SCENE__;
       delete win.__WBX_FINGERPRINT_HAS__;
       delete win.__WBX_GET_ACTIVE_PAGE_ID__;
       delete win.__WBX_ON_GUARD_RELEASE__;
+      delete win.__WBX_INJECT_HANDLE_CHANGE__;
+      delete win.__WBX_GET_PAGE_DATA_IDS__;
     };
   }, [role, scheduleDocumentBroadcast, recorderOnCanvasChange, studentOnCanvasChange]);
 
@@ -3404,7 +3450,8 @@ export function WhiteboardWorkspaceClient({
         // `handleExcalidrawChange` uses this to reject stale foreign onChanges
         // (carrying elements from the page we just LEFT) that fire after the
         // pageSwitchProgrammaticRef guard drops to 0. Blank-page switches are
-        // excluded (next.length === 0 → no anchors to validate against).
+        // excluded from the fingerprint guard (next.length === 0 → no anchors to
+        // validate against) but are covered by the separate blank-board guard below.
         if (next.length > 0) {
           pageSceneSetFingerprintRef.current.set(
             nextId,
@@ -3414,6 +3461,23 @@ export function WhiteboardWorkspaceClient({
                 .filter(Boolean)
             )
           );
+        } else {
+          // BUG-3 blank-board guard: switching to an empty board. Record the
+          // LEAVING board's element IDs as forbidden so a stale debounced
+          // onChange from that board (carrying those IDs) is rejected even
+          // after pageSwitchProgrammaticRef drops to 0.
+          const fromElements = pageDataRef.current[from] as
+            | ReadonlyArray<{ id?: string }>
+            | undefined;
+          const forbiddenIds = new Set(
+            (fromElements ?? []).map((e) => e.id ?? "").filter(Boolean)
+          );
+          if (forbiddenIds.size > 0) {
+            blankBoardForbiddenIdsRef.current.set(nextId, forbiddenIds);
+            console.info(
+              `[wba] wbsid=${whiteboardSessionId} action=blank_board_guard_set pageId=${nextId} forbidden_count=${forbiddenIds.size}`
+            );
+          }
         }
         // Scope undo/redo history to the current board. Excalidraw's history
         // stack is global to the single instance — without clearing it on every
@@ -3516,6 +3580,24 @@ export function WhiteboardWorkspaceClient({
     pageListRef.current = nextList;
     setPageList(nextList);
     pageDataRef.current[newId] = [];
+    // BUG-3 blank-board guard: same secondary guard as selectTutorPage.
+    // addTutorPage auto-navigates to a fresh empty board; record the leaving
+    // board's element IDs as forbidden so a stale debounced onChange from that
+    // board is rejected after pageSwitchProgrammaticRef drops.
+    {
+      const fromElements = pageDataRef.current[from] as
+        | ReadonlyArray<{ id?: string }>
+        | undefined;
+      const addForbiddenIds = new Set(
+        (fromElements ?? []).map((e) => e.id ?? "").filter(Boolean)
+      );
+      if (addForbiddenIds.size > 0) {
+        blankBoardForbiddenIdsRef.current.set(newId, addForbiddenIds);
+        console.info(
+          `[wba] action=blank_board_guard_set pageId=${newId} via=addTutorPage forbidden_count=${addForbiddenIds.size}`
+        );
+      }
+    }
     if (api) {
       pageSwitchProgrammaticRef.current += 1;
       const apiH = api as typeof api & {
@@ -4735,6 +4817,32 @@ export function WhiteboardWorkspaceClient({
         // never gated.
         pageSceneSetFingerprintRef.current.delete(pageId);
       }
+      // BUG-3 blank-board guard: secondary guard for switches onto boards expected
+      // to be empty. Rejects stale debounced onChange carrying the leaving board's
+      // elements when no fingerprint anchors exist (blank page ≠ no anchors to
+      // validate against). Cleared on the first non-foreign, non-empty onChange
+      // (= the user's first real stroke on the blank board).
+      const blankForbidden = blankBoardForbiddenIdsRef.current.get(pageId);
+      if (blankForbidden && blankForbidden.size > 0) {
+        if (els.length === 0) {
+          // Empty onChange — Excalidraw reporting the blank scene we programmatically
+          // set. Keep the guard active; the stale Board-N onChange may fire later.
+          // Fall through so pageDataRef is updated to [] (correct + harmless).
+        } else {
+          const hasForeignElement = (
+            els as ReadonlyArray<{ id?: string }>
+          ).some((e) => e.id && blankForbidden.has(e.id));
+          if (hasForeignElement) {
+            console.info(
+              `[wba] wbsid=${whiteboardSessionId} action=stale_foreign_scene_rejected pageId=${pageId} guard=blank_board`
+            );
+            return;
+          }
+          // Non-empty onChange with no forbidden IDs → first legitimate user stroke.
+          // Clear the blank-board guard so subsequent edits (including deletes) proceed.
+          blankBoardForbiddenIdsRef.current.delete(pageId);
+        }
+      }
       // PR-01 Option A: store raw elements ref — no per-move clone.
       // preserveImageAssetUrlsOnSceneWrite now runs only at wire/checkpoint build time.
       pageDataRef.current[pageId] = els as ExcalidrawLikeElement[];
@@ -4874,6 +4982,16 @@ export function WhiteboardWorkspaceClient({
       whiteboardSessionId,
     ]
   );
+
+  // E3 test seam: keep e2eHandleChangeInvokerRef current so
+  // window.__WBX_INJECT_HANDLE_CHANGE__ always calls the latest
+  // handleExcalidrawChange closure (simulates stale debounced onChange).
+  // MUST appear AFTER handleExcalidrawChange to avoid TDZ.
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1" || role !== "tutor") return;
+    e2eHandleChangeInvokerRef.current = (els) =>
+      handleExcalidrawChange(els as ReadonlyArray<unknown>);
+  }, [handleExcalidrawChange, role]);
 
   const handleGraphPersisted = useCallback(() => {
     const api = excalidrawAPIRef.current;
