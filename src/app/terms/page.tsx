@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
  * Terms of Service — Tutoring Notes (product subordinate facade).
  *
  * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-05-31.
+ * Product-specific COPPA cross-reference updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
  * the CANONICAL legal source for eligibility / acceptable use /
@@ -48,7 +49,7 @@ export default function TermsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="heading text-3xl font-normal">Terms of Use</CardTitle>
-              <p className="text-sm text-muted-foreground">Last updated: May 31, 2026</p>
+              <p className="text-sm text-muted-foreground">Last updated: July 9, 2026</p>
             </CardHeader>
             <CardContent className="space-y-4">
         <p className="text-sm leading-relaxed text-muted-foreground">
@@ -160,7 +161,7 @@ export default function TermsPage() {
               and revoke consent for their child&rsquo;s personal information at any time.
               See the <Link href="/privacy">privacy policy</Link> — specifically the{" "}
               &ldquo;Children&rsquo;s data and parental rights (COPPA)&rdquo; section — for
-              how to exercise these rights, the retention schedule, and the contact address
+              how to exercise these rights, our retention practices, and the contact address
               for deletion requests. Withdrawing consent stops future data collection; it
               does not automatically delete data already collected under prior consent.
               Deletion requests are honored upon verification.
