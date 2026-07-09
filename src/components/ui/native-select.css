@@ -1,0 +1,36 @@
+/**
+ * Native <select> popup contrast — app surfaces (admin forms, settings).
+ *
+ * Windows Chrome paints the open option list with a light system surface while
+ * inherited light text stays light-on-dark → unreadable options. Force
+ * color-scheme + explicit option colors using design tokens.
+ *
+ * Precedent: whiteboard-chrome.css `.mynk-wb-native-select` (2026-06-24 smoke).
+ * Scoped to [data-slot="native-select"] — not a global select {} blanket.
+ */
+
+:root:not([data-theme="light"]) [data-slot="native-select"],
+[data-theme="dark"] [data-slot="native-select"] {
+  color-scheme: dark;
+  background-color: var(--surface-2);
+  color: var(--text-strong);
+}
+
+:root:not([data-theme="light"]) [data-slot="native-select"] option,
+[data-theme="dark"] [data-slot="native-select"] option {
+  background-color: var(--surface-3);
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] [data-slot="native-select"],
+[data-theme="light"] [data-slot="native-select"] {
+  color-scheme: light;
+  background-color: var(--surface-input);
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] [data-slot="native-select"] option,
+[data-theme="light"] [data-slot="native-select"] option {
+  background-color: var(--surface-1);
+  color: var(--text-strong);
+}

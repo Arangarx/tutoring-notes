@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { saveBillingDefaults, type BillingDefaultsFormValues } from "./actions";
 import { BILLING_TIMEZONE_OPTIONS } from "./billing-options";
 
@@ -30,50 +31,47 @@ export default function BillingDefaultsForm({
     <form action={formAction} className="max-w-md space-y-5">
       <div className="space-y-1.5">
         <Label htmlFor="roundingIncrementMin">Time rounding</Label>
-        <select
+        <NativeSelect
           id="roundingIncrementMin"
           name="roundingIncrementMin"
           defaultValue={String(defaults.roundingIncrementMin)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
         >
           {INCREMENT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor="roundingMode">Rounding direction</Label>
-        <select
+        <NativeSelect
           id="roundingMode"
           name="roundingMode"
           defaultValue={defaults.roundingMode}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
         >
           {MODE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor="tutorTimezone">Your timezone</Label>
-        <select
+        <NativeSelect
           id="tutorTimezone"
           name="tutorTimezone"
           defaultValue={defaults.tutorTimezone}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
         >
           {BILLING_TIMEZONE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         <p className="text-sm text-muted-foreground">
           Applies to new sessions; past sessions stay frozen.
         </p>
