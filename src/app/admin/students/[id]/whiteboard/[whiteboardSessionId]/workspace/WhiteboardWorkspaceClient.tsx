@@ -1493,6 +1493,21 @@ export function WhiteboardWorkspaceClient({
     return () => clearInterval(t);
   }, [role, pathJoinToken, whiteboardSessionId, joinUnavailableReason, wjgLog]);
 
+  // Student-side relay wind-down — subscribe to "session_ending" from the tutor's
+  // sync client. This fires immediately on End confirm, so the student sees
+  // "Session has ended" without waiting for the join-timer poll (~3.5 s).
+  // The join-timer poll remains as durable backup truth (endedAt is canonical).
+  useEffect(() => {
+    if (role !== "student" || !studentSyncClient) return;
+    const unsub = studentSyncClient.onRemoteSessionLifecycle((_fromPeerId, type) => {
+      if (type === "session_ending") {
+        setJoinUnavailableReason((prev) => prev ?? "session_ended");
+        wjgLog("session_ended", { reason: "relay_signal" });
+      }
+    });
+    return unsub;
+  }, [role, studentSyncClient, wjgLog]);
+
   // ---------------------------------------------------------------
   // Recording lifecycle (audio + whiteboard composed)
   // ---------------------------------------------------------------
@@ -4248,6 +4263,17 @@ export function WhiteboardWorkspaceClient({
     setEndingError(null);
     setFinalizingSegmentCount(0);
     setFinalizingOutboxState("idle");
+    // Broadcast session_ending relay signal immediately so the student sees
+    // "Session has ended" without waiting for the join-timer poll (~3.5 s).
+    // endedAt remains the durable truth; the poll is still the backup.
+    const currentSync = syncClientRef.current;
+    if (currentSync) {
+      try {
+        currentSync.broadcastSessionLifecycle({ type: "session_ending" });
+      } catch {
+        // Non-fatal — the join-timer poll will pick it up.
+      }
+    }
     try {
       // Step 1 — stop the recorder. Two things have to happen here
       // synchronously, BEFORE we start awaiting anything:
@@ -7229,6 +7255,27 @@ export function WhiteboardWorkspaceClient({
               </Banner>
             )}
           </div>
+
+          {/* Board-ending overlay — covers the canvas the moment End is confirmed
+              so neither tutor nor student can draw during finalization. Positioned
+              absolutely over the entire canvas area. data-testid target for Playwright. */}
+          {endingState !== "idle" && (
+            <div
+              data-testid="wb-board-ending-overlay"
+              aria-label="Session is ending"
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 10,
+                background: "rgba(0, 0, 0, 0.35)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                pointerEvents: "all",
+                cursor: "not-allowed",
+              }}
+            />
+          )}
 
           {/* Excalidraw canvas — zenModeEnabled hides native chrome */}
           <ExcalidrawDynamic

@@ -150,6 +150,35 @@ export type WhiteboardWireMessageV3 = {
   follow?: WhiteboardWireFollow;
 };
 
+// -----------------------------------------------------------------
+// Session-lifecycle envelope (smoke-end-winddown)
+// -----------------------------------------------------------------
+//
+// Broadcast by the tutor immediately when End is confirmed — before the
+// async finalization pipeline completes. The student receives this signal
+// and shows "Session has ended" instantly rather than waiting up to 3.5 s
+// for the join-timer poll to detect endedAt. The join-timer poll remains as
+// durable backup truth (endedAt is still the canonical authority; this is
+// a UX fast-path only).
+//
+// Carried inside the same AES-GCM envelope as all other wire messages.
+// Discriminated from scene messages by `kind: "session-lifecycle"`.
+
+/**
+ * Wire envelope for a session-lifecycle event. Current payload type:
+ *   "session_ending" — tutor confirmed End; board is winding down.
+ *
+ * `v` is scoped to this message kind (independent of scene wire versions).
+ */
+export type WhiteboardWireSessionLifecycle = {
+  v: 1;
+  kind: "session-lifecycle";
+  /** Sender's stable peer id. */
+  peerId: string;
+  /** Lifecycle event type. */
+  type: "session_ending";
+};
+
 export type AnyWhiteboardWireMessage =
   | WhiteboardWireMessage
   | WhiteboardWireMessageV2
@@ -157,7 +186,8 @@ export type AnyWhiteboardWireMessage =
   | WhiteboardWireSignal
   | WhiteboardWirePresence
   | WhiteboardWirePageViewStateMsg
-  | WhiteboardWirePointerMsg;
+  | WhiteboardWirePointerMsg
+  | WhiteboardWireSessionLifecycle;
 
 /** Extras attached to each `broadcastScene` (throttled on the tutor). */
 export type WhiteboardWireBroadcastExtras = {
@@ -605,6 +635,20 @@ export type WhiteboardSyncClient = {
     camOn?: boolean;
     micOn?: boolean;
   }) => void;
+  /**
+   * Broadcast a session-lifecycle event to all peers in the room.
+   * Currently used for "session_ending" — tutor confirms End, student gets
+   * the overlay immediately without waiting for the join-timer poll.
+   * Bypasses scene throttle: delivered immediately.
+   */
+  broadcastSessionLifecycle: (args: { type: "session_ending" }) => void;
+  /**
+   * Subscribe to inbound session-lifecycle events from remote peers.
+   * Returns an unsubscriber.
+   */
+  onRemoteSessionLifecycle: (
+    cb: (fromPeerId: string, type: "session_ending") => void
+  ) => () => void;
   /** Tear down the WS, drop subscriptions. Idempotent. */
   disconnect: () => void;
 };
@@ -953,6 +997,21 @@ function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   if (kind === "pointer") {
     return validateWirePointer(parsed);
   }
+  if (kind === "session-lifecycle") {
+    const p = parsed as Partial<WhiteboardWireSessionLifecycle>;
+    if (p.v !== 1) {
+      throw new Error("[sync-client] session-lifecycle envelope: bad v");
+    }
+    if (typeof p.peerId !== "string" || p.peerId.length === 0) {
+      throw new Error("[sync-client] session-lifecycle envelope: bad peerId");
+    }
+    if (p.type !== "session_ending") {
+      throw new Error(
+        `[sync-client] session-lifecycle envelope: unknown type '${String(p.type)}'`
+      );
+    }
+    return { v: 1, kind: "session-lifecycle", peerId: p.peerId, type: "session_ending" };
+  }
   if (typeof kind !== "undefined") {
     throw new Error(
       `[sync-client] decoded payload: unknown kind '${String(kind)}'`
@@ -1119,10 +1178,12 @@ export function createWhiteboardSyncClient(
     msg: WhiteboardWirePointerMsg
   ) => void;
   type RoomPeersCb = (peers: ReadonlyArray<RoomPeer>) => void;
+  type RemoteSessionLifecycleCb = (fromPeerId: string, type: "session_ending") => void;
   const remoteSceneSubs = new Set<RemoteSceneCb>();
   const remoteSignalSubs = new Set<RemoteSignalCb>();
   const remotePageViewStateSubs = new Set<RemotePageViewStateCb>();
   const remotePointerSubs = new Set<RemotePointerCb>();
+  const remoteSessionLifecycleSubs = new Set<RemoteSessionLifecycleCb>();
   const connectSubs = new Set<() => void>();
   const disconnectSubs = new Set<() => void>();
   const peerCountSubs = new Set<(count: number) => void>();
@@ -1615,6 +1676,21 @@ export function createWhiteboardSyncClient(
         } catch (err) {
           log.warn(
             "onRemotePointer subscriber threw:",
+            (err as Error)?.message ?? String(err)
+          );
+        }
+      }
+      return;
+    }
+    if ((msg as Partial<WhiteboardWireSessionLifecycle>).kind === "session-lifecycle") {
+      const m = msg as WhiteboardWireSessionLifecycle;
+      log.log(`kind=session-lifecycle recv from=${m.peerId} type=${m.type}`);
+      for (const cb of remoteSessionLifecycleSubs) {
+        try {
+          cb(m.peerId, m.type);
+        } catch (err) {
+          log.warn(
+            "onRemoteSessionLifecycle subscriber threw:",
             (err as Error)?.message ?? String(err)
           );
         }
@@ -2173,6 +2249,19 @@ export function createWhiteboardSyncClient(
     void encryptAndEmitImmediate(msg);
   }
 
+  function broadcastSessionLifecycle(args: { type: "session_ending" }): void {
+    if (disposed) return;
+    if (aesKeyError) return;
+    const msg: WhiteboardWireSessionLifecycle = {
+      v: 1,
+      kind: "session-lifecycle",
+      peerId,
+      type: args.type,
+    };
+    log.log(`kind=session-lifecycle send type=${args.type}`);
+    void encryptAndEmitImmediate(msg);
+  }
+
   // ---------------------------------------------------------------
   // Public surface
   // ---------------------------------------------------------------
@@ -2223,10 +2312,17 @@ export function createWhiteboardSyncClient(
     broadcastSignal,
     broadcastPageViewState,
     broadcastPointer,
+    broadcastSessionLifecycle,
     onRemotePointer: (cb) => {
       remotePointerSubs.add(cb);
       return () => {
         remotePointerSubs.delete(cb);
+      };
+    },
+    onRemoteSessionLifecycle: (cb) => {
+      remoteSessionLifecycleSubs.add(cb);
+      return () => {
+        remoteSessionLifecycleSubs.delete(cb);
       };
     },
     onRemoteSignal: (cb) => {

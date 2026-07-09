@@ -186,6 +186,7 @@ export default defineConfig({
         "**/integration/ux-sarah-wave1-bundle.spec.ts",
         "**/integration/recording-resilience.spec.ts",
         "**/integration/recording-end-to-end.spec.ts",
+        "**/integration/wb-end-winddown.spec.ts",
         "**/audio-upload.spec.ts",
         "**/smoke/whiteboard-workspace.spec.ts",
       ],
