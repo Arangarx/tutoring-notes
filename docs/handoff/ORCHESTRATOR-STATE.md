@@ -27,7 +27,7 @@
 **Wave 3 IN FLIGHT:**
 - [cancel + fresh session id](3d87a590-f0ad-46be-b7e9-2bdc8f42832d) → `fix/cancel-fresh-session-id` (Sonnet/WWC) — still in flight
 - ~~Finish review + SEC-POLICY copy~~ ✅ **MERGED** `4d3e9f4` ([Finish review + policy](f971a66e-291b-49b8-84dc-5b06c0e90976) → `30c340b`) — Finish review CTA; privacy/terms interim honesty (umbrella 24-mo still separate)
-- [replay-tab aria/oracle](9d372870-f4bb-4dce-b14c-1c98bac8db45) → `fix/replay-tab-aria-oracle` — still in flight
+- ~~replay-tab aria/oracle~~ ✅ **MERGED** `508eefb` ([replay-tab aria](9d372870-f4bb-4dce-b14c-1c98bac8db45) → `ec6b67b`) — `readOnly` span tabs (disabled-button aria gap closed). **INSUFFICIENT:** PW still red — Board 1 has `aria-selected=false` + `--read-only-inactive` → **`activePageId` not Board 1 at scrub assert**. Follow-up IN FLIGHT [replay activePageId](896736f4-f5f3-468c-a838-c9b90f0fd571) → `fix/replay-tab-active-pageid`
 
 **Historical (collapsed):** Bug A `27d6cc5`, wave5→v1-redesign merge `d6b4433`, smoke triage trail below remains for audit until heavy restructure.
 
