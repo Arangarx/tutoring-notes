@@ -89,8 +89,10 @@ import {
   getOrCreateRecordingDraftStore,
 } from "@/lib/recording/recording-draft-store";
 import {
+  disposeStreamTracks,
   fingerprintMediaTrackSettings,
   getUserMediaAudioForEnumerateEntry,
+  isMicStreamSilent,
   reconcilePickerSlotAfterEnumerate,
 } from "@/lib/av/enumerate-device-acquire";
 
@@ -1095,6 +1097,150 @@ export function useAudioRecorder({
       }
     }
 
+    // Enumerate AFTER permission so device labels populate (browsers redact labels
+    // before permission is granted). Moved above the streamRef assignment so that
+    // Option A (enumerate-based re-acquire) can use the fresh list.
+    let enumeratedInputs: MediaDeviceInfo[] = [];
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      enumeratedInputs = all.filter((d) => d.kind === "audioinput");
+      setDevices(enumeratedInputs);
+    } catch (err) {
+      console.warn("[useAudioRecorder] enumerateDevices failed:", err);
+    }
+
+    // ── Option A: Unify first-acquire with the switch-acquire path ────────────
+    //
+    // The bare `{ deviceId: { exact } }` constraint used above for the initial
+    // GUM can succeed while returning a live-but-silent track on some hardware
+    // (Windows Logitech Brio, some OEM multi-endpoint configs): the OS audio
+    // engine picks the wrong input endpoint even when the deviceId matches.
+    //
+    // `getUserMediaAudioForEnumerateEntry` resolves the device by groupId first
+    // (the same Brio-safe ordering used by the mid-session device-switch path).
+    // We redo the GUM through that helper whenever a stored deviceId was used,
+    // then fall back to the initial stream if the helper itself fails.
+    //
+    // Invariant 14 (enumerate mutex) is respected: this enumerate already ran
+    // through the function's own lock-free path above.
+    if (opts.deviceId && enumeratedInputs.length > 0) {
+      const pinnedGrp =
+        pinnedMicEnumerateGroupRef.current || loadStoredMicGroupId();
+      const slotIdx = reconcilePickerSlotAfterEnumerate(
+        opts.deviceId,
+        enumeratedInputs,
+        0,
+        pinnedGrp
+      );
+      const entry = enumeratedInputs[slotIdx];
+      if (entry) {
+        try {
+          // Pass priorFp=null to disable the "require different fingerprint" check:
+          // we want the groupId-first stream regardless of fingerprint identity
+          // (Option B will detect whether it is actually live).
+          const { stream: enumeratedStream } =
+            await getUserMediaAudioForEnumerateEntry(
+              navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
+              entry,
+              enumeratedInputs,
+              null,
+              { userPickedSlot: false }
+            );
+          const newFp = fingerprintMediaTrackSettings(
+            enumeratedStream.getAudioTracks()[0]?.getSettings?.() ?? {}
+          );
+          const priorFp = fingerprintMediaTrackSettings(
+            stream.getAudioTracks()[0]?.getSettings?.() ?? {}
+          );
+          console.log(
+            `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=first_acquire_enumerate_resolved` +
+              ` slot=${slotIdx} prior_fp=${priorFp} new_fp=${newFp}`
+          );
+          disposeStreamTracks(stream);
+          stream = enumeratedStream;
+        } catch (optAErr) {
+          console.warn(
+            `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=first_acquire_enumerate_failed; keeping initial stream:`,
+            optAErr
+          );
+        }
+      }
+    }
+
+    // ── Option B: Post-GUM silent-track oracle ────────────────────────────────
+    //
+    // GUM can succeed with a live-but-silent track (raw RMS ≈ 0) if the OS
+    // audio engine selected the wrong physical input endpoint.  Sample raw RMS
+    // for ~250 ms; if it is near-zero, walk the enumerate list to find a live
+    // track before building the audio graph.  The threshold sits above absolute
+    // zero (0.0005 raw RMS) but below ambient room noise (~0.002+), so quiet
+    // rooms do NOT trigger a false-positive retry.
+    const trackIsSilent = await isMicStreamSilent(stream);
+    if (trackIsSilent) {
+      const silentDeviceId =
+        stream.getAudioTracks()[0]?.getSettings?.()?.deviceId?.slice(0, 8) ??
+        "?";
+      console.warn(
+        `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_detected` +
+          ` deviceId=${silentDeviceId}`
+      );
+      let recovered = false;
+      for (let i = 0; i < enumeratedInputs.length && !recovered; i++) {
+        const candidate = enumeratedInputs[i];
+        if (!candidate) continue;
+        try {
+          const { stream: retryStream } = await getUserMediaAudioForEnumerateEntry(
+            navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
+            candidate,
+            enumeratedInputs,
+            null,
+            { userPickedSlot: false }
+          );
+          const retryIsSilent = await isMicStreamSilent(retryStream);
+          if (!retryIsSilent) {
+            disposeStreamTracks(stream);
+            stream = retryStream;
+            console.log(
+              `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_recovered slot=${i}`
+            );
+            recovered = true;
+          } else {
+            disposeStreamTracks(retryStream);
+          }
+        } catch {
+          /* try next slot */
+        }
+      }
+      if (!recovered && enumeratedInputs.length === 0) {
+        // No enumerate list available; try unconditional default.
+        try {
+          const defaultStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          const defaultIsSilent = await isMicStreamSilent(defaultStream);
+          if (!defaultIsSilent) {
+            disposeStreamTracks(stream);
+            stream = defaultStream;
+            console.log(
+              `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_recovered slot=default`
+            );
+          } else {
+            disposeStreamTracks(defaultStream);
+            console.warn(
+              `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable`
+            );
+          }
+        } catch {
+          /* proceed with current stream — don't block acquisition entirely */
+        }
+      } else if (!recovered) {
+        console.warn(
+          `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}`
+        );
+      }
+    }
+
+    // ── Commit the final stream ───────────────────────────────────────────────
     streamRef.current = stream;
     // Note: we expose localMicStream AFTER the audio graph is built
     // (below) so callers like useLiveAV receive the graph's publishStream
@@ -1113,15 +1259,6 @@ export function useAudioRecorder({
     if (settings?.groupId) {
       saveStoredMicGroupId(settings.groupId);
       pinnedMicEnumerateGroupRef.current = settings.groupId;
-    }
-
-    // Enumerate AFTER permission so labels populate (browsers redact labels otherwise).
-    try {
-      const all = await navigator.mediaDevices.enumerateDevices();
-      const inputs = all.filter((d) => d.kind === "audioinput");
-      setDevices(inputs);
-    } catch (err) {
-      console.warn("[useAudioRecorder] enumerateDevices failed:", err);
     }
 
     // Build the audio graph (gain + meter). Returns null if Web Audio is unavailable
