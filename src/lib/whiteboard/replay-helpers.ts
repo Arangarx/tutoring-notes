@@ -52,15 +52,8 @@ export async function readReplayJsonError(res: Response): Promise<string | null>
   return null;
 }
 
-export function formatReplayDurationMs(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
-}
+/** Stable replay-named re-export of the canonical ms clock formatter. */
+export { formatDurationMs as formatReplayDurationMs } from "@/lib/time/format-duration-ms";
 
 /**
  * Authoritative replay timeline ceiling (B1 fix).
