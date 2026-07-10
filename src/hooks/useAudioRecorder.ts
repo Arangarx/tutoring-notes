@@ -94,6 +94,8 @@ import {
   getUserMediaAudioForEnumerateEntry,
   isMicStreamSilent,
   reconcilePickerSlotAfterEnumerate,
+  tryRecoverSilentMicViaSlotWalk,
+  recoverSilentMicStreamWithBackoff,
 } from "@/lib/av/enumerate-device-acquire";
 
 /** Draft checkpoint interval (W1 Surface 1) — matches design cadence. */
@@ -1171,8 +1173,9 @@ export function useAudioRecorder({
     //
     // GUM can succeed with a live-but-silent track (raw RMS ≈ 0) if the OS
     // audio engine selected the wrong physical input endpoint.  Sample raw RMS
-    // for ~250 ms; if it is near-zero, walk the enumerate list to find a live
-    // track before building the audio graph.  The threshold sits above absolute
+    // for ~250 ms; if it is near-zero, use the shared multi-backoff recovery
+    // helper to walk all enumerate slots and, if still silent, retry after
+    // increasing delays (500 ms, 1 s, 2 s).  The threshold sits above absolute
     // zero (0.0005 raw RMS) but below ambient room noise (~0.002+), so quiet
     // rooms do NOT trigger a false-positive retry.
     const trackIsSilent = await isMicStreamSilent(stream);
@@ -1180,122 +1183,34 @@ export function useAudioRecorder({
       const silentDeviceId =
         stream.getAudioTracks()[0]?.getSettings?.()?.deviceId?.slice(0, 8) ??
         "?";
-      console.warn(
-        `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_detected` +
-          ` deviceId=${silentDeviceId}`
+      const logPfx = `[useAudioRecorder] rid=${avLogSessionId ?? "?"}`;
+      console.warn(`${logPfx} event=silent_track_detected deviceId=${silentDeviceId}`);
+
+      const getUM = navigator.mediaDevices.getUserMedia.bind(
+        navigator.mediaDevices
       );
-      let recovered = false;
-      for (let i = 0; i < enumeratedInputs.length && !recovered; i++) {
-        const candidate = enumeratedInputs[i];
-        if (!candidate) continue;
-        try {
-          const { stream: retryStream } = await getUserMediaAudioForEnumerateEntry(
-            navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
-            candidate,
-            enumeratedInputs,
-            null,
-            { userPickedSlot: false }
-          );
-          const retryIsSilent = await isMicStreamSilent(retryStream);
-          if (!retryIsSilent) {
-            disposeStreamTracks(stream);
-            stream = retryStream;
-            console.log(
-              `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_recovered slot=${i}`
-            );
-            recovered = true;
-          } else {
-            disposeStreamTracks(retryStream);
-          }
-        } catch {
-          /* try next slot */
-        }
-      }
-      if (!recovered && enumeratedInputs.length === 0) {
-        // No enumerate list available; try unconditional default.
-        try {
-          const defaultStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-          });
-          const defaultIsSilent = await isMicStreamSilent(defaultStream);
-          if (!defaultIsSilent) {
-            disposeStreamTracks(stream);
-            stream = defaultStream;
-            console.log(
-              `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_recovered slot=default`
-            );
-          } else {
-            disposeStreamTracks(defaultStream);
-            console.warn(
-              `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable`
-            );
-          }
-        } catch {
-          /* proceed with current stream — don't block acquisition entirely */
-        }
-      } else if (!recovered) {
-        // All enumerate slots tried and all reported silent.
-        //
-        // On Windows (Logitech Brio after cancel → page-reload) the OS audio
-        // pipeline re-initialises after track.stop() and may need more than
-        // 250 ms × N_slots to produce real audio frames. Every slot in the
-        // recovery loop sampled at 250 ms intervals came back silent because
-        // the pipeline hadn't finished warming up. One final try after a short
-        // delay is enough to cover this class of startup latency without
-        // blocking acquisition on every other code path.
-        const _warmRetryDelayMs: number =
-          typeof window !== "undefined" &&
-          process.env.NODE_ENV !== "production" &&
-          typeof (
-            window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }
-          ).__VAD_WARM_RETRY_DELAY_MS__ === "number"
-            ? (
-                window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }
-              ).__VAD_WARM_RETRY_DELAY_MS__!
-            : 500;
 
-        const preferredEntry =
-          opts.deviceId
-            ? (enumeratedInputs.find((d) => d.deviceId === opts.deviceId) ??
-                enumeratedInputs[0])
-            : enumeratedInputs[0];
+      // Step 1: Immediate slot walk (no delay) — covers most hardware cases.
+      const immediateResult = await tryRecoverSilentMicViaSlotWalk({
+        currentStream: stream,
+        enumeratedInputs,
+        getUM,
+        logPrefix: logPfx,
+      });
 
-        if (preferredEntry) {
-          if (_warmRetryDelayMs > 0) {
-            await new Promise<void>((r) => setTimeout(r, _warmRetryDelayMs));
-          }
-          try {
-            const { stream: delayedStream } =
-              await getUserMediaAudioForEnumerateEntry(
-                navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
-                preferredEntry,
-                enumeratedInputs,
-                null,
-                { userPickedSlot: false }
-              );
-            const delayedIsSilent = await isMicStreamSilent(delayedStream);
-            if (!delayedIsSilent) {
-              disposeStreamTracks(stream);
-              stream = delayedStream;
-              console.log(
-                `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_recovered_after_delay`
-              );
-            } else {
-              disposeStreamTracks(delayedStream);
-              console.warn(
-                `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}`
-              );
-            }
-          } catch {
-            console.warn(
-              `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}`
-            );
-          }
-        } else {
-          console.warn(
-            `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}`
-          );
-        }
+      if (immediateResult.recovered) {
+        stream = immediateResult.stream;
+      } else {
+        // Step 2: Multi-backoff recovery — covers the Brio cancel→refresh class
+        // where the OS audio pipeline needs up to several seconds to warm up.
+        const backoffResult = await recoverSilentMicStreamWithBackoff({
+          currentStream: immediateResult.stream,
+          enumeratedInputs,
+          getUM,
+          logPrefix: logPfx,
+        });
+        stream = backoffResult.stream;
+        // backoffResult logs event=silent_track_unrecoverable on total failure.
       }
     }
 
@@ -1404,6 +1319,32 @@ export function useAudioRecorder({
       throw err;
     }
 
+    // Silent-track check: Brio-class warm-up may yield silence immediately
+    // after a swap GUM call.  Run backoff recovery before wiring the graph.
+    {
+      const swapSilent = await isMicStreamSilent(newStream);
+      if (swapSilent) {
+        let swapDevices = devicesRef.current;
+        if (swapDevices.length === 0) {
+          try {
+            const enumAll = await navigator.mediaDevices.enumerateDevices();
+            swapDevices = enumAll.filter((d) => d.kind === "audioinput");
+          } catch {
+            /* best-effort */
+          }
+        }
+        const logPfx = `[useAudioRecorder] rid=${avLogSessionId ?? "?"}`;
+        console.warn(`${logPfx} event=silent_track_detected_on_swap`);
+        const recovery = await recoverSilentMicStreamWithBackoff({
+          currentStream: newStream,
+          enumeratedInputs: swapDevices,
+          getUM: navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
+          logPrefix: logPfx,
+        });
+        newStream = recovery.stream;
+      }
+    }
+
     try {
       graph.swapLocalMicSource(newStream);
       const prev = streamRef.current;
@@ -1509,6 +1450,23 @@ export function useAudioRecorder({
         );
       }
       throw err;
+    }
+
+    // Silent-track check: Brio-class warm-up may yield silence immediately
+    // after a slot-swap GUM call.  Run backoff recovery before wiring the graph.
+    {
+      const swapBySlotSilent = await isMicStreamSilent(newStream);
+      if (swapBySlotSilent) {
+        const logPfx = `[useAudioRecorder] rid=${avLogSessionId ?? "?"}`;
+        console.warn(`${logPfx} event=silent_track_detected_on_swap`);
+        const recovery = await recoverSilentMicStreamWithBackoff({
+          currentStream: newStream,
+          enumeratedInputs: devicesRef.current,
+          getUM: navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
+          logPrefix: logPfx,
+        });
+        newStream = recovery.stream;
+      }
     }
 
     try {
