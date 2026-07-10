@@ -27,6 +27,7 @@ import { StudentErasurePendingBanner } from "@/components/admin/StudentErasureSt
 import { StudentOverflowActions } from "@/components/admin/StudentOverflowActions";
 import { deriveStudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
 import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
+import { Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -350,12 +351,13 @@ export default async function StudentDetailPage({
       mobileLabel: "Notes",
       icon: defaultIcons.notes,
       content: notesSection,
+      badge: noteCount > 0 ? noteCount : undefined,
     },
     {
       id: "parent",
       label: "Parent account",
-      mobileLabel: "More",
-      icon: defaultIcons.more,
+      mobileLabel: "Parent",
+      icon: <Users className="size-5" aria-hidden />,
       content: parentSection,
     },
   ];
@@ -367,6 +369,7 @@ export default async function StudentDetailPage({
       studentId={student.id}
       studentName={student.name}
       meta={meta}
+      noteCount={noteCount}
       headerActions={
         <>
           <StudentOverflowActions studentId={student.id} studentName={student.name} />
