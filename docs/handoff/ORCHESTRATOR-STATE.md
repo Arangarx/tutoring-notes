@@ -19,7 +19,7 @@
 2. **END-WINDDOWN PASS**
 3. **Share/tutor phone replay PASS** — copy: “Pause and hide replay” → “Pause”
 4. **Admin tabs PARTIAL** — icons missing on Session/Share/Notes (slot empty); Parent Users + Notes badge OK
-5. **PDF NEW FAILS** — Blob client-token mid-import (2/3 pages) + **non-PDF→first PDF page bleed** (PDF-load specific)
+5. **PDF** — Blob client-token mid-import (2/3) = **new**. Stroke bleed on PDF import = **SAME recurring bleed** (E4 did not hold) — not a new sibling bug.
 6. **Share wall** — Andrew: skip; wants share links gone long-term (notes via profile)
 **General:** Pixel student video = initials until refresh (stale 404 join → correct link; re-login unexpected)
 
@@ -27,10 +27,11 @@
 
 **Next action(s) — pre-master blockers from this smoke:**
 1. AUDIO-1 residual (cancel→refresh→Brio silent)
-2. PDF blob-token + PDF-import bleed
-3. Admin tab icons visibility
-4. Student video initials / join cookie path (investigate)
-5. Then full `test:wb-sync` + `test:regression` + `next build` + Pause copy polish
+2. **Stroke bleed RECURRING** — E4 failed hardware (blank→PDF import); durable fix + matching Playwright (escalate if attempt #2 fails)
+3. PDF blob-token (separate, new)
+4. Admin tab icons visibility
+5. Student video initials / join cookie path
+6. Then full `test:wb-sync` + `test:regression` + `next build` + Pause copy polish
 
 **Still open (non-blocking):** PERF-1; AUDIO-3; Pause copy; share-link retirement (product).
 
