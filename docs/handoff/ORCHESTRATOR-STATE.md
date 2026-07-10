@@ -10,7 +10,7 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `b5472ab8` — **✅ pre-Sarah burndown code complete for this wave:** END-WINDDOWN + SHARE-REPLAY-PHONE + AUDIO-1 + ADMIN-STUDENT-MOBILE. Recheck quicklist COMPLETE.
+**Tip:** `v1-redesign` @ `323a2f1e` — deploy **READY** after lint-token + session-lifecycle TS fixes (`cc75a965`, `323a2f1e`). Preview: https://tutoring-notes-git-v1-redesign-arangarx-5209s-projects.vercel.app
 
 **Last action:** Merged `fix/admin-student-detail-mobile-discover` `--no-ff` → `b5472ab8`. No subagents in flight.
 
