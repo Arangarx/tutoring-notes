@@ -320,7 +320,8 @@ export function StudentDetailShell({
       </div>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 flex h-[calc(3.75rem+env(safe-area-inset-bottom,0px))] items-stretch border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-6px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm md:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 flex h-[calc(3.75rem+env(safe-area-inset-bottom,0px))] items-stretch border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-sm md:hidden"
+        style={{ boxShadow: "0 -6px 16px var(--shadow-sm)" }}
         aria-label="Student sections"
         role="tablist"
         data-testid="student-detail-mobile-tabs"

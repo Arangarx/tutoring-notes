@@ -7267,7 +7267,7 @@ export function WhiteboardWorkspaceClient({
                 position: "absolute",
                 inset: 0,
                 zIndex: 10,
-                background: "rgba(0, 0, 0, 0.35)",
+                background: "var(--overlay-scrim)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
