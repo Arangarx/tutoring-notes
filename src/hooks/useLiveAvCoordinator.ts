@@ -61,6 +61,12 @@ export type UseLiveAvCoordinatorArgs = {
   /** Browser camera permission state (drives camera-on-by-default). */
   hasCamPermission: UseLiveAVReturn["hasCamPermission"];
   /**
+   * Tutor recorder first-acquire finished (AUDIO-1 #4). When `role === "tutor"`,
+   * auto-`requestCam` waits until this is true so cam GUM cannot race
+   * `useAudioRecorder.acquireMic`. Students ignore this (pass `true`).
+   */
+  tutorMicAcquireSettled: boolean;
+  /**
    * Stable sorted key of reachable peerIds (memoized in the component from
    * `liveAv.reachableParticipants`). Sole change-trigger for the
    * lifecycle-participant debounce — the effect reads the participant objects
@@ -94,6 +100,7 @@ export function useLiveAvCoordinator({
   hasLeft,
   openMenu,
   hasCamPermission,
+  tutorMicAcquireSettled,
   reachablePeerIdsKey,
   reachableParticipantsCount,
   tutorSyncConnected,
@@ -260,14 +267,18 @@ export function useLiveAvCoordinator({
   // Camera-on-by-default: auto-enable the camera when the browser Permissions
   // API confirms it was already granted (e.g. a subsequent session in the same
   // browser). Runs at most once per mount. Does NOT nag if denied or unknown.
+  //
+  // Tutor: wait for recorder first-acquire to settle (AUDIO-1 #4). Concurrent
+  // cam+mic GUM on Windows Brio latched a silent mic while video still painted.
   const hasAutoRequestedCamRef = useRef(false);
   useEffect(() => {
     if (hasCamPermission !== "granted") return;
     if (liveAvRef.current.localVideoStream) return;
     if (hasAutoRequestedCamRef.current) return;
+    if (role === "tutor" && !tutorMicAcquireSettled) return;
     hasAutoRequestedCamRef.current = true;
     void liveAvRef.current.requestCam();
-  }, [hasCamPermission, liveAvRef]);
+  }, [hasCamPermission, liveAvRef, role, tutorMicAcquireSettled]);
 
   // Lifecycle-participant debounce (FSM input): mirror reachable ADDs
   // immediately (recovery is prompt) but debounce peer REMOVAL by

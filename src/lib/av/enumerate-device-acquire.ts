@@ -271,12 +271,31 @@ export type RecoverSilentMicStreamResult =
       elapsedMs: number;
     };
 
+function logSilentReopenAttempt(
+  prefix: string,
+  entry: MediaDeviceInfo | null,
+  fingerprint: string,
+  userPickedSlot: boolean,
+  elapsedMs: number,
+  extra: string
+): void {
+  const deviceId = entry?.deviceId?.slice(0, 8) ?? "?";
+  const groupId = entry?.groupId?.slice(0, 8) ?? "?";
+  console.log(
+    `${prefix} event=silent_track_reopen_attempt deviceId=${deviceId} groupId=${groupId}` +
+      ` fp=${fingerprint} userPickedSlot=${userPickedSlot} elapsed_ms=${elapsedMs} ${extra}`
+  );
+}
+
 /**
  * Immediate (no-delay) slot walk: try every enumerate entry looking for a live
  * (non-silent) mic stream.  Also tries `{ audio: true }` when the list is empty.
  *
- * On success: disposes `currentStream` and returns the live stream.
- * On failure: leaves `currentStream` untouched and returns `{ recovered: false }`.
+ * Swap-aligned (AUDIO-1 #4): stop the silent track **before** each reopen, and
+ * use `userPickedSlot: true` (same constraint order as `swapMicDeviceBySlot`).
+ *
+ * On success: returns the live stream (prior silent tracks already stopped).
+ * On failure: returns the last opened stream (may still be silent).
  */
 export async function tryRecoverSilentMicViaSlotWalk(opts: {
   currentStream: MediaStream;
@@ -284,27 +303,42 @@ export async function tryRecoverSilentMicViaSlotWalk(opts: {
   getUM: (c: MediaStreamConstraints) => Promise<MediaStream>;
   logPrefix?: string;
 }): Promise<{ recovered: boolean; stream: MediaStream; slotIndex?: number | "default" }> {
-  const { currentStream, enumeratedInputs, getUM, logPrefix } = opts;
+  const { enumeratedInputs, getUM, logPrefix } = opts;
   const prefix = logPrefix ?? "[enumerate-device-acquire]";
+  let activeStream = opts.currentStream;
+  const startMs = Date.now();
 
   for (let i = 0; i < enumeratedInputs.length; i++) {
     const candidate = enumeratedInputs[i];
     if (!candidate) continue;
     try {
-      const { stream: retryStream } = await getUserMediaAudioForEnumerateEntry(
-        getUM,
+      // Release the latched silent endpoint before reopen (swap-equivalent).
+      disposeStreamTracks(activeStream);
+      const { stream: retryStream, fingerprint } =
+        await getUserMediaAudioForEnumerateEntry(
+          getUM,
+          candidate,
+          enumeratedInputs,
+          null,
+          { userPickedSlot: true }
+        );
+      logSilentReopenAttempt(
+        prefix,
         candidate,
-        enumeratedInputs,
-        null,
-        { userPickedSlot: false }
+        fingerprint,
+        true,
+        Date.now() - startMs,
+        `phase=immediate slot=${i}`
       );
       const retryIsSilent = await isMicStreamSilent(retryStream);
       if (!retryIsSilent) {
-        disposeStreamTracks(currentStream);
-        console.log(`${prefix} event=silent_track_recovered slot=${i}`);
+        console.log(
+          `${prefix} event=silent_track_recovered slot=${i} userPickedSlot=true` +
+            ` elapsed_ms=${Date.now() - startMs}`
+        );
         return { recovered: true, stream: retryStream, slotIndex: i };
       }
-      disposeStreamTracks(retryStream);
+      activeStream = retryStream;
     } catch {
       /* try next slot */
     }
@@ -312,20 +346,23 @@ export async function tryRecoverSilentMicViaSlotWalk(opts: {
 
   if (enumeratedInputs.length === 0) {
     try {
+      disposeStreamTracks(activeStream);
       const defaultStream = await getUM({ audio: true, video: false });
       const defaultIsSilent = await isMicStreamSilent(defaultStream);
       if (!defaultIsSilent) {
-        disposeStreamTracks(currentStream);
-        console.log(`${prefix} event=silent_track_recovered slot=default`);
+        console.log(
+          `${prefix} event=silent_track_recovered slot=default userPickedSlot=true` +
+            ` elapsed_ms=${Date.now() - startMs}`
+        );
         return { recovered: true, stream: defaultStream, slotIndex: "default" };
       }
-      disposeStreamTracks(defaultStream);
+      activeStream = defaultStream;
     } catch {
       /* fall through */
     }
   }
 
-  return { recovered: false, stream: currentStream };
+  return { recovered: false, stream: activeStream };
 }
 
 /**
@@ -363,7 +400,7 @@ export async function recoverSilentMicStreamWithBackoff(opts: {
     schedule = DEFAULT_SILENT_RECOVERY_BACKOFF_MS;
   }
 
-  const activeStream = currentStream;
+  let activeStream = currentStream;
 
   for (let attemptIdx = 0; attemptIdx < schedule.length; attemptIdx++) {
     const delay = schedule[attemptIdx]!;
@@ -375,19 +412,32 @@ export async function recoverSilentMicStreamWithBackoff(opts: {
       const candidate = enumeratedInputs[i];
       if (!candidate) continue;
       try {
-        const { stream: retryStream } = await getUserMediaAudioForEnumerateEntry(
-          getUM,
+        // Stop-before-reopen + userPickedSlot:true — same path as switch-and-back.
+        disposeStreamTracks(activeStream);
+        const { stream: retryStream, fingerprint } =
+          await getUserMediaAudioForEnumerateEntry(
+            getUM,
+            candidate,
+            enumeratedInputs,
+            null,
+            { userPickedSlot: true }
+          );
+        logSilentReopenAttempt(
+          prefix,
           candidate,
-          enumeratedInputs,
-          null,
-          { userPickedSlot: false }
+          fingerprint,
+          true,
+          Date.now() - startMs,
+          `phase=backoff attempt=${attemptIdx} slot=${i}`
         );
         const retryIsSilent = await isMicStreamSilent(retryStream);
         if (!retryIsSilent) {
-          disposeStreamTracks(activeStream);
           const elapsedMs = Date.now() - startMs;
           console.log(
-            `${prefix} event=silent_track_recovered_after_delay attempt=${attemptIdx} elapsed_ms=${elapsedMs} slot=${i}`
+            `${prefix} event=silent_track_recovered_after_delay attempt=${attemptIdx}` +
+              ` elapsed_ms=${elapsedMs} slot=${i} userPickedSlot=true` +
+              ` deviceId=${candidate.deviceId?.slice(0, 8) ?? "?"} groupId=${candidate.groupId?.slice(0, 8) ?? "?"}` +
+              ` fp=${fingerprint}`
           );
           return {
             recovered: true,
@@ -397,7 +447,7 @@ export async function recoverSilentMicStreamWithBackoff(opts: {
             slotIndex: i,
           };
         }
-        disposeStreamTracks(retryStream);
+        activeStream = retryStream;
       } catch {
         /* try next slot */
       }
@@ -406,13 +456,14 @@ export async function recoverSilentMicStreamWithBackoff(opts: {
     // Empty enumerate: try the default device once per attempt.
     if (enumeratedInputs.length === 0) {
       try {
+        disposeStreamTracks(activeStream);
         const defaultStream = await getUM({ audio: true, video: false });
         const defaultIsSilent = await isMicStreamSilent(defaultStream);
         if (!defaultIsSilent) {
-          disposeStreamTracks(activeStream);
           const elapsedMs = Date.now() - startMs;
           console.log(
-            `${prefix} event=silent_track_recovered_after_delay attempt=${attemptIdx} elapsed_ms=${elapsedMs} slot=default`
+            `${prefix} event=silent_track_recovered_after_delay attempt=${attemptIdx}` +
+              ` elapsed_ms=${elapsedMs} slot=default userPickedSlot=true`
           );
           return {
             recovered: true,
@@ -422,7 +473,7 @@ export async function recoverSilentMicStreamWithBackoff(opts: {
             slotIndex: "default",
           };
         }
-        disposeStreamTracks(defaultStream);
+        activeStream = defaultStream;
       } catch {
         /* fall through */
       }
@@ -431,7 +482,8 @@ export async function recoverSilentMicStreamWithBackoff(opts: {
 
   const elapsedMs = Date.now() - startMs;
   console.warn(
-    `${prefix} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length} attempts=${schedule.length} elapsed_ms=${elapsedMs}`
+    `${prefix} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}` +
+      ` attempts=${schedule.length} elapsed_ms=${elapsedMs} userPickedSlot=true`
   );
   return {
     recovered: false,

@@ -91,18 +91,10 @@ import {
   getUserMediaAudioForEnumerateEntry,
 } from "@/lib/av/enumerate-device-acquire";
 
-/** Serialize every `getUserMedia` call — concurrent mic+cam swaps freeze on Windows. */
-function chainDeviceAcquire<T>(
-  tail: { current: Promise<void> },
-  work: () => Promise<T>
-): Promise<T> {
-  const next = tail.current.then(work, work);
-  tail.current = next.then(
-    () => undefined,
-    () => undefined
-  );
-  return next;
-}
+import {
+  chainDeviceAcquire,
+  sharedDeviceAcquireMutex,
+} from "@/lib/av/device-acquire-mutex";
 
 // -----------------------------------------------------------------
 // Public types
@@ -875,7 +867,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const micInFlightRef = useRef<Promise<void> | null>(null);
   const camInFlightRef = useRef<Promise<void> | null>(null);
   const avBundleInFlightRef = useRef<Promise<void> | null>(null);
-  const deviceAcquireMutexRef = useRef<Promise<void>>(Promise.resolve());
+  // Shared with useAudioRecorder (tutor first-acquire) — invariant 14.
+  // Concurrent recorder GUM + requestCam latched silent Brio mic (AUDIO-1 #3).
+  const deviceAcquireMutexRef = sharedDeviceAcquireMutex;
   // Coalesces out-of-band enumerate requests (mount / devicechange /
   // focus / popover-open) into a single trailing run through the device
   // mutex — see invariant 14 (LIVE-AV.md). A burst of devicechange events

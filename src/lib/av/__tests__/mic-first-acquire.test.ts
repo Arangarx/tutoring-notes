@@ -594,6 +594,77 @@ describe("useAudioRecorder first-acquire (SMOKE-AUDIO-1)", () => {
     expect(mockSwapLocalMicSource.mock.calls[0]?.[0]).not.toBe(silentStream);
   });
 
+  // ── H: Attempt #4 — recovery uses swap-equivalent reopen ─────────────────
+
+  it("H: silent recovery stops prior track before reopen and logs userPickedSlot=true", async () => {
+    // AUDIO-1 #4: recovery must stop-before-reopen (swap-equivalent) and use
+    // userPickedSlot:true. Assert silent track.stop() runs before the recovery
+    // GUM, and console recovery log includes userPickedSlot=true.
+    const silentStream = makeFakeStream("brio-dev-abc123", STORED_GROUP_ID);
+    const recoveredStream = makeFakeStream("brio-dev-recovered-h", STORED_GROUP_ID);
+    const silentStop = silentStream.getTracks()[0]!.stop as jest.Mock;
+
+    let gumCallCount = 0;
+    const gumOrder: string[] = [];
+    mockGetUM.mockImplementation(async () => {
+      gumCallCount++;
+      if (gumCallCount >= 4) {
+        gumOrder.push(`gum${gumCallCount}:afterStops=${silentStop.mock.calls.length}`);
+        return recoveredStream;
+      }
+      gumOrder.push(`gum${gumCallCount}:stops=${silentStop.mock.calls.length}`);
+      return silentStream;
+    });
+    mockEnumerate.mockResolvedValue(ENUMERATE_LIST);
+
+    (window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }).__VAD_WARM_RETRY_DELAY_MS__ = 0;
+
+    let logicalOracleIdx = 0;
+    let _lastOracleValue = true;
+    let _pairIsFirst = true;
+    Object.defineProperty(window, "__VAD_TEST_SILENT_TRACK__", {
+      configurable: true,
+      get() {
+        if (_pairIsFirst) {
+          logicalOracleIdx++;
+          _lastOracleValue = logicalOracleIdx <= 2;
+          _pairIsFirst = false;
+        } else {
+          _pairIsFirst = true;
+        }
+        return _lastOracleValue;
+      },
+    });
+
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    const { useAudioRecorder } = await import("@/hooks/useAudioRecorder");
+
+    await act(async () => {
+      renderHook(() =>
+        useAudioRecorder({
+          studentId: "student-1",
+          onRecorded: jest.fn(),
+        })
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(mockCreateMicAudioGraph).toHaveBeenCalledTimes(1);
+    expect(mockCreateMicAudioGraph.mock.calls[0]?.[0]).toBe(recoveredStream);
+
+    // Stop-before-reopen: silent track must have been stopped before recovery GUM (#4).
+    const recoveryGumEntry = gumOrder.find((e) => e.startsWith("gum4:"));
+    expect(recoveryGumEntry).toMatch(/afterStops=[1-9]/);
+
+    const recoveryLogs = logSpy.mock.calls
+      .map((c) => String(c[0] ?? ""))
+      .filter((m) => m.includes("silent_track_recovered"));
+    expect(recoveryLogs.some((m) => m.includes("userPickedSlot=true"))).toBe(true);
+
+    logSpy.mockRestore();
+  });
+
   // ── D: No-op path — no stored deviceId ───────────────────────────────────
 
   it("D: skips enumerate-based re-acquire when no deviceId is stored (single GUM)", async () => {
