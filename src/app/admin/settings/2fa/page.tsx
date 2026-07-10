@@ -29,7 +29,7 @@ import Link from "next/link";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
 import { TwoFactorSetupForm } from "./setup/TwoFactorSetupForm";
 import { TwoFactorManageView } from "./TwoFactorManageView";
@@ -95,9 +95,9 @@ export default async function TwoFactorManagePage() {
         sidebar={<SettingsSubNav />}
         sidebarWidth="narrow"
       >
-          <AdminSectionCard title="Authenticator setup">
+          <SectionCard realm="admin" title="Authenticator setup">
             <TwoFactorSetupForm />
-          </AdminSectionCard>
+          </SectionCard>
       </AdminPageShell>
     );
   }
@@ -119,14 +119,14 @@ export default async function TwoFactorManagePage() {
       sidebar={<SettingsSubNav />}
       sidebarWidth="narrow"
     >
-        <AdminSectionCard title="Authentication status">
+        <SectionCard realm="admin" title="Authentication status">
           <TwoFactorManageView
             enrolledAt={twoFaRow.enrolledAt.toISOString()}
             remainingBackupCodes={remainingBackupCodes}
             isAdmin={isAdmin}
             userId={session.user.id ?? ""}
           />
-        </AdminSectionCard>
+        </SectionCard>
     </AdminPageShell>
   );
 }

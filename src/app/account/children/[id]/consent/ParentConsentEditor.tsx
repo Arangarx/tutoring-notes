@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { SectionCard } from "@/components/SectionCard";
 import {
   AUDIO_RECORDING_CONSENT_COPY,
   LIVE_SESSION_CONSENT_COPY,
@@ -247,7 +248,7 @@ export function ParentConsentEditor({
         </Accordion>
       </div>
 
-      <AccountSectionCardLike title={`Always-off limits for ${learnerName}`}>
+      <SectionCard realm="account" title={`Always-off limits for ${learnerName}`}>
         <p className="mb-4 text-sm text-muted-foreground">
           Optional. Check a box to block that activity for every tutor, even if you turned it on above. Your child cannot change these. All unchecked by default — nothing extra is blocked.
         </p>
@@ -278,7 +279,7 @@ export function ParentConsentEditor({
             </div>
           ))}
         </div>
-      </AccountSectionCardLike>
+      </SectionCard>
 
       <div className="space-y-3 border-t border-border pt-4">
         <Button
@@ -404,20 +405,5 @@ function PermissionToggleRow({
         />
       </div>
     </div>
-  );
-}
-
-function AccountSectionCardLike({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="rounded-[10px] border border-border bg-card p-4 shadow-sm sm:p-5">
-      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-      <div className="mt-4">{children}</div>
-    </section>
   );
 }

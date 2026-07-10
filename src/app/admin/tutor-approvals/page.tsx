@@ -1,7 +1,7 @@
 import { requireOperator } from "@/lib/operator";
 import { listWaitlistedTutors } from "@/lib/tutor-approval-scope";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ApproveTutorButton } from "./ApproveTutorButton";
@@ -22,7 +22,7 @@ export default async function TutorApprovalsPage() {
         </Button>
       }
     >
-      <AdminSectionCard title="Pending approval" contentClassName="p-0">
+      <SectionCard realm="admin" title="Pending approval" contentClassName="p-0">
         {waitlisted.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">
             No tutors awaiting approval.
@@ -51,7 +51,7 @@ export default async function TutorApprovalsPage() {
             ))}
           </ul>
         )}
-      </AdminSectionCard>
+      </SectionCard>
     </AdminPageShell>
   );
 }

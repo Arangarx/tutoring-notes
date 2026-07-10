@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
 import BillingDefaultsForm from "./BillingDefaultsForm";
 import { loadBillingDefaultsForForm } from "./actions";
@@ -29,14 +29,14 @@ export default async function BillingSettingsPage() {
   if (!defaults) {
     return (
       <AdminPageShell title="Billing" sidebar={<SettingsSubNav />} sidebarWidth="narrow">
-        <AdminSectionCard title="Billing defaults">
+        <SectionCard realm="admin" title="Billing defaults">
           <p className="text-sm text-muted-foreground max-w-lg">
             This session uses server environment login only. Billing defaults require a
             database account — complete{" "}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/setup</code>{" "}
             to create one.
           </p>
-        </AdminSectionCard>
+        </SectionCard>
       </AdminPageShell>
     );
   }
@@ -56,12 +56,12 @@ export default async function BillingSettingsPage() {
       sidebar={<SettingsSubNav />}
       sidebarWidth="narrow"
     >
-      <AdminSectionCard
+      <SectionCard realm="admin"
         title="Billing defaults"
         description="Rounded billable time is frozen onto each session at close. Changing these settings affects only new sessions."
       >
         <BillingDefaultsForm defaults={defaults} />
-      </AdminSectionCard>
+      </SectionCard>
     </AdminPageShell>
   );
 }

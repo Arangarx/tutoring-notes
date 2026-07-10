@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
 import { CalendarIntegrationsPanel } from "@/components/admin/schedule/CalendarIntegrationsPanel";
 import { CreateSessionDialog } from "@/components/admin/schedule/CreateSessionDialog";
@@ -247,7 +247,7 @@ export function SchedulePageClient() {
 
         <TabsContent value="month" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
-            <AdminSectionCard
+            <SectionCard realm="admin"
               title="Calendar"
               description="Native Mynk scheduling — external calendars are optional."
               actions={
@@ -267,16 +267,16 @@ export function SchedulePageClient() {
                 components={{ DayButton: ScheduleDayButton }}
                 className="rounded-[10px] border border-border bg-card p-2 [--cell-size:--spacing(9)]"
               />
-            </AdminSectionCard>
+            </SectionCard>
 
-            <AdminSectionCard title="Day detail" contentClassName="pt-2 min-w-0">
+            <SectionCard realm="admin" title="Day detail" contentClassName="pt-2 min-w-0">
               <DaySessionsPanel selectedDate={selectedDate} sessions={mockScheduledSessions} />
-            </AdminSectionCard>
+            </SectionCard>
           </div>
         </TabsContent>
 
         <TabsContent value="agenda" className="space-y-6">
-          <AdminSectionCard
+          <SectionCard realm="admin"
             title="Upcoming sessions"
             description="Soft duration is planning metadata — start and end recording remain tutor-controlled."
             actions={<CreateSessionDialog />}
@@ -286,7 +286,7 @@ export function SchedulePageClient() {
                 <SessionRow key={session.id} session={session} />
               ))}
             </ul>
-          </AdminSectionCard>
+          </SectionCard>
         </TabsContent>
       </Tabs>
 

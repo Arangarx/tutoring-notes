@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AccountPageShell } from "@/components/account/AccountPageShell";
-import { AccountSectionCard } from "@/components/account/AccountSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/lib/db";
@@ -86,7 +86,7 @@ export default async function ChildDevicesPage({
     >
       <AccountChildNav learnerId={id} />
 
-      <AccountSectionCard
+      <SectionCard realm="account"
         title="Active sessions"
         className="rounded-[10px] border-border shadow-sm"
         description={
@@ -138,7 +138,7 @@ export default async function ChildDevicesPage({
             </ul>
           </div>
         )}
-      </AccountSectionCard>
+      </SectionCard>
 
       <Alert className="rounded-[10px] border-l-[3px] border-accent bg-accent-soft">
         <AlertTitle className="text-accent-text">Security tip</AlertTitle>

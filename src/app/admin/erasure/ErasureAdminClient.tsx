@@ -7,7 +7,7 @@ import {
   requestErasureByAdminAction,
 } from "./actions";
 import type { ErasureJobListRow } from "@/lib/erasure/list-erasure-jobs";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { ErasureGraceCountdown } from "@/components/admin/ErasureGraceCountdown";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -222,7 +222,7 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
         </AlertDescription>
       </Alert>
 
-      <AdminSectionCard
+      <SectionCard realm="admin"
         title="Request erasure"
         description="Operator-only. Use for verified parental erasure requests. Tutors see a “Pending erasure” badge on the student roster during grace — not a deleted placeholder until purge completes."
       >
@@ -323,9 +323,9 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
             {isPending ? "Requesting…" : "Request erasure"}
           </Button>
         </form>
-      </AdminSectionCard>
+      </SectionCard>
 
-      <AdminSectionCard title="Erasure jobs" contentClassName="p-0">
+      <SectionCard realm="admin" title="Erasure jobs" contentClassName="p-0">
         {initialJobs.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">No erasure jobs yet.</p>
         ) : (
@@ -393,7 +393,7 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
             </TableBody>
           </Table>
         )}
-      </AdminSectionCard>
+      </SectionCard>
     </div>
   );
 }

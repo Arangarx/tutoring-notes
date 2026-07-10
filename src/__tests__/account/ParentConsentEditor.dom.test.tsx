@@ -173,3 +173,14 @@ describe("ParentConsentEditor — dormant consent toggles", () => {
     expect(screen.queryByText(/preferences saved/i)).not.toBeInTheDocument();
   });
 });
+
+describe("ParentConsentEditor — SectionCard realm=account", () => {
+  test("always-off limits block uses shared SectionCard with account realm", () => {
+    render(<ParentConsentEditor {...defaultProps} />);
+
+    const heading = screen.getByText("Always-off limits for Alex");
+    const card = heading.closest('[data-realm="account"]');
+    expect(card).not.toBeNull();
+    expect(card).toHaveAttribute("data-slot", "card");
+  });
+});

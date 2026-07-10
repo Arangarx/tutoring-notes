@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
 import ChangePasswordForm from "./ChangePasswordForm";
 import ProfileForm from "./ProfileForm";
@@ -47,22 +47,22 @@ export default async function ProfileSettingsPage() {
       sidebarWidth="narrow"
     >
       <div className="space-y-6">
-        <AdminSectionCard
+        <SectionCard realm="admin"
           title="Display name"
           description="How your name appears in session update emails sent to families."
         >
           <ProfileForm defaultDisplayName={admin?.displayName ?? ""} />
-        </AdminSectionCard>
+        </SectionCard>
 
         {admin ? (
-          <AdminSectionCard
+          <SectionCard realm="admin"
             title="Password"
             description="Change your sign-in password or request a reset link."
           >
             <ChangePasswordForm email={email ?? ""} has2FA={has2FA} />
-          </AdminSectionCard>
+          </SectionCard>
         ) : (
-          <AdminSectionCard title="Password">
+          <SectionCard realm="admin" title="Password">
             <p className="text-sm text-muted-foreground max-w-lg">
               This session uses server environment login only. Change{" "}
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">ADMIN_PASSWORD</code>{" "}
@@ -77,7 +77,7 @@ export default async function ProfileSettingsPage() {
               </Link>{" "}
               from the login page.
             </p>
-          </AdminSectionCard>
+          </SectionCard>
         )}
       </div>
     </AdminPageShell>

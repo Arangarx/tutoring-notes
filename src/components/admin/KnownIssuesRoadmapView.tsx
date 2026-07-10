@@ -1,4 +1,4 @@
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import {
   knownIssuesIntro,
   knownIssuesItems,
@@ -21,7 +21,7 @@ function BulletList({ items }: { items: readonly string[] }) {
 export function KnownIssuesRoadmapView() {
   return (
     <div className="space-y-6" data-testid="known-issues-roadmap">
-      <AdminSectionCard
+      <SectionCard realm="admin"
         title="Recently improved"
         description={recentlyImprovedIntro}
         data-testid="known-issues-recently-improved"
@@ -39,9 +39,9 @@ export function KnownIssuesRoadmapView() {
             </div>
           ))}
         </div>
-      </AdminSectionCard>
+      </SectionCard>
 
-      <AdminSectionCard
+      <SectionCard realm="admin"
         title="Known issues we're still working on"
         description={knownIssuesIntro}
         data-testid="known-issues-open"
@@ -56,9 +56,9 @@ export function KnownIssuesRoadmapView() {
             </li>
           ))}
         </ul>
-      </AdminSectionCard>
+      </SectionCard>
 
-      <AdminSectionCard
+      <SectionCard realm="admin"
         title="Roadmap / coming soon"
         description={roadmapIntro}
         data-testid="known-issues-roadmap-section"
@@ -81,7 +81,7 @@ export function KnownIssuesRoadmapView() {
             );
           })}
         </ul>
-      </AdminSectionCard>
+      </SectionCard>
     </div>
   );
 }
