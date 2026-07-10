@@ -22,9 +22,20 @@
 
 **⚙️ Worktree isolation (overnight, learned the hard way):** orchestrator git ops (commit/merge/push) run in the **`tutoring-notes-merge-audio` worktree on `master`**; **executor subagents run in the main checkout** (`tutoring-notes`) and are **strictly SEQUENTIAL** (shared working tree). Do NOT run orchestrator git ops in the main checkout while an executor is active — that collides (a doc commit briefly landed on an executor branch; recovered by cherry-pick). When an executor branch gets polluted, cherry-pick just its dedupe commit to master rather than merging the whole branch.
 
-**Progress:** agenticPipeline integration plan on master (`0622a25a`, [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md)) — awaiting Andrew review before pipeline code changes. Wave A-1b (2 non-fragile inline P2002 folds) executor done on `feat/dedupe-wave-a-1b-p2002-inline` @ `90d2b1c9` — pending Sonnet verify → cherry-pick to master.
+**OVERNIGHT DEDUPE PROGRESS (all executor grok → Sonnet-verified → merged to master, zero regressions):**
+1. `isPrismaUniqueViolation` → `src/lib/db/prisma-errors.ts` (`9faa164f`)
+2. inline P2002 folds (complete route + family-id) (`8b598543`)
+3. `safeName` → `src/lib/blob-path.ts` (per-site fallback param) (`ab9a27de`)
+4. `getCookieFromRequest` → `src/lib/http/cookies.ts` (auth-identical) (`d3584ff8`)
+5. ms duration formatters → `src/lib/time/format-duration-ms.ts` (byte-identical; recording formatter shares core via `padMinutes`) (`8ad4477f`)
+6. `ErrorStateCard` → 4 error/not-found pages (byte-identical, legacy markup preserved) (`e36e9e5f`)
+7. `buildAdminNavLinks` → `src/lib/admin-nav-links.ts` (drift preserved per-consumer) (`89f8dfd9`)
+- IN FLIGHT: `LegalDocumentShell` (privacy/terms shell; content untouched).
+- **DEFERRED — needs Andrew / Playwright-visual baseline:** `tokens.css` dark-palette dedup (`@media` vs `[data-theme=dark]` ~95 dup lines) — CSS-only, no unit teeth; do with a visual gate.
 
-**Next action(s):** verify + land Wave A-1b; continue Wave A (safeName → getCookieFromRequest → formatDurationMs [diff-for-identity] → ErrorStateCard → LegalDocumentShell → buildAdminNavLinks → tokens dark-palette), sequential, each executor(grok)→verifier(Sonnet)→cherry-pick/merge to master. agenticPipeline Phase 1 awaits Andrew.
+**agenticPipeline:** integration plan on master ([`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md)) — Phase 1 (change-run + fail-closed verify) awaits Andrew review before pipeline code changes.
+
+**Next action(s):** verify+land LegalDocumentShell; then Wave A safe items are largely exhausted — remaining dedupe is Wave B (section-card param, consent-write service, blob-proxy helpers, kill /api/upload/audio) + Wave C/D (whiteboard/AV, higher risk) per [`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md). Priority #2 external Google actions + Priority #3 instrumentation await Andrew. tokens.css needs visual gate.
 
 ---
 
