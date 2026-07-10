@@ -1,0 +1,68 @@
+# Dedupe execution plan — Priority #1 (living tracker)
+
+Priority #1 = eliminate all unjustified duplication site-wide, per [`.cursor/rules/composition-no-duplication.mdc`](../.cursor/rules/composition-no-duplication.mdc).
+
+**Approach (Andrew 2026-07-10):** stability/functionality/responsiveness is priority #1. **Safe + easy + fully-tested** consolidations up front; risky ones **carefully, small chunks, never big-bang.** New work introduces **zero** duplication and reduces what it touches (absolute). Every consolidation ships with exhaustive red/green tests ([`exhaustive-testing-mandate.mdc`](../.cursor/rules/exhaustive-testing-mandate.mdc)) + independent agentic verification ([`agentic-verification-pipeline.mdc`](../.cursor/rules/agentic-verification-pipeline.mdc)) + consumer grep + green `npx next build`.
+
+Source: three read-only audits (2026-07-10) — component/primitive, CSS-ownership, service/hook/util. Waves ordered by **blast radius / safety**, not value.
+
+---
+
+## Wave A — SAFE / mechanical / high-fan-out (do first)
+
+Pure functions and low-risk shared helpers; unit-testable; near-zero regression risk. No fragile surfaces.
+
+**Services / utils (non-UI)**
+- Extract `getCookieFromRequest` → `src/lib/http/cookies.ts` (dupes: `learner-session.ts:269`, `account-holder-session.ts:248`).
+- Extract `isPrismaUniqueViolation` (P2002) → `src/lib/db/prisma-errors.ts` (3 copies: claim setup, consent actions, request-erasure-by-admin).
+- Extract `safeName` → `src/lib/blob-path.ts` (dupes: `recording/upload.ts:51`, `whiteboard/upload.ts:17`).
+- Extract `parseClientPayload` → shared blob-upload parse (dupes: `upload/audio`, `upload/blob`).
+- One `formatDurationMs` (`H:MM:SS`) → `src/lib/time/` (dupes: `replay-helpers.ts:55`, `WhiteboardReplay.tsx:1586`, `WhiteboardWorkspaceClient` local, plus page-local `formatDuration`s). Reconcile with existing `components/recording/format-duration.ts`.
+- `BLOB_MAX_BYTES` magic (`100*1024*1024`) → use `audio-constants.ts` in `concat-audio.ts:117`.
+- Billing rounding defaults: collapse to single export surface (`billing/defaults.ts`; drop dup in `rounding.ts`).
+
+**UI (mechanical, no fragile surfaces)**
+- `ErrorStateCard` → replace 4 copy-paste error/not-found pages (`error.tsx`, `admin/error.tsx`, `not-found.tsx`, `admin/not-found.tsx`).
+- `LegalDocumentShell` → `privacy/page.tsx` + `terms/page.tsx` wrapper (also folds the 35+ inline-spacing debt into the shell).
+- `buildAdminNavLinks()` → `src/lib/admin-nav-links.ts` (dupes: `AdminNav`, `AdminSidebarNav` — already drifted).
+- Retire `SubmitButton` wrapper → `Button` + `useFormStatus` (8 call sites).
+- `StatTile` / `QuickLinkCard` extraction (`admin/page.tsx`, `admin/cost/page.tsx` local copy).
+- `tokens.css` dark palette: merge duplicated `@media` vs `[data-theme=dark]` blocks (~95 lines).
+- `NativeSelect` styling: single token-based block; delete hex copies in `whiteboard-chrome.css:3196` + `waiting-room-overlay.css`.
+
+## Wave B — admin/account composition (medium risk)
+
+- `SectionCard` (realm param) ← `AdminSectionCard` + `AccountSectionCard` + `AccountSectionCardLike`. **NOTE:** `V1-COMPONENT-LIBRARY.md` §1 marked these "do not consolidate (separate realms)" — that predates the 2026-07-10 rule; **needs Andrew re-waiver OR parameterize**. Confirm before doing.
+- `PageShell` + `AppHeader` ← duplicated headers across `AdminPageShell` / `AccountPageShell` / `StudentPageShell` / `ParentShareShell`.
+- `SubNav` (variant) ← `SettingsSubNav` + `AccountChildNav`.
+- `consent-write.ts` service ← versioned `ConsentRecord` create dup (claim setup + parent consent action) — prevents consent drift (security-relevant; test hard).
+- `proxy-blob-asset.ts` + `proxy-share-resource.ts` ← triplicated wb-asset/tutor-asset routes + public-* share proxies (~200 lines; security-sensitive — one place to audit).
+- Migrate audio uploads → `/api/upload/blob`, delete `/api/upload/audio` parallel route.
+
+## Wave C — whiteboard chrome (higher risk; pair with `@wb-chrome` Playwright)
+
+- Insert modals (`GraphInsertButton` / `MathInsertButton` / `PdfImageUploadButton`) + hand-rolled `role="dialog"` → `Dialog` / `WbInsertDialog` shell.
+- Legacy `.btn`/`.card` migration across `WhiteboardWorkspaceClient`, replay, join, review surfaces → `Button`/`Card`.
+- `ThemeToggle` variant ← `ThemeToggle` + `WbThemeToggle` (shared `useThemeDropdown`).
+- `WbUndoRedoButtons` variant ← `UndoRedoButtons` (legacy) + `WbUndoRedoButtons`.
+- **`whiteboard-chrome.css` monolith decomposition** (~3,254 lines) → co-located per-component CSS (BACKLOG `WB-COMPONENTS-PASS`); remove AVTile `!important` reach-ins as each component takes ownership. **Largest single CSS violation.** Fragile — see engine-protection rule.
+- Global `.btn`/`.card` (`globals.css`) retire only after consumers migrated; then move survivors into `@layer base` or delete.
+- `useExcalidrawThemeFromSystem` → app `useTheme` (aligns TU-12).
+
+## Wave D — A/V chrome (FRAGILE — Opus-grade review; whiteboard-av-reliability + engine-protection rules)
+
+- `WbTopBarMicControl`/`Live` + `WbTopBarCamControl`/`Live` + `AudioControls`/`VideoControls` → parameterized A/V control primitives.
+- `AVTile` / `MicControls` / `VideoControls` inline styles → co-located CSS; remove monolith reach-ins.
+- Device-enumeration in `useAudioRecorder` fully routed through `enumerate-device-acquire` (cross-ref `DEVICE-PICKER-DEDUPE`, best-effort).
+- `StatusPill` primitive ← WB sync-pill / student-connection-pill / `status-colors.ts` (L6).
+
+## NOT duplication (leave / documented-parallel)
+
+`Providers`/`Toaster`/`ThemeProvider` (single); `learner-session` vs `account-holder-session` (separate realms — merge only helpers); `useLiveAV`+coordinator+remote-mic (composition chain); `auth-db` vs `account-holder-auth` (documented bcrypt-round split); `assertStudentNotErased` vs `...Api` (dual surface); Excalidraw/JSXGraph third-party CSS adapters (keep scoped); hex in `tokens.css`/`BRAND.md`/`token-values.ts` (canonical token/JS-boundary).
+
+## Discipline per consolidation
+
+1. Grep ALL consumers; 2. exhaustive red-before/green-after tests to spec (right layer — Playwright for WB/AV/layout); 3. independent agentic verification (tests-to-spec + soundness + no-dup); 4. green `npx next build`; 5. small chunk — one consolidation per branch/commit series; 6. never destabilize a live surface for a refactor.
+
+## Doc drift to fix while here
+`V1-COMPONENT-LIBRARY.md`: `ThemeToggle` listed "not created" (exists); `PageSizeSelect` "candidate" (already shadcn); Account/Admin section cards "do not consolidate" (conflicts with 2026-07-10 rule).

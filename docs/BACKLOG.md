@@ -6,7 +6,7 @@ Living document for open work, pilot feedback, reliability gaps, and deferred pr
 
 We are on the **release track**: expand beyond Sarah to unsupervised new pilots. Ordered priorities:
 
-1. **Comprehensive component + service dedupe** — eliminate ALL unjustified duplication site-wide. One canonical primitive of each kind; every component a composition of primitives; every component owns its own CSS (variation via props only); one canonical implementation of each service/hook. See standard #1 below. **Highest priority.**
+1. **Comprehensive component + service dedupe** — eliminate ALL unjustified duplication site-wide. Plan + audit findings: [`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md) (Wave A safe/mechanical → D fragile A/V). **Approach:** stability first; safe+tested consolidations up front, risky ones careful/small-chunk, never big-bang. New work = zero new duplication + reduce what it touches (absolute). See standard #1 below.
 2. **Everything requiring external validation** — Google sign-in, Google Calendar, and anything needing OAuth scope approval/verification. Kick off the **external approval process now** (long lead times) even before the dependent features are finished.
 3. **Comprehensive instrumentation** — first-party analytics; see EXACTLY how the site is used (PostHog / usage instrumentation — archived bootstrapper `docs/archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md`).
 4. **Finish scheduling** (depends on #2 calendar).
@@ -24,7 +24,7 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
 - **Share/copy-link silent clipboard failure** — likely **fixed/moot**; VERIFY then close.
 - **ST-05 laser** — bidirectional works; remaining is **color review only** (WB-LASER-ICON-CONTRAST), not functionality.
 - **Student bidirectional video / dark-canvas (swing item H)** — status uncertain; **verify whether still an issue** against current `master`.
-- **prompt v8 (swing item M)** — Andrew: "already relabeled" — **needs clarification** before action (ambiguous which item this maps to).
+- **AI prompt v8 — homework → plan (swing item M)** — Andrew (2026-07-10): **PRIORITIZE** the prompt refinement. Promote toward MUST (note-quality moat). (Earlier "already relabeled" referred to form sections, not this.)
 - **General:** backlog has stale/slightly-out-of-date rows — a **freshness pass against current `master`** is warranted when picking items up (many were extracted from now-archived docs).
 
 ---
