@@ -9,7 +9,7 @@ import {
 } from "@/lib/admin-routing";
 import { AdminTestAccountsPanel } from "./AdminTestAccountsPanel";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { Button } from "@/components/ui/button";
 import { listWaitlistedTutors } from "@/lib/tutor-approval-scope";
 import { cn } from "@/lib/utils";
@@ -119,13 +119,13 @@ export default async function AdminHomePage() {
         </div>
       </div>
 
-      <AdminSectionCard
+      <SectionCard realm="admin"
         title="Test accounts"
         description="Log in as a test tutor without signing out your admin session. Use Exit impersonation to return here."
         className="border-l-[3px] border-l-accent"
       >
         <AdminTestAccountsPanel />
-      </AdminSectionCard>
+      </SectionCard>
     </AdminPageShell>
   );
 }

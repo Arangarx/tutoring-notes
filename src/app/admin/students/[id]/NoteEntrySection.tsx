@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import AiAssistPanel from "./AiAssistPanel";
 import NewNoteForm from "./NewNoteForm";
 import type { NewNoteFormHandle } from "./NewNoteForm";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 
 type Props = {
   studentId: string;
@@ -25,9 +25,9 @@ export default function NoteEntrySection({ studentId, aiEnabled, blobEnabled }: 
         enabled={aiEnabled}
         blobEnabled={blobEnabled}
       />
-      <AdminSectionCard title="New session note">
+      <SectionCard realm="admin" title="New session note">
         <NewNoteForm ref={formRef} studentId={studentId} onSaved={() => setPanelKey((k) => k + 1)} />
-      </AdminSectionCard>
+      </SectionCard>
     </div>
   );
 }

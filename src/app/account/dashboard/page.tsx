@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AccountPageShell } from "@/components/account/AccountPageShell";
-import { AccountSectionCard } from "@/components/account/AccountSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { ParentJoinGapCallout } from "@/components/account/ParentJoinGapCallout";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
@@ -82,7 +82,7 @@ export default async function AccountDashboardPage() {
         <ParentJoinGapCallout />
       ) : null}
 
-      <AccountSectionCard
+      <SectionCard realm="account"
         title={sectionTitle}
         description={sectionDescription}
         className="rounded-[10px] border-border border-l-[3px] border-l-accent bg-accent-soft/35 shadow-sm"
@@ -156,7 +156,7 @@ export default async function AccountDashboardPage() {
         <div className="mt-4 border-t border-border pt-4">
           <AddLearnerForm />
         </div>
-      </AccountSectionCard>
+      </SectionCard>
 
       {childProfiles.some((p) => p.credential) ? (
         <div className="rounded-[10px] border-l-[3px] border-accent bg-accent-soft px-4 py-3 text-sm text-foreground">
@@ -179,7 +179,7 @@ export default async function AccountDashboardPage() {
         </div>
       ) : null}
 
-      <AccountSectionCard
+      <SectionCard realm="account"
         title="Account"
         description="Your email and security settings."
         className="rounded-[10px] border-border shadow-sm"
@@ -201,7 +201,7 @@ export default async function AccountDashboardPage() {
             <Link href="/account/forgot-password">Change password</Link>
           </Button>
         </div>
-      </AccountSectionCard>
+      </SectionCard>
     </AccountPageShell>
   );
 }

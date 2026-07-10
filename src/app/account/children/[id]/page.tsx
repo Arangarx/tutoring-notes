@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AccountPageShell } from "@/components/account/AccountPageShell";
-import { AccountSectionCard } from "@/components/account/AccountSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { ParentJoinGapCallout } from "@/components/account/ParentJoinGapCallout";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
@@ -142,7 +142,7 @@ export default async function ChildDetailPage({
         </div>
       </div>
 
-      <AccountSectionCard
+      <SectionCard realm="account"
         title="Learner details"
         className="rounded-[10px] border-border shadow-sm"
       >
@@ -186,9 +186,9 @@ export default async function ChildDetailPage({
             </dd>
           </div>
         </dl>
-      </AccountSectionCard>
+      </SectionCard>
 
-      <AccountSectionCard
+      <SectionCard realm="account"
         id="child-login"
         title="Child login"
         description={
@@ -238,10 +238,10 @@ export default async function ChildDetailPage({
             />
           </div>
         )}
-      </AccountSectionCard>
+      </SectionCard>
 
       {!fullProfile.isSelfLearner ? (
-        <AccountSectionCard
+        <SectionCard realm="account"
           title="Privacy & consent"
           description="Control what tutors can capture and share."
           className="rounded-[10px] border-border shadow-sm"
@@ -255,7 +255,7 @@ export default async function ChildDetailPage({
             Set per-tutor preferences for live sessions, recordings, and session notes.
             Child restrictions can narrow what you allow.
           </p>
-        </AccountSectionCard>
+        </SectionCard>
       ) : null}
     </AccountPageShell>
   );

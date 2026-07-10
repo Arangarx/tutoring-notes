@@ -7,7 +7,7 @@ import AiGeneratedNoteReviewGate from "@/components/notes/AiGeneratedNoteReviewG
 import type { NewNoteFormHandle } from "./NewNoteForm";
 import AudioInputTabs, { type AudioResult } from "./AudioInputTabs";
 import PendingSegmentList from "./PendingSegmentList";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -207,16 +207,16 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
 
   if (!enabled) {
     return (
-      <AdminSectionCard title="Auto-fill from session" className="opacity-60">
+      <SectionCard realm="admin" title="Auto-fill from session" className="opacity-60">
         <p className="text-sm text-muted-foreground">
           AI generation is not configured on this server.
         </p>
-      </AdminSectionCard>
+      </SectionCard>
     );
   }
 
   return (
-    <AdminSectionCard
+    <SectionCard realm="admin"
       title="Auto-fill from session"
       data-testid="ai-assist-panel"
       className="min-w-0 flex-1"
@@ -323,6 +323,6 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
           </div>
         </>
       )}
-    </AdminSectionCard>
+    </SectionCard>
   );
 }

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getStudentScope } from "@/lib/student-scope";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,7 @@ export default async function OutboxPage() {
       title="Outbox"
       description="Sent and queued email messages. Use this to review what was sent and to copy share links if needed."
     >
-      <AdminSectionCard title="Messages" contentClassName="p-0">
+      <SectionCard realm="admin" title="Messages" contentClassName="p-0">
         {messages.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">No messages yet.</p>
         ) : (
@@ -62,7 +62,7 @@ export default async function OutboxPage() {
             ))}
           </ul>
         )}
-      </AdminSectionCard>
+      </SectionCard>
     </AdminPageShell>
   );
 }

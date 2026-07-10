@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/operator";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export default async function AdminFeedbackPage() {
         </>
       }
     >
-      <AdminSectionCard
+      <SectionCard realm="admin"
         title="Submissions"
         contentClassName="p-0"
       >
@@ -63,7 +63,7 @@ export default async function AdminFeedbackPage() {
             ))}
           </ul>
         )}
-      </AdminSectionCard>
+      </SectionCard>
     </AdminPageShell>
   );
 }

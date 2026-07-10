@@ -8,7 +8,7 @@ import { isGmailConnectAllowedForEmail } from "@/lib/gmail-connect-allowed";
 import { getStudentScope } from "@/lib/student-scope";
 import { getGmailConnectionForTutor, isEmailConfiguredForTutor } from "@/lib/email";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
 import EmailConfigForm from "./EmailConfigForm";
 import OAuthEmailSection from "./OAuthEmailSection";
@@ -92,7 +92,7 @@ export default async function EmailSettingsPage({
       )}
 
       <div className="space-y-6">
-        <AdminSectionCard
+        <SectionCard realm="admin"
           title="Send with your account"
           description="Sign in with Google to send from your Gmail. No SMTP setup — one click and you&rsquo;re done."
         >
@@ -103,9 +103,9 @@ export default async function EmailSettingsPage({
             connectError={params.error}
             connectSuccess={params.connected}
           />
-        </AdminSectionCard>
+        </SectionCard>
 
-        <AdminSectionCard
+        <SectionCard realm="admin"
           title="SMTP"
           description="For Resend, SendGrid, or your own server. Leave fields empty if you only use Connect Gmail. Leave password blank to keep the existing one."
         >
@@ -116,7 +116,7 @@ export default async function EmailSettingsPage({
             defaultUser={config?.user ?? ""}
             defaultFromEmail={config?.fromEmail ?? ""}
           />
-        </AdminSectionCard>
+        </SectionCard>
       </div>
     </AdminPageShell>
   );

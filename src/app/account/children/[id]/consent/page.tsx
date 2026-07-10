@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AccountPageShell } from "@/components/account/AccountPageShell";
-import { AccountSectionCard } from "@/components/account/AccountSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { db } from "@/lib/db";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { requireAccountHolderSession } from "@/lib/server-session";
@@ -157,7 +157,7 @@ export default async function LearnerConsentPage({
       <AccountChildNav learnerId={learnerId} />
 
       {learnerProfile.isSelfLearner ? (
-        <AccountSectionCard
+        <SectionCard realm="account"
           title="Privacy preferences"
           className="rounded-[10px]"
         >
@@ -166,9 +166,9 @@ export default async function LearnerConsentPage({
               "You are set up as a self-learner on this account. Parent privacy consent does not apply — you manage your own tutoring data as an adult account holder."
             }
           </p>
-        </AccountSectionCard>
+        </SectionCard>
       ) : (
-        <AccountSectionCard
+        <SectionCard realm="account"
           title="Privacy preferences"
           description="Per-tutor permissions you grant, plus optional hard limits your child cannot override."
           className="rounded-[10px] border-border bg-accent-soft/30"
@@ -179,7 +179,7 @@ export default async function LearnerConsentPage({
             tutors={tutors}
             restrictions={restrictions}
           />
-        </AccountSectionCard>
+        </SectionCard>
       )}
     </AccountPageShell>
   );

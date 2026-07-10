@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import type { MockCalendarConnection } from "@/lib/schedule/mock-data";
 import { CalendarIcon, CheckIcon, PlusIcon } from "lucide-react";
 
@@ -56,7 +56,7 @@ export function CalendarIntegrationsPanel({
   const connectedCount = connections.filter((c) => c.connected).length;
 
   return (
-    <AdminSectionCard
+    <SectionCard realm="admin"
       title={compact ? "Connected calendars" : "Calendar integrations"}
       description={
         compact
@@ -138,6 +138,6 @@ export function CalendarIntegrationsPanel({
           </p>
         ) : null}
       </div>
-    </AdminSectionCard>
+    </SectionCard>
   );
 }

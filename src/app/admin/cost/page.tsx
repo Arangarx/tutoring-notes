@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { assertAdminOrNotFound } from "@/lib/impersonation";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table,
@@ -122,7 +122,7 @@ export default async function AdminCostPage() {
         />
       </div>
 
-      <AdminSectionCard title="By cost source (this month)" contentClassName="p-0">
+      <SectionCard realm="admin" title="By cost source (this month)" contentClassName="p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -141,9 +141,9 @@ export default async function AdminCostPage() {
             ))}
           </TableBody>
         </Table>
-      </AdminSectionCard>
+      </SectionCard>
 
-      <AdminSectionCard title="By tutor (this month)" className="mt-6" contentClassName="p-0">
+      <SectionCard realm="admin" title="By tutor (this month)" className="mt-6" contentClassName="p-0">
         {byTutor.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">
             No cost events with tutor attribution yet.
@@ -170,9 +170,9 @@ export default async function AdminCostPage() {
             </TableBody>
           </Table>
         )}
-      </AdminSectionCard>
+      </SectionCard>
 
-      <AdminSectionCard title="Monthly trend (6 months)" className="mt-6">
+      <SectionCard realm="admin" title="Monthly trend (6 months)" className="mt-6">
         <div className="flex min-h-[120px] items-end gap-2">
           {monthlyBars.map((bar) => (
             <div key={bar.month} className="flex flex-1 flex-col items-center gap-1">
@@ -187,9 +187,9 @@ export default async function AdminCostPage() {
             </div>
           ))}
         </div>
-      </AdminSectionCard>
+      </SectionCard>
 
-      <AdminSectionCard title="Pricing-floor reference" className="mt-6">
+      <SectionCard realm="admin" title="Pricing-floor reference" className="mt-6">
         <p className="text-sm text-muted-foreground">
           60-minute whiteboard session variable cost anchor (design doc §1.3): Whisper ~$0.36,
           GPT + blob + compute rounding errors. Use per-session drill-down on{" "}
@@ -201,7 +201,7 @@ export default async function AdminCostPage() {
         <p className="mt-2 text-xs text-muted-foreground">
           Tutor-facing cost UI is deferred until the pricing model is locked (session tokens).
         </p>
-      </AdminSectionCard>
+      </SectionCard>
     </AdminPageShell>
   );
 }

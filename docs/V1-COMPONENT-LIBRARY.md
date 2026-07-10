@@ -102,14 +102,18 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 |---|---|---|---|---|---|
 | `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. **REQ-S3-3:** redesign must add a persistent signed-in identity indicator (display name/email; badge when impersonating or test account) — pairs with `ImpersonationBanner`. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
 | `AdminPageShell` | `src/components/admin/AdminPageShell.tsx` | Page chrome: `<h1>` title, optional eyebrow, optional description, optional actions slot. **2026-06-11:** optional `sidebar` + `sidebarWidth` for left-rail layouts. | `title`, `description`, `eyebrow`, `actions`, `children`, `className`, `sidebar`, `sidebarWidth` | Dashboard, students, settings (chunk 1) | **canonical** |
-| `AdminSectionCard` | `src/components/admin/AdminSectionCard.tsx` | Section grouping within a page. Wraps shadcn `Card`. Title + optional description + optional actions header + content slot. | `title`, `description`, `actions`, `children`, `id`, `data-testid` | Dashboard, students, settings (chunk 1) | **canonical** |
+
+### Shared layout (cross-realm)
+
+| Component | File | Purpose | Key Props | Surfaces | Dedup Status |
+|---|---|---|---|---|---|
+| `SectionCard` | `src/components/SectionCard.tsx` | Section grouping within a page. Wraps shadcn `Card`. Title + optional description + optional actions header + content slot. **`realm`** selects admin vs account styling contract (`data-realm` on root). | `realm` (`admin` \| `account`), `title`, `description`, `actions`, `children`, `className`, `contentClassName`, `id`, `data-testid` | `/admin/**`, `/account/**` | **canonical — Wave B dedupe; replaces former `AdminSectionCard` + `AccountSectionCard`** |
 
 ### Account Holder (Parent) Layout
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
 | `AccountPageShell` | `src/components/account/AccountPageShell.tsx` | Layout wrapper for authenticated AccountHolder pages. Includes its own nav with wordmark + email + sign-out. Same structural shape as `AdminPageShell` but owns its own nav (no `AdminNav`). | `title`, `description`, `eyebrow`, `actions`, `userEmail`, `children` | `/account/**` pages | **canonical — NOTE: structurally parallel to `AdminPageShell` but NOT the same component.** Both are intentional (different realms/nav); do not consolidate. |
-| `AccountSectionCard` | `src/components/account/AccountSectionCard.tsx` | Section card for AccountHolder pages — mirrors `AdminSectionCard` | Same as `AdminSectionCard` | `/account/**` pages | **canonical — parallel to `AdminSectionCard`. Same reasoning: separate realms.** |
 
 ### Auth Surfaces
 
@@ -421,7 +425,7 @@ The user identity chip in the sidebar (1A.8) IS this primitive — it satisfies 
 
 - **Page max-width (admin/tutor shell):** `max-w-6xl` (1152px) with `xl:max-w-7xl` (1280px) at xl breakpoint — set on `admin/layout.tsx` `<main>`; centered with `mx-auto px-4 py-6 md:px-6 md:py-8`. Other realms (account, marketing) may use narrower widths per surface.
 - **Page max-width (legacy default):** `max-w-4xl` (896px) where a surface has not yet adopted the admin shell width.
-- **Section spacing:** `gap-8` between `AdminPageShell` header and content; `gap-6` between sibling `AdminSectionCard` components and between sidebar rail and main column (`AdminPageShell` sidebar layout)
+- **Section spacing:** `gap-8` between `AdminPageShell` header and content; `gap-6` between sibling `SectionCard` components and between sidebar rail and main column (`AdminPageShell` sidebar layout)
 - **Form field spacing within a section:** `space-y-4` (between field groups), `space-y-1.5` (between label and input)
 - **Content max-width within cards:** `max-w-md` or `max-w-lg` for form fields; never full card width for narrow inputs
 - **Mobile:** single-column; cards stack naturally. Min touch target: `min-h-11` (44px)
@@ -432,9 +436,9 @@ Every tutor/admin page uses `AdminPageShell` inside the `admin/layout.tsx` main 
 
 ```tsx
 <AdminPageShell title="Settings" description="Manage your account and preferences.">
-  <AdminSectionCard title="Profile" description="Your display name and password.">
+  <SectionCard realm="admin" title="Profile" description="Your display name and password.">
     {/* form content */}
-  </AdminSectionCard>
+  </SectionCard>
 </AdminPageShell>
 ```
 
@@ -460,18 +464,18 @@ Andrew's approved mock (Surface 2 — dashboard) demonstrates the "variety of us
 | Surface type | Card appropriate? | Pattern to use |
 |---|---|---|
 | Navigation index (Settings index, sub-nav list) | **No** — over-chrome | Plain list with `<Link>` rows. Hover: `hover:bg-muted/60` row highlight, no card border. Group with a section divider or heading if needed. |
-| Content subsections within a page (Profile form, Email form) | **Yes** | `AdminSectionCard` — groups and labels the subsection clearly |
+| Content subsections within a page (Profile form, Email form) | **Yes** | `SectionCard` — groups and labels the subsection clearly |
 | Stat/metric tiles on a dashboard | **Yes** | Raised-surface card (`.dash-stat` pattern) — each is a distinct numerical unit |
 | Data rows within a list/panel | **No** — row styling only | `border-b border-border` row with hover background, inside a card container |
 | Pending-action / AI signal | **Partial** — strip, not card | `accent-soft` tinted strip with `border-l-4 border-accent` (`.dash-pending-summaries` mock pattern) |
-| Primary action on landing/dashboard | **Yes** | `AdminSectionCard` or custom card for each distinct action unit |
-| Operator/debug pages (Feedback, Waitlist) | **Minimal** | One `AdminPageShell` + one `AdminSectionCard` for the list; individual items = row styling |
+| Primary action on landing/dashboard | **Yes** | `SectionCard` or custom card for each distinct action unit |
+| Operator/debug pages (Feedback, Waitlist) | **Minimal** | One `AdminPageShell` + one `SectionCard` for the list; individual items = row styling |
 
 **Current card usage audit (as of chunk 1):**
 - Landing/marketing page (Phase D): cards for feature grid — **appropriate** per mock
-- Dashboard B2 reskin: `AdminSectionCard` for pending recaps + recent sessions — **appropriate** (distinct action units per mock pattern)
+- Dashboard B2 reskin: `SectionCard` for pending recaps + recent sessions — **appropriate** (distinct action units per mock pattern)
 - Settings index (pre-chunk-1): wraps every nav item in `className="card"` — **over-chrome; corrected in chunk 1**
-- Settings sub-pages (post-chunk-1): `AdminSectionCard` per logical form group — **appropriate**
+- Settings sub-pages (post-chunk-1): `SectionCard` per logical form group — **appropriate**
 
 ### 2.4 Typography Roles (from approved mock)
 
@@ -479,7 +483,7 @@ Andrew's approved mock (Surface 2 — dashboard) demonstrates the "variety of us
 |---|---|---|---|
 | Wordmark "Mynk·" | `.wordmark` | Fraunces `opsz 144, SOFT 60, wght 700` | `<AdminNav>`, `<MynkWordmark>`, auth header |
 | Page title (h1) | `.heading` | Fraunces `opsz 144, SOFT 0, wght 700` | `AdminPageShell title` prop |
-| Section heading (h2/h3) | Tailwind `text-lg font-semibold text-foreground` | Inter 600 | `AdminSectionCard` title |
+| Section heading (h2/h3) | Tailwind `text-lg font-semibold text-foreground` | Inter 600 | `SectionCard` title |
 | Body text | `text-base text-foreground` | Inter 400 (V2 weight) | Page descriptions, form helper text |
 | Muted body | `text-sm text-muted-foreground` | Inter 400 | Secondary descriptions |
 | Form label | `text-sm font-medium leading-none` | Inter 500 | shadcn `Label` |
@@ -718,7 +722,7 @@ The reskin applied tokens to pre-existing layouts. Mock-faithful layouts for key
 
 ### Resolution of §2.10 #1 — Settings sub-nav pattern
 
-**Decision:** Implement **left settings sub-nav** (180px sidebar) for the settings section — matching GitHub / Stripe / Linear density and IA clarity. The sidebar uses the same component pattern as 1A.8 (sidebar nav) but narrower. The main area keeps `AdminSectionCard` for content grouping.
+**Decision:** Implement **left settings sub-nav** (180px sidebar) for the settings section — matching GitHub / Stripe / Linear density and IA clarity. The sidebar uses the same component pattern as 1A.8 (sidebar nav) but narrower. The main area keeps `SectionCard` for content grouping.
 
 **Implement in:** Cohesive visual pass (after Chunk 1 functional merge).
 
@@ -860,7 +864,7 @@ The following files are locked to recording slice 3 or live-session infrastructu
 | 9 | **Student join** | `/join/[token]` | **[RESKIN FLOOR]** Current workspace layout. | Phone-first, `100dvh`. Canvas ≥80% viewport. Compact page strip (pill tabs). Follow-tutor toggle: `bg-accent-soft text-accent-text` when ON. AV tile: `position: fixed` bottom-right overlay. Minimal floating tool buttons. | B6 | HIGH |
 | 10 | **Auth surfaces** | `/login`, `/signup`, `/forgot`, `/reset` | **[PARTIALLY MOCK-FAITHFUL]** B1 shipped wordmark + centered card. | Verify: `bg-background` (cream/navy) page bg. Wordmark `text-[28px]`. OAuth notice ABOVE Connect-Gmail button (§2.14 #3 resolution). Coral CTA pair with ghost. | B1 follow-up / cohesive | LOW |
 | 11 | **Marketing landing** | `/` | **[FIRST CUT / NOT MERGED]** Phase D, `feature/phase-d-landing-about` @ `37d8178`. | Phase D v2 decisions (see v1-component-redesign-design-2026-05-31.md §5 D v2). MarketingHeader with single Sign-in menu. Hero: "Session notes that write themselves." `accent-text` eyebrow. Coral CTA pair. Value props 3-col. "How it works" 3-step. Trust CTA. SiteFooter. | D (Phase D v2 review) | MEDIUM |
-| 12 | **Settings index + sub-pages** | `/admin/settings/**` | **[RESKIN FLOOR / CHUNK 1]** Chunk 1 functional. §2.10 items apply. | Left settings sub-nav (180px sidebar per §2.14 #1). Content area with `AdminSectionCard`. OAuth notice above button (§2.14 #3). Amber warning token (§2.14 #5). | Cohesive pass | MEDIUM |
+| 12 | **Settings index + sub-pages** | `/admin/settings/**` | **[RESKIN FLOOR / CHUNK 1]** Chunk 1 functional. §2.10 items apply. | Left settings sub-nav (180px sidebar per §2.14 #1). Content area with `SectionCard`. OAuth notice above button (§2.14 #3). Amber warning token (§2.14 #5). | Cohesive pass | MEDIUM |
 | 13 | **Whiteboard chrome** | Workspace overlay | **[NOT YET BUILT]** P1.1 pending. | P1.2 visual design: [`docs/handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md`](handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md). Surface 4 visual language. Active tool = inverse colors (NOT coral). | P1.1 | **HIGH** |
 | 14 | **`SubmitButton` sites** | Various forms | **[DEBT]** Pre-B1 component. | Migrate to `<Button>` from shadcn/ui opportunistically when touching a page. No forced sweep. | Ongoing | LOW |
 | 15 | **`dark:` hardcodes** (~30 usages) | Various components | **[DEBT]** Key off OS not `[data-theme]`. | Migrate to token-driven classes per §2.11 end-state. Eliminate `dark:` from component code when touching a file. | Ongoing | LOW |

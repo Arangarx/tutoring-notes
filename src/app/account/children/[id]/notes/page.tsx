@@ -11,7 +11,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AccountPageShell } from "@/components/account/AccountPageShell";
-import { AccountSectionCard } from "@/components/account/AccountSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/lib/db";
@@ -117,7 +117,7 @@ export default async function LearnerNotesPage({
     >
       <AccountChildNav learnerId={learnerId} />
 
-      <AccountSectionCard
+      <SectionCard realm="account"
         title="Session notes"
         className="rounded-[10px] border-border shadow-sm"
         actions={
@@ -183,7 +183,7 @@ export default async function LearnerNotesPage({
             })}
           </div>
         )}
-      </AccountSectionCard>
+      </SectionCard>
     </AccountPageShell>
   );
 }

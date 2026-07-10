@@ -9,7 +9,15 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-type AdminSectionCardProps = {
+export type SectionCardRealm = "admin" | "account";
+
+const REALM_CARD_CLASS: Record<SectionCardRealm, string> = {
+  admin: "border-border bg-card shadow-sm",
+  account: "border-border bg-card shadow-sm",
+};
+
+type SectionCardProps = {
+  realm: SectionCardRealm;
   title: string;
   description?: ReactNode;
   actions?: ReactNode;
@@ -21,7 +29,8 @@ type AdminSectionCardProps = {
   "data-testid"?: string;
 };
 
-export function AdminSectionCard({
+export function SectionCard({
+  realm,
   title,
   description,
   actions,
@@ -30,12 +39,13 @@ export function AdminSectionCard({
   contentClassName,
   id,
   "data-testid": dataTestId,
-}: AdminSectionCardProps) {
+}: SectionCardProps) {
   return (
     <Card
       id={id}
       data-testid={dataTestId}
-      className={cn("border-border bg-card shadow-sm", className)}
+      data-realm={realm}
+      className={cn(REALM_CARD_CLASS[realm], className)}
     >
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0 pb-0">
         <div className="min-w-0 flex-1 space-y-1">

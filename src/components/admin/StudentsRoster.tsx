@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Plus, Search } from "lucide-react";
 
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
-import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SectionCard } from "@/components/SectionCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -86,13 +86,13 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
     <div className="relative flex flex-col gap-6">
       {/* Desktop add card */}
       <div className="hidden md:block">
-        <AdminSectionCard
+        <SectionCard realm="admin"
           title="Add a student"
           description="Create a roster entry to start sessions and notes."
           className="border-accent/20 bg-accent-soft/60"
         >
           <AddStudentForm idPrefix="desktop-" />
-        </AdminSectionCard>
+        </SectionCard>
       </div>
 
       {/* Sticky search toolbar */}
