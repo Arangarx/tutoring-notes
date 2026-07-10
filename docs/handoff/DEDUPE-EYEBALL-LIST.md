@@ -53,14 +53,14 @@ Canonical `SectionCard` with `realm="admin"|"account"`. Old admin/account cards 
 - [ ] Account realm — dashboard + child detail cards
 - [ ] **Consent — "Always-off limits" block** (`/account/children/[id]/consent`): was bespoke `<section>` with `p-4 sm:p-5`; now shared shadcn Card (`<div>`, different padding). Confirm layout + landmark feel OK (verifier a11y note).
 
-### PageShell / AppHeader _(if in wave)_
+### PageShell / AppHeader _(merged `f297e092`)_
 
-Admin / account / student / share shells.
+Verifier: rendered HTML byte-equivalent per realm — still worth a quick glance.
 
-- [ ] Admin shell
-- [ ] Account shell
-- [ ] Student shell _(if touched)_
-- [ ] Share shell _(if touched)_
+- [ ] Admin — `/admin`, `/admin/settings/profile` (sidebar)
+- [ ] Account — `/account/dashboard`, `/account/children/<id>`
+- [ ] Student — `/join` header band
+- [ ] Share — `/s/<token>`, `/s/<token>/all`
 
 ### SubNav _(merged `f59a1ead`)_
 
