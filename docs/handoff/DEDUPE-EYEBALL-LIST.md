@@ -45,12 +45,13 @@ Spot-check WB replay / workspace duration strings look normal (byte-identical ex
 
 ## Wave B (as items land — leave unchecked)
 
-### SectionCard realms
+### SectionCard realms _(merged `a8a31e46`)_
 
-Admin pages using `AdminSectionCard` + account pages using `AccountSectionCard` — cards look identical to before **per realm**.
+Canonical `SectionCard` with `realm="admin"|"account"`. Old admin/account cards were class-identical; distinction is `data-realm`.
 
-- [ ] Admin realm — representative pages
-- [ ] Account realm — representative pages
+- [ ] Admin realm — representative pages (settings, roster, schedule)
+- [ ] Account realm — dashboard + child detail cards
+- [ ] **Consent — "Always-off limits" block** (`/account/children/[id]/consent`): was bespoke `<section>` with `p-4 sm:p-5`; now shared shadcn Card (`<div>`, different padding). Confirm layout + landmark feel OK (verifier a11y note).
 
 ### PageShell / AppHeader _(if in wave)_
 
