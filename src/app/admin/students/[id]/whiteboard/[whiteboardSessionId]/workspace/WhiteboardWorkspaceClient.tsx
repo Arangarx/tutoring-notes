@@ -4951,10 +4951,19 @@ export function WhiteboardWorkspaceClient({
         // never gated.
         pageSceneSetFingerprintRef.current.delete(pageId);
       }
-      // BUG-3 / E4 page-foreign guard: secondary guard for switches onto any
-      // board (blank or PDF). Rejects stale debounced onChange carrying the
-      // leaving board's elements. Cleared only when onChange introduces a
-      // genuinely new element (not forbidden, not part of settled target scene).
+      // BUG-3 / E4 / E5 page-foreign guard: secondary guard for switches onto
+      // any board (blank or PDF). Rejects stale debounced onChange carrying the
+      // leaving board's elements. The guard is PERMANENT for the board's
+      // lifetime — it is only replaced by `armPageForeignGuard` on the next
+      // page switch. We previously cleared it on the "first new user element"
+      // (`hasNewUserElement`) but that opened a window: Excalidraw can fire an
+      // onChange with a new element ID during image loading / file hydration
+      // (status "saved"→"loaded" callbacks or internal normalization) before
+      // the debounced stale Board-N onChange fires. That new element cleared
+      // the guard prematurely, letting the stale onChange bleed through.
+      // Non-forbidden elements always pass the guard regardless (the guard only
+      // blocks `forbiddenIds`), so removing the clearing is safe — normal user
+      // edits on the new board are never affected.
       const foreignGuard = pageForeignGuardRef.current.get(pageId);
       if (foreignGuard && foreignGuard.forbiddenIds.size > 0) {
         if (els.length === 0) {
@@ -4976,17 +4985,9 @@ export function WhiteboardWorkspaceClient({
             );
             return;
           }
-          const hasNewUserElement = (
-            els as ReadonlyArray<{ id?: string }>
-          ).some(
-            (e) =>
-              e.id &&
-              !foreignGuard.forbiddenIds.has(e.id) &&
-              !foreignGuard.settledIds.has(e.id)
-          );
-          if (hasNewUserElement) {
-            pageForeignGuardRef.current.delete(pageId);
-          }
+          // Non-forbidden elements pass through (user's new strokes, image
+          // updates, etc.). The guard stays active until the next page switch
+          // calls armPageForeignGuard with fresh forbiddenIds.
         }
       }
       // PR-01 Option A: store raw elements ref — no per-move clone.
