@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { createActionCorrelationId } from "@/lib/action-correlation";
-import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
-import { checkApiShareAccess } from "@/lib/share-access-scope";
+import {
+  assertShareProxyAccess,
+  fetchShareBlobWithBearer,
+  gatePublicWbSessionBlob,
+} from "@/lib/share/proxy-share-resource";
 
 /**
  * Share-token gated proxy for the whiteboard final-snapshot PNG.
@@ -24,27 +26,12 @@ export async function GET(
     `[wbPublicSnapshot.route] GET wbsid=${sessionId} rid=${rid}`
   );
 
-  if (!shareToken) {
-    return NextResponse.json({ error: "Missing token." }, { status: 401 });
-  }
-
-  // Auth wall check: when NOTES_AUTH_WALL=true, session must match token ownership.
-  const access = await checkApiShareAccess(
+  const access = await assertShareProxyAccess(
     req,
     shareToken,
     `/api/whiteboard/${sessionId}/public-snapshot?token=${shareToken}`
   );
-  if (!access.allowed) {
-    return NextResponse.json(
-      { error: "Access denied." },
-      { status: access.status }
-    );
-  }
-
-  const erasureBlocked = await assertStudentNotErasedApi(access.studentId, {
-    salToken: shareToken,
-  });
-  if (erasureBlocked) return erasureBlocked;
+  if (!access.ok) return access.response;
 
   const session = await withDbRetry(
     () =>
@@ -59,44 +46,35 @@ export async function GET(
     { label: "wbPublicSnapshot.route.session" }
   );
 
-  if (!session || session.studentId !== access.studentId) {
-    return NextResponse.json({ error: "Not found." }, { status: 404 });
-  }
-  if (!session.endedAt) {
-    return NextResponse.json(
-      { error: "Session recording not yet available." },
-      { status: 404 }
-    );
-  }
-  if (!session.snapshotBlobUrl) {
-    return NextResponse.json(
-      { error: "No snapshot for this session." },
-      { status: 404 }
-    );
-  }
+  const gated = gatePublicWbSessionBlob(
+    session
+      ? {
+          studentId: session.studentId,
+          endedAt: session.endedAt,
+          blobUrl: session.snapshotBlobUrl,
+        }
+      : null,
+    access.studentId,
+    {
+      requireEnded: true,
+      notEndedJsonError: "Session recording not yet available.",
+      missingBlobJsonError: "No snapshot for this session.",
+    }
+  );
+  if (!gated.ok) return gated.response;
 
-  const blobToken = process.env.BLOB_READ_WRITE_TOKEN ?? "";
-  const blobRes = await fetch(session.snapshotBlobUrl, {
-    headers: blobToken ? { Authorization: `Bearer ${blobToken}` } : {},
+  const res = await fetchShareBlobWithBearer(gated.blobUrl, {
+    contentType: "image/png",
+    cacheMaxAge: 3600,
+    unavailableJsonError: "Snapshot unavailable.",
+    logTag: "wbPublicSnapshot.route",
+    sessionId,
+    rid,
   });
 
-  if (!blobRes.ok) {
-    console.error(
-      `[wbPublicSnapshot.route] wbsid=${sessionId} rid=${rid} blob fetch ${blobRes.status}`
-    );
-    return NextResponse.json(
-      { error: "Snapshot unavailable." },
-      { status: 502 }
-    );
+  if (res.ok) {
+    console.log(`[wbPublicSnapshot.route] wbsid=${sessionId} rid=${rid} ok`);
   }
 
-  console.log(`[wbPublicSnapshot.route] wbsid=${sessionId} rid=${rid} ok`);
-
-  return new Response(blobRes.body, {
-    status: 200,
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+  return res;
 }
