@@ -12,28 +12,16 @@
 
 **Tip:** `v1-redesign` @ `0aa2bb05` (docs) / code tip `323a2f1e` READY. Preview: https://tutoring-notes-git-v1-redesign-arangarx-5209s-projects.vercel.app
 
-**Last action:** Andrew evening recheck notes triaged (2026-07-09).
+**Last action:** Andrew “fix what’s left” — dispatching evening-smoke blockers (2026-07-09).
 
-**Recheck results (evening):**
-1. **AUDIO-1 STILL FAIL** — cancel (no cam) → refresh → new session: Brio selected, not armed; next session arms. Pre-Sarah.
-2. **END-WINDDOWN PASS**
-3. **Share/tutor phone replay PASS** — copy: “Pause and hide replay” → “Pause”
-4. **Admin tabs PARTIAL** — icons missing on Session/Share/Notes (slot empty); Parent Users + Notes badge OK
-5. **PDF** — Blob client-token mid-import (2/3) = **new**. Stroke bleed on PDF import = **SAME recurring bleed** (E4 did not hold) — not a new sibling bug.
-6. **Share wall** — Andrew: skip; wants share links gone long-term (notes via profile)
-**General:** Pixel student video = initials until refresh (stale 404 join → correct link; re-login unexpected)
+**In-flight subagents:**
+- icons + Pause copy (Composer)
+- bleed E4 residual (Sonnet worktree — ONE attempt; escalate if fails)
+- AUDIO-1 cancel→refresh residual (Sonnet worktree)
+- PDF blob-token (Composer)
+- student video/join cookie (explore → fix)
 
-**In-flight subagents:** *(none)*
-
-**Next action(s) — pre-master blockers from this smoke:**
-1. AUDIO-1 residual (cancel→refresh→Brio silent)
-2. **Stroke bleed RECURRING** — E4 failed hardware (blank→PDF import); durable fix + matching Playwright (escalate if attempt #2 fails)
-3. PDF blob-token (separate, new)
-4. Admin tab icons visibility
-5. Student video initials / join cookie path
-6. Then full `test:wb-sync` + `test:regression` + `next build` + Pause copy polish
-
-**Still open (non-blocking):** PERF-1; AUDIO-3; Pause copy; share-link retirement (product).
+**Next action(s):** land above → merge train → full master gates.
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
