@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
+import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
 
 export type SaveTutorConsentInput = {
   adminUserId: string;
@@ -22,10 +23,6 @@ export type SaveParentConsentInput = {
   tutors: SaveTutorConsentInput[];
   restrictions: SaveConsentRestrictionInput;
 };
-
-function isPrismaUniqueViolation(err: unknown): boolean {
-  return (err as { code?: string })?.code === "P2002";
-}
 
 /**
  * B2 Step 6 — parent updates per-tutor ConsentRecord versions + ConsentRestriction.

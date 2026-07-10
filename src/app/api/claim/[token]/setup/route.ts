@@ -21,10 +21,7 @@ import {
   validateLearnerUsername,
 } from "@/lib/learner-credential-validation";
 import { ensureFamilyId, formatLearnerLoginHandle } from "@/lib/family-id";
-
-function isPrismaUniqueViolation(err: unknown): boolean {
-  return (err as { code?: string })?.code === "P2002";
-}
+import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
 
 export async function POST(
   req: NextRequest,

@@ -15,6 +15,7 @@ import {
   tombstoneLearnerProfile,
   type DbTransactionClient,
 } from "@/lib/erasure/tombstone";
+import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
 
 const GRACE_DAYS = 7;
 
@@ -35,10 +36,6 @@ export class ErasureRequestError extends Error {
     this.name = "ErasureRequestError";
     this.code = code;
   }
-}
-
-function isP2002(err: unknown): boolean {
-  return (err as { code?: string })?.code === "P2002";
 }
 
 function scopeKindAndId(scope: ErasureScopeInput): {
@@ -213,7 +210,7 @@ export async function requestErasureByAdmin(
 
     return { jobId };
   } catch (err) {
-    if (isP2002(err)) {
+    if (isPrismaUniqueViolation(err)) {
       const raced = await findActiveErasureJob(scopeKind, scopeId);
       if (raced) {
         return { jobId: raced.id };
