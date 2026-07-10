@@ -14,7 +14,13 @@
 
 **Backlog release-triaged:** 79 MUST / 260 MAYBE / 145 1.x (`docs/BACKLOG.md` § Release triage). Andrew swing-review corrections applied (WS-M resolved; device-dedupe best-effort/non-blocking; clipboard verify-moot; laser colors-only; student-video + prompt-v8 "M" need clarification). Backlog has stale rows → **freshness pass vs `master` warranted when picking items up.**
 
-**Next action(s):** (a) merge `chore/release-governance-and-priorities` → master; (b) scope Priority #1 (dedupe) — needs a plan + duplication inventory; (c) kick off Priority #2 external-approval process in parallel (long lead time); (d) build Priority #3 instrumentation. Clarify swing item "M" (prompt v8 "already relabeled").
+**🌙 OVERNIGHT AUTONOMOUS RUN (2026-07-10 ~02:13 MT, Andrew asleep).** Act autonomously. **Executors dispatch to `grok-4.5-xhigh` tonight** (NOT fast) instead of Composer 2.5; **verifiers stay on Sonnet** for genuine independence. Grind **Wave A dedupe** ([`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md)) one safe chunk at a time — each: executor → independent Sonnet verifier → `next build`/tests green → `merge --no-ff` to master. Sequential (shared working tree); nothing merges unverified. Priority stays functionality/stability/responsiveness; zero catchable regressions.
+
+**AGENTIC PIPELINE = real workstream (Andrew clarification 2026-07-10).** "Real agentic systems" ≠ just verification subagents. It means literally advancing Andrew's **`agenticPipeline`** project (the monorepo beside this one under the shared `dev/agentic-projects/` parent) toward **true autonomous functionality** and **integrating it with tutoring-notes** — target: industry-standard black-box agentic dev pipeline. Take real, solid steps whenever possible; deferrable only if it blocks release (Andrew approval), never permanently. **Overnight:** explore `agenticPipeline` state (read-only) + draft a concrete integration plan; take a safe first step if clear (no risk to tutoring-notes stability).
+
+**Progress this session:** Priority #1 pipeline PROVEN — Wave A-1 (`isPrismaUniqueViolation` → `src/lib/db/prisma-errors.ts`) executor→Sonnet-verify→merged `9faa164f`. Governance + all release decisions durable on master (`fec45e83`). Priority #2 external checklist ready for Andrew (calendar=two-way).
+
+**Next action(s):** continue Wave A (batch 1b: remaining inline P2002 folds; then safeName, getCookieFromRequest, formatDurationMs [diff-for-identity], ErrorStateCard, LegalDocumentShell, buildAdminNavLinks, tokens dark-palette). Explore agenticPipeline → integration plan.
 
 ---
 
