@@ -46,6 +46,17 @@ test.describe("Admin student detail — mobile tabs", () => {
       expect(navMetrics.top).toBeGreaterThan(navMetrics.viewportHeight * 0.82);
 
       await expect(page.getByTestId("student-detail-tab-parent")).toHaveText(/Parent/i);
+
+      // Each bottom tab shows a visible icon (same slot as Parent Users icon).
+      for (const tabId of ["session", "share", "notes", "parent"] as const) {
+        const tab = page.getByTestId(`student-detail-tab-${tabId}`);
+        const icon = tab.locator("svg").first();
+        await expect(icon).toBeVisible();
+        const iconBox = await icon.boundingBox();
+        expect(iconBox?.width ?? 0).toBeGreaterThan(12);
+        expect(iconBox?.height ?? 0).toBeGreaterThan(12);
+      }
+
       await expect(page.getByTestId("student-detail-panel-session")).toBeVisible();
       await expect(page.getByTestId("student-detail-panel-notes")).toBeHidden();
 

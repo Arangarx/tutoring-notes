@@ -175,9 +175,7 @@ describe("WhiteboardReplayInFrame", () => {
     expect(screen.getByTestId("wb-replay-global-seek-thumb")).toBeInTheDocument();
     expect(screen.getByTestId("mynk-wb-chrome-replay")).toBeInTheDocument();
     expect(screen.getByTestId("wb-replay-tool-strip")).toBeInTheDocument();
-    expect(screen.getByTestId("wb-replay-hide")).toHaveTextContent(
-      "Pause and hide replay"
-    );
+    expect(screen.getByTestId("wb-replay-hide")).toHaveTextContent("Pause");
     await completeWebmDurationScanForReplayTest();
 
     // Replay records audio + whiteboard only — no live A/V cluster on review surface.

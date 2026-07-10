@@ -40,10 +40,10 @@ type StudentDetailShellProps = {
 };
 
 const defaultIcons = {
-  session: <LayoutGrid className="size-[18px]" aria-hidden />,
-  share: <Link2 className="size-[18px]" aria-hidden />,
-  notes: <FileText className="size-[18px]" aria-hidden />,
-  more: <MoreHorizontal className="size-[18px]" aria-hidden />,
+  session: <LayoutGrid className="size-5" aria-hidden />,
+  share: <Link2 className="size-5" aria-hidden />,
+  notes: <FileText className="size-5" aria-hidden />,
+  more: <MoreHorizontal className="size-5" aria-hidden />,
 };
 
 const DESKTOP_SECTION_QUERY = "(min-width: 768px)";
