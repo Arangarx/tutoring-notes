@@ -39,6 +39,7 @@
  */
 
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
+import { formatDurationMs as formatDuration } from "@/lib/time/format-duration-ms";
 import { setCaptureDeferActive } from "@/lib/deploy/capture-defer-registry";
 import {
   formatConsentActionError,
@@ -457,16 +458,6 @@ function formatTimerMinutesOnly(ms: number): string {
     return `${h}h ${m}m`;
   }
   return `${totalMin}m`;
-}
-
-function formatDuration(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
 }
 
 export function WhiteboardWorkspaceClient({

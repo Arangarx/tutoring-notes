@@ -75,6 +75,7 @@ import {
   globalMsToSegmentLocal,
 } from "@/lib/whiteboard/replay-audio-timeline";
 import { resolveEffectiveSegments } from "@/lib/whiteboard/replay-helpers";
+import { formatDurationMs } from "@/lib/time/format-duration-ms";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import {
   GraphEmbeddable,
@@ -1581,16 +1582,6 @@ function stableHashFileId(url: string): string {
   let h = 5381;
   for (let i = 0; i < url.length; i++) h = (h * 33 + url.charCodeAt(i)) | 0;
   return `f_${(h >>> 0).toString(36)}`;
-}
-
-function formatDurationMs(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
 }
 
 /** Re-export for callers that intentionally avoid parsing through the replay UI. */
