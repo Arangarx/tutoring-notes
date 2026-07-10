@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
-import { checkApiShareAccess } from "@/lib/share-access-scope";
-import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
-import { env } from "@/lib/env";
 import { isBlobHarnessActive } from "@/lib/blob-harness";
+import { env } from "@/lib/env";
+import {
+  assertShareProxyAccess,
+  gatePublicWbSessionBlob,
+  streamShareBlobWithRange,
+} from "@/lib/share/proxy-share-resource";
 
 /**
  * Share-token gated proxy for the WS-G canonical concat replay blob.
@@ -24,26 +26,13 @@ export async function GET(
   }
 
   const shareToken = new URL(req.url).searchParams.get("token");
-  if (!shareToken) {
-    return NextResponse.json({ error: "Missing token." }, { status: 401 });
-  }
 
-  const access = await checkApiShareAccess(
+  const access = await assertShareProxyAccess(
     req,
     shareToken,
     `/api/whiteboard/${sessionId}/public-concat-audio?token=${shareToken}`
   );
-  if (!access.allowed) {
-    return NextResponse.json(
-      { error: "Access denied." },
-      { status: access.status }
-    );
-  }
-
-  const erasureBlocked = await assertStudentNotErasedApi(access.studentId, {
-    salToken: shareToken,
-  });
-  if (erasureBlocked) return erasureBlocked;
+  if (!access.ok) return access.response;
 
   const session = await db.whiteboardSession.findUnique({
     where: { id: sessionId },
@@ -54,18 +43,18 @@ export async function GET(
     },
   });
 
-  if (!session || session.studentId !== access.studentId) {
-    return new NextResponse("Not found.", { status: 404 });
-  }
+  const gated = gatePublicWbSessionBlob(
+    session
+      ? {
+          studentId: session.studentId,
+          endedAt: session.endedAt,
+          blobUrl: session.concatBlobUrl,
+        }
+      : null,
+    access.studentId,
+    { requireEnded: true, plainTextErrors: true }
+  );
+  if (!gated.ok) return gated.response;
 
-  if (!session.endedAt) {
-    return new NextResponse("Not found.", { status: 404 });
-  }
-
-  const blobUrl = session.concatBlobUrl;
-  if (!blobUrl) {
-    return new NextResponse("Not found.", { status: 404 });
-  }
-
-  return streamBlobWithRangeSupport(req, blobUrl, "audio/webm");
+  return streamShareBlobWithRange(req, gated.blobUrl, "audio/webm");
 }

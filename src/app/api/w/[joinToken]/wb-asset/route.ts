@@ -1,8 +1,11 @@
-import { get } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { env } from "@/lib/env";
-import { isBlobUrlForSession } from "@/lib/whiteboard/blob-asset-in-scope";
+import {
+  isWbAssetUrlInSessionScope,
+  parseWbAssetUrlFromSearchParams,
+  streamPrivateWbAsset,
+} from "@/lib/whiteboard/proxy-blob-asset";
 
 /**
  * Same-origin read proxy for Vercel Blob **private** whiteboard-asset URLs.
@@ -22,19 +25,9 @@ export async function GET(
     return new NextResponse("Blob storage is not configured.", { status: 503 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const u = searchParams.get("u");
-  if (!u) {
-    return new NextResponse("Missing u query parameter.", { status: 400 });
-  }
-  let publicUrl: string;
-  try {
-    publicUrl = decodeURIComponent(u);
-    // eslint-disable-next-line no-new -- validate URL
-    new URL(publicUrl);
-  } catch {
-    return new NextResponse("Invalid u parameter.", { status: 400 });
-  }
+  const parsed = parseWbAssetUrlFromSearchParams(new URL(request.url).searchParams);
+  if (!parsed.ok) return parsed.response;
+  const { publicUrl } = parsed;
 
   const tokenRow = await withDbRetry(
     () =>
@@ -63,7 +56,7 @@ export async function GET(
 
   const session = tokenRow.whiteboardSession;
   if (
-    !isBlobUrlForSession(publicUrl, {
+    !isWbAssetUrlInSessionScope(publicUrl, {
       studentId: session.studentId,
       whiteboardSessionId: session.id,
     })
@@ -71,17 +64,5 @@ export async function GET(
     return new NextResponse("Not found.", { status: 404 });
   }
 
-  const result = await get(publicUrl, { access: "private" });
-  if (!result || result.statusCode !== 200 || !result.stream) {
-    return new NextResponse("Not found.", { status: 404 });
-  }
-
-  const ct = result.blob.contentType ?? "application/octet-stream";
-  return new NextResponse(result.stream, {
-    status: 200,
-    headers: {
-      "Content-Type": ct,
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+  return streamPrivateWbAsset(publicUrl, { cacheMaxAge: 3600 });
 }

@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
 import { logBlobEgressEvent } from "@/lib/observability/cost-events";
-import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
-import { checkApiShareAccess } from "@/lib/share-access-scope";
+import { assertShareProxyAccess, streamShareBlobWithRange } from "@/lib/share/proxy-share-resource";
 
 /**
  * Proxy private Vercel Blob audio to browsers on the share page.
@@ -37,20 +35,12 @@ export async function GET(
     return NextResponse.json({ error: "Missing token" }, { status: 401 });
   }
 
-  // Auth wall check: when NOTES_AUTH_WALL=true, session must match token ownership.
-  const access = await checkApiShareAccess(
+  const access = await assertShareProxyAccess(
     req,
     shareToken,
     `/api/audio/${recordingId}?token=${shareToken}`
   );
-  if (!access.allowed) {
-    return NextResponse.json({ error: "Access denied." }, { status: access.status });
-  }
-
-  const erasureBlocked = await assertStudentNotErasedApi(access.studentId, {
-    salToken: shareToken,
-  });
-  if (erasureBlocked) return erasureBlocked;
+  if (!access.ok) return access.response;
 
   const recording = await db.sessionRecording.findFirst({
     where: {
@@ -84,7 +74,7 @@ export async function GET(
   }
 
   const { blobUrl, mimeType } = recording;
-  const response = await streamBlobWithRangeSupport(
+  const response = await streamShareBlobWithRange(
     req,
     blobUrl,
     mimeType || "audio/mpeg"
