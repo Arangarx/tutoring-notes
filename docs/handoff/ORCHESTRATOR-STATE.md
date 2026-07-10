@@ -20,7 +20,11 @@
 
 **Progress this session:** Priority #1 pipeline PROVEN — Wave A-1 (`isPrismaUniqueViolation` → `src/lib/db/prisma-errors.ts`) executor→Sonnet-verify→merged `9faa164f`. Governance + all release decisions durable on master (`fec45e83`). Priority #2 external checklist ready for Andrew (calendar=two-way).
 
-**Next action(s):** continue Wave A (batch 1b: remaining inline P2002 folds; then safeName, getCookieFromRequest, formatDurationMs [diff-for-identity], ErrorStateCard, LegalDocumentShell, buildAdminNavLinks, tokens dark-palette). Explore agenticPipeline → integration plan.
+**⚙️ Worktree isolation (overnight, learned the hard way):** orchestrator git ops (commit/merge/push) run in the **`tutoring-notes-merge-audio` worktree on `master`**; **executor subagents run in the main checkout** (`tutoring-notes`) and are **strictly SEQUENTIAL** (shared working tree). Do NOT run orchestrator git ops in the main checkout while an executor is active — that collides (a doc commit briefly landed on an executor branch; recovered by cherry-pick). When an executor branch gets polluted, cherry-pick just its dedupe commit to master rather than merging the whole branch.
+
+**Progress:** agenticPipeline integration plan on master (`0622a25a`, [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md)) — awaiting Andrew review before pipeline code changes. Wave A-1b (2 non-fragile inline P2002 folds) executor done on `feat/dedupe-wave-a-1b-p2002-inline` @ `90d2b1c9` — pending Sonnet verify → cherry-pick to master.
+
+**Next action(s):** verify + land Wave A-1b; continue Wave A (safeName → getCookieFromRequest → formatDurationMs [diff-for-identity] → ErrorStateCard → LegalDocumentShell → buildAdminNavLinks → tokens dark-palette), sequential, each executor(grok)→verifier(Sonnet)→cherry-pick/merge to master. agenticPipeline Phase 1 awaits Andrew.
 
 ---
 
