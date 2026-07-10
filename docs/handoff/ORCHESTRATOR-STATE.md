@@ -32,14 +32,18 @@
 7. `buildAdminNavLinks` → `src/lib/admin-nav-links.ts` (drift preserved per-consumer) (`89f8dfd9`)
 8. `LegalDocumentShell` → privacy/terms shell (legal bodies byte-untouched) (`c5f61fa9`)
 
-**✅ SAFE Wave A tier COMPLETE (8/8, zero regressions). Autonomous grind PAUSED at this clean milestone for Andrew review.** Remaining dedupe is riskier and wants Andrew's awareness even with the gated pipeline:
-- **DEFERRED — visual gate:** `tokens.css` dark-palette dedup (`@media` vs `[data-theme=dark]` ~95 dup lines) — CSS-only, no unit teeth; needs Playwright/visual baseline.
-- **Wave B (Andrew-aware):** `SectionCard` realm-param (Andrew pre-approved parameterize; UI multi-consumer — testable), `consent-write` service (SECURITY/consent-sensitive), blob-proxy/share-proxy helpers (SECURITY-sensitive), kill parallel `/api/upload/audio` route. Per [`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md).
+**✅ SAFE Wave A tier COMPLETE (8/8, zero regressions).** Andrew eyeball still due — [`docs/handoff/DEDUPE-EYEBALL-LIST.md`](DEDUPE-EYEBALL-LIST.md).
+
+**Andrew greenlights (2026-07-10 session):** Wave B **go**; `tokens.css` dark-palette **approach defined** ([`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md) § tokens); Google calendar verification = **hybrid** (Console prep now + MVP demo then submit); **agenticPipeline Phase 1** greenlit (PM north-star: true autonomous black-box pipeline).
+
+**Remaining dedupe queue:**
+- **tokens.css** — approach-defined; execute after Wave B or parallel small branch when Andrew says go.
+- **Wave B (in flight):** `SectionCard` realm-param first, then `PageShell`/`AppHeader`, `SubNav`, `consent-write`, blob/share proxy, kill `/api/upload/audio`. Per [`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md).
 - **Wave C/D:** whiteboard chrome monolith + A/V primitives (fragile) — Opus-grade.
 
-**agenticPipeline:** integration plan on master ([`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md)) — Phase 1 (change-run + fail-closed verify) awaits Andrew review before pipeline code changes.
+**agenticPipeline:** Phase 1 (change-run + fail-closed verify) **greenlit** — can start in `agenticPipeline` repo. Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** Fresh chat — `@` [`docs/handoff/release-track-2026-07-10-session-bootstrapper.md`](release-track-2026-07-10-session-bootstrapper.md) + this file; **talk through Open Andrew-confirms before any greenlight.** Do not start Wave B / pipeline code / Google-dependent features until decided.
+**Next action(s):** Wave B grind — **SectionCard first** (executor → independent verifier → merge); Andrew runs Google Console checklist (Andrew-owned); agenticPipeline Phase 1 can start in parallel in `agenticPipeline`.
 
 ---
 
@@ -47,18 +51,19 @@
 
 **🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).
 
-**Tip:** `master` @ `0c3e267d` (Wave A complete; LegalDocumentShell landed `c5f61fa9`). Main checkout on `master`, clean. Merge-audio worktree on `v1-redesign` (isolation).
+**Tip:** `master` @ [`1ec83f8d`](https://github.com/Arangarx/tutoring-notes/commit/1ec83f8de7bb0dbb5b8e0e68311789cc8d175b0b) (session-swap bootstrapper; Wave A complete). Main checkout on `master`, clean.
 
-**Last action:** Overnight Wave A safe tier complete (8/8 verified→merged). Session swap — bootstrapper written for Andrew to continue in a fresh chat.
+**Last action:** Andrew greenlights recorded — Wave B go; tokens approach defined; Google hybrid sequencing answered; pipeline Phase 1 greenlit with PM north-star. Docs: eyeball list + state HEAD patch.
 
-**In-flight:** none. Grind paused for Andrew greenlights.
+**In-flight:** Wave B starting (`SectionCard` first).
 
-**Open Andrew-confirms (talk through in next session — see bootstrapper):**
-1. **Wave B greenlight** — SectionCard (pre-approved param), consent-write, blob-proxy, kill `/api/upload/audio` (security-aware).
-2. **`tokens.css` dark-palette** — visual gate approach.
-3. **Priority #2 Google Console** — confirm Published/`gmail.send`; `usemynk.com` Search Console; start two-way calendar verification (4–6 wk).
-4. **agenticPipeline Phase 1** — greenlight [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md) before any pipeline code.
-5. **Priority #3 instrumentation** — first concrete slice under COPPA-first-party policy.
+**Open Andrew-confirms:**
+1. **Priority #2 Google Console** — Andrew-owned: confirm Published/`gmail.send`; `usemynk.com` Search Console; redirect URIs; hybrid calendar verification submit **after** MVP demo (Console prep now).
+2. **Priority #3 instrumentation** — first concrete slice under COPPA-first-party policy.
+
+**Cleared this session:** Wave B greenlight; `tokens.css` approach; agenticPipeline Phase 1.
+
+**Durable decisions (2026-07-10):** Calendar verification = hybrid (Console prep now + MVP demo then submit). Apple Calendar = CalDAV/defer (no Google-style review). Social login shortlist: Sign in with Apple optional (Dev enrollment only); skip Facebook; Microsoft optional. Eyeball tracker: [`docs/handoff/DEDUPE-EYEBALL-LIST.md`](DEDUPE-EYEBALL-LIST.md).
 
 **Waive record:** BACKLOG **MASTER-CUT-2026-07-09**. Green at cut: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE.
 

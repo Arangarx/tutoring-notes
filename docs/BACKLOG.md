@@ -22,6 +22,8 @@ Audit 2026-07-10. Long external lead times → kick off before the dependent cod
 - **Calendar scope model — DECIDED (Andrew 2026-07-10): TWO-WAY sync.** Request `calendar.events` + `calendar.readonly` (+ change-watch/webhook infra) in the bundled verification round. Bigger build + review, but full two-way is the target.
 - **Submit ONE bundled verification round** for calendar scopes (+ any net-new) — screencast + justification; enable Google Calendar API in the project.
 
+**Sequencing (Andrew 2026-07-10):** Calendar verification = **hybrid** — Console prep **NOW** + MVP demo build, **then** submit bundled verification. **Apple Calendar** = CalDAV / no Google-style app review — **defer**. **Sign in with Apple** = optional (Apple Developer enrollment only if pursued). **Skip Facebook.** **Microsoft** = optional.
+
 **Our code (parallel prep; merge after scopes approved):** `/login` "Sign in with Google" button + Playwright (backend already wired, UI-only); Calendar OAuth routes + DB models + sync (replaces mock); scheduling backend (Priority #4, depends on calendar); umbrella privacy additive copy for calendar data before reviewers see new scopes.
 
 **State:** Gmail send = shipped + likely verified. Google Sign-In = backend-only, needs login UI + redirect URI. Calendar = mock only, **long pole**. Note: Priority #3 instrumentation (PostHog) is gated on shipping the umbrella analytics legal draft ([`docs/legal-drafts/umbrella-pending-2026-05-18.md`](legal-drafts/umbrella-pending-2026-05-18.md)) — or go first-party to avoid the DPA gate.

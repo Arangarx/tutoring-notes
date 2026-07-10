@@ -27,8 +27,21 @@ Pure functions and low-risk shared helpers; unit-testable; near-zero regression 
 - `buildAdminNavLinks()` → `src/lib/admin-nav-links.ts` (dupes: `AdminNav`, `AdminSidebarNav` — already drifted).
 - Retire `SubmitButton` wrapper → `Button` + `useFormStatus` (8 call sites).
 - `StatTile` / `QuickLinkCard` extraction (`admin/page.tsx`, `admin/cost/page.tsx` local copy).
-- `tokens.css` dark palette: merge duplicated `@media` vs `[data-theme=dark]` blocks (~95 lines).
+- ~~`tokens.css` dark palette~~ → **approach defined, ready to execute** (see [tokens.css dark-palette approach](#tokenscss-dark-palette-approach-andrew-2026-07-10) below). Execute after Wave B or parallel small branch when Andrew says go.
 - `NativeSelect` styling: single token-based block; delete hex copies in `whiteboard-chrome.css:3196` + `waiting-room-overlay.css`.
+
+### tokens.css dark-palette approach (Andrew 2026-07-10)
+
+**Facts:** Light is already single-source (`:root, [data-theme=light]`). Dark is duplicated ~95 lines ×2 (`@media prefers-color-scheme: dark` vs `[data-theme=dark]`) in `tokens.css` + same pattern in `shadcn-theme.css`. System mode currently **removes** `data-theme` so CSS `@media` is load-bearing (see `src/lib/theme.ts`).
+
+**Approved approach:**
+
+1. Change theme bootstrap + `ThemeProvider` so preference `"system"` still stores as system, but **always writes resolved** `data-theme="light"|"dark"` on `<html>` (update on `matchMedia` change). Aligns with Tailwind `@custom-variant dark` which already keys only on `[data-theme=dark]`.
+2. Delete the duplicated `@media` dark palette blocks in `tokens.css` and `shadcn-theme.css` — keep only `[data-theme=dark]` (and light single block).
+3. **Teeth:** Playwright visual baselines (or computed CSS-variable asserts) on 2–3 static surfaces (e.g. login, admin home, privacy) × light + explicit dark + system-with-emulated-prefers-dark. Red-before/green-after. Also update `theme-plumbing.test.ts` expectations if bootstrap script changes.
+4. **Andrew eyeball:** same surfaces light/dark/system after merge — [`docs/handoff/DEDUPE-EYEBALL-LIST.md`](handoff/DEDUPE-EYEBALL-LIST.md).
+
+**Status:** approach-defined; ready to execute after Wave B or as a parallel small branch when Andrew says go.
 
 ## Wave B — admin/account composition (medium risk)
 
