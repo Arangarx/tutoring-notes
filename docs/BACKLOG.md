@@ -11,6 +11,21 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
 3. **Comprehensive instrumentation** — first-party analytics; see EXACTLY how the site is used (PostHog / usage instrumentation — archived bootstrapper `docs/archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md`).
 4. **Finish scheduling** (depends on #2 calendar).
 
+### Priority #2 — external Google approvals (start NOW; ~4–6 week lead)
+
+Audit 2026-07-10. Long external lead times → kick off before the dependent code is finished.
+
+**Andrew (Google Cloud Console — no code):**
+- **Confirm consent-screen status** at [console](https://console.cloud.google.com/apis/credentials/consent): Published/In-production? `gmail.send` verified? (docs claim verified 2026-05-30 — confirm still true; INDEX was stale.)
+- **`usemynk.com`** — verify in Google Search Console + re-submit branding if pending ([`LEGAL-SYNC.md`](LEGAL-SYNC.md) re-verification to-do).
+- **Redirect URIs** for `usemynk.com` (+ legacy Vercel): `/api/auth/callback/google` (sign-in), `/api/auth/gmail/callback` (existing).
+- **Decide calendar scope model** (BLOCKS the submission): **outbound-only** (`calendar.events`, sensitive) vs **two-way sync** (adds `calendar.readonly` + watch infra). ← *decision needed from you.*
+- **Submit ONE bundled verification round** for calendar scopes (+ any net-new) — screencast + justification; enable Google Calendar API in the project.
+
+**Our code (parallel prep; merge after scopes approved):** `/login` "Sign in with Google" button + Playwright (backend already wired, UI-only); Calendar OAuth routes + DB models + sync (replaces mock); scheduling backend (Priority #4, depends on calendar); umbrella privacy additive copy for calendar data before reviewers see new scopes.
+
+**State:** Gmail send = shipped + likely verified. Google Sign-In = backend-only, needs login UI + redirect URI. Calendar = mock only, **long pole**. Note: Priority #3 instrumentation (PostHog) is gated on shipping the umbrella analytics legal draft ([`docs/legal-drafts/umbrella-pending-2026-05-18.md`](legal-drafts/umbrella-pending-2026-05-18.md)) — or go first-party to avoid the DPA gate.
+
 ### Non-negotiable standards (no exceptions without Andrew's explicit documented waiver — agents may NEVER self-authorize)
 
 1. **ZERO unjustified duplication — no bespoke bullshit.** [`.cursor/rules/composition-no-duplication.mdc`](../.cursor/rules/composition-no-duplication.mdc).
