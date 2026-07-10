@@ -16,6 +16,7 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { hmacToken, generateRawToken, LEARNER_SESSION_TTL_MS } from "@/lib/crypto/session-tokens";
+import { getCookieFromRequest } from "@/lib/http/cookies";
 
 export const LEARNER_SESSION_COOKIE = "mynk_learner_session";
 export { LEARNER_SESSION_TTL_MS };
@@ -260,20 +261,4 @@ export async function revokeAllLearnerDeviceSessions(
     data: { revokedAt: new Date() },
   });
   return result.count;
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-function getCookieFromRequest(req: NextRequest | Request, name: string): string | null {
-  if ("cookies" in req && typeof (req as NextRequest).cookies?.get === "function") {
-    return (req as NextRequest).cookies.get(name)?.value ?? null;
-  }
-  const cookieHeader = req.headers.get("cookie") ?? "";
-  for (const part of cookieHeader.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return v.join("=");
-  }
-  return null;
 }
