@@ -241,3 +241,202 @@ export async function getUserMediaAudioForEnumerateEntry(
     ? lastErr
     : new DOMException(String(lastErr ?? "constraints failed"));
 }
+
+// ── Silent-recovery helpers ───────────────────────────────────────────────────
+
+type SilentRecoveryTestWindow = {
+  __VAD_WARM_RETRY_DELAY_MS__?: number;
+  __VAD_SILENT_RECOVERY_BACKOFF_MS__?: number[];
+};
+
+/**
+ * Production backoff schedule (ms) for the multi-step silent-track recovery.
+ * Covers the Brio cancel→refresh class where the OS audio pipeline re-inits
+ * and may need up to ~3 s total to produce real audio frames.
+ */
+export const DEFAULT_SILENT_RECOVERY_BACKOFF_MS = [500, 1000, 2000] as const;
+
+export type RecoverSilentMicStreamResult =
+  | {
+      recovered: true;
+      stream: MediaStream;
+      attemptIndex: number;
+      elapsedMs: number;
+      slotIndex: number | "default";
+    }
+  | {
+      recovered: false;
+      stream: MediaStream;
+      attemptIndex: number;
+      elapsedMs: number;
+    };
+
+/**
+ * Immediate (no-delay) slot walk: try every enumerate entry looking for a live
+ * (non-silent) mic stream.  Also tries `{ audio: true }` when the list is empty.
+ *
+ * On success: disposes `currentStream` and returns the live stream.
+ * On failure: leaves `currentStream` untouched and returns `{ recovered: false }`.
+ */
+export async function tryRecoverSilentMicViaSlotWalk(opts: {
+  currentStream: MediaStream;
+  enumeratedInputs: MediaDeviceInfo[];
+  getUM: (c: MediaStreamConstraints) => Promise<MediaStream>;
+  logPrefix?: string;
+}): Promise<{ recovered: boolean; stream: MediaStream; slotIndex?: number | "default" }> {
+  const { currentStream, enumeratedInputs, getUM, logPrefix } = opts;
+  const prefix = logPrefix ?? "[enumerate-device-acquire]";
+
+  for (let i = 0; i < enumeratedInputs.length; i++) {
+    const candidate = enumeratedInputs[i];
+    if (!candidate) continue;
+    try {
+      const { stream: retryStream } = await getUserMediaAudioForEnumerateEntry(
+        getUM,
+        candidate,
+        enumeratedInputs,
+        null,
+        { userPickedSlot: false }
+      );
+      const retryIsSilent = await isMicStreamSilent(retryStream);
+      if (!retryIsSilent) {
+        disposeStreamTracks(currentStream);
+        console.log(`${prefix} event=silent_track_recovered slot=${i}`);
+        return { recovered: true, stream: retryStream, slotIndex: i };
+      }
+      disposeStreamTracks(retryStream);
+    } catch {
+      /* try next slot */
+    }
+  }
+
+  if (enumeratedInputs.length === 0) {
+    try {
+      const defaultStream = await getUM({ audio: true, video: false });
+      const defaultIsSilent = await isMicStreamSilent(defaultStream);
+      if (!defaultIsSilent) {
+        disposeStreamTracks(currentStream);
+        console.log(`${prefix} event=silent_track_recovered slot=default`);
+        return { recovered: true, stream: defaultStream, slotIndex: "default" };
+      }
+      disposeStreamTracks(defaultStream);
+    } catch {
+      /* fall through */
+    }
+  }
+
+  return { recovered: false, stream: currentStream };
+}
+
+/**
+ * After an immediate slot walk fails (or for swap paths), wait backoff delays
+ * and re-walk ALL enumerate slots looking for a live (non-silent) mic stream.
+ *
+ * Test seams (non-production `window`):
+ * - `__VAD_SILENT_RECOVERY_BACKOFF_MS__` (number[]) — override full schedule.
+ * - `__VAD_WARM_RETRY_DELAY_MS__` (number) — use `[value]` as the schedule
+ *   (one attempt; 0 = skip wait). Backward-compatible with existing Test E.
+ * Production: uses `DEFAULT_SILENT_RECOVERY_BACKOFF_MS` ([500, 1000, 2000]).
+ */
+export async function recoverSilentMicStreamWithBackoff(opts: {
+  currentStream: MediaStream;
+  enumeratedInputs: MediaDeviceInfo[];
+  getUM: (c: MediaStreamConstraints) => Promise<MediaStream>;
+  logPrefix?: string;
+}): Promise<RecoverSilentMicStreamResult> {
+  const { currentStream, enumeratedInputs, getUM, logPrefix } = opts;
+  const prefix = logPrefix ?? "[enumerate-device-acquire]";
+  const startMs = Date.now();
+
+  // Resolve backoff schedule from test seams or production default.
+  let schedule: readonly number[];
+  if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+    const w = window as unknown as SilentRecoveryTestWindow;
+    if (Array.isArray(w.__VAD_SILENT_RECOVERY_BACKOFF_MS__)) {
+      schedule = w.__VAD_SILENT_RECOVERY_BACKOFF_MS__;
+    } else if (typeof w.__VAD_WARM_RETRY_DELAY_MS__ === "number") {
+      schedule = [w.__VAD_WARM_RETRY_DELAY_MS__];
+    } else {
+      schedule = DEFAULT_SILENT_RECOVERY_BACKOFF_MS;
+    }
+  } else {
+    schedule = DEFAULT_SILENT_RECOVERY_BACKOFF_MS;
+  }
+
+  const activeStream = currentStream;
+
+  for (let attemptIdx = 0; attemptIdx < schedule.length; attemptIdx++) {
+    const delay = schedule[attemptIdx]!;
+    if (delay > 0) {
+      await new Promise<void>((r) => setTimeout(r, delay));
+    }
+
+    for (let i = 0; i < enumeratedInputs.length; i++) {
+      const candidate = enumeratedInputs[i];
+      if (!candidate) continue;
+      try {
+        const { stream: retryStream } = await getUserMediaAudioForEnumerateEntry(
+          getUM,
+          candidate,
+          enumeratedInputs,
+          null,
+          { userPickedSlot: false }
+        );
+        const retryIsSilent = await isMicStreamSilent(retryStream);
+        if (!retryIsSilent) {
+          disposeStreamTracks(activeStream);
+          const elapsedMs = Date.now() - startMs;
+          console.log(
+            `${prefix} event=silent_track_recovered_after_delay attempt=${attemptIdx} elapsed_ms=${elapsedMs} slot=${i}`
+          );
+          return {
+            recovered: true,
+            stream: retryStream,
+            attemptIndex: attemptIdx,
+            elapsedMs,
+            slotIndex: i,
+          };
+        }
+        disposeStreamTracks(retryStream);
+      } catch {
+        /* try next slot */
+      }
+    }
+
+    // Empty enumerate: try the default device once per attempt.
+    if (enumeratedInputs.length === 0) {
+      try {
+        const defaultStream = await getUM({ audio: true, video: false });
+        const defaultIsSilent = await isMicStreamSilent(defaultStream);
+        if (!defaultIsSilent) {
+          disposeStreamTracks(activeStream);
+          const elapsedMs = Date.now() - startMs;
+          console.log(
+            `${prefix} event=silent_track_recovered_after_delay attempt=${attemptIdx} elapsed_ms=${elapsedMs} slot=default`
+          );
+          return {
+            recovered: true,
+            stream: defaultStream,
+            attemptIndex: attemptIdx,
+            elapsedMs,
+            slotIndex: "default",
+          };
+        }
+        disposeStreamTracks(defaultStream);
+      } catch {
+        /* fall through */
+      }
+    }
+  }
+
+  const elapsedMs = Date.now() - startMs;
+  console.warn(
+    `${prefix} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length} attempts=${schedule.length} elapsed_ms=${elapsedMs}`
+  );
+  return {
+    recovered: false,
+    stream: activeStream,
+    attemptIndex: schedule.length,
+    elapsedMs,
+  };
+}

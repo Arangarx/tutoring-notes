@@ -252,6 +252,7 @@ describe("useAudioRecorder first-acquire (SMOKE-AUDIO-1)", () => {
   afterEach(() => {
     delete (window as SilentTrackTestWindow).__VAD_TEST_SILENT_TRACK__;
     delete (window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }).__VAD_WARM_RETRY_DELAY_MS__;
+    delete (window as unknown as { __VAD_SILENT_RECOVERY_BACKOFF_MS__?: number[] }).__VAD_SILENT_RECOVERY_BACKOFF_MS__;
   });
 
   // ── B: Option A — enumerate-based re-acquire ─────────────────────────────
@@ -427,6 +428,170 @@ describe("useAudioRecorder first-acquire (SMOKE-AUDIO-1)", () => {
     const calledWithStream = mockCreateMicAudioGraph.mock.calls[0]?.[0] as MediaStream;
     expect(calledWithStream).toBe(recoveredStream);
     expect(calledWithStream).not.toBe(silentStream);
+  });
+
+  // ── F: Delayed-retry recovery on 2nd backoff attempt ─────────────────────
+
+  it("F: recovers with 2nd backoff attempt when 1st backoff slot check is also silent", async () => {
+    // Tests the multi-step backoff: schedule [0, 0] means two attempts with no
+    // wait.  The oracle stays silent through the immediate walk AND the 1st
+    // backoff attempt, and becomes live only on the 2nd backoff's slot check.
+    //
+    // GUM call sequence (1 enumerate entry):
+    //   Call 1 : initial bare-exact GUM           → silentStream
+    //   Call 2 : Option A enumerate GUM           → silentStream
+    //   Call 3 : immediate slot walk slot 0       → silentStream
+    //   Call 4 : backoff attempt 0 slot 0         → silentStream
+    //   Call 5+: backoff attempt 1 slot 0         → recoveredStream
+    //
+    // Oracle logical call sequence:
+    //   Call 1: initial silent detect             → silent (true)
+    //   Call 2: immediate slot walk slot 0        → silent (true)
+    //   Call 3: backoff attempt 0 slot 0          → silent (true)
+    //   Call 4: backoff attempt 1 slot 0          → live   (false)  ← fix
+    const silentStream    = makeFakeStream("brio-dev-abc123", STORED_GROUP_ID);
+    const recoveredStream = makeFakeStream("brio-dev-recovered-f", STORED_GROUP_ID);
+
+    let gumCallCount = 0;
+    mockGetUM.mockImplementation(async () => {
+      gumCallCount++;
+      return gumCallCount < 5 ? silentStream : recoveredStream;
+    });
+    mockEnumerate.mockResolvedValue(ENUMERATE_LIST); // 1 entry
+
+    // Two zero-delay backoff steps.
+    (window as unknown as { __VAD_SILENT_RECOVERY_BACKOFF_MS__?: number[] }).__VAD_SILENT_RECOVERY_BACKOFF_MS__ = [0, 0];
+
+    // Pair-tracker oracle: isMicStreamSilent reads __VAD_TEST_SILENT_TRACK__
+    // TWICE per logical call (once for typeof, once to return the value).
+    // logical calls 1–3 → silent; call 4 → live.
+    let logicalOracleIdx = 0;
+    let _lastOracleValue = true;
+    let _pairIsFirst = true;
+    Object.defineProperty(window, "__VAD_TEST_SILENT_TRACK__", {
+      configurable: true,
+      get() {
+        if (_pairIsFirst) {
+          logicalOracleIdx++;
+          _lastOracleValue = logicalOracleIdx <= 3;
+          _pairIsFirst = false;
+        } else {
+          _pairIsFirst = true;
+        }
+        return _lastOracleValue;
+      },
+    });
+
+    const { useAudioRecorder } = await import("@/hooks/useAudioRecorder");
+
+    await act(async () => {
+      renderHook(() =>
+        useAudioRecorder({
+          studentId: "student-1",
+          onRecorded: jest.fn(),
+        })
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(mockCreateMicAudioGraph).toHaveBeenCalledTimes(1);
+    const calledWithStream = mockCreateMicAudioGraph.mock.calls[0]?.[0] as MediaStream;
+    expect(calledWithStream).toBe(recoveredStream);
+    expect(calledWithStream).not.toBe(silentStream);
+  });
+
+  // ── G: Swap path — swapMicDeviceBySlot backoff recovery ──────────────────
+
+  it("G: swapMicDeviceBySlot recovers from silent GUM result via backoff recovery", async () => {
+    // Initial acquire: no stored device → single GUM, non-silent.
+    // After acquire, call swapMicDeviceBySlot(0) whose GUM returns a silent
+    // stream; backoff (1 attempt, 0 delay) re-walks and finds a live stream.
+    // Assert graph.swapLocalMicSource is called with the recovered stream.
+    //
+    // GUM call sequence:
+    //   Call 1 : initial acquire (no stored device)     → liveStream
+    //   Call 2 : swapMicDeviceBySlot slot 0             → silentStream
+    //   Call 3+: backoff attempt 0 slot 0               → recoveredStream
+    //
+    // Oracle logical call sequence:
+    //   Call 1: initial acquire silent check            → live   (false)
+    //   Call 2: swap silent detection                   → silent (true)
+    //   Call 3: backoff slot 0 check                   → live   (false)
+    _storedDeviceId = "";
+    _storedGroupId = "";
+
+    const liveStream      = makeFakeStream("default-dev", "default-grp");
+    const silentStream    = makeFakeStream("brio-dev-abc123", STORED_GROUP_ID);
+    const recoveredStream = makeFakeStream("brio-dev-recovered-g", STORED_GROUP_ID);
+
+    // Capture swapLocalMicSource so we can assert which stream it receives.
+    const mockSwapLocalMicSource = jest.fn(() => true);
+    mockCreateMicAudioGraph.mockResolvedValue({
+      publishStream: mockPublishStream,
+      recordingStream: makeFakeStream("rec-out", "rec-grp"),
+      dispose: jest.fn(),
+      getLevel: jest.fn(() => 0),
+      setGain: jest.fn(),
+      setTutorRecordingMute: jest.fn(),
+      addRemoteAudio: jest.fn(),
+      setRemoteGain: jest.fn(),
+      swapLocalMicSource: mockSwapLocalMicSource,
+    });
+
+    let gumCallCount = 0;
+    mockGetUM.mockImplementation(async () => {
+      gumCallCount++;
+      if (gumCallCount === 1) return liveStream;
+      if (gumCallCount === 2) return silentStream;
+      return recoveredStream;
+    });
+    mockEnumerate.mockResolvedValue(ENUMERATE_LIST); // 1 entry — used by swap backoff
+
+    // Pair-tracker oracle: logical calls 1 and 3 → live; call 2 → silent.
+    let logicalOracleIdx = 0;
+    let _lastOracleValue = false;
+    let _pairIsFirst = true;
+    Object.defineProperty(window, "__VAD_TEST_SILENT_TRACK__", {
+      configurable: true,
+      get() {
+        if (_pairIsFirst) {
+          logicalOracleIdx++;
+          _lastOracleValue = logicalOracleIdx === 2; // only call 2 is silent
+          _pairIsFirst = false;
+        } else {
+          _pairIsFirst = true;
+        }
+        return _lastOracleValue;
+      },
+    });
+
+    const { useAudioRecorder } = await import("@/hooks/useAudioRecorder");
+
+    const hookWrap = renderHook(() =>
+      useAudioRecorder({
+        studentId: "student-1",
+        onRecorded: jest.fn(),
+      })
+    );
+    // Settle initial async acquire work.
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    });
+
+    // Verify initial acquire succeeded cleanly before testing the swap.
+    expect(mockCreateMicAudioGraph).toHaveBeenCalledTimes(1);
+
+    // Enable 0-delay backoff for the swap path (fast test, no real wait).
+    (window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }).__VAD_WARM_RETRY_DELAY_MS__ = 0;
+
+    await act(async () => {
+      await hookWrap.result.current.swapMicDeviceBySlot(0);
+    });
+
+    // swapLocalMicSource must have been called once, with the recovered stream.
+    expect(mockSwapLocalMicSource).toHaveBeenCalledTimes(1);
+    expect(mockSwapLocalMicSource.mock.calls[0]?.[0]).toBe(recoveredStream);
+    expect(mockSwapLocalMicSource.mock.calls[0]?.[0]).not.toBe(silentStream);
   });
 
   // ── D: No-op path — no stored deviceId ───────────────────────────────────
