@@ -43,7 +43,7 @@
 
 **agenticPipeline:** Phase 1 (change-run + fail-closed verify) **greenlit** — can start in `agenticPipeline` repo. Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** consent-write → blob/share proxy → kill `/api/upload/audio`. Andrew: Google Console + eyeball list.
+**Next action(s):** proxy-blob-asset + proxy-share-resource → kill `/api/upload/audio`. Then Wave B complete. Andrew: Google Console + eyeball list.
 
 ---
 
@@ -51,11 +51,11 @@
 
 **🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).
 
-**Tip:** `master` @ `f297e092` (PageShell Wave B-3 merged).
+**Tip:** `master` @ `b0b78582` (consent-write Wave B-4 merged).
 
-**Last action:** Wave B-3 PageShell APPROVE → `merge --no-ff` `f297e092`. UI Wave B chunks (SectionCard/SubNav/PageShell) done.
+**Last action:** Wave B-4 consent-write APPROVE → `merge --no-ff` `b0b78582`.
 
-**In-flight:** Wave B-4 consent-write dispatching (security-sensitive).
+**In-flight:** Wave B-5 blob/share proxy dispatching (security-sensitive).
 **Open Andrew-confirms:**
 1. **Priority #2 Google Console** — Andrew-owned: confirm Published/`gmail.send`; `usemynk.com` Search Console; redirect URIs; hybrid calendar verification submit **after** MVP demo (Console prep now).
 2. **Priority #3 instrumentation** — first concrete slice under COPPA-first-party policy.
