@@ -21,7 +21,11 @@ import {
   validateLearnerUsername,
 } from "@/lib/learner-credential-validation";
 import { ensureFamilyId, formatLearnerLoginHandle } from "@/lib/family-id";
-import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
+import {
+  ALL_OFF_CONSENT_FLAGS,
+  ConsentAlreadySavedError,
+  createVersionedConsentRecord,
+} from "@/lib/consent-write";
 
 export async function POST(
   req: NextRequest,
@@ -100,29 +104,23 @@ export async function POST(
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    // Compute next version: MAX(existing version) + 1, or 1 for first record.
-    const maxVersion = await db.consentRecord.aggregate({
-      where: { learnerProfileId, adminUserId: invite.adminUserId },
-      _max: { version: true },
-    });
-    const nextVersion = (maxVersion._max.version ?? 0) + 1;
-
     try {
-      await db.consentRecord.create({
-        data: {
-          learnerProfileId,
-          adminUserId: invite.adminUserId,
-          version: nextVersion,
+      const { version: nextVersion } = await createVersionedConsentRecord(db, {
+        learnerProfileId,
+        adminUserId: invite.adminUserId,
+        setByAccountHolderId: ahSession.accountHolderId,
+        flags: {
           allowLiveSession,
           allowAudioRecording,
           allowWhiteboardRecording,
           allowNoteSending,
-          setByAccountHolderId: ahSession.accountHolderId,
-          captureMethod: "electronic",
         },
+        logAction: "consent_set",
       });
+
+      return NextResponse.json({ ok: true, version: nextVersion });
     } catch (err) {
-      if (isPrismaUniqueViolation(err)) {
+      if (err instanceof ConsentAlreadySavedError) {
         return NextResponse.json(
           { error: "consent_already_saved" },
           { status: 409 }
@@ -130,12 +128,6 @@ export async function POST(
       }
       throw err;
     }
-
-    console.log(
-      `[cns] learnerProfileId=${learnerProfileId} adminUserId=${invite.adminUserId} action=consent_set version=${nextVersion} accountHolderId=${ahSession.accountHolderId}`
-    );
-
-    return NextResponse.json({ ok: true, version: nextVersion });
   }
 
   if (action === "consent_decline") {
@@ -153,28 +145,18 @@ export async function POST(
       return NextResponse.json({ ok: true, skipped: true });
     }
 
-    const maxVersion = await db.consentRecord.aggregate({
-      where: { learnerProfileId, adminUserId: invite.adminUserId },
-      _max: { version: true },
-    });
-    const nextVersion = (maxVersion._max.version ?? 0) + 1;
-
     try {
-      await db.consentRecord.create({
-        data: {
-          learnerProfileId,
-          adminUserId: invite.adminUserId,
-          version: nextVersion,
-          allowLiveSession: false,
-          allowAudioRecording: false,
-          allowWhiteboardRecording: false,
-          allowNoteSending: false,
-          setByAccountHolderId: ahSession.accountHolderId,
-          captureMethod: "electronic",
-        },
+      const { version: nextVersion } = await createVersionedConsentRecord(db, {
+        learnerProfileId,
+        adminUserId: invite.adminUserId,
+        setByAccountHolderId: ahSession.accountHolderId,
+        flags: ALL_OFF_CONSENT_FLAGS,
+        logAction: "consent_declined",
       });
+
+      return NextResponse.json({ ok: true, version: nextVersion });
     } catch (err) {
-      if (isPrismaUniqueViolation(err)) {
+      if (err instanceof ConsentAlreadySavedError) {
         return NextResponse.json(
           { error: "consent_already_saved" },
           { status: 409 }
@@ -182,12 +164,6 @@ export async function POST(
       }
       throw err;
     }
-
-    console.log(
-      `[cns] learnerProfileId=${learnerProfileId} adminUserId=${invite.adminUserId} action=consent_declined version=${nextVersion} accountHolderId=${ahSession.accountHolderId}`
-    );
-
-    return NextResponse.json({ ok: true, version: nextVersion });
   }
 
   if (action === "credentials") {
