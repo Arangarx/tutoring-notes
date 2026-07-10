@@ -24,6 +24,15 @@ Duplication or divergence is permitted **only** with **Andrew's explicit, docume
 - A valid waiver is: Andrew explicitly approved it, and it is documented **both** at the point of duplication (code comment referencing the waiver) **and** in [`docs/BACKLOG.md`](../../docs/BACKLOG.md) with the date and Andrew's approval.
 - Absent that waiver, if you find yourself about to duplicate: **STOP.** Compose/extend the canonical instead, or if you believe an exception is genuinely warranted, surface it to Andrew and wait for an explicit "approved" — do not proceed on assumption.
 
+## New work vs existing debt (Andrew 2026-07-10 calibration)
+
+The zero-tolerance standard applies with two different tempos:
+
+- **NEW work — absolute, immediate, no exceptions.** Any code you write or change must introduce **zero** new duplication, and must **actively reduce** duplication in what it touches (consolidate the nearby fork while you're there). Creating new duplication is a hard violation. This is non-negotiable and has no "later."
+- **EXISTING debt — reduce relentlessly but SAFELY.** Keeping the site **stable, functional, and responsive is priority #1.** Consolidate existing duplication when it is **safe + easy + fully covered by passing tests** — do those up front. Higher-risk consolidations proceed **carefully, in small chunks, never big-bang**, each behind exhaustive red/green tests ([`exhaustive-testing-mandate.mdc`](exhaustive-testing-mandate.mdc)) and independent agentic verification ([`agentic-verification-pipeline.mdc`](agentic-verification-pipeline.mdc)). Leeway is on the **pace** of cleanup only — never on the **direction**: duplication only ever goes down.
+
+Rationale: a single-dev codebase is only maintainable if duplication is driven toward zero at every opportunity — but not at the cost of destabilizing a live product with reckless mass-refactors.
+
 ## Acceptance gate (a surface is NOT done if…)
 
 - The "fix a color/spacing/behavior in two places" smell exists anywhere.
