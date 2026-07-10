@@ -2157,6 +2157,7 @@ export function createWhiteboardSyncClient(
       | WhiteboardWirePresence
       | WhiteboardWirePageViewStateMsg
       | WhiteboardWirePointerMsg
+      | WhiteboardWireSessionLifecycle
   ): Promise<void> {
     const job = (async () => {
       if (!aesKey || !socket) return;
