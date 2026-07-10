@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { CalendarIntegrationsPanel } from "@/components/admin/schedule/CalendarIntegrationsPanel";
 import { mockCalendarConnections } from "@/lib/schedule/mock-data";
 import { getStudentScope } from "@/lib/student-scope";
@@ -23,7 +23,7 @@ export default async function IntegrationsSettingsPage({
   const backLabel = fromSchedule ? "← Schedule" : "← Settings";
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Calendar integrations"
       description="Connect external calendars so sessions you schedule in Mynk also appear on Apple Calendar or Google Calendar. This page is visual-only tonight — no OAuth wiring."
       eyebrow={
@@ -42,6 +42,6 @@ export default async function IntegrationsSettingsPage({
       </div>
 
       <CalendarIntegrationsPanel connections={mockCalendarConnections} compact={false} showSettingsLink={false} />
-    </AdminPageShell>
+    </PageShell>
   );
 }

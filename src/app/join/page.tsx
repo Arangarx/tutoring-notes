@@ -15,7 +15,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { LearnerSignOutButton } from "@/components/student/LearnerSignOutButton";
-import { StudentPageShell } from "@/components/student/StudentPageShell";
+import { PageShell } from "@/components/PageShell";
 import {
   getLearnerSessionFromHeaders,
   getAccountHolderSessionFromHeaders,
@@ -66,7 +66,7 @@ function JoinNoSessionCard({
   actions?: ReactNode;
 }) {
   return (
-    <StudentPageShell actions={actions}>
+    <PageShell realm="student" actions={actions}>
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col items-center justify-center gap-4 px-4 py-8">
         <Card className="w-full rounded-[10px] border-border">
           <CardContent className="px-6 py-6 text-center space-y-2">
@@ -82,6 +82,6 @@ function JoinNoSessionCard({
           </CardContent>
         </Card>
       </div>
-    </StudentPageShell>
+    </PageShell>
   );
 }

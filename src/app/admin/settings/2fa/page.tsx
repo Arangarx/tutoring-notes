@@ -28,7 +28,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { SubNav } from "@/components/SubNav";
 import { TwoFactorSetupForm } from "./setup/TwoFactorSetupForm";
@@ -81,7 +81,7 @@ export default async function TwoFactorManagePage() {
   // Not enrolled or unconfirmed → show setup form.
   if (!twoFaRow) {
     return (
-      <AdminPageShell
+      <PageShell realm="admin"
         title="Set up Two-Factor Authentication"
         description="Protect your account with a one-time code from an authenticator app."
         eyebrow={
@@ -98,7 +98,7 @@ export default async function TwoFactorManagePage() {
           <SectionCard realm="admin" title="Authenticator setup">
             <TwoFactorSetupForm />
           </SectionCard>
-      </AdminPageShell>
+      </PageShell>
     );
   }
 
@@ -106,7 +106,7 @@ export default async function TwoFactorManagePage() {
   const isAdmin = session.user.role === "ADMIN";
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Two-Factor Authentication"
       eyebrow={
         <Link
@@ -127,6 +127,6 @@ export default async function TwoFactorManagePage() {
             userId={session.user.id ?? ""}
           />
         </SectionCard>
-    </AdminPageShell>
+    </PageShell>
   );
 }

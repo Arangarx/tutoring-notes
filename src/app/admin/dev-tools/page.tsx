@@ -14,7 +14,7 @@ import {
   listFixtureTutors,
   listFixtureFamilies,
 } from "@/lib/dev-fixtures";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { DevToolsClient } from "./DevToolsClient";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export default async function DevToolsPage() {
   const [tutors, families] = await Promise.all([listFixtureTutors(), listFixtureFamilies()]);
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Dev tools"
       description={
         <>
@@ -45,6 +45,6 @@ export default async function DevToolsPage() {
       }
     >
       <DevToolsClient initialTutors={tutors} initialFamilies={families} />
-    </AdminPageShell>
+    </PageShell>
   );
 }

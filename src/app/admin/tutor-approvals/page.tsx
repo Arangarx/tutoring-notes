@@ -1,6 +1,6 @@
 import { requireOperator } from "@/lib/operator";
 import { listWaitlistedTutors } from "@/lib/tutor-approval-scope";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -13,7 +13,7 @@ export default async function TutorApprovalsPage() {
   const waitlisted = await listWaitlistedTutors();
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Tutor approvals"
       description="Review and approve new tutor signups. WAITLISTED tutors cannot incur external cost until approved."
       actions={
@@ -52,6 +52,6 @@ export default async function TutorApprovalsPage() {
           </ul>
         )}
       </SectionCard>
-    </AdminPageShell>
+    </PageShell>
   );
 }

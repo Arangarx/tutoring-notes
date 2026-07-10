@@ -11,7 +11,7 @@ import { formatDateOnlyDisplay, formatDateOnlyInput } from "@/lib/date-only";
 import { formatUtcTimeSnapped } from "@/lib/time/snap";
 import { TutorStudentNoteExpandedBody } from "@/components/notes/TutorStudentNoteExpandedBody";
 import { formatNoteTime, safeJsonArray } from "@/lib/notes/display-utils";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 export const dynamic = "force-dynamic";
@@ -156,7 +156,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
   }
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title={`${student.name} — Session notes`}
       eyebrow={
         <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
@@ -260,6 +260,6 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
       <div className="mt-6">
         <PaginationNav label="Note pages (bottom)" />
       </div>
-    </AdminPageShell>
+    </PageShell>
   );
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { KnownIssuesRoadmapView } from "@/components/admin/KnownIssuesRoadmapView";
 import { SubNav } from "@/components/SubNav";
 import { KNOWN_ISSUES_ROADMAP_PAGE_TITLE } from "@/lib/known-issues-roadmap-content";
@@ -13,19 +13,19 @@ export default async function KnownIssuesRoadmapPage() {
   const email = session?.user?.email;
   if (!email) {
     return (
-      <AdminPageShell title={KNOWN_ISSUES_ROADMAP_PAGE_TITLE}>
+      <PageShell realm="admin" title={KNOWN_ISSUES_ROADMAP_PAGE_TITLE}>
         <p className="text-sm text-muted-foreground">
           Sign in to view known issues and the roadmap.{" "}
           <Link href="/login" className="text-foreground underline-offset-4 hover:underline">
             Login
           </Link>
         </p>
-      </AdminPageShell>
+      </PageShell>
     );
   }
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title={KNOWN_ISSUES_ROADMAP_PAGE_TITLE}
       description="Recent improvements, honest known issues, and what's coming next."
       eyebrow={
@@ -40,6 +40,6 @@ export default async function KnownIssuesRoadmapPage() {
       sidebarWidth="narrow"
     >
       <KnownIssuesRoadmapView />
-    </AdminPageShell>
+    </PageShell>
   );
 }

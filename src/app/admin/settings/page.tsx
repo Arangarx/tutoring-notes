@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SettingsNavList } from "@/components/admin/SettingsNavList";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ const settingsLinks = [
 
 export default async function SettingsIndexPage() {
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Settings"
       description="Your profile and account settings."
       className="mx-auto max-w-xl"
@@ -59,6 +59,6 @@ export default async function SettingsIndexPage() {
       }
     >
       <SettingsNavList items={settingsLinks} />
-    </AdminPageShell>
+    </PageShell>
   );
 }

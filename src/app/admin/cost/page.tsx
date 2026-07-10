@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { assertAdminOrNotFound } from "@/lib/impersonation";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -64,7 +64,7 @@ export default async function AdminCostPage() {
   const maxBarUsd = Math.max(...monthlyBars.map((b) => b.totalUsd), 0.001);
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Cost observability"
       description={
         <>
@@ -202,6 +202,6 @@ export default async function AdminCostPage() {
           Tutor-facing cost UI is deferred until the pricing model is locked (session tokens).
         </p>
       </SectionCard>
-    </AdminPageShell>
+    </PageShell>
   );
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { AccountPageShell } from "@/components/account/AccountPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { db } from "@/lib/db";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
@@ -138,7 +138,7 @@ export default async function LearnerConsentPage({
   const learnerName = learnerProfile.displayName;
 
   return (
-    <AccountPageShell
+    <PageShell realm="account"
       title={`${learnerName} — Privacy`}
       description="Choose what each tutor may do, and optional limits that always apply to your child."
       userEmail={accountHolder?.email}
@@ -181,6 +181,6 @@ export default async function LearnerConsentPage({
           />
         </SectionCard>
       )}
-    </AccountPageShell>
+    </PageShell>
   );
 }

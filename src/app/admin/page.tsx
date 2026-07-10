@@ -8,7 +8,7 @@ import {
   tutorExperienceLandingPath,
 } from "@/lib/admin-routing";
 import { AdminTestAccountsPanel } from "./AdminTestAccountsPanel";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { Button } from "@/components/ui/button";
 import { listWaitlistedTutors } from "@/lib/tutor-approval-scope";
@@ -51,7 +51,7 @@ export default async function AdminHomePage() {
   const quickLinkTitleClass = "mt-1 text-sm font-semibold text-foreground";
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Admin dashboard"
       eyebrow={
         <p className="label-mono m-0 text-accent-text">Operator console</p>
@@ -126,6 +126,6 @@ export default async function AdminHomePage() {
       >
         <AdminTestAccountsPanel />
       </SectionCard>
-    </AdminPageShell>
+    </PageShell>
   );
 }
