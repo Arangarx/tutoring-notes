@@ -21,6 +21,9 @@ function safeName(name: string): string {
 const TOKEN_RETRYABLE =
   /client token|Failed to retrieve|token|rate|limit|5\d\d|network|fetch|timeout|AbortError/i;
 
+/** Four attempts — long PDFs burst token mints; page 3+ needs headroom. */
+export const WHITEBOARD_UPLOAD_TOKEN_BACKOFFS_MS = [0, 400, 1_200, 2_400] as const;
+
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -33,45 +36,44 @@ async function uploadGeneric(
 ): Promise<WhiteboardUploadResult> {
   const { shouldUseBlobHarnessClientUpload, uploadViaBlobHarness } =
     await import("@/lib/blob-harness-client-upload");
-  if (shouldUseBlobHarnessClientUpload()) {
-    try {
-      const result = await uploadViaBlobHarness({
+  const useHarness = shouldUseBlobHarnessClientUpload();
+
+  const attemptUpload = async (): Promise<{ url: string }> => {
+    if (useHarness) {
+      return uploadViaBlobHarness({
         pathname,
         blob,
         contentType,
         handleUploadUrl: "/api/upload/blob",
         clientPayload: JSON.stringify(clientPayload),
       });
-      return { ok: true, blobUrl: result.url, sizeBytes: blob.size };
-    } catch (err) {
-      const lastRaw = err instanceof Error ? err.message : String(err);
-      return {
-        ok: false,
-        error: `Could not upload to whiteboard storage. Please try again. (${lastRaw})`,
-      };
     }
-  }
-  const { upload } = await import("@vercel/blob/client");
+    const { upload } = await import("@vercel/blob/client");
+    return upload(pathname, blob, {
+      access: "private",
+      handleUploadUrl: "/api/upload/blob",
+      contentType,
+      clientPayload: JSON.stringify(clientPayload),
+    });
+  };
+
   // Long PDF runs issue many back-to-back token requests; Vercel can
   // occasionally fail a single "retrieve the client token" call — retry
-  // with light backoff (same path as the audio uploader’s resilience).
-  const backoffs = [0, 400, 1_200];
+  // with backoff on both SDK and harness mint paths.
   let lastRaw = "Unknown error";
-  for (let attempt = 0; attempt < backoffs.length; attempt++) {
-    if (backoffs[attempt]! > 0) {
-      await sleepMs(backoffs[attempt]!);
+  for (let attempt = 0; attempt < WHITEBOARD_UPLOAD_TOKEN_BACKOFFS_MS.length; attempt++) {
+    const backoff = WHITEBOARD_UPLOAD_TOKEN_BACKOFFS_MS[attempt]!;
+    if (backoff > 0) {
+      await sleepMs(backoff);
     }
     try {
-      const result = await upload(pathname, blob, {
-        access: "private",
-        handleUploadUrl: "/api/upload/blob",
-        contentType,
-        clientPayload: JSON.stringify(clientPayload),
-      });
+      const result = await attemptUpload();
       return { ok: true, blobUrl: result.url, sizeBytes: blob.size };
     } catch (err) {
       lastRaw = err instanceof Error ? err.message : String(err);
-      const retry = attempt < backoffs.length - 1 && TOKEN_RETRYABLE.test(lastRaw);
+      const retry =
+        attempt < WHITEBOARD_UPLOAD_TOKEN_BACKOFFS_MS.length - 1 &&
+        TOKEN_RETRYABLE.test(lastRaw);
       if (typeof console !== "undefined" && !retry) {
         console.error("[whiteboard.upload] upload failed", {
           pathname,

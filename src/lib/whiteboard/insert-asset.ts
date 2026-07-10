@@ -155,6 +155,8 @@ export type InsertPdfBoardPagesResult =
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const PDF_PAGE_GAP_PX = 32;
+/** Space sequential page uploads so token mints are not burst. */
+const PDF_PAGE_UPLOAD_SPACING_MS = 250;
 /**
  * Width we render each PDF page at on the Excalidraw canvas. The
  * actual bitmap may be larger; we scale down to keep a 30-page
@@ -683,7 +685,7 @@ export async function insertPdfPagesOnCanvas(args: InsertAssetCommonArgs & {
     // Space out token requests slightly on long PDFs — pairs with upload
     // retries in `upload.ts` for "Failed to retrieve the client token".
     if (i > 0) {
-      await new Promise<void>((r) => setTimeout(r, 75));
+      await new Promise<void>((r) => setTimeout(r, PDF_PAGE_UPLOAD_SPACING_MS));
     }
     const page = pages[i];
     const pagePath = `${filename || "document"}-p${page.pageIndex}.png`;
@@ -818,7 +820,7 @@ export async function insertPdfPagesAsBoardPages(
 
   for (let i = 0; i < pages.length; i++) {
     if (i > 0) {
-      await new Promise<void>((r) => setTimeout(r, 75));
+      await new Promise<void>((r) => setTimeout(r, PDF_PAGE_UPLOAD_SPACING_MS));
     }
     const page = pages[i]!;
     const pagePath = `${filename || "document"}-p${page.pageIndex}.png`;
