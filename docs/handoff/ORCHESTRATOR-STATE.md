@@ -10,15 +10,14 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `e5e71900` — PDF blob-token + admin icons/Pause + **camOn acquire gate** merged.
+**Tip:** `v1-redesign` @ `144e9897` — PDF blob + icons/Pause + camOn + **AUDIO-1 cancel-refresh residual** merged.
 
-**Last action:** Merged `fix/wb-av-camon-acquire-gate` (`b68efd9c`).
+**Last action:** Merged `fix/smoke-audio-1-cancel-refresh` (`c47ced8b`).
 
 **In-flight subagents:**
 - [bleed E4 residual](00064894-4e81-46fa-ad64-ee7693de8801) Sonnet — ONE attempt
-- [AUDIO-1 cancel→refresh](f04a71df-0441-48a6-9ab6-ba08a6d30cbb) Sonnet — ONE attempt
 
-**Next action(s):** land remaining 2 → full master gates.
+**Next action(s):** land bleed → full master gates. Andrew hardware smoke for Brio cancel→refresh (PLAYWRIGHT-GAP).
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
