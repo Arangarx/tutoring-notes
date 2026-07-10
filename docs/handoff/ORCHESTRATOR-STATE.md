@@ -10,25 +10,29 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `323a2f1e` — deploy **READY** after lint-token + session-lifecycle TS fixes (`cc75a965`, `323a2f1e`). Preview: https://tutoring-notes-git-v1-redesign-arangarx-5209s-projects.vercel.app
+**Tip:** `v1-redesign` @ `0aa2bb05` (docs) / code tip `323a2f1e` READY. Preview: https://tutoring-notes-git-v1-redesign-arangarx-5209s-projects.vercel.app
 
-**Last action:** Merged `fix/admin-student-detail-mobile-discover` `--no-ff` → `b5472ab8`. No subagents in flight.
+**Last action:** Andrew evening recheck notes triaged (2026-07-09).
+
+**Recheck results (evening):**
+1. **AUDIO-1 STILL FAIL** — cancel (no cam) → refresh → new session: Brio selected, not armed; next session arms. Pre-Sarah.
+2. **END-WINDDOWN PASS**
+3. **Share/tutor phone replay PASS** — copy: “Pause and hide replay” → “Pause”
+4. **Admin tabs PARTIAL** — icons missing on Session/Share/Notes (slot empty); Parent Users + Notes badge OK
+5. **PDF NEW FAILS** — Blob client-token mid-import (2/3 pages) + **non-PDF→first PDF page bleed** (PDF-load specific)
+6. **Share wall** — Andrew: skip; wants share links gone long-term (notes via profile)
+**General:** Pixel student video = initials until refresh (stale 404 join → correct link; re-login unexpected)
 
 **In-flight subagents:** *(none)*
 
-**Shipped this burndown (2026-07-09):**
-- END-WINDDOWN `e58e0826` — disarm + relay `session_ending` (PERF-1 deferred)
-- SHARE-REPLAY-PHONE `8a6ab878` — viewport-lock share shell
-- AUDIO-1 `124f66c1` — enumerate-entry first acquire + silent RMS (Brio PLAYWRIGHT-GAP)
-- ADMIN-MOBILE `b5472ab8` — tab discoverability
+**Next action(s) — pre-master blockers from this smoke:**
+1. AUDIO-1 residual (cancel→refresh→Brio silent)
+2. PDF blob-token + PDF-import bleed
+3. Admin tab icons visibility
+4. Student video initials / join cookie path (investigate)
+5. Then full `test:wb-sync` + `test:regression` + `next build` + Pause copy polish
 
-**Next action(s):**
-1. Optional A spot-checks: blank Board-3 bleed + share-wall (Andrew)
-2. Hardware: Brio first-acquire meter without switch (AUDIO-1 gap)
-3. Before master cut: full `test:wb-sync` + `test:regression` + `next build`
-4. PERF-1 (de-await snapshot) still open, not Sarah-blocking
-
-**Still open (non-blocking / follow-up):** PERF-1; AUDIO-3; phone reconnect re-GUM; Brio hardware oracle.
+**Still open (non-blocking):** PERF-1; AUDIO-3; Pause copy; share-link retirement (product).
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
