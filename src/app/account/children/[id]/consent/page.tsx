@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { requireAccountHolderSession } from "@/lib/server-session";
 
-import { AccountChildNav } from "../AccountChildNav";
+import { SubNav } from "@/components/SubNav";
 import {
   ParentConsentEditor,
   type ConsentRestrictionState,
@@ -154,7 +154,7 @@ export default async function LearnerConsentPage({
         </div>
       }
     >
-      <AccountChildNav learnerId={learnerId} />
+      <SubNav realm="account-child" learnerId={learnerId} />
 
       {learnerProfile.isSelfLearner ? (
         <SectionCard realm="account"

@@ -108,6 +108,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
 | `SectionCard` | `src/components/SectionCard.tsx` | Section grouping within a page. Wraps shadcn `Card`. Title + optional description + optional actions header + content slot. **`realm`** selects admin vs account styling contract (`data-realm` on root). | `realm` (`admin` \| `account`), `title`, `description`, `actions`, `children`, `className`, `contentClassName`, `id`, `data-testid` | `/admin/**`, `/account/**` | **canonical — Wave B dedupe; replaces former `AdminSectionCard` + `AccountSectionCard`** |
+| `SubNav` | `src/components/SubNav.tsx` | In-page section navigation. **`realm`** selects settings left-rail sidebar vs account child horizontal tab strip (`data-realm` on root). | `realm` (`admin-settings` \| `account-child`), `learnerId` (account-child only) | `/admin/settings/**`, `/account/children/[id]/**` | **canonical — Wave B dedupe; replaces former `SettingsSubNav` + `AccountChildNav`** |
 
 ### Account Holder (Parent) Layout
 

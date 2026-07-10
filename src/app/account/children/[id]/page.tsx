@@ -14,7 +14,7 @@ import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { isCredentialHardLocked } from "@/lib/learner-pin-rate-limit";
 import { requireAccountHolderSession } from "@/lib/server-session";
 
-import { AccountChildNav } from "./AccountChildNav";
+import { SubNav } from "@/components/SubNav";
 import { ChangePinForm } from "./ChangePinForm";
 import { SetupLoginForm } from "./SetupLoginForm";
 import { UnlockPinButton } from "./UnlockPinButton";
@@ -112,7 +112,7 @@ export default async function ChildDetailPage({
         </div>
       }
     >
-      <AccountChildNav learnerId={id} />
+      <SubNav realm="account-child" learnerId={id} />
 
       {!fullProfile.isSelfLearner && !fullProfile.credential ? (
         <ParentJoinGapCallout

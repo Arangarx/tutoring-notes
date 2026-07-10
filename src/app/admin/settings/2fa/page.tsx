@@ -30,7 +30,7 @@ import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { SectionCard } from "@/components/SectionCard";
-import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
+import { SubNav } from "@/components/SubNav";
 import { TwoFactorSetupForm } from "./setup/TwoFactorSetupForm";
 import { TwoFactorManageView } from "./TwoFactorManageView";
 
@@ -92,7 +92,7 @@ export default async function TwoFactorManagePage() {
             ← Settings
           </Link>
         }
-        sidebar={<SettingsSubNav />}
+        sidebar={<SubNav realm="admin-settings" />}
         sidebarWidth="narrow"
       >
           <SectionCard realm="admin" title="Authenticator setup">
@@ -116,7 +116,7 @@ export default async function TwoFactorManagePage() {
           ← Settings
         </Link>
       }
-      sidebar={<SettingsSubNav />}
+      sidebar={<SubNav realm="admin-settings" />}
       sidebarWidth="narrow"
     >
         <SectionCard realm="admin" title="Authentication status">

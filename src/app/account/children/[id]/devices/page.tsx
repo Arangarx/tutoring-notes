@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { requireAccountHolderSession } from "@/lib/server-session";
 
-import { AccountChildNav } from "../AccountChildNav";
+import { SubNav } from "@/components/SubNav";
 import { DeviceRevokeButtons } from "./DeviceRevokeButtons";
 
 export const dynamic = "force-dynamic";
@@ -84,7 +84,7 @@ export default async function ChildDevicesPage({
         </Link>
       }
     >
-      <AccountChildNav learnerId={id} />
+      <SubNav realm="account-child" learnerId={id} />
 
       <SectionCard realm="account"
         title="Active sessions"

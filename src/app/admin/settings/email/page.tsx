@@ -9,7 +9,7 @@ import { getStudentScope } from "@/lib/student-scope";
 import { getGmailConnectionForTutor, isEmailConfiguredForTutor } from "@/lib/email";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { SectionCard } from "@/components/SectionCard";
-import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
+import { SubNav } from "@/components/SubNav";
 import EmailConfigForm from "./EmailConfigForm";
 import OAuthEmailSection from "./OAuthEmailSection";
 
@@ -74,7 +74,7 @@ export default async function EmailSettingsPage({
           ← Settings
         </Link>
       }
-      sidebar={<SettingsSubNav />}
+      sidebar={<SubNav realm="admin-settings" />}
       sidebarWidth="narrow"
     >
       {configured ? (
