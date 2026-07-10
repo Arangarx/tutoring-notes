@@ -99,6 +99,7 @@ type FakeSyncClient = {
   isConnected: () => boolean;
   disconnect: jest.Mock;
   onRemoteScene: () => () => void;
+  onRemoteSessionLifecycle: jest.Mock;
   onConnect: jest.Mock;
   onDisconnect: jest.Mock;
   onPeerCountChange: jest.Mock;
@@ -127,6 +128,7 @@ const mockCreateWhiteboardSyncClient = jest.fn(
       isConnected: () => connected,
       disconnect: jest.fn(),
       onRemoteScene: () => () => {},
+      onRemoteSessionLifecycle: jest.fn(() => () => {}),
       onConnect: jest.fn((cb: () => void) => {
         connectCbs.push(cb);
         return () => {
