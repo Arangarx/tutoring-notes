@@ -21,6 +21,426 @@ Living document for open work, pilot feedback, reliability gaps, and deferred pr
 
 **Program overlay:** Experience-Driven Wedge (2026-06-12) — WB reliability = gate; continuity + note-quality = moat; instrumentation = first-party post-master. Founding principle: total honesty, no dark patterns. Spec: [`docs/research/continuity-wedge-brainstorm-2026-06-12.md`](research/continuity-wedge-brainstorm-2026-06-12.md).
 
+
+## Release triage — new-pilot gate (2026-07-10)
+
+Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, not Sarah). **MUST** = data loss, silent failure, broken core flow (record → notes → replay → share → lifecycle), legal/privacy/COPPA honesty violation, security/ownership hole, or untrustworthy-to-a-stranger. **MAYBE** = Andrew's risk-tolerance call. **1.x** = post-release enhancements, scale, org/university, pricing/strategy.
+
+### MUST before new pilots
+
+#### Recording & session lifecycle
+
+- **B11** — release camera/mic tracks on session end (§3)
+- **beforeunload guard mid-recording (reliability #9)** —  (§3)
+- **Hot-swap mic / track.onended (reliability #7)** —  (§3)
+- **In-progress segment IDB on crash (reliability #1)** —  (§3)
+- **PRESARAH-1** — always-on recording; remove recording-intent toggles (§1)
+- **recording-end-to-end** — review auto-start from 0 (§1)
+- **recording-resilience** — SessionRecording rows after reopen (§1)
+- **SMOKE-AUDIO-1** — first-acquire mic silent until switch-and-back (§1)
+- **SMOKE-END-WINDDOWN** — disarm board + immediate student wind-down on End (§1)
+- **Upload-failure blob persistence (reliability #2)** —  (§3)
+- **W1-SHIP-B-FINALIZE** — `finalizeOutboxAfterEnd` drops all IDB rows (§3)
+- **W1-SHIP-B-STUCK** — `stuck` semantics + UX vs `permanent-fail@50` (§3)
+- **WS-B** — tab-kill resume loses pre-kill audio in replay/notes (§1)
+- **WS-G** — server-side tutor:mic concat replay master (§3)
+- **WS-N-PAGEHIDE** — in-progress segment flush at tab-kill (§3)
+- **WS-N5** — resume FSM `armed` window drops stroke capture after reopen (§1)
+
+#### Notes & AI
+
+- **Map/reduce accuracy + abstain-on-low-content + eval harness** —  (§5)
+- **SMOKE-NOTES-1** — post-End shimmer; form must stay visible (§1)
+- **SMOKE-NOTES-3** — notes fabricate on non-teaching talk (§1)
+- **WS-K** — incremental reduce; End ≤2–3s notes ready (§3)
+
+#### Whiteboard, sync & replay
+
+- **AV-REFRESH-LOSS** — student hard-refresh loses A/V (§4)
+- **Gate A2** — waiting room (§4)
+- **Gate A5** — live bidirectional sync completeness audit (§1)
+- **Gate A6** — replay fidelity + AV/timer sync comprehensive pass (§1)
+- **Hide replay must pause audio** —  (§4)
+- **In-person waiting-room consent projection (Plan #2)** —  (§4)
+- **PDF cross-page stroke bleed (regression)** —  (§4)
+- **Replay scrub drag** — 429s + frozen scene (§4)
+- **SMOKE-BLOCK-5** — solo/in-person stroke capture in armed window (§4)
+- **SMOKE-UX-1** — replay auto-play jumps to scrubber end (§1)
+- **SSG-2 / PRESARAH-2** — student-detail End → End-and-review (no silent data loss) (§1)
+- **SSG-3 / A6-1** — multi-segment replay scrubber + proportional seek (§1)
+- **Student canvas file sync (images/PDF)** —  (§4)
+- **Student canvas stuck on "Loading scene…"** —  (§4)
+- **Student Exit → rejoin presence desync** —  (§4)
+- **Student undo/redo non-functional** —  (§4)
+- **Unclaimed-student workspace entry redirect** —  (§4)
+- **view-whiteboard-new-replay** — parent share strict-mode locator (§1)
+- **wb-replay-scrub-seek ×3** —  (§1)
+- **WS-T-8** — roster End shows replay CTA when recording-count===0 (§4)
+- **WS-T-9** — gate-only End IDB crash (§4)
+- **WS-X** — PDF board stroke leak via v3 broadcast tombstone (§1)
+
+#### Live A/V & devices
+
+- **BUG-8** — reconnect media transport not rebuilt after peer leave/rejoin (§1)
+- **Phone student A/V** — bidirectional broken (§4)
+- **SMOKE-BLOCK-1** — reachability under-reports connected peer (Start dead) (§1)
+- **WS-I-PRESTART-MUTE** — tutor mute before audio graph arms (§3)
+
+#### Consent, COPPA & erasure
+
+- **allowWhiteboardRecording real enforcement (WB-CONSENT-UNCONDITIONAL)** —  (§6)
+- **assertEffectiveConsent legacy no_snapshot → pass** —  (§6)
+- **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE** —  (§6)
+- **CLIENT-AUDIO-CONSENT-GATE** — client consent projection completeness (§1)
+- **Consent modal removal** — Andrew legal sign-off (§6)
+- **CONSENT-COLLECTION-COMPLETENESS (CC-1/CC-2)** —  (§6)
+- **CONSENT-HONESTY-SARAH-MERGE-BLOCKER** —  (§6)
+- **createChildLearnerAction** — no ConsentRecord at create (§6)
+- **Erasure parent/account-holder self-serve UI + CRITICAL_ACTION** —  (§6)
+- **Essentials-vs-optional tier ratification** —  (§6)
+- **LIVE-SESSION-CONSENT-COPY** —  (§6)
+- **Non-technical tombstone/grace copy** —  (§6)
+- **Parent self-service erasure (non-admin)** —  (§6)
+- **Sarah test-student audit + TEST purge** —  (§6)
+
+#### Legal & privacy
+
+- **Audio recording of minors** — consent flow research (§6)
+- **CONSENT-LEGAL-CONSULT** —  (§6)
+- **OpenAI vendor ops checklist** —  (§6)
+- **PII / privacy policy before public launch** —  (§6)
+- **SEC-POLICY-TRUTH** — retention lifecycle enforcement (§1)
+- **Umbrella + product privacy retention (§312.10)** —  (§6)
+
+#### Auth, identity & security
+
+- **Account-takeover defense (1/3) email-confirmation signup** —  (§6)
+- **Account-takeover defense (2/3) notify-on-password-reset** —  (§6)
+- **Account-takeover gap on existing-email signup** —  (§6)
+- **Email-infrastructure prerequisite (Resend on usemynk.com)** —  (§6)
+- **Gate B2** — parent privacy consent lattice + management UI (§6)
+- **Join denial UX** — authenticated wrong principal gets bare 404 (§6)
+- **npm audit Tier B (SHOULD-FIX-4)** —  (§6)
+- **SEC — /api/test/whiteboard/* gate hardening** — /api/test/whiteboard/* gate hardening (§6)
+- **SEC — tutor-asset/route.ts any-origin blob URL** — tutor-asset/route.ts any-origin blob URL (§6)
+- **SMOKE-PRIV-1** — learner sign-out leaves parent session on shared device (§1)
+- **VERIFY-ACCT-1** — duplicate-account creation block (§6)
+- **WB-ADULT-JOIN-ENABLEMENT B2-signup / B3 / B4** —  (§6)
+- **WB-PARENT-JOIN-AS-CHILD** — parent_session_select picker (§6)
+
+### MAYBE — Andrew to prioritize
+
+#### Recording & session lifecycle
+
+- **Android Chrome matrix fill-in** —  (§8)
+- **audioStartedAtMs ordering bug** —  (§3)
+- **B6** — audio recovery after external app steals mic (§3)
+- **Cross-session stuck/orphaned draft surfacing (1b)** —  (§3)
+- **Custom SessionAudioPlayer (D10) + stitch-path retirement** —  (§3)
+- **deviceHealth FSM input + `dvc` logging** —  (§3)
+- **Draft clear / handleReset edge cases (1d, 1e)** —  (§3)
+- **End-session replay: per-student-mic mix UX** —  (§3)
+- **finalizeOutboxAfterEnd register path / legacy segment register deprecation** —  (§3)
+- **Live transcription (LTX) spike** —  (§3)
+- **Long-form transcribe smoke (60–90 min)** —  (§3)
+- **macOS ondevicechange debounce** — unvalidated (§3)
+- **network_offline FSM input not wired** —  (§3)
+- **Pause vs rollover race (reliability #8)** —  (§3)
+- **Per-student recording default** —  (§13)
+- **Recording auto-pause on student disconnect** —  (§13)
+- **Recovery banner stacking** — audio + WB + disconnect (1c) (§3)
+- **rid= / lifecycle log coverage (reliability #13, #14)** —  (§3)
+- **Sarah forward-migration at re-arch cutover** —  (§3)
+- **Session timer drift on iOS (reliability #4)** —  (§3)
+- **SMOKE-PERF-1** — Finalizing fixed overhead (~5–10s) (§3)
+- **timelineStartMs / unified wall-clock session timeline** —  (§3)
+- **TURN (A4 Slice-C)** —  (§3)
+- **useRecordingCoordinator extraction** —  (§3)
+- **WebM/MP4 duration unreliable for scrubbing (reliability #5)** —  (§3)
+- **Whisper CJK / language pin** —  (§3)
+- **WS-A-F-1** — outbox register-failure attempt cap (§3)
+- **WS-J prod migration apply** —  (§3)
+- **WS-K prod migration apply** —  (§3)
+
+#### Notes & AI
+
+- **AI link extraction from spoken URLs** —  (§5)
+- **AI link extraction, scrubbing, playback during review, gap detection** —  (§13)
+- **AI note generation context hygiene** —  (§5)
+- **AI prompt** — literal vs interpretive Assessment (§5)
+- **AI prompt v7 remainder** —  (§5)
+- **AI prompt v8** — homework → plan (Sarah) (§5)
+- **Audio playback during note review** —  (§5)
+- **Audio scrubbing / duration 0:00** —  (§5)
+- **MB-5 verify** — tutor_only notes path (§5)
+- **Recorder gap detection in pending list** —  (§5)
+- **REQ-S3-1** — Formatted markdown `.ai-prose` (§5)
+- **REQ-S3-2 / REQ-S3-2a** — Save notes semantics + Cancel session (§5)
+- **REQ-S3-4** — canonical notes schema (§5)
+- **Slice-3 N1–N4 deferred findings** —  (§5)
+- **Slice-3 S3** — notes reduce job-in-flight lock (§5)
+- **SMOKE-NOTES-2** — live/progressive notes during session (§5)
+- **Tutor-initiated join-link rotation** —  (§13)
+- **Whisper CJK false positive** —  (§5)
+- **Whisper repetition-loop hallucination** —  (§5)
+- **Whisper transcription accuracy / short phrase misses** —  (§5)
+
+#### Whiteboard, sync & replay
+
+- **Active-ping 409 after End** —  (§4)
+- **Asymmetric viewport when follow OFF** —  (§4)
+- **CH-SMOKE-REPLAY-PLAYPAUSE-OVERLAP** —  (§4)
+- **Cold refresh vs server truth** —  (§4)
+- **Eraser bulk delete dimmed-not-deleted** —  (§4)
+- **Eraser cursor vs delete path (TM-08)** —  (§4)
+- **Event log + replay multi-page** —  (§4)
+- **Excalidraw recovery "Load draft" popup** —  (§4)
+- **Exit→rejoin A/V slow / ghost** —  (§4)
+- **Freedraw latency PR-01** —  (§4)
+- **Gate A3** — Pass-2 in-context end-session / review shell (§4)
+- **Gate A3a** — PDF page-tab indicator (§4)
+- **Gate A3b** — SR-04a video-tile sizing (§4)
+- **Ghost viewport bounds overlay (VP-01 / SMOKE-POST-1)** —  (§4)
+- **Graph JSXGraph swap follow-ups** —  (§4)
+- **Local dev join URL parity** —  (§4)
+- **MathInsertButton first-open white-box** —  (§4)
+- **Mobile AV pip** — SR-16 (§4)
+- **Multi-part recording warning banner stale on replay** —  (§4)
+- **Native image insert broken on drag/drop** —  (§4)
+- **NR-07** — transform handles with native chrome hidden (§4)
+- **p3-video-seam** —  (§4)
+- **PDF open** — fit tutor vs student view (§4)
+- **PDF position lock / pan-clamp design spike** —  (§4)
+- **Per-board undo/redo history** —  (§4)
+- **Per-page view state** — student validation (§4)
+- **Post–sync-redesign smoke findings** —  (§4)
+- **Preview-before-Start canvas wipe race** —  (§4)
+- **Promote math insert to toolbar + library persistence** —  (§4)
+- **Re-enable Playwright invariant 8 (PDF center+fit)** —  (§4)
+- **Replay audio loading CLS** —  (§4)
+- **Replay board tabs missing PDF icons** —  (§4)
+- **Replay disabled top-bar buttons dimming** —  (§4)
+- **Replay page strip PDF section grouping** —  (§4)
+- **Replay pause→hide→reopen state** —  (§4)
+- **Replay theme click → unexpected nav** —  (§4)
+- **Room policy & joiner UX** —  (§4)
+- **Session time logging** —  (§13)
+- **Session type selection UX (in-person vs remote)** —  (§4)
+- **SMOKE-BUG-10** — in-person "waiting for student" banner (§4)
+- **SMOKE-BUG-2** — stale "Call Reconnecting" pill (§4)
+- **SMOKE-BUG-3** — student text cross-page sync (§4)
+- **SMOKE-BUG-5** — replay board-tab context (§4)
+- **SMOKE-BUG-7 / CH-SMOKE-STUDENT-MIC-PERSIST** —  (§4)
+- **SMOKE-UX-3** — replay ±10s skip (§4)
+- **Snapshot link discoverability** —  (§4)
+- **Snapshot multi-page coverage** —  (§4)
+- **ST-05 / WB-LASER-ICON-CONTRAST** — laser colors + bidirectional visibility (§4)
+- **Start/end session "flash reload" feel** —  (§4)
+- **Student `[student-apply]` console spam** —  (§4)
+- **Student bidirectional video (tiles flash/disappear)** —  (§4)
+- **Student dark-theme canvas background stuck white** —  (§4)
+- **Student default AV peer-only (self-view off)** —  (§4)
+- **Student desktop mic level meter missing** —  (§4)
+- **Student mobile tool/chrome parity** —  (§4)
+- **Student naming paradigm** — single-student fallback (§13)
+- **Student waiting room screen design** —  (§4)
+- **Thin-viewport top-bar compaction** —  (§4)
+- **TM-09** — tutor-mobile expectations notice + host gate (§4)
+- **TU-11** — keyboard-shortcut routing parity (§4)
+- **TU-12 / Excalidraw theme follows app data-theme** —  (§4)
+- **Tutor tab doesn't follow new session creation** —  (§13)
+- **Tutor-vs-student insert origin (viewport-center)** —  (§4)
+- **WB-AV-STUDENT-INITIALS-ONLY** —  (§2)
+- **WB-COMPONENTS-PASS** —  (§4)
+- **WB-FINISH-REVIEW-COPY-CONTEXT** —  (§4)
+- **WB-HAND-TOOL-MISSING (NR-01)** —  (§4)
+- **WB-IDLE-SESSION-GUARD** —  (§3)
+- **WB-IMAGE-IMPORTER** — image insert missing (§4)
+- **WB-LINE-END-TOUCH** —  (§4)
+- **WB-MENU-CLICK-THROUGH** —  (§4)
+- **WB-PDF-BLOB-TOKEN** —  (§2)
+- **WB-REPLAY-PDF-PLACEHOLDER** —  (§2)
+- **WB-REPLAY-REOPEN-START-AT-0** —  (§2)
+- **WB-REVIEW-DELETE-COPY** —  (§4)
+- **WB-REVIEW-THUMBNAIL-PDF** —  (§4)
+- **WB-SHARE-REPLAY-VIEWPORT-PHONE** —  (§4)
+- **WB-STROKE-BLEED** —  (§2)
+- **WB-STROKE-BLEED watch** —  (§4)
+- **WB-STUDENT-BOARD-TABS** —  (§4)
+- **WB-STUDENT-VIEW-LOCK-WHEN-SYNCED** —  (§4)
+- **wb-tab-kill-audio-durability ×2** — empty tutor:mic segments (§1)
+- **WB-TUTOR-REPLAY-PHONE-LAYOUT** —  (§4)
+- **Whiteboard session audio wire** —  (§4)
+- **Whiteboard undo touch + visible button** —  (§13)
+- **Workspace SSR 500** —  (§13)
+- **WS-U 1.4** — empty review screen copy (§4)
+- **WS-U-FRAGILE 2.4/2.5** — LIVE badge + sync pill visibility (§4)
+
+#### Live A/V & devices
+
+- **BUG-9** — camera hotswap mid-session does not recover cleanly (§1)
+- **DEVICE-PICKER-DEDUPE / WB-DEVICE-PICKER-DUPES** —  (§8)
+- **DEVICE-PICKER-MOBILE-FACINGMODE** —  (§8)
+- **Mic hot-plug requires hard refresh (B1-B4 smoke)** —  (§8)
+- **Slow first peer connect** —  (§3)
+- **SMOKE-BUG-11** — tutor mic picker not initialized from tn-mic-device-id (§8)
+- **WS-M** — two-device hardware smoke (tutor hears student) (§3)
+
+#### Consent, COPPA & erasure
+
+- **allowEducationalUse toggle + enforcement (BL-B)** —  (§6)
+- **BL-A** — tutor-visible per-student consent projection (§6)
+- **CH-SMOKE-DQ-CONSENT-CALLOUT-LIVE** —  (§6)
+- **CH-SMOKE-DQ-ERASURE-2FA** —  (§6)
+- **CH-SMOKE-DQ-ERASURE-ACCOUNT-LOOKUP** —  (§6)
+- **CH-SMOKE-DQ-ERASURE-COPY-JARGON** —  (§6)
+- **CH-SMOKE-DQ-MULTI-STUDENT-LIVE** —  (§6)
+- **CH-SMOKE-SETTINGS-SAVE-ON-TOGGLE** —  (§6)
+- **CH-SMOKE-STUDENT-MIC-PERSIST** —  (§6)
+- **Erasure 2FA step-up** —  (§6)
+- **Erasure operator lookup UX (MB-2)** —  (§6)
+- **ERASURE-ADMIN-METADATA** —  (§6)
+- **ERASURE-CLIENT-STORE-UNREACHABLE** —  (§6)
+- **ERASURE-INFLIGHT-CHECKPOINT** —  (§6)
+- **ERASURE-ORPHAN-AUDIO-BLOBS** —  (§6)
+- **WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME** —  (§6)
+
+#### Auth, identity & security
+
+- **2FA remember-device open decisions** —  (§6)
+- **ADMIN-PARENT-BLOCK-LIVE** —  (§6)
+- **BL-ADMIN-UUID-PICKER** — 2FA reset target picker (§6)
+- **BL-RESET-DOMAIN** — reset email respects originating host (§6)
+- **BL-RESET-GENERATE** — Chrome suggest-password on /reset-password (§6)
+- **BL-VERIFY-SUCCESS-COPY** — post-verify affirmation (§6)
+- **Claim flow: self-learner shouldn't see child PIN setup** —  (§6)
+- **Claim interstitial** — verify claim-email host vs preview (§6)
+- **Gate B1** — approval-gating / waitlist (§6)
+- **Gate B3** — security checks + final cleanups (§6)
+- **In-memory rate limiters → Neon** —  (§6)
+- **Notes first-class authenticated chrome (P2-AC-12/13)** —  (§6)
+- **Parent→self-learner toggle post-create** —  (§6)
+- **PLAYWRIGHT-GAP** — /join #k= fragment preservation (§6)
+- **SEC-1 R3** — cross-preview impersonation SSO (§6)
+- **Signup waitlist pagination + Google OAuth auto-provision** —  (§6)
+- **Signup waitlist REJECTED + revocation UI** —  (§6)
+- **WB-FLAKE-JOIN-STALECOOKIE** —  (§6)
+- **WB-JOIN-LEARNER-SESSION-PERSISTENCE** —  (§6)
+
+#### UX & design system
+
+- **2FA inline verify-at-login** —  (§7)
+- **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** —  (§7)
+- **ADMIN-STUDENT-DETAIL-MOBILE-ICONS** —  (§7)
+- **Cohesive pass open questions** —  (§7)
+- **Component-duplication + @layer base CSS cleanup** —  (§7)
+- **dark: → semantic token migration** —  (§7)
+- **Double scrollbars on admin pages** —  (§7)
+- **Error/legal/public shells legacy cleanup** —  (§7)
+- **Formalize IA decisions in UX-AND-A11Y-SPEC §15** —  (§7)
+- **Foundation pass** — promote surface-local shells to library (§7)
+- **Gate A1** — cohesive visual review + mock-faithful composition (§7)
+- **Keyboard undo Ctrl+Z misbehaves (pilot B1)** —  (§7)
+- **Known issues & roadmap** — top-level sidebar link (§7)
+- **Known issues page placement/tone** —  (§7)
+- **Known-issues section headers too muted** —  (§7)
+- **L3** — student WB chrome parity on /join (§7)
+- **L6** — WbStatusPill / connected-sync status (§7)
+- **Learner/student logged-in top-bar oversized** —  (§7)
+- **Live board ⋯ More PDF affordance discoverability** —  (§7)
+- **Live board Sign out row dimmed/clipped** —  (§7)
+- **MarketingHeader inline styles → primitives** —  (§7)
+- **Missing primitives** —  (§7)
+- **Mobile color palette dismiss I7** —  (§7)
+- **Parent consent editor save wiring** —  (§7)
+- **Parent dashboard Manage button alignment** —  (§7)
+- **Part 3 student Sign out in top-bar ⋯** —  (§7)
+- **Password fields show/hide toggle** —  (§7)
+- **Pen panel too large (pilot-2026-06-06 U5)** —  (§7)
+- **PreSessionPanel / StartWhiteboardSession mock alignment** —  (§7)
+- **Recovered-audio prompt** — always keep, no Discard (§7)
+- **REQ-S3-3** — Identity chip + test-account badge (§7)
+- **Scheduler Group F visual-only** —  (§7)
+- **Share/copy link silent clipboard failure (pilot B2)** —  (§7)
+- **Start/end session flash reload feel** —  (§7)
+- **T2** — accent-recipe pass (§7)
+- **Tailwind aliases rounded-panel, border-strong** —  (§7)
+- **TFA2** — 2FA setup/verify pages v1 redesign (§7)
+- **Thinner default pen stroke (U6)** —  (§7)
+- **Time-alert UX** — visible alert clock + settings (§7)
+- **Tutor toolbar reorder U4 / shape dropdowns U5-U6** —  (§7)
+- **Unclaimed student claim link buried** —  (§7)
+- **Verify-email success copy** —  (§7)
+- **WB-REPLAY-PAUSE-COPY** —  (§2)
+- **WB-WTR-DEVICE-LOADING** —  (§2)
+- **WS-J richer per-session billing display** —  (§7)
+- **WS-Q tutor settings** — alert defaults (§7)
+- **WS-U-FRAGILE taste/IA batch (2.8–2.15)** —  (§7)
+- **X2** — v1 design via shared components (DRY) (§7)
+- **X3** — AV pip on/off clarity (§7)
+
+#### Testing & harness
+
+- **Admin notes UX Phase 0 visual regression matrix** —  (§9)
+- **audio-rollover Playwright not in CI gate** —  (§9)
+- **Block B remote-surgical mixdown hardware oracle** —  (§9)
+- **F-1 outbox register retry cap** —  (§9)
+- **installControllableUploadStub duplication** —  (§9)
+- **iOS matrix S1–S14** — real hardware unfilled (§1)
+- **JEST-ISOLATION-CLASS-2** —  (§9)
+- **phase0-stop** — break CSS deploy-abort verify (§9)
+- **PIPELINE-1** — agentic pipeline before release (§9)
+- **Recorder test refactor Phases 4–6** —  (§9)
+- **RELAY-MARATHON-SHARDS** —  (§9)
+- **Site-wide coverage P1 gaps** —  (§9)
+- **TEST-REAL-INTEGRATION-SUPERSEDES-SMOKE** —  (§9)
+- **upload-outbox.test parallel-race flake** —  (§9)
+- **waitForPendingUploads debug surface removal** —  (§9)
+- **WS-V / Part-2 site-wide mechanical test buildout** —  (§9)
+
+#### Platform & ops
+
+- **(SARAH-CALL-PREP.md)** —  (§13)
+- **Cost observability Phase 2** —  (§10)
+- **Cost-event durability hardening** —  (§10)
+- **Full product usage instrumentation** — NEAR-IMMEDIATE POST-MASTER (§10)
+- **Historical SessionNote timezone backfill** —  (§10)
+- **Outbox permanent-failure Datadog/Sentry breadcrumbs** —  (§3)
+- **S5** — scheduled topic + notes visible in live session (§11)
+- **Scheduling** — backend wiring + calendar sync (§11)
+- **Session log billing rate / billed* column naming** —  (§10)
+- **Session timer vs billed time during disconnect gaps** —  (§10)
+- **Session-log + Wyzant/UVU export (SESSION-LOG-EXPORT)** —  (§10)
+- **Solo / in-person production enable + B-5 consent copy** —  (§10)
+- **Time-storage / billing display (billed*Local)** —  (§10)
+- **Vercel Skew Protection enablement** —  (§10)
+
+#### Commercial & GTM
+
+- **Notes quality moat elevation timing** —  (§5)
+- **Public wedge messaging** —  (§5)
+
+### 1.x — can wait
+
+| Group | Count | Notable IDs |
+|-------|------:|-------------|
+| **§1 Sarah/master-cut ops** | 5 | CUT-1, CUT-4, CUT-5, CUT-6, Ship-to-Sarah gate checklist (Andrew confirms) |
+| **§10 Ops/scheduling** | 15 | PostHog analytics Tier 0+1, Operator scoped test-data wipe + orphaned blob sweep, scripts/smoke-long-form-transcribe.mjs headless harness, RECORDER-LIFECYCLE.md preview-before-Start doc drift, docs/WHITEBOARD-ROADMAP-NEXT.md supersede?, Dev-tools adopt manual test user as fixture, … |
+| **§11 Scheduling** | 6 | S3, S4, Two-way calendar sync, Google OAuth bundling with calendar scopes, Apple CalDAV vs EventKit path, Reminders / timezone policy |
+| **§12 Org/university** | 10 | BYU / institutional pitch track separate from Sarah solo story, Stripe / subscription billing, Operator dashboard scaffolding, University department pitch infrastructure, Wyzant + UVU export formatters, Org-aware billing rounding, … |
+| **§13 Strategy/pilot** | 6 | Homework image import workflow, Rethink claim-screen layout, Self-service account deletion, Replay speaker indication, Collapse DRAFT/READY/SENT, Auto-email scheduling |
+| **§14 Deferred/someday** | 13 | WB-SCREEN-WAKE-LOCK / WB-THUMBNAIL-GRAPH / WB-OLD-PHONE-PERF, WB-GRAPH-PLACEHOLDER, WB-ENDSESSION-THUMBNAIL-TABS, Desmos live-state capture Phase 1.5, Debounced-disconnect pause trigger confirm, Engagement/dopamine surfaces, … |
+| **§2 Post-cut cleanup & WATCH** | 2 | MASTER-CUT-2026-07-09, NOTES-QUALITY-HOLD-DETAIL |
+| **§3 Recorder re-arch & scale** | 11 | Wire-level mute coordination, Remote video track recording, SFU for N>5 peers, Large-mesh CPU profiling, Tier 2 transcribe queue / VAD background job, Speaker diarization (Phase 6 task 6), … |
+| **§4 WB enhancements** | 25 | WB-LEGACY-STUDENT-CLIENT-DELETE, Laser pointer in replay, Student tab crash, Measure wire bandwidth on real session, GitHub Actions wb-regression workflow, relayShowsCollaborator copy parity, … |
+| **§5 Notes/GTM someday** | 4 | Formal eval harness + flywheel, AI edit signal Phase 1, CONTINUITY-V1-CARRYOVER, MAP-ACC |
+| **§6 Consent/auth P3** | 28 | allowMessaging / allowVideoRecording when features ship, Child-facing ConsentRestriction UI, CONSENT-UX-REDESIGN / save-on-toggle, Mid-session learner swap (Phase 3), 90-day unclaimed-real-student sunset, Mid-session consent-change poll, … |
+| **§7 UX P3 & strategic** | 13 | T9, T10, Consent floor-block checkbox contrast, BG2, Impersonation pip clarity, Video tile docking (SR-04 follow-up), … |
+| **§8 Device matrix P3** | 5 | SMOKE-AUDIO-2, SMOKE-AUDIO-3, WS-H NB-1–NB-5, Device-picker cleanup, Firefox untested |
+| **§9 Test harness P3** | 2 | Plan1 authed-join hardware failures, Preview email loopback |
+
+**1.x total: 145 items** (all P3/DEFERRED/WAIVED/PROCESS, §12–14 strategy/commercial, master-cut/Sarah-only ops, and enhancements explicitly deferrable for first stranger pilots).
+
 ---
 
 ## 1. NOW / Sarah-facing
