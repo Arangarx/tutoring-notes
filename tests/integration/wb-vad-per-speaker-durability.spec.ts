@@ -133,7 +133,7 @@ function installControllableUploadStub(
   opts: { block: boolean; delayMs: number }
 ) {
   let uploadSeq = 0;
-  return context.route("**/api/upload/audio**", async (route) => {
+  return context.route("**/api/upload/blob**", async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;

@@ -238,7 +238,7 @@
 - **Assumption**: Audio segments upload **client → Vercel Blob directly** via a token issued by our server. Our server never sees the audio bytes during upload.
 - **Where baked in**:
   - `src/lib/recording/upload.ts:uploadAudioDirect`
-  - `src/app/api/upload/audio/route.ts`
+  - `src/app/api/upload/blob/route.ts` (`kind: "audio"`)
 - **What breaks if violated**: rate-limit + bandwidth on our server for large audio uploads. Critical for Sarah's 60-90 min sessions.
 - **Migration check**: S3 pre-signed PUT URLs are the equivalent pattern.
 

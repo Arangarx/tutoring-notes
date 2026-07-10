@@ -49,7 +49,7 @@ export default function AudioUploadInput({ studentId, onUploaded, disabled }: Pr
       // Direct browser→blob upload (B1). Bypasses the Vercel function
       // 4.5MB request body cap that broke Sarah's 17.9MB m4a. See
       // src/lib/recording/upload.ts for the retry policy and
-      // src/app/api/upload/audio/route.ts for auth/ownership.
+      // src/app/api/upload/blob/route.ts (kind: audio) for auth/ownership.
       const result = await uploadAudioWithRetry(
         uploadAudioDirect,
         studentId,

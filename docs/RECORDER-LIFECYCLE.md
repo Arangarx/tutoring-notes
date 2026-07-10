@@ -159,7 +159,7 @@ WhiteboardWorkspaceClient.handleAudioRecorded
 outbox.enqueue({ sessionId, streamId: "tutor:mic", segmentId, blob, ... })
         ↓ IDB write
         ↓ worker picks up
-        ↓ POST /api/upload/audio (Vercel Blob client-direct)
+        ↓ POST /api/upload/blob kind:audio (Vercel Blob client-direct)
         ↓ row.blobRemoteUrl set; row marked uploaded
         ... (waits for End to register against SessionRecording)
         ↓

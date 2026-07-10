@@ -1027,7 +1027,7 @@ ${noteCount > 1 ? `This email shows only the most recent session. Open the link 
 
 // uploadAudioAction (server-action upload via FormData) was removed in B1.
 // All audio now uploads browser→Vercel Blob directly through
-// src/app/api/upload/audio/route.ts + src/lib/recording/upload.ts so we
+// src/app/api/upload/blob/route.ts (kind: audio) + src/lib/recording/upload.ts so we
 // don't hit the 4.5MB Vercel function body cap that broke Sarah's
 // 17.9MB pilot recording. assertOwnsStudent + size cap still enforced;
 // they moved to the route handler's onBeforeGenerateToken callback.

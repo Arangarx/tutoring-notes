@@ -2,7 +2,9 @@
  * Shared stream core for whiteboard private-blob asset proxies.
  *
  * Callers MUST run auth / session gates before invoking the stream helpers.
- * SSRF guard: `isBlobUrlForSession` is enforced here BEFORE any blob fetch.
+ * SSRF guard: callers MUST call `isWbAssetUrlInSessionScope` (wraps
+ * `isBlobUrlForSession`) before `streamPrivateWbAsset` — the scope check
+ * is not performed inside the stream helper.
  */
 
 import { get } from "@vercel/blob";

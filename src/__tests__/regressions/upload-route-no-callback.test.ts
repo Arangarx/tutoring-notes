@@ -1,5 +1,5 @@
 /**
- * Regression test for src/app/api/upload/audio/route.ts.
+ * Regression test for src/app/api/upload/blob/route.ts.
  *
  * Background: client-direct uploads to Vercel Blob (the @vercel/blob/client
  * `upload()` flow) sign a single-use token via our handleUpload route. If
@@ -25,11 +25,11 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const SRC = readFileSync(
-  join(__dirname, "..", "..", "app", "api", "upload", "audio", "route.ts"),
+  join(__dirname, "..", "..", "app", "api", "upload", "blob", "route.ts"),
   "utf8"
 );
 
-describe("api/upload/audio/route.ts client-direct upload", () => {
+describe("api/upload/blob/route.ts client-direct upload", () => {
   test("does NOT pass onUploadCompleted to handleUpload (breaks localhost)", () => {
     // The literal property must not appear inside the handleUpload({...})
     // call. Comments mentioning it are fine — that's the documentation
@@ -47,9 +47,10 @@ describe("api/upload/audio/route.ts client-direct upload", () => {
     expect(SRC).toContain("onBeforeGenerateToken");
   });
 
-  test("ownership check happens inside the token-mint handler", () => {
+  test("ownership check happens inside the token-mint handler for audio kind", () => {
     // The actual auth gate. If this regresses, anyone could upload to
     // any studentId by passing it in clientPayload.
     expect(SRC).toContain("assertOwnsStudent");
+    expect(SRC).toContain('kind === "audio"');
   });
 });
