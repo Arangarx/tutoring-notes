@@ -10,13 +10,11 @@
  * through the same `handleUpload` route and share its auth gate.
  */
 
+import { safeName } from "@/lib/blob-path";
+
 export type WhiteboardUploadResult =
   | { ok: true; blobUrl: string; sizeBytes: number }
   | { ok: false; error: string };
-
-function safeName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_") || "blob.bin";
-}
 
 const TOKEN_RETRYABLE =
   /client token|Failed to retrieve|token|rate|limit|5\d\d|network|fetch|timeout|AbortError/i;
@@ -167,7 +165,7 @@ export async function uploadWhiteboardAsset(args: {
     assetTag,
     joinToken,
   } = args;
-  const pathname = `whiteboard-sessions/${studentId}/${whiteboardSessionId}/assets/${Date.now()}-${safeName(filename)}`;
+  const pathname = `whiteboard-sessions/${studentId}/${whiteboardSessionId}/assets/${Date.now()}-${safeName(filename, "blob.bin")}`;
   return uploadGeneric(pathname, blob, contentType, {
     kind: "whiteboard-asset",
     whiteboardSessionId,
