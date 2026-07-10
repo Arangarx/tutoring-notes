@@ -10,13 +10,22 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `b8f786c8` — evening fix batch complete (PDF blob, icons/Pause, camOn, AUDIO-1 residual, **E5 bleed**).
+**Tip:** `v1-redesign` — AUDIO-1 attempt #3 merge pending docs tip update (feature `6c947920`).
 
-**Last action:** Merged `fix/wb-stroke-bleed-pdf-import` (`010a3eb5`). All evening in-flight agents landed.
+**Last action:** AUDIO-1 attempt #3 implemented + pushed (`fix/smoke-audio-1-attempt3-backoff` @ `6c947920`); merging to `v1-redesign`.
 
-**In-flight subagents:** none.
+**In-flight:** none (awaiting Andrew Brio smoke).
 
-**Next action(s):** full master gates (`test:wb-sync` + `test:regression` + `next build`); Andrew hardware smoke — Brio cancel→refresh, PDF import bleed, tab icons, student video (camOn).
+**Next action(s):** Andrew Brio cancel→refresh smoke on tip after merge. **No master cut while AUDIO-1 fails on Brio.** If #3 fails → Opus escalate. Then full gates.
+
+**Evening smoke table (2026-07-09 tip ~`22c36ca6`, pre-#3):**
+| Item | Result |
+|------|--------|
+| Admin icons | PASS |
+| PDF stroke bleed E5 | Did not repro (watch) |
+| Blob token retry | Can’t force (watch) |
+| camOn / initials | Can’t force (watch) |
+| AUDIO-1 cancel→refresh | STILL FAIL after #2 → #3 shipped, needs re-smoke |
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
