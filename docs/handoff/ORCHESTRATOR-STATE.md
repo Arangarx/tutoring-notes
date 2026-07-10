@@ -30,8 +30,12 @@
 5. ms duration formatters → `src/lib/time/format-duration-ms.ts` (byte-identical; recording formatter shares core via `padMinutes`) (`8ad4477f`)
 6. `ErrorStateCard` → 4 error/not-found pages (byte-identical, legacy markup preserved) (`e36e9e5f`)
 7. `buildAdminNavLinks` → `src/lib/admin-nav-links.ts` (drift preserved per-consumer) (`89f8dfd9`)
-- IN FLIGHT: `LegalDocumentShell` (privacy/terms shell; content untouched).
-- **DEFERRED — needs Andrew / Playwright-visual baseline:** `tokens.css` dark-palette dedup (`@media` vs `[data-theme=dark]` ~95 dup lines) — CSS-only, no unit teeth; do with a visual gate.
+8. `LegalDocumentShell` → privacy/terms shell (legal bodies byte-untouched) (`c5f61fa9`)
+
+**✅ SAFE Wave A tier COMPLETE (8/8, zero regressions). Autonomous grind PAUSED at this clean milestone for Andrew review.** Remaining dedupe is riskier and wants Andrew's awareness even with the gated pipeline:
+- **DEFERRED — visual gate:** `tokens.css` dark-palette dedup (`@media` vs `[data-theme=dark]` ~95 dup lines) — CSS-only, no unit teeth; needs Playwright/visual baseline.
+- **Wave B (Andrew-aware):** `SectionCard` realm-param (Andrew pre-approved parameterize; UI multi-consumer — testable), `consent-write` service (SECURITY/consent-sensitive), blob-proxy/share-proxy helpers (SECURITY-sensitive), kill parallel `/api/upload/audio` route. Per [`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md).
+- **Wave C/D:** whiteboard chrome monolith + A/V primitives (fragile) — Opus-grade.
 
 **agenticPipeline:** integration plan on master ([`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md)) — Phase 1 (change-run + fail-closed verify) awaits Andrew review before pipeline code changes.
 
