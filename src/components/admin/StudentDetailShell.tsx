@@ -25,6 +25,7 @@ export type StudentDetailSection = {
   mobileLabel: string;
   icon: ReactNode;
   content: ReactNode;
+  badge?: number;
 };
 
 type StudentDetailShellProps = {
@@ -35,6 +36,7 @@ type StudentDetailShellProps = {
   overflowActions: ReactNode;
   stickyCta: ReactNode;
   sections: StudentDetailSection[];
+  noteCount?: number;
 };
 
 const defaultIcons = {
@@ -53,6 +55,7 @@ export function StudentDetailShell({
   overflowActions,
   stickyCta,
   sections,
+  noteCount = 0,
 }: StudentDetailShellProps) {
   const [activeTab, setActiveTab] = useState(sections[0]?.id ?? "session");
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -180,7 +183,7 @@ export function StudentDetailShell({
   }, [sections]);
 
   return (
-    <div className="flex flex-col pb-20 md:h-[calc(100dvh-4rem)] md:min-h-0 md:pb-0">
+    <div className="flex flex-col pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:h-[calc(100dvh-4rem)] md:min-h-0 md:pb-0">
       <div className="shrink-0">
         <header className="mb-4 space-y-3 md:mb-6">
           <Link
@@ -276,6 +279,7 @@ export function StudentDetailShell({
             key={s.id}
             id={`student-section-mobile-${s.id}`}
             data-section={s.id}
+            data-testid={`student-detail-panel-${s.id}`}
             className={cn(
               "rounded-2xl border border-border bg-card p-[18px] shadow-sm",
               activeTab !== s.id && "hidden"
@@ -283,31 +287,72 @@ export function StudentDetailShell({
             aria-label={s.label}
           >
             {s.content}
+            {s.id === "session" ? (
+              <div
+                className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4"
+                data-testid="session-tab-escape-hatches"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleTabClick("notes")}
+                  className="min-h-11 rounded-full bg-accent-soft px-3.5 py-2 text-sm font-semibold text-accent-text hover:bg-accent-soft/80"
+                  data-testid="session-escape-notes-count"
+                >
+                  {noteCount} session note{noteCount !== 1 ? "s" : ""}
+                </button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => handleTabClick("notes")}
+                  data-testid="session-escape-view-notes"
+                >
+                  View notes
+                </Button>
+              </div>
+            ) : null}
           </section>
         ))}
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-14 z-10 bg-gradient-to-t from-background from-30% to-transparent px-4 pb-3 pt-6 md:hidden">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] z-10 bg-gradient-to-t from-background from-30% to-transparent px-4 pb-3 pt-6 md:hidden">
         <div className="pointer-events-auto [&_button]:whitespace-nowrap">{stickyCta}</div>
       </div>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 flex h-14 items-stretch border-t border-border bg-card md:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 flex h-[calc(3.75rem+env(safe-area-inset-bottom,0px))] items-stretch border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-6px_16px_rgba(0,0,0,0.08)] backdrop-blur-sm md:hidden"
         aria-label="Student sections"
+        role="tablist"
+        data-testid="student-detail-mobile-tabs"
       >
         {sections.map((s) => (
           <button
             key={s.id}
             type="button"
+            role="tab"
+            aria-selected={activeTab === s.id}
+            aria-controls={`student-section-mobile-${s.id}`}
+            data-testid={`student-detail-tab-${s.id}`}
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium",
-              activeTab === s.id ? "text-accent-text" : "text-muted-foreground"
+              "relative flex flex-1 flex-col items-center justify-center gap-1 px-1 text-xs transition-colors",
+              activeTab === s.id
+                ? "bg-accent-soft/70 font-semibold text-accent-text"
+                : "font-medium text-muted-foreground"
             )}
             onClick={() => handleTabClick(s.id)}
-            aria-current={activeTab === s.id ? "page" : undefined}
           >
-            <span className="flex h-[18px] items-center">{s.icon}</span>
-            {s.mobileLabel}
+            <span className="relative flex h-5 items-center [&_svg]:size-5">
+              {s.icon}
+              {s.badge != null && s.badge > 0 ? (
+                <span
+                  className="absolute -top-1.5 -right-2.5 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-accent-foreground"
+                  aria-hidden
+                >
+                  {s.badge > 99 ? "99+" : s.badge}
+                </span>
+              ) : null}
+            </span>
+            <span className="leading-none">{s.mobileLabel}</span>
           </button>
         ))}
       </nav>
