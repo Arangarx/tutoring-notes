@@ -16,6 +16,7 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { hmacToken, generateRawToken, AH_SESSION_TTL_MS } from "@/lib/crypto/session-tokens";
+import { getCookieFromRequest } from "@/lib/http/cookies";
 
 export const AH_SESSION_COOKIE = "mynk_ah_session";
 export { AH_SESSION_TTL_MS };
@@ -239,22 +240,4 @@ export function buildAhSessionCookie(
  */
 export function clearAhSessionCookie(): string {
   return `${AH_SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-function getCookieFromRequest(req: NextRequest | Request, name: string): string | null {
-  // NextRequest has req.cookies.get()
-  if ("cookies" in req && typeof (req as NextRequest).cookies?.get === "function") {
-    return (req as NextRequest).cookies.get(name)?.value ?? null;
-  }
-  // Fallback: parse Cookie header manually
-  const cookieHeader = req.headers.get("cookie") ?? "";
-  for (const part of cookieHeader.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return v.join("=");
-  }
-  return null;
 }
