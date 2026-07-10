@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { KnownIssuesRoadmapView } from "@/components/admin/KnownIssuesRoadmapView";
-import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
+import { SubNav } from "@/components/SubNav";
 import { KNOWN_ISSUES_ROADMAP_PAGE_TITLE } from "@/lib/known-issues-roadmap-content";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,7 @@ export default async function KnownIssuesRoadmapPage() {
           ← Settings
         </Link>
       }
-      sidebar={<SettingsSubNav />}
+      sidebar={<SubNav realm="admin-settings" />}
       sidebarWidth="narrow"
     >
       <KnownIssuesRoadmapView />

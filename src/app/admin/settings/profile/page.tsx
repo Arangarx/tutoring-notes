@@ -4,7 +4,7 @@ import { authOptions } from "@/auth-options";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { SectionCard } from "@/components/SectionCard";
-import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
+import { SubNav } from "@/components/SubNav";
 import ChangePasswordForm from "./ChangePasswordForm";
 import ProfileForm from "./ProfileForm";
 
@@ -43,7 +43,7 @@ export default async function ProfileSettingsPage() {
           ← Settings
         </Link>
       }
-      sidebar={<SettingsSubNav />}
+      sidebar={<SubNav realm="admin-settings" />}
       sidebarWidth="narrow"
     >
       <div className="space-y-6">

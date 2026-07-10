@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { SectionCard } from "@/components/SectionCard";
-import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
+import { SubNav } from "@/components/SubNav";
 import BillingDefaultsForm from "./BillingDefaultsForm";
 import { loadBillingDefaultsForForm } from "./actions";
 
@@ -28,7 +28,7 @@ export default async function BillingSettingsPage() {
   const defaults = await loadBillingDefaultsForForm();
   if (!defaults) {
     return (
-      <AdminPageShell title="Billing" sidebar={<SettingsSubNav />} sidebarWidth="narrow">
+      <AdminPageShell title="Billing" sidebar={<SubNav realm="admin-settings" />} sidebarWidth="narrow">
         <SectionCard realm="admin" title="Billing defaults">
           <p className="text-sm text-muted-foreground max-w-lg">
             This session uses server environment login only. Billing defaults require a
@@ -53,7 +53,7 @@ export default async function BillingSettingsPage() {
           ← Settings
         </Link>
       }
-      sidebar={<SettingsSubNav />}
+      sidebar={<SubNav realm="admin-settings" />}
       sidebarWidth="narrow"
     >
       <SectionCard realm="admin"

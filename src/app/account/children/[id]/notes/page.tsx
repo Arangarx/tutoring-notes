@@ -24,7 +24,7 @@ import {
 import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
 import { requireAccountHolderSession } from "@/lib/server-session";
 
-import { AccountChildNav } from "../AccountChildNav";
+import { SubNav } from "@/components/SubNav";
 
 export const dynamic = "force-dynamic";
 
@@ -115,7 +115,7 @@ export default async function LearnerNotesPage({
         </Link>
       }
     >
-      <AccountChildNav learnerId={learnerId} />
+      <SubNav realm="account-child" learnerId={learnerId} />
 
       <SectionCard realm="account"
         title="Session notes"
