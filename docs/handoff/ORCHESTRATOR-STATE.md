@@ -10,23 +10,25 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `124f66c1` — **✅ END-WINDDOWN** + **✅ SHARE-REPLAY-PHONE** + **✅ AUDIO-1** ([AUDIO-1 fix](ffd330a9-38a9-4532-82c4-cd46d46b40bb) → `e3afae42`/`81836b5a`). Recheck quicklist COMPLETE.
+**Tip:** `v1-redesign` @ `b5472ab8` — **✅ pre-Sarah burndown code complete for this wave:** END-WINDDOWN + SHARE-REPLAY-PHONE + AUDIO-1 + ADMIN-STUDENT-MOBILE. Recheck quicklist COMPLETE.
 
-**Last action:** Merged `fix/smoke-audio-1-first-acquire` `--no-ff` → `124f66c1`.
+**Last action:** Merged `fix/admin-student-detail-mobile-discover` `--no-ff` → `b5472ab8`. No subagents in flight.
 
-**In-flight subagents:**
-- [admin student mobile](0059ebbf-3c12-41dc-b040-85395b54b17a) Composer worktree — StudentDetailShell tab discoverability
+**In-flight subagents:** *(none)*
 
-**Decisions locked (END-WINDDOWN):** shipped — disarm overlay + relay `session_ending`; `endedAt` + poll backup. PERF-1 follow-up.
+**Shipped this burndown (2026-07-09):**
+- END-WINDDOWN `e58e0826` — disarm + relay `session_ending` (PERF-1 deferred)
+- SHARE-REPLAY-PHONE `8a6ab878` — viewport-lock share shell
+- AUDIO-1 `124f66c1` — enumerate-entry first acquire + silent RMS (Brio PLAYWRIGHT-GAP)
+- ADMIN-MOBILE `b5472ab8` — tab discoverability
 
-**AUDIO-1:** shipped A+B (enumerate-entry first acquire + silent RMS oracle). PLAYWRIGHT-GAP: real Brio hardware. AUDIO-3 / phone reconnect re-GUM still open.
+**Next action(s):**
+1. Optional A spot-checks: blank Board-3 bleed + share-wall (Andrew)
+2. Hardware: Brio first-acquire meter without switch (AUDIO-1 gap)
+3. Before master cut: full `test:wb-sync` + `test:regression` + `next build`
+4. PERF-1 (de-await snapshot) still open, not Sarah-blocking
 
-**Next action(s) — pre-Sarah burndown (priority):**
-1. **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** — in flight
-2. Optional A: blank Board-3 bleed + share-wall (Andrew)
-3. Hardware smoke: Brio first-acquire meter without switch (AUDIO-1 gap)
-
-**Still open / pre-Sarah:** student-detail mobile (fixing); PERF-1; Brio hardware oracle for AUDIO-1.
+**Still open (non-blocking / follow-up):** PERF-1; AUDIO-3; phone reconnect re-GUM; Brio hardware oracle.
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
