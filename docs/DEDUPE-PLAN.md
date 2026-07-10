@@ -32,7 +32,7 @@ Pure functions and low-risk shared helpers; unit-testable; near-zero regression 
 
 ## Wave B — admin/account composition (medium risk)
 
-- `SectionCard` (realm param) ← `AdminSectionCard` + `AccountSectionCard` + `AccountSectionCardLike`. **NOTE:** `V1-COMPONENT-LIBRARY.md` §1 marked these "do not consolidate (separate realms)" — that predates the 2026-07-10 rule; **needs Andrew re-waiver OR parameterize**. Confirm before doing.
+- `SectionCard` (realm param) ← `AdminSectionCard` + `AccountSectionCard` + `AccountSectionCardLike`. **DECIDED (Andrew 2026-07-10): parameterize into one `SectionCard` with a realm prop** — new zero-dup rule wins over the old "do not consolidate" note (update `V1-COMPONENT-LIBRARY.md` accordingly). Do carefully — every realm-specific style/behavior difference must survive as a prop.
 - `PageShell` + `AppHeader` ← duplicated headers across `AdminPageShell` / `AccountPageShell` / `StudentPageShell` / `ParentShareShell`.
 - `SubNav` (variant) ← `SettingsSubNav` + `AccountChildNav`.
 - `consent-write.ts` service ← versioned `ConsentRecord` create dup (claim setup + parent consent action) — prevents consent drift (security-relevant; test hard).
@@ -58,11 +58,18 @@ Pure functions and low-risk shared helpers; unit-testable; near-zero regression 
 
 ## NOT duplication (leave / documented-parallel)
 
-`Providers`/`Toaster`/`ThemeProvider` (single); `learner-session` vs `account-holder-session` (separate realms — merge only helpers); `useLiveAV`+coordinator+remote-mic (composition chain); `auth-db` vs `account-holder-auth` (documented bcrypt-round split); `assertStudentNotErased` vs `...Api` (dual surface); Excalidraw/JSXGraph third-party CSS adapters (keep scoped); hex in `tokens.css`/`BRAND.md`/`token-values.ts` (canonical token/JS-boundary).
+`Providers`/`Toaster`/`ThemeProvider` (single); `learner-session` vs `account-holder-session` (separate realms — merge only helpers); `useLiveAV`+coordinator+remote-mic (composition chain); `auth-db` vs `account-holder-auth` (**DECIDED Andrew 2026-07-10: keep** the documented bcrypt-round split — not real duplication); `assertStudentNotErased` vs `...Api` (dual surface); Excalidraw/JSXGraph third-party CSS adapters (keep scoped); hex in `tokens.css`/`BRAND.md`/`token-values.ts` (canonical token/JS-boundary).
 
-## Discipline per consolidation
+## Discipline per consolidation — ZERO regressions (Andrew 2026-07-10, live on master)
 
-1. Grep ALL consumers; 2. exhaustive red-before/green-after tests to spec (right layer — Playwright for WB/AV/layout); 3. independent agentic verification (tests-to-spec + soundness + no-dup); 4. green `npx next build`; 5. small chunk — one consolidation per branch/commit series; 6. never destabilize a live surface for a refactor.
+Non-negotiable, in order:
+0. **Diff-for-identity FIRST.** Before folding any duplicate into a canonical, diff every copy. Context-specific copy, behavior, styling, and functionality differences **must** be preserved as **parameters/props** on the canonical — **never silently dropped.** If the copies genuinely diverge in a way params can't cleanly express, STOP and surface to Andrew.
+1. Grep ALL consumers of both the duplicate and the canonical.
+2. **Teeth tests** — exhaustive red-before/green-after to spec, real independent oracle, right layer (Playwright for WB/AV/layout/media; unit for pure logic). If you can't test it with teeth, **escalate to Andrew** — do not proceed on hope.
+3. **Independent agentic verification** (separate agent: tests-to-spec + soundness + no-dup + no-regression) before "done".
+4. Green `npx next build` + affected test gate.
+5. **Small chunk** — one consolidation per branch/commit series; no big-bang.
+6. Never destabilize a live surface for a refactor. **Zero tolerance for catchable regressions.**
 
 ## Doc drift to fix while here
 `V1-COMPONENT-LIBRARY.md`: `ThemeToggle` listed "not created" (exists); `PageSizeSelect` "candidate" (already shadcn); Account/Admin section cards "do not consolidate" (conflicts with 2026-07-10 rule).
