@@ -2411,18 +2411,31 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncClient, hasEverHadLocalMedia, localPeerId, sessionId]);
 
-  // Broadcast coarse local A/V on/off via presence so remote tiles can
-  // render cam-off initials without relying on inbound track state.
+  // Broadcast coarse local cam/mic state via presence so remote tiles render
+  // cam-off initials without relying on inbound WebRTC track state.
   //
-  // Gate: omit camOn until hasCamPermission !== "unknown" — requestCam()
-  // hasn't settled yet, so broadcasting camOn:false would latch false on
-  // remote peers and show initials even when the camera is about to come on.
-  // This matters most on 2nd sessions where permission is already granted and
-  // requestCam() resolves almost immediately but AFTER this effect first fires.
+  // camOn broadcast rules — NEVER latch false mid-GUM (fix: wb-av-camon-acquire-gate):
+  //   "denied"              → false  (cam definitely not coming)
+  //   stream present        → !isCamMuted  (cam on/off per intentional mute)
+  //   any other state       → undefined (omit — acquiring or not yet requested)
+  //
+  // Why "denied-only false" for the false case: on 2nd sessions, hasCamPermission
+  // is already "granted" from the prior Permissions API query, but localVideoStream
+  // is still null while requestCam() is in flight. The previous gate
+  // (hasCamPermission !== "unknown") let camOn:false through in that window,
+  // latching false on the tutor's presenceMap. Subsequent heartbeats kept
+  // re-sending camOn:false so the tutor saw initials even after the video track
+  // arrived via WebRTC. Refresh "fixed" it only because the fresh sync-client
+  // started with no stale latch.
   useEffect(() => {
     if (!syncClient) return;
-    const camKnown = hasCamPermission !== "unknown";
-    const camOn = camKnown ? (localVideoStream !== null && !isCamMuted) : undefined;
+    let camOn: boolean | undefined;
+    if (hasCamPermission === "denied") {
+      camOn = false;
+    } else if (localVideoStream !== null) {
+      camOn = !isCamMuted;
+    }
+    // else: omit — acquiring or not yet started
     const micOn = localAudioStream !== null && !isMicMuted;
     syncClient.setLocalAvMediaState({ camOn, micOn });
   }, [syncClient, localAudioStream, localVideoStream, isMicMuted, isCamMuted, hasCamPermission]);

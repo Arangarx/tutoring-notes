@@ -2437,6 +2437,119 @@ describe("useLiveAV — camOn presence (fix: no premature false latch)", () => {
 
     unmount();
   });
+
+  // wb-av-camon-acquire-gate: SENDER-side broadcast gate
+  // Verifies that the local useLiveAV hook never calls setLocalAvMediaState with
+  // camOn:false while hasCamPermission=granted but localVideoStream=null (mid-GUM).
+  // This is the 2nd-session premature latch: permission pre-cached from a prior
+  // session, so hasCamPermission="granted" on mount, but the stream is still null
+  // while requestCam() is in flight.
+  test("2nd-session camOn broadcast: omitted (not false) while hasCamPermission=granted + localVideoStream=null", async () => {
+    const camStatus = makeFakePermissionStatus("granted");
+    const micStatus = makeFakePermissionStatus("granted");
+
+    const avStateCalls: Array<{ camOn?: boolean; micOn?: boolean }> = [];
+    const syncWithSpy = {
+      isConnected: () => true,
+      onRemoteScene: () => () => undefined,
+      onConnect: () => () => undefined,
+      onDisconnect: () => () => undefined,
+      onPeerCountChange: () => () => undefined,
+      broadcastScene: () => undefined,
+      broadcastDocument: () => undefined,
+      flushPendingBroadcast: () => false,
+      broadcastSignal: () => undefined,
+      onRemoteSignal: () => () => undefined,
+      onRoomPeersChange: () => () => undefined,
+      setLocalAvMediaState: (s: { camOn?: boolean; micOn?: boolean }) => {
+        avStateCalls.push({ ...s });
+      },
+      disconnect: () => undefined,
+    } as unknown as WhiteboardSyncClient;
+
+    const props = makeBaseProps({
+      syncClient: syncWithSpy,
+      _permissions: makeFakePermissions({ mic: micStatus, cam: camStatus }),
+      _getUserMedia: jest.fn(
+        async () => makeFakeStream(0, 1).stream as unknown as MediaStream
+      ),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Wait for the Permissions API query to resolve → hasCamPermission="granted"
+    await waitFor(() => {
+      expect(result.current.hasCamPermission).toBe("granted");
+    });
+
+    // At this point: hasCamPermission="granted", localVideoStream=null.
+    // The presence broadcast must NOT have sent camOn:false (the pre-fix bug).
+    for (const call of avStateCalls) {
+      expect(call.camOn).not.toBe(false);
+    }
+
+    unmount();
+  });
+
+  test("2nd-session camOn broadcast: true after requestCam resolves (not stuck on undefined)", async () => {
+    const camStatus = makeFakePermissionStatus("granted");
+    const micStatus = makeFakePermissionStatus("granted");
+
+    const avStateCalls: Array<{ camOn?: boolean; micOn?: boolean }> = [];
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const { stream: vidStream } = makeFakeStream(0, 1);
+
+    const syncWithSpy = {
+      isConnected: () => true,
+      onRemoteScene: () => () => undefined,
+      onConnect: () => () => undefined,
+      onDisconnect: () => () => undefined,
+      onPeerCountChange: () => () => undefined,
+      broadcastScene: () => undefined,
+      broadcastDocument: () => undefined,
+      flushPendingBroadcast: () => false,
+      broadcastSignal: () => undefined,
+      onRemoteSignal: () => () => undefined,
+      onRoomPeersChange: () => () => undefined,
+      setLocalAvMediaState: (s: { camOn?: boolean; micOn?: boolean }) => {
+        avStateCalls.push({ ...s });
+      },
+      disconnect: () => undefined,
+    } as unknown as WhiteboardSyncClient;
+
+    const props = makeBaseProps({
+      syncClient: syncWithSpy,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+      _permissions: makeFakePermissions({ mic: micStatus, cam: camStatus }),
+      _getUserMedia: jest.fn(
+        async () => vidStream as unknown as MediaStream
+      ),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Wait for hasCamPermission="granted"
+    await waitFor(() => {
+      expect(result.current.hasCamPermission).toBe("granted");
+    });
+
+    // Call requestCam → stream acquired
+    await act(async () => {
+      await result.current.requestCam();
+    });
+
+    // After acquisition: the last setLocalAvMediaState call must have camOn:true
+    const camTrueCalls = avStateCalls.filter((c) => c.camOn === true);
+    expect(camTrueCalls.length).toBeGreaterThan(0);
+    // And no false was ever broadcast
+    for (const call of avStateCalls) {
+      expect(call.camOn).not.toBe(false);
+    }
+
+    unmount();
+  });
 });
 
 describe("useLiveAV — student publish-path mic boost (WS-M)", () => {
