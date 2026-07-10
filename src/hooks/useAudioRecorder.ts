@@ -97,6 +97,10 @@ import {
   tryRecoverSilentMicViaSlotWalk,
   recoverSilentMicStreamWithBackoff,
 } from "@/lib/av/enumerate-device-acquire";
+import {
+  chainDeviceAcquire,
+  sharedDeviceAcquireMutex,
+} from "@/lib/av/device-acquire-mutex";
 
 /** Draft checkpoint interval (W1 Surface 1) — matches design cadence. */
 const DRAFT_CHECKPOINT_INTERVAL_MS = 30_000;
@@ -202,6 +206,13 @@ export type UseAudioRecorderReturn = {
    * cancellation cross-talk.
    */
   localMicStream: MediaStream | null;
+
+  /**
+   * True after the mount-time first mic acquire has finished (success, silent
+   * unrecoverable, or permission denied). Tutor waiting-room auto-cam must
+   * wait for this so cam GUM does not race recorder acquire (AUDIO-1 #4).
+   */
+  micAcquireSettled: boolean;
 
   /**
    * Add a remote audio MediaStream (typically a `useLiveAV` participant's
@@ -369,6 +380,8 @@ export function useAudioRecorder({
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [error, setError] = useState<string | null>(null);
   const [localMicStream, setLocalMicStream] = useState<MediaStream | null>(null);
+  /** Mount first-acquire finished — gates tutor auto-cam (AUDIO-1 #4). */
+  const [micAcquireSettled, setMicAcquireSettled] = useState(false);
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
@@ -565,12 +578,22 @@ export function useAudioRecorder({
       const permission = await queryMicPermission();
       if (cancelled) return;
       setPermissionState(permission);
-      if (permission === "denied") return;
-      if (streamRef.current) return; // already acquired (e.g. StrictMode race)
-      await acquireMic({
-        deviceId: loadStoredDeviceId() || undefined,
-        forRecording: false,
-      });
+      if (permission === "denied") {
+        setMicAcquireSettled(true);
+        return;
+      }
+      if (streamRef.current) {
+        setMicAcquireSettled(true);
+        return; // already acquired (e.g. StrictMode race)
+      }
+      try {
+        await acquireMic({
+          deviceId: loadStoredDeviceId() || undefined,
+          forRecording: false,
+        });
+      } finally {
+        if (!cancelled) setMicAcquireSettled(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -1012,8 +1035,20 @@ export function useAudioRecorder({
    * Acquire the mic with optional device constraint, populate the device list
    * (labels become available once permission is granted), build the audio graph,
    * and start the level meter. If `forRecording`, also starts MediaRecorder.
+   *
+   * Serialized through `sharedDeviceAcquireMutex` (invariant 14) so tutor
+   * first-acquire cannot race live-A/V `requestCam` (AUDIO-1 #4).
    */
   async function acquireMic(opts: { deviceId?: string; forRecording: boolean }) {
+    return chainDeviceAcquire(sharedDeviceAcquireMutex, () =>
+      acquireMicUnlocked(opts)
+    );
+  }
+
+  async function acquireMicUnlocked(opts: {
+    deviceId?: string;
+    forRecording: boolean;
+  }) {
     setError(null);
     teardownMicStream();
     setRecordState("acquiring");
@@ -1925,6 +1960,7 @@ export function useAudioRecorder({
     segmentNumber,
     doneSegmentSeconds,
     localMicStream,
+    micAcquireSettled,
     addRemoteAudio,
     setRemoteRecordingGain,
     setTutorRecordingMute,

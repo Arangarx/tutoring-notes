@@ -10,22 +10,22 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `046aa222` — AUDIO-1 attempt #3 merged (`6c947920`).
+**Tip:** `v1-redesign` — AUDIO-1 attempt #4 merge pending (branch `fix/smoke-audio-1-attempt4-mutex-swap`).
 
-**Last action:** Merged `fix/smoke-audio-1-attempt3-backoff` → `v1-redesign`.
+**Last action:** Implemented attempt #4 — shared device mutex, tutor mic-before-cam, swap-aligned silent recovery.
 
-**In-flight:** none (awaiting Andrew Brio smoke).
+**In-flight:** merging #4 → Andrew Brio re-smoke.
 
-**Next action(s):** Andrew Brio cancel→refresh smoke on tip. Filter console `silent_track` for `recovered_after_delay attempt=N elapsed_ms=M`. **No master cut while AUDIO-1 fails on Brio.** If #3 fails → Opus escalate. Then full gates.
+**Next action(s):** Andrew cancel→refresh Brio smoke. Filter `silent_track` for `userPickedSlot=true` / recovered vs unrecoverable. **No master cut while AUDIO-1 fails on Brio.** If #4 fails → product mitigation (explicit re-arm), not another backoff.
 
-**Evening smoke table (2026-07-09 tip ~`22c36ca6`, pre-#3):**
+**Evening smoke + #3 fail / #4 shipped:**
 | Item | Result |
 |------|--------|
 | Admin icons | PASS |
 | PDF stroke bleed E5 | Did not repro (watch) |
-| Blob token retry | Can’t force (watch) |
-| camOn / initials | Can’t force (watch) |
-| AUDIO-1 cancel→refresh | STILL FAIL after #2 → #3 shipped @ `046aa222`, needs re-smoke |
+| Blob token / camOn | Watch |
+| AUDIO-1 #3 | FAIL — unrecoverable ~5.8s / 3 slots |
+| AUDIO-1 #4 | Shipped — needs hardware re-smoke |
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 

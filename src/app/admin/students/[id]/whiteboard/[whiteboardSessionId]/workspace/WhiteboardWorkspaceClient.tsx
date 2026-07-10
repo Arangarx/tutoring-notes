@@ -2245,6 +2245,8 @@ export function WhiteboardWorkspaceClient({
     hasLeft,
     openMenu,
     hasCamPermission: liveAv.hasCamPermission,
+    tutorMicAcquireSettled:
+      role === "tutor" ? workspaceAudio.micAcquireSettled : true,
     reachablePeerIdsKey,
     reachableParticipantsCount: liveAv.reachableParticipants.length,
     tutorSyncConnected,
