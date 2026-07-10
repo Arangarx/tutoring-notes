@@ -39,7 +39,7 @@
 
 **agenticPipeline:** integration plan on master ([`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md)) — Phase 1 (change-run + fail-closed verify) awaits Andrew review before pipeline code changes.
 
-**Next action(s):** verify+land LegalDocumentShell; then Wave A safe items are largely exhausted — remaining dedupe is Wave B (section-card param, consent-write service, blob-proxy helpers, kill /api/upload/audio) + Wave C/D (whiteboard/AV, higher risk) per [`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md). Priority #2 external Google actions + Priority #3 instrumentation await Andrew. tokens.css needs visual gate.
+**Next action(s):** Fresh chat — `@` [`docs/handoff/release-track-2026-07-10-session-bootstrapper.md`](release-track-2026-07-10-session-bootstrapper.md) + this file; **talk through Open Andrew-confirms before any greenlight.** Do not start Wave B / pipeline code / Google-dependent features until decided.
 
 ---
 
@@ -47,15 +47,20 @@
 
 **🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).
 
-**Tip:** `chore/doc-cleanup-master` (branch off `master`/`v1-redesign` @ `fc8e1804`); merges back to master after review.
+**Tip:** `master` @ `0c3e267d` (Wave A complete; LegalDocumentShell landed `c5f61fa9`). Main checkout on `master`, clean. Merge-audio worktree on `v1-redesign` (isolation).
 
-**Last action:** Doc cleanup phases 0–5 complete; committing INDEX + state; push branch.
+**Last action:** Overnight Wave A safe tier complete (8/8 verified→merged). Session swap — bootstrapper written for Andrew to continue in a fresh chat.
 
-**In-flight:** none.
+**In-flight:** none. Grind paused for Andrew greenlights.
 
-**Next action(s):** Merge `chore/doc-cleanup-master` → master when ready. Then next cleanup thread / triage BACKLOG §1 NOW hotlist (post-cut REAL-FAILs, SMOKE-AUDIO-1 Brio verify, SMOKE-NOTES-1, SMOKE-UX-1).
+**Open Andrew-confirms (talk through in next session — see bootstrapper):**
+1. **Wave B greenlight** — SectionCard (pre-approved param), consent-write, blob-proxy, kill `/api/upload/audio` (security-aware).
+2. **`tokens.css` dark-palette** — visual gate approach.
+3. **Priority #2 Google Console** — confirm Published/`gmail.send`; `usemynk.com` Search Console; start two-way calendar verification (4–6 wk).
+4. **agenticPipeline Phase 1** — greenlight [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md) before any pipeline code.
+5. **Priority #3 instrumentation** — first concrete slice under COPPA-first-party policy.
 
-**Waive record:** BACKLOG **MASTER-CUT-2026-07-09**. Green at cut: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE. Product knowns: reopen-at-0, share PDF placeholders, device-loading spinner.
+**Waive record:** BACKLOG **MASTER-CUT-2026-07-09**. Green at cut: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE.
 
 **Evening smoke final:**
 | Item | Result |
