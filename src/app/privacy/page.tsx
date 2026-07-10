@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { MarketingHeader } from "@/components/marketing/MarketingHeader";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { LegalDocumentShell } from "@/components/LegalDocumentShell";
 import { Separator } from "@/components/ui/separator";
 
 /**
@@ -43,16 +37,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <>
-      <MarketingHeader />
-      <main id="main-content" className="px-4 py-10">
-        <div className="mx-auto w-full max-w-3xl">
-          <Card>
-            <CardHeader>
-              <CardTitle className="heading text-3xl font-normal">Privacy Policy</CardTitle>
-              <p className="text-sm text-muted-foreground">Last updated: July 9, 2026</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="July 9, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -445,10 +430,6 @@ export default function PrivacyPage() {
             Umbrella privacy policy
           </a>
         </p>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-    </>
+    </LegalDocumentShell>
   );
 }

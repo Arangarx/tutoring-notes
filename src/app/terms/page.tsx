@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { MarketingHeader } from "@/components/marketing/MarketingHeader";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { LegalDocumentShell } from "@/components/LegalDocumentShell";
 import { Separator } from "@/components/ui/separator";
 
 /**
@@ -42,16 +36,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <>
-      <MarketingHeader />
-      <main id="main-content" className="px-4 py-10">
-        <div className="mx-auto w-full max-w-3xl">
-          <Card>
-            <CardHeader>
-              <CardTitle className="heading text-3xl font-normal">Terms of Use</CardTitle>
-              <p className="text-sm text-muted-foreground">Last updated: July 9, 2026</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
+    <LegalDocumentShell title="Terms of Use" lastUpdated="July 9, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           These terms govern your use of <strong>Tutoring Notes</strong>, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
@@ -241,10 +226,6 @@ export default function TermsPage() {
             Umbrella terms of service
           </a>
         </p>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-    </>
+    </LegalDocumentShell>
   );
 }
