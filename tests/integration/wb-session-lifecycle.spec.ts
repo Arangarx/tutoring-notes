@@ -2988,29 +2988,26 @@ test.describe(
   "2nd-session: student tile video not initials, Start enables",
   { tag: [TAG.WB_PRESENCE, TAG.WB_AV, TAG.WB_SYNC] },
   () => {
-    test.fixme(
+    test(
       "second session in same context: student tile has no initials placeholder and Start enables",
-      // PLAYWRIGHT-GAP: wb-2nd-session-true-race — nondeterministic AV-tile camera
-      // presence race. The camOn:false latch timing depends on WebRTC camera
-      // resolution speed in the hermetic relay; the initials-placeholder assertion
-      // fails intermittently under full-suite contention. Not caused by the
-      // ab60bf5 consent/phase-guard batch (bothConnectedAtIso is explicitly voided
-      // in WhiteboardWorkspaceClient — camera tile status is driven by WebRTC peer
-      // signals, not DB fields). Quarantined until the true 2nd-session end-flow
-      // navigation is implemented (docs/BACKLOG.md: wb-2nd-session-true-race).
+      // Previously fixme'd as wb-2nd-session-true-race: the camOn:false latch
+      // timing was nondeterministic — if WebRTC camera resolved fast, the
+      // premature camOn:false from useLiveAV's presence effect arrived at the
+      // tutor BEFORE the video track (causing initials), then camOn:true arrived
+      // to clear it; under suite contention the window widened and the assertion
+      // raced.
+      //
+      // Fix (wb-av-camon-acquire-gate): useLiveAV no longer broadcasts camOn:false
+      // while hasCamPermission="granted" but localVideoStream=null (mid-GUM). It
+      // now omits camOn entirely until the stream is present or permission is
+      // denied. The race window is eliminated regardless of camera resolution speed.
+      //
+      // This test approximates a true 2nd-session by using browser contexts with
+      // pre-granted camera permissions (simulating the Permissions API cache from a
+      // completed first session). The true end-flow navigation (session 1 ends →
+      // navigate to session 2 in same context) is a separate BACKLOG item
+      // (docs/BACKLOG.md: wb-2nd-session-true-race).
       async ({ browser }) => {
-        // PLAYWRIGHT-GAP: The true 2nd-session race (camera permission pre-cached
-        // from a completed first session) is approximated here by navigating two
-        // browser contexts through a first session (WebRTC established once), then
-        // seeding and navigating to a second session in the same contexts.
-        // Camera permission is pre-granted via context options so both sessions
-        // run with the same "already-approved" permission state. The hermetic
-        // relay can't easily simulate the timing difference of a returning user's
-        // camera resolution, but the presence-merge fix (never latch camOn:false
-        // prematurely) must hold regardless of camera resolution speed.
-        // docs/BACKLOG.md: wb-2nd-session-true-race — full navigation away from
-        // session 1 → session ends → navigate back in same contexts with camera
-        // cached from prior session (requires real session end-flow + re-navigate).
         test.setTimeout(600_000);
 
         const session1 = await seedWbPendingLiveSyncSession();
