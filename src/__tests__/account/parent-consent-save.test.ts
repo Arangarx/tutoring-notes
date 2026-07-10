@@ -22,9 +22,23 @@ jest.mock("@/lib/server-session", () => ({
   hasLearnerSessionCookie: jest.fn(),
 }));
 
+jest.mock("@/lib/consent-write", () => {
+  const actual = jest.requireActual<typeof import("@/lib/consent-write")>(
+    "@/lib/consent-write"
+  );
+  return {
+    ...actual,
+    createVersionedConsentRecord: jest.fn(actual.createVersionedConsentRecord),
+  };
+});
+
 import { db } from "@/lib/db";
 import { saveParentConsentAction } from "@/app/account/children/[id]/consent/actions";
 import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
+import {
+  ConsentAlreadySavedError,
+  createVersionedConsentRecord,
+} from "@/lib/consent-write";
 import { uniq } from "../helpers/unique-test-token";
 
 
@@ -234,5 +248,66 @@ describe("saveParentConsentAction", () => {
     });
 
     expect(result).toEqual({ ok: false, error: "forbidden" });
+  });
+
+  it("rejects self-learner profiles", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder({ isSelfLearner: true });
+    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
+    await createStudent(tutor.id, profile.id);
+
+    (getAccountHolderSessionFromHeaders as jest.Mock).mockResolvedValueOnce({
+      accountHolderId: ah.id,
+    });
+
+    const result = await saveParentConsentAction(profile.id, {
+      tutors: [
+        {
+          adminUserId: tutor.id,
+          allowLiveSession: true,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: false,
+          allowNoteSending: false,
+        },
+      ],
+      restrictions: defaultRestrictions,
+    });
+
+    expect(result).toEqual({ ok: false, error: "self_learner" });
+
+    const count = await db.consentRecord.count({
+      where: { learnerProfileId: profile.id },
+    });
+    expect(count).toBe(0);
+  });
+
+  it("returns consent_already_saved on P2002 version race", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const profile = await createLearnerProfile(ah.id);
+    await createStudent(tutor.id, profile.id);
+
+    (getAccountHolderSessionFromHeaders as jest.Mock).mockResolvedValueOnce({
+      accountHolderId: ah.id,
+    });
+
+    (createVersionedConsentRecord as jest.Mock).mockRejectedValueOnce(
+      new ConsentAlreadySavedError()
+    );
+
+    const result = await saveParentConsentAction(profile.id, {
+      tutors: [
+        {
+          adminUserId: tutor.id,
+          allowLiveSession: true,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: false,
+          allowNoteSending: false,
+        },
+      ],
+      restrictions: defaultRestrictions,
+    });
+
+    expect(result).toEqual({ ok: false, error: "consent_already_saved" });
   });
 });

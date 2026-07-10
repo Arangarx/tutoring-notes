@@ -3,7 +3,10 @@
 import { db } from "@/lib/db";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
-import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
+import {
+  ConsentAlreadySavedError,
+  createVersionedConsentRecord,
+} from "@/lib/consent-write";
 
 export type SaveTutorConsentInput = {
   adminUserId: string;
@@ -74,34 +77,20 @@ export async function saveParentConsentAction(
   try {
     await db.$transaction(async (tx) => {
       for (const tutor of input.tutors) {
-        const maxVersion = await tx.consentRecord.aggregate({
-          where: {
-            learnerProfileId,
-            adminUserId: tutor.adminUserId,
-          },
-          _max: { version: true },
-        });
-        const nextVersion = (maxVersion._max.version ?? 0) + 1;
-
-        await tx.consentRecord.create({
-          data: {
-            learnerProfileId,
-            adminUserId: tutor.adminUserId,
-            version: nextVersion,
+        const { version: nextVersion } = await createVersionedConsentRecord(tx, {
+          learnerProfileId,
+          adminUserId: tutor.adminUserId,
+          setByAccountHolderId: ahSession.accountHolderId,
+          flags: {
             allowLiveSession: tutor.allowLiveSession,
             allowAudioRecording: tutor.allowAudioRecording,
             allowWhiteboardRecording: tutor.allowWhiteboardRecording,
             allowNoteSending: tutor.allowNoteSending,
-            setByAccountHolderId: ahSession.accountHolderId,
-            captureMethod: "electronic",
           },
+          logAction: "consent_set",
         });
 
         tutorVersions[tutor.adminUserId] = nextVersion;
-
-        console.log(
-          `[cns] learnerProfileId=${learnerProfileId} adminUserId=${tutor.adminUserId} action=consent_set version=${nextVersion} accountHolderId=${ahSession.accountHolderId}`
-        );
       }
 
       await tx.consentRestriction.upsert({
@@ -122,7 +111,7 @@ export async function saveParentConsentAction(
       });
     });
   } catch (err) {
-    if (isPrismaUniqueViolation(err)) {
+    if (err instanceof ConsentAlreadySavedError) {
       return { ok: false, error: "consent_already_saved" };
     }
     throw err;
