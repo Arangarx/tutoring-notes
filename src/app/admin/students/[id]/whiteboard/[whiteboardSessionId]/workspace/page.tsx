@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import { env } from "@/lib/env";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
-import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
-import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
-import { WorkspacePreviousSessionPreview } from "./WorkspacePreviousSessionPreview";
+import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persisted-state";
+import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
 
 /**
  * Tutor-side live whiteboard workspace.
@@ -15,12 +13,8 @@ import { WorkspacePreviousSessionPreview } from "./WorkspacePreviousSessionPrevi
  * Trust posture (re-read before changing):
  *   - `assertOwnsWhiteboardSession` re-checks the logged-in tutor
  *     owns this session. Multi-tenant gate.
- *   - Re-validates `consentAcknowledged === true` belt-and-suspenders
- *     (the action enforces it on create; this re-check defends
- *     against a row mutated outside the action layer).
- *   - Refuses to serve the workspace for sessions that have already
- *     ended (`endedAt != null`) — those go to the read-only review
- *     surface (separate todo).
+ *   - Ended sessions render the in-frame notes-hero review surface
+ *     (SessionReviewMode) so End Session + any RSC refresh converge.
  *   - We bounce env-only logins to the admin home with an explanation
  *     because the schema requires an FK to AdminUser.
  *
@@ -33,6 +27,15 @@ import { WorkspacePreviousSessionPreview } from "./WorkspacePreviousSessionPrevi
 
 export const dynamic = "force-dynamic";
 
+/**
+ * 300s maxDuration — required so that `after()` callbacks registered by server
+ * actions called from this workspace (enqueueChunkTranscriptionAction,
+ * triggerNotesGenerationAction, kickSessionChunksAction) have enough headroom to
+ * complete transcription + notes generation on Vercel Preview without a cron sweep.
+ * See PLATFORM-ASSUMPTIONS.md §1.8 (after() dependency).
+ */
+export const maxDuration = 300;
+
 export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Whiteboard session",
@@ -41,13 +44,22 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 type RouteParams = { id: string; whiteboardSessionId: string };
+type SearchParams = Record<string, string | string[] | undefined>;
 
 export default async function WhiteboardWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<RouteParams>;
+  searchParams?: Promise<SearchParams>;
 }) {
   const { id: studentId, whiteboardSessionId } = await params;
+  const sp = searchParams ? await searchParams : {};
+  const rawIntent = typeof sp.intent === "string" ? sp.intent : undefined;
+  const initialIntent = rawIntent === "endreview" ? ("endreview" as const) : undefined;
+  const rawSurface = typeof sp.surface === "string" ? sp.surface : undefined;
+  const initialReviewSurface =
+    rawSurface === "replay" ? ("replay" as const) : undefined;
 
   const scope = await requireStudentScope();
   if (scope.kind !== "admin") {
@@ -61,21 +73,9 @@ export default async function WhiteboardWorkspacePage({
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
   if (session.studentId !== studentId) {
-    // The URL says studentId X but the session row points at Y. Don't
-    // silently redirect — just 404 so we never serve cross-student data.
-    notFound();
-  }
-  if (!session.consentAcknowledged) {
-    // Defence-in-depth — the action enforces this on create.
     notFound();
   }
 
-  // Pull a few extra columns we need for the UI shell. We could push
-  // these into the scope helper but keeping them here means the scope
-  // helper stays tight and reusable. `endedAt` + `snapshotBlobUrl` are
-  // included so the previous-session preview branch (Phase 1c) can
-  // surface read-only context above the "Start a new session"
-  // affordance without a second DB round-trip.
   const detail = await withDbRetry(
     () =>
       db.whiteboardSession.findUnique({
@@ -90,13 +90,17 @@ export default async function WhiteboardWorkspacePage({
           activeMs: true,
           lastActiveAt: true,
           eventsBlobUrl: true,
-          // Per-student "Start with recording on?" default — biases the
-          // workspace toggle's initial value (Sarah, Apr 2026 pilot ask).
-          // The workspace client treats this as a SUGGESTED initial
-          // state, not a hard rule; the tutor can always flip per
-          // session.
+          sessionPhase: true,
+          sessionMode: true,
+          activatedAt: true,
           student: {
-            select: { id: true, name: true, recordingDefaultEnabled: true },
+            select: { id: true, name: true, learnerProfileId: true },
+          },
+          consentSnapshot: {
+            select: {
+              allowAudioRecording: true,
+              consentRecordId: true,
+            },
           },
         },
       }),
@@ -104,126 +108,44 @@ export default async function WhiteboardWorkspacePage({
   );
   if (!detail) notFound();
 
-  // Phase 1c (Pillar 4 Task 6): a tutor reopening a previously-ended
-  // session's workspace route should see a read-only preview of the
-  // last frame + a "Start a new whiteboard session" affordance,
-  // rather than being silently bounced to the review page. The
-  // review page is still one click away inside the preview shell;
-  // bouncing was hostile when the tutor's intent was almost always
-  // "I want to start a fresh session, just remind me where we were."
-  //
-  // We keep the workspace route alive (rather than redirecting to a
-  // new path) because Sarah's pinned tabs + the existing student
-  // detail "Open whiteboard sessions" list both use this URL — the
-  // route stays stable, the rendered UI just adapts to session
-  // state.
-  if (detail.endedAt) {
-    const eventsProxyUrl = `/api/whiteboard/${whiteboardSessionId}/events`;
-    const snapshotProxyUrl = detail.snapshotBlobUrl
-      ? `/api/whiteboard/${whiteboardSessionId}/snapshot`
-      : null;
-    const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
-    return (
-      <div className="container" style={{ maxWidth: 1280 }}>
-        <div
-          className="row"
-          style={{
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-            flexWrap: "wrap",
-            gap: 8,
-          }}
-        >
-          <div>
-            <Link href={`/admin/students/${studentId}`} className="muted">
-              ← Back to {detail.student.name}
-            </Link>
-            <h1 style={{ margin: "6px 0 0" }}>
-              Whiteboard with {detail.student.name}
-            </h1>
-            {/* Started/ended timestamps live inside the preview shell
-                so they render in the tutor's local TZ (avoids the
-                UTC-vs-local SSR-vs-client diff that would otherwise
-                trigger a React hydration mismatch — see
-                FormattedTime in WorkspacePreviousSessionPreview). */}
-          </div>
-        </div>
-        <WorkspacePreviousSessionPreview
-          whiteboardSessionId={detail.id}
-          studentId={detail.student.id}
-          studentName={detail.student.name}
-          startedAtIso={detail.startedAt.toISOString()}
-          endedAtIso={detail.endedAt.toISOString()}
-          durationSeconds={detail.durationSeconds}
-          eventsProxyUrl={eventsProxyUrl}
-          snapshotProxyUrl={snapshotProxyUrl}
-          reviewHref={reviewHref}
-        />
-      </div>
-    );
-  }
-
   const syncEnabled = Boolean(env.WHITEBOARD_SYNC_URL);
 
-  return (
-    <div className="container" style={{ maxWidth: 1280 }}>
-      <div
-        className="row"
-        style={{
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
-        <div>
-          <Link href={`/admin/students/${studentId}`} className="muted">
-            ← Back to {detail.student.name}
-          </Link>
-          <h1 style={{ margin: "6px 0 0" }}>Whiteboard with {detail.student.name}</h1>
-          <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
-            Started {detail.startedAt.toLocaleString()}
-          </p>
-        </div>
-        {!syncEnabled && (
-          <div
-            className="card"
-            style={{
-              padding: "8px 12px",
-              background: "var(--warning-soft)",
-              border: "1px solid var(--warning-border)",
-              fontSize: 13,
-              maxWidth: 360,
-            }}
-          >
-            Live student collab is disabled in this environment
-            (WHITEBOARD_SYNC_URL not set). Recording still works.
-          </div>
-        )}
-      </div>
+  const initialHasConsentSnapshot = detail.consentSnapshot != null;
+  const initialAllowAudioRecording =
+    detail.consentSnapshot?.allowAudioRecording ?? null;
 
-      <WorkspaceResumeGate
-        whiteboardSessionId={detail.id}
-        studentId={detail.student.id}
-        startedAtIso={detail.startedAt.toISOString()}
-        initialLastActiveAtIso={detail.lastActiveAt?.toISOString() ?? null}
-        syncEnabled={syncEnabled}
-      >
-        <WhiteboardWorkspaceClient
-          whiteboardSessionId={detail.id}
-          studentId={detail.student.id}
-          studentName={detail.student.name}
-          adminUserId={session.adminUserId}
-          startedAtIso={detail.startedAt.toISOString()}
-          bothConnectedAtIso={detail.bothConnectedAt?.toISOString() ?? null}
-          initialActiveMs={detail.activeMs}
-          initialLastActiveAtIso={detail.lastActiveAt?.toISOString() ?? null}
-          syncUrl={syncEnabled ? env.WHITEBOARD_SYNC_URL! : null}
-          initialUserWantsRecording={detail.student.recordingDefaultEnabled}
-        />
-      </WorkspaceResumeGate>
-    </div>
+  const initialPersistedState =
+    detail.sessionPhase === "ACTIVE" && !detail.endedAt
+      ? await assembleInitialPersistedState(
+          detail.id,
+          detail.startedAt.toISOString()
+        )
+      : null;
+
+  return (
+    <WhiteboardSessionShell
+      role="tutor"
+      whiteboardSessionId={detail.id}
+      studentId={detail.student.id}
+      studentName={detail.student.name}
+      adminUserId={session.adminUserId}
+      startedAtIso={detail.startedAt.toISOString()}
+      bothConnectedAtIso={detail.bothConnectedAt?.toISOString() ?? null}
+      initialActiveMs={detail.activeMs}
+      initialLastActiveAtIso={detail.lastActiveAt?.toISOString() ?? null}
+      syncUrl={syncEnabled ? env.WHITEBOARD_SYNC_URL! : null}
+      initialUserWantsRecording={true} // PRESARAH-1: always-on recording intent
+      initialSessionPhase={detail.sessionPhase}
+      sessionMode={detail.sessionMode}
+      activatedAt={detail.activatedAt?.toISOString() ?? null}
+      syncEnabled={syncEnabled}
+      initialMode={detail.endedAt ? "review" : "live"}
+      initialAllowAudioRecording={initialAllowAudioRecording}
+      initialHasConsentSnapshot={initialHasConsentSnapshot}
+      studentLearnerProfileId={detail.student.learnerProfileId}
+      initialIntent={initialIntent}
+      initialReviewSurface={initialReviewSurface}
+      initialPersistedState={initialPersistedState}
+    />
   );
 }

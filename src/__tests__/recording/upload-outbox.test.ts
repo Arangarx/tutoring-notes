@@ -82,6 +82,7 @@ function makeHarness(opts: {
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
   defaultResult?: OutboxUploadResult;
+  onSegmentUploaded?: (row: OutboxRow) => Promise<void>;
 }): Harness {
   const queue: OutboxUploadResult[] = [];
   let defaultResult: OutboxUploadResult =
@@ -99,6 +100,7 @@ function makeHarness(opts: {
     permanentFailAfter: opts.permanentFailAfter ?? 5,
     indexedDB: new IDBFactory(),
     logger: SILENT_LOGGER,
+    onSegmentUploaded: opts.onSegmentUploaded,
     setTimeout: (cb, ms) =>
       (opts.setTimeout ?? globalThis.setTimeout)(cb, ms) as unknown as number,
     clearTimeout: (id) =>
@@ -120,6 +122,22 @@ function makeHarness(opts: {
  * reaches 0 OR `state` is "failed" (permanent), bounded by a deadline
  * so a stalled worker doesn't hang the test runner indefinitely.
  */
+async function waitForRegisterOk(
+  outbox: UploadOutbox,
+  sessionId: string,
+  opts: { timeoutMs?: number } = {}
+): Promise<void> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 2_000);
+  while (Date.now() < deadline) {
+    const rows = await outbox.listAllRows(sessionId);
+    if (rows.some((r) => r.registerOk)) return;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error(
+    `waitForRegisterOk: no row marked registerOk within ${opts.timeoutMs ?? 2_000}ms for ${sessionId}`
+  );
+}
+
 async function waitForSettled(
   outbox: UploadOutbox,
   sessionId: string,
@@ -182,7 +200,7 @@ describe("upload-outbox — enqueue + drain", () => {
     expect(drain.timedOut).toBe(false);
     expect(h.upload).not.toHaveBeenCalled();
     const state = h.outbox.observe("ws-2").getState();
-    expect(state.state).toBe("registering");
+    expect(state.state).toBe("idle");
     expect(state.inFlightStreamCount).toBe(0);
     const rows = await h.outbox.listUploadedSegments("ws-2");
     expect(rows).toHaveLength(1);
@@ -498,7 +516,15 @@ describe("upload-outbox — multi-stream concurrency", () => {
     });
 
     // Wait until both T1 and S1 have begun (parallel across streams).
-    await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 100; i++) {
+      if (
+        order.includes("begin:tutor:mic:T1") &&
+        order.includes(`begin:${studentId}:S1`)
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
     expect(order).toEqual(
       expect.arrayContaining([
         "begin:tutor:mic:T1",
@@ -577,9 +603,212 @@ describe("upload-outbox — drainAndAwait timeout", () => {
 // finalize
 // ----------------------------------------------------------------
 
+describe("upload-outbox — transcriptionOnly flag", () => {
+  test("transcriptionOnly persists in IndexedDB and round-trips on reload", async () => {
+    const dbName = uniqueDbName();
+    const outboxA = createUploadOutbox({
+      upload: async () => ({ ok: true, blobUrl: "https://blob.example/tx.webm" }),
+      dbName,
+      logger: SILENT_LOGGER,
+      backoffMsByAttempt: [0],
+    });
+    await outboxA.enqueue({
+      sessionId: "ws-tx-flag",
+      streamId: studentMicStreamId("peer-2"),
+      segmentId: "seg-tx",
+      blobLocalRef: makeBlob(),
+      mimeType: "audio/webm",
+      sizeBytes: 12,
+      audioStartedAtMs: 42,
+      transcriptionOnly: true,
+    });
+    const rowsBeforeClose = await outboxA.listAllRows("ws-tx-flag");
+    expect(rowsBeforeClose).toHaveLength(1);
+    expect(rowsBeforeClose[0].transcriptionOnly).toBe(true);
+    await outboxA.close();
+
+    const outboxB = createUploadOutbox({
+      upload: async () => ({ ok: true, blobUrl: "https://blob.example/tx.webm" }),
+      dbName,
+      logger: SILENT_LOGGER,
+      backoffMsByAttempt: [0],
+    });
+    const rowsAfterReload = await outboxB.listAllRows("ws-tx-flag");
+    expect(rowsAfterReload).toHaveLength(1);
+    expect(rowsAfterReload[0].transcriptionOnly).toBe(true);
+    await outboxB.close();
+  });
+});
+
+describe("upload-outbox — onSegmentUploaded (WS-A mid-session register)", () => {
+  test("enqueue with blobRemoteUrl pre-set → worker invokes onSegmentUploaded and marks registerOk", async () => {
+    const onSegmentUploaded = jest.fn(async (_row: OutboxRow) => {});
+    const h = makeHarness({ onSegmentUploaded });
+
+    await h.outbox.enqueue({
+      sessionId: "ws-mid",
+      streamId: TUTOR_MIC_STREAM_ID,
+      segmentId: "seg-mid-1",
+      blobLocalRef: makeBlob(),
+      blobRemoteUrl: "https://blob.example/preuploaded",
+      mimeType: "audio/webm",
+      sizeBytes: 11,
+      audioStartedAtMs: 3_000,
+    });
+
+    await waitForRegisterOk(h.outbox, "ws-mid", { timeoutMs: 2_000 });
+
+    expect(h.upload).not.toHaveBeenCalled();
+    expect(onSegmentUploaded).toHaveBeenCalledTimes(1);
+    expect(onSegmentUploaded.mock.calls[0][0].blobRemoteUrl).toBe(
+      "https://blob.example/preuploaded"
+    );
+    expect(onSegmentUploaded.mock.calls[0][0].segmentId).toBe("seg-mid-1");
+
+    const rows = await h.outbox.listAllRows("ws-mid");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].registerOk).toBe(true);
+    await h.outbox.close();
+  });
+
+  test("drainAndAwait waits for register-only rows (blobRemoteUrl set, registerOk false)", async () => {
+    let registerCalls = 0;
+    const onSegmentUploaded = jest.fn(async () => {
+      registerCalls += 1;
+      if (registerCalls === 1) {
+        await new Promise((r) => setTimeout(r, 80));
+      }
+    });
+    const h = makeHarness({ onSegmentUploaded, backoffMsByAttempt: [0] });
+
+    await h.outbox.enqueue({
+      sessionId: "ws-reg-wait",
+      streamId: TUTOR_MIC_STREAM_ID,
+      segmentId: "seg-reg-wait",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://blob.example/preuploaded",
+      mimeType: "audio/webm",
+      sizeBytes: 11,
+      audioStartedAtMs: 5_000,
+    });
+
+    const drain = await h.outbox.drainAndAwait("ws-reg-wait", { timeoutMs: 500 });
+    expect(drain.timedOut).toBe(false);
+    expect(drain.remainingCount).toBe(0);
+    expect(onSegmentUploaded).toHaveBeenCalled();
+    const rows = await h.outbox.listAllRows("ws-reg-wait");
+    expect(rows[0].registerOk).toBe(true);
+    await h.outbox.close();
+  });
+
+  test("onSegmentUploaded failure leaves row retryable (registerOk stays false)", async () => {
+    const onSegmentUploaded = jest.fn(async () => {
+      throw new Error("register transient 503");
+    });
+    const h = makeHarness({ onSegmentUploaded });
+
+    await h.outbox.enqueue({
+      sessionId: "ws-mid-fail",
+      streamId: TUTOR_MIC_STREAM_ID,
+      segmentId: "seg-mid-fail",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://blob.example/preuploaded",
+      mimeType: "audio/webm",
+      sizeBytes: 11,
+      audioStartedAtMs: 4_000,
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(onSegmentUploaded).toHaveBeenCalledTimes(1);
+    const rows = await h.outbox.listAllRows("ws-mid-fail");
+    expect(rows[0].registerOk).toBe(false);
+    expect(h.upload).not.toHaveBeenCalled();
+    await h.outbox.close();
+  });
+
+  test("in-flight guard: concurrent drains invoke onSegmentUploaded exactly once per row", async () => {
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let invocationCount = 0;
+    const onSegmentUploaded = jest.fn(async () => {
+      invocationCount += 1;
+      if (invocationCount === 1) {
+        await firstGate;
+      }
+    });
+    const h = makeHarness({ onSegmentUploaded });
+
+    await h.outbox.enqueue({
+      sessionId: "ws-inflight",
+      streamId: TUTOR_MIC_STREAM_ID,
+      segmentId: "seg-inflight",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://blob.example/preuploaded",
+      mimeType: "audio/webm",
+      sizeBytes: 11,
+      audioStartedAtMs: 1_000,
+    });
+
+    // Let enqueue kick finish drain #1 while callback blocks on firstGate.
+    await new Promise((r) => setTimeout(r, 30));
+
+    // WS-N resume_drain_kick: second drain while registerOk still false.
+    const unsub = h.outbox.observe("ws-inflight").subscribe(() => {});
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(onSegmentUploaded).toHaveBeenCalledTimes(1);
+
+    releaseFirst();
+    await waitForRegisterOk(h.outbox, "ws-inflight");
+    unsub();
+    await h.outbox.close();
+  });
+
+  test("in-flight guard: after register failure completes, retry invoke is allowed", async () => {
+    let callNum = 0;
+    const onSegmentUploaded = jest.fn(async () => {
+      callNum += 1;
+      if (callNum === 1) {
+        throw new Error("register transient 503");
+      }
+    });
+    const h = makeHarness({ onSegmentUploaded });
+
+    await h.outbox.enqueue({
+      sessionId: "ws-inflight-retry",
+      streamId: TUTOR_MIC_STREAM_ID,
+      segmentId: "seg-inflight-retry",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://blob.example/preuploaded",
+      mimeType: "audio/webm",
+      sizeBytes: 11,
+      audioStartedAtMs: 2_000,
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+    expect(onSegmentUploaded).toHaveBeenCalledTimes(1);
+    expect((await h.outbox.listAllRows("ws-inflight-retry"))[0].registerOk).toBe(
+      false
+    );
+
+    const drain = await h.outbox.drainAndAwait("ws-inflight-retry", {
+      timeoutMs: 500,
+    });
+    expect(drain.timedOut).toBe(false);
+    expect(onSegmentUploaded).toHaveBeenCalledTimes(2);
+    expect((await h.outbox.listAllRows("ws-inflight-retry"))[0].registerOk).toBe(
+      true
+    );
+    await h.outbox.close();
+  });
+});
+
 describe("upload-outbox — finalize", () => {
   test("finalize clears rows; observer drops to idle", async () => {
-    const h = makeHarness({});
+    const h = makeHarness({ onSegmentUploaded: jest.fn(async () => {}) });
     await h.outbox.enqueue({
       sessionId: "ws-fin",
       streamId: TUTOR_MIC_STREAM_ID,
@@ -590,6 +819,7 @@ describe("upload-outbox — finalize", () => {
       sizeBytes: 1,
       audioStartedAtMs: 0,
     });
+    await waitForRegisterOk(h.outbox, "ws-fin");
     expect(await h.outbox.listAllRows("ws-fin")).toHaveLength(1);
     await h.outbox.finalize("ws-fin");
     expect(await h.outbox.listAllRows("ws-fin")).toHaveLength(0);

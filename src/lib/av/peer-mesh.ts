@@ -114,6 +114,18 @@ export type IceConnectionStateHandler = (
   iceConnectionState: RTCIceConnectionState
 ) => void;
 
+/**
+ * Fired when a remote peer explicitly sends a `leave` signal (i.e. a
+ * deliberate, graceful disconnect vs an ICE-level timeout). The
+ * peer's `RTCPeerConnection` is still open when this fires —
+ * `closePeerEntryLocal` runs immediately after the subscriber fan-out.
+ * Consumers use this to stop/drain stale tracks proactively rather than
+ * waiting for the next `onRoomPeersChange` sync event. Do NOT reset
+ * high-level connection-state fields here; the rejoin-detected path in
+ * `onRoomPeersChange` owns that reset for genuine rejoins.
+ */
+export type PeerLeaveHandler = (peerId: string) => void;
+
 export type PeerMesh = {
   /**
    * Create a `RTCPeerConnection` for `peerId` and attach local
@@ -141,12 +153,19 @@ export type PeerMesh = {
    * no-op on the second call (we check `pc.getSenders()` for an
    * existing sender bound to the same track).
    *
-   * Each `pc.addTrack(track)` fires `onnegotiationneeded` on that
-   * PC, which the existing perfect-negotiation handler in
-   * `createPeerEntry` picks up and turns into a fresh offer →
-   * answer → ICE refresh. The peer connection itself is NOT torn
-   * down; remote tracks stay flowing, only the SDP is updated to
-   * include the new media line.
+   * Returns two disjoint sets so the caller can branch correctly:
+   *   - `addedPeerIds`   — peers where `pc.addTrack(track)` was called
+   *     (new sender created). The caller should follow up with
+   *     `triggerRenegotiationOnPeers(addedPeerIds)` rather than
+   *     `replaceLocalTrackOnAllPeers`, which would fire a no-op
+   *     `replaceTrack(sameTrack)` on the freshly-created sender and
+   *     can interfere with Chrome's pending `onnegotiationneeded`
+   *     evaluation.
+   *   - `skippedPeerIds` — peers that already had a sender for this
+   *     track id. These are hotswap candidates: call
+   *     `replaceLocalTrackOnAllPeers` for them as normal.
+   *
+   * Both sets are empty when the mesh is disposed or has no peers.
    *
    * Used by `useLiveAV` to support the "tutor grants mic first, cam
    * second" flow without rebuilding the mesh and dropping every
@@ -156,10 +175,32 @@ export type PeerMesh = {
    * change — which manifested in pilot as "clicking Allow camera
    * mid-session drops son's audio + video for 5+ seconds while the
    * mesh rebuilds".
+   */
+  addLocalTrackToAllPeers: (
+    track: MediaStreamTrack
+  ) => { addedPeerIds: Set<string>; skippedPeerIds: Set<string> };
+  /**
+   * Explicitly trigger renegotiation (a fresh offer → answer cycle)
+   * for the given peer ids, routing through the same
+   * perfect-negotiation machinery (`makingOffer` / `ignoreOffer` /
+   * glare guards) as the browser's `onnegotiationneeded` event.
+   *
+   * If the PC for a peer is currently mid-negotiation
+   * (`signalingState !== "stable"` or `makingOffer === true`), the
+   * offer is deferred via an internal `pendingRenegotiation` flag
+   * and flushed by `onsignalingstatechange` when the PC returns to
+   * `stable`.  This guarantees the offer is sent even if the
+   * browser does not reliably re-fire `onnegotiationneeded` after a
+   * late `addTrack` while mid-negotiation (a known Chrome
+   * inconsistency).
+   *
+   * Safe to call redundantly — if no renegotiation is needed (e.g.
+   * the browser already handled it via `onnegotiationneeded`), the
+   * `makingOffer` guard prevents a duplicate offer.
    *
    * No-op when the mesh is disposed.
    */
-  addLocalTrackToAllPeers: (track: MediaStreamTrack) => void;
+  triggerRenegotiationOnPeers: (peerIds: string[]) => void;
   /**
    * Swap the locally captured track of a given kind on every existing
    * peer connection via {@link RTCRtpSender.replaceTrack}. No SDP
@@ -187,6 +228,18 @@ export type PeerMesh = {
    * but not failed) distinctly from `connectionState`.
    */
   onIceConnectionStateChange: (cb: IceConnectionStateHandler) => () => void;
+  /**
+   * Subscribe to deliberate-leave signals from remote peers. Fires
+   * when the remote side sends a `leave` envelope (graceful exit),
+   * as opposed to an ICE-level disconnect. The peer's PC is already
+   * closed when this fires. Distinct from `onPeerConnectionStateChange`
+   * (which doesn't fire on close because handlers are nulled first).
+   *
+   * Use this to reset per-peer media state proactively (before
+   * `onRoomPeersChange` fires on the next sync tick) so tiles
+   * transition to a clean "waiting" state immediately on leave.
+   */
+  onPeerLeave: (cb: PeerLeaveHandler) => () => void;
   /** True iff `dispose()` has been called. */
   isDisposed: () => boolean;
   /**
@@ -221,6 +274,14 @@ type PeerEntry = {
   pendingCandidates: RTCIceCandidateInit[];
   /** Marks the entry as closed; further callbacks are silently dropped. */
   closed: boolean;
+  /**
+   * Set by `triggerRenegotiationOnPeers` (or by `onnegotiationneeded` when
+   * the PC is mid-negotiation) to defer an offer until the PC returns to
+   * `stable`. Flushed by `onsignalingstatechange`. This is the belt-and-
+   * suspenders guard for Chrome's unreliable `onnegotiationneeded` re-fire
+   * after a late `addTrack` during an in-flight negotiation.
+   */
+  pendingRenegotiation: boolean;
 };
 
 // -----------------------------------------------------------------
@@ -285,7 +346,36 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
   const trackSubs = new Set<RemoteTrackHandler>();
   const connStateSubs = new Set<PeerConnectionStateHandler>();
   const iceStateSubs = new Set<IceConnectionStateHandler>();
+  const leaveSubs = new Set<PeerLeaveHandler>();
   let disposed = false;
+
+  /**
+   * Per-peer debounced restart timers for ICE `disconnected`. When ICE
+   * transitions to `disconnected`, the polite side schedules a restart
+   * after ICE_DISCONNECT_RESTART_DELAY_MS. If ICE recovers before the
+   * timer fires (state → connected/completed), the timer is cancelled.
+   * This covers the split-brain failure mode where the media path dies
+   * while the signaling channel survives.
+   */
+  const disconnectRestartTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const ICE_DISCONNECT_RESTART_DELAY_MS = 3_000;
+
+  /**
+   * Per-peer renegotiation watchdog timers (invariant 15, docs/LIVE-AV.md).
+   * When an offer is deferred (`pendingRenegotiation = true`) because the PC
+   * is mid-negotiation, the ONLY flush path is `onsignalingstatechange` →
+   * `stable`. If the PC never returns to stable (a lost answer / wedged PC,
+   * amplified by dual-device join), the deferred offer — which carries the
+   * student's late-added audio m-line — is never sent and the tutor never
+   * hears the student. The watchdog forces resolution after
+   * RENEGOTIATION_WATCHDOG_MS: a fresh offer if the PC is stable-but-unflushed,
+   * or an ICE restart if the PC is still wedged.
+   */
+  const renegotiationWatchdogTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  const RENEGOTIATION_WATCHDOG_MS = 3_000;
 
   // ---------------------------------------------------------------
   // Internal helpers
@@ -313,6 +403,87 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
     return entry;
   }
 
+  // ---------------------------------------------------------------
+  // Offer initiation — shared by onnegotiationneeded, restartInternal,
+  // and triggerRenegotiationOnPeers.
+  // ---------------------------------------------------------------
+
+  /**
+   * Initiate a fresh SDP offer for `entry`, respecting the
+   * `makingOffer` guard to prevent concurrent offers.  Caller is
+   * responsible for checking that initiating an offer makes sense
+   * (e.g. the PC is not already in the middle of one).
+   */
+  function initiateOffer(entry: PeerEntry): void {
+    if (entry.closed || entry.makingOffer) return;
+    void (async () => {
+      try {
+        entry.makingOffer = true;
+        const offer = await entry.pc.createOffer();
+        if (entry.closed) return;
+        await entry.pc.setLocalDescription(offer);
+        if (entry.closed) return;
+        log.log(`peer=${entry.remotePeerId} event=offer-send`);
+        signaling.sendOffer(entry.remotePeerId, offer.sdp ?? "");
+      } catch (err) {
+        log.error(
+          `peer=${entry.remotePeerId} event=offer-fail reason=${(err as Error)?.message ?? String(err)}`
+        );
+      } finally {
+        entry.makingOffer = false;
+      }
+    })();
+  }
+
+  /**
+   * Cancel a peer's renegotiation watchdog (invariant 15). Called when the
+   * deferred renegotiation flushes normally, and on peer close/dispose.
+   */
+  function clearRenegotiationWatchdog(remotePeerId: string): void {
+    const timer = renegotiationWatchdogTimers.get(remotePeerId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      renegotiationWatchdogTimers.delete(remotePeerId);
+    }
+  }
+
+  /**
+   * Arm the renegotiation watchdog for a peer whose offer was just deferred
+   * (invariant 15). Idempotent — a burst of defers keeps the single armed
+   * timer. The flush path (`onsignalingstatechange` → stable) cancels it;
+   * if it fires, the deferred renegotiation never flushed, so force it.
+   */
+  function armRenegotiationWatchdog(entry: PeerEntry): void {
+    if (entry.closed) return;
+    if (renegotiationWatchdogTimers.has(entry.remotePeerId)) return;
+    renegotiationWatchdogTimers.set(
+      entry.remotePeerId,
+      setTimeout(() => {
+        renegotiationWatchdogTimers.delete(entry.remotePeerId);
+        if (entry.closed || !entry.pendingRenegotiation) return;
+        if (entry.pc.signalingState === "stable" && !entry.makingOffer) {
+          // PC is stable but the flush never fired (missed
+          // signalingstatechange) — send the deferred offer now.
+          entry.pendingRenegotiation = false;
+          log.log(
+            `peer=${entry.remotePeerId} event=renegotiation-watchdog-fire reason=stable-unflushed`
+          );
+          initiateOffer(entry);
+        } else {
+          // PC is still wedged in a non-stable state past the timeout —
+          // an ICE restart resets negotiation and recovers the audio path
+          // (the restart offer regenerates SDP from current senders, so it
+          // carries the late-added audio m-line).
+          entry.pendingRenegotiation = false;
+          log.log(
+            `peer=${entry.remotePeerId} event=renegotiation-watchdog-fire reason=wedged signalingState=${entry.pc.signalingState}`
+          );
+          restartInternal(entry);
+        }
+      }, RENEGOTIATION_WATCHDOG_MS)
+    );
+  }
+
   /**
    * Create the PC, wire up event handlers, attach local tracks.
    * Caller must NOT have an entry for `remotePeerId` already (we
@@ -334,27 +505,47 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       hasRemoteDescription: false,
       pendingCandidates: [],
       closed: false,
+      pendingRenegotiation: false,
     };
 
     pc.onnegotiationneeded = () => {
       if (entry.closed) return;
-      void (async () => {
-        try {
-          entry.makingOffer = true;
-          const offer = await pc.createOffer();
-          if (entry.closed) return;
-          await pc.setLocalDescription(offer);
-          if (entry.closed) return;
-          log.log(`peer=${remotePeerId} event=offer-send`);
-          signaling.sendOffer(remotePeerId, offer.sdp ?? "");
-        } catch (err) {
-          log.error(
-            `peer=${remotePeerId} event=offer-fail reason=${(err as Error)?.message ?? String(err)}`
-          );
-        } finally {
-          entry.makingOffer = false;
-        }
-      })();
+      if (pc.signalingState === "stable" && !entry.makingOffer) {
+        void initiateOffer(entry);
+      } else {
+        // PC is mid-negotiation — defer until signalingState returns
+        // to stable.  `onsignalingstatechange` will flush the flag.
+        // This handles the Chrome case where onnegotiationneeded fires
+        // while an in-flight negotiation holds the PC in
+        // have-local-offer, causing setLocalDescription to throw
+        // InvalidStateError.  Without deferral the video track's offer
+        // is never sent and the tutor never receives the student's cam.
+        entry.pendingRenegotiation = true;
+        armRenegotiationWatchdog(entry);
+        log.log(
+          `peer=${remotePeerId} event=renegotiation-deferred signalingState=${pc.signalingState} makingOffer=${entry.makingOffer}`
+        );
+      }
+    };
+
+    // Flush any pending renegotiation when the PC returns to stable.
+    // Guards against the (cross-browser-unreliable) path where the
+    // browser does NOT re-fire onnegotiationneeded after a late
+    // addTrack returns the PC to stable state.
+    pc.onsignalingstatechange = () => {
+      if (entry.closed) return;
+      if (
+        pc.signalingState === "stable" &&
+        entry.pendingRenegotiation &&
+        !entry.makingOffer
+      ) {
+        entry.pendingRenegotiation = false;
+        clearRenegotiationWatchdog(remotePeerId);
+        log.log(
+          `peer=${remotePeerId} event=renegotiation-flush reason=state-stable`
+        );
+        void initiateOffer(entry);
+      }
     };
 
     pc.onicecandidate = (ev) => {
@@ -384,10 +575,53 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       const state = pc.iceConnectionState;
       log.log(`peer=${remotePeerId} event=ice-state to=${state}`);
       fan(iceStateSubs, remotePeerId, state);
-      // Auto-restart on failure for the polite side. The impolite
+
+      // Cancel debounced disconnect-restart timer on ICE recovery.
+      if (state === "connected" || state === "completed") {
+        const timer = disconnectRestartTimers.get(remotePeerId);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          disconnectRestartTimers.delete(remotePeerId);
+          log.log(
+            `peer=${remotePeerId} event=disconnect-restart-cancel reason=ice-recovered state=${state}`
+          );
+        }
+      }
+
+      // ICE disconnected on the polite side: schedule a debounced restart.
+      // The polite/impolite discipline prevents glare if both sides react
+      // simultaneously. Debounced to avoid thrashing on transient blips.
+      if (state === "disconnected" && entry.polite && !disconnectRestartTimers.has(remotePeerId)) {
+        log.log(
+          `peer=${remotePeerId} event=disconnect-restart-schedule delayMs=${ICE_DISCONNECT_RESTART_DELAY_MS}`
+        );
+        disconnectRestartTimers.set(
+          remotePeerId,
+          setTimeout(() => {
+            disconnectRestartTimers.delete(remotePeerId);
+            if (entry.closed) return;
+            // Guard: only restart if ICE is still disconnected; if it
+            // recovered on its own, do nothing.
+            if (entry.pc.iceConnectionState !== "disconnected") return;
+            log.log(
+              `peer=${remotePeerId} event=disconnect-restart-fire reason=ice-still-disconnected`
+            );
+            restartInternal(entry);
+          }, ICE_DISCONNECT_RESTART_DELAY_MS)
+        );
+      }
+
+      // Auto-restart on ICE failure for the polite side. The impolite
       // peer waits — if both sides tried to restart simultaneously
       // we'd be back in glare. Polite-only initiation avoids that.
+      // Also cancel any pending disconnect-restart timer since failed
+      // is a harder condition.
       if (state === "failed" && entry.polite) {
+        const timer = disconnectRestartTimers.get(remotePeerId);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          disconnectRestartTimers.delete(remotePeerId);
+        }
         log.log(
           `peer=${remotePeerId} event=auto-restart reason=ice-failed`
         );
@@ -568,6 +802,9 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       }
       if (payload.type === "leave") {
         log.log(`peer=${remotePeerId} event=remote-leave`);
+        // Notify subscribers BEFORE closing locally so they can reset
+        // per-peer media state (streams, connection pill) proactively.
+        fan(leaveSubs, remotePeerId);
         // Don't send a `leave` back — the remote already left. Just
         // close locally.
         closePeerEntryLocal(entry);
@@ -694,6 +931,16 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
     if (entry.closed) return;
     entry.closed = true;
     peers.delete(entry.remotePeerId);
+    // Cancel any pending ICE-disconnect restart timer so it doesn't
+    // fire on a closed entry.
+    const dTimer = disconnectRestartTimers.get(entry.remotePeerId);
+    if (dTimer !== undefined) {
+      clearTimeout(dTimer);
+      disconnectRestartTimers.delete(entry.remotePeerId);
+    }
+    // Cancel any armed renegotiation watchdog so it doesn't fire on a
+    // closed entry (invariant 15).
+    clearRenegotiationWatchdog(entry.remotePeerId);
     try {
       // Detach event handlers FIRST so no late callback fires once
       // we close the PC.
@@ -776,18 +1023,18 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       restartInternal(entry);
     },
     addLocalTrackToAllPeers: (track: MediaStreamTrack) => {
+      const addedPeerIds = new Set<string>();
+      const skippedPeerIds = new Set<string>();
       if (disposed) {
         log.warn(`addLocalTrackToAllPeers: ignored (disposed) track=${track.id}`);
-        return;
+        return { addedPeerIds, skippedPeerIds };
       }
       if (!track || track.readyState === "ended") {
         log.warn(
           `addLocalTrackToAllPeers: ignored (track ended or null) track=${track?.id ?? "<null>"}`
         );
-        return;
+        return { addedPeerIds, skippedPeerIds };
       }
-      let attachedCount = 0;
-      let skippedAlreadyPresent = 0;
       for (const entry of peers.values()) {
         if (entry.closed) continue;
         // Idempotency guard: if a sender for this exact track
@@ -808,12 +1055,12 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
           /* defensive: some PC stubs in tests don't implement getSenders */
         }
         if (already) {
-          skippedAlreadyPresent++;
+          skippedPeerIds.add(entry.remotePeerId);
           continue;
         }
         try {
           entry.pc.addTrack(track);
-          attachedCount++;
+          addedPeerIds.add(entry.remotePeerId);
         } catch (err) {
           log.warn(
             `peer=${entry.remotePeerId} event=addtrack-late-fail kind=${track.kind} reason=${(err as Error)?.message ?? String(err)}`
@@ -821,8 +1068,9 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         }
       }
       log.log(
-        `event=addLocalTrack-fan kind=${track.kind} trackId=${track.id} attached=${attachedCount} skipped=${skippedAlreadyPresent}`
+        `event=addLocalTrack-fan kind=${track.kind} trackId=${track.id} added=${addedPeerIds.size} skipped=${skippedPeerIds.size}`
       );
+      return { addedPeerIds, skippedPeerIds };
     },
     replaceLocalTrackOnAllPeers: (
       kind: "audio" | "video",
@@ -876,6 +1124,30 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         );
       }
     },
+    triggerRenegotiationOnPeers: (peerIds: string[]) => {
+      if (disposed) return;
+      for (const peerId of peerIds) {
+        const entry = lifeOf(peerId);
+        if (!entry) {
+          log.warn(`triggerRenegotiationOnPeers: no entry for peer=${peerId}`);
+          continue;
+        }
+        log.log(
+          `peer=${peerId} event=renegotiation-triggered reason=late-add-video`
+        );
+        if (entry.pc.signalingState === "stable" && !entry.makingOffer) {
+          void initiateOffer(entry);
+        } else {
+          // Defer: PC is mid-negotiation.  onsignalingstatechange will
+          // flush `pendingRenegotiation` when the PC returns to stable.
+          entry.pendingRenegotiation = true;
+          armRenegotiationWatchdog(entry);
+          log.log(
+            `peer=${peerId} event=renegotiation-deferred-by-trigger signalingState=${entry.pc.signalingState} makingOffer=${entry.makingOffer}`
+          );
+        }
+      }
+    },
     onRemoteTrack: (cb) => {
       trackSubs.add(cb);
       return () => {
@@ -894,10 +1166,24 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         iceStateSubs.delete(cb);
       };
     },
+    onPeerLeave: (cb) => {
+      leaveSubs.add(cb);
+      return () => {
+        leaveSubs.delete(cb);
+      };
+    },
     isDisposed: () => disposed,
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      // Cancel all pending ICE-disconnect restart timers before closing
+      // peer entries (closePeerEntryLocal also cancels per-peer, but
+      // clearing the whole map here is the belt-and-suspenders path).
+      for (const timer of disconnectRestartTimers.values()) clearTimeout(timer);
+      disconnectRestartTimers.clear();
+      for (const timer of renegotiationWatchdogTimers.values())
+        clearTimeout(timer);
+      renegotiationWatchdogTimers.clear();
       try {
         unsubscribeFromSignaling();
       } catch (err) {
@@ -912,6 +1198,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       trackSubs.clear();
       connStateSubs.clear();
       iceStateSubs.clear();
+      leaveSubs.clear();
       log.log(`event=dispose`);
     },
   };

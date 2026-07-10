@@ -24,6 +24,22 @@ jest.mock("@/app/s/[token]/SeenTracker", () => ({
   SeenTracker: () => null,
 }));
 
+jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
+  __esModule: true,
+  assertStudentNotErased: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Production: root layout wraps all routes in <Providers> → <ThemeProvider>.
+// ParentShareShell renders ThemeToggle (useTheme); bare render() lacks the provider.
+jest.mock("@/components/ThemeProvider", () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useTheme: () => ({
+    mode: "system" as const,
+    resolvedTheme: "light" as const,
+    setMode: jest.fn(),
+  }),
+}));
+
 jest.mock("@/lib/db", () => ({
   db: {
     shareLink: { findUnique: (...a: unknown[]) => mockFindUnique(...a) },
@@ -32,7 +48,10 @@ jest.mock("@/lib/db", () => ({
       findMany: (...a: unknown[]) => mockNoteViewFindMany(...a),
       createMany: (...a: unknown[]) => mockCreateMany(...a),
     },
-    adminUser: { findFirst: (...a: unknown[]) => mockAdminFindFirst(...a) },
+    adminUser: {
+      findFirst: (...a: unknown[]) => mockAdminFindFirst(...a),
+      findUnique: (...a: unknown[]) => mockAdminFindFirst(...a),
+    },
     whiteboardSession: {
       findMany: (...a: unknown[]) => mockWbSessionFindMany(...a),
     },
@@ -40,6 +59,9 @@ jest.mock("@/lib/db", () => ({
       findMany: (...a: unknown[]) => mockSessionRecordingFindMany(...a),
     },
   },
+  // withDbRetry: assertCanAccessShareLink uses this; wall is explicitly disabled (NOTES_AUTH_WALL=false)
+  // in these rendering tests so session helpers are never called — just need the DB call to work.
+  withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
 
 /** Shape from `sessionNote.findMany` + `parentShareNoteInclude` for ParentShareNoteCard. */
@@ -84,6 +106,10 @@ function prismaLikeNote(overrides: Partial<{
 describe("SharePage /s/[token] (Phase 0f)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Disable auth wall so assertCanAccessShareLink passes through on token alone.
+    // These tests exercise page rendering logic, not the auth wall
+    // (auth wall behavior is covered in share-access-scope.test.ts).
+    process.env.NOTES_AUTH_WALL = "false";
     mockFindUnique.mockResolvedValue({
       revokedAt: null,
       student: { id: "stu-1", name: "Alex" },

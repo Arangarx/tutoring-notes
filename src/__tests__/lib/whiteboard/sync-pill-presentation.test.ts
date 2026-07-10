@@ -12,6 +12,33 @@ describe("deriveSyncPillState — Phase 4d waiting-for-student dedupe", () => {
     expect(state.reason).toBe("student-connected");
   });
 
+  // UI-honesty: brief window after join shows "syncing board…" so the tutor
+  // isn't falsely told the board is already in sync before the welcome push
+  // has been applied by the student.
+  test("bothPartiesInRoom + boardSyncing → amber 'Student connected — syncing board…' pill", () => {
+    const state = deriveSyncPillState({
+      tutorSyncConnected: true,
+      bothPartiesInRoom: true,
+      boardSyncing: true,
+    });
+    expect(state.show).toBe(true);
+    expect(state.label).toBe("Student connected \u2014 syncing board\u2026");
+    expect(state.color).toBe("amber");
+    expect(state.reason).toBe("student-connected-syncing");
+  });
+
+  test("bothPartiesInRoom + boardSyncing=false → green 'Student connected' (syncing window ended)", () => {
+    const state = deriveSyncPillState({
+      tutorSyncConnected: true,
+      bothPartiesInRoom: true,
+      boardSyncing: false,
+    });
+    expect(state.show).toBe(true);
+    expect(state.label).toBe("Student connected");
+    expect(state.color).toBe("green");
+    expect(state.reason).toBe("student-connected");
+  });
+
   test("sync-server not yet connected → grey 'Sync connecting…' pill (distinct signal from awaiting-student)", () => {
     const state = deriveSyncPillState({
       tutorSyncConnected: false,
@@ -38,18 +65,21 @@ describe("deriveSyncPillState — Phase 4d waiting-for-student dedupe", () => {
     expect(state.color).toBe("amber");
   });
 
-  test("invariant: a green pill ONLY appears when both parties are in the room", () => {
-    const cases = [
+  test("invariant: a green pill ONLY appears when both parties are in the room AND boardSyncing is not active", () => {
+    const notGreenCases = [
       { tutorSyncConnected: false, bothPartiesInRoom: false },
       { tutorSyncConnected: true, bothPartiesInRoom: false },
+      // boardSyncing=true is amber, not green, even when in-room
+      { tutorSyncConnected: true, bothPartiesInRoom: true, boardSyncing: true },
     ];
-    for (const inputs of cases) {
+    for (const inputs of notGreenCases) {
       expect(deriveSyncPillState(inputs).color).not.toBe("green");
     }
     expect(
       deriveSyncPillState({
         tutorSyncConnected: true,
         bothPartiesInRoom: true,
+        boardSyncing: false,
       }).color
     ).toBe("green");
   });

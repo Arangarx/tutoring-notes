@@ -213,12 +213,24 @@ async function loadReferenceSet(prisma, label, log) {
       }),
     log
   );
+  const chunks = await withConnectionRetry(
+    prisma,
+    `${label}.transcriptChunk`,
+    () =>
+      prisma.transcriptChunk.findMany({
+        select: { chunkBlobUrl: true },
+      }),
+    log
+  );
   for (const r of recs) {
     if (r.blobUrl) set.add(r.blobUrl);
   }
   for (const b of boards) {
     if (b.eventsBlobUrl) set.add(b.eventsBlobUrl);
     if (b.snapshotBlobUrl) set.add(b.snapshotBlobUrl);
+  }
+  for (const c of chunks) {
+    if (c.chunkBlobUrl) set.add(c.chunkBlobUrl);
   }
   return set;
 }
@@ -412,11 +424,43 @@ async function main() {
     }
 
     let deleted = 0;
+    let totalBytesDeleted = 0;
     for (const o of orphans) {
       await deleteWithBackoff(token, o.url, log);
       deleted++;
+      totalBytesDeleted += o.size ?? 0;
       log(`deleted url=${o.url}`);
       await delay(100);
+    }
+
+    if (deleted > 0 && totalBytesDeleted > 0) {
+      const totalGb = totalBytesDeleted / 1_000_000_000;
+      const gbMonthsReclaimed = -totalGb / 30;
+      const rateCardVersion = "2026-06-06";
+      const costUsd = gbMonthsReclaimed * 0.023;
+      try {
+        await prodPrisma.costEvent.create({
+          data: {
+            kind: "BLOB_STORAGE",
+            model: "vercel-blob",
+            gbMonths: gbMonthsReclaimed,
+            rateCardVersion,
+            estimatedCostUsd: costUsd,
+            metadata: {
+              source: "blob-cleanup-cli",
+              blbRunId: runId,
+              deletedCount: deleted,
+              totalBytesDeleted,
+            },
+          },
+        });
+        log(
+          `cev BLOB_STORAGE gbMonths=${gbMonthsReclaimed.toFixed(6)} costUsd=${costUsd.toFixed(6)} rateCard=${rateCardVersion}`
+        );
+      } catch (cevErr) {
+        const msg = cevErr instanceof Error ? cevErr.message : String(cevErr);
+        log(`cev=FAIL kind=BLOB_STORAGE error=${msg}`);
+      }
     }
 
     console.log("");

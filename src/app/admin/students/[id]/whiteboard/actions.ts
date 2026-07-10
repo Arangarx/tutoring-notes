@@ -4,6 +4,11 @@ import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
+import {
+  harnessServerPut,
+  isAllowedBlobUrl,
+  isBlobHarnessActive,
+} from "@/lib/blob-harness";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
@@ -19,6 +24,35 @@ import {
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { parseDateOnlyInput } from "@/lib/date-only";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
+import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import {
+  assertEffectiveConsent,
+  assertConsentRecordExists,
+  createSessionConsentSnapshot,
+  ConsentError,
+  resolveModeAwareAudioRecordingConsent,
+} from "@/lib/consent-scope";
+import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
+import {
+  ErasureAccessSuspendedError,
+  isWhiteboardSessionBlockedByErasure,
+} from "@/lib/erasure/active-erasure-scope";
+import {
+  assembleBackendEventLog,
+  countEventsInBlobUrl,
+} from "@/lib/whiteboard/assemble-persisted-state";
+import {
+  kickSessionChunksAction,
+  triggerNotesGenerationAction,
+} from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { enqueueReplayConcatAfterFinalize } from "@/lib/recording/concat-audio-enqueue";
+import {
+  DEFAULT_ROUNDING_INCREMENT_MIN,
+  DEFAULT_ROUNDING_MODE,
+} from "@/lib/billing/defaults";
+import { computeBillingFreezeFields } from "@/lib/billing/freeze-at-close";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -63,32 +97,19 @@ function emptyEventsJson(startedAtIso: string): string {
 }
 
 export async function createWhiteboardSession(
-  studentId: string,
-  formData: FormData
+  studentId: string
 ): Promise<void> {
   const rid = createActionCorrelationId();
 
-  // Parse + sanity-check inputs BEFORE the auth round-trip so cheap
-  // failures don't burn DB / Blob writes. Order:
-  //   1. shape (consent checkbox present + truthy)
-  //   2. ownership (cheap DB call)
-  //   3. expensive Blob write
-  //   4. row insert
-  // If step 3 succeeds but step 4 fails, we leave behind one orphaned
+  // Order:
+  //   1. ownership (cheap DB call)
+  //   2. tutor approval check
+  //   3. CC-1 consent record existence
+  //   4. expensive Blob write
+  //   5. row insert
+  // If step 4 succeeds but step 5 fails, we leave behind one orphaned
   // empty events.json — non-fatal cost, kept this way for code
   // simplicity (a try/catch + Blob.delete would still race).
-  const consentRaw = formData.get("consentAcknowledged");
-  const consentAcknowledged =
-    consentRaw === "true" || consentRaw === "on" || consentRaw === "1";
-  if (!consentAcknowledged) {
-    console.warn(
-      `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: consent not acknowledged`
-    );
-    throw new Error(
-      "You must acknowledge the recording consent before starting a whiteboard session."
-    );
-  }
-
   const scope = await requireStudentScope();
   if (scope.kind !== "admin") {
     // The whiteboard requires a real (DB-backed) admin row because
@@ -104,6 +125,46 @@ export async function createWhiteboardSession(
   }
   await assertOwnsStudent(studentId);
 
+  const erasureBlock = await isWhiteboardSessionBlockedByErasure(studentId);
+  if (erasureBlock.blocked) {
+    const jobSuffix = erasureBlock.activeJobId
+      ? ` ers=${erasureBlock.activeJobId}`
+      : "";
+    console.warn(
+      `[ers] action=session_create_denied studentId=${studentId} rid=${rid}${jobSuffix}`
+    );
+    throw new ErasureAccessSuspendedError();
+  }
+
+  // B1 cost gate: WAITLISTED tutors cannot start whiteboard sessions.
+  // Runs BEFORE B2 consent check and BEFORE Blob write — no cost incurred
+  // until the tutor is confirmed approved to operate.
+  await assertTutorApproved(scope.adminId);
+
+  // CC-1: consent record must exist before Blob write (fail fast, no orphan Blob).
+  const studentForConsent = await withDbRetry(
+    () =>
+      db.student.findUnique({
+        where: { id: studentId },
+        select: { learnerProfileId: true },
+      }),
+    { label: "createWhiteboardSession.studentForConsent" }
+  );
+  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
+
+  try {
+    await assertConsentRecordExists(learnerProfileId, scope.adminId, {
+      studentId,
+    });
+  } catch (err) {
+    if (err instanceof ConsentError && err.permission === "consentRecord") {
+      console.warn(
+        `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: no_consent_record`
+      );
+    }
+    throw err;
+  }
+
   const startedAtIso = new Date().toISOString();
   let eventsBlobUrl: string;
   try {
@@ -112,8 +173,19 @@ export async function createWhiteboardSession(
     // by prefix. Random suffix to avoid collisions if a tutor starts
     // two sessions in the same millisecond (impossible in practice
     // but cheap insurance).
-    const result = await put(
-      `whiteboard-sessions/${scope.adminId}/${studentId}/${Date.now()}-events.json`,
+    const eventsPath = `whiteboard-sessions/${scope.adminId}/${studentId}/${Date.now()}-events.json`;
+    const result = isBlobHarnessActive()
+      ? await harnessServerPut(
+          eventsPath,
+          emptyEventsJson(startedAtIso),
+          {
+            contentType: "application/json",
+            addRandomSuffix: true,
+          },
+          harnessRequestOrigin()
+        )
+      : await put(
+      eventsPath,
       emptyEventsJson(startedAtIso),
       {
         // The Vercel Blob store backing this project is configured for
@@ -143,24 +215,49 @@ export async function createWhiteboardSession(
 
   let session;
   try {
+    // B2: session row + consent snapshot in the same transaction (atomic).
+    // The snapshot freeze is NOT flag-gated — we always record what consent
+    // was authorized at session start, even when enforcement is off.
     session = await withDbRetry(
       () =>
-        db.whiteboardSession.create({
-          data: {
-            adminUserId: scope.adminId,
-            studentId,
-            consentAcknowledged: true,
-            eventsBlobUrl,
-            eventsSchemaVersion: PHASE1_SCHEMA_VERSION,
-            // startedAt + createdAt default to now() in the schema.
-          },
-          select: { id: true, studentId: true },
+        db.$transaction(async (tx) => {
+          const row = await tx.whiteboardSession.create({
+            data: {
+              adminUserId: scope.adminId,
+              studentId,
+              consentAcknowledged: true,
+              eventsBlobUrl,
+              eventsSchemaVersion: PHASE1_SCHEMA_VERSION,
+              // startedAt + createdAt default to now() in the schema.
+            },
+            select: { id: true, studentId: true },
+          });
+          // createSessionConsentSnapshot is a no-op for unclaimed/no-record
+          // sessions; it never throws.
+          await createSessionConsentSnapshot(
+            tx,
+            row.id,
+            learnerProfileId,
+            scope.adminId
+          );
+          if (learnerProfileId) {
+            await tx.sessionParticipant.createMany({
+              data: [
+                {
+                  whiteboardSessionId: row.id,
+                  learnerProfileId,
+                },
+              ],
+              skipDuplicates: true,
+            });
+          }
+          return row;
         }),
       { label: "createWhiteboardSession" }
     );
   } catch (err) {
     console.error(
-      `[createWhiteboardSession] rid=${rid} studentId=${studentId} db.create failed:`,
+      `[createWhiteboardSession] rid=${rid} studentId=${studentId} db.transaction failed:`,
       err
     );
     throw new Error(
@@ -168,6 +265,9 @@ export async function createWhiteboardSession(
     );
   }
 
+  console.info(
+    `[slc] wbsid=${session.id} action=session_created phase=pending claimed=${learnerProfileId ? "yes" : "no"}`
+  );
   console.log(
     `[createWhiteboardSession] rid=${rid} wbsid=${session.id} studentId=${studentId} adminUserId=${scope.adminId} created`
   );
@@ -178,6 +278,111 @@ export async function createWhiteboardSession(
   redirect(
     `/admin/students/${studentId}/whiteboard/${session.id}/workspace`
   );
+}
+
+export type StartWhiteboardSessionResult = {
+  ok: true;
+  phase: "active";
+};
+
+/**
+ * Transition a whiteboard session from PENDING → ACTIVE when the tutor
+ * clicks Start. Idempotent: already-active or ended sessions are no-ops.
+ *
+ * @param sessionMode Optional mode to persist at activation time (LIVE or
+ *   IN_PERSON). When provided, it is written to the DB alongside the phase
+ *   flip so the server-truth mode reflects the tutor's choice at Start time.
+ *   Omitting leaves the DB default (LIVE) unchanged — safe for callers that
+ *   predate this parameter.
+ */
+export async function startWhiteboardSession(
+  whiteboardSessionId: string,
+  sessionMode?: "LIVE" | "IN_PERSON"
+): Promise<StartWhiteboardSessionResult> {
+  const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  const erasureBlock = await isWhiteboardSessionBlockedByErasure(session.studentId);
+  if (erasureBlock.blocked) {
+    const jobSuffix = erasureBlock.activeJobId
+      ? ` ers=${erasureBlock.activeJobId}`
+      : "";
+    console.warn(
+      `[ers] action=session_start_denied wbsid=${whiteboardSessionId} studentId=${session.studentId}${jobSuffix}`
+    );
+    throw new ErasureAccessSuspendedError();
+  }
+
+  const studentForConsent = await withDbRetry(
+    () =>
+      db.student.findUnique({
+        where: { id: session.studentId },
+        select: { learnerProfileId: true },
+      }),
+    { label: "startWhiteboardSession.studentForConsent" }
+  );
+  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
+
+  try {
+    await assertConsentRecordExists(learnerProfileId, session.adminUserId, {
+      studentId: session.studentId,
+    });
+  } catch (err) {
+    if (err instanceof ConsentError && err.permission === "consentRecord") {
+      console.warn(
+        `[startWhiteboardSession] wbsid=${whiteboardSessionId} REJECTED: no_consent_record`
+      );
+    }
+    throw err;
+  }
+
+  const adminBillingDefaults = await withDbRetry(
+    () =>
+      db.adminUser.findUnique({
+        where: { id: session.adminUserId },
+        select: {
+          defaultRoundingIncrementMin: true,
+          defaultRoundingMode: true,
+          tutorTimezone: true,
+        },
+      }),
+    { label: "startWhiteboardSession.adminBillingDefaults" }
+  );
+
+  const result = await withDbRetry(
+    () =>
+      db.whiteboardSession.updateMany({
+        where: {
+          id: whiteboardSessionId,
+          adminUserId: session.adminUserId,
+          sessionPhase: "PENDING",
+          endedAt: null,
+        },
+        data: {
+          sessionPhase: "ACTIVE",
+          activatedAt: new Date(),
+          ...(sessionMode ? { sessionMode } : {}),
+          roundingIncrementMin:
+            adminBillingDefaults?.defaultRoundingIncrementMin ??
+            DEFAULT_ROUNDING_INCREMENT_MIN,
+          roundingMode:
+            adminBillingDefaults?.defaultRoundingMode ?? DEFAULT_ROUNDING_MODE,
+          tutorTimezone: adminBillingDefaults?.tutorTimezone ?? null,
+        },
+      }),
+    { label: "startWhiteboardSession" }
+  );
+
+  if (result.count > 0) {
+    console.info(
+      `[slc] wbsid=${whiteboardSessionId} action=session_started phase=active`
+    );
+  } else {
+    console.info(
+      `[slc] wbsid=${whiteboardSessionId} action=session_start_noop`
+    );
+  }
+
+  return { ok: true, phase: "active" };
 }
 
 // -------------------------------------------------------------------
@@ -285,6 +490,29 @@ export async function issueJoinToken(
     throw new Error(
       "This whiteboard session has already ended; a new session is required to invite a student."
     );
+  }
+
+  const studentForConsent = await withDbRetry(
+    () =>
+      db.student.findUnique({
+        where: { id: session.studentId },
+        select: { learnerProfileId: true },
+      }),
+    { label: "issueJoinToken.studentForConsent" }
+  );
+  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
+
+  try {
+    await assertConsentRecordExists(learnerProfileId, session.adminUserId, {
+      studentId: session.studentId,
+    });
+  } catch (err) {
+    if (err instanceof ConsentError && err.permission === "consentRecord") {
+      console.log(
+        `[wjg] wbsid=${whiteboardSessionId} action=join_token_blocked reason=no_consent_record`
+      );
+    }
+    throw err;
   }
 
   const now = new Date();
@@ -410,14 +638,23 @@ export type EndSessionSegment = {
   audioStartedAtMs: number;
   streamId: string;
   segmentId: string;
+  /** Pause-aware segment duration in whole seconds at cut/stop time. */
+  durationSeconds?: number;
 };
 
 /**
  * Vercel Blob hostname guard — same shape `registerWhiteboardSessionAudioSegmentAction`
  * uses today (`blobUrl.includes("blob.vercel-storage.com")`). Folded
  * into a regex so the validator below is one branch per segment.
+ * Harness URLs accepted only when `isBlobHarnessActive()`.
  */
-const ALLOWED_BLOB_HOST_RE = /(^|\/\/)[\w.-]*blob\.vercel-storage\.com\//i;
+function blobUrlAllowedForEndSession(blobUrl: string): boolean {
+  return isAllowedBlobUrl(blobUrl);
+}
+
+function harnessRequestOrigin(): string {
+  return process.env.NEXTAUTH_URL ?? "http://localhost:3100";
+}
 
 function validateEndSessionSegments(
   segments: ReadonlyArray<EndSessionSegment>
@@ -427,7 +664,7 @@ function validateEndSessionSegments(
     if (typeof s.blobUrl !== "string" || !s.blobUrl) {
       return { ok: false, error: `Segment ${i} is missing blobUrl.` };
     }
-    if (!/^https?:\/\//i.test(s.blobUrl) || !ALLOWED_BLOB_HOST_RE.test(s.blobUrl)) {
+    if (!blobUrlAllowedForEndSession(s.blobUrl)) {
       return {
         ok: false,
         error: `Segment ${i} blobUrl is not in the whiteboard Blob namespace.`,
@@ -454,6 +691,207 @@ function validateEndSessionSegments(
     }
   }
   return { ok: true };
+}
+
+export type FinalizeWhiteboardSessionFromBackendResult =
+  | { ok: true; idempotent: true }
+  | {
+      ok: true;
+      idempotent: false;
+      endedAt: string;
+      durationSeconds: number;
+      registeredSegments: number;
+    }
+  | { ok: false; error: string };
+
+/**
+ * WS-C — Server-side finalize assembly layer (BLOCKER-5).
+ *
+ * Assembles events + audio from backend-persisted state, then delegates
+ * the atomic commit to `endWhiteboardSession`. Does NOT duplicate
+ * transaction / consent / erasure / token-revoke logic.
+ */
+export async function finalizeWhiteboardSessionFromBackend(
+  whiteboardSessionId: string,
+  opts?: {
+    /** Client-uploaded events.json when server batches may lag the live log. */
+    finalEventsBlobUrl?: string;
+    snapshotBlobUrl?: string | null;
+    /** Outbox segments not yet visible in SessionRecording (in-live End). */
+    extraSegments?: ReadonlyArray<EndSessionSegment>;
+  }
+): Promise<FinalizeWhiteboardSessionFromBackendResult> {
+  const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  if (session.endedAt) {
+    console.log(
+      `[fzb] fzb=${whiteboardSessionId} action=idempotent_skip batches=0 segments=0`
+    );
+    return { ok: true, idempotent: true };
+  }
+
+  const startedAtRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { startedAt: true },
+      }),
+    { label: "finalizeFromBackend.startedAt" }
+  );
+  const startedAtIso =
+    startedAtRow?.startedAt.toISOString() ?? new Date().toISOString();
+
+  const assembled = await assembleBackendEventLog(
+    whiteboardSessionId,
+    startedAtIso
+  );
+
+  const recordingRows = await withDbRetry(
+    () =>
+      db.sessionRecording.findMany({
+        where: { whiteboardSessionId },
+        orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          blobUrl: true,
+          mimeType: true,
+          sizeBytes: true,
+          streamId: true,
+          createdAt: true,
+        },
+      }),
+    { label: "finalizeFromBackend.recordings" }
+  );
+
+  const segmentByUrl = new Map<string, EndSessionSegment>();
+  for (const row of recordingRows) {
+    segmentByUrl.set(row.blobUrl, {
+      blobUrl: row.blobUrl,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      streamId: row.streamId,
+      segmentId: row.id,
+      audioStartedAtMs: row.createdAt.getTime(),
+    });
+  }
+  for (const extra of opts?.extraSegments ?? []) {
+    if (!segmentByUrl.has(extra.blobUrl)) {
+      segmentByUrl.set(extra.blobUrl, extra);
+    }
+  }
+  const segments = [...segmentByUrl.values()];
+
+  console.log(
+    `[fzb] fzb=${whiteboardSessionId} action=assemble batches=${assembled.batchCount} segments=${segments.length}`
+  );
+
+  const candidateScores: Array<{ url: string; score: number }> = [];
+  const assembledScore = assembled.log.events.length;
+  if (assembledScore > 0) {
+    candidateScores.push({ url: "__assembled__", score: assembledScore });
+  }
+  if (session.eventsBlobUrl) {
+    const existingScore = await countEventsInBlobUrl(session.eventsBlobUrl);
+    candidateScores.push({ url: session.eventsBlobUrl, score: existingScore });
+  }
+  if (opts?.finalEventsBlobUrl) {
+    const clientScore = await countEventsInBlobUrl(opts.finalEventsBlobUrl);
+    candidateScores.push({ url: opts.finalEventsBlobUrl, score: clientScore });
+  }
+
+  let finalEventsBlobUrl = session.eventsBlobUrl;
+  const best = candidateScores.reduce(
+    (acc, cur) => (cur.score > acc.score ? cur : acc),
+    { url: session.eventsBlobUrl, score: 0 }
+  );
+
+  if (best.url === "__assembled__" && assembledScore > 0) {
+    try {
+      const eventsBody = JSON.stringify(assembled.log);
+      const assembledPath = `whiteboard-sessions/${session.adminUserId}/${session.studentId}/${Date.now()}-events.json`;
+      const putResult = isBlobHarnessActive()
+        ? await harnessServerPut(
+            assembledPath,
+            eventsBody,
+            { contentType: "application/json", addRandomSuffix: true },
+            harnessRequestOrigin()
+          )
+        : await put(assembledPath, eventsBody, {
+          access: "private",
+          contentType: "application/json",
+          addRandomSuffix: true,
+        });
+      finalEventsBlobUrl = putResult.url;
+    } catch (err) {
+      console.error(
+        `[fzb] fzb=${whiteboardSessionId} action=assemble_blob_put_failed`,
+        err
+      );
+      return {
+        ok: false,
+        error: "Could not upload final whiteboard events. Please try again.",
+      };
+    }
+  } else if (best.url !== "__assembled__" && best.score > 0) {
+    finalEventsBlobUrl = best.url;
+  }
+
+  if (!finalEventsBlobUrl || !/^https?:\/\//i.test(finalEventsBlobUrl)) {
+    return {
+      ok: false,
+      error: "No final events URL available for this session.",
+    };
+  }
+
+  if (segments.length > 0) {
+    const valid = validateEndSessionSegments(segments);
+    if (!valid.ok) {
+      return { ok: false, error: valid.error };
+    }
+  }
+
+  let endResult: {
+    endedAt: string;
+    durationSeconds: number;
+    registeredSegments: number;
+  };
+  try {
+    endResult = await endWhiteboardSession(whiteboardSessionId, finalEventsBlobUrl, {
+      snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined,
+      segments,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
+
+  console.log(
+    `[fzb] fzb=${whiteboardSessionId} action=end batches=${assembled.batchCount} segments=${segments.length} newSegments=${endResult.registeredSegments}`
+  );
+
+  void kickSessionChunksAction(whiteboardSessionId).catch((sweepErr: unknown) => {
+    console.warn(
+      `[fzb] fzb=${whiteboardSessionId} action=session_sweep_fire_error err=${(sweepErr as Error)?.message ?? sweepErr}`
+    );
+  });
+  const notesResult = await triggerNotesGenerationAction(whiteboardSessionId);
+  if (!notesResult.ok) {
+    console.warn(
+      `[fzb] fzb=${whiteboardSessionId} action=notes_trigger_failed err=${notesResult.error}`
+    );
+  }
+
+  // WS-G: best-effort seamless replay concat — runs in after(), concurrent
+  // with notes-reduce; failure leaves multi-segment replay unchanged.
+  enqueueReplayConcatAfterFinalize(whiteboardSessionId);
+
+  return {
+    ok: true,
+    idempotent: false,
+    endedAt: endResult.endedAt,
+    durationSeconds: endResult.durationSeconds,
+    registeredSegments: endResult.registeredSegments,
+  };
 }
 
 /**
@@ -509,10 +947,28 @@ export async function endWhiteboardSession(
     throw new Error("This whiteboard session has already ended.");
   }
 
+  const phaseRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { sessionPhase: true },
+      }),
+    { label: "endWhiteboardSession.phase" }
+  );
+  const priorPhase = phaseRow?.sessionPhase ?? "PENDING";
+
+  // Pending cleanup: recorder may never have mounted — keep the placeholder
+  // events.json URL when the client passes no final blob URL.
+  const resolvedEventsBlobUrl =
+    priorPhase === "PENDING" &&
+    (typeof finalEventsBlobUrl !== "string" || !finalEventsBlobUrl.trim())
+      ? session.eventsBlobUrl
+      : finalEventsBlobUrl;
+
   // Crude URL sanity — the recorder constructs blob URLs via the
   // `/api/upload/blob` route which only serves whitelisted hosts;
   // a malformed value here would break replay later, so reject it now.
-  if (!/^https?:\/\//i.test(finalEventsBlobUrl)) {
+  if (!/^https?:\/\//i.test(resolvedEventsBlobUrl)) {
     throw new Error("Final events URL must be an absolute http(s) URL.");
   }
 
@@ -527,19 +983,64 @@ export async function endWhiteboardSession(
     }
   }
 
+  // B2 + Block B: mode-aware audio consent BEFORE the transaction.
+  // IN_PERSON+denied or no-snapshot claimed minor → skip segment registration.
+  // LIVE+denied → register tutor-only mixdown (client already excluded student).
+  // Session ALWAYS closes successfully — no lost sessions (reliability invariant).
+  let audioConsentGranted = true;
+  if (segments.length > 0) {
+    const audioConsent = await resolveModeAwareAudioRecordingConsent(
+      whiteboardSessionId
+    );
+    if (!audioConsent.allow) {
+      audioConsentGranted = false;
+      console.warn(
+        `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} audio_consent_denied reason=${audioConsent.reason} — segments will NOT be registered; session close proceeds`
+      );
+    }
+  }
+
+  // E6 / H-2: skip segment registration + content blob persist when erasure
+  // is in-flight or the student is already erased — session still closes.
+  const erasureShortCircuit = await shouldShortCircuitEndSessionForErasure(
+    session.studentId
+  );
+  if (erasureShortCircuit) {
+    console.warn(
+      `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} erasure_short_circuit studentId=${session.studentId} — segments and content persist skipped; session close proceeds`
+    );
+  }
+
   const now = new Date();
+  const adminTutorTimezone = await withDbRetry(
+    () =>
+      db.adminUser.findUnique({
+        where: { id: session.adminUserId },
+        select: { tutorTimezone: true },
+      }),
+    { label: "endWhiteboardSession.adminTimezone" }
+  );
   let updated: { id: string; endedAt: Date | null; durationSeconds: number | null };
   let registeredSegments = 0;
+  let billingFreeze: ReturnType<typeof computeBillingFreezeFields> = null;
   try {
     const txResult = await withDbRetry(
       () =>
         db.$transaction(async (tx) => {
-          // Read startedAt first so we can compute durationSeconds in
-          // a single update. We can't compute it from `assertOwns…`
-          // because that scope helper doesn't load `startedAt`.
           const existing = await tx.whiteboardSession.findUnique({
             where: { id: whiteboardSessionId },
-            select: { startedAt: true },
+            select: {
+              startedAt: true,
+              activatedAt: true,
+              sessionMode: true,
+              activeMs: true,
+              lastActiveAt: true,
+              bothConnectedAt: true,
+              roundingIncrementMin: true,
+              roundingMode: true,
+              tutorTimezone: true,
+              billedDurationMin: true,
+            },
           });
           const durationSeconds = existing
             ? Math.max(
@@ -547,15 +1048,62 @@ export async function endWhiteboardSession(
                 Math.floor((now.getTime() - existing.startedAt.getTime()) / 1000)
               )
             : 0;
+
+          let billingFreeze: ReturnType<typeof computeBillingFreezeFields> = null;
+          if (existing) {
+            try {
+              billingFreeze = computeBillingFreezeFields({
+                sessionMode:
+                  existing.sessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE",
+                activeMs: existing.activeMs,
+                lastActiveAtMs: existing.lastActiveAt?.getTime() ?? null,
+                endedAtMs: now.getTime(),
+                bothConnectedAtMs: existing.bothConnectedAt?.getTime() ?? null,
+                activatedAtMs: existing.activatedAt?.getTime() ?? null,
+                startedAtMs: existing.startedAt.getTime(),
+                roundingIncrementMin: existing.roundingIncrementMin,
+                roundingMode: existing.roundingMode,
+                tutorTimezone: existing.tutorTimezone,
+                adminTutorTimezone: adminTutorTimezone?.tutorTimezone ?? null,
+                existingBilledDurationMin: existing.billedDurationMin,
+              });
+            } catch (err) {
+              console.error(
+                `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} billing_freeze_failed:`,
+                err
+              );
+            }
+          }
+
           const row = await tx.whiteboardSession.update({
             where: { id: whiteboardSessionId },
             data: {
               endedAt: now,
-              eventsBlobUrl: finalEventsBlobUrl,
-              snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined,
+              eventsBlobUrl: erasureShortCircuit
+                ? session.eventsBlobUrl
+                : resolvedEventsBlobUrl,
+              ...(erasureShortCircuit
+                ? {}
+                : { snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined }),
               durationSeconds,
+              ...(billingFreeze
+                ? {
+                    billedDurationMin: billingFreeze.billedDurationMin,
+                    billedStartLocal: billingFreeze.billedStartLocal,
+                    billedEndLocal: billingFreeze.billedEndLocal,
+                    sessionDateLocal: billingFreeze.sessionDateLocal,
+                    tutorTimezone: billingFreeze.tutorTimezone,
+                    roundingIncrementMin: billingFreeze.roundingIncrementMin,
+                    roundingMode: billingFreeze.roundingMode,
+                  }
+                : {}),
             },
             select: { id: true, endedAt: true, durationSeconds: true },
+          });
+
+          await tx.sessionParticipant.updateMany({
+            where: { whiteboardSessionId, leftAt: null },
+            data: { leftAt: now },
           });
 
           // Atomic multi-track segment registration. Order matters:
@@ -571,8 +1119,11 @@ export async function endWhiteboardSession(
           //      the in-flight race where two tabs both reach end
           //      with overlapping payloads — extremely unlikely in
           //      practice but cheap to defend).
+          // B2: audioConsentGranted=false skips registration entirely;
+          // E6: erasureShortCircuit skips registration + content persist;
+          // session close + token revocation still proceed.
           let newSegments = 0;
-          if (segments.length > 0) {
+          if (segments.length > 0 && audioConsentGranted && !erasureShortCircuit) {
             const existingRows = await tx.sessionRecording.findMany({
               where: {
                 whiteboardSessionId,
@@ -606,6 +1157,10 @@ export async function endWhiteboardSession(
                   sizeBytes: s.sizeBytes,
                   streamId: s.streamId,
                   orderIndex: nextOrder++,
+                  ...(typeof s.durationSeconds === "number" &&
+                    s.durationSeconds > 0 && {
+                      durationSeconds: s.durationSeconds,
+                    }),
                 })),
                 skipDuplicates: true,
               });
@@ -620,12 +1175,13 @@ export async function endWhiteboardSession(
             },
             data: { revokedAt: now },
           });
-          return { row, newSegments };
+          return { row, newSegments, billingFreeze };
         }),
       { label: "endWhiteboardSession" }
     );
     updated = txResult.row;
     registeredSegments = txResult.newSegments;
+    billingFreeze = txResult.billingFreeze;
   } catch (err) {
     console.error(
       `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} db.transaction failed:`,
@@ -634,9 +1190,17 @@ export async function endWhiteboardSession(
     throw new Error("Could not finalize the whiteboard session. Please try again.");
   }
 
+  console.info(
+    `[slc] wbsid=${whiteboardSessionId} action=session_ended phase=${priorPhase.toLowerCase()}`
+  );
   console.log(
     `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s segmentsInPayload=${segments.length} newSegments=${registeredSegments}`
   );
+  if (billingFreeze) {
+    console.log(
+      `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} billing_frozen billedDurationMin=${billingFreeze.billedDurationMin} mode=${billingFreeze.roundingMode} increment=${billingFreeze.roundingIncrementMin} tz=${billingFreeze.tutorTimezone} sessionDateLocal=${billingFreeze.sessionDateLocal}`
+    );
+  }
   // Per-segment log line so a future ops grep can correlate an outbox
   // segmentId to its persisted SessionRecording by blobUrl.
   for (const s of segments) {
@@ -649,9 +1213,19 @@ export async function endWhiteboardSession(
   revalidatePath(
     `/admin/students/${session.studentId}/whiteboard/${whiteboardSessionId}`
   );
-  revalidatePath(
-    `/admin/students/${session.studentId}/whiteboard/${whiteboardSessionId}/workspace`
-  );
+  // NOTE: do NOT revalidatePath for the /workspace route here.
+  // The A3 in-shell mode flip (WhiteboardSessionShell) handles the
+  // live→review transition client-side via onSessionEnded(). If we
+  // revalidate /workspace, Next.js App Router re-renders page.tsx
+  // server-side (which now sees endedAt=set and returns
+  // WorkspacePreviousSessionPreview), replacing the client's
+  // WhiteboardSessionShell tree before SessionReviewMode can mount.
+  // The workspace page is force-dynamic so there is no server-side
+  // cache to warm; revalidating it is a no-op for caching and only
+  // triggers the unwanted RSC replacement. On the next manual
+  // navigation to /workspace (new tab, refresh, link click) the
+  // page correctly serves WorkspacePreviousSessionPreview because
+  // endedAt is durably stamped in the DB.
 
   return {
     endedAt: updated.endedAt!.toISOString(),
@@ -705,6 +1279,16 @@ export async function endStaleWhiteboardSession(
     throw new Error("This whiteboard session has already ended.");
   }
 
+  const phaseRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { sessionPhase: true },
+      }),
+    { label: "endStaleWhiteboardSession.phase" }
+  );
+  const priorPhase = phaseRow?.sessionPhase ?? "PENDING";
+
   const now = new Date();
   let updated;
   try {
@@ -729,6 +1313,10 @@ export async function endStaleWhiteboardSession(
             },
             select: { id: true, endedAt: true, durationSeconds: true },
           });
+          await tx.sessionParticipant.updateMany({
+            where: { whiteboardSessionId, leftAt: null },
+            data: { leftAt: now },
+          });
           await tx.whiteboardJoinToken.updateMany({
             where: {
               whiteboardSessionId,
@@ -748,6 +1336,9 @@ export async function endStaleWhiteboardSession(
     throw new Error("Could not end the whiteboard session. Please try again.");
   }
 
+  console.info(
+    `[slc] wbsid=${whiteboardSessionId} action=session_ended phase=${priorPhase.toLowerCase()}`
+  );
   console.log(
     `[endStaleWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s`
   );
@@ -870,6 +1461,9 @@ export async function generateNotesFromWhiteboardSessionAction(
       };
     }
     const tutorAdminId = scope.adminId;
+
+  // B1 cost gate: WAITLISTED tutors cannot trigger notes generation (OpenAI spend).
+  await assertTutorApproved(tutorAdminId);
 
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
   const studentId = session.studentId;
@@ -1129,8 +1723,8 @@ export async function generateNotesFromWhiteboardSessionAction(
 }
 
 export type RegisterWhiteboardSessionAudioSegmentResult =
-  | { ok: true; recordingId: string; orderIndex: number }
-  | { ok: false; error: string; debugId?: string };
+  | { ok: true; recordingId: string; orderIndex: number; deduped?: boolean }
+  | { ok: false; error: string; debugId?: string; sessionEnded?: true };
 
 /**
  * After `uploadAudioDirect` stores a segment in Blob, the workspace calls this
@@ -1141,7 +1735,15 @@ export type RegisterWhiteboardSessionAudioSegmentResult =
  */
 export async function registerWhiteboardSessionAudioSegmentAction(
   whiteboardSessionId: string,
-  segment: { blobUrl: string; mimeType: string; sizeBytes: number }
+  segment: {
+    blobUrl: string;
+    mimeType: string;
+    sizeBytes: number;
+    streamId?: string;
+    speakerId?: string;
+    audioStartedAtMs?: number;
+    durationSeconds?: number;
+  }
 ): Promise<RegisterWhiteboardSessionAudioSegmentResult> {
   const rid = createActionCorrelationId();
   try {
@@ -1154,7 +1756,7 @@ export async function registerWhiteboardSessionAudioSegmentAction(
       };
     }
 
-    if (!segment.blobUrl.includes("blob.vercel-storage.com")) {
+    if (!blobUrlAllowedForEndSession(segment.blobUrl)) {
       return { ok: false, error: "Invalid audio URL.", debugId: rid };
     }
 
@@ -1164,42 +1766,142 @@ export async function registerWhiteboardSessionAudioSegmentAction(
         ok: false,
         error: "This whiteboard session has already ended.",
         debugId: rid,
+        sessionEnded: true,
       };
     }
 
-    const last = await withDbRetry(
+    // Phase check — audio segments must only be registered during ACTIVE sessions.
+    // Reject quietly during PENDING so a stale client doesn't create orphaned rows.
+    const phaseRow = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { sessionPhase: true },
+        }),
+      { label: "registerWbAudio.phase" }
+    );
+    if (phaseRow?.sessionPhase !== "ACTIVE") {
+      console.log(
+        `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} skipped: sessionPhase=${phaseRow?.sessionPhase ?? "unknown"}`
+      );
+      return {
+        ok: false,
+        error: "Session is not yet active — audio cannot be registered.",
+        debugId: rid,
+      };
+    }
+
+    // B2 + Block B: mode-aware consent gate (same semantics as end-session).
+    const audioConsent = await resolveModeAwareAudioRecordingConsent(
+      whiteboardSessionId
+    );
+    if (!audioConsent.allow) {
+      console.log(
+        `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} rejected: consent reason=${audioConsent.reason}`
+      );
+      return {
+        ok: false,
+        error: "Audio recording consent is not granted for this session.",
+        debugId: rid,
+      };
+    }
+
+    const existing = await withDbRetry(
       () =>
         db.sessionRecording.findFirst({
-          where: { whiteboardSessionId },
-          orderBy: { orderIndex: "desc" },
-          select: { orderIndex: true },
+          where: { whiteboardSessionId, blobUrl: segment.blobUrl },
+          select: { id: true, orderIndex: true },
         }),
-      { label: "registerWbAudio.findLastOrder" }
+      { label: "registerWbAudio.dedupe" }
     );
-    const orderIndex = (last?.orderIndex ?? -1) + 1;
+    if (existing) {
+      console.log(
+        `[obx] obx action=register_mid_session rid=${rid} wbsid=${whiteboardSessionId} deduped blobUrl recordingId=${existing.id} orderIndex=${existing.orderIndex}`
+      );
+      return {
+        ok: true,
+        recordingId: existing.id,
+        orderIndex: existing.orderIndex,
+        deduped: true,
+      };
+    }
 
-    const row = await withDbRetry(
-      () =>
-        db.sessionRecording.create({
-          data: {
-            adminUserId: session.adminUserId,
-            studentId: session.studentId,
-            whiteboardSessionId,
-            blobUrl: segment.blobUrl,
-            mimeType: segment.mimeType.split(";")[0].trim(),
-            sizeBytes: segment.sizeBytes,
-            orderIndex,
-          },
-          select: { id: true },
-        }),
-      { label: "registerWbAudio.create" }
-    );
+    const streamId = segment.streamId ?? TUTOR_MIC_STREAM_ID;
+
+    let row: { id: string; orderIndex: number } | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        row = await withDbRetry(
+          () =>
+            db.$transaction(async (tx) => {
+              const last = await tx.sessionRecording.findFirst({
+                where: { whiteboardSessionId },
+                orderBy: { orderIndex: "desc" },
+                select: { orderIndex: true },
+              });
+              const orderIndex = (last?.orderIndex ?? -1) + 1;
+              return tx.sessionRecording.create({
+                data: {
+                  adminUserId: session.adminUserId,
+                  studentId: session.studentId,
+                  whiteboardSessionId,
+                  blobUrl: segment.blobUrl,
+                  mimeType: segment.mimeType.split(";")[0].trim(),
+                  sizeBytes: segment.sizeBytes,
+                  orderIndex,
+                  streamId,
+                  ...(typeof segment.durationSeconds === "number" &&
+                    segment.durationSeconds > 0 && {
+                      durationSeconds: segment.durationSeconds,
+                    }),
+                },
+                select: { id: true, orderIndex: true },
+              });
+            }),
+          { label: "registerWbAudio.create" }
+        );
+        break;
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code === "P2002") {
+          const raced = await withDbRetry(
+            () =>
+              db.sessionRecording.findFirst({
+                where: { whiteboardSessionId, blobUrl: segment.blobUrl },
+                select: { id: true, orderIndex: true },
+              }),
+            { label: "registerWbAudio.p2002Dedupe" }
+          );
+          if (raced) {
+            console.log(
+              `[obx] obx action=register_mid_session rid=${rid} wbsid=${whiteboardSessionId} deduped=p2002 blobUrl recordingId=${raced.id} orderIndex=${raced.orderIndex}`
+            );
+            return {
+              ok: true,
+              recordingId: raced.id,
+              orderIndex: raced.orderIndex,
+              deduped: true,
+            };
+          }
+          if (attempt < 1) continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!row) {
+      return {
+        ok: false,
+        error: "Could not save recording metadata after retry.",
+        debugId: rid,
+      };
+    }
 
     console.log(
-      `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} recordingId=${row.id} orderIndex=${orderIndex}`
+      `[obx] obx action=register_mid_session rid=${rid} wbsid=${whiteboardSessionId} recordingId=${row.id} orderIndex=${row.orderIndex} streamId=${streamId}`
     );
 
-    return { ok: true, recordingId: row.id, orderIndex };
+    return { ok: true, recordingId: row.id, orderIndex: row.orderIndex };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(
@@ -1212,6 +1914,108 @@ export async function registerWhiteboardSessionAudioSegmentAction(
       debugId: rid,
     };
   }
+}
+
+// -------------------------------------------------------------------
+// Recording re-arch Phase 1, Slice 2b — producer wedge
+// -------------------------------------------------------------------
+
+/**
+ * Server-side entry point for the slice 2b producer wedge.
+ *
+ * Called by the workspace client AFTER a segment blob is confirmed
+ * uploaded (outbox.enqueue succeeded). Validates session ownership
+ * and blob host, then hands off to the slice 2a `enqueueChunkTranscribe`
+ * helper — which either publishes to Vercel Queues (when provisioned)
+ * or invokes the worker directly via the queue-stub seam.
+ *
+ * Trust posture:
+ *   - `assertOwnsWhiteboardSession` re-checks that the logged-in
+ *     tutor owns this session before touching any transcription infra.
+ *   - `chunkBlobUrl` is validated against `ALLOWED_BLOB_HOST_RE`
+ *     (the same regex used by `endWhiteboardSession` and
+ *     `registerWhiteboardSessionAudioSegmentAction`) so a hand-rolled
+ *     payload cannot inject an attacker-controlled URL into the
+ *     transcription pipeline.
+ *
+ * This action THROWS on auth/validation failures (the client wraps
+ * the call in a fire-and-forget so the exception is swallowed on
+ * the upload-confirm path — it never disrupts recording or upload).
+ * The `enqueueChunkTranscribe` call itself never throws (it logs +
+ * swallows failures to preserve the non-blocking guarantee).
+ *
+ * Log prefix: [txc]  Mirrors the worker.
+ */
+export async function enqueueChunkTranscriptionAction(
+  whiteboardSessionId: string,
+  payload: {
+    chunkBlobUrl: string;
+    recordingTimeOffsetMs: number;
+    streamId?: string;
+    speakerId?: string | null;
+  }
+): Promise<void> {
+  const { chunkBlobUrl, recordingTimeOffsetMs, speakerId = null } = payload;
+  const streamId = payload.streamId ?? TUTOR_MIC_STREAM_ID;
+
+  // 1. Ownership check — multi-tenant gate, must be first.
+  const enqueueSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  // B1 cost gate: WAITLISTED tutors cannot enqueue transcription jobs.
+  await assertTutorApproved(enqueueSession.adminUserId);
+
+  // 2. Phase check — transcription chunks are only valid during ACTIVE sessions.
+  // A PENDING-phase ping from a stale client must not enqueue a transcription job.
+  const phaseRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { sessionPhase: true },
+      }),
+    { label: "enqueueChunkTranscription.phase" }
+  );
+  if (phaseRow?.sessionPhase !== "ACTIVE") {
+    console.log(
+      `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_skipped reason=not_active_phase phase=${phaseRow?.sessionPhase ?? "unknown"}`
+    );
+    return;
+  }
+
+  // Block B: mode-aware consent — IN_PERSON+denied or no-snapshot claimed minor
+  // fail-closed; LIVE+denied allows tutor-only mixdown transcription.
+  const audioConsent = await resolveModeAwareAudioRecordingConsent(
+    whiteboardSessionId
+  );
+  if (!audioConsent.allow) {
+    console.log(
+      `[txc] wbsid=${whiteboardSessionId} action=enqueue_rejected reason=${audioConsent.reason}`
+    );
+    return;
+  }
+
+  // 3. Blob host validation — reuse the same regex used by endWhiteboardSession.
+  if (
+    typeof chunkBlobUrl !== "string" ||
+    !blobUrlAllowedForEndSession(chunkBlobUrl)
+  ) {
+    console.warn(
+      `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_rejected reason=invalid_blob_host chunkBlobUrl=${chunkBlobUrl}`
+    );
+    throw new Error("Invalid chunk blob URL: host not in the allowed Blob namespace.");
+  }
+
+  console.log(
+    `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_start offsetMs=${recordingTimeOffsetMs} streamId=${streamId} chunkBlobUrlSuffix=${chunkBlobUrl.slice(-24)}`
+  );
+
+  // 4. Enqueue — never throws (errors are logged and swallowed by enqueueChunkTranscribe).
+  await enqueueChunkTranscribe({
+    sessionId: whiteboardSessionId,
+    chunkBlobUrl,
+    recordingTimeOffsetMs,
+    streamId,
+    speakerId,
+  });
 }
 
 /**

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
+import { checkApiShareAccess } from "@/lib/share-access-scope";
 
 /**
  * Share-token gated proxy for the whiteboard event log.
@@ -33,20 +35,24 @@ export async function GET(
     return NextResponse.json({ error: "Missing token." }, { status: 401 });
   }
 
-  const link = await withDbRetry(
-    () =>
-      db.shareLink.findUnique({
-        where: { token: shareToken },
-        select: { revokedAt: true, studentId: true },
-      }),
-    { label: "wbPublicEvents.route.shareLink" }
+  // Auth wall check: when NOTES_AUTH_WALL=true, session must match token ownership.
+  // When wall off, passes through on token alone (grace mode).
+  const access = await checkApiShareAccess(
+    req,
+    shareToken,
+    `/api/whiteboard/${sessionId}/public-events?token=${shareToken}`
   );
-  if (!link || link.revokedAt) {
+  if (!access.allowed) {
     return NextResponse.json(
-      { error: "Invalid or expired link." },
-      { status: 403 }
+      { error: "Access denied." },
+      { status: access.status }
     );
   }
+
+  const erasureBlocked = await assertStudentNotErasedApi(access.studentId, {
+    salToken: shareToken,
+  });
+  if (erasureBlocked) return erasureBlocked;
 
   const session = await withDbRetry(
     () =>
@@ -57,7 +63,7 @@ export async function GET(
     { label: "wbPublicEvents.route.session" }
   );
 
-  if (!session || session.studentId !== link.studentId) {
+  if (!session || session.studentId !== access.studentId) {
     // Don't leak existence — 404.
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }

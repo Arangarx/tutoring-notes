@@ -56,6 +56,16 @@ function dispatchShortcut(
   if (!target) {
     return { ok: false, reason: "excalidraw-container-not-found" };
   }
+  // When clicking a toolbar button (undo/redo), focus moves to the button
+  // and away from the Excalidraw canvas. Excalidraw 0.18 checks whether
+  // the focused element is within its component before processing keyboard
+  // shortcuts, so we must transfer focus back to the canvas before
+  // dispatching the synthetic event. tabIndex=-1 makes it programmatically
+  // focusable without inserting it into the tab order.
+  if (!target.hasAttribute("tabindex")) {
+    target.setAttribute("tabindex", "-1");
+  }
+  target.focus({ preventScroll: true });
   // We dispatch on the container itself; Excalidraw's listener is on
   // window in some versions and on the wrapper in others. Bubbling
   // up from the wrapper covers both.
@@ -79,3 +89,55 @@ export const triggerUndo: UndoRedoTrigger = (doc = document) =>
 /** Trigger Excalidraw's redo via Ctrl/Cmd+Shift+Z (works on both platforms). */
 export const triggerRedo: UndoRedoTrigger = (doc = document) =>
   dispatchShortcut(doc, { key: "z", code: "KeyZ", shiftKey: true });
+
+/** Trigger send-to-back via Ctrl/Cmd+Shift+[. */
+export const triggerSendToBack: UndoRedoTrigger = (doc = document) =>
+  dispatchShortcut(doc, { key: "[", code: "BracketLeft", shiftKey: true });
+
+/** Trigger send-backward via Ctrl/Cmd+[. */
+export const triggerSendBackward: UndoRedoTrigger = (doc = document) =>
+  dispatchShortcut(doc, { key: "[", code: "BracketLeft", shiftKey: false });
+
+/** Trigger bring-forward via Ctrl/Cmd+]. */
+export const triggerBringForward: UndoRedoTrigger = (doc = document) =>
+  dispatchShortcut(doc, { key: "]", code: "BracketRight", shiftKey: false });
+
+/** Trigger bring-to-front via Ctrl/Cmd+Shift+]. */
+export const triggerBringToFront: UndoRedoTrigger = (doc = document) =>
+  dispatchShortcut(doc, { key: "]", code: "BracketRight", shiftKey: true });
+
+/**
+ * Finalize an in-progress multipoint line/arrow (same as Enter/Escape).
+ * Excalidraw has no public finalize API — synthetic key on the canvas wrapper.
+ */
+export const triggerFinalize = (
+  doc = document
+): { ok: true } | { ok: false; reason: string } => {
+  const target = findExcalidrawTarget(doc);
+  if (!target) {
+    return { ok: false, reason: "excalidraw-container-not-found" };
+  }
+  if (!target.hasAttribute("tabindex")) {
+    target.setAttribute("tabindex", "-1");
+  }
+  target.focus({ preventScroll: true });
+  target.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "Escape",
+      code: "Escape",
+      bubbles: true,
+      cancelable: true,
+    })
+  );
+  return { ok: true };
+};
+
+/** Trigger delete selected via Delete key. */
+export const triggerDeleteSelected = (doc = document): { ok: true } | { ok: false; reason: string } => {
+  const target = findExcalidrawTarget(doc);
+  if (!target) return { ok: false, reason: "excalidraw-container-not-found" };
+  target.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Delete", code: "Delete", bubbles: true, cancelable: true })
+  );
+  return { ok: true };
+};

@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { CheckboxField } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { saveEmailConfig } from "./actions";
 
 export default function EmailConfigForm({
@@ -18,6 +22,8 @@ export default function EmailConfigForm({
 }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [secure, setSecure] = useState(defaultSecure);
 
   return (
     <form
@@ -25,19 +31,22 @@ export default function EmailConfigForm({
         e.preventDefault();
         setError(null);
         setSaved(false);
+        setPending(true);
         const formData = new FormData(e.currentTarget as HTMLFormElement);
         try {
           await saveEmailConfig(formData);
           setSaved(true);
         } catch (e) {
           setError(e instanceof Error ? e.message : "Failed to save");
+        } finally {
+          setPending(false);
         }
       }}
     >
-      <div style={{ display: "grid", gap: 12, maxWidth: 400 }}>
-        <div>
-          <label htmlFor="smtp-host">SMTP host</label>
-          <input
+      <div className="max-w-sm space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="smtp-host">SMTP host</Label>
+          <Input
             id="smtp-host"
             name="host"
             type="text"
@@ -46,10 +55,11 @@ export default function EmailConfigForm({
             required
           />
         </div>
-        <div className="row" style={{ gap: 12 }}>
-          <div>
-            <label htmlFor="smtp-port">Port</label>
-            <input
+
+        <div className="flex gap-3 items-end">
+          <div className="space-y-1.5 w-28">
+            <Label htmlFor="smtp-port">Port</Label>
+            <Input
               id="smtp-port"
               name="port"
               type="number"
@@ -57,21 +67,19 @@ export default function EmailConfigForm({
               defaultValue={defaultPort}
             />
           </div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
-            <label>
-              <input
-                type="checkbox"
-                name="secure"
-                value="true"
-                defaultChecked={defaultSecure}
-              />{" "}
-              TLS (secure)
-            </label>
-          </div>
+          <CheckboxField
+            id="smtp-secure"
+            label="TLS (secure)"
+            checked={secure}
+            onCheckedChange={(checked) => setSecure(checked === true)}
+            className="pb-2"
+          />
+          <input type="hidden" name="secure" value={secure ? "true" : "false"} />
         </div>
-        <div>
-          <label htmlFor="smtp-user">Username</label>
-          <input
+
+        <div className="space-y-1.5">
+          <Label htmlFor="smtp-user">Username</Label>
+          <Input
             id="smtp-user"
             name="user"
             type="text"
@@ -80,9 +88,10 @@ export default function EmailConfigForm({
             required
           />
         </div>
-        <div>
-          <label htmlFor="smtp-password">Password (API key or app password)</label>
-          <input
+
+        <div className="space-y-1.5">
+          <Label htmlFor="smtp-password">Password (API key or app password)</Label>
+          <Input
             id="smtp-password"
             name="password"
             type="password"
@@ -90,9 +99,10 @@ export default function EmailConfigForm({
             autoComplete="new-password"
           />
         </div>
-        <div>
-          <label htmlFor="smtp-from">From address (optional)</label>
-          <input
+
+        <div className="space-y-1.5">
+          <Label htmlFor="smtp-from">From address (optional)</Label>
+          <Input
             id="smtp-from"
             name="fromEmail"
             type="email"
@@ -100,13 +110,21 @@ export default function EmailConfigForm({
             defaultValue={defaultFromEmail}
           />
         </div>
-      </div>
-      {saved && <p style={{ color: "var(--success)", marginTop: 12 }}>Settings saved.</p>}
-      {error && <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{error}</p>}
-      <div style={{ marginTop: 16 }}>
-        <button className="btn primary" type="submit">
-          Save email settings
-        </button>
+
+        {saved ? (
+          <p className="text-sm text-success" role="status">
+            Settings saved.
+          </p>
+        ) : null}
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <Button type="submit" disabled={pending}>
+          {pending ? "Saving…" : "Save email settings"}
+        </Button>
       </div>
     </form>
   );

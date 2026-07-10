@@ -1,70 +1,98 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
+import zxcvbn from "zxcvbn";
+
+import { AuthFieldError } from "@/components/auth/AuthFieldError";
+import { PasswordStrengthField } from "@/components/auth/PasswordStrengthField";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 import { createFirstAdmin } from "./actions";
 
 export default function SetupForm({ setupToken }: { setupToken: string }) {
   const [state, formAction] = useActionState(createFirstAdmin, null);
   const [busy, setBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordScore, setPasswordScore] = useState<number | null>(null);
+  const formErrorId = useId();
 
   return (
-    <form
-      action={formAction}
-      onSubmit={() => setBusy(true)}
-    >
+    <form action={formAction} className="flex flex-col gap-4" onSubmit={() => setBusy(true)}>
       <input type="hidden" name="setupToken" value={setupToken} />
-      <div style={{ marginTop: 16 }}>
-        <label htmlFor="setup-email">Email</label>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="setup-email">Email</Label>
+        <Input
           id="setup-email"
           name="email"
           type="email"
           autoComplete="email"
           required
+          className="min-h-11"
+          aria-invalid={state?.error ? true : undefined}
+          aria-describedby={state?.error ? formErrorId : undefined}
         />
       </div>
-      <div style={{ marginTop: 12 }}>
-        <label htmlFor="setup-password">Password</label>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="setup-password">Password</Label>
+        <PasswordStrengthField
           id="setup-password"
           name="password"
-          type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={MIN_PASSWORD_LENGTH}
           required
+          value={password}
+          onChange={(e) => {
+            const val = e.target.value;
+            setPassword(val);
+            setPasswordScore(val.length > 0 ? zxcvbn(val).score : null);
+          }}
+          strengthScore={passwordScore}
+          aria-invalid={state?.error ? true : undefined}
+          aria-describedby={state?.error ? formErrorId : undefined}
         />
       </div>
-      <div style={{ marginTop: 12 }}>
-        <label htmlFor="setup-password-confirm">Confirm password</label>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="setup-password-confirm">Confirm password</Label>
+        <Input
           id="setup-password-confirm"
           name="passwordConfirm"
           type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={MIN_PASSWORD_LENGTH}
           required
+          className="min-h-11"
+          aria-invalid={state?.error ? true : undefined}
+          aria-describedby={state?.error ? formErrorId : undefined}
         />
       </div>
-      <div style={{ marginTop: 12 }}>
-        <label htmlFor="setup-displayName">Your name (shown to parents in emails)</label>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="setup-displayName">Your name (shown to parents in emails)</Label>
+        <Input
           id="setup-displayName"
           name="displayName"
           type="text"
           autoComplete="name"
           placeholder="e.g. Alex Chen"
+          className="min-h-11"
         />
-        <p className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+        <p className="text-sm text-muted-foreground">
           Optional but recommended. You can change this later under Admin → Profile.
         </p>
       </div>
-      {state?.error ? (
-        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{state.error}</p>
-      ) : null}
-      <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-        <button className="btn primary" disabled={busy} type="submit">
-          {busy ? "Creating..." : "Create account"}
-        </button>
+
+      {state?.error ? <AuthFieldError id={formErrorId} message={state.error} /> : null}
+
+      <div className="flex flex-col gap-3 pt-1">
+        <Button
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+          className="min-h-11 w-full text-base"
+        >
+          {busy ? "Creating…" : "Create account"}
+        </Button>
       </div>
     </form>
   );

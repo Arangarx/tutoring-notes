@@ -47,6 +47,47 @@ import type {
   WhiteboardSyncClient,
   RoomPeer,
 } from "@/lib/whiteboard/sync-client";
+import {
+  STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX,
+  saveStoredLearnerMicGain,
+} from "@/lib/recording/storage";
+
+const mockPublishSetGain = jest.fn();
+const mockPublishDispose = jest.fn();
+const mockPublishSwap = jest.fn();
+
+jest.mock("@/lib/mic-recorder-audio", () => {
+  const actual = jest.requireActual("@/lib/mic-recorder-audio");
+  return {
+    ...actual,
+    createMicPublishGraph: jest.fn(
+      async (_stream: MediaStream, gainLinear: number) => {
+        const pubTrack = {
+          kind: "audio" as const,
+          enabled: true,
+          id: "publish-graph-track",
+        };
+        return {
+          publishStream: {
+            id: "publish-graph-stream",
+            getAudioTracks: () => [pubTrack],
+            getTracks: () => [pubTrack],
+          } as unknown as MediaStream,
+          setGain: mockPublishSetGain,
+          getLevel: () => 0.5,
+          dispose: mockPublishDispose,
+          swapLocalMicSource: (stream: MediaStream) => {
+            const ret = mockPublishSwap(stream);
+            return ret === false ? false : true;
+          },
+          __testGain: gainLinear,
+        };
+      }
+    ),
+  };
+});
+
+import { createMicPublishGraph } from "@/lib/mic-recorder-audio";
 
 // -----------------------------------------------------------------
 // Fakes
@@ -155,6 +196,7 @@ function makeFakeSyncClient(): {
         subs.delete(cb);
       };
     },
+    setLocalAvMediaState: () => undefined,
     disconnect: () => undefined,
   } as unknown as WhiteboardSyncClient;
   function emitPeers(peers: ReadonlyArray<RoomPeer>) {
@@ -172,6 +214,7 @@ type MeshHandles = {
   restart: jest.Mock;
   addLocalTrackToAllPeers: jest.Mock;
   replaceLocalTrackOnAllPeers: jest.Mock;
+  triggerRenegotiationOnPeers: jest.Mock;
   dispose: jest.Mock;
   emitTrack: (
     peerId: string,
@@ -180,6 +223,7 @@ type MeshHandles = {
   ) => void;
   emitPcState: (peerId: string, state: RTCPeerConnectionState) => void;
   emitIceState: (peerId: string, state: RTCIceConnectionState) => void;
+  emitLeave: (peerId: string) => void;
   isDisposed: () => boolean;
 };
 
@@ -198,14 +242,23 @@ function makeFakeMesh(): MeshHandles {
     peerSet.delete(peerId);
   });
   const restart = jest.fn();
-  const addLocalTrackToAllPeers = jest.fn();
+  // Default: returns empty sets (no active peers). Override with
+  // .mockReturnValue({ addedPeerIds: new Set(['B']), skippedPeerIds: new Set() })
+  // in tests that exercise the add-vs-skip branching logic.
+  const addLocalTrackToAllPeers = jest.fn(() => ({
+    addedPeerIds: new Set<string>(),
+    skippedPeerIds: new Set<string>(),
+  }));
   const replaceLocalTrackOnAllPeers = jest.fn();
+  const triggerRenegotiationOnPeers = jest.fn();
   const dispose = jest.fn(() => {
     disposed = true;
     trackSubs.clear();
     pcSubs.clear();
     iceSubs.clear();
   });
+
+  const leaveSubs = new Set<(peerId: string) => void>();
 
   const mesh: PeerMesh = {
     addPeer,
@@ -214,6 +267,7 @@ function makeFakeMesh(): MeshHandles {
     restart,
     addLocalTrackToAllPeers,
     replaceLocalTrackOnAllPeers,
+    triggerRenegotiationOnPeers,
     onRemoteTrack: (cb) => {
       trackSubs.add(cb);
       return () => {
@@ -232,6 +286,12 @@ function makeFakeMesh(): MeshHandles {
         iceSubs.delete(cb);
       };
     },
+    onPeerLeave: (cb) => {
+      leaveSubs.add(cb);
+      return () => {
+        leaveSubs.delete(cb);
+      };
+    },
     isDisposed: () => disposed,
     dispose,
   };
@@ -248,6 +308,7 @@ function makeFakeMesh(): MeshHandles {
     restart,
     addLocalTrackToAllPeers,
     replaceLocalTrackOnAllPeers,
+    triggerRenegotiationOnPeers,
     dispose,
     emitTrack: (peerId, track, streams = []) => {
       for (const cb of trackSubs) cb(peerId, track, streams);
@@ -257,6 +318,9 @@ function makeFakeMesh(): MeshHandles {
     },
     emitIceState: (peerId, state) => {
       for (const cb of iceSubs) cb(peerId, state);
+    },
+    emitLeave: (peerId: string) => {
+      for (const cb of leaveSubs) cb(peerId);
     },
     isDisposed: () => disposed,
   };
@@ -564,6 +628,9 @@ describe("useLiveAV — requestMic", () => {
       p1 = result.current.requestMic();
       p2 = result.current.requestMic();
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(getUM).toHaveBeenCalledTimes(1);
     expect(result.current.isAcquiring).toBe(true);
 
@@ -688,43 +755,46 @@ describe("useLiveAV — requestCam", () => {
     unmount();
   });
 
-  test("requestMic + requestCam in parallel: both resolve, isAcquiring true during", async () => {
-    let resolveAudio: (s: MediaStream) => void = () => undefined;
-    let resolveVideo: (s: MediaStream) => void = () => undefined;
+  test("requestMic then requestCam: device mutex serializes getUserMedia", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
     const getUM = jest.fn((constraints: MediaStreamConstraints) => {
       if (constraints.video) {
-        return new Promise<MediaStream>((r) => {
-          resolveVideo = r;
-        });
+        return Promise.resolve(video.stream as unknown as MediaStream);
       }
-      return new Promise<MediaStream>((r) => {
-        resolveAudio = r;
-      });
+      return Promise.resolve(audio.stream as unknown as MediaStream);
     });
     const props = makeBaseProps({ _getUserMedia: getUM });
 
     const { result, unmount } = renderHook(() => useLiveAV(props));
-    let micP: Promise<void> | undefined;
-    let camP: Promise<void> | undefined;
-    act(() => {
-      micP = result.current.requestMic();
-      camP = result.current.requestCam();
-    });
-    expect(result.current.isAcquiring).toBe(true);
-
     await act(async () => {
-      resolveAudio(makeFakeStream(1, 0).stream as unknown as MediaStream);
-      await micP;
+      await result.current.requestMic();
+      await result.current.requestCam();
     });
-    expect(result.current.isAcquiring).toBe(true); // cam still in flight
     expect(result.current.localAudioStream).not.toBeNull();
-
-    await act(async () => {
-      resolveVideo(makeFakeStream(0, 1).stream as unknown as MediaStream);
-      await camP;
-    });
-    expect(result.current.isAcquiring).toBe(false);
     expect(result.current.localVideoStream).not.toBeNull();
+    expect(result.current.isAcquiring).toBe(false);
+    expect(getUM).toHaveBeenCalledTimes(2);
+
+    unmount();
+  });
+
+  test("requestMicAndCam: single getUserMedia populates audio + video streams", async () => {
+    const both = makeFakeStream(1, 1);
+    const getUM = jest.fn(
+      async () => both.stream as unknown as MediaStream
+    );
+    const props = makeBaseProps({ _getUserMedia: getUM });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMicAndCam();
+    });
+    expect(getUM).toHaveBeenCalledTimes(1);
+    expect(result.current.localAudioStream).not.toBeNull();
+    expect(result.current.localVideoStream).not.toBeNull();
+    expect(result.current.isCamMuted).toBe(false);
+    expect(result.current.isAcquiring).toBe(false);
 
     unmount();
   });
@@ -812,15 +882,14 @@ describe("useLiveAV — requestCam", () => {
       (c: unknown[]) => c[0]
     );
     expect(fannedTracks).toContain(video.videoTracks[0]);
-    // Same-path `replaceTrack` as mic switch — wakes RTP senders after add.
-    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
-      "audio",
-      audio.audioTracks[0]
-    );
-    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
+    // With 0 peers, addLocalTrackToAllPeers returns empty sets, so
+    // neither replaceLocalTrackOnAllPeers nor triggerRenegotiationOnPeers
+    // is called — both are no-ops with no active peers.
+    expect(meshHandles.replaceLocalTrackOnAllPeers).not.toHaveBeenCalledWith(
       "video",
       video.videoTracks[0]
     );
+    expect(meshHandles.triggerRenegotiationOnPeers).not.toHaveBeenCalled();
 
     // Cleanup: unmount triggers exactly one dispose.
     unmount();
@@ -865,14 +934,108 @@ describe("useLiveAV — requestCam", () => {
       (c: unknown[]) => c[0]
     );
     expect(fannedTracks).toContain(audio.audioTracks[0]);
+    // With 0 peers, addLocalTrackToAllPeers returns empty sets, so
+    // neither replaceLocalTrackOnAllPeers nor triggerRenegotiationOnPeers
+    // is called — both are no-ops with no active peers.
+    expect(meshHandles.replaceLocalTrackOnAllPeers).not.toHaveBeenCalledWith(
+      "audio",
+      audio.audioTracks[0]
+    );
+    expect(meshHandles.triggerRenegotiationOnPeers).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  // -----------------------------------------------------------------
+  // Add vs. skip branching — verifies the late-add-video renegotiation
+  // fix (the root cause of "tutor never sees student's video").
+  // -----------------------------------------------------------------
+
+  test("late-add path (addedPeerIds non-empty): calls triggerRenegotiationOnPeers, NOT replaceLocalTrackOnAllPeers for video", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    // Configure the mesh to report that video track was ADDED (new sender).
+    meshHandles.addLocalTrackToAllPeers.mockReturnValue({
+      addedPeerIds: new Set(["student-abc"]),
+      skippedPeerIds: new Set<string>(),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    await act(async () => { await result.current.requestMic(); });
+    meshHandles.addLocalTrackToAllPeers.mockClear();
+    meshHandles.triggerRenegotiationOnPeers.mockClear();
+    meshHandles.replaceLocalTrackOnAllPeers.mockClear();
+
+    await act(async () => { await result.current.requestCam(); });
+
+    // triggerRenegotiationOnPeers must be called for the add path.
+    expect(meshHandles.triggerRenegotiationOnPeers).toHaveBeenCalledWith(["student-abc"]);
+    // replaceLocalTrackOnAllPeers must NOT be called for the add path —
+    // calling replaceTrack(sameTrack) on a freshly-created sender can
+    // interfere with Chrome's pending onnegotiationneeded evaluation.
+    expect(meshHandles.replaceLocalTrackOnAllPeers).not.toHaveBeenCalledWith(
+      "video",
+      video.videoTracks[0]
+    );
+
+    unmount();
+  });
+
+  test("hotswap path (skippedPeerIds non-empty): calls replaceLocalTrackOnAllPeers for video, NOT triggerRenegotiationOnPeers", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    // Configure the mesh to report that video sender already existed (hotswap).
+    meshHandles.addLocalTrackToAllPeers.mockReturnValue({
+      addedPeerIds: new Set<string>(),
+      skippedPeerIds: new Set(["student-abc"]),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    await act(async () => { await result.current.requestMic(); });
+    meshHandles.addLocalTrackToAllPeers.mockClear();
+    meshHandles.triggerRenegotiationOnPeers.mockClear();
+    meshHandles.replaceLocalTrackOnAllPeers.mockClear();
+
+    await act(async () => { await result.current.requestCam(); });
+
+    // replaceLocalTrackOnAllPeers must be called for the hotswap path.
     expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
       "video",
       video.videoTracks[0]
     );
-    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
-      "audio",
-      audio.audioTracks[0]
-    );
+    // triggerRenegotiationOnPeers must NOT be called — no renegotiation needed
+    // when replacing an existing sender (replaceTrack has no SDP side-effect).
+    expect(meshHandles.triggerRenegotiationOnPeers).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -1360,6 +1523,95 @@ describe("useLiveAV — remote tracks + state", () => {
 
     unmount();
   });
+
+  /**
+   * TRACK-BEFORE-PRESENCE regression test (2026-06-16).
+   *
+   * Reproduces the tutor-side asymmetric-receive bug: on the host
+   * (tutor), peer-mesh can fire ontrack for the student's peerId
+   * BEFORE sync presence has emitted that peerId via onRoomPeersChange.
+   * The pre-fix code dropped the track permanently. The fix buffers the
+   * track and flushes it when the peer's internal entry is first created.
+   *
+   * jsdom cannot exercise real WebRTC. This test validates the
+   * buffer/flush logic path only. The definitive proof is a two-device
+   * LV-2 smoke: student grants cam → tutor sees a second tile with live
+   * video.
+   */
+  test("TRACK-BEFORE-PRESENCE: remote track arriving before sync presence is buffered and flushed when presence arrives", async () => {
+    const sync = makeFakeSyncClient();
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      syncClient: sync.sync,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    await waitFor(() => {
+      expect(result.current.isActive).toBe(true);
+    });
+
+    // At this point: no presence for "student-B" yet.
+    expect(result.current.participants.length).toBe(0);
+
+    // Remote track arrives BEFORE presence — the race scenario.
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(
+        "student-B",
+        remoteVideo as unknown as MediaStreamTrack
+      );
+    });
+
+    // Track should still be buffered — no participant entry yet.
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.participants.length).toBe(0);
+
+    // Now presence arrives — buffer must be drained.
+    act(() => {
+      sync.emitPeers([{ peerId: "student-B", role: "student" }]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.participants.length).toBe(1);
+    });
+
+    // The buffered track must have been flushed onto the participant.
+    const participant = result.current.participants[0]!;
+    expect(participant.peerId).toBe("student-B");
+    expect(participant.videoStream).not.toBeNull();
+    const vs = participant.videoStream as unknown as FakeMediaStream;
+    expect(vs.getVideoTracks().length).toBe(1);
+    expect(vs.getVideoTracks()[0]).toBe(remoteVideo);
+
+    unmount();
+  });
+
+  test("presence-then-track happy path still works (no regression)", async () => {
+    // Normal order: presence first, then track. Must keep working.
+    const { result, unmount, meshHandles } = await withPeer("student-C");
+    const remoteAudio = new FakeMediaStreamTrack("audio");
+    act(() => {
+      meshHandles.emitTrack(
+        "student-C",
+        remoteAudio as unknown as MediaStreamTrack
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.participants[0]?.audioStream).not.toBeNull();
+    });
+    const stream = result.current.participants[0]!
+      .audioStream as unknown as FakeMediaStream;
+    expect(stream.getAudioTracks()[0]).toBe(remoteAudio);
+
+    unmount();
+  });
 });
 
 describe("useLiveAV — mute control + reconnect", () => {
@@ -1622,6 +1874,97 @@ describe("useLiveAV — mute control + reconnect", () => {
   });
 });
 
+// =================================================================
+// Stale-peer eviction timing — 6s window (invariant 3, docs/LIVE-AV.md;
+// reliability floor "slow tutor recovery" fix, 2026-06-26)
+//
+// When a peer's PC stays disconnected/failed for PEER_EVICTION_TIMEOUT_MS
+// the hook drops it from the internal map (mesh.removePeer + rebuild) so
+// the FSM pauses recording instead of capturing tutor-only audio. The
+// window was shortened 10s → 6s so the tutor stops holding a dead PC for
+// the remote peer's blip; a recovery before the window must NOT evict.
+// =================================================================
+describe("useLiveAV — stale-peer eviction timing (6s, invariant 3)", () => {
+  async function activeWithPeer(peerId = "student-B"): Promise<{
+    result: ReturnType<
+      typeof renderHook<ReturnType<typeof useLiveAV>, unknown>
+    >["result"];
+    unmount: () => void;
+    meshHandles: MeshHandles;
+  }> {
+    const sync = makeFakeSyncClient();
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      syncClient: sync.sync,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    await waitFor(() => {
+      expect(result.current.isActive).toBe(true);
+    });
+    act(() => {
+      sync.emitPeers([{ peerId, role: "student" }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants.length).toBe(1);
+    });
+    return { result, unmount, meshHandles };
+  }
+
+  test("evicts a peer that stays disconnected past the 6s window", async () => {
+    const { unmount, meshHandles } = await activeWithPeer("student-B");
+    jest.useFakeTimers();
+    try {
+      act(() => {
+        meshHandles.emitPcState("student-B", "disconnected");
+      });
+      // Just before 6s: the 3s ICE-restart + ~3s reconnect window — NOT yet evicted.
+      act(() => {
+        jest.advanceTimersByTime(5_999);
+      });
+      expect(meshHandles.removePeer).not.toHaveBeenCalledWith("student-B");
+      // Cross the 6s threshold — the dead PC is evicted.
+      act(() => {
+        jest.advanceTimersByTime(2);
+      });
+      expect(meshHandles.removePeer).toHaveBeenCalledWith("student-B");
+    } finally {
+      jest.useRealTimers();
+      unmount();
+    }
+  });
+
+  test("does NOT evict a peer that recovers (connected) before the 6s window", async () => {
+    const { unmount, meshHandles } = await activeWithPeer("student-B");
+    jest.useFakeTimers();
+    try {
+      act(() => {
+        meshHandles.emitPcState("student-B", "disconnected");
+      });
+      act(() => {
+        jest.advanceTimersByTime(3_000);
+      });
+      // ICE-restart recovers the peer before eviction fires.
+      act(() => {
+        meshHandles.emitPcState("student-B", "connected");
+      });
+      // Advance well past the old 10s window — eviction must have been cancelled.
+      act(() => {
+        jest.advanceTimersByTime(10_000);
+      });
+      expect(meshHandles.removePeer).not.toHaveBeenCalledWith("student-B");
+    } finally {
+      jest.useRealTimers();
+      unmount();
+    }
+  });
+});
+
 describe("useLiveAV — teardown", () => {
   test("unmount disposes mesh + signaling and stops local + remote tracks", async () => {
     const { stream: localStream, audioTracks: localAud } = makeFakeStream(1);
@@ -1738,5 +2081,712 @@ describe("useLiveAV — teardown", () => {
 
     unmount();
     expect(videoTrack.stopped).toBe(true);
+  });
+});
+
+// -----------------------------------------------------------------
+// Device enumeration single-flight + never-downgrade (invariant 14)
+//
+// wb-wave5-polish reliability floor: every `enumerateDevices()` call
+// must run THROUGH the `chainDeviceAcquire` mutex (never concurrently
+// with a getUserMedia acquire — the Windows "no webcam / wrong
+// dropdown" corruption), rapid out-of-band callers must coalesce, and
+// a transient/pre-permission EMPTY enumerate must NEVER overwrite a
+// known-good device list. See docs/LIVE-AV.md invariant 14.
+//
+// The true on-hardware concurrent-acquire corruption is a
+// Windows-only failure that the Playwright fake-device harness cannot
+// reproduce (PLAYWRIGHT-GAP, docs/BACKLOG.md). These jsdom tests prove
+// the fix MECHANISM (single-flight, mutex-serialization, never-
+// downgrade), which is the logic that prevents the race.
+// -----------------------------------------------------------------
+
+describe("useLiveAV — device enumeration single-flight + never-downgrade (invariant 14)", () => {
+  type MutableNavigator = { mediaDevices?: unknown };
+  let hadMediaDevices = false;
+  let priorMediaDevices: unknown;
+
+  function installEnumerateStub(
+    impl: () => Promise<MediaDeviceInfo[]>
+  ): jest.Mock<Promise<MediaDeviceInfo[]>, []> {
+    const nav = navigator as unknown as MutableNavigator;
+    hadMediaDevices = "mediaDevices" in nav;
+    priorMediaDevices = nav.mediaDevices;
+    const enumerateDevices = jest.fn(impl);
+    nav.mediaDevices = {
+      enumerateDevices,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    };
+    return enumerateDevices;
+  }
+
+  afterEach(() => {
+    const nav = navigator as unknown as MutableNavigator;
+    if (hadMediaDevices) {
+      nav.mediaDevices = priorMediaDevices;
+    } else {
+      delete nav.mediaDevices;
+    }
+  });
+
+  const dev = (
+    deviceId: string,
+    kind: "videoinput" | "audioinput",
+    label: string
+  ): MediaDeviceInfo =>
+    ({
+      deviceId,
+      kind,
+      label,
+      groupId: `${deviceId}-grp`,
+      toJSON() {
+        return this;
+      },
+    }) as unknown as MediaDeviceInfo;
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  test("coalesces a synchronous burst of refresh calls into ONE enumerate (single-flight)", async () => {
+    const enumerateDevices = installEnumerateStub(async () => []);
+    const props = makeBaseProps();
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Let the mount enumerate fire + settle so the coalescing ref clears.
+    await settle();
+    enumerateDevices.mockClear();
+
+    // Three rapid out-of-band callers in the same tick → coalesced to one.
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      void result.current.refreshVideoDeviceList();
+      void result.current.refreshAudioDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(enumerateDevices).toHaveBeenCalledTimes(1);
+
+    // After it settles, a fresh call enumerates again (ref cleared).
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(enumerateDevices).toHaveBeenCalledTimes(2);
+
+    unmount();
+  });
+
+  test("a transient EMPTY enumerate does not overwrite a known-good device list (never-downgrade)", async () => {
+    let nextResult: MediaDeviceInfo[] = [
+      dev("cam1", "videoinput", "Cam 1"),
+      dev("mic1", "audioinput", "Mic 1"),
+    ];
+    installEnumerateStub(async () => nextResult);
+    const props = makeBaseProps();
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Mount enumerate populates the good list.
+    await settle();
+    await waitFor(() => {
+      expect(result.current.videoDevices.length).toBe(1);
+      expect(result.current.audioDevices.length).toBe(1);
+    });
+
+    // A transient empty enumerate (pre-permission / Windows race) must
+    // NOT wipe the populated picker.
+    nextResult = [];
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.videoDevices.length).toBe(1);
+    expect(result.current.videoDevices[0]?.deviceId).toBe("cam1");
+    expect(result.current.audioDevices.length).toBe(1);
+    expect(result.current.audioDevices[0]?.deviceId).toBe("mic1");
+
+    unmount();
+  });
+
+  test("never-downgrade is per-kind: a camera-only enumerate cannot wipe the mic list", async () => {
+    let nextResult: MediaDeviceInfo[] = [
+      dev("cam1", "videoinput", "Cam 1"),
+      dev("mic1", "audioinput", "Mic 1"),
+    ];
+    installEnumerateStub(async () => nextResult);
+    const props = makeBaseProps();
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    await settle();
+    await waitFor(() => {
+      expect(result.current.audioDevices.length).toBe(1);
+    });
+
+    // Enumerate returns cameras but momentarily no mics — the mic list
+    // must survive (a camera plug/unplug can't empty the mic dropdown).
+    nextResult = [dev("cam1", "videoinput", "Cam 1")];
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.videoDevices.length).toBe(1);
+    expect(result.current.audioDevices.length).toBe(1);
+    expect(result.current.audioDevices[0]?.deviceId).toBe("mic1");
+
+    unmount();
+  });
+
+  test("an out-of-band enumerate does NOT run concurrently with an in-flight getUserMedia acquire (mutex-serialized)", async () => {
+    let acquireInFlight = false;
+    let ranDuringAcquire = false;
+    const enumerateDevices = installEnumerateStub(async () => {
+      if (acquireInFlight) ranDuringAcquire = true;
+      return [];
+    });
+
+    let resolveGUM: (s: MediaStream) => void = () => undefined;
+    const getUM = jest.fn(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          resolveGUM = resolve;
+        })
+    );
+
+    const props = makeBaseProps({ _getUserMedia: getUM });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Settle the mount enumerate, then start counting fresh.
+    await settle();
+    enumerateDevices.mockClear();
+
+    // Start a mic acquire that stays pending (holds the device mutex).
+    let micPromise: Promise<void> | undefined;
+    act(() => {
+      acquireInFlight = true;
+      micPromise = result.current.requestMic();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Fire an out-of-band enumerate WHILE the acquire is in flight.
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // It must be queued behind the acquire — not executed yet. Pre-fix,
+    // refreshVideoDevices called enumerateDevices() directly and it would
+    // have run concurrently here (the Windows-corruption race).
+    expect(enumerateDevices).not.toHaveBeenCalled();
+    expect(ranDuringAcquire).toBe(false);
+
+    // Complete the acquire — the queued enumerate may now run, and only
+    // after the acquire released the mutex.
+    await act(async () => {
+      acquireInFlight = false;
+      resolveGUM(makeFakeStream(1).stream as unknown as MediaStream);
+      await micPromise;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(ranDuringAcquire).toBe(false);
+
+    unmount();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// camOn presence: sticky-latch fix + broadcast-gate
+// ---------------------------------------------------------------------------
+
+describe("useLiveAV — camOn presence (fix: no premature false latch)", () => {
+  const PEER_ID = "student-E";
+
+  /** Setup: active hook with mic acquired + one peer in presence. */
+  async function withCamPeer(): Promise<{
+    result: ReturnType<typeof renderHook<ReturnType<typeof useLiveAV>, unknown>>["result"];
+    unmount: () => void;
+    sync: ReturnType<typeof makeFakeSyncClient>;
+    meshHandles: MeshHandles;
+  }> {
+    const sync = makeFakeSyncClient();
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const video = makeFakeStream(0, 1);
+    const props = makeBaseProps({
+      syncClient: sync.sync,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+      _getUserMedia: jest.fn(async () => video.stream as unknown as MediaStream),
+    });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    // Acquire cam so hasCamPermission → "granted" and mesh is active
+    await act(async () => {
+      await result.current.requestCam();
+    });
+    await waitFor(() => {
+      expect(result.current.isActive).toBe(true);
+    });
+    // Seed the peer into presence
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student" }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants.length).toBe(1);
+    });
+    return { result, unmount, sync, meshHandles };
+  }
+
+  test("camOn:false then camOn:true — videoStream not null and camOn===true after update", async () => {
+    const { result, unmount, sync, meshHandles } = await withCamPeer();
+
+    // Remote video track arrives
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(PEER_ID, remoteVideo as unknown as MediaStreamTrack);
+    });
+
+    // Presence: camOn:false (premature latch scenario)
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student", camOn: false }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants[0]?.camOn).toBe(false);
+    });
+    // With camOn:false, videoStream must be null (initials shown)
+    expect(result.current.participants[0]?.videoStream).toBeNull();
+
+    // Presence update: camOn:true (camera actually ready)
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student", camOn: true }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants[0]?.camOn).toBe(true);
+    });
+    // Video stream must be exposed now — no initials
+    expect(result.current.participants[0]?.videoStream).not.toBeNull();
+
+    unmount();
+  });
+
+  test("camOn:undefined with live video track — videoStream exposed (fall back to track heuristic)", async () => {
+    const { result, unmount, sync, meshHandles } = await withCamPeer();
+
+    // Remote video track arrives
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(PEER_ID, remoteVideo as unknown as MediaStreamTrack);
+    });
+    await waitFor(() => {
+      expect(result.current.participants[0]?.videoStream).not.toBeNull();
+    });
+
+    // Presence update omits camOn (unknown) — track heuristic must keep video shown
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student" }]);
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    // camOn must be undefined (unknown)
+    expect(result.current.participants[0]?.camOn).toBeUndefined();
+    // videoStream must still be exposed — unknown camOn does NOT force initials
+    expect(result.current.participants[0]?.videoStream).not.toBeNull();
+
+    unmount();
+  });
+
+  test("camOn:false then presence omits camOn — stale false cleared to undefined", async () => {
+    const { result, unmount, sync, meshHandles } = await withCamPeer();
+
+    // Remote video track
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(PEER_ID, remoteVideo as unknown as MediaStreamTrack);
+    });
+
+    // Latch false first
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student", camOn: false }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants[0]?.camOn).toBe(false);
+    });
+
+    // Then omit camOn (unknown) — stale false must be cleared
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student" }]);
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    // useLiveAV fix #2: always assign entry.camOn = camOn, so stale false → undefined
+    expect(result.current.participants[0]?.camOn).toBeUndefined();
+    // With undefined camOn and a live track: videoStream exposed
+    expect(result.current.participants[0]?.videoStream).not.toBeNull();
+
+    unmount();
+  });
+
+  // wb-av-camon-acquire-gate: SENDER-side broadcast gate
+  // Verifies that the local useLiveAV hook never calls setLocalAvMediaState with
+  // camOn:false while hasCamPermission=granted but localVideoStream=null (mid-GUM).
+  // This is the 2nd-session premature latch: permission pre-cached from a prior
+  // session, so hasCamPermission="granted" on mount, but the stream is still null
+  // while requestCam() is in flight.
+  test("2nd-session camOn broadcast: omitted (not false) while hasCamPermission=granted + localVideoStream=null", async () => {
+    const camStatus = makeFakePermissionStatus("granted");
+    const micStatus = makeFakePermissionStatus("granted");
+
+    const avStateCalls: Array<{ camOn?: boolean; micOn?: boolean }> = [];
+    const syncWithSpy = {
+      isConnected: () => true,
+      onRemoteScene: () => () => undefined,
+      onConnect: () => () => undefined,
+      onDisconnect: () => () => undefined,
+      onPeerCountChange: () => () => undefined,
+      broadcastScene: () => undefined,
+      broadcastDocument: () => undefined,
+      flushPendingBroadcast: () => false,
+      broadcastSignal: () => undefined,
+      onRemoteSignal: () => () => undefined,
+      onRoomPeersChange: () => () => undefined,
+      setLocalAvMediaState: (s: { camOn?: boolean; micOn?: boolean }) => {
+        avStateCalls.push({ ...s });
+      },
+      disconnect: () => undefined,
+    } as unknown as WhiteboardSyncClient;
+
+    const props = makeBaseProps({
+      syncClient: syncWithSpy,
+      _permissions: makeFakePermissions({ mic: micStatus, cam: camStatus }),
+      _getUserMedia: jest.fn(
+        async () => makeFakeStream(0, 1).stream as unknown as MediaStream
+      ),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Wait for the Permissions API query to resolve → hasCamPermission="granted"
+    await waitFor(() => {
+      expect(result.current.hasCamPermission).toBe("granted");
+    });
+
+    // At this point: hasCamPermission="granted", localVideoStream=null.
+    // The presence broadcast must NOT have sent camOn:false (the pre-fix bug).
+    for (const call of avStateCalls) {
+      expect(call.camOn).not.toBe(false);
+    }
+
+    unmount();
+  });
+
+  test("2nd-session camOn broadcast: true after requestCam resolves (not stuck on undefined)", async () => {
+    const camStatus = makeFakePermissionStatus("granted");
+    const micStatus = makeFakePermissionStatus("granted");
+
+    const avStateCalls: Array<{ camOn?: boolean; micOn?: boolean }> = [];
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const { stream: vidStream } = makeFakeStream(0, 1);
+
+    const syncWithSpy = {
+      isConnected: () => true,
+      onRemoteScene: () => () => undefined,
+      onConnect: () => () => undefined,
+      onDisconnect: () => () => undefined,
+      onPeerCountChange: () => () => undefined,
+      broadcastScene: () => undefined,
+      broadcastDocument: () => undefined,
+      flushPendingBroadcast: () => false,
+      broadcastSignal: () => undefined,
+      onRemoteSignal: () => () => undefined,
+      onRoomPeersChange: () => () => undefined,
+      setLocalAvMediaState: (s: { camOn?: boolean; micOn?: boolean }) => {
+        avStateCalls.push({ ...s });
+      },
+      disconnect: () => undefined,
+    } as unknown as WhiteboardSyncClient;
+
+    const props = makeBaseProps({
+      syncClient: syncWithSpy,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+      _permissions: makeFakePermissions({ mic: micStatus, cam: camStatus }),
+      _getUserMedia: jest.fn(
+        async () => vidStream as unknown as MediaStream
+      ),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Wait for hasCamPermission="granted"
+    await waitFor(() => {
+      expect(result.current.hasCamPermission).toBe("granted");
+    });
+
+    // Call requestCam → stream acquired
+    await act(async () => {
+      await result.current.requestCam();
+    });
+
+    // After acquisition: the last setLocalAvMediaState call must have camOn:true
+    const camTrueCalls = avStateCalls.filter((c) => c.camOn === true);
+    expect(camTrueCalls.length).toBeGreaterThan(0);
+    // And no false was ever broadcast
+    for (const call of avStateCalls) {
+      expect(call.camOn).not.toBe(false);
+    }
+
+    unmount();
+  });
+});
+
+describe("useLiveAV — student publish-path mic boost (WS-M)", () => {
+  beforeEach(() => {
+    mockPublishSetGain.mockClear();
+    mockPublishDispose.mockClear();
+    mockPublishSwap.mockClear();
+    (createMicPublishGraph as jest.Mock).mockClear();
+    const storage = new Map<string, string>();
+    (globalThis as { window?: unknown }).window = {
+      localStorage: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          storage.set(k, v);
+        },
+        removeItem: (k: string) => {
+          storage.delete(k);
+        },
+      },
+    };
+  });
+
+  test("student path builds publish graph and exposes publishStream as localAudioStream", async () => {
+    const { stream, audioTracks } = makeFakeStream(1);
+    const getUM = jest.fn(async () => stream as unknown as MediaStream);
+    const props = makeBaseProps({
+      localPeerId: "student-S",
+      learnerProfileId: "lp-ws-m",
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+
+    expect(createMicPublishGraph).toHaveBeenCalledTimes(1);
+    expect(result.current.localAudioStream?.id).toBe("publish-graph-stream");
+    expect(result.current.localAudioStream?.getAudioTracks()[0]?.id).toBe(
+      "publish-graph-track"
+    );
+    expect(result.current.localAudioStream).not.toBe(stream);
+    expect(audioTracks[0]!.enabled).toBe(true);
+
+    unmount();
+    expect(mockPublishDispose).toHaveBeenCalled();
+  });
+
+  test("tutor path without learnerProfileId does not build publish graph", async () => {
+    const { stream } = makeFakeStream(1);
+    const getUM = jest.fn(async () => stream as unknown as MediaStream);
+    const props = makeBaseProps({ _getUserMedia: getUM });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+
+    expect(createMicPublishGraph).not.toHaveBeenCalled();
+    expect(result.current.localAudioStream).toBe(stream);
+
+    unmount();
+  });
+
+  test("gain persists per learner and forwards setGain to publish graph", async () => {
+    saveStoredLearnerMicGain("lp-gain", 2.5);
+    const { stream } = makeFakeStream(1);
+    const props = makeBaseProps({
+      learnerProfileId: "lp-gain",
+      _getUserMedia: jest.fn(async () => stream as unknown as MediaStream),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.gainLinear).toBe(2.5);
+    });
+
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    expect(createMicPublishGraph).toHaveBeenCalledWith(
+      expect.anything(),
+      2.5,
+      expect.objectContaining({ sessionId: "wb-1" })
+    );
+
+    act(() => {
+      result.current.setGainLinear(1.75);
+    });
+    expect(result.current.gainLinear).toBe(1.75);
+    expect(mockPublishSetGain).toHaveBeenCalledWith(1.75);
+    const w = (globalThis as unknown as { window?: { localStorage: { getItem: (k: string) => string | null } } }).window!;
+    expect(
+      w.localStorage.getItem(`${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}lp-gain`)
+    ).toBe("1.75");
+
+    unmount();
+  });
+
+  test("graph null fallback at gain 1.0 uses raw stream (no regression vs no-graph baseline)", async () => {
+    (createMicPublishGraph as jest.Mock).mockResolvedValueOnce(null);
+    const { stream, audioTracks } = makeFakeStream(1);
+    const props = makeBaseProps({
+      learnerProfileId: "lp-fallback",
+      _getUserMedia: jest.fn(async () => stream as unknown as MediaStream),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+
+    expect(result.current.localAudioStream).toBe(stream);
+    expect(result.current.localAudioStream?.getAudioTracks()[0]).toBe(
+      audioTracks[0]
+    );
+    expect(result.current.gainLinear).toBe(1);
+
+    act(() => {
+      result.current.toggleMic();
+    });
+    expect(audioTracks[0]!.enabled).toBe(false);
+
+    unmount();
+  });
+
+  test("toggleMic: publish-dest track silenced, raw GUM track unchanged when graph is active", async () => {
+    const { stream, audioTracks } = makeFakeStream(1);
+    const props = makeBaseProps({
+      learnerProfileId: "lp-mute-test",
+      _getUserMedia: jest.fn(async () => stream as unknown as MediaStream),
+    });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    const pubTrack = result.current.localAudioStream?.getAudioTracks()[0]!;
+    expect(pubTrack.id).toBe("publish-graph-track");
+    expect(pubTrack.enabled).toBe(true);
+    expect(audioTracks[0]!.enabled).toBe(true);
+    act(() => {
+      result.current.toggleMic();
+    });
+    expect(result.current.isMicMuted).toBe(true);
+    expect(pubTrack.enabled).toBe(false);
+    expect(audioTracks[0]!.enabled).toBe(true);
+    act(() => {
+      result.current.toggleMic();
+    });
+    expect(result.current.isMicMuted).toBe(false);
+    expect(pubTrack.enabled).toBe(true);
+    unmount();
+  });
+
+  test("setMicDevice: swap failure keeps raw GUM stream and sets error", async () => {
+    const dev = (
+      deviceId: string
+    ): MediaDeviceInfo =>
+      ({
+        deviceId,
+        kind: "audioinput",
+        label: deviceId,
+        groupId: `${deviceId}-grp`,
+        toJSON() {
+          return this;
+        },
+      }) as unknown as MediaDeviceInfo;
+
+    const nav = navigator as unknown as {
+      mediaDevices?: {
+        enumerateDevices: () => Promise<MediaDeviceInfo[]>;
+        addEventListener: jest.Mock;
+        removeEventListener: jest.Mock;
+      };
+    };
+    nav.mediaDevices = {
+      enumerateDevices: jest.fn(async () => [dev("mic-a"), dev("mic-b")]),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    };
+
+    const first = makeFakeStream(1);
+    const second = makeFakeStream(1);
+    const getUM = jest.fn(async (constraints?: MediaStreamConstraints) => {
+      const audio = constraints?.audio;
+      if (typeof audio === "object" && audio !== null) {
+        const ac = audio as MediaTrackConstraints;
+        const exactFrom = (
+          v: ConstrainDOMString | undefined
+        ): string | undefined => {
+          if (typeof v === "string") return v;
+          if (Array.isArray(v)) return undefined;
+          const ex = v?.exact;
+          return typeof ex === "string" ? ex : undefined;
+        };
+        const dev = exactFrom(ac.deviceId);
+        const grp = exactFrom(ac.groupId);
+        if (dev === "mic-b" || grp === "mic-b-grp") {
+          return second.stream as unknown as MediaStream;
+        }
+        const idealDev =
+          typeof ac.deviceId === "object" &&
+          ac.deviceId !== null &&
+          !Array.isArray(ac.deviceId)
+            ? ac.deviceId.ideal
+            : undefined;
+        if (idealDev === "mic-b") {
+          return second.stream as unknown as MediaStream;
+        }
+      }
+      return first.stream as unknown as MediaStream;
+    });
+
+    mockPublishSwap.mockReturnValue(false);
+
+    const props = makeBaseProps({
+      learnerProfileId: "lp-swap-fail",
+      localPeerId: "student-S",
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    expect(first.audioTracks[0]!.stopped).toBe(false);
+
+    await act(async () => {
+      await result.current.setMicDevice("mic-b");
+    });
+
+    expect(mockPublishSwap).toHaveBeenCalled();
+    expect(first.audioTracks[0]!.stopped).toBe(false);
+    expect(second.audioTracks[0]!.stopped).toBe(true);
+    expect(result.current.error).not.toBeNull();
+    expect(result.current.error?.type).toBe("unknown");
+
+    unmount();
   });
 });

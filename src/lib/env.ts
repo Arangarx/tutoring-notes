@@ -37,10 +37,46 @@ const EnvSchema = z.object({
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().optional()
   ),
+  /** Primary transcription model (recording chunk pipeline). Default: gpt-4o-mini-transcribe. */
+  OPENAI_TRANSCRIBE_PRIMARY_MODEL: z.string().optional(),
+  /** Fallback transcription model (silence-hallucination guard). Default: whisper-1. */
+  OPENAI_TRANSCRIBE_FALLBACK_MODEL: z.string().optional(),
+  /** Legacy single-shot transcribe model (src/lib/transcribe.ts). Default: whisper-1. */
+  OPENAI_LEGACY_TRANSCRIBE_MODEL: z.string().optional(),
+  /** Map-phase extraction model. Default: gpt-4o-mini. */
+  OPENAI_MAP_MODEL: z.string().optional(),
+  /** Reduce-phase notes model. Default: gpt-4o-mini. */
+  OPENAI_REDUCE_MODEL: z.string().optional(),
+  /** Legacy single-shot notes model (src/lib/ai.ts). Default: gpt-4o-mini. */
+  OPENAI_LEGACY_NOTES_MODEL: z.string().optional(),
   /** Vercel Blob read/write token. Optional — if absent, audio upload is disabled. */
   BLOB_READ_WRITE_TOKEN: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().optional()
+  ),
+  /**
+   * AES-256-GCM key for TOTP secret encryption (Identity Phase 1).
+   * Must decode to exactly 32 bytes when interpreted as base64url.
+   * Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+   * REQUIRED in production for any deployment with real admins.
+   * Losing this key requires re-enrolling all tutors — see docs/PLATFORM-ASSUMPTIONS.md.
+   * Optional in local dev (2FA enrollment will fail gracefully if missing).
+   */
+  TOTP_ENCRYPTION_KEY: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z
+      .string()
+      .refine(
+        (v) => {
+          try {
+            return Buffer.from(v, "base64url").length === 32;
+          } catch {
+            return false;
+          }
+        },
+        { message: "must be a base64url string that decodes to exactly 32 bytes" }
+      )
+      .optional()
   ),
   /**
    * URL of the excalidraw-room sync server (Phase 1 whiteboard live
@@ -59,6 +95,62 @@ const EnvSchema = z.object({
       .refine((u) => u.startsWith("wss://") || u.startsWith("ws://"), {
         message: "must start with wss:// (prod) or ws:// (dev)",
       })
+      .optional()
+  ),
+  /**
+   * HMAC-SHA-256 signing secret for AccountHolder session tokens (Identity Phase 2a).
+   * 32+ bytes random, base64 encoded.
+   * Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   * Optional at build time — fails-closed at request time if unset in auth paths.
+   */
+  AH_SESSION_HMAC_SECRET: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional()
+  ),
+  /**
+   * HMAC-SHA-256 signing secret for LearnerDeviceSession tokens (Identity Phase 2a).
+   * 32+ bytes random, base64 encoded.
+   * Optional at build time — fails-closed at request time if unset in auth paths.
+   */
+  LEARNER_SESSION_HMAC_SECRET: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional()
+  ),
+  /**
+   * HMAC-SHA-256 signing secret for AdminTrustedDevice tokens (2FA remember-device).
+   * 32+ bytes random. Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   * Optional at build time — fails-closed at request time if unset:
+   *   mintAdminTrustedDevice throws; validateAdminTrustedDevice returns null → TOTP required.
+   * REQUIRED in production for the remember-device feature to work.
+   * Rotation: rotating this secret instantly invalidates ALL existing trusted-device rows
+   *   (stored tokenHash values were computed with the old secret). All users will be prompted
+   *   for TOTP on their next login. Plan a maintenance window or notify users if rotating.
+   *   See docs/PLATFORM-ASSUMPTIONS.md for the full rotation story.
+   */
+  ADMIN_TFA_DEVICE_HMAC_SECRET: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional()
+  ),
+  /**
+   * AES-256-GCM key for AccountHolder TOTP secret encryption (Phase 6).
+   * Isolated from TOTP_ENCRYPTION_KEY so rotating tutor 2FA doesn't affect parent 2FA.
+   * Reserved in Phase 2a so Phase 6 executor doesn't pick a conflicting name.
+   * Optional at build time — Phase 6 enrollment will fail if unset.
+   */
+  AH_TOTP_ENCRYPTION_KEY: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z
+      .string()
+      .refine(
+        (v) => {
+          try {
+            return Buffer.from(v, "base64url").length === 32;
+          } catch {
+            return false;
+          }
+        },
+        { message: "must be a base64url string that decodes to exactly 32 bytes" }
+      )
       .optional()
   ),
 });
@@ -81,8 +173,19 @@ const parsed = EnvSchema.safeParse({
   GMAIL_CONNECT_ALLOWLIST: process.env.GMAIL_CONNECT_ALLOWLIST,
   OPERATOR_EMAILS: process.env.OPERATOR_EMAILS,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  OPENAI_TRANSCRIBE_PRIMARY_MODEL: process.env.OPENAI_TRANSCRIBE_PRIMARY_MODEL,
+  OPENAI_TRANSCRIBE_FALLBACK_MODEL: process.env.OPENAI_TRANSCRIBE_FALLBACK_MODEL,
+  OPENAI_LEGACY_TRANSCRIBE_MODEL: process.env.OPENAI_LEGACY_TRANSCRIBE_MODEL,
+  OPENAI_MAP_MODEL: process.env.OPENAI_MAP_MODEL,
+  OPENAI_REDUCE_MODEL: process.env.OPENAI_REDUCE_MODEL,
+  OPENAI_LEGACY_NOTES_MODEL: process.env.OPENAI_LEGACY_NOTES_MODEL,
   BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
+  TOTP_ENCRYPTION_KEY: process.env.TOTP_ENCRYPTION_KEY,
   WHITEBOARD_SYNC_URL: process.env.WHITEBOARD_SYNC_URL,
+  AH_SESSION_HMAC_SECRET: process.env.AH_SESSION_HMAC_SECRET,
+  LEARNER_SESSION_HMAC_SECRET: process.env.LEARNER_SESSION_HMAC_SECRET,
+  ADMIN_TFA_DEVICE_HMAC_SECRET: process.env.ADMIN_TFA_DEVICE_HMAC_SECRET,
+  AH_TOTP_ENCRYPTION_KEY: process.env.AH_TOTP_ENCRYPTION_KEY,
 });
 
 if (!parsed.success) {

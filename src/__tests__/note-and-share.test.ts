@@ -5,6 +5,10 @@ beforeEach(async () => {
   await db.emailMessage.deleteMany();
   await db.sessionNote.deleteMany();
   await db.shareLink.deleteMany();
+  // B2 consent schema: SessionConsentSnapshot has a FK to WhiteboardSession
+  // which cascades through Student — must delete before student cleanup.
+  await db.sessionConsentSnapshot.deleteMany();
+  await db.whiteboardSession.deleteMany();
   await db.student.deleteMany();
 });
 

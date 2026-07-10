@@ -1,5 +1,15 @@
 {
   "buildCommand": "npm run test:regression && npm run build",
   "installCommand": "npm ci",
-  "ignoreCommand": "node scripts/vercel-ignore-build.cjs"
+  "ignoreCommand": "node scripts/vercel-ignore-build.cjs",
+  "crons": [
+    {
+      "path": "/api/cron/transcribe-sweep",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/erasure/process",
+      "schedule": "0 */6 * * *"
+    }
+  ]
 }

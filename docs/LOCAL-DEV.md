@@ -15,6 +15,8 @@ Using the **same placeholder passwords** in `.env.example` as in `docker-compose
 
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / macOS) or Docker Engine (Linux).
 
+   `npm run db:up`, `npm run relay:build`, and `npm run test:wb-sync` call `ensure:docker` first: if the daemon is down, they start Docker Desktop (or `systemctl start docker` on Linux) and wait up to **180s** (override with `DOCKER_WAIT_TIMEOUT_MS`).
+
 2. Start Postgres:
 
    ```bash
@@ -101,6 +103,26 @@ Real-browser Playwright tests over a **local Docker relay** (not production `wss
 Playwright starts the Next dev server on port **3100** with `WHITEBOARD_SYNC_URL=ws://localhost:3002` and polls `http://localhost:3002/` until the relay is up. See `docs/PLATFORM-ASSUMPTIONS.md` §9.4–9.5.
 
 Pre-merge: any whiteboard-touching branch must show green `npm run test:wb-sync` before `git merge --no-ff` (see `AGENTS.md`).
+
+## NOTES_AUTH_WALL — notes share-page auth gate
+
+`NOTES_AUTH_WALL` controls whether `/s/[token]` notes pages require authentication.
+
+| Value | Behavior |
+|---|---|
+| **unset or `false`** (default) | Grace window: anonymous access preserved exactly as today. |
+| **`true`** | Wall on: `/s/*` pages and their API dependencies require an AccountHolder or Learner session. |
+
+**Local smoke procedure:**
+1. `NOTES_AUTH_WALL=false` (or unset): open `/s/<any-token>` in incognito → notes load anonymously. ✓
+2. `NOTES_AUTH_WALL=true`: same URL → redirected to `/account/login`. Log in as owning parent → redirected back → notes shown. ✓
+
+Add to your `.env` to toggle:
+```
+NOTES_AUTH_WALL=true
+```
+
+Leave unset (or false) for routine local development unless you are smoke-testing the auth wall specifically. The wall is only flipped to `true` in production at the v1→master cutover, after all of Sarah's families have completed the claim flow.
 
 ## Migrating from old SQLite `dev.db`
 

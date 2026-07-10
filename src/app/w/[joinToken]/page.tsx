@@ -1,32 +1,20 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { env } from "@/lib/env";
-import { StudentWhiteboardClient } from "./StudentWhiteboardClient";
+import { JoinTokenRedirect } from "./JoinTokenRedirect";
+
 /**
- * Student-facing live whiteboard (Excalidraw + E2E sync, same room + key
- * as the tutor workspace).
+ * /w/[joinToken] — legacy student entry point, now a client redirect bridge.
  *
- * URL shape: `/w/<joinToken>#k=<encryptionKey>`
+ * Old links (from "Copy student link" before full-retirement) land here.
+ * The server validates the token (revoked/expired/missing → 404 as before),
+ * then renders a tiny client component that preserves the #k= fragment and
+ * calls window.location.replace("/join/<sessionId>#k=...").
  *
- *   - `joinToken` (path) — opaque, server-known. Issued by the tutor's
- *     `issueJoinToken` server action; persisted on `WhiteboardJoinToken`.
- *     Server resolves it to a `WhiteboardSession`, validates the
- *     not-revoked + not-expired + session-still-live invariants.
+ * The authenticated /join/[sessionId] page is the canonical entry point;
+ * this page exists only so old in-flight links continue to work.
  *
- *   - `encryptionKey` (URL fragment) — the AES-GCM key for E2E
- *     encryption against the relay. Fragments are NEVER sent to the
- *     server (HTTP spec). The client extracts it in
- *     `StudentWhiteboardClient` and feeds it to `sync-client`.
- *
- * Server posture:
- *   - We do NOT run `requireStudentScope` here — the student is not
- *     a logged-in user. The token IS the auth.
- *   - We expose the bare minimum to the page: room id (= session id),
- *     tutor display name (so the student knows whose session this is),
- *     and the sync host URL. We do NOT leak adminUserId / studentId /
- *     anything else server-internal.
- *   - `noindex` so search engines don't archive the page (token leak risk).
+ * Note: we no longer check endedAt here — the /join page handles that gracefully.
  */
 
 export const dynamic = "force-dynamic";
@@ -50,82 +38,16 @@ export default async function StudentWhiteboardPage({
   const tokenRow = await db.whiteboardJoinToken.findUnique({
     where: { token: joinToken },
     select: {
-      id: true,
       whiteboardSessionId: true,
       expiresAt: true,
       revokedAt: true,
-      whiteboardSession: {
-        select: {
-          id: true,
-          studentId: true,
-          endedAt: true,
-          activeMs: true,
-          lastActiveAt: true,
-          adminUser: {
-            select: { displayName: true, email: true },
-          },
-        },
-      },
     },
   });
 
-  // Token-not-found and token-revoked-or-expired collapse to the same
-  // 404 deliberately — we don't want to leak which case it is to a
-  // probing visitor. The tutor-side admin UI surfaces token state
-  // explicitly so the tutor can re-issue.
   if (!tokenRow) notFound();
   const now = new Date();
   if (tokenRow.revokedAt) notFound();
   if (tokenRow.expiresAt.getTime() <= now.getTime()) notFound();
-  if (!tokenRow.whiteboardSession) notFound();
-  if (tokenRow.whiteboardSession.endedAt) notFound();
 
-  const tutorName =
-    tokenRow.whiteboardSession.adminUser?.displayName?.trim() ||
-    tokenRow.whiteboardSession.adminUser?.email?.split("@")[0] ||
-    "your tutor";
-
-  // Stamp bothConnectedAt on the session the first time the student
-  // opens the link. Idempotent — updateMany with null guard means
-  // a page refresh or second open never moves the anchor forward.
-  // This is the canonical source of truth the tutor's live timer
-  // counts from ("session timer starts when both are connected").
-  await db.whiteboardSession.updateMany({
-    where: {
-      id: tokenRow.whiteboardSessionId,
-      bothConnectedAt: null,
-    },
-    data: { bothConnectedAt: now },
-  });
-
-  // If WHITEBOARD_SYNC_URL isn't configured the live-collab feature is
-  // off in this environment. Show a friendly explanation rather than a
-  // broken silent "connecting…" UI.
-  if (!env.WHITEBOARD_SYNC_URL) {
-    return (
-      <div className="container" style={{ maxWidth: 720 }}>
-        <div className="card">
-          <h1 style={{ marginTop: 0 }}>Whiteboard not available</h1>
-          <p>
-            Live whiteboard collaboration is not enabled in this environment.
-            Please ask {tutorName} to share a recording link instead.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <StudentWhiteboardClient
-      whiteboardSessionId={tokenRow.whiteboardSession.id}
-      studentId={tokenRow.whiteboardSession.studentId}
-      joinToken={joinToken}
-      syncUrl={env.WHITEBOARD_SYNC_URL}
-      tutorName={tutorName}
-      initialActiveMs={tokenRow.whiteboardSession.activeMs ?? 0}
-      initialLastActiveAtIso={
-        tokenRow.whiteboardSession.lastActiveAt?.toISOString() ?? null
-      }
-    />
-  );
+  return <JoinTokenRedirect sessionId={tokenRow.whiteboardSessionId} />;
 }

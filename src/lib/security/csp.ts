@@ -197,6 +197,9 @@ export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
     "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
     "font-src 'self' data: blob: https:",
     `connect-src ${connectSrc}`,
+    // Must match next.config.ts `frame-src`. JSXGraph graphs render via
+    // renderEmbeddable on 'self' — no external frame origins.
+    "frame-src 'self'",
     "frame-ancestors 'none'",
   ].join("; ");
 }

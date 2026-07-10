@@ -4,10 +4,262 @@
  * (e.g. tests with a stub MediaStream).
  */
 
+/**
+ * Noise-floor threshold: ambient-room RMS samples below this are treated as
+ * silence and map to 0 bars. Subtract before scaling so that quiet rooms
+ * don't keep bar-1 lit permanently (8d calibration fix 2026-06-29).
+ */
+export const METER_NOISE_FLOOR = 0.006;
+
+/**
+ * Post-floor scale factor: maps the speech band above the noise floor into
+ * the 0–1 level range. With NOISE_FLOOR=0.006 and SCALE=9:
+ *   quiet speech  RMS≈0.02 → (0.02-0.006)*9 = 0.126 → bar-1 (min 0.05)
+ *   normal speech RMS≈0.05 → (0.05-0.006)*9 = 0.396 → bar-2 (min 0.25)
+ *   louder speech RMS≈0.08 → (0.08-0.006)*9 = 0.666 → bar-3 (min 0.55)
+ *
+ * Old formula (rms * 4.5) required RMS≈0.122 for bar-3, making the meter
+ * appear stuck at 1–2 bars for typical laptop-mic speech levels.
+ */
+export const METER_SCALE = 9;
+
+/**
+ * Pure calibration transform — independent oracle for the level-mapping math.
+ * Exported so unit tests can verify the calibration without a real AudioContext.
+ *
+ * @param rms - raw RMS from AnalyserNode getFloatTimeDomainData (0–1)
+ * @returns calibrated level 0–1 for WbInlineMicMeter
+ */
+export function calibrateMicLevel(rms: number): number {
+  return Math.min(1, Math.max(0, rms - METER_NOISE_FLOOR) * METER_SCALE);
+}
+
+/** Map analyser time-domain RMS into the 0–1 meter range (tutor + student). */
+export function readAnalyserRmsLevel(
+  analyser: AnalyserNode,
+  data: Float32Array<ArrayBuffer>
+): number {
+  const override = readVadTestMeterLevelOverride();
+  if (override !== null) return override;
+
+  analyser.getFloatTimeDomainData(data);
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i] ?? 0;
+    sum += v * v;
+  }
+  const rms = Math.sqrt(sum / data.length);
+  return calibrateMicLevel(rms);
+}
+
+type VadTestMeterWindow = {
+  __VAD_TEST_METER_LEVEL__?: number;
+  __VAD_TEST_TUTOR_RECORDING_MUTE_GAIN__?: number;
+  __VAD_TEST_REMOTE_RECORDING_GAINS__?: Record<string, number>;
+};
+
+/**
+ * Playwright / jest dom harness: drive VAD silence-boundary cuts without
+ * real mic dynamics. Strict no-op in production (NODE_ENV gate).
+ */
+function readVadTestMeterLevelOverride(): number | null {
+  if (typeof window === "undefined") return null;
+  if (process.env.NODE_ENV === "production") return null;
+  const v = (window as unknown as VadTestMeterWindow).__VAD_TEST_METER_LEVEL__;
+  if (typeof v === "number" && Number.isFinite(v) && v >= 0) return v;
+  return null;
+}
+
+/** Playwright harness: readback of tutor recording-branch mute gain (prod NO-OP). */
+function writeTutorRecordingMuteGainTestSeam(value: number): void {
+  if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV === "production") return;
+  (window as unknown as VadTestMeterWindow).__VAD_TEST_TUTOR_RECORDING_MUTE_GAIN__ =
+    value;
+}
+
+/** Playwright harness: readback of per-remote recording gain (prod NO-OP). */
+function writeRemoteRecordingGainTestSeam(
+  streamId: string,
+  value: number
+): void {
+  if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV === "production") return;
+  const w = window as unknown as VadTestMeterWindow;
+  if (!w.__VAD_TEST_REMOTE_RECORDING_GAINS__) {
+    w.__VAD_TEST_REMOTE_RECORDING_GAINS__ = {};
+  }
+  w.__VAD_TEST_REMOTE_RECORDING_GAINS__[streamId] = value;
+}
+
+export type MicLevelMonitor = {
+  getLevel: () => number;
+  dispose: () => void;
+};
+
+/**
+ * Lightweight analyser tap for live-A/V mic metering (student top bar).
+ * Does NOT stop tracks on dispose — the stream is owned by `useLiveAV`.
+ *
+ * **Unsafe on student publish streams** — use only on dedicated meter
+ * taps, not the track wired to RTCPeerConnection (see LIVE-AV.md).
+ */
+export async function createMicLevelMonitor(
+  micStream: MediaStream
+): Promise<MicLevelMonitor | null> {
+  try {
+    const audioContext = new AudioContext();
+    await audioContext.resume();
+    const source = audioContext.createMediaStreamSource(micStream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.65;
+    source.connect(analyser);
+    const data = new Float32Array(analyser.fftSize);
+    let disposed = false;
+    return {
+      getLevel: () => readAnalyserRmsLevel(analyser, data),
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        try {
+          source.disconnect();
+        } catch {
+          /* ignore */
+        }
+        void audioContext.close();
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export type CreateMicAudioGraphOptions = {
   /** Same id as live-A/V `avx=` for correlating logs (`whiteboardSessionId`). */
   sessionId?: string;
 };
+
+export type CreateMicPublishGraphOptions = {
+  /** Same id as live-A/V `avx=` for correlating logs (`whiteboardSessionId`). */
+  sessionId?: string;
+};
+
+/**
+ * Student live-A/V publish path only: mic → gain → publishDest (+ analyser tap).
+ * No recording destination, no remote mixdown — mirrors the tutor publish branch
+ * in {@link createMicAudioGraph} without the recorder fan-out.
+ */
+export type MicPublishGraph = {
+  publishStream: MediaStream;
+  dispose: () => void;
+  getLevel: () => number;
+  setGain: (gainLinear: number) => void;
+  swapLocalMicSource: (newMicStream: MediaStream) => boolean;
+};
+
+export async function createMicPublishGraph(
+  micStream: MediaStream,
+  gainLinear: number,
+  options?: CreateMicPublishGraphOptions
+): Promise<MicPublishGraph | null> {
+  const sid = options?.sessionId ?? "?";
+  try {
+    const audioContext = new AudioContext();
+    await audioContext.resume();
+
+    let inboundMicStream = micStream;
+    let mediaStreamSource = audioContext.createMediaStreamSource(micStream);
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = gainLinear;
+
+    const publishDest = audioContext.createMediaStreamDestination();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.65;
+
+    const data = new Float32Array(analyser.fftSize);
+
+    mediaStreamSource.connect(gainNode);
+    gainNode.connect(publishDest);
+    gainNode.connect(analyser);
+
+    let disposed = false;
+
+    return {
+      publishStream: publishDest.stream,
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        try {
+          inboundMicStream.getTracks().forEach((t) => t.stop());
+        } catch {
+          /* ignore */
+        }
+        void audioContext.close();
+      },
+      getLevel: () => readAnalyserRmsLevel(analyser, data),
+      setGain: (g: number) => {
+        const clamped = Math.max(0, g);
+        gainNode.gain.value = clamped;
+        console.log(`[avx] avx=${sid} event=gain_change gain=${clamped}`);
+      },
+      swapLocalMicSource: (newMicStream: MediaStream): boolean => {
+        if (disposed) return false;
+        const prevSource = mediaStreamSource;
+        try {
+          mediaStreamSource.disconnect();
+        } catch {
+          /* ignore */
+        }
+        let newSource: MediaStreamAudioSourceNode;
+        try {
+          newSource = audioContext.createMediaStreamSource(newMicStream);
+        } catch (err) {
+          let recovered = false;
+          try {
+            prevSource.connect(gainNode);
+            recovered = true;
+          } catch {
+            /* ignore */
+          }
+          console.warn(
+            `[avx] avx=${sid} event=mic_device_swap result=failed reason=create-source-failed recovered=${recovered}`,
+            (err as Error)?.message ?? String(err)
+          );
+          return false;
+        }
+        try {
+          newSource.connect(gainNode);
+          mediaStreamSource = newSource;
+          inboundMicStream = newMicStream;
+          console.log(`[avx] avx=${sid} event=mic_device_swap result=ok`);
+          return true;
+        } catch (err) {
+          try {
+            newSource.disconnect();
+          } catch {
+            /* ignore */
+          }
+          let recovered = false;
+          try {
+            prevSource.connect(gainNode);
+            recovered = true;
+          } catch {
+            /* ignore */
+          }
+          console.warn(
+            `[avx] avx=${sid} event=mic_device_swap result=failed reason=connect-failed recovered=${recovered}`,
+            (err as Error)?.message ?? String(err)
+          );
+          return false;
+        }
+      },
+    };
+  } catch {
+    return null;
+  }
+}
 
 export type MicAudioGraph = {
   /**
@@ -102,6 +354,12 @@ export type MicAudioGraph = {
    * destinations (MediaRecorder continues on the same mixed graph).
    */
   swapLocalMicSource: (newMicStream: MediaStream) => void;
+  /**
+   * Gate ONLY the tutor's own mic contribution to `recordingStream`.
+   * Live publish + meter analyser are unaffected; remote/learner inputs
+   * mixed via {@link addRemoteAudio} are on a separate branch.
+   */
+  setTutorRecordingMute: (muted: boolean) => void;
 };
 
 /**
@@ -123,6 +381,13 @@ export async function createMicAudioGraph(
     const gainNode = audioContext.createGain();
     gainNode.gain.value = gainLinear;
 
+    // WS-I: recording-branch-only mute — must NOT reuse boost gainNode (also
+    // feeds publish + analyser). Remote/learner audio enters recordingDest via
+    // separate per-remote GainNodes in addRemoteAudio.
+    const recordingMuteGainNode = audioContext.createGain();
+    recordingMuteGainNode.gain.value = 1;
+    writeTutorRecordingMuteGainTestSeam(1);
+
     const recordingDest = audioContext.createMediaStreamDestination();
     const publishDest = audioContext.createMediaStreamDestination();
     const analyser = audioContext.createAnalyser();
@@ -132,7 +397,8 @@ export async function createMicAudioGraph(
     const data = new Float32Array(analyser.fftSize);
 
     mediaStreamSource.connect(gainNode);
-    gainNode.connect(recordingDest);
+    gainNode.connect(recordingMuteGainNode);
+    recordingMuteGainNode.connect(recordingDest);
     gainNode.connect(publishDest);
     gainNode.connect(analyser);
 
@@ -181,19 +447,21 @@ export async function createMicAudioGraph(
         }
         void audioContext.close();
       },
-      getLevel: () => {
-        analyser.getFloatTimeDomainData(data);
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) {
-          const v = data[i] ?? 0;
-          sum += v * v;
-        }
-        const rms = Math.sqrt(sum / data.length);
-        // Map typical speech RMS (~0.01–0.2) into a visible 0–1 range.
-        return Math.min(1, rms * 4.5);
-      },
+      getLevel: () => readAnalyserRmsLevel(analyser, data),
       setGain: (g: number) => {
         gainNode.gain.value = Math.max(0, g);
+      },
+      setTutorRecordingMute: (muted: boolean) => {
+        const target = muted ? 0 : 1;
+        try {
+          recordingMuteGainNode.gain.value = target;
+        } catch {
+          // AudioContext closed under us mid-flight.
+        }
+        writeTutorRecordingMuteGainTestSeam(target);
+        console.log(
+          `[avx] avx=${sid} action=tutor_recording_mute muted=${muted}`
+        );
       },
       addRemoteAudio: (remoteStream: MediaStream) => {
         if (disposed) {
@@ -223,6 +491,7 @@ export async function createMicAudioGraph(
         }
         const remoteGain = audioContext.createGain();
         remoteGain.gain.value = 1;
+        writeRemoteRecordingGainTestSeam(remoteStream.id, 1);
         const entry: RemoteEntry = {
           stream: remoteStream,
           source: remoteSource,
@@ -269,6 +538,7 @@ export async function createMicAudioGraph(
           // AudioContext closed under us mid-flight. The detach
           // path will clean the entry; nothing to do here.
         }
+        writeRemoteRecordingGainTestSeam(entry.stream.id, clamped);
       },
       swapLocalMicSource: (newMicStream: MediaStream) => {
         if (disposed) return;

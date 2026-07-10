@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import {
+  handleHarnessBlobGenerateClientToken,
+  isBlobHarnessActive,
+} from "@/lib/blob-harness";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
-import { assertOwnsStudent } from "@/lib/student-scope";
+import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import {
   assertJoinTokenAllowsWhiteboardAssetUpload,
+  assertLearnerSessionAllowsWhiteboardAssetUpload,
   assertOwnsWhiteboardSession,
 } from "@/lib/whiteboard-scope";
+import { getLearnerSession } from "@/lib/learner-session";
+import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
 
 /**
  * Generalized client-direct Vercel Blob upload route.
@@ -121,11 +131,10 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  try {
-    const jsonResponse = await handleUpload({
-      request,
-      body,
-      onBeforeGenerateToken: async (pathname, clientPayloadRaw) => {
+  const runOnBeforeGenerateToken = async (
+    pathname: string,
+    clientPayloadRaw: string | null
+  ) => {
         const payload = parseClientPayload(clientPayloadRaw);
         const kind = payload?.kind;
         if (!kind || !(kind in POLICY)) {
@@ -145,6 +154,12 @@ export async function POST(request: Request): Promise<Response> {
             throw new Error("Missing studentId in clientPayload.");
           }
           await assertOwnsStudent(studentId);
+          await assertStudentNotErased(studentId);
+          // B1 cost gate: WAITLISTED tutors cannot upload audio blobs.
+          const audioBlobScope = await requireStudentScope();
+          if (audioBlobScope.kind === "admin") {
+            await assertTutorApproved(audioBlobScope.adminId);
+          }
           console.log(
             `[uploadBlob.route] rid=${rid} kind=audio studentId=${studentId} pathname=${pathname}`
           );
@@ -172,6 +187,7 @@ export async function POST(request: Request): Promise<Response> {
           payload?.joinToken &&
           typeof payload.joinToken === "string"
         ) {
+          // Token auth: legacy anonymous /w/[joinToken] path (kept for in-flight old links).
           const { studentId } = await assertJoinTokenAllowsWhiteboardAssetUpload(
             payload.joinToken,
             whiteboardSessionId,
@@ -181,12 +197,55 @@ export async function POST(request: Request): Promise<Response> {
           console.log(
             `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} joinToken=1 assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
           );
+        } else if (kind === "whiteboard-asset") {
+          // Learner-session auth: authenticated /join/[sessionId] path.
+          // Accepts learner session OR account-holder session for a self-learner
+          // (WB-JOIN-ADULT-LEARNER). If either principal is present, authorize
+          // via the participant gate. Otherwise fall through to tutor ownership.
+          const learnerSession = await getLearnerSession(request);
+          let learnerProfileIdForUpload: string | null =
+            learnerSession?.learnerProfileId ?? null;
+          if (!learnerProfileIdForUpload) {
+            const ahSession = await getAccountHolderSession(request);
+            if (ahSession) {
+              const resolved = await resolveAhJoinLearnerProfileId(
+                whiteboardSessionId,
+                ahSession.accountHolderId
+              );
+              if (resolved) learnerProfileIdForUpload = resolved.learnerProfileId;
+            }
+          }
+          if (learnerProfileIdForUpload) {
+            const { studentId } = await assertLearnerSessionAllowsWhiteboardAssetUpload(
+              learnerProfileIdForUpload,
+              whiteboardSessionId,
+              pathname
+            );
+            studentIdForToken = studentId;
+            console.log(
+              `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} learnerAuth=1 assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
+            );
+          } else {
+            // Tutor auth (no learner session, no joinToken).
+            if (payload?.joinToken) {
+              throw new Error("joinToken is only valid for whiteboard-asset uploads.");
+            }
+            const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+            studentIdForToken = session.studentId;
+            // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
+            await assertTutorApproved(session.adminUserId);
+            console.log(
+              `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
+            );
+          }
         } else {
           if (payload?.joinToken) {
             throw new Error("joinToken is only valid for whiteboard-asset uploads.");
           }
           const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
           studentIdForToken = session.studentId;
+          // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
+          await assertTutorApproved(session.adminUserId);
           console.log(
             `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
           );
@@ -203,13 +262,35 @@ export async function POST(request: Request): Promise<Response> {
             rid,
           }),
         };
-      },
+  };
+
+  try {
+    if (
+      isBlobHarnessActive() &&
+      body.type === "blob.generate-client-token"
+    ) {
+      const harnessResponse = await handleHarnessBlobGenerateClientToken(
+        request,
+        body,
+        (pathname, clientPayloadRaw, multipart) =>
+          runOnBeforeGenerateToken(pathname, clientPayloadRaw)
+      );
+      return NextResponse.json(harnessResponse);
+    }
+
+    const jsonResponse = await handleUpload({
+      request,
+      body,
+      onBeforeGenerateToken: runOnBeforeGenerateToken,
     });
 
     return NextResponse.json(jsonResponse);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[uploadBlob.route] rid=${rid} handleUpload threw:`, msg);
-    return NextResponse.json({ error: msg, debugId: rid }, { status: 400 });
+    return NextResponse.json(
+      { error: "Upload authorization failed. Please try again.", debugId: rid },
+      { status: 400 }
+    );
   }
 }

@@ -274,7 +274,8 @@ on when generation fails best-effort.
 7. finalizeOutboxAfterEnd(wbsid)           # drop IDB rows
         │
         ▼
-8. router.replace(reviewHref) + router.refresh()    # land on review page
+8. onSessionEnded?.() → shell flips mode="review"  # A3 in-shell flip
+   ↳ fallback: router.replace(reviewHref) + router.refresh()  # if no shell
 ```
 
 **Order is load-bearing.** Steps 1-4 must happen exactly in that
@@ -282,19 +283,27 @@ order; step 5/5b can fail without affecting steps 6-8; step 7 must
 happen after step 6 succeeds (otherwise a refresh between 6 and 7
 would leak orphan rows and re-upload them on next mount).
 
-**Phase 1c clarification on step 8:** the immediate post-End
-destination is still the read-only **review** page, *not* the
-preview-before-Start surface. Most of the high-value
-immediate-post-session actions (AI-generate notes from the
-session audio — the wedge — plus replay scrub, snapshot capture,
-share-link copy) live on the review page; landing the tutor
-there directly avoids an extra click for those flows. The
-preview-before-Start surface (Pillar 4 Task 6) is for the
-**re-entry** case: a tutor returning to `/workspace` later (via
-a pinned tab, a browser bookmark, or a manually-edited URL) sees
-the read-only final-frame preview + the Start-new affordance
-instead of the old "session has already ended" 404. See the
-"Workspace preview-before-Start" section below for the routing.
+**A3 clarification on step 8 (Phase A, 2026-06-11):** step 8 is now an
+**in-shell mode flip** rather than a page navigation. `WhiteboardSessionShell`
+receives an `onSessionEnded` callback from the workspace; when `handleEndSession`
+reaches step 8 it calls `onSessionEnded?.()` which sets `mode="review"`.
+This unmounts the live subtree (firing sync disconnect + useLiveAV
+teardown + active-ping cleanup), then mounts `SessionReviewMode` (notes
+primary, read-only board preview, lazy replay drill-down). The URL does not
+change. The standalone review route (`/admin/students/[id]/whiteboard/[whiteboardSessionId]`)
+still works for revisiting past sessions and deep links from notes.
+
+**Legacy fallback:** if `onSessionEnded` is undefined (e.g. a caller that
+doesn't use `WhiteboardSessionShell`), step 8 falls back to the original
+`router.replace(reviewHref) + router.refresh()` navigation.
+
+**Phase 1c clarification:** most high-value immediate-post-session actions
+(AI-generate notes, replay, snapshot, share-link copy) are now in the
+in-shell `SessionReviewMode`. The preview-before-Start surface
+(`WorkspacePreviousSessionPreview`, Pillar 4 Task 6) still serves the
+**re-entry** case: a tutor returning to `/workspace` later (pinned tab,
+browser bookmark, manual URL) sees the final-frame preview + Start-new
+affordance. See the "Workspace preview-before-Start" section below.
 
 ---
 
@@ -333,6 +342,113 @@ instead of the old "session has already ended" 404. See the
 
 ---
 
+## Video capture — design seam (post-Sarah, NOT built)
+
+> **Ratified (Block C, C5 — Andrew 2026-06-30):** video is **designed-for**,
+> not built for Sarah. This section is the architecture seam only — no
+> `MediaRecorder`, no upload path, no replay UI, no consent gate, no
+> migration. If you find yourself adding executable logic or a Prisma field,
+> STOP — that's out of scope until a post-Sarah build wave.
+
+### Principle — video is another per-stream lane
+
+The recording stack already generalizes beyond a single tutor mic:
+
+* **`SessionRecording.streamId`** is a free-form string (not an enum) —
+  today's `tutor:mic` and `student:peer-<id>:mic` rows are just values.
+* **Pillar 2 (outbox)** is keyed by `(sessionId, streamId, segmentId)` —
+  serial-within-stream, parallel-across-streams.
+* **Pillar 1 (FSM)** gates capture via `inputStreams: ReadonlyMap<streamId, …>`
+  and `shouldCapture(streamId)`.
+* **Tap-before-mix** ([LIVE-AV.md](LIVE-AV.md) invariant **#6a**) already
+  separates per-speaker capture lanes from the single replay mixdown.
+  Video is the same pattern: another lane off a raw `MediaStream`, not a
+  second replay source unless explicitly chosen.
+
+### Stream-id convention (no migration)
+
+Future video lanes mirror the mic helpers in
+`src/lib/recording/remote-stream-recorder.ts` / `lifecycle-machine.ts`:
+
+| Lane | `streamId` | Helper (future) |
+|---|---|---|
+| Tutor camera | `tutor:video` | `TUTOR_VIDEO_STREAM_ID` (or equivalent) |
+| Student camera | `student:peer-<peerId>:video` | `studentVideoStreamId(peerId)` |
+
+These slot into the **same** `SessionRecording.streamId` column and the
+same outbox `streamId` field — no schema change required. Grep for
+`studentMicStreamId` when wiring the video helper so naming stays
+consistent.
+
+### What already supports video (zero schema work)
+
+* **`SessionRecording.streamId`** — free-form; indexed
+  `[whiteboardSessionId, streamId]` for end-session registration.
+* **Outbox row `streamId`** — any lane can enqueue segments; worker
+  scheduling is already per-stream.
+* **Outbox `transcriptionOnly` flag** — per-speaker mic lanes use
+  `transcriptionOnly: true` so they never become replay rows (see
+  `assembleEndSessionSegments`). **Video lanes would NOT set this flag**
+  — they are replay/archival candidates, not Whisper inputs.
+* **FSM `inputStreams` registry** — host adds `tutor:video` /
+  `student:peer-*:video` with health when capture engages; FSM contract
+  unchanged.
+* **`TranscriptChunk.streamId` / `speakerId`** — present for per-speaker
+  audio; video does not use the transcription path unless a future product
+  choice adds e.g. frame-captioning (out of Sarah scope).
+
+### Deferred — must be built explicitly later
+
+* **Video `MediaRecorder` lane(s)** — tap `localVideoStream` /
+  `participants[i].videoStream` from `useLiveAV` (pre-mix, analogous to
+  #6a's raw audio tap), segment via the same outbox contract.
+* **Replay surface** — today replay is **audio + whiteboard strokes only**
+  (`WhiteboardReplay`, scene-paint engine). Playing video requires a new
+  replay UI (sync to `recordingTimeOffsetMs` / session clock).
+* **Storage, bandwidth, cost** — video blobs are orders of magnitude
+  larger than audio; Vercel Blob limits, egress, and OpenAI-adjacent cost
+  models need a product decision before capture ships.
+* **Consent copy + gate** — video of minors is **more sensitive than audio**.
+  Must **not** reuse the audio consent gate or `allowAudioRecording`
+  toggle. Gate B2 in [BACKLOG.md](BACKLOG.md) already defers
+  `allowVideoRecording` until the feature exists — consent surface tracks
+  feature surface. Requires **legal consult** ([CONSENT-LEGAL-CONSULT](BACKLOG.md)).
+* **Retention / erasure** — video blobs must participate in erasure
+  inventory and orphan reconciliation (same class of gap as
+  **ERASURE-ORPHAN-AUDIO-BLOBS** in [BACKLOG.md](BACKLOG.md)).
+
+### Single-replay-source invariant still holds
+
+[LIVE-AV.md](LIVE-AV.md) invariant **#6**: one audio mixdown → one replay
+file. Invariant **#6a**: per-speaker mic lanes are transcription-only and
+structurally excluded from `SessionRecording` rows (fixes the
+[`89e0fe1`](https://github.com/Arangarx/tutoring-notes/commit/89e0fe1)
+non-deterministic multi-row replay bug).
+
+If/when video ships, **decide explicitly**:
+
+* **Replay source** — e.g. one composited or primary camera track becomes
+  the session replay video (like `tutor:mic` for audio), OR
+* **Archival-only** — video rows exist for compliance/download but replay
+  stays audio + WB.
+
+Do **not** let multiple uncoordinated `SessionRecording` video rows
+become replay candidates without sync metadata — that recreates the
+`createdAt`-race failure mode #6 documents.
+
+### Consent + legal flag
+
+* Video capture of minors requires a **distinct affirmative gate** — not
+  implied by live-session consent, whiteboard consent, or audio recording
+  consent.
+* **`allowVideoRecording`** parent toggle stays unbuilt until video ships
+  (Gate B2 scope rule).
+* Before any pilot capture: run **CONSENT-LEGAL-CONSULT** (counsel on
+  minor video retention, parent notice, and whether live A/V preview
+  differs from persisted video).
+
+---
+
 ## Cheat sheet — common questions
 
 **Q: I want to add a new audio source (e.g. `student:peer-7:mic`).
@@ -362,7 +478,7 @@ explicit precedence, add tests in
 `src/__tests__/recording/lifecycle-machine.test.ts`. Then thread the
 input from the host. Do NOT introduce side effects in the FSM.
 
-**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs prefixes
+**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs / ers / sal prefixes
 documented?**
 A: AGENTS.md "Per-session ID logging is mandatory." section. The
 3-letter prefixes used in this stack are `wbsid` (whiteboard
@@ -374,8 +490,77 @@ Phase 5 task 8), `rid` (audio recorder), `avx`
 events also carry a `peer=<remotePeerId>` subkey), `imp`
 (impersonation lifecycle — SEC-1; key lines:
 `[imp] imp=<logId> admin=<adminId> impersonating=<targetId> start`,
-`[imp] imp=<logId> exit admin=<adminId>`), and the
-component-specific ones in `useAudioRecorder` (`aud=`).
+`[imp] imp=<logId> exit admin=<adminId>`), `tfa`
+(TOTP 2FA lifecycle — Identity Phase 1; key lines:
+`[tfa] tfa=<id> adminUserId=<id> action=enroll-start`,
+`[tfa] tfa=<id> adminUserId=<id> action=enroll-confirm`,
+`[tfa] tfa=<id> adminUserId=<id> action=verify-success`,
+`[tfa] tfa=<id> adminUserId=<id> action=verify-fail`,
+`[tfa] tfa=<id> adminUserId=<id> action=backup-code-used codeId=<id>`,
+`[tfa] adminUserId=<id> action=reset reset-by=<adminId>`), `lpr`
+(LearnerProfile ownership-assertion denials + learner login events — `assertOwnsLearnerProfile`,
+`action=login`, `action=login_failed`, `action=hard_lock_triggered`,
+`action=hard_lock_cleared_by_parent`; hard lock and unlock also written by the Neon-backed
+`LearnerLoginThrottle` layer via call sites in `src/app/api/auth/learner/login/route.ts` and
+`src/app/account/children/[id]/actions.ts`; key lines:
+`[lpr] lpr=<learnerProfileId> action=login device=<sessionId>`,
+`[lpr] lpr=unknown action=hard_lock_triggered handle=<familyId>:<username>`,
+`[lpr] lpr=<learnerProfileId> action=hard_lock_cleared_by_parent credKey=<familyId>:<username>`),
+`ers` (erasure lifecycle — `src/lib/erasure/`; every transition writes
+`[ers] ers=<jobId> action=<action> ...` or `[ers] action=<action> ...` when no job yet;
+key lines:
+`[ers] ers=<jobId> action=requested scope=<kind> scopeId=<id> principal=admin:<adminUserId>`,
+`[ers] action=tombstone_learner_profile scopeId=<lpId> sessions_revoked=<n>`,
+`[ers] action=tombstone_account_holder scopeId=<ahId> ...`,
+`[ers] action=soft_disable_credential scope=<kind> scopeId=<id> count=<n>`,
+`[ers] action=grace_gated ers=<jobId> eligibleInMs=<n>`,
+`[ers] action=phase_advance from=<status> to=<status> ers=<jobId>`,
+`[ers] action=cancel_restore_completed ers=<jobId>`,
+`[ers] action=cancel_restore_failed ers=<jobId> error=<msg>`,
+`[ers] action=untombstone_learner_profile scopeId=<lpId> ers=<jobId>`,
+`[ers] action=credential_reenabled count=<n> ers=<jobId>`,
+`[ers] action=content_access_denied studentId=<id> ers=<jobId>`,
+`[ers] action=session_create_denied studentId=<id> rid=<rid> ers=<jobId>`,
+`[ers] action=session_start_denied wbsid=<id> studentId=<id> ers=<jobId>`,
+`[ers] action=completed ers=<jobId>`),
+`sal` (share-link access — `src/lib/share-access-scope.ts`; emitted on every
+`/s/*` page and API access decision; writes
+`[sal] sal=<token:8> action=access_granted principal=account_holder|learner studentId=<id>`,
+`[sal] sal=<token:8> action=access_granted_anon_grace studentId=<id>`,
+`[sal] sal=<token:8> action=access_denied_redirect studentId=<id> reason=no_session`,
+`[sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed`,
+`[sal] sal=<token:8> action=ownership_denied principal=<type> ...`,
+`[sal] sal=<token:8> action=erasure_suspended studentId=<id>` during active erasure grace),
+`vad` (VAD segment-cut lifecycle in `useAudioRecorder` meter RAF — key lines:
+`[vad] vad=<segmentId> action=open wbsid=<id> offsetMs=<ms>`,
+`[vad] vad=<segmentId> action=cut wbsid=<id> offsetMs=<ms>`,
+`[vad] vad=<segmentId> action=cap_force wbsid=<id> offsetMs=<ms>`),
+`psc` (per-speaker transcription lane lifecycle in `useRemoteMicRecorders` +
+`remote-stream-recorder` + `upload-outbox-instance` transcription enqueue — key lines:
+`[psc] psc=<streamId> action=<create|start|stop|dispose|enqueue> wbsid=<id> peer=<peerId> speakerId=<learnerProfileId>`),
+`wbp` (WS-B ~1s whiteboard event-batch server persist in `useWhiteboardRecorder` —
+key lines:
+`[wbp] wbp=<batchSeq> action=append wbsid=<id> from=<n> to=<n>`,
+`[wbp] wbp=<batchSeq> action=skip_empty wbsid=<id> from=<n> to=<n>`,
+`[wbp] wbp=<batchSeq> action=skip_inflight wbsid=<id>`,
+`[wbp] wbp=<batchSeq> action=error wbsid=<id> from=<n> to=<n> status=<code>`),
+`wbr` (WS-D ACTIVE session resume hydrate from backend in `useWhiteboardRecorder` —
+key line:
+`[wbr] wbr=<wbsid> action=hydrate_server events=<n> boardPages=<n> lastPersistedTo=<n> batchSeq=<n>`),
+`fzb` (WS-C server-side finalize assembly in `finalizeWhiteboardSessionFromBackend` —
+key lines:
+`[fzb] fzb=<wbsid> action=assemble batches=<n> segments=<m>`,
+`[fzb] fzb=<wbsid> action=end batches=<n> segments=<m> newSegments=<k>`,
+`[fzb] fzb=<wbsid> action=idempotent_skip batches=0 segments=0`),
+`alr` (AccountHolder-login durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
+key is `ah-login:<normalizedEmail>`; key lines:
+`[alr] alr=ah-login:<email> action=rate-limited count=<n> retryAfterSec=<s>`,
+`[alr] alr=ah-login:<email> action=approaching-limit count=<n>/10`),
+`tfr` (2FA-verify durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
+key is `2fa-verify:<adminUserId>`; key lines:
+`[tfr] tfr=2fa-verify:<id> action=rate-limited count=<n> retryAfterSec=<s>`,
+`[tfr] tfr=2fa-verify:<id> action=approaching-limit count=<n>/20`), and
+the component-specific ones in `useAudioRecorder` (`aud=`).
 
 ### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)
 
@@ -386,6 +571,25 @@ capture), **~200ms debounce** after interactive viewport/`onChange`, **tab hide 
 pagehide / beforeunload** (best-effort). Live sync uses an immediate encrypted
 `kind: "pageViewState"` envelope in parallel with v3 full-document broadcasts;
 students apply tutor patches only.
+
+### WS-C — two-path finalize (server vs in-live client flush)
+
+| Entry | Path |
+|---|---|
+| Roster / gate **End and review** | `finalizeWhiteboardSessionFromBackend` assembles `WhiteboardEventBatch` + `SessionRecording` rows → delegates to `endWhiteboardSession` → navigate with `initialMode=review` (no live workspace mount) |
+| In-live **End session** | Client flush (outbox drain + optional events upload + snapshot) → `finalizeWhiteboardSessionFromBackend` with overrides → shell `onSessionEnded()` → review |
+| Legacy deep link `?intent=endreview` | Feature-flagged off (`LEGACY_INTENT_ENDREVIEW_AUTO_END`); was client auto-end on mount |
+
+```
+[Backend batches + SessionRecording] ──► finalizeWhiteboardSessionFromBackend (fzb)
+                                              │
+                                              ▼
+                                    endWhiteboardSession (transaction)
+                                              │
+                    ┌─────────────────────────┴─────────────────────────┐
+                    ▼                                                   ▼
+         Roster/gate: router → review SSR              In-live: onSessionEnded → review overlay
+```
 
 ---
 

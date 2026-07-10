@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+
+import { AuthShell } from "@/components/auth/AuthShell";
 import { hasAdminUsers } from "@/lib/auth-db";
 import {
   setupBlockedNoSecretInProduction,
@@ -30,56 +32,65 @@ export default async function SetupPage({ searchParams }: Props) {
 
   if (setupBlockedNoSecretInProduction()) {
     return (
-      <div className="container" style={{ maxWidth: 560 }}>
-        <div className="card">
-          <h1 style={{ marginTop: 0 }}>First-time admin</h1>
-          <p className="muted" style={{ marginTop: 0 }}>
-            Public signup for the first admin is disabled in production until you configure a setup secret.
+      <AuthShell
+        title="First-time admin"
+        description="Public signup for the first admin is disabled in production until you configure a setup secret."
+        footer={
+          <Link href="/login" className="text-brand underline-offset-2 hover:underline">
+            Back to sign in
+          </Link>
+        }
+      >
+        <div className="space-y-4 text-sm text-muted-foreground">
+          <p>
+            <strong className="text-foreground">Option A — recommended:</strong> In Vercel (or your
+            host), set <code className="text-xs">SETUP_SECRET</code> to a long random string, redeploy,
+            then open <code className="text-xs">/setup?token=…</code> with that same value and create
+            your admin.
           </p>
-          <p style={{ marginTop: 12 }}>
-            <strong>Option A — recommended:</strong> In Vercel (or your host), set{" "}
-            <code>SETUP_SECRET</code> to a long random string, redeploy, then open{" "}
-            <code>/setup?token=…</code> with that same value and create your admin.
+          <p>
+            <strong className="text-foreground">Option B:</strong> Set{" "}
+            <code className="text-xs">ADMIN_EMAIL</code> and <code className="text-xs">ADMIN_PASSWORD</code>{" "}
+            in environment variables, redeploy, then sign in at /login.
           </p>
-          <p style={{ marginTop: 12 }}>
-            <strong>Option B:</strong> Set <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> in
-            environment variables, redeploy, then sign in at <Link href="/login">/login</Link> — then add a
-            real DB admin from the app if needed, or keep using env bootstrap (see README).
-          </p>
-          <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>
-            See <code>docs/DEPLOY.md</code> for the full checklist.
-          </p>
+          <p className="text-xs">See docs/DEPLOY.md for the full checklist.</p>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   if (!setupReachableWithoutToken() && !setupTokenValid(token)) {
     return (
-      <div className="container" style={{ maxWidth: 560 }}>
-        <div className="card">
-          <h1 style={{ marginTop: 0 }}>Setup link required</h1>
-          <p className="muted" style={{ marginTop: 0 }}>
-            Open <code>/setup?token=…</code> using the same value as the <code>SETUP_SECRET</code>{" "}
-            environment variable.
-          </p>
-          <p style={{ marginTop: 12 }}>
-            <Link href="/login">Back to login</Link>
-          </p>
-        </div>
-      </div>
+      <AuthShell
+        title="Setup link required"
+        description={
+          <>
+            Open <code className="text-xs">/setup?token=…</code> using the same value as the{" "}
+            <code className="text-xs">SETUP_SECRET</code> environment variable.
+          </>
+        }
+        footer={
+          <Link href="/login" className="text-brand underline-offset-2 hover:underline">
+            Back to sign in
+          </Link>
+        }
+      >
+        {null}
+      </AuthShell>
     );
   }
 
   return (
-    <div className="container" style={{ maxWidth: 560 }}>
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Create admin account</h1>
-        <p className="muted" style={{ marginTop: 0 }}>
-          No admin account exists yet. Create the first one to sign in. Use a strong password.
-        </p>
-        <SetupForm setupToken={token ?? ""} />
-      </div>
-    </div>
+    <AuthShell
+      title="Create admin account"
+      description="No admin account exists yet. Create the first one to sign in. Use a strong password."
+      footer={
+        <Link href="/login" className="text-brand underline-offset-2 hover:underline">
+          Back to sign in
+        </Link>
+      }
+    >
+      <SetupForm setupToken={token ?? ""} />
+    </AuthShell>
   );
 }

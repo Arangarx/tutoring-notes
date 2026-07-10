@@ -1,0 +1,49 @@
+---
+description: Andrew smokes once per feature when agents declare DONE — Playwright owns regressions; hardware smoke is human judgment only.
+alwaysApply: true
+---
+
+# Andrew smokes once — when the feature is DONE
+
+**Ratified Andrew 2026-06-23.** Agents take a feature **spec → completion** with full Playwright coverage. Andrew enters **once**, when the feature is **DONE**, for quirks / real hardware / human judgment — **not** to re-prove regressions.
+
+## Division of labor
+
+| Owner | Responsibility |
+|-------|----------------|
+| **Agents** | Implement spec; **Playwright test per behavioral/visual acceptance item** ([`playwright-on-fix.mdc`](playwright-on-fix.mdc)); green automated gates ([`test-selection.mdc`](test-selection.mdc)); author smokebook **before** requesting Andrew — but Andrew does **not** run it until DONE. |
+| **Andrew** | **One** hardware smoke per feature when DONE: subjective UX, real devices/browsers, external apps (Teams, iOS Safari), `PLAYWRIGHT-GAP` items. **Not** regression re-proof. |
+
+## Feature DONE (orchestrator verifies before requesting Andrew smoke)
+
+All must be true:
+
+1. **Scope complete** — every in-spec acceptance item implemented (no hidden "follow-up" blockers).
+2. **Playwright mapped** — each behavioral/visual item has a named `wb-regression` test (file + title), or explicit `PLAYWRIGHT-GAP` + [`docs/BACKLOG.md`](../../docs/BACKLOG.md) entry.
+3. **Agent gates green** — merge-tier suite passed (`test:wb-affected:run` minimum; `test:wb-sync` when WB/sync in scope or merging to integration/`master`).
+4. **Smokebook ready** — follows [`SMOKEBOOK-TEMPLATE.md`](../../docs/handoff/SMOKEBOOK-TEMPLATE.md); items are **new surface + human judgment only** (see below).
+5. **Preview verified** — Vercel `branchAlias` fetched (never guessed); branch pushed.
+
+Until all five pass: **do not ask Andrew to smoke.**
+
+## Smokebook scope (what Andrew's run is for)
+
+**Include:** novel UX, feel, hardware-only paths, visual polish judgment, cross-device layout, pilot-realistic flows Playwright cannot hermeticize.
+
+**Exclude / mark explicitly:** anything already covered by Playwright — cite in the optional agent-authored **Coverage** line as `[automated: <spec> › <test title>]` and treat as **N/A with notes** ("covered by Playwright gate") unless a **human-only** reason exists (e.g. "Teams desktop WebRTC feel"). **Notes is Andrew's field; agents author Coverage, never Notes.**
+
+**Forbidden smokebook patterns:**
+
+- Per-fix or mid-wave "please smoke this commit"
+- Items that duplicate `@wb-*` tests without `[human-only: …]` justification
+- Using Andrew smoke as the **first** regression net for behavior Playwright could catch
+
+## Anti-patterns (process failures)
+
+- Andrew smoked the same regression twice → we failed [`playwright-on-fix.mdc`](playwright-on-fix.mdc).
+- Andrew asked to smoke before DONE checklist → orchestrator jumped the queue.
+- Bug found in smoke that Playwright should have caught → add test **before** calling fix done; Andrew does not re-smoke that class again.
+
+## Orchestrator one-liner for Andrew
+
+> "Feature DONE — gates green, Playwright mapped. Smokebook is for **new UX + hardware judgment only**. Please smoke once."

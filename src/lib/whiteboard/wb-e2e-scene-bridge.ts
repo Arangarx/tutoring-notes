@@ -4,9 +4,11 @@
  * `NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1`. Not a mock: same instances the app uses.
  */
 import {
+  insertGraphOnCanvas,
   insertImageOnCanvas,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
+import { parseGraphStateJson } from "@/lib/whiteboard/graph-state";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
 
@@ -19,6 +21,12 @@ export type WbE2eSceneBridge = {
   placeMarkerAtViewportCenter: (markerId: string) => void;
   /** Freedraw-style line segment (triggers onChange + sync). */
   drawTestStroke: (strokeId: string, x1: number, y1: number, x2: number, y2: number) => void;
+  /**
+   * Inject a degenerate line element (1 point, zero bbox) into the scene and fire
+   * the recorder's onChange — the adapter's degenerate-filter must drop it before sync.
+   * Used to gate-test the phantom-stroke fix (WB-DELAYED-STROKE-UNDO root cause).
+   */
+  injectDegenerateElement: (elementId: string, type?: "line" | "arrow") => void;
   /**
    * Create-or-update the SAME element id with a higher version and a wider
    * extent — mimics a real freehand stroke growing across onChange ticks
@@ -52,6 +60,21 @@ export type WbE2eSceneBridge = {
     whiteboardSessionId: string,
     studentId: string
   ) => Promise<string>;
+  /** JSXGraph embeddable insert (Playwright inv 12). */
+  insertGraphFixture: (
+    whiteboardSessionId: string,
+    studentId: string,
+    initialExpressions?: string[]
+  ) => string;
+  /** Graph embeddable state for sync-hydration regressions. */
+  graphElementState: (elementId: string) => {
+    graphStateJson: string | null;
+    expressions: string[];
+    bbox: [number, number, number, number] | null;
+    link: string | null;
+  } | null;
+  /** Trigger Excalidraw's undo via the imperative API (more reliable than Ctrl+Z in Playwright). */
+  historyUndo: () => void;
 };
 
 type WbE2eSceneMutationHook = () => void;
@@ -210,7 +233,41 @@ export function registerWbE2eSceneBridge(
     drawTestStroke(strokeId, x1, y1, x2, y2) {
       const existing = api.getSceneElements() as ExcalidrawLikeElement[];
       const el = makeLine(strokeId, x1, y1, x2, y2);
-      api.updateScene({ elements: [...existing, el] });
+      // IMMEDIATELY so the stroke enters the undo stack and Ctrl+Z can remove it.
+      api.updateScene({ elements: [...existing, el], captureUpdate: "IMMEDIATELY" });
+      invokeSceneMutationHook(role);
+    },
+    injectDegenerateElement(elementId, type = "line") {
+      const now = Date.now();
+      const degenEl: ExcalidrawLikeElement = {
+        id: elementId,
+        type,
+        x: 100,
+        y: 100,
+        width: 0,
+        height: 0,
+        angle: 0,
+        strokeColor: "black",
+        backgroundColor: "transparent",
+        strokeWidth: 2,
+        opacity: 100,
+        seed: now % 2 ** 31,
+        version: 1,
+        versionNonce: now,
+        isDeleted: false,
+        groupIds: [],
+        frameId: null,
+        roundness: null,
+        boundElements: null,
+        updated: now,
+        link: null,
+        locked: false,
+        // Single point — the phantom-stroke shape (zero bbox, 1 point)
+        points: [[0, 0]],
+      } as ExcalidrawLikeElement;
+      const existing = api.getSceneElements() as ExcalidrawLikeElement[];
+      // Use NEVER so the phantom stroke cannot be Ctrl+Z'd (matches real repro)
+      api.updateScene({ elements: [...existing, degenEl], captureUpdate: "NEVER" });
       invokeSceneMutationHook(role);
     },
     growStroke(strokeId, width, version) {
@@ -355,6 +412,56 @@ export function registerWbE2eSceneBridge(
       }
       invokeSceneMutationHook(role);
       return result.elementId;
+    },
+    insertGraphFixture(whiteboardSessionId, studentId, initialExpressions) {
+      const result = insertGraphOnCanvas({
+        excalidrawAPI: api,
+        whiteboardSessionId,
+        studentId,
+        initialExpressions,
+      });
+      if (!result.ok) {
+        throw new Error(result.reason);
+      }
+      invokeSceneMutationHook(role);
+      return result.elementId;
+    },
+    graphElementState(elementId) {
+      const el = (api.getSceneElements() as Array<{
+        id?: string;
+        type?: string;
+        link?: string;
+        customData?: { graphStateJson?: string };
+      }>).find((e) => e.id === elementId);
+      if (!el || el.type !== "embeddable") return null;
+      const graphStateJson =
+        typeof el.customData?.graphStateJson === "string"
+          ? el.customData.graphStateJson
+          : null;
+      const parsed = parseGraphStateJson(graphStateJson);
+      return {
+        graphStateJson,
+        expressions: parsed.expressions ?? [],
+        bbox: parsed.bbox ?? null,
+        link: typeof el.link === "string" ? el.link : null,
+      };
+    },
+    historyUndo() {
+      // ExcalidrawImperativeAPI 0.18 only exposes history.clear(), not .undo().
+      // Dispatch Ctrl+Z to the Excalidraw container as the most reliable path.
+      const target =
+        document.querySelector(".excalidraw") ??
+        document.querySelector(".excalidraw-container") ??
+        document.documentElement;
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "z",
+          code: "KeyZ",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
     },
   };
 

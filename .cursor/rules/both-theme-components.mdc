@@ -1,0 +1,24 @@
+---
+description: Components must be theme-agnostic (tokens only, no light/dark in component code); verify both current themes per build slice — no separate theming pass.
+globs: src/components/**,src/app/**/*.tsx,src/styles/**
+alwaysApply: false
+---
+
+# Theme-agnostic component build standard
+
+**Binding (Andrew 2026-06-07):** components must be **theme-agnostic** — reference **only** semantic design tokens / CSS variables (`var(--surface-base)`, `bg-card`, `text-foreground`, etc.). **No `light`/`dark` references in component code**: no `dark:` Tailwind variants, no `prefers-color-scheme` checks, no `if (theme === 'dark')` styling branches. Theme-specific values live **only** in `tokens.css` / `shadcn-theme.css` (swapped by `[data-theme]` on `<html>`). Architecture is **N-theme-capable**, not just light/dark.
+
+Design and verify **both current themes in the same build slice**. No separate theming pass.
+
+## Rules
+
+1. **Done = theme-agnostic + both themes verified** — a component or page is not complete until it uses tokens only (no `light`/`dark` in component code) and looks correct with `[data-theme=light]` and `[data-theme=dark]` on `<html>`.
+2. **Tokens only in components** — semantic classes (`bg-card`, `text-foreground`) or CSS variables; never raw hex or inline theme branches.
+3. **`dark:` variants are debt** — ~30 existing `dark:` usages violate this standard. `@custom-variant` keyed to `[data-theme=dark]` is interim; migrate to token-driven classes when touching a file so `dark` leaves component code entirely.
+4. **Boundary adapters (narrow carve-out)** — JS that must pass a non-CSS value may read theme via central `useTheme` only: Excalidraw `theme` prop (binary API adapter), `ThemeToggle` UI, raw color/asset for JS/canvas. Never hardcode or branch inline elsewhere.
+5. **Whiteboard** — Excalidraw `theme` must follow **app-selected** theme via `useTheme`, not OS-only. **TU-12**.
+
+## References
+
+- [`docs/V1-COMPONENT-LIBRARY.md`](../../docs/V1-COMPONENT-LIBRARY.md) §2.11 (HARD acceptance gate + A′ plumbing slice)
+- [`docs/handoff/whiteboard-chrome-design-2026-06-07.md`](../../docs/handoff/whiteboard-chrome-design-2026-06-07.md)

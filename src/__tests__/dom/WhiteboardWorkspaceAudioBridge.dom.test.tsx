@@ -43,6 +43,7 @@ function mockWorkspaceAudio(
     state: "recording",
     uploadMode: null,
     elapsed: 42,
+    sessionElapsed: 42,
     segmentNumber: 2,
     doneSegmentSeconds: 0,
     localMicStream: null,
@@ -58,6 +59,7 @@ function mockWorkspaceAudio(
       } as MediaDeviceInfo,
     ],
     selectedDeviceId: "dev-mock-1",
+    pickedMicSlot: 0,
     gainLinear: 1,
     setGainLinear: jest.fn(),
     chimeEnabled: true,
@@ -72,12 +74,15 @@ function mockWorkspaceAudio(
     meterBarRef: createRef<HTMLDivElement>(),
     handleStartRecording: jest.fn(),
     handleDeviceChange: jest.fn(),
+    handleMicSlotChange: jest.fn(),
     pauseRecording: jest.fn(),
     resumeRecording: jest.fn(),
     stopAndUpload: jest.fn(),
     handleReset: jest.fn(),
     flushPendingUploads: jest.fn(() => Promise.resolve()),
     swapMicDevice: jest.fn(() => Promise.resolve()),
+    swapMicDeviceBySlot: jest.fn(() => Promise.resolve()),
+    setTutorRecordingMute: jest.fn(),
     ...overrides,
   };
 }
@@ -90,10 +95,10 @@ describe("WhiteboardWorkspaceAudioBridge", () => {
     mockDrainAndAwait.mockClear();
   });
 
-  test("mounts RecordingControlPanel — mic picker, meter, segment timer", () => {
+  test("headless by default — no visible RecordingControlPanel on live board", () => {
     const audio = mockWorkspaceAudio();
 
-    render(
+    const { container } = render(
       <WhiteboardWorkspaceAudioBridge
         audio={audio}
         whiteboardSessionId="wbs-test-1"
@@ -102,11 +107,25 @@ describe("WhiteboardWorkspaceAudioBridge", () => {
       />
     );
 
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByTestId("mic-device-select")).not.toBeInTheDocument();
+  });
+
+  test("showPanel renders RecordingControlPanel for legacy surfaces", () => {
+    const audio = mockWorkspaceAudio();
+
+    render(
+      <WhiteboardWorkspaceAudioBridge
+        audio={audio}
+        whiteboardSessionId="wbs-test-panel"
+        userWantsRecording
+        recordingActive
+        showPanel
+      />
+    );
+
     expect(screen.getByTestId("mic-device-select")).toBeInTheDocument();
     expect(screen.getByTestId("mic-level-meter")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/Segment 2, duration 00:42/i)
-    ).toBeInTheDocument();
   });
 
   test("subscribes to outbox.observe(whiteboardSessionId) on mount", () => {

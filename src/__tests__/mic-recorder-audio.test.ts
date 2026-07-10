@@ -6,12 +6,13 @@
  *  - Returns the expected shape (recordingStream, dispose, getLevel, setGain).
  *  - setGain forwards to the GainNode without rebuilding the graph.
  *  - dispose stops the mic tracks and closes the AudioContext.
+ *  - calibrateMicLevel: noise-floor subtraction + bar-range coverage (8d).
  */
 
-import { createMicAudioGraph } from "@/lib/mic-recorder-audio";
+import { createMicAudioGraph, createMicPublishGraph, calibrateMicLevel, METER_NOISE_FLOOR, METER_SCALE } from "@/lib/mic-recorder-audio";
 
 type GainParam = { value: number };
-type FakeNode = { connect: jest.Mock };
+type FakeNode = { connect: jest.Mock; disconnect?: jest.Mock };
 
 function fakeMicStream() {
   const track = { stop: jest.fn() };
@@ -51,8 +52,13 @@ describe("createMicAudioGraph", () => {
 
   test("happy path: builds graph, exposes setGain/getLevel/dispose, cleans up", async () => {
     const gainParam: GainParam = { value: 0 };
+    const recordingMuteGainParam: GainParam = { value: 1 };
     const sourceNode: FakeNode = { connect: jest.fn() };
     const gainNode = { gain: gainParam, connect: jest.fn() };
+    const recordingMuteGainNode = {
+      gain: recordingMuteGainParam,
+      connect: jest.fn(),
+    };
     const analyserNode = {
       fftSize: 0,
       smoothingTimeConstant: 0,
@@ -68,12 +74,16 @@ describe("createMicAudioGraph", () => {
       { stream: publishStream },
     ];
     let destIdx = 0;
+    let gainCall = 0;
     const close = jest.fn().mockResolvedValue(undefined);
     const resume = jest.fn().mockResolvedValue(undefined);
 
     const ctx = {
       createMediaStreamSource: jest.fn(() => sourceNode),
-      createGain: jest.fn(() => gainNode),
+      createGain: jest.fn(() => {
+        gainCall += 1;
+        return gainCall === 1 ? gainNode : recordingMuteGainNode;
+      }),
       createAnalyser: jest.fn(() => analyserNode),
       createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
       resume,
@@ -89,9 +99,12 @@ describe("createMicAudioGraph", () => {
     expect(resume).toHaveBeenCalled();
     expect(ctx.createMediaStreamSource).toHaveBeenCalledWith(stream);
     expect(gainParam.value).toBe(1.5);
-    // source -> gain, gain -> recordingDest, gain -> publishDest, gain -> analyser
+    expect(recordingMuteGainParam.value).toBe(1);
+    // source -> boost gain; boost -> recordingMute + publish + analyser
     expect(sourceNode.connect).toHaveBeenCalledWith(gainNode);
     expect(gainNode.connect).toHaveBeenCalledTimes(3);
+    expect(gainNode.connect).toHaveBeenCalledWith(recordingMuteGainNode);
+    expect(recordingMuteGainNode.connect).toHaveBeenCalledWith(destinations[0]);
     // Two destinations created (recording + publish).
     expect(ctx.createMediaStreamDestination).toHaveBeenCalledTimes(2);
 
@@ -117,6 +130,56 @@ describe("createMicAudioGraph", () => {
     graph!.dispose();
     expect(stream.track.stop).toHaveBeenCalled();
     expect(close).toHaveBeenCalled();
+  });
+
+  test("setTutorRecordingMute gates only the recording branch (not boost/publish)", async () => {
+    const gainParam: GainParam = { value: 1 };
+    const recordingMuteGainParam: GainParam = { value: 1 };
+    const sourceNode: FakeNode = { connect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const recordingMuteGainNode = {
+      gain: recordingMuteGainParam,
+      connect: jest.fn(),
+    };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const destinations = [{ stream: { id: "r" } }, { stream: { id: "p" } }];
+    let destIdx = 0;
+    let gainCall = 0;
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => sourceNode),
+      createGain: jest.fn(() => {
+        gainCall += 1;
+        return gainCall === 1 ? gainNode : recordingMuteGainNode;
+      }),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicAudioGraph(stream as unknown as MediaStream, 1, {
+      sessionId: "sess-ws-i",
+    });
+
+    graph!.setTutorRecordingMute(true);
+    expect(recordingMuteGainParam.value).toBe(0);
+    expect(gainParam.value).toBe(1);
+    expect(logSpy).toHaveBeenCalledWith(
+      "[avx] avx=sess-ws-i action=tutor_recording_mute muted=true"
+    );
+
+    graph!.setTutorRecordingMute(false);
+    expect(recordingMuteGainParam.value).toBe(1);
+
+    logSpy.mockRestore();
+    graph!.dispose();
   });
 
   test("swapLocalMicSource rewires the local mic without recreating destinations (MediaRecorder path stable)", async () => {
@@ -188,6 +251,11 @@ describe("createMicAudioGraph", () => {
     // instead of a gap).
     const sourceNode = { connect: jest.fn(), disconnect: jest.fn() };
     const micGain = { gain: { value: 0 }, connect: jest.fn(), disconnect: jest.fn() };
+    const recordingMuteGain = {
+      gain: { value: 1 },
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+    };
     const remoteGains: Array<{
       gain: { value: number };
       connect: jest.Mock;
@@ -222,6 +290,10 @@ describe("createMicAudioGraph", () => {
         if (gainIdx === 0) {
           gainIdx += 1;
           return micGain;
+        }
+        if (gainIdx === 1) {
+          gainIdx += 1;
+          return recordingMuteGain;
         }
         const g = {
           gain: { value: 1 },
@@ -292,6 +364,11 @@ describe("createMicAudioGraph", () => {
     // source stays connected.
     const sourceNode = { connect: jest.fn(), disconnect: jest.fn() };
     const micGain = { gain: { value: 0 }, connect: jest.fn(), disconnect: jest.fn() };
+    const recordingMuteGain = {
+      gain: { value: 1 },
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+    };
     const remoteGains: Array<{
       gain: { value: number };
       connect: jest.Mock;
@@ -314,6 +391,10 @@ describe("createMicAudioGraph", () => {
         if (gainIdx === 0) {
           gainIdx += 1;
           return micGain;
+        }
+        if (gainIdx === 1) {
+          gainIdx += 1;
+          return recordingMuteGain;
         }
         const g = {
           gain: { value: 1 },
@@ -491,5 +572,216 @@ describe("createMicAudioGraph", () => {
       warnSpy.mockRestore();
       graph!.dispose();
     }
+  });
+});
+
+/**
+ * 8d: Meter calibration — noise-floor subtraction + bar-range coverage.
+ *
+ * Independent oracle for the level-mapping math: test the pure
+ * `calibrateMicLevel` function directly (no AudioContext needed).
+ *
+ * The old formula (rms * 4.5) required RMS ≈ 0.122 to light bar-3, causing
+ * the meter to appear stuck at 1–2 bars during typical laptop-mic speech.
+ * The new formula applies a noise-floor subtraction then a higher scale factor
+ * so normal speech spans all three bars.
+ *
+ * Bar thresholds (from WbInlineMicMeter): bar-1 ≥ 0.05, bar-2 ≥ 0.25, bar-3 ≥ 0.55.
+ */
+describe("calibrateMicLevel — noise-floor calibration (8d)", () => {
+  test("silence (below noise floor) maps to 0", () => {
+    // RMS values well below the noise floor must clamp to 0 — no bars lit.
+    expect(calibrateMicLevel(0)).toBe(0);
+    expect(calibrateMicLevel(METER_NOISE_FLOOR * 0.5)).toBe(0);
+    expect(calibrateMicLevel(METER_NOISE_FLOOR)).toBe(0);
+  });
+
+  test("quiet speech lights bar-1 only", () => {
+    // Quiet mic: RMS ≈ 0.015 — above noise floor but below bar-2 threshold.
+    const level = calibrateMicLevel(0.015);
+    expect(level).toBeGreaterThanOrEqual(0.05); // bar-1 lit
+    expect(level).toBeLessThan(0.25);            // bar-2 not lit
+  });
+
+  test("normal speech lights bar-1 and bar-2", () => {
+    // Normal conversation: RMS ≈ 0.04.
+    const level = calibrateMicLevel(0.04);
+    expect(level).toBeGreaterThanOrEqual(0.25); // bar-2 lit
+    expect(level).toBeLessThan(0.55);            // bar-3 not lit
+  });
+
+  test("louder speech lights all three bars", () => {
+    // Moderately loud: RMS ≈ 0.075.
+    const level = calibrateMicLevel(0.075);
+    expect(level).toBeGreaterThanOrEqual(0.55); // bar-3 lit
+    expect(level).toBeLessThanOrEqual(1);
+  });
+
+  test("very loud audio clamps to 1", () => {
+    expect(calibrateMicLevel(1)).toBe(1);
+    expect(calibrateMicLevel(0.5)).toBe(1);
+  });
+
+  test("offset-invariance: noise-floor offsets do not change the bar when below threshold", () => {
+    // Any RMS ≤ METER_NOISE_FLOOR must yield exactly 0 regardless of value.
+    for (const rms of [0, 0.001, 0.003, METER_NOISE_FLOOR]) {
+      expect(calibrateMicLevel(rms)).toBe(0);
+    }
+  });
+
+  test("calibration constants satisfy bar-range coverage invariant", () => {
+    // Verify the constants are tuned so that:
+    //   (0.075 - NOISE_FLOOR) * SCALE >= 0.55  (louder speech lights bar-3)
+    //   (0.04  - NOISE_FLOOR) * SCALE >= 0.25  (normal speech lights bar-2)
+    //   (0.015 - NOISE_FLOOR) * SCALE >= 0.05  (quiet speech lights bar-1)
+    expect(Math.max(0, 0.075 - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.55);
+    expect(Math.max(0, 0.04  - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.25);
+    expect(Math.max(0, 0.015 - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.05);
+  });
+});
+
+describe("createMicPublishGraph", () => {
+  const originalAudioContext = (globalThis as { AudioContext?: unknown }).AudioContext;
+
+  afterEach(() => {
+    if (originalAudioContext === undefined) {
+      delete (globalThis as { AudioContext?: unknown }).AudioContext;
+    } else {
+      (globalThis as { AudioContext?: unknown }).AudioContext = originalAudioContext;
+    }
+  });
+
+  test("returns null when AudioContext is missing", async () => {
+    delete (globalThis as { AudioContext?: unknown }).AudioContext;
+    const stream = fakeMicStream();
+    const graph = await createMicPublishGraph(stream as unknown as MediaStream, 1);
+    expect(graph).toBeNull();
+  });
+
+  test("builds publish-only graph: setGain, dispose, no recording destination", async () => {
+    const gainParam: GainParam = { value: 0 };
+    const sourceNode: FakeNode = { connect: jest.fn(), disconnect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn((arr: Float32Array) => {
+        for (let i = 0; i < arr.length; i++) arr[i] = 0.08;
+      }),
+    };
+    const publishStream = { id: "publish-only" };
+    const close = jest.fn().mockResolvedValue(undefined);
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => sourceNode),
+      createGain: jest.fn(() => gainNode),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => ({ stream: publishStream })),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close,
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicPublishGraph(
+      stream as unknown as MediaStream,
+      1.25
+    );
+
+    expect(graph).not.toBeNull();
+    expect(ctx.createMediaStreamDestination).toHaveBeenCalledTimes(1);
+    expect(graph!.publishStream).toBe(publishStream);
+    expect(gainParam.value).toBe(1.25);
+    expect(graph!.getLevel()).toBeGreaterThan(0);
+
+    graph!.setGain(2);
+    expect(gainParam.value).toBe(2);
+
+    graph!.dispose();
+    expect(stream.track.stop).toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
+  });
+
+  test("swapLocalMicSource rewires without recreating publish destination", async () => {
+    const gainParam: GainParam = { value: 1 };
+    const firstSource = { connect: jest.fn(), disconnect: jest.fn() };
+    const secondSource = { connect: jest.fn(), disconnect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const publishStream = { id: "stable-publish" };
+    let sourceCall = 0;
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => {
+        sourceCall += 1;
+        return sourceCall === 1 ? firstSource : secondSource;
+      }),
+      createGain: jest.fn(() => gainNode),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => ({ stream: publishStream })),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicPublishGraph(stream as unknown as MediaStream, 1);
+    const nextStream = fakeMicStream();
+    expect(graph!.swapLocalMicSource(nextStream as unknown as MediaStream)).toBe(
+      true
+    );
+
+    expect(firstSource.disconnect).toHaveBeenCalled();
+    expect(secondSource.connect).toHaveBeenCalledWith(gainNode);
+    expect(graph!.publishStream).toBe(publishStream);
+    graph!.dispose();
+  });
+
+  test("swapLocalMicSource returns false and recovers prior source when createMediaStreamSource throws", async () => {
+    const gainParam: GainParam = { value: 1 };
+    const firstSource = { connect: jest.fn(), disconnect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const publishStream = { id: "stable-publish" };
+    let sourceCall = 0;
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => {
+        sourceCall += 1;
+        if (sourceCall === 1) return firstSource;
+        throw new Error("create-source-failed");
+      }),
+      createGain: jest.fn(() => gainNode),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => ({ stream: publishStream })),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicPublishGraph(stream as unknown as MediaStream, 1);
+    const nextStream = fakeMicStream();
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(graph!.swapLocalMicSource(nextStream as unknown as MediaStream)).toBe(
+      false
+    );
+    expect(firstSource.disconnect).toHaveBeenCalled();
+    expect(firstSource.connect).toHaveBeenCalledWith(gainNode);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "[avx] avx=? event=mic_device_swap result=failed reason=create-source-failed recovered=true"
+      ),
+      "create-source-failed"
+    );
+
+    warnSpy.mockRestore();
+    graph!.dispose();
   });
 });

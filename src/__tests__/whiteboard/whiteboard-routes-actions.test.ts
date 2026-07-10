@@ -53,6 +53,9 @@ type DbMock = {
   student: {
     findUniqueOrThrow: jest.Mock;
   };
+  sessionConsentSnapshot: {
+    findUnique: jest.Mock;
+  };
 };
 
 let dbMock: DbMock;
@@ -81,11 +84,24 @@ jest.mock("@/lib/db", () => {
     student: {
       findUniqueOrThrow: jest.fn(),
     },
+    // assertEffectiveConsent (now unconditional) reads sessionConsentSnapshot.
+    // Default null → no-snapshot fallback (consent granted for unclaimed sessions).
+    sessionConsentSnapshot: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
   };
   (globalThis as unknown as DbMockSidechannel).__dbMock = mock;
+  const $transaction = jest.fn(async (fn: (tx: typeof mock) => Promise<unknown>) =>
+    fn(mock)
+  );
   return {
     __esModule: true,
-    db: mock,
+    db: {
+      ...mock,
+      $transaction,
+      // B1: default APPROVED so existing tests are unaffected by the approval gate.
+      adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
+    },
     withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
   };
 });// ── Auth / scope mock ────────────────────────────────────────────────
@@ -207,6 +223,11 @@ beforeEach(() => {
   jest.clearAllMocks();
   requireStudentScopeMock.mockResolvedValue(adminScope);
   assertOwnsWhiteboardSessionMock.mockResolvedValue(mockSession);
+  // Phase check (Concern 4): default ACTIVE so existing happy-path tests pass.
+  dbMock.whiteboardSession.findUnique.mockResolvedValue({ sessionPhase: "ACTIVE" });
+  // Consent snapshot (Concern 2 — unconditional): default null → no-snapshot
+  // fallback (consent granted for unclaimed sessions).
+  dbMock.sessionConsentSnapshot.findUnique.mockResolvedValue(null);
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -365,13 +386,16 @@ describe("registerWhiteboardSessionAudioSegmentAction", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toMatch(/already ended/i);
+      expect(result.sessionEnded).toBe(true);
     }
   });
 
   it("creates SessionRecording with next orderIndex on happy path", async () => {
     assertOwnsWhiteboardSessionMock.mockResolvedValueOnce(mockLiveSession);
-    dbMock.sessionRecording.findFirst.mockResolvedValue({ orderIndex: 2 });
-    dbMock.sessionRecording.create.mockResolvedValue({ id: "rec-new" });
+    dbMock.sessionRecording.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ orderIndex: 2 });
+    dbMock.sessionRecording.create.mockResolvedValue({ id: "rec-new", orderIndex: 3 });
 
     const result = await registerWhiteboardSessionAudioSegmentAction("ws-1", {
       blobUrl: "https://blob.vercel-storage.com/seg.webm",

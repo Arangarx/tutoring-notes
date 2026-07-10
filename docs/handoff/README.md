@@ -4,8 +4,9 @@ This folder holds two related kinds of handoff document:
 
 1. **Executor bootstrappers** (`<scope>-bootstrapper.md`) — forward-looking task briefings the orchestrator chat hands to a fresh executor chat (Composer 2.5 by default) to build a feature, fix a bug, or run a spike. Self-contained: workspace + branch discipline, project context, read-first list, scope/commits, smoke checklist, wrap-up + merge instructions, stop conditions.
 2. **Orchestrator reports** (`<scope>-<date>-orchestrator-report.md`) — retrospective handoff from one orchestrator session to the next. Captures what shipped, what was deferred and why, lessons learned (especially in-branch reverts), open items pointer to BACKLOG, and a starter bootstrapper for the next session's first move. Read by the next orchestrator before that chat does anything else.
+3. **Smokebooks / smoke-runbooks** (`<scope>-smoke-<date>.md`, etc.) — manual preview checklists Andrew runs **once per feature when DONE** ([`.cursor/rules/smoke-when-done.mdc`](../../.cursor/rules/smoke-when-done.mdc)). Agents ship Playwright + green gates first; smokebooks target **new UX + hardware judgment**, not regression re-proof. **MUST** follow [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md). Enforced by [`.cursor/rules/smokebook-template.mdc`](../../.cursor/rules/smokebook-template.mdc).
 
-**Both types should be Composer-2.5-authored via subagent dispatch** when length > ~3 paragraphs. Opus supplies the scope blob (what to capture, structural template, links to existing reference docs); Composer types the prose. See `.cursor/rules/orchestrator-discipline.mdc` for the dispatch-vs-do boundary.
+**Bootstrappers and orchestrator reports should be Composer-2.5-authored via subagent dispatch** when length > ~3 paragraphs. Opus supplies the scope blob (what to capture, structural template, links to existing reference docs); Composer types the prose. See `.cursor/rules/orchestrator-discipline.mdc` for the dispatch-vs-do boundary.
 
 ## Why commit them?
 

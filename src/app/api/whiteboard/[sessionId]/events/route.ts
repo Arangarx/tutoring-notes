@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import {
+  harnessStoreGet,
+  isBlobHarnessActive,
+  isHarnessBlobUrl,
+  pathnameFromHarnessUrl,
+} from "@/lib/blob-harness";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 
 /**
@@ -39,6 +46,9 @@ export async function GET(
   // Ownership check — calls notFound() on miss (doesn't leak existence).
   const session = await assertOwnsWhiteboardSession(sessionId);
 
+  const erasureBlocked = await assertStudentNotErasedApi(session.studentId);
+  if (erasureBlocked) return erasureBlocked;
+
   // A session that hasn't ended yet still has a valid eventsBlobUrl
   // if the tutor did an early Stop. Don't gate on endedAt — the admin
   // review page can call this endpoint for any session that has a
@@ -54,6 +64,41 @@ export async function GET(
   }
 
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN ?? "";
+
+  if (isBlobHarnessActive() && isHarnessBlobUrl(session.eventsBlobUrl)) {
+    const key = pathnameFromHarnessUrl(session.eventsBlobUrl);
+    const stored = key ? harnessStoreGet(key) : null;
+    if (!stored) {
+      console.error(
+        `[wbEvents.route] wbsid=${sessionId} rid=${rid} harness blob missing key=${key}`
+      );
+      return NextResponse.json(
+        { error: "Event log unavailable." },
+        { status: 502 }
+      );
+    }
+    const ct = stored.contentType.toLowerCase();
+    if (!ct.startsWith("application/json")) {
+      return NextResponse.json(
+        {
+          error:
+            "The recording for this session is in an unexpected format and cannot be replayed.",
+        },
+        { status: 502 }
+      );
+    }
+    console.log(
+      `[wbEvents.route] wbsid=${sessionId} rid=${rid} bytes=${stored.bytes.byteLength} harness ok`
+    );
+    return new Response(new Uint8Array(stored.bytes), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": session.endedAt ? "private, max-age=300" : "no-store",
+      },
+    });
+  }
+
   const blobRes = await fetch(session.eventsBlobUrl, {
     headers: blobToken ? { Authorization: `Bearer ${blobToken}` } : {},
   });

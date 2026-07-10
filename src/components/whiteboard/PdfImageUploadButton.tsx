@@ -25,6 +25,7 @@ import {
   formatPdfSelectionPreview,
   parsePdfCustomRanges,
 } from "@/lib/whiteboard/pdf-page-selection";
+import { WbIconPdf } from "@/components/whiteboard/chrome/wb-icons";
 
 type Props = {
   excalidrawAPI: ExcalidrawApiLike | null;
@@ -32,6 +33,8 @@ type Props = {
   studentId: string;
   disabled?: boolean;
   integrate: InsertPdfBoardPagesIntegrate;
+  /** Icon-only top-bar button matching session shell mock. */
+  chrome?: boolean;
 };
 
 type DialogState =
@@ -79,6 +82,7 @@ export function PdfImageUploadButton({
   studentId,
   disabled,
   integrate,
+  chrome,
 }: Props) {
   const [state, setState] = useState<DialogState>({ kind: "closed" });
   const [pickMode, setPickMode] = useState<PickMode>("all");
@@ -274,13 +278,14 @@ export function PdfImageUploadButton({
     <>
       <button
         type="button"
-        className="btn"
+        className={chrome ? "mynk-wb-tb-btn mynk-wb-tb-btn--icon" : "btn"}
         onClick={() => setState({ kind: "open" })}
         disabled={disabled || !excalidrawAPI}
         data-testid="wb-insert-asset-btn"
         title="Insert PDF worksheet"
+        aria-label="Insert PDF"
       >
-        Insert PDF
+        {chrome ? <WbIconPdf /> : "Insert PDF"}
       </button>
 
       {state.kind !== "closed" && (

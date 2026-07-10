@@ -2,7 +2,19 @@
 
 > **Start here.** This is the single entry point for any new chat, agent, or human picking up work in this repo. Every canonical doc, spoke doc, and smoke runbook is mapped below by topic. For the curated reading-list with in-depth framing, see `AGENTS.md § Key docs`.
 >
-> Last updated: 2026-05-27 (morning cleanup follow-up).
+> Last updated: 2026-07-01 (Sarah merge gate + Part 3 spine index entries).
+
+---
+
+## Docs cleanup / archival policy
+
+On every docs-cleanup pass: **archive** anything verified to be captured elsewhere or later superseded/overridden — but **never** archive information that would be lost if it's still valid and unique.
+
+Bar to archive a doc or section: **(a)** its still-valid content is provably captured in a canonical consolidated doc, **or** **(b)** it's been explicitly superseded. If removing it would lose valid unique information, **keep it**. Goal: reduce docs sprawl without losing signal.
+
+**Canonical pattern:** consolidate scattered feedback into one source, verify capture, **then** archive the redundant copies. See [docs/BACKLOG.md](docs/BACKLOG.md) § Docs cleanup pass (next).
+
+**Archive (cold storage):** superseded or captured-elsewhere docs live in [`docs/archive/`](docs/archive/) — not authoritative; see [`docs/archive/ARCHIVE-LEDGER.md`](docs/archive/ARCHIVE-LEDGER.md) for the audit trail. Agents ignore this tree by default (`.cursorindexingignore`).
 
 ---
 
@@ -11,7 +23,17 @@
 | Doc | What's in it | When to read |
 |---|---|---|
 | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | Canonical wave-by-wave sequencing from solo-tutor reliability floor to Aug 2026 university-pitch readiness. Re-validate quarterly or after major Sarah feedback. | Start of any session where you're deciding what to work on next |
+| [docs/handoff/ORCHESTRATOR-STATE.md](docs/handoff/ORCHESTRATOR-STATE.md) | **Living orchestrator bootstrap** — current branch/tip, Sarah merge gate, execution order, Part 3 spine status, session-experience build status | **Every fresh orchestrator chat — read HEAD first** |
+| [../../../../../.cursor/plans/whiteboard_reliability_remaining_b082882.plan.md](../../../../../.cursor/plans/whiteboard_reliability_remaining_b082882.plan.md) | **Active Sarah-merge plan** — full live-session arc gate, no interim merge; Parts 1–3 + consent/erasure on `wb-wave5-polish` | When sequencing whiteboard reliability work or confirming merge discipline |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Pilot feedback items, known follow-ups, reliability gaps audit (Axes 1–5), security recon results, and deferred phase notes | Whenever triaging new work, checking reliability posture, or looking for a deferred item |
+
+---
+
+## Testing + quality
+
+| Doc | What's in it | When to read |
+|---|---|---|
+| [docs/TESTING-COVERAGE.md](docs/TESTING-COVERAGE.md) | Feature × automated-coverage tier matrix (U/I/E/RB/M), teeth-gap summary, Playwright smoke-automation roadmap | Before planning test work, pre-merge gates, or converting manual smokes to e2e |
 
 ---
 
@@ -21,6 +43,9 @@
 |---|---|---|
 | [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) | **Must-read gate.** Three-pillar FSM + outbox + atomic end-session; end-session flow diagram; Phase 1c surfaces (snapshot PNG, preview-before-Start); per-session ID registry (`rid`, `wbsid`, `obx`, `snp`, `pvw`, `avx`, …) | Before touching `lifecycle-machine.ts`, `upload-outbox.ts`, `endWhiteboardSession`, or workspace `handleEndSession` |
 | [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) | Current whiteboard build status, guardrails, adversarial review, demo gate, sync-host deploy notes | Before any whiteboard feature work or smoke pass |
+| [docs/handoff/ORCHESTRATOR-STATE.md](docs/handoff/ORCHESTRATOR-STATE.md) § Session-experience build status + Current Wave focus | **Part 3 reliability spine** — enumerated `p3-*` todos, built vs unbuilt pipeline, spike branch pointer | Before Part 3 execution or when checking what's already shipped on `wb-wave5-polish` |
+| [docs/handoff/whiteboard-chrome-requirements.md](docs/handoff/whiteboard-chrome-requirements.md) | **Custom Mynk whiteboard chrome** — LOCKED decision, 63 Sarah UX requirements (toolbar, properties, defaults, mobile incl. TM-09), feasibility tags | Before any Excalidraw UI replacement work |
+| [docs/handoff/whiteboard-chrome-design-2026-06-07.md](docs/handoff/whiteboard-chrome-design-2026-06-07.md) | **Whiteboard chrome design (ratified 2026-06-07)** — hybrid tutor layout, architecture, fork resolutions, Phase 0–3 phasing + POC gate, sync invariants | Before building Phase 1 tutor-desktop chrome or reviewing POC results |
 | [docs/LIVE-AV.md](docs/LIVE-AV.md) | Live A/V architecture cheat sheet — peer-mesh, signaling, `useLiveAV`, `mic-recorder-audio`, participants-reconcile effect | Before touching `peer-mesh.ts`, `useLiveAV.ts`, `mic-recorder-audio.ts`, or anything claiming to "simplify" peer connection or audio recording |
 | [docs/PHASE-1B-STATUS.md](docs/PHASE-1B-STATUS.md) | Outbox + atomic end-session branch handoff (Pillars 2 + 3) — **SHIPPED** 2026-05-10–13 | Historical reference for Pillars 2 + 3 design decisions |
 | [docs/PHASE-4A-STATUS.md](docs/PHASE-4A-STATUS.md) | Live-A/V peer-mesh + signaling foundation — **SHIPPED** (Phase 4a; first of 4 sub-chats; full stack shipped through 4d + device-mgmt) | Historical reference for Pillar 6 decisions; see `docs/LIVE-AV.md` for the current cheat sheet |
@@ -33,6 +58,7 @@
 
 | Doc | What's in it | When to read |
 |---|---|---|
+| [docs/V1-COMPONENT-LIBRARY.md](docs/V1-COMPONENT-LIBRARY.md) | **V1 component spine.** Full inventory + dedup status of every shared component; UX rubric (card-usage convention, spacing, typography, form patterns); component-pass chunk tracker; slice-3/live-session collision-zone lock list. | **Before any UI chunk pass.** Read this to know what's canonical, what's a duplicate, and what conventions the next chunk must follow. |
 | [docs/BRAND.md](docs/BRAND.md) | Engineering-ready brand reference — Mynka Blue palette (`#1E3D54`), coral accent (`#E27D60`), cream surfaces, Fraunces/Inter/JetBrains Mono typography, voice | Before any UI or branding work |
 | [docs/MYNK-BRAND-PHASE-2-DECISIONS.md](docs/MYNK-BRAND-PHASE-2-DECISIONS.md) | Locked palette + typography + voice decisions from the 2026-05-19 PM design session | Before making design decisions or creative direction choices |
 | [docs/UX-AND-A11Y-SPEC.md](docs/UX-AND-A11Y-SPEC.md) | Conformance bar, contrast audit, Pre-flight checklist, open IA decisions | Before implementing any UX components or accessibility work |
@@ -87,6 +113,7 @@ No standalone security doc. The canonical list of open security items lives in [
 
 | Doc | What's in it | When to read |
 |---|---|---|
+| [docs/handoff/SMOKEBOOK-TEMPLATE.md](docs/handoff/SMOKEBOOK-TEMPLATE.md) | Canonical smokebook/runbook template — per-item Action/Expect/Ignore/PASS/FAIL/Notes; header with branch, tip commit, verified preview URL | Before authoring any smokebook or smoke-runbook |
 | [docs/SMOKE-LONG-FORM-TRANSCRIBE.md](docs/SMOKE-LONG-FORM-TRANSCRIBE.md) | Long-form transcribe (60–90 min) Tier 1 smoke harness — **Wave 1 BLOCKER-PROD** (Vercel Pro 300s ceiling validation); the only supported trigger is the authenticated admin UI Server Action | Before running long-form transcribe smoke on Production or Preview |
 | [docs/PHASE-2-IOS-SMOKE-MATRIX.md](docs/PHASE-2-IOS-SMOKE-MATRIX.md) | iOS Safari real-hardware smoke matrix — **Wave 1 BLOCKER-PROD** (Axis 4 cross-platform parity; Sarah uses iPhone); becomes the living iOS limitations doc as rows are ticked | Before iOS Safari smoke pass; fill on real hardware only |
 | [docs/whiteboard-smoke-log.md](docs/whiteboard-smoke-log.md) | Manual whiteboard smoke log — living doc updated after each smoke pass or pilot quote capture | After any whiteboard smoke run |
@@ -130,29 +157,15 @@ See [docs/handoff/README.md](docs/handoff/README.md) for the full lifecycle, nam
 
 ---
 
-## Stale archive (superseded — reference only)
+## External plan files (superseded — not in repo)
 
-These docs have SUPERSEDED headers at their top. Preserved for archival reference; do not act on them directly.
+These live outside the repo under `~/.cursor/plans/`. Canonical sequencing is [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + live STATUS/BACKLOG docs. Repo-local superseded docs are in [`docs/archive/`](docs/archive/) (see ledger).
 
 | Doc | Superseded by | Reason |
 |---|---|---|
-| [docs/AGENT-BOOTSTRAP.md](docs/AGENT-BOOTSTRAP.md) | `AGENTS.md` + `docs/INDEX.md` | Old-style bootstrap pre-dating the AGENTS.md + handoff pattern; references stale branch names and plan file paths |
-| [docs/RESUME-AUDIO-BUILD.md](docs/RESUME-AUDIO-BUILD.md) | [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) | Audio build shipped; the file itself said to delete it after shipping |
-| [docs/UX-REFRESH-PLAN.md](docs/UX-REFRESH-PLAN.md) | [docs/UX-AND-A11Y-SPEC.md](docs/UX-AND-A11Y-SPEC.md), [docs/MYNK-BRAND-PHASE-2-DECISIONS.md](docs/MYNK-BRAND-PHASE-2-DECISIONS.md), [docs/BRAND.md](docs/BRAND.md) | v1 redesign from scratch superseded the phased-refresh plan; doc already had an internal SUPERSEDED notice |
-| [docs/handoff/live-av-device-management-bootstrapper.md](docs/handoff/live-av-device-management-bootstrapper.md) | [docs/PHASE-LIVE-AV-DEVICE-MGMT-STATUS.md](docs/PHASE-LIVE-AV-DEVICE-MGMT-STATUS.md) | Work shipped (`ac92137`) |
-| [docs/handoff/long-form-transcribe-tier-1-parallelize-bootstrapper.md](docs/handoff/long-form-transcribe-tier-1-parallelize-bootstrapper.md) | [docs/PHASE-6-TIER-1-STATUS.md](docs/PHASE-6-TIER-1-STATUS.md) | Work shipped (`5ccf1c7`) |
-| [docs/handoff/pdf-page-picker-and-per-page-boards-bootstrapper.md](docs/handoff/pdf-page-picker-and-per-page-boards-bootstrapper.md) | [docs/PHASE-PDF-STATUS.md](docs/PHASE-PDF-STATUS.md) | Work shipped (`9ff5b11`) |
-| [docs/handoff/phase-4a-bootstrapper.md](docs/handoff/phase-4a-bootstrapper.md) | [docs/PHASE-4A-STATUS.md](docs/PHASE-4A-STATUS.md) | Work shipped (`59d13ad`) |
-| [docs/handoff/phase-4b-bootstrapper.md](docs/handoff/phase-4b-bootstrapper.md) | [docs/PHASE-4B-STATUS.md](docs/PHASE-4B-STATUS.md) | Work shipped (Phase 4b in 4c train) |
-| [docs/handoff/phase-4c-bootstrapper.md](docs/handoff/phase-4c-bootstrapper.md) | [docs/PHASE-4C-STATUS.md](docs/PHASE-4C-STATUS.md) | Work shipped (`d7fd583`) |
-| [docs/handoff/phase-4d-bootstrapper.md](docs/handoff/phase-4d-bootstrapper.md) | [docs/PHASE-4D-STATUS.md](docs/PHASE-4D-STATUS.md) | Work shipped (`41bf006`) |
-| [docs/handoff/spike-long-form-transcribe-smoke-bootstrapper.md](docs/handoff/spike-long-form-transcribe-smoke-bootstrapper.md) | [docs/handoff/long-form-transcribe-tier-1-orchestrator-report.md](docs/handoff/long-form-transcribe-tier-1-orchestrator-report.md) | Spike completed; orchestrator report is the outcome artifact |
-| `../../../../../.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | RELEASE-ROADMAP.md is the canonical sequencing source; master plan todos mostly completed |
-| `../../../../../.cursor/plans/tutoring_notes_release_plan_781d48c1.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | Earlier release plan superseded by RELEASE-ROADMAP.md |
-| `../../../../../.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_cc1eb419.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) | Whiteboard strategy plan mostly completed; current roadmap + status are the live references |
-| [docs/GTM-READINESS.md](docs/GTM-READINESS.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md), [docs/DEPLOY.md](docs/DEPLOY.md), [docs/COMMERCIAL-LAUNCH-CHECKLIST.md](docs/COMMERCIAL-LAUNCH-CHECKLIST.md) | Pre-Neon GTM checklist; verdict framing migrated; §1 hosting facts stale |
-| [docs/handoff/per-page-view-state-bootstrapper.md](docs/handoff/per-page-view-state-bootstrapper.md) | [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | Tutor-side per-page view state shipped; student-side validation tracked in BACKLOG |
-| [docs/WHITEBOARD-ROADMAP-NEXT.md](docs/WHITEBOARD-ROADMAP-NEXT.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | Earlier consolidated whiteboard roadmap merging IMPROVEMENT-PLAN + BACKLOG + STATUS; superseded by canonical roadmap + status + backlog |
-| [.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md](.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | W-item checklist superseded by BACKLOG + STATUS + RELEASE-ROADMAP |
-| [.cursor/plans/whiteboard_backlog_execution.plan.md](.cursor/plans/whiteboard_backlog_execution.plan.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | Cursor Build YAML waves stale (PDF shipped, roadmap consolidated) |
+| `../../../../../.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | Master plan todos mostly completed |
+| `../../../../../.cursor/plans/tutoring_notes_release_plan_781d48c1.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | Earlier release plan |
+| `../../../../../.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_cc1eb419.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) | Whiteboard strategy plan mostly completed |
+| [.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md](.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | W-item checklist superseded |
+| [.cursor/plans/whiteboard_backlog_execution.plan.md](.cursor/plans/whiteboard_backlog_execution.plan.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | Cursor Build YAML waves stale |
 | [.cursor/plans/whiteboard_improvement_execution.plan.md](.cursor/plans/whiteboard_improvement_execution.plan.md) | [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | All YAML todos completed 2026-05 |

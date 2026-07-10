@@ -3,11 +3,14 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createAdmin, getAdminByEmail } from "@/lib/auth-db";
+import { validatePasswordStrength, MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 
 const SignupSchema = z
   .object({
     email: z.string().email("Enter a valid email."),
-    password: z.string().min(8, "Password must be at least 8 characters."),
+    password: z
+      .string()
+      .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`),
     passwordConfirm: z.string(),
     displayName: z.string().optional(),
   })
@@ -39,6 +42,12 @@ export async function signup(
   }
 
   const { email, password, displayName } = parsed.data;
+
+  const strengthCheck = validatePasswordStrength(password);
+  if (!strengthCheck.ok) {
+    return { error: strengthCheck.feedback || "Password is too weak. Try a longer phrase." };
+  }
+
   const existing = await getAdminByEmail(email);
   if (existing) {
     // Anti-enumeration: a malicious actor can otherwise probe which emails

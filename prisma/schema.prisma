@@ -25,6 +25,28 @@ enum CostEventKind {
   WHISPER_TRANSCRIPTION
   GPT_NOTES_GENERATION
   GPT_ASSESSMENT_EXTRACTION
+  BLOB_STORAGE
+  BLOB_EGRESS
+  VERCEL_COMPUTE
+  NEON_COMPUTE
+}
+
+/// Purpose values for one-time email tokens issued to AccountHolders.
+enum AccountHolderEmailTokenPurpose {
+  SIGNUP_VERIFY
+  PASSWORD_RESET
+  EMAIL_CHANGE
+  CRITICAL_ACTION
+}
+
+/// Per-LearnerProfile access mode chosen by the parent.
+/// parent_session_select: legacy value kept for existing rows; superseded by account_holder_session.
+/// account_holder_session: child accesses via the owning AccountHolder session (parent selects learner).
+/// child_pin_required: child must use own username + PIN via username@familyid login.
+enum LearnerAccessMode {
+  parent_session_select
+  account_holder_session
+  child_pin_required
 }
 
 /// Role for AdminUser — determines which experience the account gets.
@@ -36,37 +58,91 @@ enum AdminRole {
   TUTOR
 }
 
+/// Tutor account approval status (B1 signup-waitlist).
+/// New tutor signups land WAITLISTED; operator must approve before they can incur cost.
+/// Existing rows are backfilled to APPROVED via the migration (grandfather).
+/// WAITLISTED: cannot incur external cost (Blob, OpenAI, Whisper).
+/// APPROVED: full cost access granted.
+/// (REJECTED is deferred — see feat/signup-waitlist smokebook TODOs.)
+enum TutorApprovalStatus {
+  WAITLISTED
+  APPROVED
+}
+
+enum SessionPhase {
+  PENDING
+  ACTIVE
+}
+
+enum SessionMode {
+  LIVE
+  IN_PERSON
+}
+
+/// Erasure job scope — learner profile or full account-holder family.
+enum ErasureScopeKind {
+  learner_profile
+  account_holder
+}
+
+/// Resumable erasure state machine phases (see docs/handoff/learner-erasure-plan.md §4.1).
+enum ErasureJobStatus {
+  requested
+  blobs_purging
+  db_scrubbing
+  completed
+  failed
+  canceled
+}
+
 model Student {
-  id          String       @id @default(uuid())
-  name        String
-  parentEmail String?      // Saved so tutor doesn't re-enter every time
-  createdAt   DateTime     @default(now())
-  /** Tutor who owns this student (multi-tenant). Null = legacy rows before scoping or env-only admin. */
-  adminUserId String?
-  adminUser   AdminUser?   @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  id                      String              @id @default(uuid())
+  name                    String
+  parentEmail             String? // Saved so tutor doesn't re-enter every time
+  createdAt               DateTime            @default(now())
+  /**
+   * Tutor who owns this student (multi-tenant). Null = legacy rows before scoping or env-only admin.
+   */
+  adminUserId             String?
+  adminUser               AdminUser?          @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   /**
    * Per-student default for the whiteboard "Start recording" toggle
-   * (Sarah, Apr 2026 pilot ask): some students decline recording, so
-   * the workspace should remember that and show Start unticked for
-   * them next time. The tutor can still flip it per session — this is
-   * just the initial state. Defaults to true so the existing behavior
-   * is unchanged for current students until a tutor explicitly opts
-   * one out.
+   * DEPRECATED (PRESARAH-1, 2026-07): per-student "start recording by
+   * default" toggle removed — recording intent is always armed from
+   * session activation. Column retained for additive-migration rule.
    */
-  recordingDefaultEnabled Boolean @default(true)
-  notes       SessionNote[]
-  shareLinks  ShareLink[]
-  recordings  SessionRecording[]
-  whiteboardSessions WhiteboardSession[]
-  costEvents  CostEvent[]
+  recordingDefaultEnabled Boolean             @default(true)
+  /// When true: this student was created by the dev-tools fixture dashboard
+  /// and may be deleted by it. The delete path checks this flag in the WHERE
+  /// clause — physically incapable of deleting real students.
+  isTestFixture           Boolean             @default(false)
+  notes                   SessionNote[]
+  shareLinks              ShareLink[]
+  recordings              SessionRecording[]
+  whiteboardSessions      WhiteboardSession[]
+  costEvents              CostEvent[]
 
+  /// Identity Phase 2 / IAC-2: nullable FK to LearnerProfile.
+  /// One LearnerProfile can be linked to multiple tutor-scoped Student rows (multi-tutor).
+  /// @@unique([adminUserId, learnerProfileId]) prevents a tutor from double-claiming the same
+  /// child profile while allowing multiple tutors to each link the same LearnerProfile.
+  /// SetNull so deleting a LearnerProfile un-links the student without destroying tutor history.
+  learnerProfileId String?
+  learnerProfile   LearnerProfile?      @relation(fields: [learnerProfileId], references: [id], onDelete: SetNull)
+  claimInvites     StudentClaimInvite[]
+  /// Set during erasure db_scrubbing; route guards check this (M-4).
+  erasedAt         DateTime?
+
+  /// IAC-2: per-tutor uniqueness — a tutor cannot link the same learner profile twice;
+  /// a second tutor can link the same profile under their own adminUserId.
+  @@unique([adminUserId, learnerProfileId])
   @@index([adminUserId])
 }
 
 model SessionNote {
-  id        String    @id @default(uuid())
+  id        String  @id @default(uuid())
   studentId String
-  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   /**
    * Calendar day of the session (no time, no timezone). Stored as Postgres
@@ -75,62 +151,78 @@ model SessionNote {
    * UTC accessors (`formatDateOnlyDisplay`) — Prisma still hands back a JS
    * `Date` at UTC midnight, which `toLocaleDateString()` would shift west.
    */
-  date      DateTime  @db.Date
-  topics    String
-  homework  String
+  date       DateTime   @db.Date
+  topics     String
+  homework   String
   /**
    * Where the student stands on what was covered (B4, Sarah pilot
    * feedback). Renamed for parents to "Assessment" in the UI; field
    * stays untouched in the DB so existing rows backfill to "" by default.
    */
-  assessment String   @default("")
+  assessment String     @default("")
   /**
    * The DB column stays `nextSteps` for backwards compatibility, but the
    * UI labels it "Plan" everywhere (B4). See `src/lib/ai.ts` — the AI
    * prompt now returns this as `plan` and the server action maps it back
    * to `nextSteps` at the DB boundary.
    */
-  nextSteps String
-  linksJson String    @default("[]")
-  template  String?
-  status    NoteStatus @default(DRAFT)
-  sentAt    DateTime?
+  nextSteps  String
+  linksJson  String     @default("[]")
+  template   String?
+  status     NoteStatus @default(DRAFT)
+  sentAt     DateTime?
 
-  /** Optional session start/end times. Auto-filled from recording timestamps when available; editable by the tutor. */
+  /**
+   * Optional session start/end times. Auto-filled from recording timestamps when available; editable by the tutor.
+   */
   startTime DateTime?
   endTime   DateTime?
 
-  aiGenerated     Boolean  @default(false)
+  aiGenerated     Boolean @default(false)
   aiPromptVersion String?
 
-  /** Whether to include the session recordings in the parent share link. Default off. */
+  /**
+   * Whether to include the session recordings in the parent share link. Default off.
+   */
   shareRecordingInEmail Boolean @default(false)
 
-  /** Recordings for this note (0 = no recording, 1 = single, N = multi-segment). */
-  recordings SessionRecording[]
-  /** Whiteboard sessions attached to this note (0..N — same note can collect multiple sessions over time). */
+  /**
+   * Recordings for this note (0 = no recording, 1 = single, N = multi-segment).
+   */
+  recordings         SessionRecording[]
+  /**
+   * Whiteboard sessions attached to this note (0..N — same note can collect multiple sessions over time).
+   */
   whiteboardSessions WhiteboardSession[]
-  views      NoteView[]
+  views              NoteView[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([studentId, date])
 }
 
 model SessionRecording {
   id          String    @id @default(uuid())
-  /** Tutor who owns this recording (multi-tenant). */
+  /**
+   * Tutor who owns this recording (multi-tenant).
+   */
   adminUserId String
   adminUser   AdminUser @relation("AdminRecordings", fields: [adminUserId], references: [id], onDelete: Cascade)
-  /** Student the session was for. */
+  /**
+   * Student the session was for.
+   */
   studentId   String
   student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  /** Note this recording belongs to. Null until the note is saved. */
+  /**
+   * Note this recording belongs to. Null until the note is saved.
+   */
   noteId     String?
   note       SessionNote? @relation(fields: [noteId], references: [id], onDelete: SetNull)
-  /** Order within the note (0-indexed). Determines Part 1 of N labeling. */
+  /**
+   * Order within the note (0-indexed). Determines Part 1 of N labeling.
+   */
   orderIndex Int          @default(0)
 
   /**
@@ -144,7 +236,9 @@ model SessionRecording {
   whiteboardSessionId String?
   whiteboardSession   WhiteboardSession? @relation("WhiteboardAudio", fields: [whiteboardSessionId], references: [id], onDelete: SetNull)
 
-  /** Private Vercel Blob URL. Never expose directly — generate signed read URLs at render time. */
+  /**
+   * Private Vercel Blob URL. Never expose directly — generate signed read URLs at render time.
+   */
   blobUrl         String
   mimeType        String
   sizeBytes       Int
@@ -155,21 +249,21 @@ model SessionRecording {
    * Capture-stream identifier (Phase 1b — Pillar 2). Today the only
    * value in production is `"tutor:mic"`; Phase 4 will add
    * `"student:peer-<id>:mic"` rows for live student audio capture and
-   * (later) `"tutor:cam"` / `"student:peer-<id>:cam"` for video.
-   *
+   * (post-Sarah design seam) `"tutor:video"` / `"student:peer-<id>:video"` —
+   * see `docs/RECORDER-LIFECYCLE.md` § Video capture — design seam (NOT built).
    * The default backfills every pre-Phase-1b row to `"tutor:mic"` so
    * existing recordings show up as a single tutor stream in replay,
    * which matches the pre-Phase-1b mental model exactly. Multi-stream
    * sessions just become "rows with `streamId !== 'tutor:mic'` exist
    * for this whiteboardSessionId".
-   *
    * Kept as a free-form String (rather than an enum) so adding a new
    * stream kind in Phase 4 is purely a code change — no follow-up
    * migration to extend the enum.
    */
-  streamId        String   @default("tutor:mic")
+  streamId String @default("tutor:mic")
 
-  createdAt DateTime @default(now())
+  createdAt  DateTime    @default(now())
+  costEvents CostEvent[]
 
   @@index([adminUserId])
   @@index([studentId])
@@ -182,7 +276,9 @@ model SessionRecording {
    * compatibility (queries that don't filter by streamId).
    */
   @@index([whiteboardSessionId, streamId])
-  costEvents CostEvent[]
+  @@unique([whiteboardSessionId, orderIndex])
+  /// WS-A SF-1: close dup-row race between onSegmentUploaded and end-session createMany.
+  @@unique([whiteboardSessionId, blobUrl])
 }
 
 /**
@@ -190,7 +286,6 @@ model SessionRecording {
  * (in Phase 2) text/code documents the tutor and student worked through
  * together. Created when the tutor clicks "Start whiteboard session"
  * after acknowledging the consent checkbox; finalized on Stop.
- *
  * The model is intentionally library-agnostic (see plan guardrail #3):
  * the events blob is OUR canonical diff log shape (see
  * `src/lib/whiteboard/event-log.ts`), not Excalidraw's internal shape,
@@ -198,20 +293,31 @@ model SessionRecording {
  * sessions.
  */
 model WhiteboardSession {
-  id          String    @id @default(uuid())
-  /** Tutor who created the session (multi-tenant ownership). */
+  id          String       @id @default(uuid())
+  /**
+   * Tutor who created the session (multi-tenant ownership).
+   */
   adminUserId String
-  adminUser   AdminUser @relation("AdminWhiteboards", fields: [adminUserId], references: [id], onDelete: Cascade)
-  /** Student the session was for. */
+  adminUser   AdminUser    @relation("AdminWhiteboards", fields: [adminUserId], references: [id], onDelete: Cascade)
+  /**
+   * Student the session was for.
+   */
   studentId   String
-  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  /** Optional link to a note this session produced. SetNull so a note delete leaves the session itself recoverable. */
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /**
+   * Optional link to a note this session produced. SetNull so a note delete leaves the session itself recoverable.
+   */
   noteId      String?
   note        SessionNote? @relation(fields: [noteId], references: [id], onDelete: SetNull)
 
   startedAt       DateTime  @default(now())
   endedAt         DateTime?
   durationSeconds Int?
+
+  sessionPhase SessionPhase @default(PENDING)
+  sessionMode  SessionMode  @default(LIVE)
+  /// When tutor clicked Start (PENDING→ACTIVE); null while pending.
+  activatedAt  DateTime?
 
   /**
    * Guardrail #4 — tutor checked the consent box before starting.
@@ -246,12 +352,26 @@ model WhiteboardSession {
   snapshotBlobUrl String?
 
   /**
+   * WS-G — server-side FFmpeg concat of mixdown replay segments into one
+   * seamless WebM blob. Nullable until the post-finalize `after()` job
+   * completes; when absent or failed, replay falls back to multi-segment
+   * `SessionRecording` rows (no audio lost).
+   */
+  concatBlobUrl String?
+
+  /**
+   * WS-G — duration of `concatBlobUrl` in whole seconds (from ffmpeg probe
+   * after re-encode). Feeds replay scrubber / WS-L duration path when the
+   * canonical concat blob is used.
+   */
+  concatDurationSeconds Int?
+
+  /**
    * Sarah's explicit ask (blocker #24): session timer that starts when
    * BOTH parties first connect to the live room and is read by both
    * clients to compute elapsed. Survives one-side disconnect — the
    * other side's clock keeps running off this fixed point. Null until
    * the student joins (tutor-solo sessions stay null and show no timer).
-   *
    * Kept for backwards compatibility + the read-only review surface
    * ("session anchor" in case a tutor wants to know when the student
    * first showed up). NOT used as the displayed timer anymore — see
@@ -263,7 +383,6 @@ model WhiteboardSession {
    * Wyzant-style billable time: total milliseconds during which BOTH
    * parties were connected to the live room. Persisted by heartbeats
    * from the tutor's workspace via POST /api/whiteboard/[id]/active-ping.
-   *
    * Sarah's expectation (Apr 2026): "the timer should pause when the
    * student isn't there". Storing the accumulated value (rather than
    * computing wall-clock from `bothConnectedAt`) means a student drop /
@@ -284,17 +403,201 @@ model WhiteboardSession {
    */
   lastActiveAt DateTime?
 
-  /** Audio segments captured alongside the strokes (parallel to SessionNote.recordings). */
-  audioRecordings SessionRecording[]    @relation("WhiteboardAudio")
-  /** Tokenized join links the tutor mints to invite the student to the live session. */
-  joinTokens      WhiteboardJoinToken[]
+  /**
+   * Audio segments captured alongside the strokes (parallel to SessionNote.recordings).
+   */
+  audioRecordings  SessionRecording[]    @relation("WhiteboardAudio")
+  /**
+   * Tokenized join links the tutor mints to invite the student to the live session.
+   */
+  joinTokens       WhiteboardJoinToken[]
+  /**
+   * Per-chunk transcription rows (recording re-arch Phase 1).
+   */
+  transcriptChunks TranscriptChunk[]
+  /**
+   * Auto-generated session notes (recording re-arch Phase 1).
+   */
+  tutorNote        TutorNote?
 
-  createdAt DateTime @default(now())
+  /// B2: frozen consent snapshot at session start (legal record).
+  consentSnapshot SessionConsentSnapshot?
+
+  /// WS-J — rounding rule locked at session start (copied from AdminUser defaults).
+  roundingIncrementMin Int?
+  roundingMode         String?
+
+  /// WS-J — frozen billable display at session close (immutable once set).
+  billedDurationMin Int?
+  billedStartLocal  String?
+  billedEndLocal    String?
+  sessionDateLocal  String?
+  /// IANA timezone frozen at close (copied at start, resolved with fallback at close).
+  tutorTimezone     String?
+
+  sessionParticipants SessionParticipant[]
+
+  /// WS-B: cursor for ~1s live event-batch persistence (wave 0).
+  lastPersistedBatchSeq Int @default(0)
+  lastPersistedToIndex  Int @default(-1)
+
+  whiteboardEventBatches WhiteboardEventBatch[]
+
+  createdAt  DateTime    @default(now())
+  costEvents CostEvent[]
 
   @@index([adminUserId])
   @@index([studentId])
   @@index([noteId])
-  costEvents CostEvent[]
+}
+
+/// ~1s batched whiteboard event persistence (WS-B, wave 0).
+model WhiteboardEventBatch {
+  id                  String            @id @default(cuid())
+  whiteboardSessionId String
+  whiteboardSession   WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  batchSeq            Int
+  fromEventIndex      Int
+  toEventIndex        Int
+  eventsJson          Json
+  /// Required on every batch for multi-page recovery.
+  boardDocumentJson   Json
+  schemaVersion       Int
+  createdAt           DateTime          @default(now())
+
+  @@unique([whiteboardSessionId, batchSeq])
+  @@index([whiteboardSessionId, createdAt])
+  @@index([whiteboardSessionId, toEventIndex])
+}
+
+model SessionParticipant {
+  id                  String            @id @default(uuid())
+  whiteboardSessionId String
+  whiteboardSession   WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  learnerProfileId    String
+  learnerProfile      LearnerProfile    @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  joinedAt            DateTime          @default(now())
+  leftAt              DateTime?
+
+  @@unique([whiteboardSessionId, learnerProfileId])
+}
+
+/**
+ * Per-chunk transcription result keyed by whiteboard session + blob URL.
+ * Recording re-arch Phase 1 — populated by the chunk-transcribe queue consumer.
+ */
+model TranscriptChunk {
+  id                    String    @id @default(cuid())
+  sessionId             String
+  /**
+   * Uploaded segment blob URL — idempotency key with sessionId.
+   */
+  chunkBlobUrl          String
+  /**
+   * Start offset in the monotonic recording-time clock (ms).
+   */
+  recordingTimeOffsetMs Int
+  /**
+   * Chunk audio duration from the transcription API response (ms).
+   */
+  durationMs            Int?
+  /**
+   * Assembled transcript text for this chunk.
+   */
+  transcript            String    @default("")
+  /**
+   * pending | transcribing | done | failed — see TranscriptChunkStatus in transcript-types.ts
+   */
+  status                String
+  /**
+   * Capture-stream identifier — mirrors SessionRecording.streamId.
+   * Defaults to tutor mic for backward compatibility with pre-per-speaker rows.
+   */
+  streamId              String    @default("tutor:mic")
+  /**
+   * Optional per-speaker label (e.g. peer id) for future per-lane transcription.
+   */
+  speakerId             String?
+  transcribedAt         DateTime?
+  error                 String?
+  /**
+   * Transcription attempt count — incremented on each failed worker run.
+   * Cron sweep skips rows at TRANSCRIBE_SWEEP_MAX_ATTEMPTS.
+   */
+  attempts              Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  session    WhiteboardSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  extraction TranscriptChunkExtraction?
+
+  @@unique([sessionId, chunkBlobUrl])
+  @@index([sessionId, recordingTimeOffsetMs])
+  @@index([sessionId, streamId])
+  @@index([status, updatedAt])
+}
+
+/**
+ * Map-step output: structured per-chunk extraction (topics, questions, etc.).
+ * Recording re-arch Phase 1 — optional until map layer ships (Phase 4 target).
+ */
+model TranscriptChunkExtraction {
+  id               String   @id @default(cuid())
+  sessionId        String
+  chunkId          String   @unique
+  /**
+   * JSON string[] — topics covered in this chunk.
+   */
+  topics           String   @default("[]")
+  /**
+   * JSON string[] — student questions in this chunk.
+   */
+  studentQuestions String   @default("[]")
+  /**
+   * JSON string[] — corrections made in this chunk.
+   */
+  corrections      String   @default("[]")
+  /**
+   * JSON string[] — follow-up items from this chunk.
+   */
+  followUps        String   @default("[]")
+  extractedAt      DateTime @default(now())
+
+  chunk TranscriptChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+/**
+ * Auto-generated tutor session notes (recording re-arch Phase 1).
+ * One row per whiteboard session; status drives post-session skeleton UX.
+ */
+model TutorNote {
+  id          String    @id @default(cuid())
+  sessionId   String    @unique
+  /**
+   * pending | generating | done | failed | partial — see TutorNoteStatus in transcript-types.ts
+   */
+  status      String
+  /**
+   * Final session note (markdown or structured text).
+   */
+  content     String?
+  /**
+   * True when generated on a partial transcript (timeout path).
+   */
+  isPartial   Boolean   @default(false)
+  error       String?
+  generatedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  /// WS-K: watermark — number of done chunks included in the last live reduce.
+  /// Used at End to decide if a final LLM call is needed (fast-path skip).
+  lastReducedChunkCount Int      @default(0)
+  /// WS-K: timestamp of last live reduce. Used for time-based debounce in enqueueLiveReduce.
+  lastLiveReduceAt      DateTime?
+
+  session WhiteboardSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 /**
@@ -305,37 +608,39 @@ model WhiteboardSession {
  * on tutor Stop.
  */
 model WhiteboardJoinToken {
-  id                  String   @id @default(uuid())
+  id                  String            @id @default(uuid())
   whiteboardSessionId String
   whiteboardSession   WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
-  token               String   @unique
+  token               String            @unique
   expiresAt           DateTime
   revokedAt           DateTime?
-  createdAt           DateTime @default(now())
+  createdAt           DateTime          @default(now())
 
   @@index([whiteboardSessionId])
   @@index([token])
 }
 
 model NoteView {
-  id         String   @id @default(uuid())
-  /** Share link token (not an FK — survives link regeneration, old views just become orphans). */
+  id         String      @id @default(uuid())
+  /**
+   * Share link token (not an FK — survives link regeneration, old views just become orphans).
+   */
   shareToken String
   noteId     String
   note       SessionNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  seenAt     DateTime @default(now())
+  seenAt     DateTime    @default(now())
 
   @@unique([shareToken, noteId])
   @@index([shareToken])
 }
 
 model ShareLink {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   studentId String
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  token     String   @unique
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  token     String    @unique
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([studentId])
 }
@@ -363,33 +668,121 @@ model FeedbackItem {
 }
 
 model AdminUser {
-  id            String    @id @default(uuid())
-  email         String    @unique
+  id                      String                 @id @default(uuid())
+  email                   String                 @unique
   /// Null for Google-OAuth-only admins and test accounts. Never null for
   /// password-login admins. Making this nullable (SEC-1 Dispatch A) is
   /// additive — existing rows keep their hashes.
-  passwordHash  String?
-  displayName   String?
+  passwordHash            String?
+  displayName             String?
   /// When true: credentials login is blocked; this account is an
   /// impersonation target only. Default false = all existing rows are
   /// real admins until explicitly updated (see scripts/seed-admin-google.sql).
-  isTestAccount Boolean   @default(false)
+  isTestAccount           Boolean                @default(false)
+  /// When true: this account was created by the dev-tools fixture dashboard
+  /// and may be deleted by it. The delete path checks this flag in the WHERE
+  /// clause — rows where isTestFixture=false are physically undelectable via
+  /// the dev-tools path, even if their id is passed.
+  isTestFixture           Boolean                @default(false)
   /// Role determines experience + capabilities (SEC-1 follow-up).
   /// ADMIN: dashboard + impersonation. TUTOR: workspace only, cannot impersonate.
   /// Default TUTOR — new accounts land in the safe/restricted role by default.
   /// Orthogonal to isTestAccount (a TUTOR can be a real login OR a test account target).
-  role          AdminRole @default(TUTOR)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  students      Student[]
-  emailMessages EmailMessage[] @relation("AdminEmailMessages")
-  emailConfigs  EmailConfig[] @relation("AdminEmailConfigs")
-  oauthConnections OAuthEmailConnection[] @relation("AdminOAuthConnections")
-  recordings    SessionRecording[] @relation("AdminRecordings")
-  whiteboardSessions WhiteboardSession[] @relation("AdminWhiteboards")
-  costEvents    CostEvent[]
-  initiatedImpersonations ImpersonationLog[] @relation("AdminImpersonations")
-  wasImpersonatedIn       ImpersonationLog[] @relation("ImpersonatedBy")
+  role                    AdminRole              @default(TUTOR)
+  /// Tutor approval status (B1 signup-waitlist).
+  /// New signups default WAITLISTED; all existing rows are backfilled to APPROVED.
+  /// WAITLISTED tutors are blocked from incurring any external cost.
+  approvalStatus          TutorApprovalStatus    @default(WAITLISTED)
+  /// Timestamp when this account was approved by an operator.
+  approvedAt              DateTime?
+  /// AdminUser.id of the operator who approved this account.
+  approvedByAdminId       String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  students                Student[]
+  emailMessages           EmailMessage[]         @relation("AdminEmailMessages")
+  emailConfigs            EmailConfig[]          @relation("AdminEmailConfigs")
+  oauthConnections        OAuthEmailConnection[] @relation("AdminOAuthConnections")
+  recordings              SessionRecording[]     @relation("AdminRecordings")
+  whiteboardSessions      WhiteboardSession[]    @relation("AdminWhiteboards")
+  costEvents              CostEvent[]
+  initiatedImpersonations ImpersonationLog[]     @relation("AdminImpersonations")
+  wasImpersonatedIn       ImpersonationLog[]     @relation("ImpersonatedBy")
+  /// TOTP 2FA enrollment. Null = not enrolled; populated after enrollment.
+  /// isTestAccount rows are EXEMPT and will never have a twoFactor row.
+  twoFactor               AdminUser2FA?
+  claimInvites            StudentClaimInvite[]   @relation("TutorClaimInvites")
+  /// B2: consent records where this tutor is the recipient of the parent's consent grant.
+  consentRecords          ConsentRecord[]        @relation("TutorConsentRecords")
+  /// Trusted-browser records for 30-day 2FA login skip. ADDITIVE ONLY.
+  trustedDevices          AdminTrustedDevice[]
+
+  /// WS-J — tutor billing defaults for new sessions (copied onto session at start).
+  defaultRoundingIncrementMin Int?
+  defaultRoundingMode         String?
+  /// IANA timezone for billing local-time display (e.g. America/Denver).
+  tutorTimezone               String?
+}
+
+/// TOTP 2FA enrollment for AdminUser accounts (Identity Phase 1).
+/// ADDITIVE ONLY — no existing columns are renamed or dropped.
+/// totpSecretEnc: AES-256-GCM encrypted base32 TOTP secret; NEVER plaintext.
+/// Rotating or losing TOTP_ENCRYPTION_KEY requires re-enrolling all tutors
+/// (see docs/PLATFORM-ASSUMPTIONS.md for the key-rotation story).
+model AdminUser2FA {
+  id                   String                   @id @default(uuid())
+  adminUserId          String                   @unique
+  adminUser            AdminUser                @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  /// AES-256-GCM ciphertext. Format: base64url(iv) + "." + base64url(ciphertext+authTag).
+  /// The plaintext TOTP secret is NEVER stored or logged.
+  totpSecretEnc        String
+  enrolledAt           DateTime                 @default(now())
+  lastVerifiedAt       DateTime?
+  /// Rotation: new pending secret stored here while current totpSecretEnc remains valid.
+  /// Swapped atomically to totpSecretEnc on rotateTotpConfirm; cleared on success/abandon.
+  pendingTotpSecretEnc String?
+  /// When rotation was started. Null when no rotation is in progress.
+  pendingEnrolledAt    DateTime?
+  backupCodes          AdminUser2FABackupCode[]
+}
+
+/// Single-use backup codes for TOTP 2FA recovery (Identity Phase 1).
+/// ADDITIVE ONLY — no existing columns are renamed or dropped.
+/// codeHash: bcrypt hash of the one-time plaintext code. Plaintext shown once at enrollment.
+model AdminUser2FABackupCode {
+  id        String       @id @default(uuid())
+  twoFaId   String
+  twoFa     AdminUser2FA @relation(fields: [twoFaId], references: [id], onDelete: Cascade)
+  /// bcrypt hash of the one-time plaintext code. Single-use; usedAt set on redemption.
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  @@index([twoFaId])
+}
+
+/// Trusted-browser record for admin/tutor 2FA login skip (30-day).
+/// ADDITIVE ONLY — no existing columns renamed or dropped.
+/// Raw device token is NEVER stored — only HMAC-SHA-256(rawToken, ADMIN_TFA_DEVICE_HMAC_SECRET).
+model AdminTrustedDevice {
+  id          String    @id @default(uuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  /// HMAC-SHA-256(rawToken, ADMIN_TFA_DEVICE_HMAC_SECRET). Raw token NEVER stored or logged.
+  tokenHash   String    @unique
+
+  /// Truncated User-Agent (max 128 chars on write) for device list UI.
+  deviceLabel String?
+
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime  @default(now())
+  /// Fixed 30-day absolute expiry from creation (no sliding renewal).
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  @@index([adminUserId])
+  @@index([adminUserId, revokedAt])
 }
 
 /// Audit log for every admin impersonation session. endedAt = null means
@@ -459,10 +852,10 @@ model WaitlistEntry {
 }
 
 model CostEvent {
-  id     String @id @default(uuid())
-  kind   CostEventKind
+  id    String        @id @default(uuid())
+  kind  CostEventKind
   /// e.g. `whisper-1`, `gpt-4o-mini` — exact model id string from the API call
-  model  String
+  model String
 
   inputTokens  Int?
   outputTokens Int?
@@ -470,12 +863,18 @@ model CostEvent {
 
   estimatedCostUsd Decimal? @db.Decimal(10, 6)
 
-  adminUserId    String?
-  adminUser      AdminUser?       @relation(fields: [adminUserId],    references: [id], onDelete: SetNull)
-  studentId      String?
-  student        Student?         @relation(fields: [studentId],      references: [id], onDelete: SetNull)
-  sessionRecordingId String?
-  sessionRecording   SessionRecording? @relation(fields: [sessionRecordingId], references: [id], onDelete: SetNull)
+  bytesTransferred Float?
+  gbMonths         Float?
+  computeGbHr      Float?
+  rateCardVersion  String?
+  sessionId        String?
+
+  adminUserId         String?
+  adminUser           AdminUser?         @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+  studentId           String?
+  student             Student?           @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  sessionRecordingId  String?
+  sessionRecording    SessionRecording?  @relation(fields: [sessionRecordingId], references: [id], onDelete: SetNull)
   whiteboardSessionId String?
   whiteboardSession   WhiteboardSession? @relation(fields: [whiteboardSessionId], references: [id], onDelete: SetNull)
 
@@ -487,5 +886,364 @@ model CostEvent {
   @@index([adminUserId, createdAt])
   @@index([studentId, createdAt])
   @@index([createdAt])
+  @@index([whiteboardSessionId, createdAt])
+  @@index([sessionId, createdAt])
 }
 
+// =============================================================================
+// IDENTITY PHASE 2 — Three-Principal Data Model (ADDITIVE, schema-only pass)
+// New tables are empty on deploy; Student.learnerProfileId is all NULL.
+// Business/audit tables (WhiteboardSession, SessionRecording, CostEvent, etc.)
+// continue referencing Student by opaque id — no PII columns added to them.
+// =============================================================================
+
+/// Parent or self-learner account that holds the legal/billing relationship.
+/// PII isolation: billing, consent, and contact data lives here; business/audit
+/// tables (Sessions, Recordings, CostEvents) reference Student by opaque id.
+/// Tombstone pattern: on COPPA deletion-on-request, PII is redacted but the
+/// row is kept so business FK references (SessionNote, etc.) stay intact.
+model AccountHolder {
+  id                 String                    @id @default(uuid())
+  email              String                    @unique
+  /// Bcrypt hash (12 rounds) of the AccountHolder's password.
+  /// Null for accounts created via OAuth or before P2a is applied.
+  passwordHash       String?
+  /// Display name chosen at signup. Nullable for legacy rows.
+  displayName        String?
+  /// Timestamp when the AccountHolder verified their email. Null = unverified.
+  /// Required before login is permitted (anti-spam; prevents orphaned accounts).
+  emailVerifiedAt    DateTime?
+  /// true when the account holder IS the learner (adult self-learner flow).
+  isSelfLearner      Boolean                   @default(false)
+  /// IAC-7: globally unique family identifier used in child login handles (username@familyid).
+  /// Lazily set when the first child_pin_required LearnerProfile credential is created.
+  /// Editable later via family-settings (must remain globally unique).
+  /// Null for accounts with no child_pin_required learners (adult self-learners, account_holder_session families).
+  familyId           String?                   @unique
+  /// On honored COPPA deletion: email and name are redacted, row is retained
+  /// so tutor business records (notes, recordings) remain coherent.
+  tombstonedAt       DateTime?
+  /// When true: this account was created by the dev-tools fixture dashboard
+  /// and may be deleted by it. The delete path checks this flag in the WHERE
+  /// clause — physically incapable of deleting real (non-fixture) users.
+  isTestFixture      Boolean                   @default(false)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  learnerProfiles    LearnerProfile[]
+  emailTokens        AccountHolderEmailToken[]
+  sessions           AccountHolderSession[]
+  learnerCredentials LearnerCredential[]
+
+  @@index([email])
+  @@index([familyId])
+}
+
+/// One-time email tokens for AccountHolder flows (signup, password-reset, etc.).
+model AccountHolderEmailToken {
+  id                     String                         @id @default(uuid())
+  accountHolderId        String
+  accountHolder          AccountHolder                  @relation(fields: [accountHolderId], references: [id], onDelete: Cascade)
+  tokenHash              String                         @unique
+  purpose                AccountHolderEmailTokenPurpose
+  expiresAt              DateTime
+  consumedAt             DateTime?
+  /// For CRITICAL_ACTION tokens: JSON payload binding this token to a specific action.
+  /// Example: '{"action":"change_consent","learnerProfileId":"..."}'
+  payload                String?
+  /// For SIGNUP_VERIFY tokens sent to a child's email (optional email upgrade §4.8):
+  /// identifies which LearnerProfile the verification applies to. Null = AH email verify.
+  targetLearnerProfileId String?
+  createdAt              DateTime                       @default(now())
+
+  @@index([accountHolderId])
+}
+
+/// A single learner identity under an AccountHolder.
+/// One AccountHolder can have multiple LearnerProfiles (e.g. two kids).
+/// Tombstone pattern: on COPPA deletion, displayName is replaced with a
+/// redacted placeholder ("Deleted learner") and tombstonedAt is set.
+/// Restrict on AccountHolder delete: must tombstone profiles first so
+/// business references remain consistent.
+model LearnerProfile {
+  id              String                 @id @default(uuid())
+  accountHolderId String
+  accountHolder   AccountHolder          @relation(fields: [accountHolderId], references: [id], onDelete: Restrict)
+  /// After tombstone: replaced with a redacted placeholder, e.g. "Deleted learner".
+  displayName     String
+  tombstonedAt    DateTime?
+  /// When true: this profile was created by the dev-tools fixture dashboard
+  /// and may be deleted by it. The delete path checks this flag in the WHERE
+  /// clause — physically incapable of deleting real learner profiles.
+  isTestFixture   Boolean                @default(false)
+  /// IAC-5/6: access mode for this learner profile.
+  /// account_holder_session: learner accessed via owning AccountHolder session (parent selects).
+  /// child_pin_required: learner authenticates independently via username@familyid + PIN.
+  accessMode      LearnerAccessMode      @default(account_holder_session)
+  /// IAC-5/8: true when this LearnerProfile IS the AccountHolder themselves (adult self-learner).
+  /// Set at signup or via "connect yourself as a learner" in the claim interstitial.
+  isSelfLearner   Boolean                @default(false)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  credential      LearnerCredential?
+  deviceSessions  LearnerDeviceSession[]
+  /// IAC-2: one LearnerProfile can be linked to multiple tutor-scoped Student rows (multi-tutor).
+  students        Student[]
+  /// B2: versioned per-tutor consent records for this learner.
+  consentRecords  ConsentRecord[]
+  /// B2: optional child-narrowing restrictions (defaults all-false = no restrictions).
+  consentRestriction ConsentRestriction?
+  sessionParticipants SessionParticipant[]
+
+  @@index([accountHolderId])
+}
+
+/// PIN/password credential for learner login (optional — token-only flows skip this).
+model LearnerCredential {
+  id               String         @id @default(uuid())
+  learnerProfileId String         @unique
+  learnerProfile   LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  /// IAC-7: denormalized from learnerProfile.accountHolderId for the per-family username unique index.
+  /// Must be set at create time to match learnerProfile.accountHolderId. Never changes after creation.
+  accountHolderId  String
+  accountHolder    AccountHolder  @relation(fields: [accountHolderId], references: [id], onDelete: Cascade)
+  /// IAC-7: username is unique per-family (@@unique with accountHolderId).
+  /// Two families can both have "dragon"; same family cannot have duplicate usernames.
+  username         String
+  /// bcrypt hash of the learner's PIN or password.
+  secretHash       String
+  /// Soft-disable during erasure grace (Option A reversible tombstone); login fail-closed when true.
+  disabled         Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  /// IAC-7: per-family username uniqueness (global uniqueness removed).
+  @@unique([accountHolderId, username])
+}
+
+/// Long-lived device session token for a learner (issued after successful auth).
+/// Q-4 LOCKED: 90-day sliding window, parent-revocable.
+/// Store expiry and revocation timestamp here; enforcement logic is a later phase.
+model LearnerDeviceSession {
+  id               String         @id @default(uuid())
+  learnerProfileId String
+  learnerProfile   LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  tokenHash        String         @unique
+  /// Q-4 LOCKED: 90-day sliding expiry. Parent can revoke early via revokedAt.
+  expiresAt        DateTime
+  lastSeenAt       DateTime       @default(now())
+  revokedAt        DateTime?
+  /// User-agent snippet for device-management UI (truncated to 128 chars on write).
+  deviceInfo       String?
+  createdAt        DateTime       @default(now())
+
+  @@index([learnerProfileId])
+}
+
+/// Invitation the tutor mints so an AccountHolder can claim a Student record.
+/// The tokenHash is the credential — scoped, time-limited, single-use (claimedAt set on use).
+/// adminUserId (not tutorId) follows the repo's AdminUser FK naming convention.
+/// §6.4: token renamed to tokenHash (SHA-256 of raw token; hash-only storage).
+model StudentClaimInvite {
+  id                       String    @id @default(uuid())
+  studentId                String
+  student                  Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// Tutor (AdminUser) who minted this invite.
+  adminUserId              String
+  adminUser                AdminUser @relation("TutorClaimInvites", fields: [adminUserId], references: [id], onDelete: Cascade)
+  /// SHA-256(rawToken). Raw token is emailed; never stored here.
+  tokenHash                String    @unique
+  expiresAt                DateTime
+  /// Set when the invite is successfully used to complete a claim.
+  claimedAt                DateTime?
+  /// Set when the tutor revokes the invite OR post-claim sibling cleanup runs.
+  revokedAt                DateTime?
+  /// AccountHolder who completed the claim (set alongside claimedAt in same transaction).
+  claimedByAccountHolderId String?
+  createdAt                DateTime  @default(now())
+
+  @@index([studentId])
+  @@index([adminUserId])
+}
+
+/// Server-side opaque session for AccountHolder (parent / adult self-learner).
+/// Immediately revocable: set revokedAt or bulk-revoke on password reset / compromise.
+/// Raw token stored ONLY in the HttpOnly cookie `mynk_ah_session`.
+/// Only HMAC-SHA-256(rawToken, AH_SESSION_HMAC_SECRET) is persisted here.
+model AccountHolderSession {
+  id              String        @id @default(uuid())
+  accountHolderId String
+  accountHolder   AccountHolder @relation(fields: [accountHolderId], references: [id], onDelete: Cascade)
+
+  /// HMAC-SHA-256(rawToken, AH_SESSION_HMAC_SECRET). Raw token is never stored or logged.
+  tokenHash String @unique
+
+  /// True once AccountHolder has passed TOTP verification (if enrolled in Phase 6).
+  /// Always false in Phase 2 — wired now so Phase 6 needs no ALTER TABLE.
+  twoFactorVerified Boolean @default(false)
+
+  /// User-agent snippet for session management UI.
+  deviceInfo String?
+
+  /// Absolute expiry timestamp; renewed via sliding window on each validated request.
+  expiresAt DateTime
+
+  lastUsedAt DateTime  @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([accountHolderId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+/// Durable rate-limit state for operator auth endpoints (MEDIUM-severity, IAC-11).
+/// Replaces in-memory `auth:<ip>` and `2fa:<ip>` Map counters in middleware so
+/// state survives Vercel cold starts and is shared across serverless instances.
+///
+/// Row kinds:
+///   kind="ah-login"   scopeKey="ah-login:<normalizedEmail>"   — AccountHolder login (10/min)
+///   kind="2fa-verify" scopeKey="2fa-verify:<adminUserId>"     — operator 2FA verify (20/min)
+///
+/// Each row tracks a single fixed window: requestCount increments atomically;
+/// windowResetAt marks when the window expires. On expiry the row is reset in-place.
+///
+/// Stable-key rationale: x-forwarded-for varies across Vercel proxy hops so an
+/// IP-scoped key never accumulates reliably (same lesson learned on LearnerLoginThrottle).
+/// Email (AH login) and adminUserId (2FA) are per-session-stable identity keys.
+model AuthThrottle {
+  id            String   @id @default(cuid())
+  /// "ah-login:<normalizedEmail>" or "2fa-verify:<adminUserId>"
+  scopeKey      String   @unique
+  /// "ah-login" | "2fa-verify"
+  kind          String
+  /// Requests counted in the current window.
+  requestCount  Int      @default(0)
+  /// Absolute timestamp when the current window expires.
+  windowResetAt DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([kind, updatedAt])
+}
+
+/// Durable rate-limit state for learner PIN login (IAC-10).
+/// Replaces module-global Map/Set in learner-pin-rate-limit.ts so state
+/// survives Vercel cold starts and is shared across serverless instances.
+///
+/// Two row kinds share this table:
+///   kind="soft"  scopeKey="soft:<username>:<ip>"         — per-username+IP soft cooldown
+///   kind="hard"  scopeKey="hard:<familyId>:<username>"   — per-credential hard lock (IP-independent)
+model LearnerLoginThrottle {
+  id            String    @id @default(cuid())
+  /// "soft:<normalizedUsername>:<ip>" or "hard:<familyId>:<username>"
+  scopeKey      String    @unique
+  /// "soft" | "hard"
+  kind          String
+  failureCount  Int       @default(0)
+  /// Soft cooldown expiry. Null = no active cooldown.
+  cooldownUntil DateTime?
+  /// Hard-lock timestamp. Non-null = locked; set idempotently once count ≥ 13.
+  hardLockedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([kind, updatedAt])
+}
+
+// =============================================================================
+// B2 PARENT PRIVACY CONSENT (ADDITIVE — gate B2, feat/b2-consent)
+// All three tables are empty on deploy; no existing rows are touched.
+// Enforcement is dormant until CONSENT_ENFORCEMENT=true.
+// =============================================================================
+
+/// Versioned per-tutor consent record set by the parent (AccountHolder).
+/// Each "Save preferences" creates a new version (MAX+1 or 1 for first).
+/// Legal record: onDelete: Restrict on both FKs — rows are never deleted.
+/// Per-tutor: (learnerProfileId, adminUserId) pair; consent for tutor A
+/// does not propagate to tutor B.
+model ConsentRecord {
+  id                        String         @id @default(uuid())
+  learnerProfileId          String
+  learnerProfile            LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Restrict)
+  adminUserId               String
+  adminUser                 AdminUser      @relation("TutorConsentRecords", fields: [adminUserId], references: [id], onDelete: Restrict)
+  /// Version counter — monotonically increasing per (learnerProfileId, adminUserId).
+  /// Starts at 1; incremented on each "Save preferences".
+  version                   Int
+  /// V1 consent toggles — boolean ceiling set by the parent.
+  allowLiveSession          Boolean
+  allowAudioRecording       Boolean
+  allowWhiteboardRecording  Boolean
+  allowNoteSending          Boolean
+  /// AccountHolder who set this record (must equal LearnerProfile.accountHolderId).
+  setByAccountHolderId      String
+  /// Capture method — always "electronic" in V1 (web form).
+  captureMethod             String         @default("electronic")
+  setAt                     DateTime       @default(now())
+
+  /// Per-tutor versioning uniqueness.
+  @@unique([learnerProfileId, adminUserId, version])
+  @@index([learnerProfileId, adminUserId])
+}
+
+/// Child-narrowing restrictions (floor) set on a LearnerProfile.
+/// In V1 all default to false (no restrictions from child side).
+/// No child-facing UI ships in V1; reserved for future phase.
+/// Cascade: deleting a LearnerProfile removes its restrictions.
+model ConsentRestriction {
+  id                          String         @id @default(uuid())
+  learnerProfileId            String         @unique
+  learnerProfile              LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  restrictAudioRecording      Boolean        @default(false)
+  restrictWhiteboardRecording Boolean        @default(false)
+  restrictNoteSending         Boolean        @default(false)
+  createdAt                   DateTime       @default(now())
+  updatedAt                   DateTime       @updatedAt
+}
+
+/// Frozen consent state at the moment a WhiteboardSession was created.
+/// Legal record: onDelete: Restrict on whiteboardSession — must tombstone
+/// snapshot before deleting a session that has a legal consent record.
+/// consentRecordId/Version are null when no record existed at session start
+/// (unclaimed learner or pre-B2 session).
+model SessionConsentSnapshot {
+  id                        String            @id @default(uuid())
+  whiteboardSessionId       String            @unique
+  whiteboardSession         WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Restrict)
+  /// Effective consent values frozen at session start.
+  allowLiveSession          Boolean
+  allowAudioRecording       Boolean
+  allowWhiteboardRecording  Boolean
+  allowNoteSending          Boolean
+  /// Reference to the ConsentRecord used to compute this snapshot.
+  /// Null when no record existed (unclaimed / pre-consent session).
+  consentRecordId           String?
+  consentRecordVersion      Int?
+  frozenAt                  DateTime          @default(now())
+}
+
+/// Resumable learner/family right-to-erasure job (E1).
+/// Tombstone runs in `requested`; blob purge must not start until purgeEligibleAt (7-day grace).
+/// scopeId is a plain indexed string (LP or AH id) — no FK because targets are tombstoned, not deleted.
+/// Partial unique index erasure_job_active_scope (one active job per scope) is in migration SQL — Prisma cannot express WHERE.
+model ErasureJob {
+  id                   String            @id @default(uuid())
+  scopeKind            ErasureScopeKind
+  scopeId              String
+  status               ErasureJobStatus  @default(requested)
+  requestedAt          DateTime          @default(now())
+  /// Principal kind + opaque id, e.g. "admin:<uuid>" (v1 admin-only trigger).
+  requestedByPrincipal String
+  /// requestedAt + 7 days — worker must not advance past requested until now() >= this.
+  purgeEligibleAt      DateTime
+  blobInventoryJson    Json?
+  blobsDeletedJson     Json?
+  lastError            String?
+  completedAt          DateTime?
+  canceledAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([scopeKind, scopeId])
+  @@index([status, purgeEligibleAt])
+}

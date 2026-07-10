@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/operator";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 
 export const dynamic = "force-dynamic";
 
@@ -12,48 +15,55 @@ export default async function AdminFeedbackPage() {
   });
 
   return (
-    <div className="card">
-      <h1 style={{ marginTop: 0 }}>Feedback inbox</h1>
-      <p className="muted">
-        <strong>This page only lists submissions.</strong> To send feedback yourself (even while signed
-        in), use{" "}
-        <Link href="/feedback" style={{ fontWeight: 600 }}>
-          Send feedback
-        </Link>{" "}
-        in the top nav — that opens the public <code>/feedback</code> form.
-      </p>
-
-      <div className="divider" />
-
-      {items.length === 0 ? (
-        <p className="muted">
-          No submissions yet.{" "}
-          <Link href="/feedback" style={{ textDecoration: "underline", fontWeight: 600 }}>
-            Open the public form (/feedback)
+    <AdminPageShell
+      title="Feedback inbox"
+      description={
+        <>
+          <strong>This page only lists submissions.</strong> To send feedback yourself (even while
+          signed in), use{" "}
+          <Link
+            href="/feedback"
+            className="font-semibold text-foreground underline-offset-4 hover:underline"
+          >
+            Send feedback
           </Link>{" "}
-          to send a test — not this URL.
-        </p>
-      ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          {items.map((f) => (
-            <div key={f.id} className="card">
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{f.kind}</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    {new Date(f.createdAt).toLocaleString()}
-                    {f.contactEmail ? ` • ${f.contactEmail}` : ""}
-                    {f.page ? ` • ${f.page}` : ""}
-                  </div>
+          in the top nav — that opens the public <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/feedback</code> form.
+        </>
+      }
+    >
+      <AdminSectionCard
+        title="Submissions"
+        contentClassName="p-0"
+      >
+        {items.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-muted-foreground">
+            No submissions yet.{" "}
+            <Link
+              href="/feedback"
+              className="font-semibold text-foreground underline-offset-4 hover:underline"
+            >
+              Open the public form (/feedback)
+            </Link>{" "}
+            to send a test — not this URL.
+          </div>
+        ) : (
+          <ul className="divide-y divide-border" role="list">
+            {items.map((f) => (
+              <li key={f.id} className="px-4 py-4 space-y-2">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <p className="text-sm font-semibold text-foreground">{f.kind}</p>
+                  <p className="text-xs font-mono text-muted-foreground">
+                    <LocalDateTimeText dateTime={f.createdAt.toISOString()} />
+                    {f.contactEmail ? ` · ${f.contactEmail}` : ""}
+                    {f.page ? ` · ${f.page}` : ""}
+                  </p>
                 </div>
-              </div>
-              <div className="divider" />
-              <div style={{ whiteSpace: "pre-wrap" }}>{f.message}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{f.message}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </AdminSectionCard>
+    </AdminPageShell>
   );
 }
-

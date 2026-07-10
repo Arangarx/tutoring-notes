@@ -18,12 +18,26 @@
  * `onRecordingActive` and `onRecorded` callbacks via test-only buttons.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+jest.mock("@/lib/recording/upload", () => ({
+  uploadAudioDirect: jest.fn(),
+  uploadAudioWithRetry: jest.fn(),
+}));
 
 type RecorderStubProps = {
   onRecordingActive?: (active: boolean) => void;
-  onRecorded: (audio: { blobUrl: string; mimeType: string; sizeBytes: number; filename: string }) => void;
+  onRecorded: (
+    audio: {
+      blobUrl?: string;
+      blob?: Blob;
+      mimeType: string;
+      sizeBytes: number;
+      filename: string;
+    },
+    meta?: { autoRollover?: boolean }
+  ) => void;
 };
 
 jest.mock("@/app/admin/students/[id]/AudioRecordInput", () => {
@@ -61,6 +75,23 @@ jest.mock("@/app/admin/students/[id]/AudioRecordInput", () => {
           >
             stub-finish
           </button>
+          <button
+            type="button"
+            data-testid="stub-recorder-rollover"
+            onClick={() => {
+              onRecorded(
+                {
+                  mimeType: "audio/webm",
+                  sizeBytes: 128,
+                  filename: "part-1.webm",
+                  blob: new Blob(["rollover-audio"], { type: "audio/webm" }),
+                },
+                { autoRollover: true }
+              );
+            }}
+          >
+            stub-rollover
+          </button>
         </div>
       );
     },
@@ -75,6 +106,11 @@ jest.mock("@/app/admin/students/[id]/AudioUploadInput", () => ({
 }));
 
 import AudioInputTabs from "@/app/admin/students/[id]/AudioInputTabs";
+import { uploadAudioWithRetry } from "@/lib/recording/upload";
+
+const uploadWithRetryMock = uploadAudioWithRetry as jest.MockedFunction<
+  typeof uploadAudioWithRetry
+>;
 
 function Harness({
   initialTab = "record" as "text" | "upload" | "record",
@@ -169,5 +205,37 @@ describe("AudioInputTabs — recording-in-progress confirm (B3)", () => {
     expect(confirmSpy.mock.calls[0][0]).toMatch(/discard the current audio/i);
     expect(onAudioCleared).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("active-tab")).toHaveTextContent("text");
+  });
+});
+
+describe("AudioInputTabs — WS-N admin rollover segment upload", () => {
+  beforeEach(() => {
+    uploadWithRetryMock.mockReset();
+    uploadWithRetryMock.mockResolvedValue({
+      ok: true,
+      blobUrl: "https://blob.test/rollover-segment.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 128,
+    });
+  });
+
+  test("rollover segment without blobUrl uploads and forwards blobUrl to onAudioReady", async () => {
+    const onAudioReady = jest.fn();
+    render(<Harness onAudioReady={onAudioReady} />);
+
+    await userEvent.click(screen.getByTestId("stub-recorder-rollover"));
+
+    await waitFor(() => {
+      expect(uploadWithRetryMock).toHaveBeenCalledTimes(1);
+    });
+    expect(onAudioReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blobUrl: "https://blob.test/rollover-segment.webm",
+        mimeType: "audio/webm",
+        sizeBytes: 128,
+        filename: "part-1.webm",
+      }),
+      { keepRecorderMounted: true }
+    );
   });
 });

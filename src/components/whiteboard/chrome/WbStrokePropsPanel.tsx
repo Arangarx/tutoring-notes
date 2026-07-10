@@ -1,0 +1,301 @@
+"use client";
+
+import { useState } from "react";
+import {
+  triggerBringForward,
+  triggerBringToFront,
+  triggerDeleteSelected,
+  triggerSendBackward,
+  triggerSendToBack,
+} from "@/lib/whiteboard/undo-redo";
+import {
+  EXCALIDRAW_STROKE_HEX,
+  WB_INK_ADAPTIVE_SENTINEL,
+  WB_STROKE_PRESETS,
+  WB_STROKE_WIDTHS,
+} from "@/styles/token-values";
+import { WbCustomSlider } from "@/components/whiteboard/chrome/WbCustomSlider";
+import { StrokeWidthIcon } from "@/components/whiteboard/chrome/wb-icons";
+
+export type WbStrokePropsPanelProps = {
+  strokeColor: string;
+  strokeWidth: number;
+  opacity: number;
+  roughness: number;
+  /** Excalidraw currentItemRoundness — "sharp" | "round" */
+  roundness: "sharp" | "round";
+  moreStylesOpen: boolean;
+  /** Theme-resolved hex for the adaptive ink swatch: #1e293b (light) or #ffffff (dark). */
+  inkHex: string;
+  onStrokeChange: (updates: {
+    color?: string;
+    width?: number;
+    opacity?: number;
+    roughness?: number;
+  }) => void;
+  onMoreStylesToggle: () => void;
+  onRoughnessChange: (roughness: number) => void;
+  onRoundnessChange: (roundness: "sharp" | "round") => void;
+  /** When false, hide roughness controls (no-op for freedraw / eraser / text). Default true. */
+  showRoughness?: boolean;
+  /** When false, hide edge-sharpness controls (no-op for line/arrow/freedraw). Default true. */
+  showRoundness?: boolean;
+};
+
+/** Roughness level icons — simple SVGs representing Architect / Artist / Cartoon. Exported for reuse in sidebar summary. */
+export const RoughnessIcon = ({ level }: { level: 0 | 1 | 2 }) => (
+  <svg
+    width={24}
+    height={14}
+    viewBox="0 0 24 14"
+    fill="none"
+    aria-hidden
+    style={{ display: "block" }}
+  >
+    {level === 0 && (
+      /* Architect: perfectly straight diagonal line */
+      <line
+        x1="3"
+        y1="11"
+        x2="21"
+        y2="3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    )}
+    {level === 1 && (
+      /* Artist: gently wavy line */
+      <path
+        d="M2 7 Q6 3 10 7 Q14 11 18 7 Q20 5 22 7"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        fill="none"
+      />
+    )}
+    {level === 2 && (
+      /* Cartoon: jagged zigzag */
+      <polyline
+        points="2,11 6,3 10,11 14,3 18,11 22,3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    )}
+  </svg>
+);
+
+const ROUGHNESS_OPTIONS = [
+  { value: 0 as const, label: "Architect" },
+  { value: 1 as const, label: "Artist" },
+  { value: 2 as const, label: "Cartoon" },
+];
+
+/**
+ * Edge sharpness icons — L-corner glyphs that read unambiguously as
+ * "sharp corner" vs "rounded corner," rather than two similar rectangles.
+ */
+export const SharpnessIcon = ({ type }: { type: "sharp" | "round" }) => (
+  <svg
+    width={22}
+    height={22}
+    viewBox="0 0 22 22"
+    fill="none"
+    aria-hidden
+    style={{ display: "block" }}
+  >
+    {type === "sharp" ? (
+      /* Sharp: two lines meeting at a right-angle — clearly a sharp corner */
+      <path d="M5 17 L5 5 L17 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="miter" />
+    ) : (
+      /* Round: arc from vertical to horizontal — clearly a rounded corner */
+      <path d="M5 17 L5 9 Q5 5 9 5 L17 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    )}
+  </svg>
+);
+
+const ROUNDNESS_OPTIONS: { value: "sharp" | "round"; label: string }[] = [
+  { value: "sharp", label: "Sharp" },
+  { value: "round", label: "Round" },
+];
+
+export function WbStrokePropsPanel({
+  strokeColor,
+  strokeWidth,
+  opacity,
+  roughness,
+  roundness,
+  moreStylesOpen,
+  inkHex,
+  onStrokeChange,
+  onMoreStylesToggle,
+  onRoughnessChange,
+  onRoundnessChange,
+  showRoughness = true,
+  showRoundness = true,
+}: WbStrokePropsPanelProps) {
+  const [opacityPreview, setOpacityPreview] = useState<number | null>(null);
+  const displayOpacity = opacityPreview ?? opacity;
+
+  return (
+    <div
+      className="mynk-wb-props-panel-inner"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      {/* ── Stroke color ── always visible */}
+      <div className="mynk-wb-props-section">
+        <div className="mynk-wb-props-section-title">Stroke color</div>
+        <div className="mynk-wb-props-swatches">
+          {WB_STROKE_PRESETS.map((p) => {
+            const isInk = p.hex === WB_INK_ADAPTIVE_SENTINEL;
+            // Display hex: adaptive (white in dark / dark in light) for visual preview only.
+            const displayHex = isInk ? inkHex : p.hex;
+            // Stored hex: ink always stores EXCALIDRAW_STROKE_HEX (#1e293b).
+            // Excalidraw's dark-mode canvas filter inverts it to white automatically.
+            // Never store #ffffff — it would invert to black.
+            const storeHex = isInk ? EXCALIDRAW_STROKE_HEX : p.hex;
+            const isActive = strokeColor === storeHex;
+            return (
+              <button
+                key={p.hex}
+                type="button"
+                className={`mynk-wb-swatch${isActive ? " mynk-wb-swatch--active" : ""}`}
+                style={{ backgroundColor: displayHex }}
+                aria-label={p.label}
+                aria-pressed={isActive}
+                onClick={() => onStrokeChange({ color: storeHex })}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Stroke width ── always visible */}
+      <div className="mynk-wb-props-section">
+        <div className="mynk-wb-props-section-title">Stroke width</div>
+        <div className="mynk-wb-props-widths">
+          {WB_STROKE_WIDTHS.map((w) => (
+            <button
+              key={w.value}
+              type="button"
+              className={`mynk-wb-width-btn${strokeWidth === w.value ? " mynk-wb-width-btn--active" : ""}`}
+              aria-label={w.label}
+              aria-pressed={strokeWidth === w.value}
+              onClick={() => onStrokeChange({ width: w.value })}
+            >
+              <StrokeWidthIcon lineH={w.lineH} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Opacity ── always visible */}
+      <div className="mynk-wb-props-section">
+        <div className="mynk-wb-props-section-header">
+          <div className="mynk-wb-props-section-title">Opacity</div>
+          <span className="mynk-wb-props-opacity-val">{displayOpacity}%</span>
+        </div>
+        <div className="mynk-wb-slider-wrap">
+          <WbCustomSlider
+            value={opacity}
+            ariaLabel="Stroke opacity"
+            testId="wb-opacity-slider"
+            thumbTestId="wb-opacity-slider-thumb"
+            onChange={(v) => onStrokeChange({ opacity: v })}
+            onLiveValueChange={setOpacityPreview}
+          />
+        </div>
+      </div>
+
+      <div className="mynk-wb-popover-sep" />
+
+      <button
+        type="button"
+        className="mynk-wb-chip mynk-wb-more-styles-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          onMoreStylesToggle();
+        }}
+        aria-expanded={moreStylesOpen}
+        data-testid="wb-more-styles-btn"
+      >
+        {moreStylesOpen ? "▴ Less styles" : "▾ More styles"}
+      </button>
+
+      {moreStylesOpen && (
+        <div className="mynk-wb-more-styles-area">
+          {showRoughness && (
+            <div className="mynk-wb-props-section" data-testid="wb-roughness-section">
+              <div className="mynk-wb-props-section-title">Roughness</div>
+              <div className="mynk-wb-props-chips mynk-wb-roughness-chips">
+                {ROUGHNESS_OPTIONS.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    className={`mynk-wb-chip mynk-wb-roughness-chip${roughness === r.value ? " mynk-wb-chip--active" : ""}`}
+                    title={r.label}
+                    aria-label={r.label}
+                    aria-pressed={roughness === r.value}
+                    onClick={() => onRoughnessChange(r.value)}
+                  >
+                    <RoughnessIcon level={r.value} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showRoundness && (
+            <div className="mynk-wb-props-section" data-testid="wb-roundness-section">
+              <div className="mynk-wb-props-section-title">Edge sharpness</div>
+              <div className="mynk-wb-props-chips mynk-wb-roughness-chips">
+                {ROUNDNESS_OPTIONS.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    className={`mynk-wb-chip mynk-wb-roughness-chip mynk-wb-sharpness-chip${roundness === r.value ? " mynk-wb-chip--active" : ""}`}
+                    title={r.label}
+                    aria-label={r.label}
+                    aria-pressed={roundness === r.value}
+                    onClick={() => onRoundnessChange(r.value)}
+                  >
+                    <SharpnessIcon type={r.value} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Z-order ── */}
+          <div className="mynk-wb-props-section mynk-wb-zorder-section">
+            <div className="mynk-wb-props-section-title">Z-order</div>
+            <div className="mynk-wb-props-chips" style={{ marginBottom: 8 }}>
+              {[
+                { label: "Send to back", fn: triggerSendToBack },
+                { label: "Send backward", fn: triggerSendBackward },
+                { label: "Bring forward", fn: triggerBringForward },
+                { label: "Bring to front", fn: triggerBringToFront },
+              ].map(({ label, fn }) => (
+                <button key={label} type="button" className="mynk-wb-zorder-btn" onClick={() => fn()}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="mynk-wb-delete-btn"
+            onClick={() => triggerDeleteSelected()}
+          >
+            Delete selected
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

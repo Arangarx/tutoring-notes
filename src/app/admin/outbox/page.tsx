@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getStudentScope, studentsWhereForScope } from "@/lib/student-scope";
+import { getStudentScope } from "@/lib/student-scope";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { LocalDateTimeText } from "@/components/LocalDateTimeText";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export const dynamic = "force-dynamic";
 
@@ -19,41 +24,45 @@ export default async function OutboxPage() {
   });
 
   return (
-    <div className="card">
-      <h1 style={{ marginTop: 0 }}>Outbox</h1>
-      <p className="muted">
-        Sent and queued email messages. Use this to review what was sent and to copy share links if
-        needed.
-      </p>
-
-      <div className="divider" />
-
-      {messages.length === 0 ? (
-        <p className="muted">No messages yet.</p>
-      ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          {messages.map((m) => (
-            <div key={m.id} className="card">
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{m.subject}</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    To {m.toEmail} &bull; {new Date(m.createdAt).toLocaleString()}
+    <AdminPageShell
+      title="Outbox"
+      description="Sent and queued email messages. Use this to review what was sent and to copy share links if needed."
+    >
+      <AdminSectionCard title="Messages" contentClassName="p-0">
+        {messages.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">No messages yet.</p>
+        ) : (
+          <ul className="divide-y divide-border" role="list">
+            {messages.map((m) => (
+              <li key={m.id} className="space-y-3 px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{m.subject}</p>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
+                      To {m.toEmail} &bull;{" "}
+                      <LocalDateTimeText dateTime={m.createdAt.toISOString()} />
+                    </p>
                   </div>
                 </div>
-              </div>
-              <div className="divider" />
-              <div className="row">
-                <input readOnly value={m.linkUrl} />
-                <a className="btn" href={m.linkUrl} target="_blank" rel="noreferrer">
-                  Open link
-                </a>
-              </div>
-              <div style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{m.bodyText}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={m.linkUrl}
+                    className="h-9 min-w-0 flex-1 font-mono text-xs"
+                    aria-label="Share link URL"
+                  />
+                  <Button asChild variant="outline" size="sm" className="shrink-0">
+                    <a href={m.linkUrl} target="_blank" rel="noreferrer">
+                      Open link
+                    </a>
+                  </Button>
+                </div>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{m.bodyText}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </AdminSectionCard>
+    </AdminPageShell>
   );
 }

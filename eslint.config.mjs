@@ -10,10 +10,8 @@ const designTokenMessage =
 export default [
   ...compat.extends("next/core-web-vitals"),
   {
-    files: ["src/**/*.{ts,tsx,js,jsx,css}"],
+    files: ["src/**/*.{ts,tsx,js,jsx}"],
     ignores: [
-      "src/app/globals.css",
-      "src/styles/tokens.css",
       "src/styles/token-values.ts",
       "src/app/icon.tsx",
       "src/**/*.test.ts",
@@ -21,6 +19,8 @@ export default [
       "src/__tests__/**",
     ],
     rules: {
+      // color-contrast: removed from eslint-plugin-jsx-a11y v6; enforced via axe-playwright
+      // (tests/visual/fixtures.ts — color-contrast enabled for Phase B1+).
       "no-restricted-syntax": [
         "error",
         {

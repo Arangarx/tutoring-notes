@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — Mobile Whiteboard Mock (2026-06-10)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root,[data-theme="light"]{
+  --surface-base:#f5f4ec;--surface-1:#fcfbf4;--surface-2:#ecebe1;--surface-3:#e3e2d8;
+  --border:#c5cfd0;--border-subtle:#e3e8e9;--border-strong:#4a6680;
+  --text:#15203a;--text-muted:#5a6877;--text-disabled:#94a3b8;--text-inverse:#fcfbf4;
+  --brand:#1e3d54;--accent:#e27d60;--accent-soft:#f8e0d6;--accent-text:#8a3c25;--accent-strong:#c96a50;--accent-on:#15203a;
+  --success:#16a34a;--destructive:#dc2626;--destructive-soft:rgba(220,38,38,0.10);
+  --popover:#fcfbf4;--card:#fcfbf4;--ring:var(--border-strong);
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.08);--shadow-md:0 4px 12px rgba(0,0,0,0.12);--shadow-lg:0 8px 24px rgba(0,0,0,0.20);
+  --overlay-scrim:rgba(0,0,0,0.35);
+  --radius-sm:6px;--radius-md:10px;
+  --font-body:"Inter",sans-serif;--font-display:"Fraunces",Georgia,serif;--font-mono:"JetBrains Mono",monospace;
+  --meta-header-bg:rgba(235,233,224,0.94);--meta-header-border:rgba(0,0,0,0.08);
+  --meta-chrome-fg:var(--text-muted);--meta-chrome-border:rgba(0,0,0,0.15);--meta-chrome-active-bg:rgba(0,0,0,0.06);
+  --callout-bg:rgba(226,125,96,0.12);--callout-border:rgba(226,125,96,0.45);
+  --laser-tutor:var(--accent);
+  --laser-student:#0891b2;
+  --board-paper:#faf9f5;
+  --board-paper-dark:#0a1e2a;
+}
+[data-theme="dark"]{
+  --surface-base:#051a24;--surface-1:#0e2a38;--surface-2:#142f3e;--surface-3:#1c3548;
+  --border:#1c3548;--border-subtle:#0e2a38;--border-strong:#6a8fa0;
+  --text:#f0ede4;--text-muted:#a5b5c0;--text-disabled:rgba(165,181,192,0.45);--text-inverse:#051a24;
+  --brand:#7ea4b1;--accent:#e27d60;--accent-soft:#2e1d18;--accent-text:#e8a08a;--accent-strong:#d06b4e;--accent-on:#051a24;
+  --success:#4ade80;--destructive:#fca5a5;--destructive-soft:rgba(239,68,68,0.12);
+  --popover:#0e2a38;--card:#0e2a38;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.30);--shadow-md:0 4px 12px rgba(0,0,0,0.40);--shadow-lg:0 8px 24px rgba(0,0,0,0.55);
+  --overlay-scrim:rgba(0,0,0,0.55);
+  --meta-header-bg:rgba(2,8,13,0.94);--meta-header-border:rgba(255,255,255,0.08);
+  --meta-chrome-fg:rgba(240,237,228,0.7);--meta-chrome-border:rgba(255,255,255,0.15);--meta-chrome-active-bg:rgba(255,255,255,0.12);
+  --callout-bg:rgba(226,125,96,0.15);--callout-border:rgba(226,125,96,0.5);
+  --board-paper:#0c2433;
+  --board-paper-dark:#061018;
+}
+html,body{font-family:var(--font-body);background:var(--surface-base);color:var(--text);min-height:100dvh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.meta-header{position:sticky;top:0;z-index:300;background:var(--meta-header-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--meta-header-border);padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.meta-title{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 60,"wght" 700;font-size:15px;margin-right:auto;letter-spacing:-0.02em}
+.meta-title .dot{color:var(--accent)}
+.meta-btn{font:500 11px var(--font-mono);padding:5px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--meta-chrome-border);color:var(--meta-chrome-fg);background:transparent;transition:all .12s}
+.meta-btn:hover,.meta-btn.active{background:var(--meta-chrome-active-bg);color:var(--text)}
+.meta-btn.state-active{background:var(--accent);border-color:var(--accent-strong);color:var(--accent-on);font-weight:600}
+.meta-sep{width:1px;height:18px;background:var(--meta-chrome-border);margin:0 2px}
+.mock-notes{max-width:1400px;margin:0 auto;padding:12px 16px 0;font-size:13px;line-height:1.55;color:var(--text-muted)}
+.mock-notes ul{margin:6px 0 0 18px}
+.viewport-root{flex:1;min-height:0;display:flex;flex-direction:column}
+.stage-devices{flex:1;display:flex;flex-direction:column;align-items:center;padding:12px 16px 20px;overflow:auto;min-height:0}
+.devices-row{display:flex;flex-wrap:wrap;gap:28px 36px;justify-content:center;width:100%;max-width:1680px}
+.devices-row.compare .device-wrap{flex:1 1 320px;max-width:calc(50% - 18px)}
+.device-wrap{display:none;flex-direction:column;align-items:center;gap:8px;width:100%}
+.device-wrap.visible{display:flex}
+.device-label{font:600 11px var(--font-mono);color:var(--text-muted);letter-spacing:.03em}
+.device-scale-outer{width:100%;display:flex;justify-content:center}
+.device-scale-inner{position:relative}
+.device-viewport{overflow:hidden;background:var(--surface-base);border:2px solid var(--border-strong);box-shadow:var(--shadow-lg);transform-origin:top center}
+.device-viewport[data-device="phone"]{border-radius:28px}
+.device-viewport[data-device="tablet"]{border-radius:18px}
+.device-screen{width:100%;height:100%;position:relative;overflow:hidden}
+
+/* ── Session shell (100% of device frame — not 100dvh, or landscape clips sheets off-screen) ── */
+.wb-shell{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--surface-base);overflow:hidden;position:relative}
+.wb-shell.phone-layout .wb-tablet-rail{display:none}
+.wb-shell.tablet-layout .wb-tablet-rail{display:flex}
+.wb-shell.tablet-layout .wb-phone-rail{display:none}
+.wb-shell.phone-layout .wb-phone-rail{display:none}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-phone-rail{display:flex}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-bottom-bar{display:none}
+
+/* Top bar — live desktop chrome */
+.wb-topbar{height:44px;flex-shrink:0;display:flex;align-items:center;gap:2px;padding:0 6px;background:var(--surface-1);border-bottom:1px solid var(--border);z-index:30}
+.wb-wordmark{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 60,"wght" 700;color:var(--brand);font-size:14px;letter-spacing:-0.025em;padding:0 4px;white-space:nowrap;flex-shrink:0}
+.wb-wordmark .dot{color:var(--accent)}
+.wb-live-badge{display:flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--accent-text);border-radius:999px;padding:3px 8px 3px 6px;font:500 11px var(--font-mono);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;flex-shrink:0}
+.wb-live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:wb-pulse 1.8s ease-in-out infinite;flex-shrink:0}
+@keyframes wb-pulse{0%,100%{opacity:1}50%{opacity:.65}}
+.wb-timer{font:600 14px var(--font-mono);color:var(--text);padding:0 4px;white-space:nowrap}
+.wb-topbar-spacer{flex:1;min-width:4px}
+.wb-tb-btn{height:32px;border-radius:6px;border:none;display:inline-flex;align-items:center;gap:4px;padding:0 8px;cursor:pointer;font:500 13px var(--font-body);color:var(--text-muted);background:transparent;transition:background .12s,color .12s;flex-shrink:0}
+.wb-tb-btn--icon{width:32px;padding:0;justify-content:center}
+.wb-tb-btn:hover:not(.wb-tb-btn--primary):not(.wb-tb-btn--copied){background:color-mix(in srgb,var(--surface-3) 75%,var(--text) 25%);color:var(--text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--border) 50%,var(--text) 50%)}
+.wb-tb-btn--primary{background:var(--accent);color:var(--accent-on);font-weight:600;padding:0 10px}
+.wb-tb-btn--primary:hover{background:var(--accent-strong)}
+.wb-tb-btn--mic-on{background:color-mix(in srgb,var(--accent) 14%,var(--surface-2));border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent)}
+.wb-tb-btn--mic-off{color:color-mix(in srgb,var(--destructive) 85%,var(--text-muted));border:1px solid color-mix(in srgb,var(--destructive) 28%,var(--border));background:color-mix(in srgb,var(--destructive) 7%,var(--surface-2))}
+.wb-mic-meter{display:flex;align-items:flex-end;gap:2px;height:14px}
+.wb-mic-bar{width:3px;border-radius:2px;background:var(--text-disabled);opacity:.45}
+.wb-mic-bar--b1{height:5px}.wb-mic-bar--b2{height:9px}.wb-mic-bar--b3{height:14px}
+.wb-mic-bar--active{background:var(--accent);opacity:1}
+
+/* Board tabs footer — SR-06 / SR-14 / SR-17: spreadsheet paradigm @ bottom */
+.wb-board-footer{flex-shrink:0;display:flex;align-items:stretch;background:var(--surface-1);border-top:1px solid var(--border);z-index:34;max-height:40px}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-board-footer{position:absolute;left:0;right:0;bottom:0;z-index:40;background:color-mix(in srgb,var(--surface-1) 94%,transparent);backdrop-filter:blur(8px)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-boards-list-btn{margin-left:48px}
+.wb-boards-list-btn{display:flex;align-items:center;gap:5px;flex-shrink:0;height:36px;padding:0 10px;border:none;border-right:1px solid var(--border);background:var(--card);color:var(--text);font:600 11px var(--font-body);cursor:pointer;white-space:nowrap}
+.wb-boards-list-btn:hover{background:var(--accent-soft)}
+.wb-boards-list-btn svg{flex-shrink:0;opacity:.85}
+.wb-shell[data-boards-collapsed] .wb-board-tabs{display:none}
+.wb-shell[data-boards-collapsed] .wb-boards-list-btn{border-right:none}
+.wb-board-tabs{height:36px;max-height:40px;flex:1;min-width:0;display:flex;align-items:stretch;padding:0 4px 0 0;background:transparent;overflow-x:auto;scrollbar-width:none}
+.wb-board-tabs::-webkit-scrollbar{display:none}
+.wb-board-tab-wrap{display:flex;align-items:stretch;flex-shrink:0;border-right:1px solid var(--border);transition:background .12s}
+.wb-board-tab-wrap--active{border-top:2px solid var(--accent);background:var(--card)}
+.wb-board-tab{display:flex;align-items:center;gap:6px;padding:0 12px;height:100%;border:none;background:transparent;color:var(--text-muted);font:500 12px var(--font-body);cursor:pointer;white-space:nowrap}
+.wb-board-tab-wrap--active .wb-board-tab{color:var(--text);font-weight:600}
+.wb-board-tab__dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.wb-board-tab--add{padding:0 12px;font-size:18px;font-weight:400;color:var(--text-muted);border:none;background:transparent;cursor:pointer;flex-shrink:0}
+.wb-board-tab--add:hover{color:var(--accent)}
+
+/* Body */
+.wb-body{flex:1;display:flex;min-height:0;overflow:hidden;position:relative}
+
+/* Tablet + phone-landscape slim rails */
+.wb-tablet-rail,.wb-phone-rail{width:44px;flex-shrink:0;display:none;flex-direction:column;align-items:center;padding:6px 0;gap:2px;background:var(--surface-1);border-right:1px solid var(--border);z-index:20}
+.wb-tablet-rail .wb-tool-btn,.wb-phone-rail .wb-tool-btn{width:36px;height:36px}
+.wb-shell.phone-layout[data-orientation="landscape"][data-toolbar-hidden] .wb-phone-rail{display:none}
+
+/* Canvas — reads as whiteboard */
+.wb-canvas{flex:1;position:relative;min-width:0;background:var(--board-paper);overflow:hidden}
+.wb-canvas::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 55%,color-mix(in srgb,var(--border) 18%,transparent) 100%);pointer-events:none;z-index:1}
+.wb-canvas-grid{display:none;position:absolute;inset:0;background-image:linear-gradient(var(--border-subtle) 1px,transparent 1px),linear-gradient(90deg,var(--border-subtle) 1px,transparent 1px);background-size:32px 32px;opacity:.35;pointer-events:none;z-index:0}
+.wb-shell[data-grid-on] .wb-canvas-grid{display:block}
+.wb-canvas-strokes{position:absolute;inset:0;pointer-events:none;z-index:2}
+.wb-canvas-pct{position:absolute;top:6px;left:6px;z-index:5;font:500 9px var(--font-mono);color:var(--text-muted);background:color-mix(in srgb,var(--surface-1) 85%,transparent);border:1px dashed var(--border);border-radius:4px;padding:2px 6px;pointer-events:none}
+
+/* Callouts — tutor vs student */
+.wb-callout{position:absolute;z-index:60;max-width:min(210px,48vw);font:500 10px var(--font-mono);line-height:1.35;color:var(--accent-text);background:var(--callout-bg);border:1px solid var(--callout-border);border-radius:6px;padding:6px 8px;pointer-events:none;box-shadow:var(--shadow-sm)}
+.wb-callout::before{content:"";position:absolute;width:8px;height:8px;background:var(--callout-bg);border-left:1px solid var(--callout-border);border-bottom:1px solid var(--callout-border);transform:rotate(-45deg)}
+.wb-callout--end{top:48px;right:8px}
+.wb-callout--end::before{right:12px;top:-5px;border-left:none;border-bottom:none;border-top:1px solid var(--callout-border);border-right:1px solid var(--callout-border)}
+.wb-callout--panel-toggle{top:6px;left:56px;bottom:auto;max-width:min(220px,52vw)}
+.wb-callout--panel-toggle::before{left:14px;top:-5px;bottom:auto;border-left:none;border-bottom:none;border-top:1px solid var(--callout-border);border-right:1px solid var(--callout-border)}
+.wb-callout--overflow{bottom:120px;right:8px}
+.wb-callout--overflow::before{right:14px;bottom:-5px}
+.wb-callout--student{bottom:10px;left:8px;max-width:min(240px,58vw)}
+.wb-callout--student::before{left:14px;bottom:-5px}
+.wb-callout--av{top:96px;right:8px;max-width:min(220px,50vw)}
+.wb-callout--av::before{right:14px;top:-5px;border-left:none;border-bottom:none;border-top:1px solid var(--callout-border);border-right:1px solid var(--callout-border)}
+.wb-callout--laser{top:40%;bottom:auto;left:8px;transform:none;max-width:min(220px,52vw);text-align:left}
+.wb-callout--laser::before{left:20px;margin-left:0;bottom:-5px}
+.wb-callout--boards{bottom:100px;left:8px;max-width:min(240px,56vw)}
+.wb-callout--boards::before{left:18px;bottom:-5px}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--panel-toggle{top:40px;left:8px;bottom:auto;max-width:min(190px,40vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--panel-toggle::before{left:14px;top:-5px;bottom:auto}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--overflow{bottom:auto;top:58%;left:52px;right:auto;max-width:min(200px,42vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--overflow::before{left:14px;top:auto;bottom:-5px;right:auto}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--student{bottom:108px;left:52px;top:auto;max-width:min(210px,44vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--laser{top:32%;left:52px;max-width:min(200px,40vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--boards{bottom:44px;left:52px;max-width:min(215px,44vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--boards::before{left:16px}
+.wb-callout strong{color:var(--text);font-weight:600}
+
+/* Panel toggle — persistent show/hide tools (top chrome bar, TM-12) */
+.wb-panel-toggle{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--accent-strong);background:var(--card);color:var(--text);font:600 11px var(--font-body);cursor:pointer;flex-shrink:0;box-shadow:var(--shadow-sm);transition:background .12s,box-shadow .2s}
+.wb-panel-toggle:hover{background:var(--accent-soft)}
+.wb-panel-toggle__chev{font-size:9px;color:var(--accent-text);transition:transform .2s}
+.wb-shell[data-toolbar-hidden] .wb-panel-toggle{background:var(--accent);color:var(--accent-on);border-color:var(--accent-strong);animation:wb-toggle-pulse 2.4s ease-in-out infinite}
+.wb-shell[data-toolbar-hidden] .wb-panel-toggle .wb-panel-toggle__chev{color:var(--accent-on)}
+@keyframes wb-toggle-pulse{0%,100%{box-shadow:var(--shadow-sm)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent),var(--shadow-sm)}}
+
+/* Bottom bar — collapsible */
+.wb-bottom-bar{flex-shrink:0;background:var(--card);border-top:1px solid var(--border);transition:transform .25s ease,opacity .2s;z-index:35}
+.wb-shell[data-toolbar-hidden] .wb-bottom-bar{transform:translateY(100%);opacity:0;pointer-events:none;position:absolute;left:0;right:0;bottom:0}
+.wb-props-mobile{display:none;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--card)}
+.wb-shell.phone-layout .wb-props-mobile,.wb-shell.tablet-layout .wb-props-mobile{display:block}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-props-mobile{display:none}
+/* Compact props chip — phone landscape only (replaces full-width props bar) */
+.wb-props-landscape-chip{display:none;position:absolute;z-index:45;top:8px;left:8px;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:999px;background:var(--card);cursor:pointer;font-size:11px;color:var(--text);box-shadow:var(--shadow-sm);transition:opacity .2s,transform .2s}
+.wb-props-landscape-chip:hover{background:var(--accent-soft)}
+.wb-props-landscape-chip .wb-summary-swatch{width:14px;height:14px}
+.wb-props-landscape-chip .wb-summary-stroke{width:18px}
+.wb-props-landscape-chip .wb-summary-chip{font-size:10px;padding:1px 5px}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-props-landscape-chip{display:inline-flex}
+.wb-shell.phone-layout[data-orientation="landscape"][data-toolbar-hidden] .wb-props-landscape-chip{display:none;pointer-events:none;opacity:0}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-canvas-pct{left:auto;right:8px}
+.wb-props-mobile-btn{width:100%;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:12px;color:var(--text)}
+.wb-summary-swatch{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:#15203a;flex-shrink:0}
+.wb-summary-stroke{width:24px;display:flex;align-items:center;justify-content:center}
+.wb-summary-stroke-line{display:block;width:100%;height:2px;background:var(--text);border-radius:1px}
+.wb-summary-chip{font:11px var(--font-mono);color:var(--text-muted);padding:2px 6px;border-radius:4px;background:var(--surface-2)}
+.wb-bottom-toolbar{height:52px;display:flex;align-items:center;justify-content:space-around;padding:0 2px;gap:0}
+.wb-tool-btn{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;position:relative;flex-shrink:0;transition:background .1s,color .1s}
+.wb-tool-btn:not(.wb-tool-btn--active):active{background:color-mix(in srgb,var(--surface-3) 75%,var(--text) 25%);color:var(--text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--border) 50%,var(--text) 50%)}
+.wb-tool-btn--active{background:var(--text);color:var(--text-inverse)}
+.wb-tool-btn--shapes{padding-right:0}
+.wb-tool-btn--wand-student{color:var(--laser-student)}
+.wb-tool-btn--wand-tutor{color:var(--laser-tutor)}
+.wb-pulldown-chevron{position:absolute;right:2px;bottom:2px;min-width:20px;min-height:20px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:inherit;opacity:.88}
+.wb-tool-btn--active .wb-pulldown-chevron{color:var(--text-inverse)}
+.wb-tool-btn--student-only{display:none}
+.wb-shell[data-role="student"] .wb-tool-btn--tutor-only{display:none}
+.wb-shell[data-role="student"] .wb-tool-btn--student-only{display:flex}
+.wb-shell.phone-layout .wb-tool-btn--tablet-only{display:none}
+.wb-shell.tablet-layout .wb-tool-btn--phone-only{display:none}
+
+/* AV pip — tutor-primary, cam on */
+.wb-av-pip{position:absolute;z-index:25;right:10px;top:10px;width:120px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);display:flex;flex-direction:column;overflow:hidden}
+.wb-shell.tablet-layout .wb-av-pip{width:140px}
+.wb-av-pip__handle{height:12px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);cursor:grab;font:10px var(--font-mono);letter-spacing:2px;color:var(--text-muted)}
+.wb-shell.phone-layout .wb-av-pip__handle,.wb-shell.tablet-layout .wb-av-pip__handle,.wb-shell.phone-layout .wb-av-resize,.wb-shell.tablet-layout .wb-av-resize{display:none}
+.wb-av-pip__tiles{padding:3px;display:flex;flex-direction:column;gap:3px}
+.wb-av-tile{border-radius:4px;position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:flex-start;color:var(--text-inverse)}
+.wb-av-tile span{position:absolute;top:3px;left:4px;font:600 8px var(--font-mono);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5);z-index:2}
+.wb-av-tile--primary{aspect-ratio:16/10;min-height:68px;background:linear-gradient(145deg,#2d4a5e 0%,#1a3040 40%,#3d5a6e 100%)}
+.wb-av-tile--primary::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 68% 32%,rgba(255,220,180,.35) 0%,transparent 45%);pointer-events:none}
+.wb-av-tile--secondary{aspect-ratio:16/9;min-height:36px;background:linear-gradient(145deg,#4a5568 0%,#2d3748 100%)}
+.wb-av-tile--secondary::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,rgba(200,210,220,.25) 0%,transparent 50%);pointer-events:none}
+.wb-av-tile--hidden{display:none}
+.wb-av-tile--cam-off{background:var(--surface-3)!important}
+.wb-av-tile--cam-off::after{display:none}
+.wb-av-tile--cam-off .wb-av-tile__avatar{position:absolute;inset:0;display:flex!important;align-items:center;justify-content:center;color:var(--text-muted)}
+.wb-shell[data-av-swapped] .wb-av-tile--primary{min-height:36px;aspect-ratio:16/9}
+.wb-shell[data-av-swapped] .wb-av-tile--secondary{min-height:68px;aspect-ratio:16/10}
+.wb-av-pip__controls{display:flex;flex-wrap:wrap;gap:3px;padding:5px 6px;border-top:1px solid var(--border);justify-content:center}
+.wb-av-btn{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;background:transparent;color:var(--text);transition:background .12s;flex-shrink:0}
+.wb-av-btn--on{background:color-mix(in srgb,var(--accent) 14%,var(--surface-2));border-color:color-mix(in srgb,var(--accent) 38%,var(--border))}
+.wb-av-btn--off{color:color-mix(in srgb,var(--destructive) 85%,var(--text-muted));border-color:color-mix(in srgb,var(--destructive) 28%,var(--border));background:color-mix(in srgb,var(--destructive) 7%,var(--surface-2))}
+.wb-av-btn--swap{font-size:9px;font-weight:700;font-family:var(--font-mono);width:auto;padding:0 6px;min-width:28px}
+.wb-av-resize{position:absolute;right:2px;bottom:2px;width:10px;height:10px;border-right:2px solid var(--text-muted);border-bottom:2px solid var(--text-muted);opacity:.5}
+
+/* Overlays */
+.wb-overlay-backdrop{display:none;position:absolute;inset:0;z-index:90;background:var(--overlay-scrim)}
+.wb-overlay-backdrop--open{display:block}
+.wb-props-sheet{display:none;position:absolute;left:0;right:0;bottom:0;z-index:95;max-height:52%;overflow-y:auto;background:var(--card);border-top:1px solid var(--border);border-radius:12px 12px 0 0;box-shadow:0 -4px 16px rgba(0,0,0,.15);padding:0 14px 16px;transform:translateY(100%);transition:transform .25s ease;flex-direction:column;gap:10px}
+.wb-props-sheet--touch{display:flex}
+.wb-props-sheet--open{transform:translateY(0)}
+.wb-props-sheet__handle-row{display:flex;align-items:center;justify-content:center;padding:10px 0 4px;position:relative}
+.wb-props-sheet__handle{width:36px;height:4px;border-radius:2px;background:var(--border)}
+.wb-props-sheet__close{position:absolute;right:0;top:6px;width:28px;height:28px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.wb-props-section-title{font:500 10px var(--font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px}
+.wb-props-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.wb-props-section-header .wb-props-section-title{margin-bottom:0}
+.wb-props-opacity-val{font:10px var(--font-mono);color:var(--text-muted)}
+.wb-popover-sep{height:1px;background:var(--border);margin:4px 0}
+.wb-props-chips{display:flex;gap:6px;flex-wrap:wrap}
+.wb-roughness-chip{width:36px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+.wb-more-styles-btn{width:100%;justify-content:center;display:flex}
+.wb-more-styles-area{margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:6px}
+.wb-zorder-btn{border:1px solid var(--border);background:var(--card);color:var(--text);font-size:11px;height:28px;padding:0 8px;border-radius:4px;font-weight:500;cursor:pointer;white-space:nowrap}
+.wb-delete-btn{width:100%;border:1px solid color-mix(in srgb,var(--destructive) 40%,var(--border));background:var(--card);color:var(--destructive);font-size:11px;height:28px;padding:0 8px;border-radius:4px;font-weight:500;cursor:pointer;margin-top:4px}
+.wb-summary-chip--icon{padding:2px 4px;background:transparent}
+.wb-props-swatches{display:flex;flex-wrap:wrap;gap:6px}
+.wb-swatch{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);cursor:pointer}
+.wb-swatch--active{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--ring)}
+.wb-props-widths{display:flex;gap:6px}
+.wb-width-btn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:4px;border:1px solid var(--border);background:transparent;cursor:pointer}
+.wb-width-btn--active{background:var(--accent-soft);border-color:var(--accent)}
+.wb-chip{border:1px solid var(--border);background:transparent;color:var(--text);font-size:11px;height:28px;padding:0 8px;border-radius:4px;font-weight:500;cursor:pointer}
+.wb-chip--active{background:var(--text);color:var(--text-inverse);border-color:var(--text)}
+.wb-slider-custom{position:relative;height:20px;display:flex;align-items:center;margin-top:4px}
+.wb-slider-custom__track{position:absolute;left:0;right:0;height:4px;border-radius:2px;background:var(--surface-2)}
+.wb-slider-custom__thumb{position:absolute;width:16px;height:16px;border-radius:50%;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.2);top:50%;margin-top:-8px;left:calc(72% * (100% - 16px) / 100%)}
+.wb-dismiss-hint{font:10px var(--font-mono);color:var(--text-muted);text-align:center;padding:4px 0 0;border-top:1px dashed var(--border);margin-top:4px}
+
+/* Overflow / shapes sheets */
+.wb-action-sheet{display:none;position:absolute;left:0;right:0;bottom:0;z-index:92;background:var(--popover);border-top:1px solid var(--border);border-radius:12px 12px 0 0;box-shadow:0 -4px 16px rgba(0,0,0,.15);padding:12px 14px 20px;transform:translateY(100%);transition:transform .25s ease;max-height:55%;overflow-y:auto}
+.wb-action-sheet--open{display:block;transform:translateY(0)}
+.wb-action-sheet h3{font-size:13px;font-weight:600;margin-bottom:10px}
+.wb-menu-item{width:100%;display:flex;align-items:center;gap:10px;padding:12px 8px;border:none;border-bottom:1px solid var(--border-subtle);background:transparent;font:inherit;font-size:14px;color:var(--text);cursor:pointer;text-align:left;min-height:44px}
+.wb-menu-item:last-child{border-bottom:none}
+.wb-menu-item--destructive{color:var(--destructive)}
+.wb-menu-item small{margin-left:auto;font:10px var(--font-mono);color:var(--text-muted)}
+.wb-shapes-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+.wb-shape-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:56px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:10px;font-weight:500}
+.wb-shape-btn--active{background:var(--text);color:var(--text-inverse);border-color:var(--text)}
+.wb-shape-btn:active:not(.wb-shape-btn--active){background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
+</style>
+</head>
+<body>
+<header class="meta-header">
+  <div class="meta-title">Mynk<span class="dot">·</span> Mobile Whiteboard <span style="font-size:11px;opacity:.55">live board · user-review rev</span></div>
+  <button class="meta-btn" data-view="phone" onclick="setView('phone',this)">Phone</button>
+  <button class="meta-btn" data-view="tablet" onclick="setView('tablet',this)">Tablet</button>
+  <button class="meta-btn active" data-view="compare" onclick="setView('compare',this)">Compare</button>
+  <span class="meta-sep"></span>
+  <button class="meta-btn active" data-orient="portrait" onclick="setPhoneOrient('portrait',this)">Portrait</button>
+  <button class="meta-btn" data-orient="landscape" onclick="setPhoneOrient('landscape',this)">Landscape</button>
+  <span class="meta-sep"></span>
+  <button class="meta-btn state-active" data-state="live" onclick="setMockState('live',this)">Live</button>
+  <button class="meta-btn" data-state="props" onclick="setMockState('props',this)">Props sheet</button>
+  <button class="meta-btn" data-state="overflow" onclick="setMockState('overflow',this)">Overflow ⋮</button>
+  <button class="meta-btn" data-state="grid" onclick="setMockState('grid',this)">Grid on</button>
+  <button class="meta-btn" data-state="shapes" onclick="setMockState('shapes',this)">Shapes</button>
+  <button class="meta-btn" data-state="boards" onclick="setMockState('boards',this)">Boards list</button>
+  <button class="meta-btn" data-state="boards-collapsed" onclick="setMockState('boards-collapsed',this)">Tabs collapsed</button>
+  <button class="meta-btn" data-state="toolbar-hidden" onclick="setMockState('toolbar-hidden',this)">Tools hidden</button>
+  <span class="meta-sep"></span>
+  <button class="meta-btn active" data-role="tutor" onclick="setRole('tutor',this)">Tutor</button>
+  <button class="meta-btn" data-role="student" onclick="setRole('student',this)">Student</button>
+  <button class="meta-btn" onclick="toggleTheme()" id="themeBtn">☾ Dark</button>
+</header>
+
+<div class="mock-notes">
+  <strong>Visual proposal only — no production code.</strong> Portrait-primary phone (390×844); landscape (844×390) supported via meta toggle — no rotate nudge. Incorporates tutor's-wife / student-perspective review (2026-06-10).
+  <ul>
+    <li><strong>Panel toggle (TM-12):</strong> persistent <em>Show tools / Hide tools</em> pill in the <strong>top chrome bar</strong> (session row, left cluster) — never over the canvas; always visible in shown/hidden states; opens &amp; closes props summary + tier-1 toolbar. Not gesture-only.</li>
+    <li><strong>Sheets:</strong> open via toolbar buttons (Styles, ⋮, props summary) — <em>not</em> bottom-edge swipe-up (avoids OS gesture collision). Swipe-down / backdrop / × to dismiss.</li>
+    <li><strong>Phone tier-1 (tutor):</strong> Select · Pencil · Eraser · Shapes▾ · Styles · Wand · ⋮</li>
+    <li><strong>Phone tier-1 (student):</strong> Select · Pencil · Eraser · Shapes▾ · Styles · Wand (laser) · ⋮ — matches tutor tier-1 set</li>
+    <li><strong>Board tabs (SR-06/14/17):</strong> bottom strip — spreadsheet paradigm (Google Sheets / Excel mobile); tabs sit above the bottom toolbar, <em>not</em> under the top bar. Overflow / tight width → bottom-left <em>Boards</em> list button opens overlay picker (iPad Sheets / Excel &ldquo;Sheets&rdquo; pattern).</li>
+    <li><strong>Phone landscape:</strong> tier-1 moves to slim left rail (same tools/order as portrait bottom bar); props summary = compact chip on canvas; bottom toolbar hidden — board footer stays pinned at bottom; <em>Boards</em> list button inset past left rail (no collision with props chip)</li>
+    <li><strong>Tablet tier-1:</strong> slim left rail (Select/Pencil/Eraser/Text/Wand) + bottom bar (Shapes▾ · Undo · Styles · ⋮)</li>
+    <li><strong>Canvas:</strong> sample board content (PDF page, graph, strokes) — reads as whiteboard, not empty room</li>
+    <li><strong>AV:</strong> tutor tile primary + cam on; student self hidden by default (tutor role: self visible); swap + show-self toggles</li>
+    <li><strong>Laser:</strong> student wand tier-1; tutor laser = coral, student laser = cyan (<code>--laser-student</code>, TBD)</li>
+    <li><strong>VP-02:</strong> grid OFF by default — use <em>Grid on</em> meta toggle</li>
+  </ul>
+</div>
+
+<div class="viewport-root">
+  <div class="stage-devices active" id="stageDevices">
+    <div class="devices-row compare" id="devicesRow">
+      <div class="device-wrap visible" id="phoneWrap" data-device="phone">
+        <div class="device-label" id="phoneLabel">Phone portrait · 390×844 · tier-1 toolbar</div>
+        <div class="device-scale-outer"><div class="device-scale-inner" id="phoneScaleInner">
+          <div class="device-viewport" id="phoneViewport" data-device="phone" data-w="390" data-h="844">
+            <div class="device-screen" id="phoneMount"></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="device-wrap visible" id="tabletWrap" data-device="tablet">
+        <div class="device-label">Tablet portrait · 834×1194 · slim rail + bottom bar</div>
+        <div class="device-scale-outer"><div class="device-scale-inner" id="tabletScaleInner">
+          <div class="device-viewport" id="tabletViewport" data-device="tablet" data-w="834" data-h="1194">
+            <div class="device-screen" id="tabletMount"></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Canonical shell template -->
+<template id="wbShellTemplate">
+<div class="wb-shell phone-layout" data-role="tutor">
+  <header class="wb-topbar">
+    <div class="wb-wordmark">Mynk<span class="dot">·</span></div>
+    <div class="wb-live-badge"><span class="wb-live-dot"></span>LIVE</div>
+    <div class="wb-timer">14m</div>
+    <button class="wb-panel-toggle" type="button" data-panel-toggle aria-label="Toggle tools panel">
+      <span class="wb-panel-toggle__chev">▾</span>
+      <span class="wb-panel-toggle__label">Hide tools</span>
+    </button>
+    <div class="wb-topbar-spacer"></div>
+    <button class="wb-tb-btn wb-tb-btn--icon wb-tb-btn--mic-on" title="Mic on" aria-label="Microphone">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      <div class="wb-mic-meter"><div class="wb-mic-bar wb-mic-bar--b1 wb-mic-bar--active"></div><div class="wb-mic-bar wb-mic-bar--b2 wb-mic-bar--active"></div><div class="wb-mic-bar wb-mic-bar--b3"></div></div>
+    </button>
+    <button class="wb-tb-btn wb-tb-btn--primary wb-end-btn">End session</button>
+  </header>
+
+  <div class="wb-body">
+    <aside class="wb-tablet-rail wb-tool-btn--tablet-only">
+      <button class="wb-tool-btn" title="Select"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3l14 9-7 1-4 7-3-17z"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--active" title="Pencil"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+      <button class="wb-tool-btn" title="Eraser"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></button>
+      <button class="wb-tool-btn" title="Text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--wand-tutor" title="Pointer wand (tutor laser)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
+    </aside>
+
+    <aside class="wb-phone-rail" aria-label="Drawing tools">
+      <button class="wb-tool-btn" title="Select"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3l14 9-7 1-4 7-3-17z"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--active" title="Pencil"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+      <button class="wb-tool-btn" title="Eraser"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--shapes" title="Shapes"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
+      <button class="wb-tool-btn" title="Styles" data-open-props><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--wand-tutor wb-tool-btn--tutor-only" title="Pointer wand (tutor)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--wand-student wb-tool-btn--student-only" title="Laser wand (student)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
+      <button class="wb-tool-btn" title="More" data-open-overflow><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+    </aside>
+
+    <main class="wb-canvas">
+      <div class="wb-canvas-grid"></div>
+      <div class="wb-canvas-strokes">
+        <svg width="100%" height="100%" viewBox="0 0 400 700" preserveAspectRatio="xMidYMid slice">
+          <!-- PDF page on board -->
+          <rect x="16" y="24" width="300" height="220" rx="3" fill="var(--surface-1)" stroke="var(--border)" stroke-width="1"/>
+          <line x1="32" y1="52" x2="300" y2="52" stroke="var(--border-subtle)" stroke-width="1"/>
+          <text x="32" y="72" font-family="Inter,sans-serif" font-size="11" font-weight="600" fill="var(--text)">Quadratic Functions — Ch. 4</text>
+          <text x="32" y="92" font-family="Inter,sans-serif" font-size="9" fill="var(--text-muted)">f(x) = ax² + bx + c</text>
+          <line x1="32" y1="108" x2="280" y2="108" stroke="var(--border-subtle)" stroke-width=".5" opacity=".6"/>
+          <line x1="32" y1="124" x2="260" y2="124" stroke="var(--border-subtle)" stroke-width=".5" opacity=".6"/>
+          <line x1="32" y1="140" x2="240" y2="140" stroke="var(--border-subtle)" stroke-width=".5" opacity=".6"/>
+          <!-- Mini graph on PDF -->
+          <line x1="48" y1="200" x2="120" y2="200" stroke="var(--text-muted)" stroke-width="1" opacity=".5"/>
+          <line x1="84" y1="168" x2="84" y2="216" stroke="var(--text-muted)" stroke-width="1" opacity=".5"/>
+          <path d="M 52 196 Q 84 152 116 196" stroke="var(--brand)" stroke-width="1.5" fill="none"/>
+          <!-- Board strokes — hand-drawn feel -->
+          <path d="M 40 280 Q 80 260 120 275 T 200 268" stroke="var(--text)" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".9"/>
+          <text x="210" y="272" font-family="Inter,sans-serif" font-size="13" font-weight="500" fill="var(--accent-text)">vertex here →</text>
+          <rect x="48" y="310" width="100" height="56" rx="4" fill="none" stroke="#2563eb" stroke-width="2" opacity=".75"/>
+          <text x="58" y="338" font-family="JetBrains Mono,monospace" font-size="10" fill="#2563eb">x = −b/2a</text>
+          <ellipse cx="300" cy="340" rx="42" ry="28" fill="none" stroke="var(--text)" stroke-width="1.8" opacity=".7"/>
+          <path d="M 60 420 L 140 400 L 180 440 L 100 460 Z" fill="color-mix(in srgb,var(--accent) 12%,transparent)" stroke="var(--accent)" stroke-width="1.5"/>
+          <!-- Tutor laser (coral) -->
+          <circle cx="175" cy="318" r="7" fill="var(--laser-tutor)" opacity=".95"/>
+          <line x1="175" y1="318" x2="130" y2="250" stroke="var(--laser-tutor)" stroke-width="2" stroke-linecap="round" opacity=".85"/>
+          <!-- Student laser (cyan — distinct, TBD) -->
+          <circle cx="260" cy="400" r="6" fill="var(--laser-student)" opacity=".95"/>
+          <line x1="260" y1="400" x2="310" y2="360" stroke="var(--laser-student)" stroke-width="2" stroke-linecap="round" opacity=".85"/>
+          <text x="268" y="418" font-family="JetBrains Mono,monospace" font-size="8" fill="var(--laser-student)">student laser</text>
+        </svg>
+      </div>
+      <div class="wb-canvas-pct" data-canvas-pct>Canvas ~84%</div>
+
+      <button class="wb-props-landscape-chip" type="button" data-open-props aria-label="Stroke properties — tap to expand">
+        <span class="wb-summary-swatch"></span>
+        <span class="wb-summary-stroke"><span class="wb-summary-stroke-line"></span></span>
+        <span class="wb-summary-chip">Styles</span>
+      </button>
+
+      <div class="wb-callout wb-callout--end"><strong>Tutor:</strong> End session · <strong>Student:</strong> Leave</div>
+      <div class="wb-callout wb-callout--panel-toggle"><strong>Tools toggle</strong> — top chrome bar (left); never over canvas; tap to show/hide toolbar + props bar</div>
+      <div class="wb-callout wb-callout--overflow wb-tool-btn--tutor-only"><strong>Tutor ⋮</strong> inserts, share, theme, board +</div>
+      <div class="wb-callout wb-callout--student"><strong>Student</strong> tier-1: select, pencil, eraser, shapes▾, styles, wand, ⋮</div>
+      <div class="wb-callout wb-callout--av"><strong>AV:</strong> tutor primary · cam on · student self hidden (tutor: self on)</div>
+      <div class="wb-callout wb-callout--laser">Tutor laser = coral · Student laser = cyan (<strong>TBD</strong>)</div>
+      <div class="wb-callout wb-callout--boards"><strong>Board tabs</strong> — bottom strip (Sheets/Excel); <strong>Boards</strong> button → overlay when tabs overflow or space is tight</div>
+
+      <div class="wb-av-pip" title="Video tiles">
+        <div class="wb-av-pip__handle">···</div>
+        <div class="wb-av-pip__tiles">
+          <div class="wb-av-tile wb-av-tile--primary" data-av-tile="tutor"><span>Tutor</span><div class="wb-av-tile__avatar" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div></div>
+          <div class="wb-av-tile wb-av-tile--secondary" data-av-tile="student"><span>You</span><div class="wb-av-tile__avatar" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div></div>
+        </div>
+        <div class="wb-av-pip__controls">
+          <button class="wb-av-btn wb-av-btn--on" data-av-mic title="Mic on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg></button>
+          <button class="wb-av-btn wb-av-btn--on" data-av-cam title="Camera on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+          <button class="wb-av-btn wb-av-btn--swap" data-av-swap title="Swap primary tile">⇅</button>
+          <button class="wb-av-btn wb-av-btn--on" data-av-self title="Show self-view"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <div class="wb-av-resize" aria-hidden="true"></div>
+      </div>
+
+      <div class="wb-overlay-backdrop" data-overlay="backdrop"></div>
+
+      <div class="wb-props-sheet wb-props-sheet--touch" data-overlay="props">
+        <div class="wb-props-sheet__handle-row">
+          <div class="wb-props-sheet__handle" title="Swipe down to dismiss"></div>
+          <button class="wb-props-sheet__close" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="wb-props-section-title">Stroke color</div>
+        <div class="wb-props-swatches">
+          <div class="wb-swatch wb-swatch--active" style="background:#15203a"></div>
+          <div class="wb-swatch" style="background:#5a6877"></div>
+          <div class="wb-swatch" style="background:#e27d60"></div>
+          <div class="wb-swatch" style="background:#2563eb"></div>
+          <div class="wb-swatch" style="background:#16a34a"></div>
+        </div>
+        <div class="wb-props-section-title">Stroke width</div>
+        <div class="wb-props-widths">
+          <button class="wb-width-btn"><span style="display:block;width:14px;height:1px;background:currentColor"></span></button>
+          <button class="wb-width-btn wb-width-btn--active"><span style="display:block;width:14px;height:2px;background:currentColor"></span></button>
+          <button class="wb-width-btn"><span style="display:block;width:14px;height:3px;background:currentColor"></span></button>
+          <button class="wb-width-btn"><span style="display:block;width:14px;height:5px;background:currentColor"></span></button>
+        </div>
+        <div class="wb-props-section-header">
+          <div class="wb-props-section-title">Opacity</div>
+          <span class="wb-props-opacity-val">72%</span>
+        </div>
+        <div class="wb-slider-custom"><div class="wb-slider-custom__track"></div><div class="wb-slider-custom__thumb"></div></div>
+        <div class="wb-popover-sep"></div>
+        <button class="wb-chip wb-more-styles-btn wb-chip--active" type="button">▴ Less styles</button>
+        <div class="wb-more-styles-area">
+          <div class="wb-props-section-title">Roughness</div>
+          <div class="wb-props-chips">
+            <button class="wb-chip wb-roughness-chip wb-chip--active" type="button" title="Architect" aria-label="Architect">
+              <svg width="24" height="14" viewBox="0 0 24 14" fill="none" aria-hidden><line x1="3" y1="11" x2="21" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button class="wb-chip wb-roughness-chip" type="button" title="Artist" aria-label="Artist">
+              <svg width="24" height="14" viewBox="0 0 24 14" fill="none" aria-hidden><path d="M2 7 Q6 3 10 7 Q14 11 18 7 Q20 5 22 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>
+            </button>
+            <button class="wb-chip wb-roughness-chip" type="button" title="Cartoon" aria-label="Cartoon">
+              <svg width="24" height="14" viewBox="0 0 24 14" fill="none" aria-hidden><polyline points="2,11 6,3 10,11 14,3 18,11 22,3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+          </div>
+          <div class="wb-props-section-title">Edge sharpness</div>
+          <div class="wb-props-chips">
+            <button class="wb-chip wb-roughness-chip wb-chip--active" type="button" title="Sharp" aria-label="Sharp">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden><path d="M5 17 L5 5 L17 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter"/></svg>
+            </button>
+            <button class="wb-chip wb-roughness-chip" type="button" title="Round" aria-label="Round">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden><path d="M5 17 L5 9 Q5 5 9 5 L17 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div class="wb-props-section-title">Z-order</div>
+          <div class="wb-props-chips" style="margin-bottom:8px">
+            <button class="wb-zorder-btn" type="button">Send to back</button>
+            <button class="wb-zorder-btn" type="button">Send backward</button>
+            <button class="wb-zorder-btn" type="button">Bring forward</button>
+            <button class="wb-zorder-btn" type="button">Bring to front</button>
+          </div>
+          <button class="wb-delete-btn" type="button">Delete selected</button>
+        </div>
+        <div class="wb-dismiss-hint">Opened via Styles button · dismiss: backdrop · swipe down · ×</div>
+      </div>
+
+      <div class="wb-action-sheet" data-overlay="overflow">
+        <h3>More tools</h3>
+        <button class="wb-menu-item wb-tool-btn--tutor-only">Insert PDF <small>tutor</small></button>
+        <button class="wb-menu-item wb-tool-btn--tutor-only">Insert image</button>
+        <button class="wb-menu-item wb-tool-btn--tutor-only">Insert equation ∑</button>
+        <button class="wb-menu-item">Text tool</button>
+        <button class="wb-menu-item wb-tool-btn--student-only">Follow tutor viewport <small>on</small></button>
+        <button class="wb-menu-item">Undo / Redo</button>
+        <button class="wb-menu-item wb-tool-btn--tutor-only">Share link</button>
+        <button class="wb-menu-item wb-tool-btn--tutor-only">Theme</button>
+        <button class="wb-menu-item wb-tool-btn--tutor-only">Add board +</button>
+        <button class="wb-menu-item">View options (grid)</button>
+        <p style="font:10px var(--font-mono);color:var(--text-muted);margin-top:8px">Opened via ⋮ button — not bottom-edge swipe</p>
+      </div>
+
+      <div class="wb-action-sheet" data-overlay="boards">
+        <h3>Boards · SR-17</h3>
+        <button class="wb-menu-item wb-board-tab-wrap--active"><span class="wb-board-tab__dot"></span> Board 1 <small>active</small></button>
+        <button class="wb-menu-item">Board 2</button>
+        <button class="wb-menu-item">Ch.4 PDF</button>
+        <button class="wb-menu-item wb-tool-btn--tutor-only">Add board + <small>tutor</small></button>
+        <p style="font:10px var(--font-mono);color:var(--text-muted);margin-top:8px">Opened via bottom-left Boards button — Sheets/Excel overlay pattern</p>
+      </div>
+
+      <div class="wb-action-sheet" data-overlay="shapes">
+        <h3>Shapes · PU-05</h3>
+        <div class="wb-shapes-grid">
+          <button class="wb-shape-btn wb-shape-btn--active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg>Line</button>
+          <button class="wb-shape-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>Arrow</button>
+          <button class="wb-shape-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Rect</button>
+          <button class="wb-shape-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 9-9 9-9-9 9-9z"/></svg>Diamond</button>
+          <button class="wb-shape-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="12" rx="10" ry="6"/></svg>Ellipse</button>
+        </div>
+        <p style="font:11px var(--font-mono);color:var(--text-muted)">Opened via Shapes▾ split-button. 56px touch cells.</p>
+      </div>
+    </main>
+  </div>
+
+  <footer class="wb-board-footer" aria-label="Board tabs">
+    <button class="wb-boards-list-btn" type="button" data-open-boards aria-label="All boards">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Boards</span>
+    </button>
+    <div class="wb-board-tabs">
+      <div class="wb-board-tab-wrap wb-board-tab-wrap--active">
+        <button class="wb-board-tab"><span class="wb-board-tab__dot"></span>Board 1</button>
+      </div>
+      <div class="wb-board-tab-wrap"><button class="wb-board-tab">Board 2</button></div>
+      <div class="wb-board-tab-wrap"><button class="wb-board-tab">Ch.4 PDF</button></div>
+      <button class="wb-board-tab--add wb-tool-btn--tutor-only" title="Add board">+</button>
+    </div>
+  </footer>
+
+  <div class="wb-bottom-bar">
+    <div class="wb-props-mobile" data-props-bar>
+      <button class="wb-props-mobile-btn" type="button" data-open-props aria-label="Stroke properties — tap to expand">
+        <span class="wb-summary-swatch"></span>
+        <span class="wb-summary-chip wb-summary-chip--icon" title="Architect" aria-label="Architect">
+          <svg width="24" height="14" viewBox="0 0 24 14" fill="none" aria-hidden><line x1="3" y1="11" x2="21" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="wb-summary-chip wb-summary-chip--icon" title="Sharp" aria-label="Sharp">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden><path d="M5 17 L5 5 L17 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter"/></svg>
+        </span>
+        <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">Colors &amp; styles</span>
+      </button>
+    </div>
+    <nav class="wb-bottom-toolbar" aria-label="Drawing tools">
+      <button class="wb-tool-btn wb-tool-btn--phone-only" title="Select"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3l14 9-7 1-4 7-3-17z"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--active" title="Pencil"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+      <button class="wb-tool-btn" title="Eraser"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--shapes" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
+      <button class="wb-tool-btn wb-tool-btn--phone-only" title="Styles" data-open-props><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--wand-tutor wb-tool-btn--tutor-only" title="Pointer wand (tutor)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--wand-student wb-tool-btn--student-only" title="Laser wand (student)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--tablet-only wb-tool-btn--shapes" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
+      <button class="wb-tool-btn wb-tool-btn--tablet-only" title="Undo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--tablet-only" title="Styles" data-open-props><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+      <button class="wb-tool-btn" title="More" data-open-overflow><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+    </nav>
+  </div>
+</div>
+</template>
+
+<script>
+const PHONE_PORTRAIT={w:390,h:844},PHONE_LANDSCAPE={w:844,h:390},TABLET_W=834,TABLET_H=1194;
+let mockState='live',currentRole='tutor',phoneOrient='portrait',shellPhone=null,shellTablet=null;
+
+function createShell(layout){
+  const t=document.getElementById('wbShellTemplate');
+  const shell=t.content.firstElementChild.cloneNode(true);
+  shell.classList.remove('phone-layout','tablet-layout');
+  shell.classList.add(layout==='tablet'?'tablet-layout':'phone-layout');
+  shell.dataset.role=currentRole;
+  if(layout==='phone')shell.dataset.orientation=phoneOrient;
+  else shell.removeAttribute('data-orientation');
+  updateEndBtn(shell);
+  updateCanvasPct(shell,layout);
+  updateAVForRole(shell);
+  updatePanelToggleUI(shell);
+  wireShellInteractions(shell);
+  applyMockStateToShell(shell,mockState);
+  return shell;
+}
+
+function updateEndBtn(shell){
+  const btn=shell.querySelector('.wb-end-btn');
+  if(!btn)return;
+  if(shell.dataset.role==='student'){btn.textContent='Leave';btn.classList.remove('wb-tb-btn--primary')}
+  else{btn.textContent='End session';btn.classList.add('wb-tb-btn--primary')}
+}
+
+function updateCanvasPct(shell,layout){
+  const el=shell.querySelector('[data-canvas-pct]');
+  if(!el)return;
+  let h=layout==='tablet'?TABLET_H:(phoneOrient==='landscape'?PHONE_LANDSCAPE.h:PHONE_PORTRAIT.h);
+  const hidden=shell.hasAttribute('data-toolbar-hidden');
+  const isPhoneLandscape=layout==='phone'&&phoneOrient==='landscape';
+  let propsBar=0,toolbar=0,boardFooter=36;
+  if(!hidden&&!isPhoneLandscape){propsBar=40;toolbar=52}
+  const chrome=44+boardFooter+propsBar+toolbar;
+  const pct=Math.round((h-chrome)/h*100);
+  el.textContent='Canvas ~'+pct+'% (SR-01)';
+}
+
+function updatePanelToggleUI(shell){
+  const btn=shell.querySelector('[data-panel-toggle]');
+  if(!btn)return;
+  const hidden=shell.hasAttribute('data-toolbar-hidden');
+  const label=btn.querySelector('.wb-panel-toggle__label');
+  const chev=btn.querySelector('.wb-panel-toggle__chev');
+  if(label)label.textContent=hidden?'Show tools':'Hide tools';
+  if(chev){chev.textContent=hidden?'▴':'▾';chev.style.transform=hidden?'':'rotate(180deg)'}
+}
+
+function updateAVForRole(shell){
+  const role=shell.dataset.role;
+  const studentTile=shell.querySelector('[data-av-tile="student"]');
+  const selfBtn=shell.querySelector('[data-av-self]');
+  const showSelf=role==='tutor';
+  if(studentTile){
+    studentTile.classList.toggle('wb-av-tile--hidden',!showSelf);
+    studentTile.querySelector('span').textContent=role==='tutor'?'You (tutor)':'You';
+  }
+  if(selfBtn){
+    selfBtn.classList.toggle('wb-av-btn--on',showSelf);
+    selfBtn.classList.toggle('wb-av-btn--off',!showSelf);
+    selfBtn.title=showSelf?'Hide self-view':'Show self-view';
+  }
+}
+
+function wireShellInteractions(shell){
+  const panelToggle=shell.querySelector('[data-panel-toggle]');
+  panelToggle?.addEventListener('click',()=>{
+    shell.toggleAttribute('data-toolbar-hidden');
+    updatePanelToggleUI(shell);
+    updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');
+  });
+  shell.querySelector('[data-av-self]')?.addEventListener('click',function(){
+    const tile=shell.querySelector('[data-av-tile="student"]');
+    if(!tile)return;
+    const show=!tile.classList.contains('wb-av-tile--hidden');
+    tile.classList.toggle('wb-av-tile--hidden',show);
+    this.classList.toggle('wb-av-btn--on',!show);
+    this.classList.toggle('wb-av-btn--off',show);
+    this.title=show?'Show self-view':'Hide self-view';
+  });
+  shell.querySelector('[data-av-swap]')?.addEventListener('click',()=>{
+    shell.toggleAttribute('data-av-swapped');
+  });
+  shell.querySelector('[data-av-cam]')?.addEventListener('click',function(){
+    const on=this.classList.contains('wb-av-btn--on');
+    this.classList.toggle('wb-av-btn--on',!on);
+    this.classList.toggle('wb-av-btn--off',on);
+    shell.querySelectorAll('.wb-av-tile').forEach(t=>{
+      t.classList.toggle('wb-av-tile--cam-off',on);
+      const av=t.querySelector('.wb-av-tile__avatar');
+      if(av)av.hidden=!on;
+    });
+  });
+}
+
+function applyMockStateToShell(shell,state){
+  const backdrop=shell.querySelector('[data-overlay="backdrop"]');
+  const props=shell.querySelector('[data-overlay="props"]');
+  const overflow=shell.querySelector('[data-overlay="overflow"]');
+  const shapes=shell.querySelector('[data-overlay="shapes"]');
+  const boards=shell.querySelector('[data-overlay="boards"]');
+  shell.removeAttribute('data-grid-on');
+  shell.removeAttribute('data-toolbar-hidden');
+  shell.removeAttribute('data-boards-collapsed');
+  [backdrop,props,overflow,shapes,boards].forEach(el=>{if(el)el.classList.remove('wb-overlay-backdrop--open','wb-props-sheet--open','wb-action-sheet--open')});
+  updatePanelToggleUI(shell);
+  if(state==='live'){updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');return}
+  if(state==='grid'){shell.setAttribute('data-grid-on','');updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');return}
+  if(state==='toolbar-hidden'){shell.setAttribute('data-toolbar-hidden','');updatePanelToggleUI(shell);updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');return}
+  if(state==='boards-collapsed'){shell.setAttribute('data-boards-collapsed','');updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');return}
+  if(backdrop)backdrop.classList.add('wb-overlay-backdrop--open');
+  if(state==='props'&&props){
+    props.classList.add('wb-props-sheet--open');
+  }else if(state==='overflow'&&overflow){
+    overflow.classList.add('wb-action-sheet--open');
+  }else if(state==='boards'&&boards){
+    boards.classList.add('wb-action-sheet--open');
+  }else if(state==='shapes'&&shapes){
+    shapes.classList.add('wb-action-sheet--open');
+  }
+  updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');
+}
+
+function getAllShells(){return[shellPhone,shellTablet].filter(Boolean)}
+
+function setMockState(state,btn){
+  mockState=state;
+  document.querySelectorAll('[data-state]').forEach(b=>b.classList.remove('state-active'));
+  if(btn)btn.classList.add('state-active');
+  getAllShells().forEach(s=>applyMockStateToShell(s,state));
+}
+
+function setRole(role,btn){
+  currentRole=role;
+  document.querySelectorAll('.meta-header [data-role]').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  getAllShells().forEach(s=>{s.dataset.role=role;updateEndBtn(s);updateAVForRole(s)});
+}
+
+function toggleTheme(){
+  const h=document.documentElement,d=h.getAttribute('data-theme')==='dark';
+  h.setAttribute('data-theme',d?'light':'dark');
+  document.getElementById('themeBtn').textContent=d?'☾ Dark':'☀ Light';
+}
+
+function setPhoneOrient(orient,btn){
+  phoneOrient=orient;
+  document.querySelectorAll('[data-orient]').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  const vp=document.getElementById('phoneViewport');
+  const label=document.getElementById('phoneLabel');
+  const dims=orient==='landscape'?PHONE_LANDSCAPE:PHONE_PORTRAIT;
+  vp.dataset.w=dims.w;vp.dataset.h=dims.h;
+  if(label)label.textContent=orient==='landscape'?'Phone landscape · 844×390 · left rail + props chip':'Phone portrait · 390×844 · tier-1 toolbar';
+  if(shellPhone){
+    shellPhone.dataset.orientation=phoneOrient;
+    updateCanvasPct(shellPhone,'phone');
+  }
+  scaleDevices();
+}
+
+function scaleDevices(){
+  document.querySelectorAll('.device-viewport').forEach(vp=>{
+    const w=+vp.dataset.w,h=+vp.dataset.h;
+    vp.style.width=w+'px';vp.style.height=h+'px';
+    const outer=vp.parentElement;
+    const avail=outer?outer.parentElement.clientWidth:400;
+    const metaH=document.querySelector('.meta-header')?.offsetHeight||52;
+    const notesH=document.querySelector('.mock-notes')?.offsetHeight||60;
+    const scale=Math.min(avail/w,(window.innerHeight-metaH-notesH-80)/h,1);
+    vp.style.transform='scale('+scale+')';
+    if(outer){outer.style.height=Math.ceil(h*scale)+'px';outer.style.width=Math.ceil(w*scale)+'px'}
+  });
+}
+
+function setView(view,btn){
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  const phoneWrap=document.getElementById('phoneWrap');
+  const tabletWrap=document.getElementById('tabletWrap');
+  const row=document.getElementById('devicesRow');
+  const showPhone=view==='phone'||view==='compare';
+  const showTablet=view==='tablet'||view==='compare';
+  phoneWrap.classList.toggle('visible',showPhone);
+  tabletWrap.classList.toggle('visible',showTablet);
+  row.classList.toggle('compare',view==='compare');
+  if(!shellPhone){shellPhone=createShell('phone');document.getElementById('phoneMount').appendChild(shellPhone)}
+  if(!shellTablet){shellTablet=createShell('tablet');document.getElementById('tabletMount').appendChild(shellTablet)}
+  scaleDevices();
+}
+
+window.addEventListener('resize',scaleDevices);
+setView('compare',document.querySelector('[data-view="compare"]'));
+setRole('tutor');
+</script>
+</body>
+</html>

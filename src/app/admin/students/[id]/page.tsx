@@ -9,36 +9,53 @@ import SendUpdateForm from "./SendUpdateForm";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
 import { ShareLinkRow } from "./ShareLinkRow";
 import { SubmitButton } from "@/components/SubmitButton";
-import { StudentActions } from "./StudentActions";
 import NoteEntrySection from "./NoteEntrySection";
 import { ActiveWhiteboardSessionsList } from "./whiteboard/ActiveWhiteboardSessionsList";
+import { EndedUnsavedSessionsList } from "./whiteboard/EndedUnsavedSessionsList";
 import { StartWhiteboardSession } from "./whiteboard/StartWhiteboardSession";
-import { StudentRecordingDefaultToggle } from "./StudentRecordingDefaultToggle";
 import { env } from "@/lib/env";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { getRequestBaseUrl } from "@/lib/public-url";
+import { Button } from "@/components/ui/button";
+import { ClaimInviteSection } from "./ClaimInviteSection";
+import { ConnectedParentSection, type ConnectedParent } from "./ConnectedParentSection";
+import { StudentDetailShell } from "@/components/admin/StudentDetailShell";
+import { StudentErasurePendingBanner } from "@/components/admin/StudentErasureStatus";
+import { StudentOverflowActions } from "@/components/admin/StudentOverflowActions";
+import { deriveStudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
+import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
+import { FileText, LayoutGrid, Link2, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Whisper + LLM can exceed default ~10s serverless limits.
- *
- * Budget for a worst-case ~60-minute single audio upload on this page:
- *   blob download   ~10 s
- *   ffmpeg split    ~40 s   (3–4 parts for a 60-min recording)
- *   Whisper calls   ~3–4 min (each ~22 MB chunk runs ~50–70 s sequentially)
- *   AI structuring  ~15 s
- *   ─────────────────────
- *   total           ~5 min
- *
- * 300 s (Vercel Pro maximum, also the cap on Hobby) gives us the full budget.
- * Anything beyond ~60 min would need to be split into a queue/worker pattern.
- *
- * This timeout applies to all server actions invoked from this page,
- * including transcribeAndGenerateAction. Vercel clamps to plan limits, so
- * a value larger than 300 is safe to set but will be capped.
- */
 export const maxDuration = 300;
+
+function SectionHeading({
+  kicker,
+  title,
+  description,
+  actions,
+}: {
+  kicker?: string;
+  title: string;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-3.5 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0 space-y-1">
+        {kicker ? (
+          <p className="label-mono m-0 text-[11px] text-accent-text">{kicker}</p>
+        ) : null}
+        <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
+        {description ? (
+          <p className="text-[13px] leading-relaxed text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
+    </div>
+  );
+}
 
 export default async function StudentDetailPage({
   params,
@@ -50,151 +67,320 @@ export default async function StudentDetailPage({
   const scope = await getStudentScope();
   if (scope.kind === "none") redirect("/login");
 
+  const scopedAdminUserId: string | null = scope.kind === "admin" ? scope.adminId : null;
+
   const student = await db.student.findUnique({
     where: { id },
     include: {
       shareLinks: { where: { revokedAt: null }, orderBy: { createdAt: "desc" } },
       _count: { select: { notes: true } },
       notes: { orderBy: { date: "desc" }, take: 1, select: { date: true } },
-      // Still-running whiteboard rooms (endedAt = null) — surfaced under
-      // the "Start" button so tutors can continue or end stragglers
-      // without multiple forgotten live sessions piling up in the DB.
       whiteboardSessions: {
         where: { endedAt: null },
         orderBy: { startedAt: "desc" },
         take: 20,
         select: { id: true, startedAt: true },
       },
+      learnerProfile: {
+        select: {
+          id: true,
+          isSelfLearner: true,
+          displayName: true,
+          tombstonedAt: true,
+          accountHolder: {
+            select: {
+              id: true,
+              email: true,
+              displayName: true,
+              emailVerifiedAt: true,
+              tombstonedAt: true,
+            },
+          },
+        },
+      },
+      claimInvites: {
+        where: {
+          ...(scopedAdminUserId !== null ? { adminUserId: scopedAdminUserId } : {}),
+          claimedAt: { not: null },
+        },
+        orderBy: { claimedAt: "desc" },
+        take: 1,
+        select: { claimedAt: true },
+      },
     },
   });
+
+  const claimInvitesEnabled =
+    process.env.NEXT_PUBLIC_CLAIM_INVITES_ENABLED === "true";
 
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
 
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [endedUnsavedSessions, endedUnsavedTotalCount] = await Promise.all([
+    db.whiteboardSession.findMany({
+      where: {
+        studentId: id,
+        endedAt: { gte: thirtyDaysAgo },
+        noteId: null,
+      },
+      orderBy: { endedAt: "desc" },
+      take: 20,
+      select: { id: true, startedAt: true, endedAt: true },
+    }),
+    db.whiteboardSession.count({
+      where: {
+        studentId: id,
+        endedAt: { not: null },
+        noteId: null,
+      },
+    }),
+  ]);
+
+  const lp = student.learnerProfile;
+  const lpId = lp?.id ?? null;
+  const ahId = lp?.accountHolder?.id ?? null;
+  const purgeDates = await lookupActiveErasurePurgeDates(
+    lpId ? [lpId] : [],
+    ahId ? [ahId] : []
+  );
+  const activeJobPurgeEligibleAt =
+    (lpId && purgeDates.byLearnerProfileId.get(lpId)) ??
+    (ahId && purgeDates.byAccountHolderId.get(ahId)) ??
+    null;
+  const erasureState = deriveStudentErasureDisplayState({
+    erasedAt: student.erasedAt,
+    lpTombstonedAt: lp?.tombstonedAt ?? null,
+    ahTombstonedAt: lp?.accountHolder?.tombstonedAt ?? null,
+    activeJobPurgeEligibleAt,
+  });
+  const accessSuspended =
+    erasureState.kind === "pending_grace" || erasureState.kind === "purged";
+
+  const learnerProfileId = student.learnerProfileId;
+  const isSelfLearner = student.learnerProfile?.isSelfLearner ?? false;
+  const consentRecordExists =
+    learnerProfileId && scopedAdminUserId
+      ? !!(await db.consentRecord.findFirst({
+          where: { learnerProfileId, adminUserId: scopedAdminUserId },
+          orderBy: { version: "desc" },
+          select: { id: true },
+        }))
+      : false;
+
   const activeShare = student.shareLinks[0] ?? null;
-  // Tutor-displayed share URL follows the deployment serving the request so
-  // smoke-testing on a Vercel preview surfaces the preview host (not the
-  // hardcoded production NEXTAUTH_URL). Email send still uses the production
-  // URL via `baseUrl()` in the action so parents always get the stable host.
   const shareDisplayBaseUrl = activeShare ? await getRequestBaseUrl() : null;
 
-  return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            <Link href="/admin/students">Students</Link> / {student.name}
-          </div>
-          <h1 style={{ margin: "6px 0 0" }}>{student.name}</h1>
-        </div>
-        <div className="row">
-          <StudentActions studentId={student.id} currentName={student.name} />
-          <Link className="btn" href="/admin/outbox">
-            Outbox
-          </Link>
-        </div>
-      </div>
+  const noteCount = student._count.notes;
+  const lastNote = student.notes[0];
+  const openSessions = student.whiteboardSessions.length;
 
-      <div className="divider" />
+  const meta = (
+    <>
+      {noteCount} note{noteCount !== 1 ? "s" : ""}
+      {lastNote ? <> · last {formatDateOnlyDisplay(lastNote.date)}</> : null}
+      {openSessions > 0 ? (
+        <>
+          {" "}
+          · {openSessions} open session{openSessions !== 1 ? "s" : ""}
+        </>
+      ) : null}
+    </>
+  );
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Share link (for parents/students)</h3>
-        {activeShare ? (
-          <>
-            <p className="muted" style={{ marginTop: 0 }}>
-              This link does not require login. You can revoke/regenerate anytime.
-            </p>
-            {(() => {
-              const url = `${shareDisplayBaseUrl ?? "http://localhost:3000"}/s/${activeShare.token}`;
-              return (
-                <>
-                  <ShareLinkRow url={url} />
-                  <div className="row" style={{ marginTop: 8 }}>
-                    <form action={regenerateShareLink.bind(null, student.id)}>
-                      <SubmitButton label="Regenerate" pendingLabel="Regenerating…" />
-                    </form>
-                    <form action={revokeShareLink.bind(null, student.id)}>
-                      <SubmitButton label="Revoke" pendingLabel="Revoking…" className="btn" />
-                    </form>
-                  </div>
-                </>
-              );
-            })()}
-          </>
-        ) : (
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <p className="muted" style={{ margin: 0 }}>
-              No active share link yet.
-            </p>
-            <form action={regenerateShareLink.bind(null, student.id)}>
-              <SubmitButton label="Create share link" />
-            </form>
-          </div>
+  const stickyCta = accessSuspended ? (
+    <p className="text-sm text-muted-foreground" role="status">
+      Sessions unavailable while erasure is pending or complete.
+    </p>
+  ) : (
+    <div className="w-full md:w-auto [&_button]:h-12 [&_button]:w-full [&_button]:text-[15px] md:[&_button]:h-11 md:[&_button]:w-auto">
+      <StartWhiteboardSession
+        studentId={student.id}
+        consentRecordExists={consentRecordExists}
+        isSelfLearner={isSelfLearner}
+        studentClaimed={!!student.learnerProfileId}
+        accessSuspended={false}
+      />
+    </div>
+  );
+
+  const sessionSection = (
+    <>
+      <SectionHeading
+        kicker="Live session"
+        title="Whiteboard session"
+        description="Live whiteboard with audio recording. Generates session notes from what you wrote and said."
+      />
+      <ActiveWhiteboardSessionsList
+        studentId={student.id}
+        sessions={student.whiteboardSessions}
+      />
+      <EndedUnsavedSessionsList
+        studentId={student.id}
+        sessions={endedUnsavedSessions.flatMap((s) =>
+          s.endedAt != null ? [{ ...s, endedAt: s.endedAt }] : []
         )}
-      </div>
+        totalCount={endedUnsavedTotalCount}
+      />
+    </>
+  );
 
-      <div className="divider" />
-
-      <NoteEntrySection studentId={student.id} aiEnabled={!!env.OPENAI_API_KEY} blobEnabled={!!env.BLOB_READ_WRITE_TOKEN} />
-
-      <div className="divider" />
-
-      <div className="card">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Whiteboard session</h3>
-            <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
-              Live whiteboard with audio recording for tutoring sessions.
-              Generates session notes from what you wrote and said.
-            </p>
-          </div>
-          <StartWhiteboardSession studentId={student.id} />
+  const shareSection = (
+    <>
+      <SectionHeading
+        title="Share link (for parents/students)"
+        description="This link does not require login. You can revoke or regenerate it anytime."
+      />
+      {activeShare ? (
+        <>
+          {(() => {
+            const url = `${shareDisplayBaseUrl ?? "http://localhost:3000"}/s/${activeShare.token}`;
+            return (
+              <>
+                <ShareLinkRow url={url} />
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <form action={regenerateShareLink.bind(null, student.id)}>
+                    <SubmitButton label="Regenerate" pendingLabel="Regenerating…" variant="outline" />
+                  </form>
+                  <form action={revokeShareLink.bind(null, student.id)}>
+                    <SubmitButton label="Revoke" pendingLabel="Revoking…" variant="outline" />
+                  </form>
+                </div>
+              </>
+            );
+          })()}
+        </>
+      ) : (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">No active share link yet.</p>
+          <form action={regenerateShareLink.bind(null, student.id)}>
+            <SubmitButton label="Create share link" variant="default" />
+          </form>
         </div>
-        <ActiveWhiteboardSessionsList
-          studentId={student.id}
-          sessions={student.whiteboardSessions}
-        />
-        <div style={{ marginTop: 10 }}>
-          <StudentRecordingDefaultToggle
-            studentId={student.id}
-            initialEnabled={student.recordingDefaultEnabled}
-          />
-        </div>
-      </div>
+      )}
+    </>
+  );
 
-      <div className="divider" />
-
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Send update email</h3>
-        <p className="muted">
-          Sends the share link to the parent. The parent email address is saved for this student
-          for next time.
-        </p>
+  const notesSection = (
+    <>
+      <NoteEntrySection
+        studentId={student.id}
+        aiEnabled={!!env.OPENAI_API_KEY}
+        blobEnabled={!!env.BLOB_READ_WRITE_TOKEN}
+      />
+      <div className="mt-6 border-t border-border pt-6">
+      <SectionHeading
+        kicker="Parent communication"
+        title="Send update email"
+        description="Sends the share link to the parent. The parent email address is saved for this student for next time."
+      />
         <SendUpdateForm studentId={student.id} defaultToEmail={student.parentEmail} />
       </div>
-
-      <div className="divider" />
-
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <div>
-          <h3 style={{ margin: 0 }}>Session notes</h3>
-          <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
-            {student._count.notes === 0 ? (
-              "No notes yet."
-            ) : (
-              <>
-                {student._count.notes} note{student._count.notes !== 1 ? "s" : ""}
-                {student.notes[0] && (
-                  <> · last {formatDateOnlyDisplay(student.notes[0].date)}</>
-                )}
-              </>
-            )}
+      <div className="mt-6 border-t border-border pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            <strong className="font-semibold text-foreground">
+              {noteCount} session note{noteCount !== 1 ? "s" : ""}
+            </strong>
+            {lastNote ? <> · last {formatDateOnlyDisplay(lastNote.date)}</> : null}
           </p>
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href={`/admin/students/${id}/notes`}>View all notes →</Link>
+          </Button>
         </div>
-        <Link className="btn" href={`/admin/students/${id}/notes`}>
-          View all notes →
-        </Link>
       </div>
+    </>
+  );
+
+  const parentSection = claimInvitesEnabled ? (
+    <>
+      <SectionHeading
+        title="Parent account"
+        description={
+          student.learnerProfileId
+            ? "A parent account is connected to this student."
+            : "Invite a parent to create a Mynk account and connect this student."
+        }
+      />
+      {student.learnerProfile?.accountHolder ? (
+        <ConnectedParentSection
+          studentId={student.id}
+          learnerName={student.learnerProfile.displayName}
+          connectedParent={
+            {
+              email: student.learnerProfile.accountHolder.email,
+              displayName: student.learnerProfile.accountHolder.displayName,
+              emailVerifiedAt: student.learnerProfile.accountHolder.emailVerifiedAt,
+              claimedAt: student.claimInvites[0]?.claimedAt ?? null,
+            } satisfies ConnectedParent
+          }
+        />
+      ) : (
+        <ClaimInviteSection
+          studentId={student.id}
+          studentName={student.name}
+          alreadyClaimed={!!student.learnerProfileId}
+        />
+      )}
+    </>
+  ) : (
+    <p className="text-sm text-muted-foreground">Parent account linking is not enabled.</p>
+  );
+
+  const sections = [
+    {
+      id: "session",
+      label: "Whiteboard",
+      mobileLabel: "Session",
+      icon: <LayoutGrid className="size-5" aria-hidden />,
+      content: sessionSection,
+    },
+    {
+      id: "share",
+      label: "Share link",
+      mobileLabel: "Share",
+      icon: <Link2 className="size-5" aria-hidden />,
+      content: shareSection,
+    },
+    {
+      id: "notes",
+      label: "Notes & email",
+      mobileLabel: "Notes",
+      icon: <FileText className="size-5" aria-hidden />,
+      content: notesSection,
+      badge: noteCount > 0 ? noteCount : undefined,
+    },
+    {
+      id: "parent",
+      label: "Parent account",
+      mobileLabel: "Parent",
+      icon: <Users className="size-5" aria-hidden />,
+      content: parentSection,
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <StudentErasurePendingBanner state={erasureState} />
+      <StudentDetailShell
+      studentId={student.id}
+      studentName={student.name}
+      meta={meta}
+      noteCount={noteCount}
+      headerActions={
+        <>
+          <StudentOverflowActions studentId={student.id} studentName={student.name} />
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href="/admin/outbox">Outbox</Link>
+          </Button>
+        </>
+      }
+      overflowActions={
+        <StudentOverflowActions studentId={student.id} studentName={student.name} />
+      }
+      stickyCta={stickyCta}
+      sections={sections}
+      />
     </div>
   );
 }

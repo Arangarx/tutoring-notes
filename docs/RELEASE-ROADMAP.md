@@ -1,11 +1,30 @@
 # Release roadmap — solo tutor floor → university pitch readiness
 
-**Last updated:** 2026-05-27
+**Last updated:** 2026-07-01
 
 > Audience: orchestrators, executors, and Andrew sequencing work across
 > the tutoring-notes pilot through Aug 2026. This doc is a **thin
 > orchestration overlay** on the canonical master plan — not a substitute
 > for phase-spec depth.
+
+---
+
+## Strategic refresh — Experience-Driven Wedge (2026-06-12)
+
+> **READ ALONGSIDE this roadmap.** A 2026-06-12 strategy brainstorm **refined the compass** (refinement, NOT pivot — the original sequencing was market-research-aligned and still is). The current strategic overlay is the **Experience-Driven Wedge** program: `~/.cursor/plans/experience-driven_wedge_ae2776e1.plan.md` (full rationale: [continuity-wedge brainstorm](research/continuity-wedge-brainstorm-2026-06-12.md)).
+>
+> **What changed:**
+> - **Publicity-driven re-sequencing de-emphasized** — backlog is ~1 month from complete; sequence by *practical* concern, not pitch optics.
+> - **The wedge is now named:** experience-driven competition. WB + reliability = **ground floor (a GATE)**; the win is an **accreting, honest, transparent, seamless** experience (**tutor-first** → parent/student).
+> - **Founding principle (supersedes all):** no dark patterns; **total honesty + total transparency** — engagement claims derived-from-evidence with drilldowns.
+>
+> **How the program maps onto this roadmap (no row deletions — this is an overlay):**
+> - **Program Phase 1 (WB reliability floor)** = existing **Gate A2 (waiting room)** + **Gate A5 (live bidirectional sync)** + **Gate A6 (replay fidelity + AV/timer sync)** + the **audio-clock fix** (`useAudioMsClock` perf.now surrogate = root cause under A6). Still the master-cut gate.
+> - **Program Phases 2–3 (continuity engine + note-quality)** = **NEW strategic overlay**, not previously in the wave map — this is the moat. **Note-quality is elevated from Wave 6 polish to a first-class wedge.**
+> - **Program Phase 4 (instrumentation)** = reframes deferred **Backlog "Phase 11a PostHog"** to **first-party, learner-type-keyed** capture (sub-learner = zero 3rd-party egress).
+> - Engagement/dopamine, parent progress arc, marketplace = **design-compatible-for now, NOT near-term scope.**
+>
+> **Cadence: rolling-wave** — detailed-plan only the *next* phase. This roadmap's wave/gate ledger remains valid as depth; the program is the current compass.
 
 ---
 
@@ -223,13 +242,122 @@ executors/branches recommended.
 | Mynk P0 in-app wiring (`usemynk.com`, package metadata) | Brand + Mynk-Pre-Trademark backlog | M | Production-route brand surface |
 | DESIGN-TOKENS Phase 0 (Tailwind + shadcn foundation) | UX Refresh / DESIGN-TOKENS-PLAN | M | Unblocks token migration |
 | DESIGN-TOKENS Phase 1 (token migration on prod routes) | UX Refresh / DESIGN-TOKENS-PLAN | M | Replaces inline hex; ESLint hex ban per spec |
-| Resume v1 IA design session (Sarah's full list trigger) | `docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md` | M | Lock scheduling Y/N + 5 remaining IA decisions |
+| Resume v1 IA design session (Sarah's full list trigger) | `docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md` | M | 5 remaining IA decisions (scheduling Y/N **locked** — post-V1/pre-release; see § V1 sequencing tiers) |
+| **Scheduling + external calendar integration** | Sarah live feedback 2026-06-08; [`docs/BACKLOG.md`](BACKLOG.md) § Scheduling proposal | L | **DECISION (Andrew 2026-06-08): post-V1, pre-release** — not a master-cut gate; required before recruiting new pilots. Full spec in BACKLOG. Sync with tutor's existing calendar (e.g. Google); in-app upcoming sessions + start/join links; soft duration; needs design pass + sequencing within pre-release window |
 | Phase 1 public-surface design specs (`docs/UX-DESIGNS-PHASE-1.md`) | v1 design bootstrapper | L | After IA locked; 8 surfaces |
-| Phase 2 tutor-surface design specs (`docs/UX-DESIGNS-PHASE-2.md`) | v1 design bootstrapper | L | After IA locked; count depends on scheduling decision |
+| Phase 2 tutor-surface design specs (`docs/UX-DESIGNS-PHASE-2.md`) | v1 design bootstrapper | L | After IA locked |
 | Public surface visual refresh (login, signup, forgot-password, reset-password, privacy, terms, parent-share, feedback, setup) | UX Refresh / v1 specs | L | Implement Phase 1 specs |
 
 **Wave 3 unblock:** Sarah completes full pilot action list; orchestrator
 confirms IA decisions in v1 design handoff.
+
+**V1 sequencing tiers (ratified 2026-06-08):** Use this vocabulary consistently in orchestrator chats, STATUS docs, and backlog rows:
+
+| Tier | Also called | Meaning |
+|---|---|---|
+| **V1** | master cut | `v1-redesign → master` = Sarah's complete redesigned live site. Gate A items only. |
+| **Post-V1 / pre-release** | Gate B era | After master cut, before opening to recruit/advertise **new** pilots. Approval-gating, parent consent, security cleanups, **scheduling + external calendar** (see BACKLOG). |
+| **Release** | recruiting new pilots | Opening the doors to recruit/advertise beyond Sarah/trusted pilots. Requires Gate B complete. |
+
+**V1 `v1-redesign → master` cut:** Two-tier gate checklist — **canonical operational list:**
+[`docs/handoff/ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) §
+Pre-master gates. **Merge to master = reveal to Sarah:** production
+(`tutoring-notes.vercel.app` and `usemynk.com` share the same Vercel
+deployment alias on `master`; no UI-skin feature flag exists). Build on
+`v1-redesign`; cut `master` only when the whole site is one cohesive release.
+
+**Gate A — blocks master cut (V1)** (Sarah's live site complete + coherent):
+
+1. Visual redesign + whiteboard chrome + theme parity (in flight).
+2. **Waiting room** — green-room A/V verify + admit flow; timer starts when
+   student leaves waiting room (designed, not built).
+3. **Pass-2 in-context end-session (Gate A3)** — shared session shell; end-session
+   transitions same shell to review in place (Pass-1 interim = separate review
+   page today). **Deferred from `feat/wb-chrome-redo` — v1-required.** P2 git
+   search (2026-06-09): no production notes-only implementation on
+   `feat/wb-chrome-p2`; reconstruct from
+   [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md).
+4. **PDF page-tab indicator (Gate A3a)** — PDF board tabs show PDF icon;
+   blocked on `isPdf` field on `PageStripRow` + data propagation. **V1-required;
+   deferred from `feat/wb-chrome-redo`.**
+5. **SR-04a video-tile sizing (Gate A3b)** — live-A/V video fills panel /
+   multi-tile auto-expand. **V1-required; deferred from `feat/wb-chrome-redo`.**
+   Parent req SR-04 in
+   [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md).
+6. **Live bidirectional whiteboard sync completeness (Gate A5)** — comprehensive
+   *enumerated* audit-and-fix: every tutor action appears on the student view
+   live and timely, and vice versa (freedraw, shapes, lines/arrows, text,
+   eraser, move/resize/rotate, style/z-order, page CRUD, PDF, math, graph +
+   expression edits, images, undo/redo, select+delete). **Sub-item (Andrew
+   2026-06-10): peer-visible laser/pointer** — tutor→student + bidirectional
+   student laser (**ST-05**), per-role colors tutor=coral / student=cyan;
+   never built (not a regression); fix via `sync-client.ts` IMMEDIATE pointer
+   envelope + `onPointerUpdate`/`isCollaborating` + `appState.collaborators`
+   on both sides (see Gate A5 in
+   [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md)). **Acceptance:**
+   each type verified bidirectionally via hermetic relay on real browser (**not**
+   jsdom); stated timeliness bound; all gaps fixed; extend `test:wb-sync`
+   invariants where feasible + manual matrix for the rest. **Starting baseline:**
+   [`whiteboard-live-sync-regression.spec.ts`](../tests/integration/whiteboard-live-sync-regression.spec.ts)
+   inv 1–12 (partial). **Not yet started — v1-required.**
+7. **Replay fidelity + AV/timer sync (Gate A6)** — replay reconstructs every
+   whiteboard action in correct order and timing, aligned with session timer
+   and recorded audio (same action-type enumeration as A5). **Acceptance:**
+   temporal alignment within stated tolerance; no missing/dropped/reordered
+   events; verified on real recorded sessions. **Starting baseline (partial):**
+   [`recording-end-to-end.spec.ts`](../tests/integration/recording-end-to-end.spec.ts),
+   replay event-log unit tests, [`WHITEBOARD-STATUS.md`](WHITEBOARD-STATUS.md)
+   § 1.4. **Not yet started — v1-required.** Both A5 and A6 embody the
+   north-star reliability bar (no backup recorder alongside our app).
+
+8. **Part 3 reliability spine (pre-Sarah session experience)** — **active on
+   `wb-wave5-polish`** (worktree `tutoring-notes-polishwt`); **single merge to
+   `v1-redesign` only after full live-session arc passes both-themes hardware
+   smoke (no interim merge). Enumerated spine:
+   `p3-clock` → `p3-perspeaker-capture` → `p3-vad-chunking` →
+   `p3-consent-recording` → `p3-incremental-map` → `p3-model-abstraction` →
+   `p3-finalize` → `p3-replay-scrub` → `p3-video-seam` (video seam
+   design-only for Sarah). Precedes the final Sarah gate; consent/erasure
+   checkpoint re-smoke is **not** a merge trigger. Plan:
+   [`whiteboard_reliability_remaining_b082882.plan.md`](../../../../.cursor/plans/whiteboard_reliability_remaining_b082882.plan.md);
+   orchestrator spine summary:
+   [`docs/handoff/ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) §
+   Session-experience build status + Current Wave focus.
+
+**Design note:** waiting room, live board, and Pass-2 review = **one session
+shell, three modes** — design together
+([`session-lifecycle-consent-design-2026-05-31.md`](handoff/session-lifecycle-consent-design-2026-05-31.md)).
+
+**Gate B — post-V1 / pre-release** (before **release** = recruiting new pilots;
+some urgent because site is already live, just unadvertised):
+
+6. **Approval-gating / waitlist** — sign-up parks on waitlist; no cost until
+   Andrew approves (cost exposure exists today).
+7. **Parent privacy consent** — real `ConsentRecord` architecture;
+   V1 toggles only for shipping features (`allowAudioRecording`,
+   `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession`).
+8. **Security checks + final cleanups** — before new pilots.
+9. **Scheduling + external calendar integration** — post-V1, pre-release; not a
+   master-cut gate. Full spec: [`docs/BACKLOG.md`](BACKLOG.md) § Scheduling
+   proposal. Needs design pass + sequencing within this window.
+
+**Near-immediate post-master follow-ups (Andrew 2026-06-17):** Work that
+starts at or immediately after the `v1-redesign → master` cut — not Gate A
+blockers.
+
+- **Full product usage instrumentation** — previously scoped as a pre-master
+  gate; **reclassified** to near-immediate post-master (Andrew 2026-06-17).
+  The app must be fully instrumented for product usage so a solo dev can
+  query what's actually used and where users struggle. Tactical early slice
+  of Program Phase 4 (first-party, learner-type-keyed instrumentation).
+  Durable spec: [`docs/BACKLOG.md`](BACKLOG.md) § Near-immediate post-master
+  priorities.
+
+**Escape hatch (not building now):** per-email allowlist if a prod fix must
+ship before full reveal. **Accepted cost:** long-lived `v1-redesign` branch
+until Gate A complete. Chrome requirements:
+[`docs/handoff/whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md).
+Durable rows: [`docs/BACKLOG.md`](BACKLOG.md) § V1 redesign — pre-master.
 
 ---
 
@@ -322,6 +450,7 @@ to Wave 4/5).
 | PDF position lock / pan-clamp design spike | PDF captured backlog | Polish. |
 | Vercel Blob rate limit on 30-page PDF import | PDF captured | Reliability polish; uncommon path. |
 | In-app onboarding polish | BACKLOG | Wave 3+ UX refresh subsumes. |
+| Google OAuth sign-in + sign-up (parents + tutors) | BACKLOG § Identity/access | Post-V1 fast-follow after Wave 3 ships; credentials-only today; provider in `auth-options.ts` not on login/signup UI. |
 
 ---
 
@@ -388,4 +517,6 @@ Master plan body can lag shipped reality. Treat **plan status block
 
 ## Changelog
 
+- **2026-07-01:** Added Gate A item 8 — Part 3 reliability spine on `wb-wave5-polish` (enumerated p3-* todos; single merge at full-arc Sarah gate; cross-ref active plan + ORCHESTRATOR-STATE).
+- **2026-06-12:** Added "Strategic refresh — Experience-Driven Wedge" overlay (top). Compass refined (not pivoted): publicity-driven re-sequencing de-emphasized; wedge named (experience-driven competition, tutor-first); founding principle (no dark patterns / total honesty + transparency); program-to-wave mapping (Phase 1 = Gate A2/A5/A6 + audio-clock; Phases 2-3 continuity + note-quality = new moat overlay; Phase 4 = first-party instrumentation reframing Phase 11a). Rolling-wave cadence.
 - **2026-05-20:** Initial roadmap committed during release-pivot orchestration session.

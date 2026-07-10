@@ -79,8 +79,14 @@ export async function updateSceneMergingWithRemote(
     filteredRemote as unknown as Parameters<typeof reconcileElements>[1],
     appState
   );
-  excalidrawAPI.updateScene({
+  // captureUpdate: "NEVER" — remote-origin scene merges must not enter
+  // the local undo/redo stack. Without this, pressing undo would replay
+  // a remote peer's strokes rather than the local user's own actions.
+  (excalidrawAPI as typeof excalidrawAPI & {
+    updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+  }).updateScene({
     elements: merged as ReadonlyArray<unknown>,
+    captureUpdate: "NEVER",
   });
 }
 

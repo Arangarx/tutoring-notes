@@ -11,13 +11,25 @@ import {
   CHIME_VOL_MAX,
   CHIME_VOL_MIN,
   STORAGE_DEVICE_KEY,
+  STORAGE_MIC_GROUP_KEY,
   STORAGE_GAIN_KEY,
   STORAGE_CHIME_ENABLED_KEY,
   STORAGE_CHIME_VOLUME_KEY,
+  STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX,
+  STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX,
+  STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX,
   loadStoredGain,
   saveStoredGain,
   loadStoredDeviceId,
   saveStoredDeviceId,
+  loadStoredMicGroupId,
+  saveStoredMicGroupId,
+  loadStoredLearnerMicDeviceId,
+  saveStoredLearnerMicDeviceId,
+  loadStoredLearnerMicGroupId,
+  saveStoredLearnerMicGroupId,
+  loadStoredLearnerMicGain,
+  saveStoredLearnerMicGain,
   loadStoredChimeEnabled,
   saveStoredChimeEnabled,
   loadStoredChimeVolume,
@@ -100,6 +112,71 @@ describe("loadStoredDeviceId / saveStoredDeviceId", () => {
   });
 });
 
+describe("loadStoredMicGroupId / saveStoredMicGroupId", () => {
+  test("round-trips group id alongside device id", () => {
+    saveStoredMicGroupId("grp-wife-mic");
+    expect(loadStoredMicGroupId()).toBe("grp-wife-mic");
+    expect(getStored(STORAGE_MIC_GROUP_KEY)).toBe("grp-wife-mic");
+  });
+
+  test("empty group id removes the key", () => {
+    saveStoredMicGroupId("grp-x");
+    saveStoredMicGroupId("");
+    expect(loadStoredMicGroupId()).toBe("");
+    expect(getStored(STORAGE_MIC_GROUP_KEY)).toBeNull();
+  });
+});
+
+describe("loadStoredLearnerMicDeviceId / saveStoredLearnerMicDeviceId", () => {
+  const learnerId = "lp_e6_persist_test";
+
+  test("default empty string when nothing stored", () => {
+    expect(loadStoredLearnerMicDeviceId(learnerId)).toBe("");
+  });
+
+  test("round-trips a learner-scoped mic device id", () => {
+    saveStoredLearnerMicDeviceId(learnerId, "e6-mic-b");
+    expect(loadStoredLearnerMicDeviceId(learnerId)).toBe("e6-mic-b");
+    expect(getStored(`${STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX}${learnerId}`)).toBe(
+      "e6-mic-b"
+    );
+  });
+
+  test("empty id clears the stored key (missing device fallback path)", () => {
+    saveStoredLearnerMicDeviceId(learnerId, "stale-mic");
+    saveStoredLearnerMicDeviceId(learnerId, "");
+    expect(loadStoredLearnerMicDeviceId(learnerId)).toBe("");
+    expect(
+      getStored(`${STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX}${learnerId}`)
+    ).toBeNull();
+  });
+
+  test("scopes storage per learner profile id", () => {
+    saveStoredLearnerMicDeviceId("learner-a", "mic-a");
+    saveStoredLearnerMicDeviceId("learner-b", "mic-b");
+    expect(loadStoredLearnerMicDeviceId("learner-a")).toBe("mic-a");
+    expect(loadStoredLearnerMicDeviceId("learner-b")).toBe("mic-b");
+  });
+});
+
+describe("loadStoredLearnerMicGroupId / saveStoredLearnerMicGroupId", () => {
+  const learnerId = "lp_e6_group_test";
+
+  test("round-trips group id alongside device id", () => {
+    saveStoredLearnerMicGroupId(learnerId, "grp-b");
+    expect(loadStoredLearnerMicGroupId(learnerId)).toBe("grp-b");
+    expect(getStored(`${STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX}${learnerId}`)).toBe(
+      "grp-b"
+    );
+  });
+
+  test("empty group id removes the key", () => {
+    saveStoredLearnerMicGroupId(learnerId, "grp-x");
+    saveStoredLearnerMicGroupId(learnerId, "");
+    expect(loadStoredLearnerMicGroupId(learnerId)).toBe("");
+  });
+});
+
 describe("loadStoredChimeEnabled / saveStoredChimeEnabled", () => {
   test("default true (chime on for new tutors)", () => {
     expect(loadStoredChimeEnabled()).toBe(true);
@@ -121,6 +198,36 @@ describe("loadStoredChimeEnabled / saveStoredChimeEnabled", () => {
     const w = (globalThis as unknown as { window?: { localStorage: MemoryStorage } }).window!;
     w.localStorage.setItem(STORAGE_CHIME_ENABLED_KEY, "true");
     expect(loadStoredChimeEnabled()).toBe(true);
+  });
+});
+
+describe("loadStoredLearnerMicGain / saveStoredLearnerMicGain", () => {
+  const learnerId = "lp-student-1";
+
+  test("default when nothing stored", () => {
+    expect(loadStoredLearnerMicGain(learnerId)).toBe(GAIN_DEFAULT);
+  });
+
+  test("round-trips a valid value under learner-scoped key", () => {
+    saveStoredLearnerMicGain(learnerId, 2.25);
+    expect(loadStoredLearnerMicGain(learnerId)).toBe(2.25);
+    expect(getStored(`${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}${learnerId}`)).toBe(
+      "2.25"
+    );
+  });
+
+  test("clamps junk to default", () => {
+    const w = (globalThis as unknown as { window?: { localStorage: MemoryStorage } }).window!;
+    w.localStorage.setItem(
+      `${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}${learnerId}`,
+      "not-a-number"
+    );
+    expect(loadStoredLearnerMicGain(learnerId)).toBe(GAIN_DEFAULT);
+    w.localStorage.setItem(
+      `${STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX}${learnerId}`,
+      String(GAIN_MAX + 1)
+    );
+    expect(loadStoredLearnerMicGain(learnerId)).toBe(GAIN_DEFAULT);
   });
 });
 
@@ -154,6 +261,10 @@ describe("SSR / no-window safety", () => {
   test("loaders return defaults when window is undefined", () => {
     expect(loadStoredGain()).toBe(GAIN_DEFAULT);
     expect(loadStoredDeviceId()).toBe("");
+    expect(loadStoredMicGroupId()).toBe("");
+    expect(loadStoredLearnerMicDeviceId("lp")).toBe("");
+    expect(loadStoredLearnerMicGroupId("lp")).toBe("");
+    expect(loadStoredLearnerMicGain("lp")).toBe(GAIN_DEFAULT);
     expect(loadStoredChimeEnabled()).toBe(true);
     expect(loadStoredChimeVolume()).toBe(CHIME_VOL_DEFAULT);
   });
@@ -161,6 +272,10 @@ describe("SSR / no-window safety", () => {
   test("savers no-op without throwing when window is undefined", () => {
     expect(() => saveStoredGain(1)).not.toThrow();
     expect(() => saveStoredDeviceId("x")).not.toThrow();
+    expect(() => saveStoredMicGroupId("g")).not.toThrow();
+    expect(() => saveStoredLearnerMicDeviceId("lp", "x")).not.toThrow();
+    expect(() => saveStoredLearnerMicGroupId("lp", "g")).not.toThrow();
+    expect(() => saveStoredLearnerMicGain("lp", 1.5)).not.toThrow();
     expect(() => saveStoredChimeEnabled(true)).not.toThrow();
     expect(() => saveStoredChimeVolume(0.5)).not.toThrow();
   });
@@ -179,6 +294,10 @@ describe("quota / write failures", () => {
     };
     expect(() => saveStoredGain(1)).not.toThrow();
     expect(() => saveStoredDeviceId("x")).not.toThrow();
+    expect(() => saveStoredMicGroupId("g")).not.toThrow();
+    expect(() => saveStoredLearnerMicDeviceId("lp", "x")).not.toThrow();
+    expect(() => saveStoredLearnerMicGroupId("lp", "g")).not.toThrow();
+    expect(() => saveStoredLearnerMicGain("lp", 1.5)).not.toThrow();
     expect(() => saveStoredChimeEnabled(true)).not.toThrow();
     expect(() => saveStoredChimeVolume(0.5)).not.toThrow();
   });

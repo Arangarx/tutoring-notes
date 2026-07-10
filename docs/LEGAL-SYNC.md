@@ -1,5 +1,13 @@
 # Legal sync — `/privacy` and `/terms` ↔ www.mortensenapps.com
 
+## Standing hard rule — honesty (Andrew 2026-07-09)
+
+**Terms and Privacy must be honest at all times** — especially anything that ships on **`master` / production**. Do not claim retention schedules, deletion clocks, subprocessors, or product capabilities the codebase does not implement. Prefer accurate softer wording over aspirational copy. **Preview branches** have a little more leeway (Andrew-only smoke; nobody else uses them), but still prefer truthfulness; never use preview as an excuse to leave dishonest copy on a path that will merge to master.
+
+This is **non-negotiable** and pairs with SEC-POLICY-TRUTH (interim product-facade honesty + retention lifecycle later). Umbrella `mortensenapps.com` may still differ until upstream is updated — product facade must not over-promise relative to *this* app.
+
+---
+
 **`https://www.mortensenapps.com/privacy` and `https://www.mortensenapps.com/terms`
 are the authoritative legal source for any product under the Mortensen
 Apps umbrella.** Those exact URLs (with the `www.` subdomain) are the
@@ -151,9 +159,9 @@ first, then re-submit. The consent screen will continue to display
 | AI note generation (OpenAI) | Product |
 | Session audio recordings (Vercel Blob) | Product |
 | Where data is stored | Product |
-| Data retention and deletion | **Hybrid** — umbrella framing, product-specific delete-from-app instruction |
+| Data retention and deletion | **Hybrid** — umbrella framing, product-specific delete-from-app instruction. **Expanded 2026-05-31:** added COPPA §312.10 child-specific retention schedule paragraph (active relationship + 24 months post-closure; no indefinite retention; verified deletion requests honored earlier). Original general-retention and delete-from-app paragraph preserved verbatim. |
 | Security | **Umbrella** — full enumerated list (encryption in transit / hosting / authentication / secrets / Limited Use). Product-specific bcrypt password storage added. |
-| Children | **Hybrid** — umbrella's framing, product-specific tutor-consent and share-link minor handling |
+| Children | **Hybrid** — umbrella's framing, product-specific tutor-consent and share-link minor handling. **Expanded 2026-05-31:** added full COPPA §312.10 children's data inventory, subprocessor disclosure, retention schedule (active + 24 months), parental rights bullet list (review/delete/revoke), deletion-request contact path, consent-revocation two-track mechanics, and educational-use consent disclosure. The original tutor-responsibility and share-link paragraphs are preserved verbatim; COPPA disclosures are a separate adjacent `<div>` headed "Children's data and parental rights (COPPA)". |
 | Changes | **Umbrella** |
 | Contact | Product — uses `arangarx+tutoringnotes@gmail.com` for product-specific addressing, links to mortensenapps.com for general inquiries |
 
@@ -168,6 +176,7 @@ first, then re-submit. The consent screen will continue to display
 | Your content | Product |
 | Gmail integration | Product |
 | Third-party services | **Hybrid** — umbrella's framing, product-specific subprocessor list with link to privacy policy |
+| Children and parental consent | **Hybrid** — umbrella now has this section (added 2026-05-31 on `coppa-312-10-disclosure` branch); product facade adds Tutoring-Notes-specific COPPA language (COPPA applicability, representation-of-consent, cross-reference to privacy policy COPPA section). |
 | Availability and changes | Product (combines umbrella's posture with product-specific notification language) |
 | Disclaimers | **Umbrella** — adds product-specific "Educational outcomes are not guaranteed" sentence |
 | Limitation of liability | **Umbrella** — **VERBATIM**, including the $50 / 12-month-of-fees cap. Do not alter without legal review. |
@@ -229,6 +238,35 @@ repo lands a verification-team-driven change before the deploy):
   changes.
 
 ## History
+
+- **2026-05-31** — COPPA §312.10 compliance sync (disclosure floor, not counsel-gated per
+  Andrew 2026-05-31 decision). Branch `coppa-312-10-disclosure` in the umbrella repo;
+  product facades committed on `v1-redesign`. ADDITIVE-ONLY changes to umbrella; no
+  existing clause, heading, or sentence was removed or reworded.
+  - **Umbrella `privacy/index.html`:** added COPPA para to "Retention and deletion"
+    (no indefinite retention, written policy, product-specific schedule, parental
+    deletion-request cross-reference); expanded "Children" section with VPC requirement,
+    parent rights bullet list (review/direct-delete/revoke), two-track revocation
+    mechanics, and children's PI retention cap. Last updated: May 31, 2026.
+  - **Umbrella `terms/index.html`:** added new "Children and parental consent" section
+    between Third-party services and Disclaimers (COPPA applicability, representation-
+    of-consent, parental-rights cross-reference to product privacy notice). Last updated:
+    May 31, 2026.
+  - **Product `privacy/page.tsx`:** added LearnerProfile, session transcripts, and
+    parent-for-consent items to "What data we collect"; updated "Session audio recordings"
+    to explicitly name OpenAI as subprocessor on `/v1/audio/transcriptions` (no training);
+    added COPPA §312.10 child retention schedule paragraph to "Data retention and
+    deletion"; expanded "Children" section (original two paragraphs preserved verbatim)
+    with adjacent new `<div>` "Children's data and parental rights (COPPA)" covering
+    full COPPA data inventory, subprocessor disclosure, how-we-use statement, 24-month
+    retention schedule, parental rights bullet list, two-track revocation disclosure,
+    and educational-use consent disclosure. Contact path:
+    `arangarx+tutoringnotes@gmail.com`. Last updated / SYNCED FROM: May 31, 2026.
+  - **Product `terms/page.tsx`:** added new "Children and parental consent" section
+    before Disclaimers; updated SYNCED FROM and Last updated dates.
+  - **LEGAL-SYNC.md:** updated /privacy table rows for "Children" and
+    "Data retention and deletion"; added "Children and parental consent" row to /terms
+    table; added this history entry.
 
 - **2026-05-17** — initial sync. Brought tutoring-notes copies in line
   with the umbrella's full Sharing/Disclosure list, Limited Use

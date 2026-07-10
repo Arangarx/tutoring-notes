@@ -112,6 +112,121 @@ describe("excalidraw-adapter -- toCanonical", () => {
     expect(toCanonical(rect({ type: "selection" }))).toBeNull();
   });
 
+  // ── Degenerate line/arrow filter (phantom-stroke fix) ──────────────────────
+  // A single click with the line tool + right-click finalize produces a
+  // degenerate element: 1 point (or N identical points), zero bounding box.
+  // These must be dropped before they reach the canonical layer.
+
+  test("degenerate line (1 point, zero bbox) is dropped", () => {
+    const el = freedraw({
+      id: "degen-line-1pt",
+      type: "line",
+      width: 0,
+      height: 0,
+      points: [[0, 0]],
+    });
+    expect(toCanonical(el)).toBeNull();
+  });
+
+  test("degenerate line (2 identical points, zero bbox) is dropped", () => {
+    const el = freedraw({
+      id: "degen-line-2pt-same",
+      type: "line",
+      width: 0,
+      height: 0,
+      points: [[0, 0], [0, 0]],
+    });
+    expect(toCanonical(el)).toBeNull();
+  });
+
+  test("degenerate arrow (1 point, zero bbox) is dropped", () => {
+    const el = freedraw({
+      id: "degen-arrow-1pt",
+      type: "arrow",
+      width: 0,
+      height: 0,
+      points: [[0, 0]],
+    });
+    expect(toCanonical(el)).toBeNull();
+  });
+
+  test("degenerate arrow (2 identical points, zero bbox) is dropped", () => {
+    const el = freedraw({
+      id: "degen-arrow-2pt-same",
+      type: "arrow",
+      width: 0,
+      height: 0,
+      points: [[5, 5], [5, 5]],
+    });
+    expect(toCanonical(el)).toBeNull();
+  });
+
+  // ── Over-drop guard: legitimate elements MUST be kept ─────────────────────
+
+  test("legitimate line (2 distinct points, real bbox) is KEPT", () => {
+    const el = freedraw({
+      id: "real-line",
+      type: "line",
+      width: 10,
+      height: 10,
+      points: [[0, 0], [10, 10]],
+    });
+    const wb = toCanonical(el);
+    expect(wb).not.toBeNull();
+    expect(wb!.type).toBe("line");
+  });
+
+  test("legitimate arrow (2 distinct points, real bbox) is KEPT", () => {
+    const el = freedraw({
+      id: "real-arrow",
+      type: "arrow",
+      width: 20,
+      height: 0,
+      points: [[0, 0], [20, 0]],
+    });
+    const wb = toCanonical(el);
+    expect(wb).not.toBeNull();
+    expect(wb!.type).toBe("arrow");
+  });
+
+  test("line with 2 distinct points but tiny bbox (near-zero) is KEPT — conservative guard", () => {
+    // |width|=0.5 < 1 AND |height|=0.5 < 1, but points ARE distinct → KEPT
+    const el = freedraw({
+      id: "near-zero-bbox-line",
+      type: "line",
+      width: 0.5,
+      height: 0.5,
+      points: [[0, 0], [0.5, 0.5]],
+    });
+    expect(toCanonical(el)).not.toBeNull();
+  });
+
+  test("line with zero bbox but 1pt + hasBbox via width>=1 is KEPT", () => {
+    // width ≥ 1 alone is enough to keep it
+    const el = freedraw({
+      id: "wide-zero-height-line",
+      type: "line",
+      width: 5,
+      height: 0,
+      points: [[0, 0]],
+    });
+    expect(toCanonical(el)).not.toBeNull();
+  });
+
+  test("freedraw single-point dot (type=freedraw, zero bbox) is KEPT — must NOT be dropped", () => {
+    // freedraw dots are legitimate (stroke radius gives them visual extent);
+    // the degenerate filter must NOT touch freedraw/freehand.
+    const el = freedraw({
+      id: "freedraw-dot",
+      type: "freedraw",
+      width: 0,
+      height: 0,
+      points: [[0, 0]],
+    });
+    expect(toCanonical(el)).not.toBeNull();
+    expect(toCanonical(el)!.type).toBe("freehand");
+  });
+
   test("unknown future element types are dropped without throwing", () => {
     expect(toCanonical(rect({ type: "future-shape" }))).toBeNull();
   });
@@ -185,18 +300,39 @@ describe("excalidraw-adapter -- toCanonical", () => {
     expect(wb.assetUrl).toBe("https://blob/eq.svg");
   });
 
-  test("desmos iframe maps to wbType=desmos with desmosStateJson", () => {
+  test("graph embeddable maps to type=graph with graphStateJson", () => {
+    const el = rect({
+      id: "g1",
+      type: "embeddable",
+      link: "mynk://graph",
+      customData: {
+        wbType: "graph",
+        graphStateJson: '{"expressions":["x^2"],"bbox":[-10,10,10,-10]}',
+        assetUrl: "mynk://graph",
+      },
+    });
+    const wb = toCanonical(el)!;
+    expect(wb.type).toBe("graph");
+    expect(wb.graphStateJson).toContain("x^2");
+    expect(wb.assetUrl).toBe("mynk://graph");
+  });
+
+  test("legacy desmos iframe maps without throwing", () => {
     const el = rect({
       id: "ds1",
-      type: "iframe",
+      type: "embeddable",
+      link: "https://www.desmos.com/calculator/abc123",
       customData: {
-        wbType: "desmos",
+        wbType: "embed",
+        assetUrl: "https://www.desmos.com/calculator/abc123",
+        embed: { provider: "desmos" },
         desmosStateJson: '{"version":11}',
       },
     });
     const wb = toCanonical(el)!;
     expect(wb.type).toBe("desmos");
     expect(wb.desmosStateJson).toBe('{"version":11}');
+    expect(wb.assetUrl).toBe("https://www.desmos.com/calculator/abc123");
   });
 });
 
@@ -216,7 +352,25 @@ describe("excalidraw-adapter -- toExcalidraw round-trip", () => {
     expect(back).toEqual(original);
   });
 
-  test("desmos round-trips through iframe slot", () => {
+  test("graph round-trips through embeddable slot", () => {
+    const wb: WBElement = {
+      id: "g1",
+      type: "graph",
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      assetUrl: "mynk://graph",
+      graphStateJson: '{"expressions":["sin(x)"]}',
+    };
+    const ex = toExcalidraw(wb);
+    expect(ex.type).toBe("embeddable");
+    expect(ex.link).toBe("mynk://graph");
+    const back = toCanonical(ex);
+    expect(back).toEqual(wb);
+  });
+
+  test("legacy desmos round-trips through iframe slot", () => {
     const wb: WBElement = {
       id: "ds1",
       type: "desmos",
@@ -224,11 +378,19 @@ describe("excalidraw-adapter -- toExcalidraw round-trip", () => {
       y: 0,
       width: 400,
       height: 300,
+      assetUrl: "https://www.desmos.com/calculator/abc",
       desmosStateJson: '{"v":11}',
     };
     const ex = toExcalidraw(wb);
     expect(ex.type).toBe("iframe");
-    const back = toCanonical(ex);
+    const back = toCanonical({
+      ...ex,
+      link: wb.assetUrl,
+      customData: {
+        ...ex.customData,
+        assetUrl: wb.assetUrl,
+      },
+    });
     expect(back).toEqual(wb);
   });
 
@@ -553,5 +715,43 @@ describe("excalidraw-adapter -- canonicalizeScene", () => {
       rect({ id: "keep2" }),
     ]);
     expect(out.map((e) => e.id)).toEqual(["keep", "keep2"]);
+  });
+
+  test("canonicalizeScene drops degenerate line (1pt, zero bbox) — phantom-stroke gate", () => {
+    const degenLine = freedraw({
+      id: "phantom",
+      type: "line",
+      width: 0,
+      height: 0,
+      points: [[0, 0]],
+    });
+    const out = canonicalizeScene([
+      freedraw({ id: "real-stroke" }),
+      degenLine,
+      rect({ id: "real-rect" }),
+    ]);
+    expect(out.map((e) => e.id)).toEqual(["real-stroke", "real-rect"]);
+    expect(out).toHaveLength(2);
+  });
+
+  test("canonicalizeScene keeps a freedraw dot alongside a degenerate line drop", () => {
+    const degenArrow = freedraw({
+      id: "phantom-arrow",
+      type: "arrow",
+      width: 0,
+      height: 0,
+      points: [[3, 3], [3, 3]],
+    });
+    const freedrawDot = freedraw({
+      id: "dot",
+      type: "freedraw",
+      width: 0,
+      height: 0,
+      points: [[3, 3]],
+    });
+    const out = canonicalizeScene([degenArrow, freedrawDot]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("dot");
+    expect(out[0].type).toBe("freehand");
   });
 });

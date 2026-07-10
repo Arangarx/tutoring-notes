@@ -39,8 +39,9 @@ export const WB_EVENT_LOG_SCHEMA_VERSION = 1 as const;
  *
  * The `type` discriminator covers the surfaces we persist in Phase 1:
  * freehand strokes, lines, shapes, arrows, text, images (used both for
- * raster paste AND PDF-page-tile AND math-equation-SVG), and Desmos
- * iframe embeds. Everything else (libraries-of-shapes, frames, custom
+ * raster paste AND PDF-page-tile AND math-equation-SVG), JSXGraph
+ * graph embeds, and legacy Desmos iframe embeds. Everything else
+ * (libraries-of-shapes, frames, custom
  * tools) is normalized into one of these on the way in.
  */
 export type WBElement = {
@@ -55,6 +56,7 @@ export type WBElement = {
     | "arrow"
     | "text"
     | "image"
+    | "graph"
     | "desmos";
   /**
    * Top-left x of the element's bounding box in scene coordinates.
@@ -85,7 +87,7 @@ export type WBElement = {
   fontFamily?: number | string;
   /** For image / equation / pdf-page elements: URL of the underlying asset (Vercel Blob). */
   assetUrl?: string;
-  /** Optional alt text for images / equations / desmos. */
+  /** Optional alt text for images / equations / graph / legacy desmos. */
   altText?: string;
   /**
    * For math-equation images: the source LaTeX string. Preserved so the
@@ -93,7 +95,13 @@ export type WBElement = {
    * doing OCR on the rendered SVG.
    */
   latex?: string;
-  /** For desmos elements: the initial state JSON (`Calculator.getState()`). */
+  /** For graph elements: serialized JSXGraph state (expressions + bbox). */
+  graphStateJson?: string;
+  /**
+   * Legacy Desmos embeds (pre–JSXGraph swap): initial state JSON from
+   * `Calculator.getState()`. Still read from old recordings; new inserts
+   * use `graph` + `graphStateJson`.
+   */
   desmosStateJson?: string;
   /**
    * Per-client originator id (excalidraw-room socket id). Used by the
@@ -150,13 +158,34 @@ export type WBEvent =
    * Scene reconstruction (`reconstructSceneAt`) ignores this variant —
    * it's pure camera, not an element change.
    *
-   * Per-page navigation is intentionally NOT carried in this event
-   * because replay has no page-strip surface today. Viewport changes
-   * captured on page-switch (live workspace) will appear in the log
-   * as a normal `viewport` event at the moment of the switch, which
-   * is exactly the camera-jump replay needs.
+   * Per-page navigation is recorded as `page-switch` events (E4/BUG-5)
+   * so replay can highlight the active board tab over the timeline.
+   * Viewport changes captured on page-switch (live workspace) still
+   * appear as normal `viewport` events at the moment of the switch.
    */
-  | { t: number; type: "viewport"; panX: number; panY: number; zoom: number }
+  | {
+      t: number;
+      type: "page-switch";
+      pageId: string;
+      title: string;
+    }
+  | {
+      t: number;
+      type: "viewport";
+      /** Tutor `scrollX` at record time. */
+      panX: number;
+      /** Tutor `scrollY` at record time. */
+      panY: number;
+      zoom: number;
+      /**
+       * Tutor Excalidraw canvas width (CSS px) when this camera was recorded.
+       * Optional for backward compat — replay center-match needs these to
+       * re-derive scroll for a different-sized replay viewport.
+       */
+      viewportWidth?: number;
+      /** Tutor Excalidraw canvas height (CSS px) at record time. */
+      viewportHeight?: number;
+    }
   /**
    * Phase 2 reservation — tutor and student edited a shared text/code
    * document. Carries an opaque `payload` (likely a Yjs update or
@@ -308,10 +337,12 @@ export function reconstructSceneAt(
         break;
       }
       default:
-        // pause / resume / tab-* / sync-* / viewport / text-doc-update don't
-        // affect scene reconstruction. viewport is pure camera (replay's
-        // applySceneAt handles it separately). text-doc-update will get its
-        // own reconstruction path in Phase 2.
+        // pause / resume / tab-* / sync-* / viewport / page-switch /
+        // text-doc-update don't affect scene reconstruction. viewport is
+        // pure camera (replay's applySceneAt handles it separately).
+        // page-switch is pure board-tab state (replay timeline controller
+        // handles it separately). text-doc-update will get its own
+        // reconstruction path in Phase 2.
         break;
     }
   }
@@ -326,15 +357,99 @@ export function reconstructSceneAt(
  * isn't worth the complexity (200ms debounce + page-switch cadence means
  * ~50–200 events even on a long session).
  */
+export type RecordedViewportCamera = {
+  panX: number;
+  panY: number;
+  zoom: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+};
+
 export function findLatestViewportAt(
   log: WBEventLog,
   untilT: number
-): { panX: number; panY: number; zoom: number } | null {
-  let latest: { panX: number; panY: number; zoom: number } | null = null;
+): RecordedViewportCamera | null {
+  let latest: RecordedViewportCamera | null = null;
   for (const ev of log.events) {
     if (ev.t > untilT) break;
     if (ev.type === "viewport") {
-      latest = { panX: ev.panX, panY: ev.panY, zoom: ev.zoom };
+      latest = {
+        panX: ev.panX,
+        panY: ev.panY,
+        zoom: ev.zoom,
+        viewportWidth: ev.viewportWidth,
+        viewportHeight: ev.viewportHeight,
+      };
+    }
+  }
+  return latest;
+}
+
+/** Row shape for replay's read-only board tab strip (subset of PageStripRow). */
+export type ReplayPageTabRow = {
+  id: string;
+  title: string;
+  section: "board";
+  isPdf: false;
+};
+
+const REPLAY_DEFAULT_FIRST_PAGE: ReplayPageTabRow = {
+  id: "p1",
+  title: "Board 1",
+  section: "board",
+  isPdf: false,
+};
+
+/**
+ * Build the ordered board-tab list for replay from `page-switch` events.
+ * Seeds the implicit first board (`p1`) when the log only records switches
+ * to later-added pages — matches the workspace's default initial page.
+ */
+export function deriveReplayPageListFromLog(log: WBEventLog): ReplayPageTabRow[] {
+  const seen = new Set<string>();
+  const rows: ReplayPageTabRow[] = [];
+
+  for (const ev of log.events) {
+    if (ev.type !== "page-switch") continue;
+    if (seen.has(ev.pageId)) continue;
+    seen.add(ev.pageId);
+    rows.push({
+      id: ev.pageId,
+      title: ev.title,
+      section: "board",
+      isPdf: false,
+    });
+  }
+
+  if (rows.length === 0) {
+    return [REPLAY_DEFAULT_FIRST_PAGE];
+  }
+  if (!seen.has(REPLAY_DEFAULT_FIRST_PAGE.id)) {
+    rows.unshift(REPLAY_DEFAULT_FIRST_PAGE);
+  } else {
+    const p1Idx = rows.findIndex((r) => r.id === REPLAY_DEFAULT_FIRST_PAGE.id);
+    if (p1Idx > 0) {
+      const [p1Row] = rows.splice(p1Idx, 1);
+      rows.unshift(p1Row!);
+    }
+  }
+  return rows;
+}
+
+/**
+ * Active board page at replay time `untilT` — latest `page-switch` event
+ * with `t <= untilT`. Returns null when no switch has occurred yet (caller
+ * should fall back to the first tab in {@link deriveReplayPageListFromLog}).
+ */
+export function findActiveReplayPageIdAt(
+  log: WBEventLog,
+  untilT: number
+): string | null {
+  let latest: string | null = null;
+  for (const ev of log.events) {
+    if (ev.t > untilT) break;
+    if (ev.type === "page-switch") {
+      latest = ev.pageId;
     }
   }
   return latest;

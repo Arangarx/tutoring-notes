@@ -1,0 +1,423 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  AUDIO_RECORDING_CONSENT_COPY,
+  LIVE_SESSION_CONSENT_COPY,
+} from "@/lib/consent-toggle-copy";
+import { cn } from "@/lib/utils";
+
+import { saveParentConsentAction } from "./actions";
+
+export type TutorConsentState = {
+  adminUserId: string;
+  tutorLabel: string;
+  version: number | null;
+  allowLiveSession: boolean;
+  allowAudioRecording: boolean;
+  allowWhiteboardRecording: boolean;
+  /** Dormant — retained in schema; hidden from UI pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
+  allowNoteSending: boolean;
+};
+
+export type ConsentRestrictionState = {
+  restrictAudioRecording: boolean;
+  restrictWhiteboardRecording: boolean;
+  /** Dormant — paired with allowNoteSending; hidden pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
+  restrictNoteSending: boolean;
+};
+
+type PermissionKey = keyof Omit<
+  TutorConsentState,
+  "adminUserId" | "tutorLabel" | "version"
+>;
+
+type PermissionToggleDef = {
+  key: PermissionKey;
+  label: string;
+  description: string;
+  emphasis: "critical" | "recommended" | "standard";
+};
+
+const PERMISSION_TOGGLES: ReadonlyArray<PermissionToggleDef> = [
+  {
+    key: "allowLiveSession",
+    ...LIVE_SESSION_CONSENT_COPY,
+    emphasis: "critical",
+  },
+  {
+    key: "allowAudioRecording",
+    ...AUDIO_RECORDING_CONSENT_COPY,
+    emphasis: "recommended",
+  },
+];
+
+const RESTRICTION_TOGGLES = [
+  {
+    key: "restrictAudioRecording" as const,
+    label: "Always block audio recording",
+    description:
+      "Applies to every tutor. If checked, session audio cannot be recorded even when a tutor's setting above is on.",
+  },
+  {
+    key: "restrictWhiteboardRecording" as const,
+    label: "Always block whiteboard replay",
+    description:
+      "Applies to every tutor. If checked, you cannot replay saved whiteboard sessions even when a tutor's setting above is on.",
+  },
+] satisfies ReadonlyArray<{
+  key: keyof ConsentRestrictionState;
+  label: string;
+  description: string;
+}>;
+
+type ParentConsentEditorProps = {
+  learnerProfileId: string;
+  learnerName: string;
+  tutors: TutorConsentState[];
+  restrictions: ConsentRestrictionState;
+};
+
+export function ParentConsentEditor({
+  learnerProfileId,
+  learnerName,
+  tutors,
+  restrictions: initialRestrictions,
+}: ParentConsentEditorProps) {
+  const [tutorStates, setTutorStates] = useState(tutors);
+  const [restrictions, setRestrictions] = useState(initialRestrictions);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function updateTutorToggle(
+    adminUserId: string,
+    key: (typeof PERMISSION_TOGGLES)[number]["key"],
+    checked: boolean
+  ) {
+    setTutorStates((prev) =>
+      prev.map((t) => (t.adminUserId === adminUserId ? { ...t, [key]: checked } : t))
+    );
+    setSaved(false);
+  }
+
+  function updateRestriction(
+    key: keyof ConsentRestrictionState,
+    checked: boolean
+  ) {
+    setRestrictions((prev) => ({ ...prev, [key]: checked }));
+    setSaved(false);
+  }
+
+  async function handleSave() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await saveParentConsentAction(learnerProfileId, {
+        tutors: tutorStates.map(
+          ({
+            adminUserId,
+            allowLiveSession,
+            allowAudioRecording,
+            allowWhiteboardRecording,
+            allowNoteSending,
+          }) => ({
+            adminUserId,
+            allowLiveSession,
+            allowAudioRecording,
+            allowWhiteboardRecording,
+            allowNoteSending,
+          })
+        ),
+        restrictions,
+      });
+
+      if (!result.ok) {
+        setError(result.error ?? "save_failed");
+        return;
+      }
+
+      if (result.tutorVersions) {
+        setTutorStates((prev) =>
+          prev.map((tutor) => ({
+            ...tutor,
+            version: result.tutorVersions![tutor.adminUserId] ?? tutor.version,
+          }))
+        );
+      }
+      setSaved(true);
+    } catch {
+      setError("network");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (tutors.length === 0) {
+    return (
+      <div className="rounded-[10px] border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
+        <p>
+          {`${learnerName} isn't connected to a tutor yet. Privacy preferences are set when you claim a tutor's invite link, or will appear here once a tutor is linked.`}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Alert className="rounded-[10px] border-accent/30 bg-accent-soft">
+        <AlertTitle className="text-accent-text">How privacy settings work</AlertTitle>
+        <AlertDescription className="text-foreground">
+          <p>
+            {`You control privacy in two layers for ${learnerName}. First, choose what each tutor may do — those choices are separate per tutor. Second, you can optionally set hard limits that apply to every tutor and that ${learnerName} cannot change.`}
+          </p>
+          <p className="mt-2">
+            {`What actually happens in a session: a tutor may only do something when you have turned it on for that tutor and you have not blocked it in the hard limits below.`}
+          </p>
+        </AlertDescription>
+      </Alert>
+
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">What each tutor may do</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Turn on only what you are comfortable with for each tutor. Allowing something for one tutor does not affect another.
+          </p>
+        </div>
+
+        <Accordion
+          type="multiple"
+          defaultValue={tutorStates.map((t) => t.adminUserId)}
+          className="rounded-[10px] border border-border bg-card px-4"
+        >
+          {tutorStates.map((tutor) => (
+            <AccordionItem key={tutor.adminUserId} value={tutor.adminUserId}>
+              <AccordionTrigger className="py-4 hover:no-underline">
+                <div className="flex flex-1 items-center gap-3 pr-2 text-left">
+                  <span className="font-medium text-foreground">{tutor.tutorLabel}</span>
+                  {tutor.version ? (
+                    <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                      v{tutor.version}
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="bg-accent-soft text-accent-text font-mono text-[10px] uppercase"
+                    >
+                      Not set
+                    </Badge>
+                  )}
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pb-4">
+                <div
+                  className={cn(
+                    "space-y-3 rounded-[10px] p-3",
+                    !tutor.allowLiveSession &&
+                      "border border-warning/30 border-l-4 border-l-warning/50 bg-warning/10"
+                  )}
+                >
+                  {PERMISSION_TOGGLES.map((perm) => (
+                    <PermissionToggleRow
+                      key={perm.key}
+                      perm={perm}
+                      tutor={tutor}
+                      onToggle={(checked) =>
+                        updateTutorToggle(tutor.adminUserId, perm.key, checked)
+                      }
+                    />
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      </div>
+
+      <AccountSectionCardLike title={`Always-off limits for ${learnerName}`}>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Optional. Check a box to block that activity for every tutor, even if you turned it on above. Your child cannot change these. All unchecked by default — nothing extra is blocked.
+        </p>
+        <div className="space-y-3">
+          {RESTRICTION_TOGGLES.map((item) => (
+            <div
+              key={item.key}
+              className="flex items-start gap-3 rounded-[10px] border border-border bg-background p-3"
+            >
+              <Checkbox
+                id={`restriction-${item.key}`}
+                checked={restrictions[item.key]}
+                onCheckedChange={(checked) =>
+                  updateRestriction(item.key, checked === true)
+                }
+                aria-label={item.label}
+                className="mt-0.5"
+              />
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <Label
+                  htmlFor={`restriction-${item.key}`}
+                  className="cursor-pointer text-sm font-medium"
+                >
+                  {item.label}
+                </Label>
+                <p className="text-xs text-muted-foreground">{item.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </AccountSectionCardLike>
+
+      <div className="space-y-3 border-t border-border pt-4">
+        <Button
+          type="button"
+          data-testid="parent-consent-save-btn"
+          variant="accent"
+          className="w-full min-h-11 sm:w-auto"
+          onClick={() => void handleSave()}
+          disabled={busy}
+          aria-busy={busy}
+        >
+          {busy ? "Saving…" : "Save privacy preferences"}
+        </Button>
+
+        {saved ? (
+          <Alert
+            data-testid="parent-consent-saved-alert"
+            className="rounded-[10px] border-accent/30 bg-accent-soft"
+          >
+            <AlertTitle>Preferences saved</AlertTitle>
+            <AlertDescription>
+              Your privacy choices are saved. New tutoring sessions will use
+              these settings.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {error ? (
+          <Alert className="rounded-[10px] border-destructive/30" role="alert">
+            <AlertTitle>Could not save</AlertTitle>
+            <AlertDescription>
+              {error === "network"
+                ? "Network error — please try again."
+                : error === "consent_already_saved"
+                  ? "Preferences were already saved. Refresh the page and try again."
+                  : "Something went wrong saving your preferences. Please try again."}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PermissionToggleRow({
+  perm,
+  tutor,
+  onToggle,
+}: {
+  perm: PermissionToggleDef;
+  tutor: TutorConsentState;
+  onToggle: (checked: boolean) => void;
+}) {
+  const inputId = `${tutor.adminUserId}-${perm.key}`;
+  const isCritical = perm.emphasis === "critical";
+  const isRecommended = perm.emphasis === "recommended";
+  const liveSessionsOff = isCritical && !tutor.allowLiveSession;
+
+  return (
+    <div
+      className={cn(
+        "rounded-[10px] border bg-background p-3",
+        liveSessionsOff
+          ? "border-warning/30"
+          : isRecommended
+            ? "border-accent/30 bg-accent-soft/20"
+            : "border-border"
+      )}
+    >
+      {liveSessionsOff ? (
+        <div className="mb-3 rounded-[8px] border border-warning/30 bg-warning/10 px-3 py-2">
+          <p className="text-sm font-medium text-warning">
+            Limited to scheduling without live sessions
+          </p>
+          <p className="mt-1 text-xs text-foreground">
+            {
+              "Without live sessions, Mynk is effectively just a scheduling calendar — your child cannot join tutoring on the whiteboard. You can decline, but there is little reason to use the app if this stays off."
+            }
+          </p>
+        </div>
+      ) : null}
+
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Label
+              htmlFor={inputId}
+              className={cn(
+                "cursor-pointer",
+                isCritical ? "text-base font-semibold" : "text-sm font-medium"
+              )}
+            >
+              {perm.label}
+            </Label>
+            {isRecommended ? (
+              <Badge className="bg-accent-soft text-accent-text font-mono text-[10px] uppercase">
+                Recommended
+              </Badge>
+            ) : null}
+          </div>
+          <p
+            className={cn(
+              "text-muted-foreground",
+              isCritical || isRecommended ? "text-sm" : "text-xs"
+            )}
+          >
+            {perm.description}
+          </p>
+          {isRecommended ? (
+            <p className="text-xs text-foreground">
+              You can turn this off, but most families keep it on so sessions are
+              useful after class ends.
+            </p>
+          ) : null}
+        </div>
+        <Switch
+          id={inputId}
+          data-testid={`parent-consent-toggle-${tutor.adminUserId}-${perm.key}`}
+          checked={tutor[perm.key]}
+          onCheckedChange={onToggle}
+          aria-label={perm.label}
+          className="shrink-0"
+        />
+      </div>
+    </div>
+  );
+}
+
+function AccountSectionCardLike({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-[10px] border border-border bg-card p-4 shadow-sm sm:p-5">
+      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}

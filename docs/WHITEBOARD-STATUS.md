@@ -430,6 +430,25 @@ to know when to revisit.
 
 ---
 
+## Sarah UX asks + custom chrome decision (2026-06-07)
+
+**Feasibility (pinned `@excalidraw/excalidraw` 0.18.1):** `UIOptions` can only hide canvas menu actions + hide the image tool (`tools: { image: false }`). It **cannot** reorder the toolbar, hide individual shape tools, compact/replace the left properties palette, or control mobile color/pen popup dismissal. Achieving those requires hiding native Excalidraw UI (e.g. `zenModeEnabled` or CSS) and building **Mynk whiteboard chrome** driving the imperative `excalidrawAPI` (`setActiveTool`, `updateScene({ appState })`, etc.) — we already use this pattern for `UndoRedoButtons` + PDF/Math/Desmos inserts. Drawing **defaults** (pen width, roughness/sharpness, font) remain cheap via `initialData.appState` / `updateScene`.
+
+**Governing decision (Andrew ratified LOCKED 2026-06-07):** invest once in a shared chrome layer with **tutor-desktop** and **student-mobile-first** variants, rather than patching Excalidraw internals. Sequenced into the whiteboard wave (requires real-iPhone testing); **not a V1-notes blocker**. **Consolidated requirements:** [`docs/handoff/whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md).
+
+| Sarah ask | ID | Notes |
+|---|---|---|
+| Toolbar reorder: Cursor → Pencil → Eraser → Typing, then shapes | U4 (2026-05-26) | Custom chrome — not `UIOptions` |
+| Line+arrow dropdown; rectangle/diamond/ellipse dropdown | U5/U6 (2026-05-26) | Custom chrome — not `UIOptions` |
+| Left properties / pen panel too large on tutor desktop | U5 (2026-06-06) + prior | v1 redesign + custom chrome |
+| Thinner default pen stroke | U6 (2026-06-06) | Defaults via `appState`; compact panel needs chrome |
+| Mobile color/pen palette dismiss on outside tap | I7 | Student-mobile-first chrome |
+| Student workspace **BREAKING** mobile-first redesign | Wave 3 | Layout pass clusters with I7 + waiting room etc. |
+
+Backlog rows: `docs/BACKLOG.md` whiteboard queue + framing note. Do not re-estimate toolbar reorder or dropdown consolidation as a config tweak.
+
+---
+
 ## Follow-ups (NOT in Phase 1, tracked here so they don't get lost)
 
 - **Backlog of record (whiteboard + cross-cutting):** `docs/BACKLOG.md` section **“Whiteboard — implementation / design queue”** (PDF workbook, session audio, replay scrub, multi-page log, student follow UX). Add there first; keep this file’s follow-ups to Phase-1-adjacent crumbs.

@@ -65,13 +65,13 @@ test("smoke: create note, send update, outbox link opens share page", async ({
 test("auth: unauthenticated access to admin redirects to login", async ({ page }) => {
   await page.goto("/admin/students");
   await expect(page).toHaveURL(/\/login/);
-  await expect(page.getByRole("heading", { name: "Login" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });
 
 test("forgot password page loads and links back to login", async ({ page }) => {
   await page.goto("/forgot-password");
-  await expect(page.getByRole("heading", { name: "Forgot password" })).toBeVisible();
-  await page.getByRole("link", { name: "Back to login" }).click();
+  await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+  await page.getByRole("link", { name: "Back to sign in" }).click();
   await expect(page).toHaveURL(/\/login/);
 });
 

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — Site Redesign Mock · Student List (2026-06-10)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root,[data-theme="light"]{
+  --surface-base:#f5f4ec;--surface-1:#fcfbf4;--surface-2:#ecebe1;--surface-3:#e3e2d8;
+  --border-subtle:#e3e8e9;--border-default:#c5cfd0;--border-strong:#4a6680;
+  --text-strong:#15203a;--text-default:#15203a;--text-muted:#5a6877;--text-disabled:#94a3b8;--text-inverse:#fcfbf4;
+  --brand:#1e3d54;--accent:#e27d60;--accent-soft:#f8e0d6;--accent-strong:#c96a50;--accent-on:#15203a;--accent-text:#8a3c25;
+  --success:#16a34a;--success-soft:rgba(34,197,94,0.12);
+  --danger-text:#dc2626;--danger-border:#dc2626;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.08);--shadow-md:0 4px 12px rgba(0,0,0,0.12);--shadow-lg:0 8px 24px rgba(0,0,0,0.20);
+  --overlay-scrim:rgba(0,0,0,0.4);--surface-overlay:rgba(15,23,42,0.45);
+  --radius-sm:6px;--radius-md:10px;--radius-lg:16px;
+  --font-body:"Inter",ui-sans-serif,system-ui,sans-serif;--font-display:"Fraunces",Georgia,serif;--font-mono:"JetBrains Mono",Menlo,monospace;
+  --meta-header-bg:rgba(235,233,224,0.94);--meta-header-border:rgba(0,0,0,0.08);
+  --meta-chrome-fg:var(--text-muted);--meta-chrome-border:rgba(0,0,0,0.15);--meta-chrome-active-bg:rgba(0,0,0,0.06);
+  --avatar-1:#f97316;--avatar-2:#f59e0b;--avatar-3:#84cc16;--avatar-4:#10b981;
+}
+[data-theme="dark"]{
+  --surface-base:#051a24;--surface-1:#0e2a38;--surface-2:#142f3e;--surface-3:#1c3548;
+  --border-subtle:#0e2a38;--border-default:#1c3548;--border-strong:#6a8fa0;
+  --text-strong:#f0ede4;--text-default:#f0ede4;--text-muted:#a5b5c0;--text-disabled:rgba(165,181,192,0.45);--text-inverse:#051a24;
+  --brand:#7ea4b1;--accent:#e27d60;--accent-soft:#2e1d18;--accent-strong:#d06b4e;--accent-on:#051a24;--accent-text:#e8a08a;
+  --success:#4ade80;--success-soft:rgba(34,197,94,0.12);
+  --danger-text:#fca5a5;--danger-border:#fca5a5;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.30);--shadow-md:0 4px 12px rgba(0,0,0,0.40);--shadow-lg:0 8px 24px rgba(0,0,0,0.55);
+  --overlay-scrim:rgba(0,0,0,0.55);--surface-overlay:rgba(0,0,0,0.6);
+  --meta-header-bg:rgba(2,8,13,0.94);--meta-header-border:rgba(255,255,255,0.08);
+  --meta-chrome-fg:rgba(240,237,228,0.7);--meta-chrome-border:rgba(255,255,255,0.15);--meta-chrome-active-bg:rgba(255,255,255,0.12);
+}
+html,body{font-family:var(--font-body);background:var(--surface-base);color:var(--text-default);-webkit-font-smoothing:antialiased;min-height:100dvh;display:flex;flex-direction:column}
+.meta-header{position:sticky;top:0;z-index:200;background:var(--meta-header-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--meta-header-border);padding:10px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.meta-title{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 60,"wght" 700;font-size:15px;letter-spacing:-0.02em;margin-right:auto}
+.meta-title .dot{color:var(--accent)}
+.meta-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.meta-btn{font:500 11px var(--font-mono);padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid var(--meta-chrome-border);color:var(--meta-chrome-fg);background:transparent}
+.meta-btn:hover,.meta-btn.active{background:var(--meta-chrome-active-bg);color:var(--text-default)}
+.mock-notes{max-width:1280px;margin:0 auto;padding:16px 20px 0;font-size:13px;line-height:1.55;color:var(--text-muted)}
+.mock-notes strong{color:var(--text-default)}
+.mock-notes ul{margin:8px 0 0 18px}
+.viewport-root{flex:1;min-height:0;display:flex;flex-direction:column}
+.stage-desktop{flex:1;display:flex;flex-direction:column;min-height:0;padding:16px}
+.stage-devices{flex:1;display:none;flex-direction:column;align-items:center;padding:12px 16px 24px;overflow:auto}
+.stage-devices.active{display:flex}
+.devices-row{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;width:100%;max-width:1200px}
+.device-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;flex:1 1 320px;max-width:calc(50% - 14px)}
+.device-label{font:600 11px var(--font-mono);color:var(--text-muted)}
+.device-viewport{position:relative;overflow:hidden;background:var(--surface-base);border:2px solid var(--border-strong);border-radius:28px;box-shadow:var(--shadow-lg);transform-origin:top center}
+.device-screen{width:100%;height:100%;overflow:hidden;position:relative}
+.app-shell{display:flex;min-height:560px;height:calc(100dvh - 180px);max-width:1100px;margin:0 auto;width:100%;background:var(--surface-base);border:1px solid var(--border-default);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
+.device-viewport .app-shell{width:100%!important;height:100%!important;max-width:none!important;margin:0!important;border:none!important;border-radius:0!important;min-height:0!important}
+/* layout */
+.sidebar{width:220px;flex-shrink:0;background:var(--surface-1);border-right:1px solid var(--border-default);display:flex;flex-direction:column;padding:16px 12px}
+.sidebar .wordmark{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 60,"wght" 700;font-size:20px;color:var(--brand);letter-spacing:-0.025em;padding:4px 8px 20px}
+.sidebar .wordmark .dot{color:var(--accent)}
+.nav-link{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-md);font-size:14px;font-weight:500;color:var(--text-muted);text-decoration:none;margin-bottom:2px}
+.nav-link.active{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.nav-link:hover:not(.active){background:var(--surface-2);color:var(--text-default)}
+.sidebar-footer{margin-top:auto;padding-top:16px;border-top:1px solid var(--border-subtle)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.top-bar-m{display:none;height:52px;min-height:52px;align-items:center;justify-content:space-between;padding:0 16px;background:var(--surface-1);border-bottom:1px solid var(--border-default)}
+.top-bar-m .wordmark{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 60,"wght" 700;font-size:18px;color:var(--brand)}
+.top-bar-m .wordmark .dot{color:var(--accent)}
+.icon-btn{width:40px;height:40px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--text-muted);cursor:pointer;font-size:18px}
+.content{flex:1;overflow:auto;padding:24px}
+.content-m{padding:16px}
+.page-title{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 0,"wght" 700;font-size:28px;letter-spacing:-0.02em;margin-bottom:4px}
+.page-desc{font-size:14px;color:var(--text-muted);margin-bottom:20px}
+.toolbar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.search{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--radius-md);padding:0 12px;height:44px}
+.search input{flex:1;border:none;background:transparent;font:inherit;color:var(--text-default);outline:none;min-width:0}
+.search input::placeholder{color:var(--text-muted)}
+.btn-outline{font:inherit;font-weight:500;font-size:14px;padding:10px 16px;border-radius:var(--radius-md);border:1px solid var(--border-strong);background:transparent;color:var(--text-default);cursor:pointer;white-space:nowrap}
+.btn-outline.btn-danger{background:transparent;color:var(--danger-text);border-color:var(--danger-border)}
+.btn-primary{font:inherit;font-weight:600;font-size:14px;padding:10px 18px;border-radius:var(--radius-md);border:none;background:var(--accent);color:var(--accent-on);cursor:pointer}
+.roster{display:flex;flex-direction:column;gap:10px}
+.student-row{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface-1);border:1px solid var(--border-default);border-radius:var(--radius-lg);text-decoration:none;color:inherit;transition:border-color .15s}
+.student-row:hover{border-color:var(--border-strong)}
+.avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0}
+.avatar.sm{width:40px;height:40px;font-size:14px}
+.student-name{font-weight:600;font-size:15px}
+.student-meta{font:11px var(--font-mono);color:var(--text-muted);margin-top:2px}
+.chevron{margin-left:auto;color:var(--text-muted);font-size:18px}
+.add-card-desktop{background:var(--surface-1);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:20px;margin-bottom:20px}
+.add-card-desktop h3{font-size:15px;font-weight:600;margin-bottom:4px}
+.add-card-desktop p{font-size:13px;color:var(--text-muted);margin-bottom:14px}
+.add-form{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.add-form label{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+.add-form input,.text-field{height:44px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-2);font:inherit;color:var(--text-default);width:100%;min-width:200px}
+.add-form input::placeholder,.text-field::placeholder{color:var(--text-muted)}
+.text-field.sheet{height:48px;padding:0 14px;margin-bottom:16px}
+.fab{display:none;position:absolute;bottom:20px;right:16px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-on);border:none;font-size:28px;font-weight:300;box-shadow:var(--shadow-md);cursor:pointer;z-index:5}
+.sheet-backdrop{display:none;position:absolute;inset:0;background:var(--overlay-scrim);z-index:20}
+.sheet-backdrop.open{display:block}
+.bottom-sheet{position:absolute;left:0;right:0;bottom:0;z-index:21;background:var(--surface-1);border-top:1px solid var(--border-default);border-radius:20px 20px 0 0;padding:12px 20px 28px;transform:translateY(100%);transition:transform .25s ease;box-shadow:var(--shadow-lg)}
+.bottom-sheet.open{transform:translateY(0)}
+.sheet-handle{width:36px;height:4px;border-radius:2px;background:var(--border-default);margin:0 auto 16px}
+.sheet-title{font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:4px}
+.sheet-desc{font-size:13px;color:var(--text-muted);margin-bottom:16px}
+/* mobile reflow */
+.app-shell.narrow .sidebar{display:none}
+.app-shell.narrow .top-bar-m{display:flex}
+.app-shell.narrow .content{padding:16px}
+.app-shell.narrow .page-title{font-size:22px}
+.app-shell.narrow .toolbar .btn-outline{display:none}
+.app-shell.narrow .add-card-desktop{display:none}
+.app-shell.narrow .fab{display:flex;align-items:center;justify-content:center}
+.app-shell.narrow .search{flex:1 1 100%}
+</style>
+</head>
+<body>
+<header class="meta-header">
+  <div class="meta-title">Mynk<span class="dot">·</span> Student List Mock <span style="font-size:11px;opacity:.5;font-weight:400">/admin/students</span></div>
+  <div class="meta-controls">
+    <button class="meta-btn active" data-view="desktop" onclick="setView('desktop',this)">Desktop</button>
+    <button class="meta-btn" data-view="phone" onclick="setView('phone',this)">Phone</button>
+    <button class="meta-btn" data-view="compare" onclick="setView('compare',this)">Compare</button>
+    <button class="meta-btn" onclick="toggleTheme()" id="themeBtn">☾ Dark</button>
+  </div>
+</header>
+<div class="mock-notes">
+  <strong>Proposals vs today:</strong>
+  <ul>
+    <li><strong>Mobile:</strong> full-width roster (not squeezed desktop column); sticky search; “Add student” moves to FAB + bottom sheet instead of a card above the fold.</li>
+    <li><strong>Desktop:</strong> persistent left nav (Students / Outbox / Settings) — replaces buried header links; roster is primary, add-student is secondary card.</li>
+    <li><strong>Both themes:</strong> token-driven surfaces; student rows use raised cards on base background (matches whiteboard shell).</li>
+  </ul>
+</div>
+<div class="viewport-root">
+  <div class="stage-desktop" id="stageDesktop">
+    <div class="app-shell" id="appShell">
+      <aside class="sidebar">
+        <div class="wordmark">Mynk<span class="dot">·</span></div>
+        <a class="nav-link active" href="#">Students</a>
+        <a class="nav-link" href="#">Outbox</a>
+        <a class="nav-link" href="#">Settings</a>
+        <div class="sidebar-footer">
+          <a class="nav-link" href="#">Sign out</a>
+        </div>
+      </aside>
+      <div class="main">
+        <header class="top-bar-m">
+          <div class="wordmark">Mynk<span class="dot">·</span></div>
+          <div style="display:flex;gap:8px">
+            <button class="icon-btn" title="Outbox">📤</button>
+            <button class="icon-btn" title="Settings">⚙</button>
+          </div>
+        </header>
+        <div class="content">
+          <h1 class="page-title">Students</h1>
+          <p class="page-desc">Your roster — add students, open profiles, and start whiteboard sessions.</p>
+          <div class="add-card-desktop">
+            <h3>Add a student</h3>
+            <p>Create a roster entry to start sessions and notes.</p>
+            <div class="add-form">
+              <div style="flex:1;min-width:200px"><label>Student name</label><input placeholder="e.g. Jordan S." value=""></div>
+              <button class="btn-primary" style="height:44px">Add student</button>
+            </div>
+          </div>
+          <div class="toolbar">
+            <div class="search"><span style="color:var(--text-muted)">⌕</span><input placeholder="Search students…" value=""></div>
+            <button class="btn-outline">View outbox</button>
+          </div>
+          <div class="roster">
+            <a class="student-row" href="#"><div class="avatar" style="background:var(--avatar-1)">ER</div><div><div class="student-name">Emma R.</div><div class="student-meta">12 notes · last Jun 8</div></div><span class="chevron">›</span></a>
+            <a class="student-row" href="#"><div class="avatar" style="background:var(--avatar-4)">JS</div><div><div class="student-name">Jordan S.</div><div class="student-meta">8 notes · last Jun 5</div></div><span class="chevron">›</span></a>
+            <a class="student-row" href="#"><div class="avatar" style="background:var(--avatar-2)">MK</div><div><div class="student-name">Maya K.</div><div class="student-meta">3 notes · last May 28</div></div><span class="chevron">›</span></a>
+            <a class="student-row" href="#"><div class="avatar" style="background:var(--avatar-3)">AL</div><div><div class="student-name">Alex L.</div><div class="student-meta">1 note · last May 12</div></div><span class="chevron">›</span></a>
+          </div>
+        </div>
+        <button class="fab" onclick="openSheet()" aria-label="Add student">+</button>
+        <div class="sheet-backdrop" id="sheetBackdrop" onclick="closeSheet()"></div>
+        <div class="bottom-sheet" id="bottomSheet" role="dialog" aria-label="Add student">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Add a student</div>
+          <p class="sheet-desc">Create a roster entry to start sessions and notes.</p>
+          <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">Student name</label>
+          <input class="text-field sheet" placeholder="e.g. Jordan S.">
+          <button class="btn-primary" style="width:100%;height:48px;font-size:15px">Add student</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="stage-devices" id="stageDevices">
+    <div class="devices-row" id="devicesRow">
+      <div class="device-wrap" id="phoneWrap">
+        <div class="device-label">iPhone 14 · 390×844 · sheet open</div>
+        <div class="device-scale"><div class="device-viewport" id="phoneVp" data-w="390" data-h="844"><div class="device-screen" id="phoneMount"></div></div></div>
+      </div>
+      <div class="device-wrap" id="desktopMiniWrap" style="display:none">
+        <div class="device-label">Desktop reference</div>
+        <div class="device-scale"><div class="device-viewport" id="deskVp" data-w="900" data-h="600" style="border-radius:12px"><div class="device-screen" id="deskMount"></div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const PHONE_W=390,PHONE_H=844;
+let shellClone=null;
+function toggleTheme(){
+  const h=document.documentElement;
+  const d=h.getAttribute('data-theme')==='dark';
+  h.setAttribute('data-theme',d?'light':'dark');
+  document.getElementById('themeBtn').textContent=d?'☾ Dark':'☀ Light';
+}
+function openSheet(){document.getElementById('sheetBackdrop').classList.add('open');document.getElementById('bottomSheet').classList.add('open')}
+function closeSheet(){document.getElementById('sheetBackdrop').classList.remove('open');document.getElementById('bottomSheet').classList.remove('open')}
+function setLayout(shell,narrow){shell.classList.toggle('narrow',narrow)}
+function scaleDevices(){
+  document.querySelectorAll('.device-viewport').forEach(vp=>{
+    const w=+vp.dataset.w,h=+vp.dataset.h;
+    vp.style.width=w+'px';vp.style.height=h+'px';
+    const outer=vp.parentElement,avail=outer?outer.clientWidth:window.innerWidth-48;
+    const meta=document.querySelector('.meta-header')?.offsetHeight||49;
+    const notes=document.querySelector('.mock-notes')?.offsetHeight||60;
+    const scale=Math.min(avail/w,(window.innerHeight-meta-notes-80)/h,1);
+    vp.style.transform='scale('+scale+')';
+    if(outer){outer.style.height=Math.ceil(h*scale)+'px';outer.style.width=Math.ceil(w*scale)+'px'}
+  });
+}
+function setView(view,btn){
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  const primary=document.getElementById('appShell');
+  const stageD=document.getElementById('stageDesktop');
+  const stageP=document.getElementById('stageDevices');
+  const phoneMount=document.getElementById('phoneMount');
+  const deskMount=document.getElementById('deskMount');
+  const deskWrap=document.getElementById('desktopMiniWrap');
+  closeSheet();
+  if(view==='desktop'){
+    stageD.style.display='';stageP.classList.remove('active');
+    if(primary.parentElement!==stageD)stageD.appendChild(primary);
+    setLayout(primary,false);
+    if(shellClone?.parentElement)shellClone.remove();
+    return;
+  }
+  stageD.style.display='none';stageP.classList.add('active');
+  deskWrap.style.display=view==='compare'?'flex':'none';
+  if(view==='compare'){
+    setLayout(primary,true);phoneMount.appendChild(primary);openSheet();
+    if(!shellClone){shellClone=primary.cloneNode(true);shellClone.removeAttribute('id');setLayout(shellClone,false)}
+    deskMount.appendChild(shellClone);
+  }else{
+    setLayout(primary,true);phoneMount.appendChild(primary);
+    if(shellClone?.parentElement)shellClone.remove();
+    openSheet();
+  }
+  scaleDevices();
+}
+window.addEventListener('resize',scaleDevices);
+setView('compare',document.querySelector('[data-view="compare"]'));
+</script>
+</body>
+</html>

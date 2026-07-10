@@ -82,6 +82,24 @@ export async function uploadAudioDirect(
   // the codec hint isn't load-bearing for either Whisper or playback.
   const cleanContentType = mimeType.split(";")[0].trim() || "application/octet-stream";
   try {
+    if (
+      (await import("@/lib/blob-harness-client-upload")).shouldUseBlobHarnessClientUpload()
+    ) {
+      const { uploadViaBlobHarness } = await import("@/lib/blob-harness-client-upload");
+      const result = await uploadViaBlobHarness({
+        pathname,
+        blob,
+        contentType: cleanContentType,
+        handleUploadUrl: "/api/upload/audio",
+        clientPayload: JSON.stringify({ studentId }),
+      });
+      return {
+        ok: true,
+        blobUrl: result.url,
+        mimeType,
+        sizeBytes: blob.size,
+      };
+    }
     // Dynamic import keeps @vercel/blob/client out of the server bundle
     // and out of jest's default node environment when this module is
     // imported by code paths that never actually upload (e.g. the

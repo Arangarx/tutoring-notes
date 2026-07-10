@@ -26,12 +26,12 @@ import type { NextConfig } from "next";
  *     `blob:` for uploaded image previews; `https:` so PDF/image
  *     assets uploaded to Vercel Blob render. Tightening this further
  *     would require enumerating each blob host, which churns.
+ *     Must match `src/lib/security/csp.ts` (middleware also sets CSP;
+ *     policies combine — keep in sync).
  *
  *   font-src 'self' data: blob: https:
  *     `data:` for MathJax + Excalidraw base64 fonts; `blob:` for
  *     @font-face / object URLs; `https:` for dependency webfonts from CDNs.
- *     Must match `src/lib/security/csp.ts` (middleware also sets CSP;
- *     policies combine — keep in sync).
  *
  *   connect-src 'self' https: wss:
  *     Whisper API, Vercel Blob client uploads, the WHITEBOARD_SYNC_URL
@@ -39,10 +39,8 @@ import type { NextConfig } from "next";
  *     host would be more secure but creates an env-coupling problem
  *     across dev/prod/preview deployments.
  *
- *   frame-src 'self' https://www.desmos.com https://desmos.com
- *     The whiteboard's "Insert Desmos" toolbar embeds Desmos
- *     calculator iframes. NO other iframe sources are accepted —
- *     the Excalidraw `validateEmbeddable` allowlist mirrors this.
+ *   frame-src 'self'
+ *     JSXGraph graphs render via renderEmbeddable on our origin (no iframes).
  *
  *   worker-src 'self' blob:
  *     pdfjs-dist runs its parser in a worker; the bootstrap is
@@ -73,7 +71,7 @@ const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: blob: https:",
   "connect-src 'self' https: wss:",
-  "frame-src 'self' https://www.desmos.com https://desmos.com",
+  "frame-src 'self'",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
@@ -82,6 +80,9 @@ const CONTENT_SECURITY_POLICY = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "development",
+  },
   eslint: { ignoreDuringBuilds: false },
   async rewrites() {
     return [{ source: "/favicon.ico", destination: "/icon" }];

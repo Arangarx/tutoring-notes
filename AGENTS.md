@@ -99,10 +99,47 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   per-peer events also carry `peer=<peerId>`), `cev` (cost-event row —
   OpenAI usage observability), `blb` (blob cleanup CLI), `brs` (branch
   sweep CLI), `imp` (impersonation lifecycle — SEC-1; every start/exit
-  writes `[imp] imp=<logId> ...`). See
+  writes `[imp] imp=<logId> ...`), `tfa` (TOTP 2FA lifecycle — Identity
+  Phase 1; every enroll/verify/reset transition writes `[tfa] ...
+  adminUserId=<id> action=<action>`), `lpr` (LearnerProfile ownership-
+  assertion denials + learner login/lock events — `assertOwnsLearnerProfile`
+  `[lpr] lpr=<id> assert_owns_denied ...`; login route writes
+  `[lpr] lpr=<profileId> action=login device=<sessionId>`,
+  `[lpr] lpr=unknown action=login_failed handle=<familyId>:<username> attempt=<n>`,
+  `[lpr] lpr=unknown action=hard_lock_triggered handle=<familyId>:<username>`,
+  `[lpr] lpr=<profileId> action=hard_lock_cleared_by_parent credKey=<familyId>:<username>`;
+  hard lock state is durable in `LearnerLoginThrottle` Neon table — survives cold starts
+  and is shared across instances),
+  `nsi` (notes-session-integration bridge — DRAFT `SessionNote` auto-creation/update
+  at reduce completion, Save/finalize DRAFT→READY, delete-session-and-data; every
+  transition writes `[nsi] wbsid=<sessionId> action=<action> ...`),
+  `wjg` (whiteboard join gate lifecycle — student new-shell path; every transition
+  writes `[wjg] wjg=<joinToken:8> wbsid=<id> action=<action> ...` — mount, key_ok,
+  key_missing, sync_connect, sync_disconnect, excalidraw_api_ready, loading_cleared,
+  loading_stuck, student_reload, session_ended),
+  `wtr` (waiting room — PENDING-phase overlay lifecycle; writes
+  `[wtr] wbsid=<id> role=<tutor|student> action=<action>` for:
+  `waiting_shown` (overlay first shown), `student_connected` (bothPartiesInRoom
+  flips true while PENDING), `start_clicked mode=<live|in_person>` (tutor
+  taps Start), `live_entered mode=<live|in_person>` (overlay dismissed, phase
+  flips to ACTIVE)),
+  `slc` (session lifecycle — `createWhiteboardSession` /
+  `startWhiteboardSession` / `endWhiteboardSession`; every transition writes
+  `[slc] wbsid=<id> action=session_created|session_started|session_ended ...`),
+  `rol` (JWT role-refresh — auth-options jwt callback
+  periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
+  stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when
+  the DB row is missing, `[rol] sub=<id> refresh_error fail_open` on transient DB error),
+  `sal` (share-link access — `src/lib/share-access-scope.ts`; emitted on every
+  `/s/*` page and API access decision; writes
+  `[sal] sal=<token:8> action=access_granted principal=account_holder|learner studentId=<id>`,
+  `[sal] sal=<token:8> action=access_granted_anon_grace studentId=<id>`,
+  `[sal] sal=<token:8> action=access_denied_redirect studentId=<id> reason=no_session`,
+  `[sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed`,
+  `[sal] sal=<token:8> action=ownership_denied principal=<type> ...`).
+  See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
-  registry.
-- **Migrations are additive.** Production runs on Neon; never drop or
+  registry.- **Migrations are additive.** Production runs on Neon; never drop or
   rename a column without a multi-step migration.
 - **Server actions assert ownership.** `assertOwnsStudent(adminUserId,
   studentId)` (or the equivalent for the resource) runs before any
@@ -120,7 +157,7 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   in the same commit. Orchestrators check this during executor
   handoff review. Migration to a new compute platform reads that
   doc as the primary checklist.
-- **Legal copy stays synced with the umbrella.** `https://www.mortensenapps.com/privacy`
+- **Legal copy stays synced with the umbrella — and must stay honest.** `https://www.mortensenapps.com/privacy`
   + `https://www.mortensenapps.com/terms` are the **canonical legal
   source** and the URLs registered in the shared "Mortensen Apps" OAuth
   consent screen that Tutoring Notes uses (confirmed from Google Cloud
@@ -130,7 +167,13 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   product-specific sections (Vercel Blob audio, OpenAI Whisper,
   whiteboard data, minor-data tutor-consent specifics); they are not a
   parallel canonical source and are not registered with Google for this
-  OAuth client. Any change to either TSX file MUST follow the sync
+  OAuth client. **HARD RULE (Andrew 2026-07-09):** Terms/Privacy must be
+  **honest at all times**, especially on **`master`/production** — never
+  claim retention clocks, deletion automation, or capabilities the app
+  does not implement. Slightly more leeway on preview-only branches
+  (Andrew-only), but dishonest copy must not merge to master. See
+  [docs/LEGAL-SYNC.md](docs/LEGAL-SYNC.md) § Standing hard rule — honesty.
+  Any change to either TSX file MUST follow the sync
   protocol in [docs/LEGAL-SYNC.md](docs/LEGAL-SYNC.md): identify whether
   the edited section is umbrella-derived (must match upstream verbatim)
   or product-specific (free to edit), update the top-of-file sync date
@@ -140,19 +183,60 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   the review.
 - **This repo (`tutoring-notes`) — feature branches: commit + push by default.** After substantive work on a named branch here, create a descriptive commit and push (`origin`; retry transient network failures) unless Andrew says to hold off. (Scope is this app only, not every workspace.)
 - **Executor bootstrappers AND orchestrator reports live in `docs/handoff/`** — when the orchestrator drafts a briefing for a fresh executor chat, write it as `docs/handoff/<scope>-bootstrapper.md`; when the orchestrator captures session retrospectives for a future orchestrator picking up, write it as `docs/handoff/<scope>-<date>-orchestrator-report.md`. Both go here, not `~/.cursor/plans/`. Two reasons: (a) Cursor's chat UI only resolves workspace-relative file paths so in-workspace handoff docs are clickable, (b) committed handoff docs create an audit trail pairing "what we asked for" with "what shipped" (bootstrappers) and "what we did and decided" with "what's open" (orchestrator reports). **Bootstrappers must be pure executor briefings from line 1** with the required top-of-file template. **Both bootstrappers AND orchestrator reports should be Composer-2.5-authored via subagent dispatch** when length > ~3 paragraphs — Opus supplies the scope blob and structural outline; Composer types the prose. See `docs/handoff/README.md` for both templates + full lifecycle.
+- **`docs/archive/` is cold storage** — agents must not explore, search, or cite it unless Andrew explicitly asks for an archive audit; it holds superseded/captured-elsewhere docs and is not authoritative (see `docs/archive/ARCHIVE-LEDGER.md`).
 - **Orchestrator state checkpoints — zero-catch-up fresh chats.** Canonical living bootstrap: [`docs/handoff/ORCHESTRATOR-STATE.md`](docs/handoff/ORCHESTRATOR-STATE.md) (stable filename, updated in place; `git log -p` on that file = audit trail). Every fresh orchestrator chat reads it first (also enforced in [`.cursor/rules/orchestrator-discipline.mdc`](.cursor/rules/orchestrator-discipline.mdc)). **Lightweight head** (Last action / Next action / Open confirms / in-flight / uncommitted) — Opus keeps current inline on every turn that materially changes state. **Heavy full restructure** — dispatch Composer 2.5 at milestones (after `merge --no-ff` to master, after closing a multi-day thread or long-standing bug, before a new major Wave/Phase/SEC thread, session wind-down if material changed); use [`docs/handoff/orchestrator-state-template.md`](docs/handoff/orchestrator-state-template.md). Dated `docs/handoff/orchestrator-state-<YYYY-MM-DD>-<HHMM>.md` files are **legacy snapshots** (retained, not the live source). On truncation/slowdown, refresh `ORCHESTRATOR-STATE.md` rather than spawning a new dated file.
 - **Chat output links use workspace-relative paths only.** Cursor's chat UI clickably resolves paths like `docs/BACKLOG.md` and `src/lib/ai.ts` but renders absolute paths (`c:/Users/...`, `/Users/...`) and `file://` URIs as plain unclickable text, breaking Andrew's workflow. Same rule applies inside any `docs/handoff/*.md` since those files are designed to be `@`-referenced in fresh chats. When citing a file, always use the workspace-relative form.
 - **Windows PowerShell: multi-line commit messages via temp file, not `-m`.** PowerShell 5.x (the default on Win10/11 without an explicit pwsh install — Andrew's setup) mangles multi-line strings, Unicode escape sequences (`\u2014`), and backtick-escaped characters when passed to `git commit -m "..."`. Safe pattern: Write the message to `.git/COMMIT_MSG_DRAFT.txt`, then `git commit -F .git/COMMIT_MSG_DRAFT.txt`, then delete the temp file in a **sequential** subsequent call (NOT a parallel tool call — a parallel `Delete` races the `commit` and the file vanishes before git reads it; this has bitten us).
+- **Composition over duplication — no bespoke code.** See [`.cursor/rules/composition-no-duplication.mdc`](.cursor/rules/composition-no-duplication.mdc) (standing architectural standard; `alwaysApply`).
+- **Playwright on every fix — no second smoke for the same bug.** Any behavioral, visual, chrome, sync, or multi-peer regression fix ships a Playwright test in the **same branch** (enrolled in `wb-regression` when applicable). Jest/jsdom does not substitute. Narrow environment-only gaps need an explicit `PLAYWRIGHT-GAP` + backlog entry — never silent omission. See [`.cursor/rules/playwright-on-fix.mdc`](.cursor/rules/playwright-on-fix.mdc) (`alwaysApply`).
+- **Selective test execution by tag.** Tagged Playwright suites + `npm run test:wb-affected` for diff-scoped runs on small branches; **full** `test:wb-sync` required before **`master`**. See [`.cursor/rules/test-selection.mdc`](.cursor/rules/test-selection.mdc) and [`tests/test-tags.ts`](tests/test-tags.ts).
+- **Andrew smokes once when DONE.** Agents complete Playwright + gates before requesting hardware smoke. See [`.cursor/rules/smoke-when-done.mdc`](.cursor/rules/smoke-when-done.mdc).
 
 ## Hard-won lessons
 
 Cross-cutting rules from production debugging. Add dated evidence under **Real-world observations** (Model usage protocol) when new ones land.
 
+### Plans are agent scaffolding, not ratified user intent (2026-06-17, P2 student shell)
+
+Andrew writes/approves plans primarily as orchestration scaffolding and does NOT read them in detail; a decision appearing in an approved plan is therefore NOT evidence he endorsed it. The P2 student-shell plan specified a heavily-divergent slim student (pencil+eraser only, in-app `AVPermissionsPrompt`, student-specific top bar) that contradicted Andrew's actual "student == tutor minus a short delta list" intent — and it shipped to smoke before he caught it. The 5-axis review accepted the plan's premise rather than challenging it. **Rules:** (1) Material product/scope/UX decisions must be surfaced to Andrew EXPLICITLY (a direct question or crisp in-chat callout), never buried in a plan and treated as approved-by-silence. (2) When a plan encodes a non-obvious divergence from prior verbal intent, call it out for confirmation rather than assuming the plan ratifies it. (3) Capture verbal design agreements into a durable, executor-facing contract immediately — the prior orchestrator's "5-delta" agreement evaporated because it was never written down, so the plan re-invented a divergent design.
+
+### A missed or un-acted prompt is NOT consent (2026-06-17)
+
+Andrew's attention is split and he frequently does not see passive prompts — a `SwitchMode` ask, an `AskQuestion` he scrolls past, an inline "say the word and I'll…". **Inaction, a rejected/ignored mode switch, or silence is NOT agreement and NOT a preference signal** — it usually just means he didn't see it. **Rules:** (1) never infer intent or "proceed" from the absence of a click/response; (2) for any material decision, put it in front of him explicitly and wait for an affirmative answer — if a passive prompt goes unanswered, re-surface it directly rather than assuming a default; (3) a `SwitchMode`/`AskQuestion` rejection means "not that, or didn't see it," never "I considered the status quo and chose it."
+
+### Subagent git safety — never discard uncommitted work (2026-06-10, smokebook loss)
+
+- A dispatched subagent, blocked from `git checkout`-ing a branch by the user's **uncommitted** working-tree edits (full smoke notes), ran a `git restore` that **discarded** those notes. A separate fumble created an **accidental local merge** of an in-progress feature branch into the integration branch (`v1-redesign`). No code was lost (feature branch was pushed) but the user's notes were unrecoverable.
+- **Rule:** subagent dispatch prompts that involve branch switching MUST instruct: if `git checkout`/`switch` is blocked by uncommitted changes, **STOP and report** — never `git restore`/`checkout -- <file>`/`stash drop`/`reset --hard`/`pull`-merge to "unblock." Uncommitted working-tree edits may be the user's hand-written work and are not in git history.
+- **Rule:** subagents must never `git merge` or `git pull` into a shared branch (`v1-redesign`/`master`) as a side effect of checkout; merges into shared branches are orchestrator-only (`merge --no-ff` after approval).
+- **Corollary:** the orchestrator should commit the user's hand-entered artifacts (smoke notes, etc.) promptly rather than leaving them as long-lived uncommitted working-tree state that a dispatch can clobber.
+
+### Whiteboard chrome — extend don't rewrite (2026-06-09, wb-chrome-redo)
+
+- **Two successive chrome attempts (P1.1, P2) regressed board separation and killed interactive controls** because executors rewrote `WhiteboardWorkspaceClient.tsx` rather than extending it. The engine's page/board switching, `pageDataRef` guards, live-sync wiring, and recording lifecycle are tightly coupled and fragile to restructuring.
+- **Rule:** chrome work on the whiteboard workspace is ADDITIVE ONLY. New state, new handlers, new JSX layout, new imports — all fine. Modifying or removing existing engine logic (page switch, scene data flow, recording FSM wiring) — hard stop, escalate to orchestrator.
+- **Pattern for chrome integration:** (1) start from known-good baseline (`a150d4f`), (2) extract new chrome components via `git show <commit>:<path>`, (3) apply engine additions (A4 reliability, new callbacks) as surgical additions AFTER existing logic, (4) replace the render section JSX with the new chrome layout, (5) verify board separation in a real browser before declaring done.
+- **Calibration:** "do not touch the engine" does NOT mean zero changes to the engine file. Adding state, handlers, callbacks, and wiring NEW buttons to EXISTING functions is expected and necessary. The guard is against BEHAVIORAL changes (rewriting, refactoring, or removing existing logic).
+- **Windows extraction:** `Out-File -Encoding utf8` adds UTF-8 BOM which corrupts non-ASCII test assertions when jest processes the file. Always extract files using `[System.IO.File]::WriteAllLines(path, content, New-Object System.Text.UTF8Encoding $false)` for test files with unicode literals.
+
+### Secret handling — third-party egress (2026-05-31, 2FA QR)
+
+- A "secret encrypted at rest" guarantee is incomplete if the plaintext secret is later transmitted to a third party. The Phase-1 2FA acceptance verified no plaintext secret in DB/logs but **missed** that the enrollment QR was rendered via an external API (`api.qrserver.com`) with the secret in the URL — caught only in smoke via a CSP block, not by tests or the acceptance checklist.
+- **Rule:** for any secret/credential, the acceptance bar includes **no plaintext secret egress to external services** (QR generation, analytics, error trackers, logging sinks, CDNs). Generate/handle secrets locally (server-side or in-browser), never by handing them to a third-party URL. Add a grep-guard test against known external-service hosts where practical.
+- **Corollary:** a tight CSP is a real safety net — it converted a silent secret leak into a visible failure. Don't reflexively allowlist a blocked third-party origin to "fix" a feature; first ask why we're sending it data at all.
+
 ### Layout / coordinates — jsdom blind spot (2026-05-30, whiteboard viewport sync)
 
 - **Coordinate and layout math is not verified in jsdom.** jsdom reports `offsetLeft`/`offsetTop` as 0 and applies transforms synchronously, so offset-contamination and version-skip bugs are **invisible** to unit tests (the buggy viewport-center formula matched the correct one for ~2 weeks). **Rule:** prove geometry on a **real browser** — on-device debug HUD, Playwright/WebKit, or tutor+student hardware — before calling viewport/sync work done.
-- **Requirement-not-code tests.** Assert the user-observable requirement via an **independent oracle** (e.g. the library's real transform), never constants back-derived from the implementation's own formula. **Canonical pattern:** vary `offsetLeft`/`offsetTop` and assert scene viewport center unchanged (offset-invariance). A green Jest suite is necessary, not sufficient, for layout.
+- **Requirement-not-code tests.** Assert the user-observable requirement via an **independent oracle** (e.g. the library's real transform), never constants back-derived from the implementation's own formula. **Canonical pattern:** vary `offsetLeft`/`offsetTop` and assert scene viewport center unchanged (offset-invariance). **Layout/chrome:** assert **relational** properties (equal inset in parent, midline alignment) — not absolute pixel positions; see [`.cursor/rules/visual-layout-oracles.mdc`](.cursor/rules/visual-layout-oracles.mdc). A green Jest suite is necessary, not sufficient, for layout.
 - **No-theater / real-render gate.** Red-before / green-after, or it does not count. Force-triggered harnesses can **mask** cadence bugs; prefer real event cadence or hardware HUD when the symptom is device-only.
+
+### Smoke-note triage anchoring + Playwright-to-spec (2026-07-03, fix-batch double-regression)
+
+In the wave5 fix batch, four smoke findings were mis-handled — two mis-scoped to the wrong surface (a top-bar note written under the *learner sign-out* test was applied to the *tutor in-session* top bar; an "End" note written under the *student-detail open-sessions* test was applied to the *in-session* End button), and two shipped as "fixed" on green Jest but **regressed on real hardware** (replay auto-play now always jumps to the scrubber end; the notes form disappeared entirely during generation).
+
+- **Lesson A — a smoke finding is `note + the test item it was written under`, never the note text alone.** Andrew anchors notes to the test where he noticed the issue. Triage MUST preserve that anchor and interpret the note *first* in the context of the test's surface. He *sometimes* files a general note under a test just because that's where he noticed it — so: (1) interpret in the test-surface context first, (2) if it's genuinely ambiguous whether the note is generic or specific to the surface-under-test, **verify with Andrew** — never resolve the ambiguity by assumption. The disambiguation is usually already encoded by placement; stripping the note out of the smokebook into a floating instruction destroys it. When dispatching a fix, the anchoring test/surface must travel with the instruction, and the orchestrator should quote the anchor back to Andrew before building.
+- **Lesson B — Playwright for everything we touch; tests to spec, never to code.** Jest/jsdom is near-worthless for this app's failure classes (replay/media timing, notes render lifecycle, layout/size) — this batch proved it: green Jest, regressed hardware, twice. Standing rule (Andrew 2026-07-03): if we touch a surface, it gets a **Playwright** test. And ALWAYS write the test to the **spec / user-observable requirement** with an independent oracle — NEVER derive it from the implementation just written (that passes by construction and proves nothing). Green Jest is necessary-not-sufficient; a real-browser/Playwright check is the gate for these classes before any fix is called done. Cross-ref **Layout / coordinates — jsdom blind spot** and **Requirement-not-code tests** above.
 
 ### In-chat model cost (Cursor UI)
 
@@ -226,6 +310,28 @@ lesson).
   run two live-stack tasks** (dev server, DB migrations,
   `npm run test:wb-sync`) against the shared services at once —
   serialize those regardless of worktree isolation.
+
+**`composer-2.5-fast` is FORBIDDEN (hard rule).** It is ~6× the cost
+of `composer-2.5` for a latency-only benefit that buys us nothing on
+this codebase. All Composer dispatches use **`composer-2.5`** — never
+`-fast`. Codified alongside the explicit-model rule below and in
+[.cursor/rules/orchestrator-discipline.mdc](.cursor/rules/orchestrator-discipline.mdc)
+§ Hard model rules.
+
+**Effort-scoped override — Whiteboard reliability floor (the Sarah
+merge, `wb-wave5-polish`).** For the whiteboard-reliability-floor
+effort (plan `whiteboard_reliability_floor_9ba650d1`), execution tier
+is **Opus by default** — a deliberate, scoped inversion of the
+"dispatch aggressively to Composer" default below, justified by the
+stakes (the live commercial session experience) and Composer's mixed
+track record on this exact A/V/recording code. Drop to `composer-2.5`
+**only** for unambiguously mechanical, zero-correctness-doubt,
+test-gated tasks (delete confirmed-dead files, pure CSS file splits
+verified by visual diff, boilerplate scaffolding). Anything touching
+A/V transport, the recording lifecycle, effect-dependency wiring, or
+layout/enumeration coupling stays on Opus. Full statement in
+[.cursor/rules/orchestrator-discipline.mdc](.cursor/rules/orchestrator-discipline.mdc)
+§ Effort-scoped override.
 
 **ALWAYS specify `model` explicitly on EVERY dispatch — including
 `resume`.** Observed 2026-05-29 (Andrew caught it): a `Task` `resume`
@@ -302,6 +408,72 @@ criteria in the next subsection):
   outbox/FSM work, Phase 11d prompt iteration meta-loop), or (d)
   determining the shape of a future Phase that doesn't yet have a
   scope.
+
+**Conductor tier — orchestration itself is tierable (2026-06-12)**
+
+The tier-assignment bullets above govern which model **executes** work
+(via subagent dispatch). A separate axis governs which model **conducts**
+the orchestration chat itself — and this is where the largest API-cost
+lever lives.
+
+- **The cost mechanic:** subagents are cheap; the expensive line item is
+  the *standing Opus orchestration chat*. Every turn re-bills the entire
+  accumulated context at Opus rates, and reasoning-effort multiplies it.
+    Two levers: (a) what **tier conducts**, (b) **context hygiene** — a
+    fresh chat bootstrapped from `ORCHESTRATOR-STATE.md` is far cheaper
+    than letting one chat balloon; restart fresh after big milestones.
+    **Swap early — at ~60–70% context (Cursor's flagged threshold), not
+    at truncation:** quality/hallucination drift can begin in that band.
+    Start a fresh chat, `@`-reference the previous chat +
+    `ORCHESTRATOR-STATE.md`, continue. This depends on the state doc being
+    continuously current so the chat is always swap-ready. See
+    [`.cursor/rules/orchestrator-discipline.mdc`](.cursor/rules/orchestrator-discipline.mdc)
+    § "Swap chats early".
+- **The judgment-vs-loop heuristic:** ask of the orchestration session —
+  *"Am I mostly making NEW judgment calls (sequencing, design trade-offs,
+  is-this-grouping-safe, when-to-merge/defer/escalate), or mostly running
+  a KNOWN loop (dispatch scoped item → merge → build → push → repeat)?"*
+  - **Known-loop backlog burndown** (e.g. a visual/UX tweak wave with
+    pre-specified items) → **Composer 2.5** conducts (if every decision
+    is already made) or **Sonnet** (if you want a safety net that reads
+    subagent reports critically).
+  - **Mixed** (scoped work + live design/grouping/reliability calls) →
+    **Sonnet** conducts.
+  - **New judgment** (phase planning, novel architecture, auth/migration
+    design, strategic calls like cut-to-master / Vercel tier / brand
+    gating, multi-day high-blast-radius) → **Opus**, **episodically** —
+    spin up Opus for that one session, then drop back down.
+- **Key reframe:** "Opus reserved for orchestration only" (above) is
+  refined — orchestration is a **spectrum**. Planning/design/strategy
+  orchestration = Opus; execution-queue / merge-train orchestration =
+  Sonnet or Composer. Keep Opus for **episodes**, not as a standing
+  conductor. The "in doubt → Opus" rule is for **judgment/quality-risk
+  calls**, NOT for keeping a conductor warm.
+- **Validating example (2026-06-12):** the v1 design-system wave-2
+  burndown (6-agent fan-out + merge-train + smokebook) was a known loop;
+  the only genuine Opus-grade call was grouping agents for file-
+  disjointness, which Sonnet would also handle.
+- **Default conductor is Composer 2.5; escalate UP by tripwire (2026-06-23).**
+  Andrew now conducts from Composer 2.5 by default and escalates to
+  Sonnet/Opus only on a tripwire.   **First response to a tripwire is a plan-mode "step back"** (read-only,
+  still on Composer 2.5) — re-think and write a concrete plan; that alone
+  often clears the tripwire. Only if the step-back confirms it's genuinely
+  above-tier do you escalate the model. Because **Composer cannot dispatch
+  Anthropic models**, escalation = **STOP and recommend Andrew switch
+  this chat's model up** (not "dispatch up"). Use plan mode liberally in
+  general — including for small/narrow problems — not only at tripwires. The self-detectable
+  tripwire checklist + STOP-and-switch handoff protocol is the
+  authoritative, always-applied source:
+  [`.cursor/rules/orchestrator-discipline.mdc`](.cursor/rules/orchestrator-discipline.mdc)
+  § "DEFAULT CONDUCTOR IS COMPOSER 2.5 — escalate UP by tripwire".
+  Tripwires in brief: 2nd failed attempt at the same bug; changing a
+  fragile/load-bearing surface (recorder FSM, outbox, end-session,
+  live-A/V, WB sync/viewport, auth boundary, migration); multiple viable
+  approaches with real trade-offs; concurrency/ordering/geometry or
+  >3-area cross-cut; scope explosion; you're guessing; 5-axis review not
+  done; strategic call. Escalate to the **cheapest** tier that clears it
+  (Sonnet default; Opus only for new architectural pillars / designs that
+  already cost a recovery cycle / multi-day high-blast-radius).
 
 **Proven patterns** — combine tiers when it pays off:
 
@@ -382,8 +554,13 @@ the always-applied authority on this.
 While the pilot is solo (just Andrew + Sarah) and there's no adversarial
 CI agent reviewing PRs automatically:
 
+- **Andrew smokes once — when the feature is DONE** ([`.cursor/rules/smoke-when-done.mdc`](.cursor/rules/smoke-when-done.mdc)). Agents own spec → implementation → **Playwright per acceptance item** → automated gates green. Andrew enters for **hardware quirks + human judgment only** — not regression re-proof. **Do not request Andrew smoke mid-wave or per-fix.**
 - Executors deliver a **smokeable branch** with the Vercel Preview URL +
-  a smoke checklist + a clear final report. They do NOT open PRs.
+  a smoke checklist + a clear final report **after the DONE checklist passes**.
+  Smokebooks MUST follow
+  [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](docs/handoff/SMOKEBOOK-TEMPLATE.md)
+  (enforced by [`.cursor/rules/smokebook-template.mdc`](.cursor/rules/smokebook-template.mdc)).
+  They do NOT open PRs.
 - Andrew (or the orchestrator after Andrew confirms smoke pass) merges
   directly to master via `git merge --no-ff <branch>` to keep a clean,
   revertable merge commit. The branch is preserved (and later cleaned up
@@ -392,10 +569,39 @@ CI agent reviewing PRs automatically:
   forbidden** — branch + commit + push + smoke + merge is the
   discipline; only the PR step is dropped.
 - **Whiteboard sync changes** (any file touching `src/lib/whiteboard/`,
-  `src/components/whiteboard/`, or `tests/integration/whiteboard*`) MUST
-  pass `npm run test:wb-sync` locally before `git merge --no-ff`. Pre-build
-  the local relay image once (`npm run relay:build`; requires Docker). Green
-  output proves real-browser coverage via the hermetic relay, not jsdom alone.
+  `src/components/whiteboard/`, or `tests/integration/whiteboard*`) need
+  real-browser coverage via the hermetic relay — not jsdom alone. Pre-build
+  the local relay image once (`npm run relay:build`; requires Docker).
+  - **Tagged selective gate (default inner loop, 2026-06-23).** Playwright
+    wb-regression tests carry domain tags (`@wb-graph`, `@wb-strokes`, … —
+    [`tests/test-tags.ts`](tests/test-tags.ts)). On commits and small merges,
+    run **`npm run test:wb-affected:run -- --base origin/<parent>`** (dry-run:
+    `npm run test:wb-affected`) so only adjacent/affected tags execute. Err on
+    caution — broad touches (e.g. `WhiteboardWorkspaceClient`) warrant extra
+    tags or full suite. Explicit: `npm run test:wb-playwright:tags -- @wb-graph`.
+  - **Merge to `v1-redesign` / long integration branches:** `test:wb-sync`
+    **once on the final integrated tip** before `merge --no-ff` when the branch
+    touched sync/whiteboard surfaces (existing cadence). Large stacked waves on
+    the integration branch use the full suite; per-wave relay runs are not required.
+  - **Merge to `master`:** **always full** — `npm run test:wb-sync` +
+    `npm run test:regression` + `npx next build`. No selective gate.
+  - **Cadence — merge-boundary, not per-wave (Andrew 2026-06-17).** The
+    ~38-min Playwright phase is a **merge gate**, not a per-commit/per-fix-wave
+    gate. Waves that **don't touch** whiteboard/sync apply paths (e.g.
+    chrome/responsive-only) may use **`test:wb-affected`** only; the jest
+    subset (`npm run test:wb-jest`, ~5s) is the minimum inner-loop gate.
+- **Build-surface changes** (fonts, CSS, or build configuration — e.g.
+  `src/app/fonts.ts`, `src/styles/*.css`, `eslint.config.*`, `next.config.*`,
+  Tailwind/PostCSS config, `package.json` build scripts) MUST pass a real
+  **`npx next build`** locally (full compile + ESLint lint step + TypeScript
+  type-check; exit 0; route table printed) before `git merge --no-ff` — NOT
+  jest alone (`npm run test:regression` does not exercise the Next
+  build/lint/type-check pipeline). On 2026-05-31 Phase A (`5aa3c7d`) shipped
+  stacked `next/font` `axes`+fixed-`weight` and ESLint parsing
+  `src/styles/typography.css` as JS (bad `css` glob in `eslint.config.mjs`)
+  failures invisible to jest; every intervening `v1-redesign` Vercel deploy
+  broke until `754dbe5` + `e51d23f`. A green jest run is necessary but not
+  sufficient for any build-surface change.
 - **When this changes:** revisit the convention if (a) the team grows
   beyond solo or (b) an adversarial agentic CI pipeline lands that auto-
   reviews PRs. At that point, PRs become the right shape again. Until

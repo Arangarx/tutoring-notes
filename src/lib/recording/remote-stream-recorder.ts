@@ -110,6 +110,18 @@ export type RemoteStreamRecorderOptions = {
    * with a Math.random-based fallback for legacy test runners.
    */
   _uuid?: () => string;
+  /**
+   * When true, outbox rows are transcription-only and excluded from replay
+   * assembly (`assembleEndSessionSegments` skips them).
+   */
+  transcriptionOnly?: boolean;
+  /** Stable speaker identity (e.g. LearnerProfile id) for attribution. */
+  speakerId?: string;
+  /**
+   * Monotonic p3-clock reader — called at segment start to stamp
+   * `recordingTimeOffsetMs` on each outbox row.
+   */
+  getRecordingTimeOffsetMs?: () => number;
 };
 
 export type RemoteStreamRecorder = {
@@ -171,6 +183,7 @@ export function createRemoteStreamRecorder(
   let recording = false;
   let disposed = false;
   let segmentStartedAtMs = 0;
+  let segmentRecordingOffsetMs = 0;
 
   // Track in-flight enqueues so stop() can await them.
   let pendingEnqueues: Promise<void>[] = [];
@@ -190,10 +203,12 @@ export function createRemoteStreamRecorder(
     }
     const segmentId = uuid();
     const startedAt = segmentStartedAtMs;
+    const recordingTimeOffsetMs = segmentRecordingOffsetMs;
     // After firing one segment, mark the next as starting now
     // (covers the timesliceMs path where multiple segments fire
     // within one start()/stop() cycle).
     segmentStartedAtMs = now();
+    segmentRecordingOffsetMs = opts.getRecordingTimeOffsetMs?.() ?? segmentRecordingOffsetMs;
 
     log.log(
       `${tag} segment ready segmentId=${segmentId} bytes=${blob.size}`
@@ -208,6 +223,11 @@ export function createRemoteStreamRecorder(
           mimeType,
           sizeBytes: blob.size,
           audioStartedAtMs: startedAt,
+          ...(typeof recordingTimeOffsetMs === "number" && {
+            recordingTimeOffsetMs,
+          }),
+          ...(opts.speakerId && { speakerId: opts.speakerId }),
+          ...(opts.transcriptionOnly === true && { transcriptionOnly: true }),
         });
       } catch (err) {
         log.error(
@@ -273,6 +293,7 @@ export function createRemoteStreamRecorder(
         return;
       }
       segmentStartedAtMs = now();
+      segmentRecordingOffsetMs = opts.getRecordingTimeOffsetMs?.() ?? 0;
       recorder.addEventListener("dataavailable", handleDataAvailable);
       recorder.addEventListener("stop", handleStop);
       try {

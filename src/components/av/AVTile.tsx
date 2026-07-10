@@ -45,7 +45,7 @@
  * which is the cheapest update path.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { AvParticipant } from "@/hooks/useLiveAV";
 import {
@@ -58,6 +58,8 @@ import {
   getDeterministicColorFromPeerId,
   getInitialsFromLabel,
 } from "@/components/av/initials-from-label";
+import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
+import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
 
 /**
  * Subset of `AvParticipant` the tile actually reads. The host passes
@@ -75,6 +77,14 @@ export type AVTileParticipant =
       videoStream: MediaStream | null;
       isLocal: true;
     };
+
+/** Mic/cam toggles overlaid on the local preview tile (self only). */
+export type AVTileLocalMediaControls = {
+  onToggleMic: () => void;
+  onToggleCam: () => void;
+  disabled?: boolean;
+  camDisabled?: boolean;
+};
 
 export type AVTileProps = {
   participant: AVTileParticipant;
@@ -106,6 +116,12 @@ export type AVTileProps = {
    * tests can grab a specific tile when multiple are rendered.
    */
   testId?: string;
+  /**
+   * When set on the local tile, renders mic/cam toggles as an overlay
+   * on the self preview (not a shared cluster footer — avoids "controls
+   * for the other person" confusion).
+   */
+  localMediaControls?: AVTileLocalMediaControls;
 };
 
 /**
@@ -120,9 +136,11 @@ export function AVTile({
   localCamMuted,
   onReconnect,
   testId,
+  localMediaControls,
 }: AVTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const tileBodyRef = useRef<HTMLDivElement | null>(null);
   /**
    * True when the browser refused to autoplay the remote audio
    * element. iOS Safari and Chrome Android frequently block
@@ -140,6 +158,71 @@ export function AVTile({
     const el = videoRef.current;
     if (!el) return;
     el.srcObject = participant.videoStream ?? null;
+    if (!participant.videoStream) return;
+    // Mechanism B (part 1): forced synchronous layout flush immediately after
+    // srcObject assignment. Reading offsetHeight forces the browser to compute
+    // layout geometry for this element right now, giving the compositor concrete
+    // pixel dimensions before the deferred play() call. This is the same
+    // technique as reading a layout property to "cancel" a CSS batching optimisation.
+    void el.offsetHeight;
+    // Belt-and-suspenders explicit play() after srcObject assignment.
+    //
+    // Root fix for "black video until manual resize" is the key-remount below
+    // (videoKey): when videoStream arrives, React mounts a fresh <video> that
+    // starts life as display:block, which wires Chrome's compositor immediately.
+    // This double-RAF play() guards against browsers that do not auto-start a
+    // muted autoPlay video without an explicit play() call, and against any
+    // remaining timing edge cases on the freshly-mounted element.
+    const stream = participant.videoStream;
+    let innerRaf: number | null = null;
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        const cur = videoRef.current;
+        if (!cur || cur.srcObject !== stream) return;
+        const p =
+          typeof cur.play === "function"
+            ? (cur.play() as Promise<void> | undefined)
+            : undefined;
+        p?.catch(() => {});
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      if (innerRaf !== null) cancelAnimationFrame(innerRaf);
+    };
+  }, [participant.videoStream]);
+
+  // Mechanism B (part 2): ResizeObserver-driven reflow + play().
+  //
+  // Fires when the video tile's layout box grows from zero to a concrete non-zero
+  // size. This catches the case where srcObject was assigned while the cluster was
+  // still in CSS-flex auto height (no concrete pixel box) — Mechanism A fixes that
+  // via a cluster-level state change, but the observer here is an independent
+  // last-resort: the moment the element gets a real bounding box we force another
+  // layout flush and call play().  One-shot: disconnects after the first non-zero
+  // entry so it does not loop on every subsequent resize.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !participant.videoStream) return;
+    // ResizeObserver is not available in jsdom; guard so tests can run without it.
+    if (typeof ResizeObserver === "undefined") return;
+    const stream = participant.videoStream;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          ro.disconnect();
+          const cur = videoRef.current;
+          if (!cur || cur.srcObject !== stream) break;
+          void cur.offsetHeight;
+          (cur.play?.() as Promise<void> | undefined)?.catch(() => {});
+          break;
+        }
+      }
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+    };
   }, [participant.videoStream]);
 
   useEffect(() => {
@@ -197,6 +280,31 @@ export function AVTile({
 
   const isLocalTile = isLocal === true || participant.isLocal === true;
 
+  // Key-remount: when videoStream transitions null → non-null for the FIRST time
+  // (or after a genuine new stream arrives), produce a different key so React
+  // replaces the <video> element with a fresh instance that starts life as
+  // display:block. Chrome only wires the compositor pipeline on freshly mounted
+  // visible video elements; transitioning an existing display:none element to
+  // display:block does NOT trigger that wiring until a subsequent layout event.
+  //
+  // Stabilization (Fix 2.3): during renegotiation a participant's videoStream
+  // briefly goes null → stream (same stream id) as hasVideoTrack flips. Without
+  // stabilization the key changes null→stream→null→stream, producing a visible
+  // flash as the <video> element remounts. We hold the last known non-null stream
+  // id in a ref so a TEMPORARY null transition keeps the same key (no remount)
+  // while a FIRST-TIME null→stream or a genuinely new stream still produces a
+  // different key (triggering the needed compositor-wire remount).
+  const lastVideoStreamIdRef = useRef<string | null>(null);
+  if (participant.videoStream?.id != null) {
+    lastVideoStreamIdRef.current = participant.videoStream.id;
+  }
+  // "vid-inactive" (no prior stream) vs stream id for remount on first arrival;
+  // stays at the last stream id during brief null windows to avoid flash.
+  const videoKey =
+    participant.videoStream?.id ??
+    lastVideoStreamIdRef.current ??
+    "vid-inactive";
+
   const pill = useMemo(() => {
     if (isLocalTile) return getConnectionStatePill(SELF_STATE, SELF_STATE);
     const remote = participant as AvParticipant;
@@ -217,16 +325,28 @@ export function AVTile({
         ? "Tutor"
         : "Student";
 
-  const hasVideoTrack =
+  // A muted remote cam still carries a disabled video track — treat as cam-off
+  // so initials render instead of a black <video> frame. When the peer
+  // presence-signaled `camOn === false`, trust that over inbound track state
+  // (remote track enabled/muted does not propagate reliably to receivers).
+  const remoteParticipant = !isLocalTile ? (participant as AvParticipant) : null;
+  const remoteReportsCamOff = remoteParticipant?.camOn === false;
+  const hasActiveVideoTrack =
+    !remoteReportsCamOff &&
     !!participant.videoStream &&
-    participant.videoStream.getVideoTracks().length > 0;
+    participant.videoStream
+      .getVideoTracks()
+      .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
   const showCamPlaceholder =
-    !hasVideoTrack || (isLocalTile && localCamMuted === true);
+    remoteReportsCamOff ||
+    !hasActiveVideoTrack ||
+    (isLocalTile && localCamMuted === true);
 
-  const remote = !isLocalTile ? (participant as AvParticipant) : null;
+  const remote = remoteParticipant;
   const remoteAwaitingVideo =
     !!remote &&
-    !hasVideoTrack &&
+    !hasActiveVideoTrack &&
+    remote.camOn !== false &&
     (remote.peerConnectionState === "connecting" ||
       remote.peerConnectionState === "new");
 
@@ -253,6 +373,22 @@ export function AVTile({
 
   const pillHidden = shouldHidePill(pill);
 
+  // Mechanism B (part 3 — placeholder reflow): force a layout flush when the tile
+  // is in cam-off/initials/awaiting-video mode and Mechanism A has just given the
+  // cluster a concrete height. Without this, layout batching can leave the
+  // absolute-positioned placeholder <div> with zero computed height until the
+  // next manual resize. Reading offsetHeight from the tile body forces the browser
+  // to compute layout so the placeholder paints correctly.
+  //
+  // NOTE: jsdom blind spot — offsetHeight is always 0 in jsdom; this effect is
+  // only observable in a real browser. The hardware smoke is the gate.
+  useLayoutEffect(() => {
+    if (!showCamPlaceholder) return;
+    const el = tileBodyRef.current;
+    if (!el) return;
+    void el.offsetHeight;
+  }, [showCamPlaceholder]);
+
   return (
     <div
       data-testid={testId ?? `av-tile-${participant.peerId}`}
@@ -272,6 +408,7 @@ export function AVTile({
       }}
     >
       <div
+        ref={tileBodyRef}
         style={{
           position: "relative",
           width: "100%",
@@ -281,6 +418,7 @@ export function AVTile({
         }}
       >
         <video
+          key={videoKey}
           ref={videoRef}
           autoPlay
           muted
@@ -382,23 +520,56 @@ export function AVTile({
             Tap to hear audio
           </button>
         )}
-        {isLocalTile && localMicMuted === true && (
-          <span
-            data-testid={`av-tile-local-mic-muted-${participant.peerId}`}
-            style={{
-              position: "absolute",
-              top: 6,
-              right: 6,
-              padding: "2px 6px",
-              fontSize: 10,
-              fontWeight: 600,
-              borderRadius: 4,
-              background: "var(--error)",
-              color: "white",
-            }}
+        {isLocalTile && localMediaControls && (
+          <div
+            className="mynk-wb-av-tile-local-controls"
+            data-testid="av-controls"
           >
-            Muted
-          </span>
+            <button
+              type="button"
+              className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${
+                localMicMuted ? " mynk-wb-tb-btn--mic-off" : " mynk-wb-tb-btn--mic-on"
+              }`}
+              title={localMicMuted ? "Unmute your microphone" : "Mute your microphone"}
+              aria-label={localMicMuted ? "Unmute your microphone" : "Mute your microphone"}
+              aria-pressed={!localMicMuted}
+              disabled={localMediaControls.disabled}
+              onClick={(e) =>
+                afterToggleRefreshHover(e.currentTarget, localMediaControls.onToggleMic)
+              }
+              data-testid="av-controls-toggle-mic"
+            >
+              <WbIconMic size={13} />
+            </button>
+            <button
+              type="button"
+              className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${
+                localCamMuted ? " mynk-wb-tb-btn--cam-off" : " mynk-wb-tb-btn--cam-on"
+              }`}
+              title={
+                localMediaControls.camDisabled
+                  ? "Camera unavailable"
+                  : localCamMuted
+                    ? "Turn your camera on"
+                    : "Turn your camera off"
+              }
+              aria-label={
+                localMediaControls.camDisabled
+                  ? "Camera unavailable"
+                  : localCamMuted
+                    ? "Turn your camera on"
+                    : "Turn your camera off"
+              }
+              aria-pressed={!localCamMuted}
+              disabled={localMediaControls.disabled || localMediaControls.camDisabled}
+              onClick={(e) =>
+                afterToggleRefreshHover(e.currentTarget, localMediaControls.onToggleCam)
+              }
+              data-testid="av-controls-toggle-cam"
+            >
+              <WbIconCamera size={13} />
+            </button>
+          </div>
         )}
       </div>
       <div

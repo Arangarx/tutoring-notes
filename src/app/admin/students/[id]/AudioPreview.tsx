@@ -33,9 +33,10 @@ export default function AudioPreview({ src, mimeType }: AudioPreviewProps) {
     setHasError(false);
     const audio = audioRef.current;
     if (!audio) return;
-    return attachWebmDurationFix(audio, mimeType, {
+    const { cleanup } = attachWebmDurationFix(audio, mimeType, {
       onLoadFailed: () => setHasError(true),
     });
+    return cleanup;
   }, [src, mimeType]);
 
   if (hasError) {

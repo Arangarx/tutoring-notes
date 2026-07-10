@@ -122,6 +122,18 @@ describe("buildContentSecurityPolicy — directive guards", () => {
     expect(getDirective(csp, "frame-ancestors")).toBe("'none'");
   });
 
+  test("frame-src is self-only (JSXGraph graphs use renderEmbeddable, not iframes)", () => {
+    const frameSrc = getDirective(csp, "frame-src") ?? "";
+    expect(frameSrc).toBe("'self'");
+    expect(frameSrc).not.toMatch(/desmos\.com/);
+  });
+
+  test("font-src, img-src, and style-src exclude Desmos origins (Phase 2b)", () => {
+    expect(getDirective(csp, "font-src")).not.toMatch(/desmos\.com/);
+    expect(getDirective(csp, "img-src")).not.toMatch(/desmos\.com/);
+    expect(getDirective(csp, "style-src")).not.toMatch(/desmos\.com/);
+  });
+
   test("connect-src allows the Vercel Blob upload endpoint (B1 regression)", () => {
     expect(getDirective(csp, "connect-src")).toMatch(/\bhttps:\/\/vercel\.com\b/);
   });

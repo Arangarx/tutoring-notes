@@ -1,0 +1,631 @@
+"use server";
+
+/**
+ * Recording re-arch Phase 1, Slice 3 — notes pipeline server actions.
+ *
+ * These actions are the tutor-facing entry points for:
+ *   - Triggering notes generation after session end (called from workspace client)
+ *   - Kicking straggler transcript chunks at session end (end-session sweep)
+ *   - Polling for TutorNote status (called from review page)
+ *   - Regenerating notes (escape hatch for failures) — confirm dialog required client-side
+ *   - Saving a DRAFT SessionNote as finalized (DRAFT → READY)
+ *   - Deleting a session and all related data (with ownership assertion)
+ *
+ * Trust posture:
+ *   - ALL actions start with assertOwnsWhiteboardSession (multi-tenant gate).
+ *   - Downstream workers that run in fire-and-forget contexts are invoked only
+ *     AFTER ownership has been validated here.
+ *   - logCostEvent uses whiteboardSessionId FK — validated against existing session row.
+ *
+ * Log prefixes: [tnt] (TutorNote pipeline), [nsi] (notes-session-integration).
+ */
+
+import { revalidatePath } from "next/cache";
+import { db, withDbRetry } from "@/lib/db";
+import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
+import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
+import { enqueueNotesReduce } from "@/lib/recording/notes-enqueue";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
+import {
+  getTutorNoteBySessionId,
+  getTranscriptChunksBySessionId,
+  updateTutorNote,
+} from "@/lib/recording/transcript-store";
+import type { TutorNote } from "@prisma/client";
+import { TRANSCRIBE_SWEEP_MAX_ATTEMPTS } from "@/lib/recording/transcribe-sweep-config";
+import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
+
+// ---------------------------------------------------------------------------
+// (a) End-session sweep — kick non-done chunks for this session
+// ---------------------------------------------------------------------------
+
+/**
+ * Called from WhiteboardWorkspaceClient after finalizeOutboxAfterEnd.
+ * Kicks any non-done, non-permanently-failed TranscriptChunk rows so
+ * transcription completes quickly before the reduce step fires.
+ *
+ * Fire-and-forget from the client — this action itself returns fast.
+ * The actual chunk work runs in fire-and-forget sub-workers.
+ *
+ * Trust: assertOwnsWhiteboardSession before touching transcription infra.
+ */
+export async function kickSessionChunksAction(
+  whiteboardSessionId: string
+): Promise<{ kicked: number }> {
+  const kickSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+  // B1 cost gate: WAITLISTED tutors cannot trigger transcription kicks.
+  await assertTutorApproved(kickSession.adminUserId);
+
+  const chunks = await getTranscriptChunksBySessionId(whiteboardSessionId);
+
+  // Kick non-done, non-permanently-failed chunks (under max attempts).
+  const toKick = chunks.filter(
+    (c) =>
+      c.status !== "done" &&
+      !(c.status === "failed" && c.attempts >= TRANSCRIBE_SWEEP_MAX_ATTEMPTS)
+  );
+
+  console.log(
+    `[txc] wbsid=${whiteboardSessionId} action=session_sweep_kick eligible=${toKick.length} total=${chunks.length}`
+  );
+
+  for (const chunk of toKick) {
+    // Fire-and-forget per chunk — reuses existing enqueue mechanism with durability.
+    await enqueueChunkTranscribe({
+      sessionId: whiteboardSessionId,
+      chunkBlobUrl: chunk.chunkBlobUrl,
+      recordingTimeOffsetMs: chunk.recordingTimeOffsetMs,
+    });
+  }
+
+  return { kicked: toKick.length };
+}
+
+// ---------------------------------------------------------------------------
+// (c) Notes reduce trigger — called after session end
+// ---------------------------------------------------------------------------
+
+/**
+ * Trigger auto-notes generation for a session.
+ *
+ * Called from WhiteboardWorkspaceClient after finalizeOutboxAfterEnd (fire-and-forget).
+ * Upserts a pending TutorNote row, then fires the immediate reduce attempt.
+ *
+ * Idempotent: if TutorNote is already done/partial, no-ops.
+ *
+ * Trust: assertOwnsWhiteboardSession before enqueue.
+ */
+export type TriggerNotesGenerationResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function triggerNotesGenerationAction(
+  whiteboardSessionId: string
+): Promise<TriggerNotesGenerationResult> {
+  try {
+    const triggerSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    // B1 cost gate: WAITLISTED tutors cannot trigger notes generation (OpenAI spend).
+    await assertTutorApproved(triggerSession.adminUserId);
+
+    console.log(
+      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_generation`
+    );
+
+    // Validate session is sealed — the worker also checks, but fail fast here.
+    const session = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { endedAt: true },
+        }),
+      { label: "triggerNotesGenerationAction.session" }
+    );
+
+    if (!session?.endedAt) {
+      console.warn(
+        `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_skip reason=session_not_sealed`
+      );
+      return { ok: false, error: "Session is not sealed yet" };
+    }
+
+    await enqueueNotesReduce(whiteboardSessionId);
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_failed err=${msg}`
+    );
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// (d) Poll for TutorNote status — called from review page
+// ---------------------------------------------------------------------------
+
+export type TutorNoteStatusResult =
+  | { found: false }
+  | {
+      found: true;
+      status: string;
+      content: string | null;
+      isPartial: boolean;
+      error: string | null;
+      generatedAt: string | null;
+    };
+
+/**
+ * Fetch the current TutorNote status for a session.
+ * Used by the review page to poll until done.
+ *
+ * Trust: assertOwnsWhiteboardSession.
+ */
+export async function getTutorNoteStatusAction(
+  whiteboardSessionId: string
+): Promise<TutorNoteStatusResult> {
+  await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  const note = await getTutorNoteBySessionId(whiteboardSessionId);
+  if (!note) {
+    return { found: false };
+  }
+
+  return {
+    found: true,
+    status: note.status,
+    content: note.content ?? null,
+    isPartial: note.isPartial,
+    error: note.error ?? null,
+    generatedAt: note.generatedAt?.toISOString() ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// (e) Regenerate notes — escape hatch for failures
+// ---------------------------------------------------------------------------
+
+/**
+ * Regenerate notes for a session.
+ *
+ * Resets the TutorNote to 'pending' and re-fires the reduce worker.
+ * Used from the review page "Regenerate" escape hatch.
+ *
+ * Trust: assertOwnsWhiteboardSession.
+ */
+export async function regenerateNotesAction(
+  whiteboardSessionId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const regenSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    // B1 cost gate: WAITLISTED tutors cannot regenerate notes (OpenAI spend).
+    await assertTutorApproved(regenSession.adminUserId);
+
+    const existing = await getTutorNoteBySessionId(whiteboardSessionId);
+    if (existing && (existing.status === "generating")) {
+      // Already generating — don't interrupt.
+      console.log(
+        `[tnt] wbsid=${whiteboardSessionId} action=regenerate_skip reason=already_generating`
+      );
+      return { ok: true };
+    }
+
+    if (existing) {
+      // Reset to pending so the worker can re-run.
+      await updateTutorNote(whiteboardSessionId, {
+        status: "pending",
+        error: null,
+      });
+      console.log(
+        `[tnt] wbsid=${whiteboardSessionId} action=regenerate_reset`
+      );
+    }
+
+    console.log(
+      `[tnt] wbsid=${whiteboardSessionId} action=regenerate_trigger`
+    );
+    await enqueueNotesReduce(whiteboardSessionId);
+    return { ok: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[tnt] wbsid=${whiteboardSessionId} action=regenerate_failed err=${msg}`
+    );
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal: load TutorNote for authorized session (used by review page SSR)
+// ---------------------------------------------------------------------------
+
+/**
+ * Load TutorNote for a session during SSR of the review page.
+ * assertOwnsWhiteboardSession must already have been called by the page.
+ * This is a lightweight helper — not a server action.
+ */
+export async function loadTutorNoteForReview(
+  whiteboardSessionId: string
+): Promise<TutorNote | null> {
+  return getTutorNoteBySessionId(whiteboardSessionId);
+}
+
+// ---------------------------------------------------------------------------
+// (f) Save session notes — create or update the live SessionNote (READY)
+// ---------------------------------------------------------------------------
+
+export type SaveSessionNoteFields = {
+  topics: string;
+  assessment: string;
+  nextSteps: string;
+  links: string;
+};
+
+export type SaveSessionNoteResult =
+  | { ok: true; noteId: string }
+  | { ok: false; error: string };
+
+/**
+ * Create or update the live SessionNote for a whiteboard session.
+ *
+ * Locked design (B4): Save = create/update ONE SessionNote (status READY),
+ * idempotent via WhiteboardSession.noteId. Immediately parent-visible.
+ * Re-save updates the same note — no duplicates.
+ *
+ * The tutor edits structured fields (topics/assessment/Plan/links) seeded
+ * from the TutorNote on the review page before clicking Save.
+ *
+ * Trust: assertOwnsWhiteboardSession.
+ * Log prefix: [nsi]
+ */
+export async function saveSessionNotesAction(
+  whiteboardSessionId: string,
+  fields: SaveSessionNoteFields
+): Promise<SaveSessionNoteResult> {
+  try {
+    const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+    const linksJson = fields.links
+      ? JSON.stringify(
+          fields.links
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean)
+        )
+      : "[]";
+
+    let noteId: string;
+
+    const existingNoteId = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { noteId: true },
+        }),
+      { label: "saveDraftSessionNote.fetchNoteId" }
+    ).then((s) => s?.noteId ?? null);
+
+    if (existingNoteId) {
+      // Update the existing DRAFT note and mark as READY
+      await withDbRetry(
+        () =>
+          db.sessionNote.update({
+            where: { id: existingNoteId },
+            data: {
+              topics: fields.topics,
+              assessment: fields.assessment,
+              nextSteps: fields.nextSteps,
+              linksJson,
+              status: "READY",
+              aiGenerated: true,
+              aiPromptVersion: REDUCE_PROMPT_VERSION,
+            },
+          }),
+        { label: "saveDraftSessionNote.update" }
+      );
+      noteId = existingNoteId;
+      console.log(
+        `[nsi] wbsid=${whiteboardSessionId} action=save_note_updated noteId=${noteId}`
+      );
+    } else {
+      // Edge case: no note exists yet — create a READY note directly
+      const note = await withDbRetry(
+        () =>
+          db.sessionNote.create({
+            data: {
+              studentId: session.studentId,
+              date: new Date(),
+              topics: fields.topics,
+              homework: "",
+              assessment: fields.assessment,
+              nextSteps: fields.nextSteps,
+              linksJson,
+              status: "READY",
+              aiGenerated: true,
+              aiPromptVersion: REDUCE_PROMPT_VERSION,
+            },
+            select: { id: true },
+          }),
+        { label: "saveDraftSessionNote.create" }
+      );
+      noteId = note.id;
+      // Link the session → note
+      await withDbRetry(
+        () =>
+          db.whiteboardSession.update({
+            where: { id: whiteboardSessionId },
+            data: { noteId },
+          }),
+        { label: "saveDraftSessionNote.linkNote" }
+      );
+      console.log(
+        `[nsi] wbsid=${whiteboardSessionId} action=save_note_created noteId=${noteId}`
+      );
+    }
+
+    revalidatePath(`/admin/students/${session.studentId}/notes`);
+    revalidatePath(`/admin/students/${session.studentId}`);
+
+    return { ok: true, noteId };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[nsi] wbsid=${whiteboardSessionId} action=save_note_failed err=${msg}`
+    );
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// (g) Delete session and all related data — with confirm dialog client-side
+// ---------------------------------------------------------------------------
+
+export type DeleteSessionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Delete a whiteboard session and ALL related data:
+ *   - SessionNote (if linked — deleted regardless of status; tutor explicitly chose to delete)
+ *   - SessionRecording rows for this session
+ *   - WhiteboardSession (cascades: TutorNote, TranscriptChunks, extractions, JoinTokens)
+ *
+ * IMPORTANT: Audio and events Blob files are NOT deleted here (that is the
+ * stale-branch sweep utility's responsibility). DB rows only.
+ *
+ * On failure the action returns {ok:false} but the CALLER is responsible for
+ * redirecting to the student detail regardless (cron sweeps orphaned rows).
+ *
+ * Requires a confirm dialog client-side.
+ *
+ * Trust: assertOwnsWhiteboardSession. All deletes verified against the session's
+ * studentId to prevent cross-student data leakage.
+ * Log prefix: [nsi]
+ */
+export async function deleteWhiteboardSessionAndDataAction(
+  whiteboardSessionId: string
+): Promise<DeleteSessionResult> {
+  try {
+    const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+    const sessionDetail = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { noteId: true, studentId: true },
+        }),
+      { label: "deleteSession.fetchDetail" }
+    );
+
+    if (!sessionDetail) {
+      return { ok: false, error: "Session not found." };
+    }
+
+    // Verify ownership cross-check (belt + suspenders)
+    if (sessionDetail.studentId !== session.studentId) {
+      console.error(
+        `[nsi] wbsid=${whiteboardSessionId} action=delete_session_rejected reason=studentId_mismatch`
+      );
+      return { ok: false, error: "Not authorized to delete this session." };
+    }
+
+    const noteId = sessionDetail.noteId;
+
+    console.log(
+      `[nsi] wbsid=${whiteboardSessionId} action=delete_session_start noteId=${noteId ?? "none"} studentId=${session.studentId}`
+    );
+
+    await withDbRetry(
+      () =>
+        db.$transaction(async (tx) => {
+          // 1. Delete SessionNote (any status) before deleting the WB session.
+          //    The SetNull cascade would null noteId but leave the SessionNote row
+          //    orphaned — we want full cleanup.
+          if (noteId) {
+            await tx.sessionNote.delete({ where: { id: noteId } });
+          }
+
+          // 2. Delete SessionRecording rows for this session
+          //    (WhiteboardSession FK is SetNull not Cascade — must delete explicitly)
+          await tx.sessionRecording.deleteMany({
+            where: { whiteboardSessionId },
+          });
+
+          // 3. Delete SessionConsentSnapshot (onDelete: Restrict — must delete
+          //    explicitly before the parent WhiteboardSession row).
+          await tx.sessionConsentSnapshot.deleteMany({
+            where: { whiteboardSessionId },
+          });
+
+          // 4. Delete WhiteboardSession (cascades: TutorNote, TranscriptChunks,
+          //    TranscriptChunkExtractions, WhiteboardJoinTokens, SessionParticipants)
+          await tx.whiteboardSession.delete({
+            where: { id: whiteboardSessionId },
+          });
+        }),
+      { label: "deleteSession.transaction" }
+    );
+
+    console.log(
+      `[nsi] wbsid=${whiteboardSessionId} action=delete_session_done studentId=${session.studentId}`
+    );
+
+    revalidatePath(`/admin/students/${session.studentId}`);
+    revalidatePath(`/admin/students/${session.studentId}/notes`);
+
+    return { ok: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[nsi] wbsid=${whiteboardSessionId} action=delete_session_failed err=${msg}`
+    );
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// (h) Load in-shell review payload — called from SessionReviewMode on mount
+// ---------------------------------------------------------------------------
+
+export type SessionReviewPayload = {
+  studentName: string;
+  startedAtIso: string;
+  endedAtIso: string | null;
+  durationSeconds: number | null;
+  billedDurationMin: number | null;
+  billedStartLocal: string | null;
+  billedEndLocal: string | null;
+  hasAudio: boolean;
+  /** Whiteboard event count from events.json (NOTE-1 replay gate). */
+  eventCount: number;
+  eventsProxyUrl: string;
+  snapshotProxyUrl: string | null;
+  audioSegments: Array<{
+    url: string;
+    mimeType: string;
+    durationSeconds: number | null;
+  }>;
+  canonicalAudioBlobUrl: string | null;
+  canonicalAudioMimeType: string | null;
+  canonicalDurationSeconds: number | null;
+  initialNote: TutorNoteStatusResult;
+};
+
+/**
+ * Load review-mode data for the in-shell post-end-session surface.
+ *
+ * Called client-side from SessionReviewMode when the shell flips
+ * mode="review" after a successful handleEndSession. Returns the same
+ * data the standalone review page.tsx assembles SSR, so the in-shell
+ * surface can display notes + board preview + lazy replay without a
+ * full page navigation.
+ *
+ * Trust: assertOwnsWhiteboardSession.
+ * Log prefix: [nsi]
+ */
+export async function loadSessionReviewPayload(
+  whiteboardSessionId: string
+): Promise<SessionReviewPayload> {
+  await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  const detail = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: {
+          id: true,
+          startedAt: true,
+          endedAt: true,
+          durationSeconds: true,
+          billedDurationMin: true,
+          billedStartLocal: true,
+          billedEndLocal: true,
+          snapshotBlobUrl: true,
+          eventsBlobUrl: true,
+          concatBlobUrl: true,
+          concatDurationSeconds: true,
+          student: { select: { id: true, name: true } },
+          audioRecordings: {
+            select: {
+              id: true,
+              mimeType: true,
+              durationSeconds: true,
+              orderIndex: true,
+            },
+            orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
+          },
+        },
+      }),
+    { label: "loadSessionReviewPayload.detail" }
+  );
+
+  if (!detail) {
+    throw new Error(`Session ${whiteboardSessionId} not found`);
+  }
+
+  const note = await getTutorNoteBySessionId(whiteboardSessionId);
+  const initialNote: TutorNoteStatusResult = note
+    ? {
+        found: true,
+        status: note.status,
+        content: note.content ?? null,
+        isPartial: note.isPartial,
+        error: note.error ?? null,
+        generatedAt: note.generatedAt?.toISOString() ?? null,
+      }
+    : { found: false };
+
+  console.log(
+    `[nsi] wbsid=${whiteboardSessionId} action=load_review_payload hasAudio=${detail.audioRecordings.length > 0} noteFound=${initialNote.found}`
+  );
+
+  let eventCount = 0;
+  if (detail.eventsBlobUrl) {
+    try {
+      const blobRes = await fetch(detail.eventsBlobUrl, { cache: "no-store" });
+      if (blobRes.ok) {
+        const raw = JSON.parse(await blobRes.text()) as {
+          events?: unknown;
+        };
+        if (Array.isArray(raw.events)) {
+          eventCount = raw.events.length;
+        }
+      }
+    } catch {
+      // best-effort — gate defaults to audio-only
+    }
+  }
+
+  const replayAudio = buildReplayAudioPayload({
+    whiteboardSessionId,
+    concatBlobUrl: detail.concatBlobUrl,
+    concatDurationSeconds: detail.concatDurationSeconds,
+    audioRecordings: detail.audioRecordings,
+    audience: "admin",
+  });
+
+  return {
+    studentName: detail.student.name,
+    startedAtIso: detail.startedAt.toISOString(),
+    endedAtIso: detail.endedAt?.toISOString() ?? null,
+    durationSeconds: detail.durationSeconds,
+    billedDurationMin: detail.billedDurationMin,
+    billedStartLocal: detail.billedStartLocal,
+    billedEndLocal: detail.billedEndLocal,
+    hasAudio: replayAudio.hasAudio,
+    eventCount,
+    eventsProxyUrl: `/api/whiteboard/${whiteboardSessionId}/events`,
+    snapshotProxyUrl: detail.snapshotBlobUrl
+      ? `/api/whiteboard/${whiteboardSessionId}/snapshot`
+      : null,
+    audioSegments: replayAudio.audioSegments.map((s) => ({
+      url: s.url,
+      mimeType: s.mimeType ?? "audio/webm",
+      durationSeconds: s.durationSeconds ?? null,
+    })),
+    canonicalAudioBlobUrl: replayAudio.canonicalAudioBlobUrl,
+    canonicalAudioMimeType: replayAudio.canonicalAudioMimeType,
+    canonicalDurationSeconds: replayAudio.canonicalDurationSeconds,
+    initialNote,
+  };
+}

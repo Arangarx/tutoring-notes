@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { renameStudent, deleteStudent } from "./actions";
 import { SubmitButton } from "@/components/SubmitButton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function StudentActions({
   studentId,
@@ -18,19 +21,24 @@ export function StudentActions({
 
   if (confirmDelete) {
     return (
-      <div className="row">
-        <span className="muted" style={{ fontSize: 14 }}>Delete &ldquo;{currentName}&rdquo;? This is permanent.</span>
+      <div className="flex max-w-xl flex-col gap-3 sm:flex-row sm:items-center">
+        <span className="text-sm text-muted-foreground">
+          Delete &ldquo;{currentName}&rdquo;? This is permanent.
+        </span>
         <form
           action={async () => {
             await deleteStudent(studentId);
             router.push("/admin/students");
           }}
+          className="flex flex-wrap gap-2"
         >
-          <button className="btn" type="submit" style={{ color: "var(--sign-out-hover-text)" }}>Delete</button>
+          <Button type="submit" variant="destructive" className="min-h-11">
+            Delete
+          </Button>
+          <Button type="button" variant="outline" className="min-h-11" onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </Button>
         </form>
-        <button className="btn" type="button" onClick={() => setConfirmDelete(false)}>
-          Cancel
-        </button>
       </div>
     );
   }
@@ -42,27 +50,41 @@ export function StudentActions({
           await renameStudent(studentId, fd);
           setEditing(false);
         }}
+        className="flex flex-col gap-3 sm:flex-row sm:items-end"
       >
-        <div className="row">
-          <input name="name" defaultValue={currentName} required style={{ maxWidth: 280 }} />
-          <SubmitButton label="Save" pendingLabel="Saving…" />
-          <button className="btn" type="button" onClick={() => setEditing(false)}>
+        <div className="min-w-0 flex-1 space-y-2">
+          <Label htmlFor="rename-student">Name</Label>
+          <Input
+            id="rename-student"
+            name="name"
+            defaultValue={currentName}
+            required
+            className="min-h-11 max-w-sm"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <SubmitButton label="Save" pendingLabel="Saving…" variant="default" />
+          <Button type="button" variant="outline" className="min-h-11" onClick={() => setEditing(false)}>
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
     );
   }
 
   return (
-    <div className="row">
-      <button className="btn" type="button" onClick={() => setEditing(true)}>
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" variant="outline" className="min-h-11" onClick={() => setEditing(true)}>
         Rename
-      </button>
-      <button className="btn" type="button" onClick={() => setConfirmDelete(true)}
-        style={{ color: "var(--sign-out-hover-text)" }}>
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-11 border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive/60"
+        onClick={() => setConfirmDelete(true)}
+      >
         Delete student
-      </button>
+      </Button>
     </div>
   );
 }

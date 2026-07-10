@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import { PreviewBranchBadge } from "@/components/PreviewBranchBadge";
 import { Providers } from "@/components/Providers";
 import { SiteFooter } from "@/components/SiteFooter";
-import { ThemeInit } from "@/components/ThemeInit";
+import { getBuildIdentity } from "@/lib/build-identity";
+import { getPreviewBranchBadgeData } from "@/lib/preview-branch-badge";
+import { getThemeBootstrapScript } from "@/lib/theme";
+import { fraunces, inter, jetbrainsMono } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,13 +16,30 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const { shortSha: buildShortSha } = getBuildIdentity();
+  const previewBranchBadge = getPreviewBranchBadgeData();
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: getThemeBootstrapScript() }}
+        />
+      </head>
       <body style={{ minHeight: "100%", display: "flex", flexDirection: "column", margin: 0 }}>
-        <ThemeInit />
         <Providers>
           <div style={{ flex: 1 }}>{children}</div>
-          <SiteFooter />
+          <SiteFooter buildShortSha={buildShortSha} />
+          {previewBranchBadge ? (
+            <PreviewBranchBadge
+              branch={previewBranchBadge.branch}
+              shortSha={previewBranchBadge.shortSha}
+            />
+          ) : null}
         </Providers>
       </body>
     </html>

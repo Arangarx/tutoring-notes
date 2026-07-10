@@ -1,62 +1,136 @@
 /**
- * Pure thresholds + decision functions for the recorder timer.
- *
- * Goal: lock the rollover/warning/safety semantics so a future tweak (e.g.
- * shortening segments) can't accidentally regress the "fire chime once per
- * segment" guard or the "session safety hard stop" behavior.
+ * Pure thresholds + decision functions for the recorder timer / VAD policy.
  */
 
 import {
-  SEGMENT_MAX_SECONDS,
-  WARN_SEGMENT_SECONDS,
+  VAD_MAX_SEGMENT_SECONDS,
+  VAD_MIN_SEGMENT_SECONDS,
+  VAD_SILENCE_HOLD_MS,
+  VAD_SILENCE_RMS_THRESHOLD,
+  SESSION_BILLING_HOUR_SECONDS,
+  SESSION_TIME_WARN_BEFORE_SECONDS,
+  SESSION_TIME_WARN_SECONDS,
   SESSION_SAFETY_MAX_SECONDS,
-  shouldRolloverSegment,
-  shouldFireApproachingChime,
+  shouldCutOnSilence,
+  shouldForceVadCap,
+  shouldFireSessionTimeChime,
   shouldHardStopSession,
-  formatSegmentTimeLeft,
+  isSessionTimeWarning,
+  formatSessionTimeLeft,
+  formatTimeAlertHint,
+  getTimeAlertHintParts,
+  sessionChimeMilestoneIndex,
+  effectiveSessionSafetyMaxSeconds,
+  clampVadSilenceAccumulationMs,
 } from "@/lib/recording/segment-policy";
 
-describe("segment-policy thresholds", () => {
-  test("WARN_SEGMENT_SECONDS is 5 minutes before the segment cap", () => {
-    expect(SEGMENT_MAX_SECONDS - WARN_SEGMENT_SECONDS).toBe(5 * 60);
-  });
-
-  test("SESSION_SAFETY_MAX_SECONDS is much larger than a single segment", () => {
-    expect(SESSION_SAFETY_MAX_SECONDS).toBeGreaterThan(SEGMENT_MAX_SECONDS * 4);
-  });
-});
-
-describe("shouldRolloverSegment", () => {
-  test("returns false below the cap", () => {
-    expect(shouldRolloverSegment(0)).toBe(false);
-    expect(shouldRolloverSegment(SEGMENT_MAX_SECONDS - 1)).toBe(false);
-  });
-
-  test("returns true exactly at the cap", () => {
-    expect(shouldRolloverSegment(SEGMENT_MAX_SECONDS)).toBe(true);
-  });
-
-  test("returns true past the cap (in case a tick was missed)", () => {
-    expect(shouldRolloverSegment(SEGMENT_MAX_SECONDS + 7)).toBe(true);
+describe("segment-policy — 50-min rollover removed (red-before)", () => {
+  test("SEGMENT_MAX_SECONDS symbol is gone from exports", () => {
+    const mod = require("@/lib/recording/segment-policy") as Record<string, unknown>;
+    expect(mod.SEGMENT_MAX_SECONDS).toBeUndefined();
+    expect(mod.shouldRolloverSegment).toBeUndefined();
+    expect(mod.shouldFireApproachingChime).toBeUndefined();
+    expect(mod.formatSegmentTimeLeft).toBeUndefined();
+    expect(mod.effectiveSegmentMaxSeconds).toBeUndefined();
   });
 });
 
-describe("shouldFireApproachingChime", () => {
-  test("returns false before the warning threshold regardless of fired flag", () => {
-    expect(shouldFireApproachingChime(WARN_SEGMENT_SECONDS - 1, false)).toBe(false);
-    expect(shouldFireApproachingChime(WARN_SEGMENT_SECONDS - 1, true)).toBe(false);
+describe("VAD helpers", () => {
+  test("shouldCutOnSilence honors VAD_MIN_SEGMENT_SECONDS + hold", () => {
+    expect(
+      shouldCutOnSilence({
+        segmentElapsedS: VAD_MIN_SEGMENT_SECONDS - 1,
+        silenceHeldMs: VAD_SILENCE_HOLD_MS + 100,
+        rmsLevel: 0,
+      })
+    ).toBe(false);
+
+    expect(
+      shouldCutOnSilence({
+        segmentElapsedS: VAD_MIN_SEGMENT_SECONDS,
+        silenceHeldMs: VAD_SILENCE_HOLD_MS - 1,
+        rmsLevel: 0,
+      })
+    ).toBe(false);
+
+    expect(
+      shouldCutOnSilence({
+        segmentElapsedS: VAD_MIN_SEGMENT_SECONDS,
+        silenceHeldMs: VAD_SILENCE_HOLD_MS,
+        rmsLevel: 0,
+      })
+    ).toBe(true);
+
+    expect(
+      shouldCutOnSilence({
+        segmentElapsedS: 60,
+        silenceHeldMs: VAD_SILENCE_HOLD_MS,
+        rmsLevel: VAD_SILENCE_RMS_THRESHOLD,
+      })
+    ).toBe(false);
   });
 
-  test("returns true at the warning threshold when not yet fired", () => {
-    expect(shouldFireApproachingChime(WARN_SEGMENT_SECONDS, false)).toBe(true);
+  test("shouldForceVadCap at VAD_MAX_SEGMENT_SECONDS", () => {
+    expect(shouldForceVadCap(VAD_MAX_SEGMENT_SECONDS - 1)).toBe(false);
+    expect(shouldForceVadCap(VAD_MAX_SEGMENT_SECONDS)).toBe(true);
+    expect(shouldForceVadCap(VAD_MAX_SEGMENT_SECONDS + 10)).toBe(true);
   });
 
-  test("returns false at the warning threshold when already fired (no replay on resume)", () => {
-    expect(shouldFireApproachingChime(WARN_SEGMENT_SECONDS, true)).toBe(false);
+  test("clampVadSilenceAccumulationMs — huge RAF gap does not exceed hold window (SF-3)", () => {
+    const hold = VAD_SILENCE_HOLD_MS;
+    expect(clampVadSilenceAccumulationMs(120_000)).toBe(hold - 1);
+    expect(clampVadSilenceAccumulationMs(hold - 1)).toBe(hold - 1);
+    expect(clampVadSilenceAccumulationMs(0)).toBe(0);
+    expect(clampVadSilenceAccumulationMs(-5)).toBe(0);
+
+    let silenceHeldMs = 0;
+    silenceHeldMs += clampVadSilenceAccumulationMs(60_000);
+    expect(
+      shouldCutOnSilence({
+        segmentElapsedS: VAD_MIN_SEGMENT_SECONDS,
+        silenceHeldMs,
+        rmsLevel: 0,
+      })
+    ).toBe(false);
+
+    silenceHeldMs += clampVadSilenceAccumulationMs(hold);
+    expect(
+      shouldCutOnSilence({
+        segmentElapsedS: VAD_MIN_SEGMENT_SECONDS,
+        silenceHeldMs,
+        rmsLevel: 0,
+      })
+    ).toBe(true);
+  });
+});
+
+describe("shouldFireSessionTimeChime — session elapsed, not segment", () => {
+  test("SESSION_TIME_WARN_SECONDS is 5 min before first hour", () => {
+    expect(SESSION_TIME_WARN_SECONDS).toBe(SESSION_BILLING_HOUR_SECONDS - 5 * 60);
   });
 
-  test("stays false past the threshold once fired (single-fire per segment)", () => {
-    expect(shouldFireApproachingChime(WARN_SEGMENT_SECONDS + 60, true)).toBe(false);
+  test("fires at first hourly warn threshold when not yet fired", () => {
+    expect(shouldFireSessionTimeChime(SESSION_TIME_WARN_SECONDS, -1)).toBe(true);
+    expect(sessionChimeMilestoneIndex(SESSION_TIME_WARN_SECONDS)).toBe(1);
+  });
+
+  test("does not replay for the same milestone", () => {
+    expect(shouldFireSessionTimeChime(SESSION_TIME_WARN_SECONDS + 60, 1)).toBe(
+      false
+    );
+  });
+
+  test("fires again approaching the second hour", () => {
+    const secondWarn =
+      2 * SESSION_BILLING_HOUR_SECONDS - SESSION_TIME_WARN_BEFORE_SECONDS;
+    expect(shouldFireSessionTimeChime(secondWarn, 1)).toBe(true);
+    expect(sessionChimeMilestoneIndex(secondWarn)).toBe(2);
+  });
+
+  test("does not fire before the warn window", () => {
+    expect(shouldFireSessionTimeChime(SESSION_TIME_WARN_SECONDS - 1, -1)).toBe(
+      false
+    );
   });
 });
 
@@ -70,27 +144,84 @@ describe("shouldHardStopSession", () => {
     expect(shouldHardStopSession(SESSION_SAFETY_MAX_SECONDS)).toBe(true);
     expect(shouldHardStopSession(SESSION_SAFETY_MAX_SECONDS + 100)).toBe(true);
   });
+
+  test("honors __SESSION_SAFETY_MAX_SECONDS_OVERRIDE in non-production", () => {
+    const prev = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", {
+      value: "development",
+      writable: true,
+      configurable: true,
+    });
+    (global as unknown as { window?: { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number } }).window =
+      { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE: 12 };
+    expect(effectiveSessionSafetyMaxSeconds()).toBe(12);
+    expect(shouldHardStopSession(12)).toBe(true);
+    expect(shouldHardStopSession(11)).toBe(false);
+    delete (global as unknown as { window?: { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number } })
+      .window?.__SESSION_SAFETY_MAX_SECONDS_OVERRIDE;
+    Object.defineProperty(process.env, "NODE_ENV", {
+      value: prev,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  /**
+   * P1-J7 / smokebook item 8 — independent-oracle threshold contract.
+   * Cap is chosen in-test (25s), not derived from SESSION_SAFETY_MAX_SECONDS
+   * or implementation literals, so the suite cannot false-green if the prod
+   * constant changes without the override seam still honoring the boundary.
+   */
+  test("FALSE→TRUE across overridden safety cap (independent oracle, P1-J7)", () => {
+    const INDEPENDENT_CAP_SECONDS = 25;
+    const prevEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", {
+      value: "development",
+      writable: true,
+      configurable: true,
+    });
+    (global as unknown as { window?: { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number } }).window =
+      { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE: INDEPENDENT_CAP_SECONDS };
+
+    expect(effectiveSessionSafetyMaxSeconds()).toBe(INDEPENDENT_CAP_SECONDS);
+    expect(shouldHardStopSession(INDEPENDENT_CAP_SECONDS - 1)).toBe(false);
+    expect(shouldHardStopSession(INDEPENDENT_CAP_SECONDS)).toBe(true);
+    expect(shouldHardStopSession(INDEPENDENT_CAP_SECONDS + 60)).toBe(true);
+
+    delete (global as unknown as { window?: { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number } })
+      .window?.__SESSION_SAFETY_MAX_SECONDS_OVERRIDE;
+    Object.defineProperty(process.env, "NODE_ENV", {
+      value: prevEnv,
+      writable: true,
+      configurable: true,
+    });
+  });
 });
 
-describe("formatSegmentTimeLeft", () => {
-  test("prod copy: minutes wording at 5 min remaining", () => {
-    expect(formatSegmentTimeLeft(5 * 60)).toBe("~5 min left");
+describe("getTimeAlertHintParts + formatTimeAlertHint", () => {
+  test("hint parts derive from SESSION_TIME_WARN_BEFORE_SECONDS and SESSION_BILLING_HOUR_SECONDS", () => {
+    expect(getTimeAlertHintParts()).toEqual({
+      minutesBefore: SESSION_TIME_WARN_BEFORE_SECONDS / 60,
+      billingHourHours: SESSION_BILLING_HOUR_SECONDS / 3600,
+    });
   });
 
-  test("rounds up to whole minutes (so 4:01 reads as 5 min, not 4)", () => {
-    expect(formatSegmentTimeLeft(241)).toBe("~5 min left");
+  test("formatTimeAlertHint renders billing-aware copy", () => {
+    expect(formatTimeAlertHint()).toBe(
+      "Alerts 5 minutes before each hour of session time."
+    );
+  });
+});
+
+describe("formatSessionTimeLeft + isSessionTimeWarning", () => {
+  test("formatSessionTimeLeft prod copy at 5 min remaining", () => {
+    expect(formatSessionTimeLeft(5 * 60)).toBe("~5 min left");
   });
 
-  test("smoke copy: switches to seconds under 90s", () => {
-    expect(formatSegmentTimeLeft(30)).toBe("~30s left");
-    expect(formatSegmentTimeLeft(89)).toBe("~89s left");
-  });
-
-  test("90s exactly uses minute wording (boundary)", () => {
-    expect(formatSegmentTimeLeft(90)).toBe("~2 min left");
-  });
-
-  test("clamps negative values to 0 (timer overshoot)", () => {
-    expect(formatSegmentTimeLeft(-3)).toBe("~0s left");
+  test("isSessionTimeWarning true inside 5 min of hour boundary", () => {
+    expect(isSessionTimeWarning(SESSION_BILLING_HOUR_SECONDS - 60)).toBe(true);
+    expect(isSessionTimeWarning(SESSION_BILLING_HOUR_SECONDS - 6 * 60)).toBe(
+      false
+    );
   });
 });

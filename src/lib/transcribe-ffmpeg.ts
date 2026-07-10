@@ -194,6 +194,31 @@ async function ensureChunksUnderLimit(
 }
 
 /**
+ * Probe audio duration in seconds from an in-memory buffer.
+ * Returns null when ffmpeg is unavailable or the probe fails.
+ */
+export async function probeAudioBufferDurationSeconds(
+  buffer: Buffer,
+  filename: string,
+  mimeType: string
+): Promise<number | null> {
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath) return null;
+
+  const ext = extFromMimeOrFilename(mimeType, filename);
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tn-probe-"));
+  try {
+    const inputPath = path.join(tmpRoot, `input.${ext}`);
+    await fs.writeFile(inputPath, buffer);
+    return await probeDurationSeconds(ffmpegPath, inputPath);
+  } catch {
+    return null;
+  } finally {
+    await fs.rm(tmpRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/**
  * When audio exceeds Whisper's per-request size limit, split into time-based segments with ffmpeg,
  * then bisect any segment that is still too large (VBR).
  *

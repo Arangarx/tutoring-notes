@@ -1,0 +1,3253 @@
+/**
+ * Mynk whiteboard chrome — native Excalidraw UI hide rules + full-viewport layout.
+ *
+ * `zenModeEnabled` on <ExcalidrawDynamic> hides most native chrome, but NOT the
+ * left tool rail or hamburger. These selectors finish the job.
+ *
+ * Selectors verified against @excalidraw/excalidraw@0.18.1 dist/prod/index.css.
+ * All rules scoped to `.mynk-wb-chrome` to avoid leaking to other surfaces.
+ *
+ * Layout: position:fixed inset:0 overlay that covers admin nav during live sessions.
+ * Requires z-index:50 or higher to sit above AdminNav.
+ */
+
+/* ΓöÇΓöÇ Excalidraw native chrome hide ΓöÇΓöÇ */
+.mynk-wb-chrome .App-toolbar-container,
+.mynk-wb-chrome .App-toolbar,
+.mynk-wb-chrome .shapes-section,
+.mynk-wb-chrome .App-menu__left .dropdown-menu-button,
+.mynk-wb-chrome .App-menu_top .App-menu__left .dropdown-menu-button,
+.mynk-wb-chrome .main-menu-trigger,
+.mynk-wb-chrome .default-sidebar-trigger,
+.mynk-wb-chrome .sidebar-trigger,
+.mynk-wb-chrome .layer-ui__wrapper__top-right,
+.mynk-wb-chrome .layer-ui__wrapper__footer,
+.mynk-wb-chrome .layer-ui__wrapper__footer-left,
+.mynk-wb-chrome .layer-ui__wrapper__footer-right,
+.mynk-wb-chrome .footer-center,
+.mynk-wb-chrome .App-menu_top,
+.mynk-wb-chrome .App-menu_bottom,
+.mynk-wb-chrome .App-mobile-menu,
+.mynk-wb-chrome .welcome-screen-decor,
+.mynk-wb-chrome .welcome-screen-center,
+.mynk-wb-chrome .welcome-screen-menu,
+.mynk-wb-chrome .help-icon {
+  display: none !important;
+}
+
+/* Touch/mobile: HintViewer renders outside the hidden toolbar — hide keyboard hints. */
+.mynk-wb-chrome .excalidraw.excalidraw--mobile .HintViewer {
+  display: none !important;
+}
+
+/*
+ * ST-05 / L1 — tutor local laser color.
+ * Excalidraw@0.18.1 hardcodes DEFAULT_LASER_COLOR ("red") for the local user's
+ * laser trail (LaserTrails.localTrail). Remote peer lasers use pointer.laserColor
+ * (set in useCollaboratorPointers). Override local fill to coral (--accent).
+ */
+.mynk-wb-chrome .SVGLayer svg path[fill="red"] {
+  fill: var(--accent);
+}
+
+/* ΓöÇΓöÇ Chrome container: full-viewport fixed overlay ΓöÇΓöÇ */
+.mynk-wb-chrome {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  overflow: hidden;
+}
+
+/* ── Top bar (44px) ── */
+.mynk-wb-topbar {
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  /* overflow: visible — dropdowns (Share, Mic, Theme, View) must extend
+     below this bar; overflow:hidden clips them at the 44px boundary. */
+  overflow: visible;
+  position: relative;
+  /* z-index scale: banner z-20, AV cluster z-25, topbar/strip z-30 (stacking contexts).
+     Raised from z-10 so all dropdown panels render above the banner and video tile. */
+  z-index: 30;
+}
+
+.mynk-wb-topbar__zone {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-topbar__zone--trailing {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.mynk-wb-topbar__sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* ΓöÇΓöÇ Body: left strip + canvas ΓöÇΓöÇ */
+.mynk-wb-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ΓöÇΓöÇ Left tool strip (48px) ΓöÇΓöÇ */
+.mynk-wb-strip {
+  width: 48px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 2px;
+  /* overflow-y:auto scrolls the rail on short viewports so the collapse
+     button stays reachable. Right-opening flyouts (PP-06 props panel, shapes
+     pulldown, more popover) use createPortal + position:fixed so they escape
+     this overflow container entirely — no overflow-clip-margin trickery
+     needed. overflow-x:hidden hides any stray horizontal overflow from
+     collapsed-state transitions. min-height:0 lets the flex body constrain
+     height. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  position: relative;
+  /* Raised from z-10 to match topbar stacking context level (z-30). */
+  z-index: 30;
+  scrollbar-width: none;  /* keep the rail slim on Firefox */
+}
+
+.mynk-wb-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.mynk-wb-strip--collapsed {
+  width: 24px;
+  padding: 4px 0;
+  align-items: center;
+  overflow: hidden;
+}
+
+.mynk-wb-strip--collapsed .mynk-wb-strip__tools,
+.mynk-wb-strip--collapsed .mynk-wb-strip__sep {
+  display: none;
+}
+
+.mynk-wb-strip__tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 2px;
+}
+
+.mynk-wb-strip__spacer {
+  flex: 1;
+  min-height: 4px;
+}
+
+.mynk-wb-strip__collapse-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.mynk-wb-strip--collapsed .mynk-wb-strip__collapse-btn {
+  width: 24px;
+  max-width: 24px;
+  min-width: 24px;
+  height: 32px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.mynk-wb-strip__sep {
+  width: 32px;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+/* ΓöÇΓöÇ Tool button (1A.9 spec: 36×36px) ΓöÇΓöÇ */
+.mynk-wb-tool-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: background 0.1s, color 0.1s;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.mynk-wb-tool-btn:not(.mynk-wb-tool-btn--active):hover {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
+}
+
+.mynk-wb-tool-btn:not(.mynk-wb-tool-btn--active):hover svg {
+  filter: brightness(1.12);
+}
+
+/* Active tool: inverse colors (mock .rec-tool.is-active).
+   Specificity (0,2,0) beats plain :hover (0,1,1), but we also add the
+   :hover variant explicitly so there is zero ambiguity. */
+.mynk-wb-tool-btn--active,
+.mynk-wb-tool-btn--active:hover {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.mynk-wb-tool-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.mynk-wb-tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ΓöÇΓöÇ Canvas area ΓöÇΓöÇ */
+.mynk-wb-canvas {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background-color: var(--board-paper);
+  background-image: radial-gradient(
+    ellipse 120% 100% at 50% 50%,
+    transparent 55%,
+    var(--board-paper-vignette) 100%
+  );
+}
+
+/* Ensure Excalidraw fills canvas host */
+.mynk-wb-canvas .excalidraw,
+.mynk-wb-canvas .excalidraw-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Touch multipoint line/arrow — replaces hidden Excalidraw footer Done control. */
+.mynk-wb-multipoint-done {
+  position: absolute;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+.mynk-wb-multipoint-done:hover {
+  background: var(--surface-2);
+}
+
+/*
+ * Self-hosted graph embeds use link "mynk://graph" only for Excalidraw
+ * embeddable validation (renderEmbeddable path).
+ *
+ * 1. Hyperlink editor popup — hide via :has on the sentinel href (DOM).
+ * 2. On-canvas link badge — drawn by Excalidraw renderLinkIcon (canvas, not
+ *    CSS-targetable). Link must stay on the element for reload validation;
+ *    badge is accepted as a minor cosmetic trade-off (see graph-persist.ts).
+ *
+ * Legacy external embed links are unaffected.
+ */
+.mynk-wb-chrome .excalidraw-hyperlinkContainer:has(
+  .excalidraw-hyperlinkContainer-link[href="mynk://graph"]
+) {
+  display: none !important;
+}
+
+/* ΓöÇΓöÇ Banners overlay (absolute, top of canvas) ΓöÇΓöÇ */
+.mynk-wb-banners {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.mynk-wb-banners > * {
+  pointer-events: auto;
+}
+
+/*
+ * Mobile AV pip is fixed top-right (.mynk-wb-av-cluster--mobile: inset 12px,
+ * width 120px narrow/phone-landscape or 180px tablet-portrait — WbAVCluster).
+ * Keep banners left of the pip so "waiting for student" stays readable (z-20
+ * sits under z-25 pip; shrinking the box beats lowering z-index).
+ */
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-banners,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-banners {
+  right: calc(12px + 120px + 8px);
+}
+
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-banners {
+  right: calc(12px + 180px + 8px);
+}
+
+/* ΓöÇΓöÇ Wordmark + LIVE badge (session shell mock) ΓöÇΓöÇ */
+.mynk-wb-wordmark {
+  font-family: var(--font-display, var(--font-sans));
+  font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700;
+  color: var(--brand, var(--primary));
+  font-size: 16px;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  padding: 0 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mynk-wb-wordmark__dot {
+  color: var(--accent);
+}
+
+.mynk-wb-live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-radius: 999px;
+  padding: 3px 8px 3px 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.mynk-wb-live-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: mynk-wb-pulse 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.mynk-wb-live-badge--amber {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.mynk-wb-live-badge__dot--amber {
+  background: var(--warning);
+  animation: none;
+}
+
+.mynk-wb-live-badge--grey {
+  background: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
+}
+
+.mynk-wb-live-badge__dot--grey {
+  background: var(--badge-neutral-dot);
+  animation: none;
+}
+
+.mynk-wb-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mynk-wb-sync-pill--green {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.mynk-wb-sync-pill--amber {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.mynk-wb-sync-pill--grey {
+  background: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
+}
+
+@keyframes mynk-wb-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+.mynk-wb-timer {
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+  letter-spacing: 0.02em;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+/* ΓöÇΓöÇ Top bar buttons (tb-btn pattern) ΓöÇΓöÇ */
+.mynk-wb-tb-btn {
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied):not(.mynk-wb-tb-btn--mic-on):not(.mynk-wb-tb-btn--mic-off):not(.mynk-wb-tb-btn--cam-on):not(.mynk-wb-tb-btn--cam-off) {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
+}
+
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied):not(.mynk-wb-tb-btn--mic-on):not(.mynk-wb-tb-btn--mic-off):not(.mynk-wb-tb-btn--cam-on):not(.mynk-wb-tb-btn--cam-off) svg {
+  filter: brightness(1.12);
+}
+
+.mynk-wb-tb-btn--icon {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+.mynk-wb-tb-btn--primary {
+  background: var(--accent);
+  color: var(--accent-on);
+  font-weight: 600;
+  padding: 0 12px;
+}
+
+.mynk-wb-tb-btn--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  color: var(--accent-on);
+}
+
+/* Touch top bar — icon-only End session saves horizontal space at ~390px */
+.mynk-wb-tb-btn--end-touch {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Finish & save — inline confirm anchored to top-bar CTA */
+.mynk-wb-end-confirm-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mynk-wb-end-confirm {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(280px, calc(100vw - 24px));
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.mynk-wb-end-confirm__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.mynk-wb-end-confirm__body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.mynk-wb-end-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.mynk-wb-tb-btn--copied {
+  color: var(--success);
+}
+
+.mynk-wb-share-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mynk-wb-share-caret {
+  width: 22px !important;
+  margin-left: -2px;
+}
+
+.mynk-wb-share-chevron {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.mynk-wb-share-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 45;
+}
+
+/* Top-bar mic — inline meter + settings popover */
+.mynk-wb-mic-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-mic-settings-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mynk-wb-mic-meter-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.mynk-wb-mic-caret {
+  width: 22px !important;
+  margin-left: -2px;
+}
+
+.mynk-wb-mic-meter {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  margin: 0 2px;
+}
+
+.mynk-wb-mic-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--text-disabled, var(--muted-foreground));
+  opacity: 0.45;
+}
+
+.mynk-wb-mic-bar--b1 { height: 5px; }
+.mynk-wb-mic-bar--b2 { height: 9px; }
+.mynk-wb-mic-bar--b3 { height: 14px; }
+
+.mynk-wb-mic-bar--active {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.mynk-wb-mic-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 320px;
+  max-width: min(400px, 90vw);
+  z-index: 45;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.mynk-wb-mic-popover [data-testid="mic-controls"] {
+  margin-bottom: 0;
+  border: none;
+  border-radius: 10px;
+}
+
+/* Camera control — SR-04 addendum (mirrors mic-wrap pattern) */
+.mynk-wb-cam-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-cam-settings-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mynk-wb-cam-caret {
+  width: 22px !important;
+  margin-left: -2px;
+}
+
+.mynk-wb-cam-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 260px;
+  max-width: min(360px, 90vw);
+  z-index: 45;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.mynk-wb-cam-popover [data-testid="video-controls"] {
+  margin-bottom: 0;
+  border: none;
+  border-radius: 10px;
+}
+
+/* View menu — VP-02 */
+.mynk-wb-view-menu {
+  position: relative;
+}
+
+.mynk-wb-view-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+  padding: 8px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 40;
+}
+
+.mynk-wb-view-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+  padding: 6px 4px;
+}
+
+/* Theme menu — TU-13 system / light / dark */
+.mynk-wb-theme-menu {
+  position: relative;
+}
+
+.mynk-wb-theme-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 9.5rem;
+  padding: 4px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 45;
+}
+
+.mynk-wb-theme-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.mynk-wb-theme-item:hover {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-theme-item--active {
+  background: var(--accent-soft);
+  color: var(--foreground);
+}
+
+/* ΓöÇΓöÇ AV cluster — SR-04 top-right, draggable + resizable ΓöÇΓöÇ */
+.mynk-wb-av-cluster {
+  position: absolute;
+  z-index: 25;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  resize: none;
+}
+
+.mynk-wb-av-cluster--mobile {
+  top: 12px;
+  right: 12px;
+  bottom: auto;
+  left: auto !important;
+}
+
+.mynk-wb-av-cluster__drag-handle {
+  height: 14px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  flex-shrink: 0;
+  touch-action: none;
+}
+
+.mynk-wb-av-cluster__drag-dots {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.mynk-wb-av-cluster__tiles {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* SR-04a — video tiles fill the resizable cluster (override AVTile 160px default). */
+.mynk-wb-av-cluster__tiles-panel {
+  flex: 1 1 auto;
+  display: flex !important;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 4px;
+  align-items: stretch !important;
+}
+
+/* Manual resize / viewport-capped fallback — tiles share the fixed cluster height. */
+.mynk-wb-av-cluster:not([data-auto-grow="true"])
+  .mynk-wb-av-cluster__tiles-panel
+  > [data-testid^="av-tile-"] {
+  width: 100% !important;
+  height: auto;
+  flex: 1 1 0;
+  min-height: 0;
+  max-width: 100%;
+}
+
+/* Auto-grow — fixed tile height; cluster grows/shrinks with tile count (no stretch). */
+.mynk-wb-av-cluster[data-auto-grow="true"]
+  .mynk-wb-av-cluster__tiles-panel
+  > [data-testid^="av-tile-"] {
+  width: 100% !important;
+  height: auto;
+  flex: 0 0 var(--wb-av-tile-target-h, 213px);
+  min-height: var(--wb-av-tile-target-h, 213px);
+  max-width: 100%;
+}
+
+/* A3b — tile video body: unset standalone aspect-ratio so cluster height
+ * drives layout instead. A non-zero min-height prevents collapse to 0 when
+ * the cluster is in manual-resize / viewport-capped mode (no auto-grow). */
+.mynk-wb-av-cluster__tiles-panel > [data-testid^="av-tile-"] > div:first-child {
+  flex: 1 1 auto !important;
+  aspect-ratio: unset !important;
+  min-height: 60px;
+}
+
+/* Local-tile mic/cam overlay — on self preview only (SR-04 UX). */
+.mynk-wb-av-tile-local-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--surface-tile-solid) 92%, transparent),
+    color-mix(in srgb, var(--surface-tile-solid) 55%, transparent) 55%,
+    transparent
+  );
+  pointer-events: auto;
+}
+
+.mynk-wb-av-tile-local-controls .mynk-wb-tb-btn--icon {
+  width: 28px;
+  height: 28px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* AV on/off — top-bar mic/camera + local-tile overlay (same tb-btn modifiers). */
+.mynk-wb-tb-btn--cam-on,
+.mynk-wb-tb-btn--mic-on {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.mynk-wb-tb-btn--cam-off,
+.mynk-wb-tb-btn--mic-off {
+  color: color-mix(in srgb, var(--destructive) 85%, var(--text-muted));
+  border-color: color-mix(in srgb, var(--destructive) 28%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 7%, var(--surface-2));
+}
+
+.mynk-wb-tb-btn--cam-on,
+.mynk-wb-tb-btn--cam-off,
+.mynk-wb-tb-btn--mic-on,
+.mynk-wb-tb-btn--mic-off {
+  border: 1px solid;
+}
+
+.mynk-wb-tb-btn--cam-on:hover:not(:disabled),
+.mynk-wb-tb-btn--mic-on:hover:not(:disabled),
+.mynk-wb-tb-btn--cam-on:active:not(:disabled),
+.mynk-wb-tb-btn--mic-on:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-3));
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+
+.mynk-wb-tb-btn--cam-off:hover:not(:disabled),
+.mynk-wb-tb-btn--mic-off:hover:not(:disabled),
+.mynk-wb-tb-btn--cam-off:active:not(:disabled),
+.mynk-wb-tb-btn--mic-off:active:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 11%, var(--surface-2));
+  color: color-mix(in srgb, var(--destructive) 90%, var(--foreground));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 22%, var(--border));
+}
+
+.mynk-wb-av-cluster__resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.mynk-wb-av-cluster__resize-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  opacity: 0.5;
+}
+
+/* ΓöÇΓöÇ PP-06 compact properties — lives in left sidebar rail ΓöÇΓöÇ */
+.mynk-wb-props-compact {
+  position: relative;
+  z-index: 22;
+}
+
+.mynk-wb-props-sidebar {
+  width: 100%;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mynk-wb-props-sidebar .mynk-wb-props-compact__summary {
+  flex-direction: column;
+  padding: 8px 6px;
+  gap: 4px;
+  width: 36px;
+}
+
+.mynk-wb-props-sidebar .mynk-wb-props-compact__panel {
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+}
+
+.mynk-wb-props-compact__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.mynk-wb-props-compact__summary:hover {
+  background: var(--surface-2);
+  border-color: var(--ring);
+}
+
+.mynk-wb-props-compact__panel {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 260px;
+  padding: 12px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  /* z-index above the strip and its siblings */
+  z-index: 40;
+}
+
+/* Click-toggle: open state driven by --open class (React state), NOT :hover.
+   The old :hover approach caused the panel to vanish when the cursor moved
+   off the summary button toward the panel. */
+.mynk-wb-props-compact--open .mynk-wb-props-compact__panel {
+  display: block;
+}
+
+.mynk-wb-props-compact--open .mynk-wb-props-compact__summary {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
+.mynk-wb-summary-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.mynk-wb-summary-stroke {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--foreground);
+}
+
+.mynk-wb-props-compact--open .mynk-wb-props-compact__summary .mynk-wb-summary-stroke {
+  color: var(--background);
+}
+
+.mynk-wb-summary-stroke-line {
+  display: block;
+  width: 100%;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.mynk-wb-summary-chip {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.mynk-wb-props-section {
+  margin-bottom: 10px;
+}
+
+.mynk-wb-props-section-title {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.mynk-wb-props-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.mynk-wb-props-opacity-val {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+}
+
+.mynk-wb-props-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mynk-wb-props-widths {
+  display: flex;
+  gap: 6px;
+}
+
+.mynk-wb-props-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* "More styles" expanded area — subtle separator without muted clash.
+   Previous background: var(--muted) caused white-on-light label in dark mode. */
+.mynk-wb-more-styles-area {
+  margin-top: 8px;
+  padding: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.mynk-wb-more-styles-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Shapes pulldown — PU-05 */
+.mynk-wb-shapes-menu {
+  position: relative;
+}
+
+/* More overflow — anchored to left-rail Γï« button */
+.mynk-wb-more-menu {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.mynk-wb-shapes-dropdown {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 35;
+}
+
+.mynk-wb-shapes-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.mynk-wb-shapes-item:hover:not(.mynk-wb-shapes-item--active) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-shapes-item--active {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.mynk-wb-shapes-item--active:hover {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.mynk-wb-pulldown-chevron {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 3px 4px 4px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--foreground);
+  line-height: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  opacity: 0.88;
+}
+
+.mynk-wb-pulldown-chevron::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+}
+
+.mynk-wb-tool-btn--active .mynk-wb-pulldown-chevron {
+  color: var(--background);
+  opacity: 1;
+}
+
+[data-layout="narrow"] .mynk-wb-pulldown-chevron,
+[data-layout="tablet-portrait"] .mynk-wb-pulldown-chevron {
+  display: none;
+}
+
+/* ΓöÇΓöÇ Board tab strip — SR-14 ΓöÇΓöÇ */
+.mynk-wb-board-tabs-outer {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+}
+
+.mynk-wb-board-tabs-scroll {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--text-muted);
+}
+
+.mynk-wb-board-tabs-scroll:hover:not(:disabled) {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
+}
+
+.mynk-wb-board-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 100%;
+  padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.mynk-wb-board-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.mynk-wb-board-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 100%;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.mynk-wb-board-tab--active {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+/* Board tab wrapper — groups the tab button + delete button as a flex row */
+.mynk-wb-board-tab-wrap {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+
+.mynk-wb-board-tab-wrap:not(.mynk-wb-board-tab-wrap--active):hover {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
+}
+
+.mynk-wb-board-tab-wrap:not(.mynk-wb-board-tab-wrap--active):hover .mynk-wb-board-tab:not(:disabled) {
+  color: var(--foreground);
+}
+
+.mynk-wb-board-tab-wrap .mynk-wb-board-tab {
+  border-right: none;
+  padding-right: 6px;
+  background: transparent;
+}
+
+/* Active-tab underline + fill covers the FULL wrap (tab label + delete area). */
+.mynk-wb-board-tab-wrap--active {
+  border-bottom: 2px solid var(--accent);
+  background: var(--card);
+}
+
+.mynk-wb-board-tab-wrap--active .mynk-wb-board-tab {
+  border-bottom: none;
+  background: transparent;
+}
+
+/* When there is no delete affordance (only 1 board), restore symmetric
+   padding so the board name stays centred. Without this, padding-right: 6px
+   (from the generic wrap selector below) leaves the name left-biased. */
+.mynk-wb-board-tab-wrap--no-delete .mynk-wb-board-tab {
+  padding: 0 14px;
+}
+
+/* Delete ×, Confirm, Cancel buttons */
+.mynk-wb-board-tab-del {
+  display: flex;
+  align-items: center;
+  padding: 0 6px 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.mynk-wb-board-tab-wrap:hover .mynk-wb-board-tab-del,
+.mynk-wb-board-tab-del--confirm,
+.mynk-wb-board-tab-del--cancel {
+  opacity: 1;
+}
+
+.mynk-wb-board-tab-del:hover:not(:disabled) {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+  border-radius: 3px;
+}
+
+.mynk-wb-board-tab-del--confirm {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--destructive);
+  padding: 0 4px;
+}
+
+.mynk-wb-board-tab-del--cancel {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+
+.mynk-wb-board-tab__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.mynk-wb-board-tab__pdf-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: currentColor;
+  opacity: 0.75;
+}
+
+.mynk-wb-board-tab--add {
+  padding: 0 12px;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--text-muted);
+  border-right: none;
+}
+
+.mynk-wb-board-tab--add:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Student read-only board tabs — active highlight without disabled-button styling */
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab-wrap--read-only {
+  cursor: default;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-active,
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-inactive {
+  cursor: default;
+  pointer-events: none;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-inactive {
+  opacity: 0.65;
+}
+
+/* Ghost viewport label — VP-01 (bounds rendering deferred) */
+.mynk-wb-ghost-label {
+  position: absolute;
+  top: 12%;
+  left: 20%;
+  z-index: 4;
+  pointer-events: none;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 4px;
+  opacity: 0;
+}
+
+.mynk-wb-ghost-label--visible {
+  opacity: 1;
+}
+
+/* ΓöÇΓöÇ Bottom toolbar (mobile / tablet portrait) ΓöÇΓöÇ */
+.mynk-wb-bottom-toolbar {
+  display: none;
+  height: 52px;
+  min-height: 52px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 4px;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.mynk-wb-bottom-toolbar .mynk-wb-tool-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.mynk-wb-bottom-toolbar .mynk-wb-more-popover {
+  left: auto;
+  right: 0;
+  top: auto;
+  bottom: 100%;
+  margin-left: 0;
+  margin-bottom: 4px;
+}
+
+/* Touch bottom sheets — TM-11 props, TM-13 shapes/overflow */
+.mynk-wb-action-sheet-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.mynk-wb-action-sheet-backdrop--open {
+  display: block;
+}
+
+.mynk-wb-action-sheet {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 95;
+  max-height: min(60dvh, 420px);
+  overflow: hidden;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+  padding: 0 16px 16px;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.mynk-wb-action-sheet--open {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.mynk-wb-action-sheet__handle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 40px 6px 0;
+  position: relative;
+  flex-shrink: 0;
+  touch-action: none;
+}
+
+.mynk-wb-action-sheet__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.mynk-wb-action-sheet__close {
+  position: absolute;
+  right: 4px;
+  top: 6px;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.mynk-wb-action-sheet__close:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.mynk-wb-action-sheet__body {
+  overflow-y: auto;
+  overflow-x: visible;
+  overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Active swatch ring extends 4px outside — pad so left edge isn't clipped */
+.mynk-wb-action-sheet .mynk-wb-props-panel-inner {
+  padding-inline: 4px;
+}
+
+.mynk-wb-action-sheet .mynk-wb-props-swatches {
+  padding: 4px;
+}
+
+.mynk-wb-chrome-error-fallback {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 1200;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.mynk-wb-action-sheet__shapes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.mynk-wb-action-sheet__shapes-list .mynk-wb-shapes-item {
+  padding: 12px 14px;
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+.mynk-wb-action-sheet__menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 4px;
+}
+
+.mynk-wb-action-sheet__menu-list .mynk-wb-menu-item {
+  padding: 12px 14px;
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+.mynk-wb-props-mobile-bar {
+  display: none;
+  padding: 6px 12px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+
+.mynk-wb-props-mobile-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+/* ΓöÇΓöÇ Responsive layout modes ΓöÇΓöÇ */
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-strip,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-strip,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-strip {
+  display: none;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar {
+  display: flex;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-sidebar,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-sidebar,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-sidebar,
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-compact,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-compact,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-compact {
+  display: none;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar {
+  display: block;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-action-sheet,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-action-sheet,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-action-sheet {
+  display: flex;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__inserts,
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__zoom {
+  display: none;
+}
+
+/* Touch top bar — slim composition: essentials inline, secondary in overflow sheet */
+.mynk-wb-topbar__overflow-btn {
+  display: none;
+  flex-shrink: 0;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__desktop-only,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__desktop-only,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__desktop-only {
+  display: none;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__overflow-btn,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__overflow-btn,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__overflow-btn {
+  display: inline-flex;
+}
+
+/*
+ * Narrow-desktop compaction — viewport @media only; does NOT change data-layout
+ * mode (non-touch windows stay data-layout="desktop" per useWbLayoutMode).
+ * Reveal the existing overflow ⋯ and progressively hide inline controls that
+ * have equivalents in renderTopBarOverflowItems — lowest priority first so the
+ * full bar is used until controls would clip.
+ */
+.mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-end-session"] {
+  flex-shrink: 0;
+}
+
+@media (max-width: 1100px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__overflow-btn {
+    display: inline-flex;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"]
+    .mynk-wb-topbar__zone:has([data-testid="wb-theme-toggle"]) {
+    display: none;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__sep.mynk-wb-topbar__desktop-only {
+    display: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-grid-toggle"] {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__inserts {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-undo"],
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-redo"] {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-share-wrap {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-topbar-cam"] {
+    display: none;
+  }
+}
+
+@media (max-width: 660px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-topbar-mic"] {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-wordmark {
+    font-size: 14px;
+    padding: 0 4px;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-timer {
+    padding: 0 4px;
+    font-size: 13px;
+  }
+}
+
+/*
+ * Student narrow-desktop compaction — restore deleted 64108cf rules (8a).
+ *
+ * Non-touch windows stay data-layout="desktop" even at half-screen widths.
+ * The generic zone:has(wb-theme-toggle) rule already hides mic/cam/follow/
+ * undo/redo at <1100px. But the recording-disclosure text sits in a SEPARATE
+ * zone (pill + timer + disclosure) and stays visible, causing the bar to
+ * overflow at viewport widths below ~800px.
+ *
+ * Fix: hide the disclosure when the overflow-btn appears (1100px). Without
+ * the disclosure the remaining fixed elements (wordmark + name + pill + timer
+ * + overflow-btn + exit-btn) total <350px and fit at any reasonable width.
+ *
+ * wb-student-undo / wb-student-redo are inside the theme-toggle zone so they
+ * ARE already hidden by the zone rule — no separate rule needed for those.
+ */
+@media (max-width: 1100px) {
+  .mynk-wb-chrome[data-layout="desktop"][data-role="student"] .mynk-wb-student-disclosure {
+    display: none;
+  }
+}
+
+/* At very narrow desktop (<660px) also truncate the tutor-name so the pill
+ * and timer stay reachable without overflow. */
+@media (max-width: 660px) {
+  .mynk-wb-chrome[data-layout="desktop"][data-role="student"] .mynk-wb-student-tutor-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 72px;
+    flex-shrink: 1;
+  }
+}
+
+.mynk-wb-topbar-overflow-inserts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.mynk-wb-topbar-overflow-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-wordmark {
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__sep,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__sep,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__sep {
+  margin: 0 2px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-timer,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-timer,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-timer {
+  padding: 0 4px;
+  font-size: 13px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn {
+  gap: 6px;
+  padding: 8px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke {
+  width: 22px;
+}
+
+/* Collapse bottom tool chrome when tools hidden — canvas regains vertical space */
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="narrow"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="phone-landscape"] .mynk-wb-bottom-toolbar {
+  display: none;
+}
+
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="narrow"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="phone-landscape"] .mynk-wb-props-mobile-bar {
+  display: none;
+}
+
+/* ── Phone landscape — tier-1 tools on slim left rail (mock §phone landscape) ── */
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-live-column {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  grid-template-rows: 1fr;
+  position: relative;
+  min-height: 0;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-body {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 44px;
+  height: auto;
+  min-height: 0;
+  max-height: 100%;
+  align-self: stretch;
+  padding: 6px 0 14px;
+  gap: 2px;
+  border-top: none;
+  border-right: 1px solid var(--border);
+  background: var(--card);
+  z-index: 45;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  border-radius: 999px;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Bottom fade hints when rail content overflows (paired with thin scrollbar). */
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::after {
+  content: "";
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  margin-top: -10px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--card) 88%, transparent)
+  );
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar .mynk-wb-tool-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar .mynk-wb-more-popover {
+  left: 100%;
+  right: auto;
+  top: 0;
+  bottom: auto;
+  margin-left: 4px;
+  margin-bottom: 0;
+}
+
+/* Props summary — compact chip on canvas (replaces full-width mobile bar) */
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-bar {
+  grid-column: 2;
+  grid-row: 1;
+  display: block;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 45;
+  padding: 0;
+  background: transparent;
+  border: none;
+  width: auto;
+  pointer-events: none;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  pointer-events: auto;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-btn:hover {
+  background: var(--accent-soft);
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-btn .mynk-wb-summary-swatch {
+  width: 14px;
+  height: 14px;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke {
+  width: 18px;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-btn .mynk-wb-summary-chip {
+  font-size: 10px;
+  padding: 1px 5px;
+}
+
+/* Hide trailing "Colors & styles" label — chip shows swatches only */
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-btn > span:last-child {
+  display: none;
+}
+
+/* Board tabs pinned to bottom — canvas column only (do not paint over left rail). */
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-pagestrip {
+  grid-column: 2 / -1;
+  grid-row: 1;
+  align-self: end;
+  z-index: 40;
+  max-height: 40px;
+  padding-left: 0;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-debug-footer {
+  bottom: 48px;
+}
+
+.mynk-wb-chrome {
+  height: 100dvh;
+}
+
+.mynk-wb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mynk-wb-live-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Legacy alias */
+.mynk-wb-av-tile {
+  display: none;
+}
+
+/* ΓöÇΓöÇ Properties popover (legacy anchor — kept for more menu) ΓöÇΓöÇ */
+.mynk-wb-props-popover {
+  position: absolute;
+  left: 52px;
+  top: 50%;
+  transform: translateY(-25%);
+  width: 240px;
+  padding: 12px;
+  z-index: 30;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* ΓöÇΓöÇ More overflow popover ΓöÇΓöÇ */
+.mynk-wb-more-popover {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+  min-width: 192px;
+  padding: 4px;
+  z-index: 35;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Popover section separator */
+.mynk-wb-popover-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+  opacity: 0.6;
+}
+
+/* ΓöÇΓöÇ Page strip ΓöÇΓöÇ */
+.mynk-wb-pagestrip {
+  flex-shrink: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  overflow-x: hidden;
+}
+
+/* ΓöÇΓöÇ Debug footer ΓöÇΓöÇ */
+.mynk-wb-debug-footer {
+  position: absolute;
+  bottom: 44px;
+  right: 8px;
+  font-size: 10px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0.5;
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+/* ΓöÇΓöÇ Stroke color swatch (20px circle) ΓöÇΓöÇ */
+.mynk-wb-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: box-shadow 0.1s, transform 0.1s;
+}
+
+.mynk-wb-swatch:hover:not(.mynk-wb-swatch--active) {
+  transform: scale(1.15);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mynk-wb-swatch--active {
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+
+/* Roughness icon chips — square to hold the SVG glyph */
+.mynk-wb-roughness-chips {
+  gap: 6px;
+}
+
+.mynk-wb-roughness-chip {
+  width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ΓöÇΓöÇ Stroke width preset (28×28px) ΓöÇΓöÇ */
+.mynk-wb-width-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--foreground);
+  transition: background 0.1s;
+}
+
+.mynk-wb-width-btn:hover:not(.mynk-wb-width-btn--active) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-width-btn--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.mynk-wb-width-btn--active:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* ΓöÇΓöÇ Chip toggle (1A.10 spec) ΓöÇΓöÇ */
+.mynk-wb-chip {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 11px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+
+.mynk-wb-chip:hover:not(.mynk-wb-chip--active) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-chip--active {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
+/* Active chip must keep its highlight on hover — no specificity slip */
+.mynk-wb-chip--active:hover {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
+/* ΓöÇΓöÇ Opacity slider ΓöÇΓöÇ */
+/*
+ * Thumb-at-extremes fix: the thumb (16px = 8px radius) must be flush at both
+ * ends. When the slider width equals the container width, the BROWSER centers
+ * the thumb at x=0 (min) and x=slider_width (max), so at min the left 8px of
+ * the thumb overflows left, and vice versa.
+ *
+ * Correct fix: narrow the slider by 2×thumb_radius (16px) and add equal
+ * margin so the element is centered. At min, thumb center = 0 of the SLIDER =
+ * 8px from container left — thumb left edge is flush with container left.
+ * At max, thumb center = slider_width = container_width - 8px — thumb right
+ * edge is flush with container right. No overflow:hidden needed.
+ */
+.mynk-wb-slider-wrap {
+  /* No overflow clipping — the thumb extends to the container edge naturally */
+}
+
+.mynk-wb-slider {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 0 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  outline: none;
+  cursor: pointer;
+}
+
+.mynk-wb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  margin-top: -6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.1s;
+}
+
+.mynk-wb-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.mynk-wb-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+.mynk-wb-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.mynk-wb-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+
+/* ΓöÇΓöÇ More panel menu item ΓöÇΓöÇ */
+.mynk-wb-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+
+.mynk-wb-menu-item:hover {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-menu-item--destructive {
+  color: var(--destructive);
+}
+
+.mynk-wb-menu-item--destructive:hover {
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
+.mynk-wb-menu-item__kbd {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ΓöÇΓöÇ Info note in popover ΓöÇΓöÇ */
+.mynk-wb-info-note {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  padding: 6px 10px;
+  line-height: 1.4;
+}
+
+/* ─── Z-order + delete action buttons (More styles area) ─── */
+/* Use card background for contrast against the muted area background. */
+.mynk-wb-zorder-btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 11px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+
+.mynk-wb-zorder-btn:hover {
+  background: color-mix(in srgb, var(--surface-2) 40%, transparent);
+  border-color: var(--ring);
+}
+
+.mynk-wb-delete-btn {
+  border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent);
+  background: var(--card);
+  color: var(--destructive);
+  font-size: 11px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.mynk-wb-delete-btn:hover {
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
+/* ── Edge sharpness icon chips — same square shape as roughness chips ── */
+.mynk-wb-sharpness-chip {
+  width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Custom opacity slider (replaces native input[type=range]) ── */
+/*
+ * At value=0: left = calc(0 * (100% - 16px)) = 0  → thumb left edge = 0 (flush) ✓
+ * At value=100: left = calc(1 * (100% - 16px)) = 100% - 16px  → thumb right edge = 100% (flush) ✓
+ */
+.mynk-wb-slider-custom {
+  position: relative;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  outline: none;
+  border-radius: 2px;
+  user-select: none;
+  touch-action: none;
+}
+
+.mynk-wb-slider-custom:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.mynk-wb-slider-custom__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  pointer-events: none;
+}
+
+.mynk-wb-slider-custom__thumb {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  top: 50%;
+  margin-top: -8px;
+  transition: box-shadow 0.1s;
+}
+
+.mynk-wb-slider-custom:hover .mynk-wb-slider-custom__thumb,
+.mynk-wb-slider-custom:focus-visible .mynk-wb-slider-custom__thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* ── In-frame replay mode (Phase 1 wb-replay-in-frame) ── */
+.mynk-wb-chrome[data-mode="replay"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-timeline {
+  min-height: 48px;
+  height: auto;
+  flex-shrink: 0;
+  z-index: 1;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-footer .mynk-wb-pagestrip {
+  flex-shrink: 0;
+  z-index: 0;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"][data-mode="replay"] .mynk-wb-replay-footer {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: end;
+  z-index: 40;
+  padding-left: 44px;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"][data-mode="replay"] .mynk-wb-replay-footer .mynk-wb-pagestrip {
+  grid-column: unset;
+  grid-row: unset;
+  align-self: unset;
+  max-height: unset;
+  padding-left: 0;
+  background: transparent;
+  backdrop-filter: none;
+  z-index: unset;
+}
+
+.mynk-wb-replay-timeline__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mynk-wb-replay-play-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mynk-wb-replay-play-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.mynk-wb-replay-timeline__seek-wrap {
+  flex: 1;
+  min-width: 120px;
+}
+
+.mynk-wb-replay-timeline__seek {
+  width: 100%;
+}
+
+.wb-review-notes-column {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wb-review-board-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* ── Unified session review surface (prominent ↔ docked notes) ── */
+.wb-session-review-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.wb-session-review-root--loading,
+.wb-session-review-root--error {
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.wb-review-unified-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.55fr);
+  overflow: hidden;
+  transition: grid-template-columns 250ms ease-out;
+}
+
+.wb-session-review-root--replay-active .wb-review-unified-body {
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+}
+
+.wb-review-notes-surface {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  background: var(--background);
+  transition: padding 250ms ease-out;
+}
+
+.wb-review-notes-surface--docked {
+  padding: 8px 10px;
+  border-right: 1px solid var(--border);
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.wb-review-main-frame {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.wb-review-hero-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 250ms ease-out;
+}
+
+.wb-review-hero-board--receded {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.wb-review-replay-pane {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(16px);
+  pointer-events: none;
+  transition:
+    opacity 250ms ease-out,
+    transform 250ms ease-out;
+}
+
+.wb-review-replay-pane--visible {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-review-unified-body,
+  .wb-review-notes-surface,
+  .wb-review-hero-board,
+  .wb-review-replay-pane {
+    transition: none;
+  }
+}
+
+.wb-review-board-thumbnail-wrap {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.wb-review-board-cta {
+  flex-shrink: 0;
+  align-self: center;
+  width: auto;
+  text-align: center;
+  justify-content: center;
+}
+
+.wb-review-board-thumbnail-placeholder,
+.wb-review-board-thumbnail-empty {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.wb-review-board-thumbnail-placeholder {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wb-review-board-thumbnail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wb-review-more-menu {
+  position: relative;
+}
+
+.wb-review-more-menu > summary {
+  cursor: pointer;
+}
+
+.wb-review-more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.wb-review-more-menu__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--foreground) 10%, transparent);
+  white-space: nowrap;
+}
+
+/* ── Share replay page shell (/s/[token]/whiteboard/[wbsid]) ──
+   Viewport-locked flex column so embedded replay gets a real height chain.
+   Without this, min-h-dvh + scrollable page → 0×0 canvas rect → blank blue board. */
+.wb-share-replay-page {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.wb-share-replay-page__header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.wb-share-replay-page__header-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 10px 12px 12px;
+}
+
+.wb-share-replay-page__title {
+  margin: 6px 0 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.wb-share-replay-page__subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.wb-share-replay-page__player {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .wb-share-replay-page__header-inner {
+    padding: 12px 20px 14px;
+  }
+
+  .wb-share-replay-page__title {
+    font-size: 1.5rem;
+  }
+}
+
+.mynk-wb-replay-root--embedded {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-chrome[data-mode="replay"] {
+  position: relative;
+  inset: unset;
+  z-index: 0;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-replay-body,
+.mynk-wb-replay-root--embedded .mynk-wb-live-column,
+.mynk-wb-replay-root--embedded .mynk-wb-replay-column {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-canvas {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  width: 100%;
+  height: 100%;
+}
+
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host .excalidraw,
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host .excalidraw-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Hide any Excalidraw UI controls that leak through in replay/thumbnail mode. */
+.wb-replay-canvas-host .layer-ui__wrapper,
+.wb-replay-canvas-host .excalidraw .scroll-back-to-content,
+.wb-replay-canvas-host [class*="scroll-back-to-content"],
+.wb-review-board-thumbnail .layer-ui__wrapper,
+.wb-review-board-thumbnail .excalidraw .scroll-back-to-content,
+.wb-review-board-thumbnail [class*="scroll-back-to-content"] {
+  display: none !important;
+}
+
+.wb-review-wb-topbar {
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.wb-review-board-thumbnail {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.wb-review-board-thumbnail .excalidraw,
+.wb-review-board-thumbnail .excalidraw-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Graph-only hero thumbnail (ReviewGraphOnlyThumbnail) — div, not img; needs explicit box. */
+.wb-review-board-thumbnail--graph {
+  width: min(100%, 720px);
+  aspect-ratio: 4 / 3;
+  min-height: 240px;
+  max-height: min(56vh, 540px);
+  position: relative;
+  overflow: hidden;
+}
+
+.wb-review-board-thumbnail--graph .wb-graph-root {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+}
+
+.wb-replay-canvas-host {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  /* Default: creates a stacking/positioning context for Excalidraw children. */
+  position: relative;
+}
+
+.wb-replay-in-frame-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.mynk-wb-replay-meta {
+  flex-shrink: 0;
+}
+
+.wb-replay-persist-wrapper {
+  /* legacy testid mount — unified layout uses .wb-review-replay-pane */
+}
+
+.wb-review-topbar {
+  display: none;
+}
+
+.wb-review-hero-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.55fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .wb-review-unified-body,
+  .wb-session-review-root--replay-active .wb-review-unified-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .wb-session-review-root--replay-active .wb-review-notes-surface--docked {
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .wb-review-hero-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── P2 student role — mobile-first chrome (data-role="student") ── */
+.mynk-wb-chrome[data-role="student"] {
+  height: 100dvh;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-live-column {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-student-tutor-name {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.mynk-wb-student-disclosure {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.mynk-wb-follow-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.mynk-wb-follow-toggle.mynk-wb-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.mynk-wb-follow-toggle input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  align-self: center;
+  accent-color: var(--accent);
+}
+
+.mynk-wb-follow-toggle__label {
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.mynk-wb-student-follow {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.mynk-wb-tb-btn--compact {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mynk-wb-canvas-banner {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 25;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--info-soft);
+  border: 1px solid var(--info-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mynk-wb-canvas-banner--warn {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-pagestrip,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-pagestrip {
+  max-height: 40px;
+}
+
+.mynk-wb-bottom-toolbar--desktop-undo {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.mynk-wb-props-mobile-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  z-index: 35;
+}
+
+/* ── Wave 5 polish — shared grid icon toggle (both roles) ── */
+.mynk-wb-tb-btn--grid-on {
+  background: var(--accent-soft);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.mynk-wb-tb-btn--grid-on:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--accent) 30%);
+  color: var(--foreground);
+}
+
+/* Top-bar overflow ⋯ — dropdown below trigger (replaces bottom sheet) */
+.mynk-wb-topbar-overflow-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.mynk-wb-topbar-overflow-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 16px));
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll {
+  max-height: min(60dvh, 400px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  /* Extra bottom padding lifts Sign out above the fade mask (touch overflow sheet). */
+  padding-bottom: 40px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-menu-item,
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-view-item.mynk-wb-menu-item {
+  justify-content: flex-start;
+  padding: 4px 8px;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-popover-sep {
+  margin: 2px 0;
+}
+
+.mynk-wb-overflow-av-pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mynk-wb-overflow-av-pickers [data-testid="audio-controls"],
+.mynk-wb-overflow-av-pickers [data-testid="video-controls"] {
+  margin-bottom: 0;
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-menu-item--active,
+.mynk-wb-action-sheet__menu-list .mynk-wb-menu-item--active {
+  background: var(--accent-soft);
+}
+
+.mynk-wb-menu-item__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+/* Overflow / action-sheet menu lists — consistent left alignment */
+.mynk-wb-action-sheet__menu-list .mynk-wb-menu-item,
+.mynk-wb-action-sheet__menu-list .mynk-wb-view-item.mynk-wb-menu-item {
+  justify-content: flex-start;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance {
+  /* Extra bottom padding lifts the last row above the fade mask (TM touch styles sheet). */
+  padding-bottom: 40px;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--match-view {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--match-view:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle--synced {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Wave5 #1 — follow-toggle pill vertical centering in the 44px topbar.
+ * The pill (height:28px) sits inside a chain of flex containers all with
+ * align-items:center. Belt-and-suspenders: force align-self:center and
+ * vertical-align:middle on the <label> (inline-flex) to clear browser
+ * baseline-alignment quirks that can push it high in the bar. */
+.mynk-wb-chrome[data-role="student"] .mynk-wb-student-follow {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  height: 44px;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  vertical-align: middle;
+  margin: 0;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle .mynk-wb-menu-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle input[type="checkbox"] {
+  position: relative;
+  top: 0;
+  vertical-align: middle;
+  margin: 0;
+}
+
+/* Native <select> in WB chrome (mic/cam device pickers).
+ * Windows Chrome paints the open list with a light system surface while
+ * inherited light --text stays light-on-dark → unreadable options (Andrew
+ * 2026-06-24 smoke). Force color-scheme + explicit option colors. */
+:root:not([data-theme="light"]) .mynk-wb-chrome .mynk-wb-native-select,
+[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select,
+:root:not([data-theme="light"]) .mynk-wb-mic-popover .mynk-wb-native-select,
+:root:not([data-theme="light"]) .mynk-wb-cam-popover .mynk-wb-native-select {
+  color-scheme: dark;
+  background-color: #142f3e;
+  color: #f0ede4;
+  border: 1px solid #1c3548;
+}
+
+:root:not([data-theme="light"]) .mynk-wb-chrome .mynk-wb-native-select option,
+[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select option,
+:root:not([data-theme="light"]) .mynk-wb-mic-popover .mynk-wb-native-select option,
+:root:not([data-theme="light"]) .mynk-wb-cam-popover .mynk-wb-native-select option {
+  background-color: #1c3548;
+  color: #f0ede4;
+}
+
+:root[data-theme="light"] .mynk-wb-chrome .mynk-wb-native-select,
+.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select,
+:root[data-theme="light"] .mynk-wb-mic-popover .mynk-wb-native-select,
+:root[data-theme="light"] .mynk-wb-cam-popover .mynk-wb-native-select {
+  color-scheme: light;
+  background-color: var(--surface-input);
+  color: var(--text-strong);
+  border: 1px solid var(--border-default);
+}
+
+:root[data-theme="light"] .mynk-wb-chrome .mynk-wb-native-select option,
+.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select option,
+:root[data-theme="light"] .mynk-wb-mic-popover .mynk-wb-native-select option,
+:root[data-theme="light"] .mynk-wb-cam-popover .mynk-wb-native-select option {
+  background-color: var(--surface-1);
+  color: var(--text-strong);
+}
+
+/* Student phone portrait — minimal top bar: wordmark + pill + timer + ⋯ + exit. */
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-wordmark {
+  padding: 0 4px;
+  font-size: 14px;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-topbar__spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* Student touch top bar — hide timer/tutor in sheet except narrow keeps inline timer. */
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-timer,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-timer {
+  display: none;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name {
+  display: none;
+}

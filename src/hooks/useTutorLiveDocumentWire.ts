@@ -7,6 +7,7 @@ import type {
   WhiteboardWirePage,
 } from "@/lib/whiteboard/sync-client";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
+import { isDegenerateLinearElement } from "@/lib/whiteboard/excalidraw-adapter";
 import type { PageViewState } from "@/lib/whiteboard/board-document-snapshot";
 
 const THROTTLE_MS = 50;
@@ -41,16 +42,29 @@ export function useTutorLiveDocumentWire(options: {
   const revRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Always-current ref so welcome-push callbacks are never stale-closed
+  // over the React-state `sync` / `enabled` values. The `new-user` event can
+  // fire in the brief render-cycle gap between "sync client created" and "React
+  // processes setSyncReady(true)", during which `sync` and `enabled` in the
+  // useCallback closure are still null/false. Reading syncRef.current instead
+  // bypasses that race entirely without changing steady-state semantics.
+  const syncRef = useRef<WhiteboardSyncClient | null>(null);
+  syncRef.current = sync;
+
   const emitDocument = useCallback(() => {
-    if (!enabled || !sync) return;
+    const liveSync = syncRef.current;
+    if (!liveSync) return;
     revRef.current += 1;
     const { pageList, activePageId, sections } = getPageListAndActive();
     const raw = getPagesSnapshot();
     const pages: Record<string, ExcalidrawLikeElement[]> = {};
     for (const [k, els] of Object.entries(raw)) {
-      pages[k] = (els as ReadonlyArray<ExcalidrawLikeElement>).map(
-        (e) => ({ ...e }) as ExcalidrawLikeElement
-      );
+      // Drop degenerate line/arrow elements (phantom strokes — 1 point, zero bbox)
+      // before they reach the student's canvas. The recorder path filters them via
+      // toCanonical/diffScenes; here we extend the same guard to the live-sync wire.
+      pages[k] = (els as ReadonlyArray<ExcalidrawLikeElement>)
+        .filter((e) => !isDegenerateLinearElement(e))
+        .map((e) => ({ ...e }) as ExcalidrawLikeElement);
     }
     const pageWireRows = pageList.map((p) => ({
       id: p.id,
@@ -74,14 +88,14 @@ export function useTutorLiveDocumentWire(options: {
         : {}),
     };
     const follow = getFollow();
-    sync.broadcastDocument({
+    liveSync.broadcastDocument({
       rev: revRef.current,
       pages,
       page,
       follow,
     });
     onDocumentEmitted?.(follow);
-  }, [enabled, sync, getPagesSnapshot, getPageListAndActive, getFollow, onDocumentEmitted]);
+  }, [getPagesSnapshot, getPageListAndActive, getFollow, onDocumentEmitted]);
 
   const scheduleDocumentBroadcast = useCallback(() => {
     if (!enabled || !sync) return;
@@ -100,14 +114,19 @@ export function useTutorLiveDocumentWire(options: {
   }, [emitDocument, enabled, sync]);
 
   const flushDocumentBroadcastNow = useCallback(() => {
-    if (!enabled || !sync) return;
+    // Use syncRef.current (not the closed-over `sync`) so this function is
+    // never stale when called from the new-user / welcome-push path — the
+    // sync client can be live while the React closure still holds sync=null
+    // from a not-yet-processed setSyncReady(true) state update.
+    const liveSync = syncRef.current;
+    if (!liveSync) return;
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
     emitDocument();
-    sync.flushPendingBroadcast();
-  }, [emitDocument, enabled, sync]);
+    liveSync.flushPendingBroadcast();
+  }, [emitDocument]);
 
   return { scheduleDocumentBroadcast, flushDocumentBroadcastNow, revRef };
 }

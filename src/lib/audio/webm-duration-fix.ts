@@ -63,13 +63,39 @@
 export type AttachWebmDurationFixOptions = {
   onMetadataLoaded?: () => void;
   onLoadFailed?: () => void;
+  /**
+   * Called once when the audio duration resolves to a finite positive value.
+   * For WebM blobs whose duration is initially Infinity, this fires on the
+   * `durationchange` event after Chrome finishes scanning the file — which is
+   * AFTER `onMetadataLoaded`.  Callers that need the real measured duration
+   * (e.g. to update a scrubber range) must listen here, not in
+   * `onMetadataLoaded`, because the duration is still Infinity at metadata
+   * time.
+   *
+   * Fires at most once per `attachWebmDurationFix` call.  If the duration is
+   * already finite when the fix attaches (cache hit), it fires synchronously
+   * from the catch-up block.  Also fires when `cancelPendingFix()` has been
+   * called — cancelling the reset-to-0 does not suppress this notification.
+   */
+  onDurationResolved?: (durationSec: number) => void;
+};
+
+export type AttachWebmDurationFixResult = {
+  /** Remove all listeners added by the fix. Call from useEffect cleanup. */
+  cleanup: () => void;
+  /**
+   * Cancel any pending durationchange reset-to-0.
+   * Call this when the user (or player code) has intentionally seeked to a
+   * specific position so the fix doesn't clobber it on durationchange.
+   */
+  cancelPendingFix: () => void;
 };
 
 export function attachWebmDurationFix(
   audio: HTMLAudioElement,
   mimeType: string | null | undefined,
   options: AttachWebmDurationFixOptions = {}
-): () => void {
+): AttachWebmDurationFixResult {
   const isWebm = (mimeType ?? "").toLowerCase().includes("webm");
 
   // State lives in closures (not React refs) so this helper is
@@ -77,6 +103,13 @@ export function attachWebmDurationFix(
   // existing test surface, but the helper itself is plain DOM.
   let loadedOk = false;
   let needsFix = false;
+  // Separate from needsFix so onDurationResolved fires even when the
+  // caller called cancelPendingFix() to suppress the reset-to-0.
+  let hasNotifiedDuration = false;
+  // currentTime captured just before we set el.currentTime = 1e101, so
+  // onDurationChange can restore to the pre-hack position (typically 0 on
+  // fresh entry) rather than hard-coding 0.
+  let savedCurrentTime = 0;
 
   function onLoadedMetadata() {
     loadedOk = true;
@@ -84,6 +117,7 @@ export function attachWebmDurationFix(
     if (!isWebm) return;
     if (!Number.isFinite(audio.duration) || audio.duration === 0) {
       needsFix = true;
+      savedCurrentTime = audio.currentTime;
       try {
         audio.currentTime = 1e101;
       } catch {
@@ -96,14 +130,37 @@ export function attachWebmDurationFix(
   }
 
   function onDurationChange() {
+    // Always notify when duration first resolves to a finite positive value,
+    // independent of needsFix state.  This fires even when cancelPendingFix()
+    // was called (e.g. the user scrubbed mid-scan) so the controller can
+    // update resolvedMaxMs / scrubberMax regardless.
+    if (Number.isFinite(audio.duration) && audio.duration > 0 && !hasNotifiedDuration) {
+      hasNotifiedDuration = true;
+      options.onDurationResolved?.(audio.duration);
+    }
     if (!needsFix) return;
     if (Number.isFinite(audio.duration) && audio.duration > 0) {
-      try {
-        audio.currentTime = 0;
-      } catch {
-        // Reset to 0 is best-effort; ignore.
-      }
       needsFix = false;
+      // Don't reset position if audio is actively playing — the play() call
+      // already positioned it correctly; resetting would jump the playhead.
+      if (!audio.paused && !audio.ended) return;
+      // NOTE: we intentionally do NOT check audio.seeking here.
+      //
+      // The original guard (`if (audio.seeking) return`) was meant to protect
+      // against clobbering a controller-initiated seek.  But controller seeks
+      // always call cancelPendingFix() first (via applySeek), which sets
+      // needsFix=false — so we'd have already returned above.  The only
+      // scenario where we reach this point with audio.seeking=true is when
+      // Chrome fires durationchange WHILE our own 1e101 hack seek is still
+      // completing.  Skipping the reset in that case is exactly the first-play
+      // bug: el.currentTime stays parked at the measured end (e.g. 94.741s)
+      // and the next play() starts from there, fires onEnded immediately.
+      console.log("[avx] webmfix_reset_currentTime");
+      try {
+        audio.currentTime = savedCurrentTime;
+      } catch {
+        // Reset is best-effort; ignore.
+      }
     }
   }
 
@@ -140,16 +197,45 @@ export function attachWebmDurationFix(
   // `HAVE_METADATA = 1`: duration + dimensions known. Higher
   // ready-states (`HAVE_CURRENT_DATA = 2`, etc.) also satisfy this
   // — the event already fired regardless.
+  //
+  // GUARD: do NOT fire the WebM hack (currentTime = 1e101) while
+  // audio is actively playing.  The replay player re-mounts this
+  // fix when segment mimeType changes, which can happen mid-playback
+  // during a segment advance.  Setting currentTime while the element
+  // is playing would reset the playhead to 0 — causing the current
+  // segment to replay from the beginning and firing a second `ended`
+  // event, which Andrew observed as "replays segment 2 after
+  // reaching end-of-timeline" (S3).  If the audio is playing, mark
+  // it as loaded (so the error-suppression logic works) and skip
+  // the hack — the real `loadedmetadata` event already ran and the
+  // duration was either fixed then or is already finite.
   if (audio.readyState >= 1) {
-    onLoadedMetadata();
-    if (Number.isFinite(audio.duration) && audio.duration > 0) {
-      onDurationChange();
+    if (!audio.paused && !audio.ended) {
+      // Audio is actively playing — skip the currentTime thrash.
+      loadedOk = true;
+      options.onMetadataLoaded?.();
+      // If duration is already finite (e.g. second segment with known header),
+      // notify the controller even though we skipped the fix.
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && !hasNotifiedDuration) {
+        hasNotifiedDuration = true;
+        options.onDurationResolved?.(audio.duration);
+      }
+    } else {
+      onLoadedMetadata();
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        onDurationChange();
+      }
     }
   }
 
-  return () => {
-    audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-    audio.removeEventListener("durationchange", onDurationChange);
-    audio.removeEventListener("error", onError);
+  return {
+    cleanup: () => {
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("durationchange", onDurationChange);
+      audio.removeEventListener("error", onError);
+    },
+    cancelPendingFix: () => {
+      needsFix = false;
+    },
   };
 }

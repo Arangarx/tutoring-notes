@@ -40,7 +40,7 @@ describe("TutorStudentNoteExpandedBody (Phase 0d)", () => {
     });
     expect(link).toHaveAttribute(
       "href",
-      "/admin/students/stu-42/whiteboard/wb-from-rec"
+      "/admin/students/stu-42/whiteboard/wb-from-rec/workspace?surface=replay"
     );
   });
 
@@ -59,7 +59,7 @@ describe("TutorStudentNoteExpandedBody (Phase 0d)", () => {
     });
     expect(link).toHaveAttribute(
       "href",
-      "/admin/students/stu-42/whiteboard/wb-sess-1"
+      "/admin/students/stu-42/whiteboard/wb-sess-1/workspace?surface=replay"
     );
   });
 

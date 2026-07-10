@@ -19,16 +19,18 @@
  */
 
 import {
+  buildGraphEmbeddableElement,
   computeFitCameraForRect,
-  insertDesmosEmbedOnCanvas,
+  GRAPH_EMBED_LINK,
+  insertGraphOnCanvas,
   insertImageOnCanvas,
   insertMathSvgOnCanvas,
   insertPdfPagesAsBoardPages,
   insertPdfPagesOnCanvas,
   pdfBoardPageTitle,
-  validateDesmosUrl,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
+import { DEFAULT_GRAPH_BBOX } from "@/lib/whiteboard/graph-state";
 import {
   viewportCoordsToSceneCoords,
   viewportSceneCenterFromScroll,
@@ -767,6 +769,79 @@ describe("insertPdfPagesOnCanvas", () => {
     expect(scenes).toHaveLength(0);
   });
 
+  it("centers math SVG at insertCenter on PDF-fit camera despite stale scroll during upload", async () => {
+    uploadMock.mockResolvedValue({
+      ok: true,
+      blobUrl: "https://blob.example/eq.svg",
+      sizeBytes: 100,
+    });
+    const viewportWidth = 1000;
+    const viewportHeight = 800;
+    const pdfWidthPx = 720;
+    const pdfHeightPx = 960;
+    const contentWidth = 720;
+    const contentHeight = 720 * (pdfHeightPx / pdfWidthPx);
+    const fitCamera = computeFitCameraForRect({
+      centerSceneX: contentWidth / 2,
+      centerSceneY: contentHeight / 2,
+      contentWidth,
+      contentHeight,
+      viewportWidth,
+      viewportHeight,
+    });
+    expect(fitCamera).not.toBeNull();
+    if (!fitCamera) return;
+
+    const insertCenter = viewportSceneCenterFromScroll(
+      fitCamera.panX,
+      fitCamera.panY,
+      fitCamera.zoom,
+      viewportWidth,
+      viewportHeight
+    );
+
+    let getAppStateCalls = 0;
+    const { api, scenes } = makeFakeApi();
+    api.getAppState = () => {
+      getAppStateCalls += 1;
+      // After the first read, simulate live-sync clobbering scrollY.
+      const scrollY =
+        getAppStateCalls > 1 ? fitCamera.panY + 600 : fitCamera.panY;
+      return {
+        scrollX: fitCamera.panX,
+        scrollY,
+        width: viewportWidth,
+        height: viewportHeight,
+        zoom: { value: fitCamera.zoom },
+      };
+    };
+
+    const svg = new Blob(["<svg>...</svg>"], { type: "image/svg+xml" });
+    const result = await insertMathSvgOnCanvas({
+      excalidrawAPI: api,
+      whiteboardSessionId: "wb-1",
+      studentId: "s-1",
+      svgBlob: svg,
+      widthPx: 240,
+      heightPx: 80,
+      latex: "x^2",
+      insertCenter,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const inserted = scenes[0][0] as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    expect(inserted.x + inserted.width / 2).toBeCloseTo(insertCenter.x, 5);
+    expect(inserted.y + inserted.height / 2).toBeCloseTo(insertCenter.y, 5);
+    // Viewport center on a PDF-fit board is the page center — not below the image.
+    expect(inserted.y + inserted.height / 2).toBeCloseTo(contentHeight / 2, 5);
+  });
+
   it("inserts a math SVG with latex preserved in customData", async () => {
     uploadMock.mockResolvedValue({
       ok: true,
@@ -820,102 +895,53 @@ describe("insertPdfPagesOnCanvas", () => {
   });
 });
 
-describe("validateDesmosUrl", () => {
-  it("accepts a saved-graph URL and strips fragments", () => {
-    const result = validateDesmosUrl(
-      "https://www.desmos.com/calculator/abc123#editor"
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.url).toBe("https://www.desmos.com/calculator/abc123");
-  });
-
-  it("accepts the blank calculator URL", () => {
-    const result = validateDesmosUrl("https://www.desmos.com/calculator");
-    expect(result.ok).toBe(true);
-  });
-
-  it("accepts the apex domain (no www) for forwarded links", () => {
-    const result = validateDesmosUrl("https://desmos.com/calculator/xyz");
-    expect(result.ok).toBe(true);
-  });
-
-  it("rejects non-https URLs", () => {
-    const result = validateDesmosUrl("http://www.desmos.com/calculator");
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects non-Desmos hosts", () => {
-    const evil = validateDesmosUrl("https://evil.example/calculator");
-    expect(evil.ok).toBe(false);
-    if (evil.ok) return;
-    expect(evil.reason).toMatch(/Only Desmos/);
-  });
-
-  it("rejects garbage input", () => {
-    const result = validateDesmosUrl("not a url at all");
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects empty input with a tutor-friendly hint", () => {
-    const result = validateDesmosUrl("   ");
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.reason).toMatch(/Enter a Desmos URL/);
+describe("buildGraphEmbeddableElement", () => {
+  it("builds an embeddable with the graph sentinel link and customData", () => {
+    const el = buildGraphEmbeddableElement({
+      x: 10,
+      y: 20,
+      width: 720,
+      height: 540,
+      graphState: { bbox: DEFAULT_GRAPH_BBOX, expressions: ["x^2"] },
+    }) as Record<string, unknown>;
+    expect(el.type).toBe("embeddable");
+    expect(el.link).toBe(GRAPH_EMBED_LINK);
+    expect(el.x).toBe(10);
+    expect(el.y).toBe(20);
+    const customData = el.customData as {
+      wbType?: string;
+      graph?: { provider: string };
+      graphStateJson?: string;
+    };
+    expect(customData.wbType).toBe("graph");
+    expect(customData.graph?.provider).toBe("jsxgraph");
+    expect(JSON.parse(customData.graphStateJson ?? "{}")).toEqual({
+      bbox: DEFAULT_GRAPH_BBOX,
+      expressions: ["x^2"],
+    });
   });
 });
 
-describe("insertDesmosEmbedOnCanvas", () => {
-  it("inserts an embeddable element with the validated URL", () => {
+describe("insertGraphOnCanvas", () => {
+  it("inserts at viewport center with graph sentinel link", () => {
     const { api, scenes } = makeFakeApi();
-    const result = insertDesmosEmbedOnCanvas({
+    const result = insertGraphOnCanvas({
       excalidrawAPI: api,
       whiteboardSessionId: "wb-1",
       studentId: "s-1",
-      url: "https://www.desmos.com/calculator/abc123",
+      initialExpressions: ["sin(x)"],
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(scenes).toHaveLength(1);
     const el = scenes[0][0] as Record<string, unknown>;
     expect(el.type).toBe("embeddable");
-    expect(el.link).toBe("https://www.desmos.com/calculator/abc123");
-    const customData = el.customData as {
-      assetUrl?: string;
-      wbType?: string;
-      embed?: { provider: string; kind: string; url: string };
-    };
-    expect(customData.assetUrl).toBe("https://www.desmos.com/calculator/abc123");
-    expect(customData.wbType).toBe("embed");
-    expect(customData.embed?.provider).toBe("desmos");
-    expect(customData.embed?.kind).toBe("saved");
-  });
-
-  it("labels a blank calculator as `calculator` (not `saved`)", () => {
-    const { api, scenes } = makeFakeApi();
-    const result = insertDesmosEmbedOnCanvas({
-      excalidrawAPI: api,
-      whiteboardSessionId: "wb-1",
-      studentId: "s-1",
-      url: "https://www.desmos.com/calculator",
-    });
-    expect(result.ok).toBe(true);
-    const el = scenes[0][0] as Record<string, unknown>;
-    const customData = el.customData as {
-      embed?: { kind: string };
-    };
-    expect(customData.embed?.kind).toBe("calculator");
-  });
-
-  it("does not mutate the scene if the URL is invalid", () => {
-    const { api, scenes } = makeFakeApi();
-    const result = insertDesmosEmbedOnCanvas({
-      excalidrawAPI: api,
-      whiteboardSessionId: "wb-1",
-      studentId: "s-1",
-      url: "https://evil.example/calculator",
-    });
-    expect(result.ok).toBe(false);
-    expect(scenes).toHaveLength(0);
+    expect(el.link).toBe(GRAPH_EMBED_LINK);
+    expect(el.x).toBe(500 - 720 / 2);
+    expect(el.y).toBe(400 - 540 / 2);
+    const customData = el.customData as { graphStateJson?: string };
+    expect(JSON.parse(customData.graphStateJson ?? "{}").expressions).toEqual([
+      "sin(x)",
+    ]);
   });
 });

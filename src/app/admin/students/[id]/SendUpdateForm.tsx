@@ -2,14 +2,18 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
+import Link from "next/link";
 import { sendUpdateEmail, type SendUpdateResult } from "./actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 function SendButton() {
   const { pending } = useFormStatus();
   return (
-    <button className="btn primary" type="submit" disabled={pending}>
+    <Button type="submit" disabled={pending} className="min-h-11" aria-busy={pending}>
       {pending ? "Sending…" : "Send"}
-    </button>
+    </Button>
   );
 }
 
@@ -24,42 +28,50 @@ export default function SendUpdateForm({
 
   return (
     <>
-      <form action={formAction}>
+      <form action={formAction} className="space-y-4">
         <input type="hidden" name="studentId" value={studentId} />
-        <label htmlFor="toEmail">To (parent/guardian email)</label>
-        <input
-          id="toEmail"
-          name="toEmail"
-          type="email"
-          placeholder="parent@example.com"
-          defaultValue={defaultToEmail ?? ""}
-          required
-        />
-        <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+        <div className="space-y-2">
+          <Label htmlFor="toEmail">To (parent/guardian email)</Label>
+          <Input
+            id="toEmail"
+            name="toEmail"
+            type="email"
+            placeholder="parent@example.com"
+            defaultValue={defaultToEmail ?? ""}
+            required
+            className="min-h-11"
+            autoComplete="email"
+          />
+        </div>
+        <div className="flex justify-end">
           <SendButton />
         </div>
       </form>
-      {state?.ok === true && state.sent && (
-        <p style={{ color: "var(--success)", marginTop: 12 }}>
-          Sent to {state.toEmail}. They’ll receive the link in their inbox (check junk if not).
+      {state?.ok === true && state.sent ? (
+        <p className="mt-4 text-sm text-success" role="status">
+          Sent to {state.toEmail}. They&apos;ll receive the link in their inbox (check junk if not).
         </p>
-      )}
-      {state?.ok === true && state.outboxOnly && (
-        <p style={{ color: "var(--warning)", marginTop: 12 }}>
+      ) : null}
+      {state?.ok === true && state.outboxOnly ? (
+        <p className="mt-4 text-sm text-muted-foreground" role="status">
           Email is not configured. Message saved to outbox — copy the share link from above or from{" "}
-          <a href="/admin/outbox">Outbox</a> to send it yourself. To actually send email, add SMTP
-          settings to your server environment.
+          <Link href="/admin/outbox" className="text-brand underline-offset-2 hover:underline">
+            Outbox
+          </Link>{" "}
+          to send it yourself. To actually send email, add SMTP settings to your server environment.
         </p>
-      )}
-      {state?.ok === true && state.error && !state.sent && !state.outboxOnly && (
-        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>
+      ) : null}
+      {state?.ok === true && state.error && !state.sent && !state.outboxOnly ? (
+        <p className="mt-4 text-sm text-destructive" role="alert">
           Failed to send: {state.error}. Message saved to outbox — you can copy the link and send
           manually.
         </p>
-      )}
-      {state?.ok === false && state.error && (
-        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{state.error}</p>
-      )}
+      ) : null}
+      {state?.ok === false && state.error ? (
+        <p className="mt-4 text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
+      ) : null}
     </>
   );
 }

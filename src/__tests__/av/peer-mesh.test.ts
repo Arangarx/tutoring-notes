@@ -110,8 +110,10 @@ class FakePc {
       this.signalingState = "have-local-offer";
     } else if (t === "answer") {
       this.signalingState = "stable";
+      this._fireSignalingStateChange();
     } else if (t === "rollback") {
       this.signalingState = "stable";
+      this._fireSignalingStateChange();
     }
   }
 
@@ -121,7 +123,22 @@ class FakePc {
       this.signalingState = "have-remote-offer";
     } else if (desc.type === "answer") {
       this.signalingState = "stable";
+      this._fireSignalingStateChange();
     }
+  }
+
+  /** Fire onsignalingstatechange — called automatically when state transitions to stable. */
+  _fireSignalingStateChange(): void {
+    this.onsignalingstatechange?.call(
+      this as unknown as RTCPeerConnection,
+      new Event("signalingstatechange")
+    );
+  }
+
+  /** Test helper: manually set signalingState and fire onsignalingstatechange. */
+  triggerSignalingStateChange(state: RTCSignalingState): void {
+    this.signalingState = state;
+    this._fireSignalingStateChange();
   }
 
   async addIceCandidate(candidate?: RTCIceCandidateInit | null): Promise<void> {
@@ -1484,5 +1501,632 @@ describe("createPeerMesh — replaceLocalTrackOnAllPeers", () => {
     const pc = instances[0]! as FakePc;
     expect(pc.history.some((h) => h.type === "replaceTrack")).toBe(false);
     m.dispose();
+  });
+});
+
+// =================================================================
+// addLocalTrackToAllPeers — return value distinguishes add vs skip
+//
+// The return value `{ addedPeerIds, skippedPeerIds }` lets the caller
+// (useLiveAV mid-session effect) branch on add-path vs hotswap-path
+// without calling replaceTrack(sameTrack) on a freshly-created sender.
+// =================================================================
+
+describe("createPeerMesh — addLocalTrackToAllPeers return value", () => {
+  test("returns addedPeerIds for peers where addTrack was called (new sender)", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    m.addPeer("C");
+
+    const t = makeFakeTrack("video");
+    const result = m.addLocalTrackToAllPeers(t);
+
+    expect(result.addedPeerIds).toEqual(new Set(["B", "C"]));
+    expect(result.skippedPeerIds).toEqual(new Set());
+    m.dispose();
+  });
+
+  test("returns skippedPeerIds for peers that already had the sender (idempotent second call)", () => {
+    const sig = makeFakeSignaling();
+    const { factory } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+
+    const t = makeFakeTrack("video");
+    m.addLocalTrackToAllPeers(t); // First call — adds the sender
+    const result2 = m.addLocalTrackToAllPeers(t); // Second call — sender already present
+
+    expect(result2.addedPeerIds).toEqual(new Set());
+    expect(result2.skippedPeerIds).toEqual(new Set(["B"]));
+    m.dispose();
+  });
+
+  test("returns empty sets when mesh is disposed", () => {
+    const sig = makeFakeSignaling();
+    const { factory } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    m.dispose();
+
+    const result = m.addLocalTrackToAllPeers(makeFakeTrack("video"));
+    expect(result.addedPeerIds.size).toBe(0);
+    expect(result.skippedPeerIds.size).toBe(0);
+  });
+
+  test("returns empty sets when there are no peers", () => {
+    const sig = makeFakeSignaling();
+    const { factory } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+
+    const result = m.addLocalTrackToAllPeers(makeFakeTrack("video"));
+    expect(result.addedPeerIds.size).toBe(0);
+    expect(result.skippedPeerIds.size).toBe(0);
+    m.dispose();
+  });
+
+  test("mixed: one peer already had the track, another is new", () => {
+    const sig = makeFakeSignaling();
+    const { factory } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    m.addPeer("C");
+
+    const t = makeFakeTrack("video");
+    // Give B the sender first
+    m.addLocalTrackToAllPeers(t);
+    // Now remove C so we can re-add only B having the track
+    m.removePeer("C");
+    m.addPeer("C"); // C's new PC has no senders yet
+
+    const result = m.addLocalTrackToAllPeers(t);
+    expect(result.addedPeerIds).toEqual(new Set(["C"]));
+    expect(result.skippedPeerIds).toEqual(new Set(["B"]));
+    m.dispose();
+  });
+});
+
+// =================================================================
+// triggerRenegotiationOnPeers — explicit renegotiation for late-add
+//
+// Primary fix for the "tutor never sees student's video" bug:
+// after the student calls addLocalTrackToAllPeers for a video track,
+// useLiveAV calls triggerRenegotiationOnPeers to guarantee an offer
+// is sent even if the browser doesn't reliably re-fire
+// onnegotiationneeded while mid-negotiation.
+// =================================================================
+
+describe("createPeerMesh — triggerRenegotiationOnPeers", () => {
+  test("fires an offer immediately when PC is in stable state", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+
+    // PC starts in stable state — trigger should fire an offer immediately.
+    const sendsBefore = sig.sends.length;
+    m.triggerRenegotiationOnPeers(["B"]);
+    await flush();
+
+    expect(sig.sends.slice(sendsBefore).filter((s) => s.kind === "offer")).toHaveLength(1);
+    m.dispose();
+  });
+
+  test("defers (sets pendingRenegotiation) when PC is mid-negotiation (have-local-offer)", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+
+    // Drive PC to have-local-offer (in-flight audio negotiation).
+    pc.triggerNegotiationNeeded();
+    await flush();
+    expect(pc.signalingState).toBe("have-local-offer");
+
+    const sendsBefore = sig.sends.length;
+    m.triggerRenegotiationOnPeers(["B"]);
+    await flush();
+
+    // No additional offer yet — deferred.
+    expect(sig.sends.slice(sendsBefore).filter((s) => s.kind === "offer")).toHaveLength(0);
+
+    // Answer arrives → state returns to stable → pendingRenegotiation flushes.
+    sig.inject("B", { type: "answer", sdp: "answer" });
+    await flush();
+
+    const offersAfterAnswer = sig.sends.slice(sendsBefore).filter((s) => s.kind === "offer");
+    expect(offersAfterAnswer).toHaveLength(1);
+    m.dispose();
+  });
+
+  test("logs event=renegotiation-triggered with peer= on trigger", async () => {
+    const sig = makeFakeSignaling();
+    const { factory } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+      log,
+    });
+    m.addPeer("B");
+
+    m.triggerRenegotiationOnPeers(["B"]);
+    await flush();
+
+    expect(lines.some((l) => /event=renegotiation-triggered/.test(l) && /peer=B/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("logs event=renegotiation-flush when deferred offer finally fires", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+      log,
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+
+    // Force into mid-negotiation state.
+    pc.triggerNegotiationNeeded();
+    await flush();
+
+    m.triggerRenegotiationOnPeers(["B"]);
+    sig.inject("B", { type: "answer", sdp: "answer" });
+    await flush();
+
+    expect(lines.some((l) => /event=renegotiation-flush/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("no-op for unknown peer — logs warning, sends no offer", async () => {
+    const sig = makeFakeSignaling();
+    const { factory } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+      log,
+    });
+
+    m.triggerRenegotiationOnPeers(["never-added"]);
+    await flush();
+
+    expect(sig.sends.filter((s) => s.kind === "offer")).toHaveLength(0);
+    expect(lines.some((l) => /no entry.*peer=never-added|peer=never-added.*no entry/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("no-op when mesh is disposed", async () => {
+    const sig = makeFakeSignaling();
+    const { factory } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    m.dispose();
+
+    expect(() => m.triggerRenegotiationOnPeers(["B"])).not.toThrow();
+    expect(sig.sends.filter((s) => s.kind === "offer")).toHaveLength(0);
+  });
+
+  test("onnegotiationneeded defers when PC is mid-negotiation", async () => {
+    // This covers the primary bug: onnegotiationneeded fires when the
+    // student adds their video track while the initial audio negotiation
+    // is in-flight (PC in have-local-offer). The handler should defer
+    // via pendingRenegotiation rather than trying setLocalDescription
+    // (which throws InvalidStateError) and silently dropping the offer.
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+
+    // Drive PC to have-local-offer (in-flight audio negotiation).
+    pc.triggerNegotiationNeeded();
+    await flush();
+    expect(pc.signalingState).toBe("have-local-offer");
+    const offersSent = sig.sends.filter((s) => s.kind === "offer").length;
+
+    // Student adds video track mid-negotiation — onnegotiationneeded fires.
+    pc.triggerNegotiationNeeded(); // Simulates addTrack firing the event
+    await flush();
+    // Offer NOT sent yet — deferred.
+    expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(offersSent);
+
+    // Audio negotiation completes: answer arrives → state = stable.
+    sig.inject("B", { type: "answer", sdp: "answer" });
+    await flush();
+
+    // Deferred renegotiation flushes — a new offer is sent for the video track.
+    expect(sig.sends.filter((s) => s.kind === "offer").length).toBeGreaterThan(offersSent);
+    m.dispose();
+  });
+});
+
+// =================================================================
+// ICE disconnected → debounced restart (split-brain fix, A4)
+// =================================================================
+
+describe("ICE disconnected → debounced polite restart", () => {
+  test("polite side schedules a restart 3s after ICE disconnected", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" → B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+        sessionId: "test-sid",
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      // Bring PC to a working state first so we're past initial setup.
+      pc.setIceConnectionState("connected");
+      await flush();
+
+      // Clear prior offers (from negotiation setup).
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE drops to disconnected.
+      pc.setIceConnectionState("disconnected");
+      await flush();
+
+      // Before the timer fires, no restart offer yet.
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(offersBefore);
+
+      // Advance 3 s — restart should fire.
+      jest.advanceTimersByTime(3_000);
+      await flush();
+
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBeGreaterThan(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("impolite side does NOT schedule a disconnect restart", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="A" < remotePeerId="B" → A is impolite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      pc.setIceConnectionState("disconnected");
+      await flush();
+      jest.advanceTimersByTime(4_000);
+      await flush();
+
+      // Impolite side must NOT send a restart offer on disconnected.
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBe(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("timer is cancelled if ICE recovers before 3s", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" → B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      pc.setIceConnectionState("connected");
+      await flush();
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE goes disconnected.
+      pc.setIceConnectionState("disconnected");
+      await flush();
+
+      // ICE recovers before the 3s timer fires.
+      jest.advanceTimersByTime(1_000);
+      pc.setIceConnectionState("connected");
+      await flush();
+
+      // Advance past the 3s mark — timer should have been cancelled.
+      jest.advanceTimersByTime(5_000);
+      await flush();
+
+      // No new restart offer should have been sent.
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBe(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("ICE failed on polite side still triggers immediate restart", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" → B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      pc.setIceConnectionState("connected");
+      await flush();
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE fails — existing auto-restart behavior, synchronous.
+      pc.setIceConnectionState("failed");
+      await flush();
+
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBeGreaterThan(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+// =================================================================
+// Renegotiation watchdog — deferred offer that never flushes
+// (invariant 15, docs/LIVE-AV.md — "tutor can't hear student")
+//
+// Root cause this guards: a renegotiation deferred while the PC is
+// mid-negotiation (pendingRenegotiation = true) has exactly ONE flush
+// path — onsignalingstatechange → stable. If the PC never returns to
+// stable (lost answer / wedged PC, amplified by dual-device join), the
+// deferred offer — which carries the student's late-added AUDIO m-line —
+// is never sent and the tutor never hears the student. The watchdog
+// forces resolution after the timeout: an ICE restart if the PC is still
+// wedged, or a plain re-offer if the PC is stable-but-unflushed.
+// =================================================================
+
+describe("createPeerMesh — renegotiation watchdog (deferred offer never flushes)", () => {
+  test("forces an ICE-restart offer when the PC stays wedged past the watchdog timeout", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      // Drive PC into have-local-offer (in-flight negotiation). No answer
+      // ever arrives → the PC stays non-stable indefinitely.
+      pc.triggerNegotiationNeeded();
+      await flush();
+      expect(pc.signalingState).toBe("have-local-offer");
+
+      // A late track add fires a renegotiation that DEFERS (PC mid-flight).
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+      m.triggerRenegotiationOnPeers(["B"]);
+      await flush();
+      // Deferred — no new offer, no ICE restart yet.
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(
+        offersBefore
+      );
+      expect(pc.createOfferCalls.some((o) => o.iceRestart === true)).toBe(false);
+
+      // Watchdog fires — the wedged PC gets an ICE-restart offer that
+      // regenerates SDP from current senders (carrying the audio m-line).
+      jest.advanceTimersByTime(3_000);
+      await flush();
+
+      expect(
+        sig.sends.filter((s) => s.kind === "offer").length
+      ).toBeGreaterThan(offersBefore);
+      expect(pc.createOfferCalls.some((o) => o.iceRestart === true)).toBe(true);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("forces a plain re-offer when the PC is stable-but-unflushed (missed signalingstatechange)", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      pc.triggerNegotiationNeeded();
+      await flush();
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      m.triggerRenegotiationOnPeers(["B"]); // defers + arms watchdog
+      await flush();
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(
+        offersBefore
+      );
+
+      // Simulate the failure the watchdog's stable-branch backstops: the PC
+      // silently reached `stable` but onsignalingstatechange never fired, so
+      // the normal flush path was missed. Set the field directly (no event).
+      pc.signalingState = "stable";
+
+      jest.advanceTimersByTime(3_000);
+      await flush();
+
+      // Watchdog sees a stable PC → plain re-offer (NOT an ICE restart).
+      expect(
+        sig.sends.filter((s) => s.kind === "offer").length
+      ).toBeGreaterThan(offersBefore);
+      expect(pc.createOfferCalls.some((o) => o.iceRestart === true)).toBe(false);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("is cancelled when the deferred renegotiation flushes normally before the timeout", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      pc.triggerNegotiationNeeded();
+      await flush();
+      m.triggerRenegotiationOnPeers(["B"]); // defers + arms watchdog
+      await flush();
+
+      // Answer arrives → stable → normal flush fires the deferred offer
+      // AND cancels the watchdog.
+      const offersBeforeFlush = sig.sends.filter((s) => s.kind === "offer")
+        .length;
+      sig.inject("B", { type: "answer", sdp: "answer" });
+      await flush();
+      const offersAfterFlush = sig.sends.filter((s) => s.kind === "offer")
+        .length;
+      expect(offersAfterFlush).toBeGreaterThan(offersBeforeFlush);
+
+      // Advance well past the watchdog window — it must NOT fire a second,
+      // redundant forced offer, and must NOT escalate to an ICE restart.
+      jest.advanceTimersByTime(5_000);
+      await flush();
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(
+        offersAfterFlush
+      );
+      expect(pc.createOfferCalls.some((o) => o.iceRestart === true)).toBe(false);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("does not fire on a peer that was removed while the watchdog was armed", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      pc.triggerNegotiationNeeded();
+      await flush();
+      m.triggerRenegotiationOnPeers(["B"]); // defers + arms watchdog
+      await flush();
+
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+      m.removePeer("B"); // closes the entry + clears its watchdog
+
+      jest.advanceTimersByTime(5_000);
+      await flush();
+
+      // No forced offer on the closed peer.
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(
+        offersBefore
+      );
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

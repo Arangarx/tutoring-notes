@@ -8,6 +8,12 @@
 
 **Context.** 2026-05-26 evening call + 12:03–12:17 AM Discord follow-up largely answered the prior prep list. Full capture: [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md). See § Answers landed (2026-05-26) below for what landed.
 
+### 0. Sarah primary tutoring device — OPEN verify (2026-06-18)
+
+> **Ask Sarah:** "When you're tutoring live sessions in Mynk, what device do you normally use — desktop/laptop or phone/tablet? If desktop, is it Windows?"
+
+**Why.** Assumed from Andrew 2026-06-18: Sarah tutors primarily from a **Windows desktop** (Chromium/Blink), not Mac/iPhone. Recalibrates our WebKit/mobile risk model — **tutor side = Chromium (zero WebKit risk)**; **student side = mobile-web generally** (Android test-student covered; iOS student coverage = zero). See [`docs/PLATFORM-ASSUMPTIONS.md`](PLATFORM-ASSUMPTIONS.md) §8.0.
+
 ### 1. Q4 — pain point you've been working around (still never asked)
 
 > **Ask Sarah:** "Is there anything you do *every session* that's annoying — that you've just learned to work around — that you've never told us about because it didn't feel like a 'bug'?"
@@ -47,6 +53,20 @@ Invite her to share anything else (*"if I do I'll let you know"* from Q1 continu
 ---
 
 ## Answers landed
+
+### 2026-06-06 (Discord — post live whiteboard session, ~10:28–10:43 PM)
+
+Full capture: [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md) — real session (Sarah tutor Mac + student PC); sync + drawing pad validated; desktop UX annoyances triaged vs v1 redesign / identity epic / recording re-arch.
+
+### 2026-06-07 (engineering capture — Excalidraw 0.18.1 feasibility; do not re-litigate)
+
+These Sarah asks are **known** with a verified feasibility answer — not open questions for the next call:
+
+- **Toolbar reorder (Sarah U4, 2026-05-26)** — Cursor → Pencil → Eraser → Typing first. **Answered:** not achievable via `UIOptions` on pinned 0.18.1; requires Mynk custom toolbar driving `excalidrawAPI`. On whiteboard-wave roadmap.
+- **Shape dropdown consolidation (Sarah U5/U6, 2026-05-26)** — line+arrow together; rectangle/diamond/ellipse together. Same custom-chrome path; not a config tweak.
+- **Mobile palette dismiss (I7, 2026-05-26 iPhone smoke)** — color/pen palette should close on outside tap. **Answered:** not exposed in 0.18.1 public API; fix lands in **student-mobile-first** custom chrome. On whiteboard-wave roadmap.
+
+Detail: `docs/WHITEBOARD-STATUS.md` § Sarah UX asks + custom chrome; `docs/BACKLOG.md` whiteboard queue framing note (2026-06-07).
 
 ### 2026-05-26 / 2026-05-27 (evening call + 12:03–12:17 AM follow-up thread)
 

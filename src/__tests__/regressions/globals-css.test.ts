@@ -30,7 +30,11 @@ const TOKENS = readFileSync(
   join(__dirname, "..", "..", "styles", "tokens.css"),
   "utf8"
 );
-const CSS = `${GLOBALS}\n${TOKENS}`;
+const TYPOGRAPHY = readFileSync(
+  join(__dirname, "..", "..", "styles", "typography.css"),
+  "utf8"
+);
+const CSS = `${GLOBALS}\n${TOKENS}\n${TYPOGRAPHY}`;
 
 describe("tokens.css — legacy variable definitions", () => {
   const REQUIRED_VARS = [
@@ -95,5 +99,47 @@ describe("tokens.css — theme + color-scheme", () => {
 describe("globals.css — imports token layer", () => {
   test("imports tokens.css", () => {
     expect(GLOBALS).toMatch(/@import\s+["'].*tokens\.css["']/);
+  });
+
+  test("imports typography.css", () => {
+    expect(GLOBALS).toMatch(/@import\s+["'].*typography\.css["']/);
+  });
+});
+
+describe("tokens.css — Mynka Blue dark (no legacy purple)", () => {
+  test("dark blocks use Mynka Blue brand, not legacy #7c5cff", () => {
+    expect(TOKENS).toMatch(/\[data-theme="dark"\][\s\S]*--brand:\s*#7ea4b1/i);
+    expect(TOKENS).not.toMatch(/#7c5cff/i);
+  });
+
+  test("light accent-on is Option A dark text on coral", () => {
+    expect(TOKENS).toMatch(
+      /:root[\s\S]*--accent-on:\s*#15203a/i
+    );
+  });
+
+  test("dark accent-on is near-navy on coral CTA", () => {
+    expect(TOKENS).toMatch(
+      /\[data-theme="dark"\][\s\S]*--accent-on:\s*#051a24/i
+    );
+  });
+});
+
+describe("globals.css — coral CTA link safety", () => {
+  test("button-styled links are excluded from a{color:inherit}", () => {
+    expect(GLOBALS).toMatch(/a:not\(\[data-slot="button"\]\)/);
+  });
+
+  test("btn.btn-primary alias matches coral CTA foreground token", () => {
+    expect(GLOBALS).toMatch(/\.btn\.btn-primary[\s\S]*color:\s*var\(--accent-on\)/);
+  });
+});
+
+describe("typography.css — brand utility classes", () => {
+  test("defines wordmark, heading, ai-prose, label-mono", () => {
+    expect(TYPOGRAPHY).toMatch(/\.wordmark\b/);
+    expect(TYPOGRAPHY).toMatch(/\.heading\b/);
+    expect(TYPOGRAPHY).toMatch(/\.ai-prose\b/);
+    expect(TYPOGRAPHY).toMatch(/\.label-mono\b/);
   });
 });

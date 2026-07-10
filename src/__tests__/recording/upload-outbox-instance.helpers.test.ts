@@ -2,6 +2,11 @@
  * @jest-environment jsdom
  */
 
+jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
+  registerWhiteboardSessionAudioSegmentAction: jest.fn(),
+  enqueueChunkTranscriptionAction: jest.fn(),
+}));
+
 /**
  * Tests for the Phase 1b End-session glue helpers exported from
  * `upload-outbox-instance`:
@@ -33,6 +38,7 @@ import {
   createUploadOutbox,
   type OutboxUploadResult,
   type OutboxUploadFn,
+  type UploadOutbox,
 } from "@/lib/recording/upload-outbox";
 
 const NEVER_CALLED_UPLOADER: OutboxUploadFn = async () => {
@@ -42,6 +48,23 @@ const NEVER_CALLED_UPLOADER: OutboxUploadFn = async () => {
 afterEach(() => {
   resetUploadOutboxForTests();
 });
+
+/** Mirrors upload-outbox.test.ts — drain the register path before finalize. */
+async function waitForRegisterOk(
+  outbox: UploadOutbox,
+  sessionId: string,
+  opts: { timeoutMs?: number } = {}
+): Promise<void> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 2_000);
+  while (Date.now() < deadline) {
+    const rows = await outbox.listAllRows(sessionId);
+    if (rows.some((r) => r.registerOk)) return;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error(
+    `waitForRegisterOk: no row marked registerOk within ${opts.timeoutMs ?? 2_000}ms for ${sessionId}`
+  );
+}
 
 describe("assembleEndSessionSegments", () => {
   test("returns empty array when the outbox has no rows for the session", async () => {
@@ -141,7 +164,7 @@ describe("assembleEndSessionSegments", () => {
     expect(segs[0].segmentId).toBe("seg-uploaded");
   });
 
-  test("emits both tutor + student segments with stream ids preserved", async () => {
+  test("replay assembly includes ONLY tutor:mic when student lanes are transcriptionOnly", async () => {
     const outbox = createUploadOutbox({
       upload: NEVER_CALLED_UPLOADER,
       dbName: `outbox-helpers-${Math.random().toString(36).slice(2)}`,
@@ -149,7 +172,7 @@ describe("assembleEndSessionSegments", () => {
     setUploadOutboxForTests(outbox);
 
     await outbox.enqueue({
-      sessionId: "wbs-multi",
+      sessionId: "wbs-replay-mix",
       streamId: "tutor:mic",
       segmentId: "tutor-1",
       blobLocalRef: null,
@@ -159,25 +182,103 @@ describe("assembleEndSessionSegments", () => {
       audioStartedAtMs: 1_000,
     });
     await outbox.enqueue({
-      sessionId: "wbs-multi",
+      sessionId: "wbs-replay-mix",
+      streamId: "student:peer-abc123:mic",
+      segmentId: "student-1-tx",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://abc.blob.vercel-storage.com/student-1-tx.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 200,
+      audioStartedAtMs: 1_100,
+      transcriptionOnly: true,
+    });
+
+    const segs = await assembleEndSessionSegments("wbs-replay-mix");
+    expect(segs).toHaveLength(1);
+    expect(segs[0]?.streamId).toBe("tutor:mic");
+    expect(segs[0]?.segmentId).toBe("tutor-1");
+  });
+
+  test("red-before guard: per-speaker row WITHOUT transcriptionOnly leaks into replay set", async () => {
+    const outbox = createUploadOutbox({
+      upload: NEVER_CALLED_UPLOADER,
+      dbName: `outbox-helpers-${Math.random().toString(36).slice(2)}`,
+    });
+    setUploadOutboxForTests(outbox);
+
+    await outbox.enqueue({
+      sessionId: "wbs-leak",
+      streamId: "tutor:mic",
+      segmentId: "tutor-1",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://abc.blob.vercel-storage.com/tutor-1.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 100,
+      audioStartedAtMs: 1_000,
+    });
+    await outbox.enqueue({
+      sessionId: "wbs-leak",
+      streamId: "student:peer-leak:mic",
+      segmentId: "student-leak",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://abc.blob.vercel-storage.com/student-leak.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 200,
+      audioStartedAtMs: 1_100,
+      // Intentionally missing transcriptionOnly — simulates the 89e0fe1 failure mode.
+    });
+
+    const segs = await assembleEndSessionSegments("wbs-leak");
+    expect(segs.some((s) => s.streamId.startsWith("student:peer-"))).toBe(true);
+    expect(segs).toHaveLength(2);
+  });
+
+  test("excludes transcriptionOnly rows from replay assembly while keeping unflagged rows", async () => {
+    const outbox = createUploadOutbox({
+      upload: NEVER_CALLED_UPLOADER,
+      dbName: `outbox-helpers-${Math.random().toString(36).slice(2)}`,
+    });
+    setUploadOutboxForTests(outbox);
+
+    await outbox.enqueue({
+      sessionId: "wbs-tx-only",
+      streamId: "tutor:mic",
+      segmentId: "tutor-1",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://abc.blob.vercel-storage.com/tutor-1.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 100,
+      audioStartedAtMs: 1_000,
+    });
+    await outbox.enqueue({
+      sessionId: "wbs-tx-only",
       streamId: "student:peer-1:mic",
       segmentId: "student-1",
       blobLocalRef: null,
       blobRemoteUrl: "https://abc.blob.vercel-storage.com/student-1.webm",
       mimeType: "audio/webm",
       sizeBytes: 200,
-      audioStartedAtMs: 1_000,
+      audioStartedAtMs: 1_100,
+      transcriptionOnly: true,
+    });
+    await outbox.enqueue({
+      sessionId: "wbs-tx-only",
+      streamId: "student:peer-2:mic",
+      segmentId: "student-2-tx",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://abc.blob.vercel-storage.com/student-2-tx.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 300,
+      audioStartedAtMs: 1_200,
+      transcriptionOnly: true,
     });
 
-    const segs = await assembleEndSessionSegments("wbs-multi");
-    // We don't assert client-side order — the server's atomic action
-    // re-sorts by (audioStartedAtMs ASC, streamId ASC) before
-    // assigning orderIndex. What matters here is that BOTH streams
-    // make it into the payload with their streamId preserved.
-    expect(segs).toHaveLength(2);
+    const segs = await assembleEndSessionSegments("wbs-tx-only");
+    expect(segs).toHaveLength(1);
     const byId = new Map(segs.map((s) => [s.segmentId, s]));
     expect(byId.get("tutor-1")?.streamId).toBe("tutor:mic");
-    expect(byId.get("student-1")?.streamId).toBe("student:peer-1:mic");
+    expect(byId.has("student-1")).toBe(false);
+    expect(byId.has("student-2-tx")).toBe(false);
   });
 });
 
@@ -226,6 +327,10 @@ describe("finalizeOutboxAfterEnd", () => {
   test("deletes every row for the session so the next mount starts empty", async () => {
     const outbox = createUploadOutbox({
       upload: NEVER_CALLED_UPLOADER,
+      // Production singleton always wires onSegmentUploaded; mirror that
+      // so enqueue→register completes before finalize (see upload-outbox
+      // finalize test + drain-before-seal in the real End-session flow).
+      onSegmentUploaded: jest.fn(async () => {}),
       dbName: `outbox-helpers-${Math.random().toString(36).slice(2)}`,
     });
     setUploadOutboxForTests(outbox);
@@ -241,6 +346,7 @@ describe("finalizeOutboxAfterEnd", () => {
       audioStartedAtMs: 1,
     });
     expect(await outbox.listAllRows("wbs-fin")).toHaveLength(1);
+    await waitForRegisterOk(outbox, "wbs-fin");
 
     await finalizeOutboxAfterEnd("wbs-fin");
 

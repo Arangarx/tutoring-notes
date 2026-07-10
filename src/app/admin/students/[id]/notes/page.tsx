@@ -3,45 +3,23 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { NoteCardActions } from "../NoteCardActions";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
 import { formatDateOnlyDisplay, formatDateOnlyInput } from "@/lib/date-only";
 import { formatUtcTimeSnapped } from "@/lib/time/snap";
 import { TutorStudentNoteExpandedBody } from "@/components/notes/TutorStudentNoteExpandedBody";
-
+import { formatNoteTime, safeJsonArray } from "@/lib/notes/display-utils";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_PAGE_SIZE = 20;
 
-/**
- * Extract HH:MM (UTC) for `<input type="time">` defaultValue, snapped
- * to the 5-minute grid the edit dialog ships with (see NoteCardActions).
- * Historical notes saved before the step constraint (e.g. 10:53) would
- * otherwise be `:invalid` on open and block save until manually nudged.
- * Shared snap helper: `lib/time/snap.ts`.
- */
 function formatTimeInput(d: Date | null): string {
   return formatUtcTimeSnapped(d);
-}
-
-/** Format a UTC DateTime as "3:00 PM" for display. */
-function formatTimeDisplay(d: Date | null): string {
-  if (!d) return "";
-  const h = d.getUTCHours();
-  const m = d.getUTCMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
-}
-
-function safeJsonArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
 }
 
 interface PageProps {
@@ -63,6 +41,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
 
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
+  await assertStudentNotErased(id);
 
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const pageSize = Math.min(50, Math.max(10, parseInt(size, 10) || DEFAULT_PAGE_SIZE));
@@ -132,13 +111,13 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
     return (
       <nav
         aria-label={label}
-        style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
+        className="flex flex-wrap items-center gap-2"
       >
-        {pageNum > 1 && (
-          <Link className="btn" href={buildPageUrl(pageNum - 1)}>
-            ← Previous
-          </Link>
-        )}
+        {pageNum > 1 ? (
+          <Button asChild variant="outline" size="sm" className="min-h-9">
+            <Link href={buildPageUrl(pageNum - 1)}>← Previous</Link>
+          </Button>
+        ) : null}
         {Array.from({ length: totalPages }, (_, i) => i + 1)
           .filter((p) => Math.abs(p - pageNum) <= 2 || p === 1 || p === totalPages)
           .reduce<(number | "…")[]>((acc, p, idx, arr) => {
@@ -150,85 +129,95 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
           }, [])
           .map((p, idx) =>
             p === "…" ? (
-              <span key={`ellipsis-${idx}`} style={{ alignSelf: "center", padding: "0 4px" }}>
+              <span key={`ellipsis-${idx}`} className="px-1 text-muted-foreground">
                 …
               </span>
             ) : (
-              <Link
+              <Button
                 key={p}
-                className="btn"
-                href={buildPageUrl(p as number)}
-                aria-current={p === pageNum ? "page" : undefined}
-                style={p === pageNum ? { opacity: 0.6, pointerEvents: "none" } : {}}
+                asChild
+                variant={p === pageNum ? "secondary" : "outline"}
+                size="sm"
+                className="min-h-9 min-w-9"
               >
-                {p}
-              </Link>
+                <Link href={buildPageUrl(p as number)} aria-current={p === pageNum ? "page" : undefined}>
+                  {p}
+                </Link>
+              </Button>
             )
           )}
-        {pageNum < totalPages && (
-          <Link className="btn" href={buildPageUrl(pageNum + 1)}>
-            Next →
-          </Link>
-        )}
+        {pageNum < totalPages ? (
+          <Button asChild variant="outline" size="sm" className="min-h-9">
+            <Link href={buildPageUrl(pageNum + 1)}>Next →</Link>
+          </Button>
+        ) : null}
       </nav>
     );
   }
 
   return (
-    <div className="card">
-      {/* Breadcrumb */}
-      <div className="muted" style={{ fontSize: 12 }}>
-        <Link href="/admin/students">Students</Link>
-        {" / "}
-        <Link href={`/admin/students/${id}`}>{student.name}</Link>
-        {" / "}Notes
-      </div>
-      <h1 style={{ margin: "6px 0 16px" }}>
-        {student.name} — Session notes
-      </h1>
-
-      {/* Toolbar */}
+    <AdminPageShell
+      title={`${student.name} — Session notes`}
+      eyebrow={
+        <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
+          <Link href="/admin/students" className="hover:text-foreground">
+            Students
+          </Link>
+          {" / "}
+          <Link href={`/admin/students/${id}`} className="hover:text-foreground">
+            {student.name}
+          </Link>
+          {" / "}
+          <span className="text-foreground">Notes</span>
+        </nav>
+      }
+      actions={
+        <Button asChild variant="outline" className="min-h-11">
+          <Link href={`/admin/students/${id}`}>← Back to student</Link>
+        </Button>
+      }
+    >
       <Suspense>
-        <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <NotesSearchBar placeholder="Search topics, homework, assessment, plan…" />
           <PageSizeSelect defaultSize={DEFAULT_PAGE_SIZE} />
-          <Link className="btn" href={`/admin/students/${id}`} style={{ flexShrink: 0 }}>
-            ← Back to student
-          </Link>
         </div>
       </Suspense>
 
-      {/* Results count + top pagination */}
-      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12, alignItems: "center" }}>
-        <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
           {q
             ? `${totalCount} note${totalCount !== 1 ? "s" : ""} matching "${q}"`
             : `${totalCount} note${totalCount !== 1 ? "s" : ""} total`}
-          {totalPages > 1 && ` — page ${pageNum} of ${totalPages}`}
+          {totalPages > 1 ? ` — page ${pageNum} of ${totalPages}` : ""}
         </p>
         <PaginationNav label="Note pages (top)" />
       </div>
 
       {notes.length === 0 ? (
-        <p className="muted">{q ? "No notes match your search." : "No notes yet."}</p>
+        <p className="text-sm text-muted-foreground">
+          {q ? "No notes match your search." : "No notes yet."}
+        </p>
       ) : (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div className="flex flex-col gap-3">
           {notes.map((n) => (
-            <div key={n.id} className="card">
-                <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+            <Card key={n.id} className="border-border bg-card shadow-sm">
+              <CardContent className="space-y-4 p-4 pt-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div style={{ fontWeight: 700 }}>
+                    <div className="font-semibold text-foreground">
                       {formatDateOnlyDisplay(n.date)}
                     </div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    <div className="mt-1 text-xs text-muted-foreground">
                       {(n.startTime || n.endTime) && (
                         <span>
-                          {formatTimeDisplay(n.startTime)} {n.startTime && n.endTime && "–"} {formatTimeDisplay(n.endTime)}
+                          {formatNoteTime(n.startTime)}{" "}
+                          {n.startTime && n.endTime && "–"} {formatNoteTime(n.endTime)}
                           {" · "}
                         </span>
                       )}
                       Status: {n.status}
-                      {n.template && ` · ${n.template}`}
+                      {n.template ? ` · ${n.template}` : ""}
                     </div>
                   </div>
                   <NoteCardActions
@@ -250,7 +239,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
                   />
                 </div>
 
-                <div className="divider" />
+                <div className="h-px bg-border" />
 
                 <TutorStudentNoteExpandedBody
                   studentId={student.id}
@@ -262,15 +251,15 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
                   recordings={n.recordings}
                   whiteboardSessions={n.whiteboardSessions}
                 />
-              </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
-      {/* Bottom pagination */}
-      <div style={{ marginTop: 20 }}>
+      <div className="mt-6">
         <PaginationNav label="Note pages (bottom)" />
       </div>
-    </div>
+    </AdminPageShell>
   );
 }

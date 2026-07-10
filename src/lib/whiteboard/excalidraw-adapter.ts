@@ -23,6 +23,10 @@ import type {
   WBElement,
   WBEvent,
 } from "@/lib/whiteboard/event-log";
+import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
+
+/** Legacy Desmos iframe hosts (pre–JSXGraph swap). Read-only in adapter. */
+const LEGACY_DESMOS_HOSTS = ["www.desmos.com", "desmos.com"] as const;
 
 /**
  * Minimal structural types for the Excalidraw element shapes we care
@@ -65,18 +69,59 @@ export type ExcalidrawLikeElement = {
   fileId?: string | null;
   /** image elements: Excalidraw expects `saved` after BinaryFiles are registered */
   status?: string;
-  /** customData carries our extension fields for non-native types (latex, desmos state) */
+  /** Excalidraw stroke style — persisted on element even when not rendered for freedraw */
+  roughness?: number;
+  /** customData carries our extension fields for non-native types (latex, graph state) */
   customData?: {
-    wbType?: WBElement["type"];
+    wbType?: WBElement["type"] | "embed";
     latex?: string;
+    graphStateJson?: string;
     desmosStateJson?: string;
+    embed?: { provider?: string };
     altText?: string;
     /** For image elements: the resolved asset URL on Vercel Blob. */
     assetUrl?: string;
     /** Originator client id for collaborative attribution. */
     clientId?: string;
   };
+  /** embeddable elements: validated URL passed to Excalidraw */
+  link?: string | null;
 };
+
+function embedLink(
+  src: ExcalidrawLikeElement
+): string | undefined {
+  const link = src.link ?? src.customData?.assetUrl;
+  return typeof link === "string" ? link : undefined;
+}
+
+function isGraphEmbeddable(src: ExcalidrawLikeElement): boolean {
+  const customData = src.customData;
+  if (customData?.wbType === "graph") return true;
+  if (typeof customData?.graphStateJson === "string") return true;
+  return embedLink(src) === GRAPH_EMBED_LINK;
+}
+
+/** Legacy pilot Desmos iframe embeds — read-only; no new inserts. */
+function isLegacyDesmosEmbeddable(src: ExcalidrawLikeElement): boolean {
+  const customData = src.customData;
+  if (customData?.wbType === "desmos") return true;
+  if (
+    customData?.wbType === "embed" &&
+    customData.embed?.provider === "desmos"
+  ) {
+    return true;
+  }
+  const link = embedLink(src);
+  if (!link) return false;
+  try {
+    return LEGACY_DESMOS_HOSTS.includes(
+      new URL(link).hostname as (typeof LEGACY_DESMOS_HOSTS)[number]
+    );
+  } catch {
+    return false;
+  }
+}
 
 /** Round to 2 decimal places to suppress noisy float jitter in diffs. */
 function r2(n: number): number {
@@ -258,12 +303,28 @@ function patchRestoredLinearElementPoints(raw: unknown): unknown {
 
 /** Translate an Excalidraw element type string into our canonical type. */
 function mapExcalidrawTypeToWB(
-  type: string,
-  customData: ExcalidrawLikeElement["customData"]
+  src: ExcalidrawLikeElement
 ): WBElement["type"] | null {
-  // Custom-typed elements (math equation, desmos) use customData.wbType
-  // so we can round-trip them through Excalidraw's image/iframe slot.
-  if (customData?.wbType) return customData.wbType;
+  const { type, customData } = src;
+  // Custom-typed elements use customData.wbType (graph, desmos, text/latex).
+  const wb = customData?.wbType;
+  if (wb && wb !== "embed") {
+    if (wb === "graph" || wb === "desmos") return wb;
+    const native: WBElement["type"][] = [
+      "freehand",
+      "line",
+      "rectangle",
+      "ellipse",
+      "diamond",
+      "arrow",
+      "text",
+      "image",
+    ];
+    if ((native as string[]).includes(wb)) return wb as WBElement["type"];
+  }
+  if (customData?.wbType === "embed" && isLegacyDesmosEmbeddable(src)) {
+    return "desmos";
+  }
   switch (type) {
     case "freedraw":
       return "freehand";
@@ -277,10 +338,9 @@ function mapExcalidrawTypeToWB(
       return type;
     case "iframe":
     case "embeddable":
-      // Desmos and other iframe embeds without explicit wbType default
-      // to "desmos" so replay can render them; non-Desmos iframes are
-      // rare enough in tutoring sessions that this fallback is safe.
-      return "desmos";
+      if (isGraphEmbeddable(src)) return "graph";
+      if (isLegacyDesmosEmbeddable(src)) return "desmos";
+      return null;
     case "frame":
     case "magicframe":
     case "selection":
@@ -298,6 +358,8 @@ function mapWBTypeToExcalidraw(type: WBElement["type"]): string {
   switch (type) {
     case "freehand":
       return "freedraw";
+    case "graph":
+      return "embeddable";
     case "desmos":
       return "iframe";
     default:
@@ -312,11 +374,39 @@ function mapWBTypeToExcalidraw(type: WBElement["type"]): string {
  * Returns `null` for elements we don't persist (selection, frame,
  * magicframe, isDeleted=true).
  */
+/**
+ * A single click with the line/arrow tool + right-click finalize produces a
+ * degenerate element: 1 point (or N identical points), zero bounding box.
+ * These are phantom strokes — they enter the event log and sync wire but
+ * can never be undone on either side. Drop them early, before they reach
+ * the canonical layer.
+ *
+ * Conservative predicate: drop ONLY when ALL three hold:
+ *   1. type is "line" or "arrow" (NOT freedraw — a freedraw dot is legitimate)
+ *   2. fewer than 2 *distinct* points (length < 2 OR every point equals pts[0])
+ *   3. both |width| < 1 AND |height| < 1
+ *
+ * If any of {2+ distinct points, |width|>=1, |height|>=1} holds → KEEP.
+ */
+export function isDegenerateLinearElement(src: ExcalidrawLikeElement): boolean {
+  if (src.type !== "line" && src.type !== "arrow") return false;
+  if (Math.abs(src.width) >= 1 || Math.abs(src.height) >= 1) return false;
+  const pts = src.points;
+  if (!pts || pts.length < 2) return true;
+  // If any point differs from the first, the element has spatial extent → keep.
+  const [x0, y0] = pts[0];
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i][0] !== x0 || pts[i][1] !== y0) return false;
+  }
+  return true; // all points identical, zero bbox → degenerate
+}
+
 export function toCanonical(
   src: ExcalidrawLikeElement
 ): WBElement | null {
   if (src.isDeleted) return null;
-  const wbType = mapExcalidrawTypeToWB(src.type, src.customData);
+  if (isDegenerateLinearElement(src)) return null;
+  const wbType = mapExcalidrawTypeToWB(src);
   if (!wbType) return null;
 
   const out: WBElement = {
@@ -356,6 +446,9 @@ export function toCanonical(
   if (src.customData?.assetUrl) out.assetUrl = src.customData.assetUrl;
   if (src.customData?.altText) out.altText = src.customData.altText;
   if (src.customData?.latex) out.latex = src.customData.latex;
+  if (src.customData?.graphStateJson) {
+    out.graphStateJson = src.customData.graphStateJson;
+  }
   if (src.customData?.desmosStateJson) {
     out.desmosStateJson = src.customData.desmosStateJson;
   }
@@ -377,6 +470,11 @@ export function toExcalidraw(src: WBElement): ExcalidrawLikeElement {
     customData.latex = src.latex;
     customData.wbType = "text"; // round-trip preservation
   }
+  if (src.type === "graph") {
+    customData.wbType = "graph";
+    if (src.graphStateJson) customData.graphStateJson = src.graphStateJson;
+    customData.assetUrl = GRAPH_EMBED_LINK;
+  }
   if (src.type === "desmos") {
     customData.wbType = "desmos";
     if (src.desmosStateJson) customData.desmosStateJson = src.desmosStateJson;
@@ -392,6 +490,7 @@ export function toExcalidraw(src: WBElement): ExcalidrawLikeElement {
     height: src.height,
     isDeleted: false,
     customData: Object.keys(customData).length ? customData : undefined,
+    link: src.type === "graph" ? GRAPH_EMBED_LINK : undefined,
   };
 
   if (src.index !== undefined) out.index = src.index;
@@ -462,6 +561,7 @@ export function diffElement(
     "assetUrl",
     "altText",
     "latex",
+    "graphStateJson",
     "desmosStateJson",
   ];
 

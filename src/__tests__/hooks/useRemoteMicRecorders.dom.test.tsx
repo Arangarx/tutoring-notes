@@ -126,6 +126,7 @@ function Host(props: {
     shouldCapture: state.shouldCapture,
     mutedPeerIdsInRecording: state.mutedPeerIds,
     outbox: props.outbox,
+    resolveSpeakerIdForPeer: () => "lp-test",
     _createRecorder: props.recorderFactory,
   });
   return null;

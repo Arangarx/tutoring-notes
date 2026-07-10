@@ -34,6 +34,17 @@ jest.mock("@vercel/blob/client", () => ({
 jest.mock("@/lib/student-scope", () => ({
   __esModule: true,
   assertOwnsStudent: (id: string) => assertOwnsStudentMock(id),
+  // B1: default APPROVED so existing tests are unaffected by the approval gate.
+  requireStudentScope: jest.fn().mockResolvedValue({ kind: "admin", adminId: "admin_test_1" }),
+}));
+
+// B1: mock db for the approval check (adminUser.findUnique returns APPROVED).
+jest.mock("@/lib/db", () => ({
+  __esModule: true,
+  db: {
+    adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
+  },
+  withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
 
 import { POST } from "@/app/api/upload/audio/route";
@@ -143,12 +154,14 @@ describe("POST /api/upload/audio", () => {
     expect(json.clientToken).toBe("stubbed-token-abc");
   });
 
-  test("returns 400 when handleUpload throws (e.g. signature/auth failure)", async () => {
+  test("returns 400 with a generic error (no internal detail) when handleUpload throws", async () => {
     handleUploadMock.mockRejectedValue(new Error("bad signature"));
     const res = await POST(makeRequest({ type: "blob.generate-client-token", payload: {} }));
     expect(res.status).toBe(400);
     const json = (await res.json()) as { error?: string; debugId?: string };
-    expect(json.error).toContain("bad signature");
+    // Error must not expose internal exception detail to the client.
+    expect(json.error).not.toContain("bad signature");
+    expect(json.error).toContain("authorization");
     expect(typeof json.debugId).toBe("string");
   });
 });

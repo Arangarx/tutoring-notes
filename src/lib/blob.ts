@@ -1,4 +1,10 @@
 import { del, head, getDownloadUrl } from "@vercel/blob";
+import {
+  harnessStoreGet,
+  isBlobHarnessActive,
+  isHarnessBlobUrl,
+  pathnameFromHarnessUrl,
+} from "@/lib/blob-harness";
 import { env } from "@/lib/env";
 export { ACCEPTED_AUDIO_TYPES, BLOB_MAX_BYTES, isAcceptedAudioType } from "@/lib/audio-constants";
 
@@ -52,4 +58,41 @@ export async function getBlobMetadata(
 ): Promise<{ size: number; contentType: string }> {
   const metadata = await head(blobUrl);
   return { size: metadata.size, contentType: metadata.contentType };
+}
+
+/**
+ * Download bytes from a private Vercel Blob URL.
+ *
+ * Private-store URLs (`*.private.blob.vercel-storage.com`) return 403
+ * without a Bearer token. Server-side callers must use this helper (or
+ * equivalent Authorization header) — never a bare fetch(blobUrl).
+ */
+export async function fetchPrivateBlobBytes(
+  blobUrl: string,
+  options: { fetchImpl?: typeof fetch } = {}
+): Promise<{ buffer: Buffer; contentType: string }> {
+  if (isBlobHarnessActive() && isHarnessBlobUrl(blobUrl)) {
+    const key = pathnameFromHarnessUrl(blobUrl);
+    const stored = key ? harnessStoreGet(key) : null;
+    if (!stored) {
+      throw new Error("Harness blob not found");
+    }
+    return { buffer: stored.bytes, contentType: stored.contentType };
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN ?? "";
+  const headers: Record<string, string> = blobToken
+    ? { Authorization: `Bearer ${blobToken}` }
+    : {};
+
+  const res = await fetchImpl(blobUrl, { headers });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  }
+
+  const arrayBuf = await res.arrayBuffer();
+  const rawCt = res.headers.get("content-type") ?? "";
+  const contentType = rawCt.split(";")[0].trim() || "application/octet-stream";
+  return { buffer: Buffer.from(arrayBuf), contentType };
 }

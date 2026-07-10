@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { MarketingHeader } from "@/components/marketing/MarketingHeader";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+
 /**
  * Privacy policy — Tutoring Notes (product subordinate facade).
  *
- * SYNCED FROM https://www.mortensenapps.com/privacy as of 2026-05-17.
+ * SYNCED FROM https://www.mortensenapps.com/privacy as of 2026-05-31.
+ * Product-specific retention + inventory copy updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -33,12 +43,17 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="container" style={{ maxWidth: 720 }}>
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Privacy Policy</h1>
-        <p className="muted" style={{ fontSize: 14 }}>Last updated: May 2026</p>
-
-        <p className="muted" style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6 }}>
+    <>
+      <MarketingHeader />
+      <main id="main-content" className="px-4 py-10">
+        <div className="mx-auto w-full max-w-3xl">
+          <Card>
+            <CardHeader>
+              <CardTitle className="heading text-3xl font-normal">Privacy Policy</CardTitle>
+              <p className="text-sm text-muted-foreground">Last updated: July 9, 2026</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
           umbrella privacy policy at{" "}
@@ -49,11 +64,11 @@ export default function PrivacyPage() {
           policy governs.
         </p>
 
-        <div className="divider" style={{ margin: "20px 0" }} />
+        <Separator className="my-5" />
 
-        <section style={{ display: "grid", gap: 16 }}>
+        <section className="grid gap-4">
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>What Tutoring Notes is</h2>
+            <h2 className="heading m-0 text-lg font-normal">What Tutoring Notes is</h2>
             <p style={{ margin: "8px 0 0" }}>
               Tutoring Notes is a web application that helps private tutors record session
               audio, draft session notes, run a shared whiteboard during lessons, and share
@@ -62,7 +77,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>What data we collect</h2>
+            <h2 className="heading m-0 text-lg font-normal">What data we collect</h2>
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
               <li><strong>Account information:</strong> email address, hashed password, and optional display name when you create a tutor account.</li>
               <li><strong>Session notes:</strong> student names, session dates, topics, homework, assessment, plan, and links you enter.</li>
@@ -74,11 +89,14 @@ export default function PrivacyPage() {
               <li><strong>Waitlist entries</strong> (email and optional name) submitted through interest forms or contact, retained for outreach.</li>
               <li><strong>Gmail OAuth tokens</strong> if you use &ldquo;Connect Gmail&rdquo; (see Google account and Gmail below).</li>
               <li><strong>Standard technical logs</strong> (IP address, user agent, timestamps) collected by our hosting provider for security and reliability.</li>
+              <li><strong>LearnerProfile information:</strong> a student&rsquo;s name entered when creating a student profile. For students under 13, this is personal information subject to COPPA protections.</li>
+              <li><strong>Session transcripts</strong> automatically generated from session audio by the OpenAI transcription service (see below). Transcripts are derived from and linked to the session audio recording.</li>
+              <li><strong>Parent or guardian contact information</strong> collected during the account-claim and consent flow for students, including for verifiable parental consent purposes for students under 13.</li>
             </ul>
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>How we use your data</h2>
+            <h2 className="heading m-0 text-lg font-normal">How we use your data</h2>
             <p style={{ margin: "8px 0 0" }}>
               Your data is used solely to operate the product: signing you in, storing and
               displaying notes / audio / whiteboard sessions, generating share links, and
@@ -89,7 +107,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Sharing, disclosure, and recipients</h2>
+            <h2 className="heading m-0 text-lg font-normal">Sharing, disclosure, and recipients</h2>
             <p style={{ margin: "8px 0 0" }}>
               We share or disclose information only as needed to run the product, as
               described below.
@@ -136,7 +154,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Google account and Gmail (Connect Gmail)</h2>
+            <h2 className="heading m-0 text-lg font-normal">Google account and Gmail (Connect Gmail)</h2>
             <p style={{ margin: "8px 0 0" }}>
               When you click &ldquo;Connect Gmail,&rdquo; the app requests permission to send
               email on your behalf using the <strong>Gmail API</strong>{" "}
@@ -160,7 +178,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>AI note generation (OpenAI)</h2>
+            <h2 className="heading m-0 text-lg font-normal">AI note generation (OpenAI)</h2>
             <p style={{ margin: "8px 0 0" }}>
               When you use the <strong>Auto-fill from session</strong> feature, content
               you provide (typed notes, uploaded audio, or in-browser recording) is sent
@@ -180,18 +198,28 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Session audio recordings (Vercel Blob)</h2>
+            <h2 className="heading m-0 text-lg font-normal">Session audio recordings (Vercel Blob)</h2>
             <p style={{ margin: "8px 0 0" }}>
               When you upload or record a session audio file, the recording is stored in{" "}
               <strong>Vercel Blob</strong> (private, US region). Audio is never publicly
-              accessible — all playback links are short-lived signed URLs generated at
-              render time.
+              accessible — playback uses authenticated, session-scoped URLs served through
+              our application (tutor accounts and revocable parent share links), not direct
+              public blob links.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              Recordings are sent to <strong>OpenAI Whisper</strong> for transcription
-              as part of the note generation flow. The same API data policy applies:
-              data is not used for training. Audio is not shared with any other third
-              party.
+              Recordings are sent to <strong>OpenAI</strong> via the{" "}
+              <code>/v1/audio/transcriptions</code> endpoint (<strong>Whisper</strong>) for
+              transcription as part of the note generation flow. OpenAI acts as a{" "}
+              <strong>subprocessor</strong> processing audio on our instructions under a
+              data processing agreement; audio data is <strong>not used to train</strong>{" "}
+              OpenAI&rsquo;s models. Audio is not shared with any other third party.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              Audio recordings of tutoring sessions may contain the voices of students,
+              including students under 13. Audio of students under 13 is collected only with
+              verifiable parental consent. See the{" "}
+              <strong>Children&rsquo;s data and parental rights (COPPA)</strong> section
+              below for the applicable retention schedule and how to exercise your rights.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               The <strong>Include audio recording in parent share link</strong> option
@@ -203,7 +231,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Where data is stored</h2>
+            <h2 className="heading m-0 text-lg font-normal">Where data is stored</h2>
             <p style={{ margin: "8px 0 0" }}>
               Data is stored in a PostgreSQL database hosted on <strong>Neon</strong>{" "}
               (US region). The application is hosted on <strong>Vercel</strong>. Both
@@ -212,7 +240,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Data retention and deletion</h2>
+            <h2 className="heading m-0 text-lg font-normal">Data retention and deletion</h2>
             <p style={{ margin: "8px 0 0" }}>
               We retain data as long as your account exists and as needed to provide the
               service and meet legal obligations. Tutors can delete individual students
@@ -220,10 +248,24 @@ export default function PrivacyPage() {
               data deleted, contact us at the email below and we will process the request
               promptly.
             </p>
+            <p style={{ margin: "8px 0 0" }}>
+              <strong>Children&rsquo;s personal information — retention (COPPA
+              §312.10).</strong> Session audio recordings, session transcripts, session
+              notes, LearnerProfile information (name), and parent or guardian contact
+              information for students who are minors are retained for the duration of
+              the active tutor–student relationship while your account remains in use. We
+              may keep session history for a reasonable period after tutoring ends so
+              tutors and parents can review progress.{" "}
+              <strong>We do not retain children&rsquo;s personal information
+              indefinitely.</strong> Verified deletion requests from a parent or legal
+              guardian (see Children&rsquo;s data and parental rights below) are honored
+              promptly. Automated retention schedules may be introduced in the future;
+              this policy will be updated when they take effect.
+            </p>
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Security</h2>
+            <h2 className="heading m-0 text-lg font-normal">Security</h2>
             <p style={{ margin: "8px 0 0" }}>
               We use commercially reasonable safeguards appropriate to the sensitivity of
               tutoring data and the nature of our hosted software:
@@ -243,7 +285,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Children</h2>
+            <h2 className="heading m-0 text-lg font-normal">Children</h2>
             <p style={{ margin: "8px 0 0" }}>
               Tutoring Notes is intended for use by <strong>tutors</strong> (adults).
               Tutors are responsible for obtaining any parent, guardian, or
@@ -262,7 +304,117 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Changes</h2>
+            <h2 className="heading m-0 text-lg font-normal">Children&rsquo;s data and parental rights (COPPA)</h2>
+            <p style={{ margin: "8px 0 0" }}>
+              Tutoring Notes is a platform designed for K–12 tutoring and knowingly
+              collects personal information from students who may be under 13. We are
+              subject to the Children&rsquo;s Online Privacy Protection Act (COPPA),
+              16&nbsp;CFR Part&nbsp;312. We require verifiable parental consent before
+              collecting personal information from or about a child under 13.
+            </p>
+
+            <p style={{ margin: "8px 0 0" }}>
+              <strong>What children&rsquo;s personal information we collect and why.</strong>{" "}
+              For a student under 13, personal information we collect and process includes:
+            </p>
+            <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
+              <li><strong>Session audio recordings</strong> containing the child&rsquo;s
+                voice — collected to enable transcription and note generation for the
+                tutor&rsquo;s session record.</li>
+              <li><strong>Session transcripts</strong> automatically derived from audio
+                via OpenAI (subprocessor) for note generation and session history.</li>
+              <li><strong>Session notes</strong> created by or for the tutor summarizing
+                session content, topics, and progress related to the student.</li>
+              <li><strong>LearnerProfile information</strong> — the student&rsquo;s name
+                — to identify the student and provide contextual note generation.</li>
+              <li><strong>Parent or guardian contact information</strong> (email) collected
+                during the account-claim and consent process for communication and
+                consent purposes.</li>
+            </ul>
+
+            <p style={{ margin: "8px 0 0" }}>
+              <strong>Subprocessors handling children&rsquo;s data.</strong> Session audio
+              is transmitted to <strong>OpenAI</strong> via the{" "}
+              <code>/v1/audio/transcriptions</code> endpoint for transcription only.
+              OpenAI acts as a subprocessor operating under a data processing agreement
+              on our instructions; child audio is <strong>not used to train</strong>{" "}
+              OpenAI&rsquo;s models. Session data is stored in{" "}
+              <strong>Vercel Blob</strong> (audio files) and{" "}
+              <strong>Neon</strong> (database records), both US-region. No children&rsquo;s
+              personal information is shared with any other third party.
+            </p>
+
+            <p style={{ margin: "8px 0 0" }}>
+              <strong>How we use children&rsquo;s personal information.</strong> Children&rsquo;s
+              personal information is used exclusively to: deliver the tutoring session
+              recording, transcription, and note-generation service; enable the tutor to
+              review session history and track the student&rsquo;s progress; and (with
+              parental consent) allow the parent or guardian to review session content
+              through a tokenized, revocable share link. We do not use children&rsquo;s
+              personal information for advertising, profiling, or any purpose unrelated
+              to the child&rsquo;s tutoring sessions.
+            </p>
+
+            <p style={{ margin: "8px 0 0" }}>
+              <strong>Retention (COPPA §312.10).</strong> Session audio recordings,
+              transcripts, and notes, together with LearnerProfile information (name) and
+              parent contact information, are retained for the duration of the active
+              tutor–student relationship while your account remains in use. We may keep
+              session history for a reasonable period after tutoring ends so tutors and
+              parents can review progress.{" "}
+              <strong>We do not retain children&rsquo;s personal information
+              indefinitely.</strong> Verified deletion requests from a parent or legal
+              guardian are honored promptly (see Parental rights below). Automated
+              retention schedules may be introduced in the future; this policy will be
+              updated when they take effect.
+            </p>
+
+            <p style={{ margin: "8px 0 0" }}>
+              <strong>Parental rights.</strong> As a parent or legal guardian, you have
+              the right to:
+            </p>
+            <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
+              <li>Review the personal information we have collected from your child.</li>
+              <li>Direct us to delete your child&rsquo;s personal information.</li>
+              <li>Revoke consent and refuse to permit further collection or use of your
+                child&rsquo;s personal information (consent revocation stops future
+                recording).</li>
+            </ul>
+            <p style={{ margin: "8px 0 0" }}>
+              To exercise any of these rights, contact us at{" "}
+              <a href="mailto:arangarx+tutoringnotes@gmail.com">arangarx+tutoringnotes@gmail.com</a>.
+              We will comply with verified requests as required by COPPA
+              (16&nbsp;CFR&nbsp;§312.6).
+            </p>
+
+            <p style={{ margin: "8px 0 0" }}>
+              <strong>Consent revocation and data already collected (two tracks).</strong>{" "}
+              Session audio recordings, transcripts, and notes are created only with a
+              parent or guardian&rsquo;s consent. Withdrawing consent stops future
+              recording; it does not automatically delete content already created under
+              your prior consent. As a parent or legal guardian, you may request to
+              review or delete your child&rsquo;s personal information at any time by
+              contacting us at{" "}
+              <a href="mailto:arangarx+tutoringnotes@gmail.com">arangarx+tutoringnotes@gmail.com</a>.
+              We honor verified requests as required by the Children&rsquo;s Online
+              Privacy Protection Act (COPPA).
+            </p>
+
+            <p style={{ margin: "8px 0 0" }}>
+              <strong>Educational use by the tutor.</strong> With parental consent, a
+              child&rsquo;s session recordings, transcripts, and notes may be used by
+              the tutor for educational purposes directly related to that child&rsquo;s
+              instruction — for example, reviewing past sessions to plan future lessons or
+              identifying recurring learning gaps. This consent is part of the account
+              setup and is revocable going forward: revoking it stops future access for
+              those purposes and the tutor is notified. Content already made available
+              to the tutor under prior consent is not automatically retracted on
+              revocation; you may request deletion of specific content separately.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="heading m-0 text-lg font-normal">Changes</h2>
             <p style={{ margin: "8px 0 0" }}>
               We may update this policy from time to time. The &ldquo;Last updated&rdquo; date
               above will change when we do. Material changes may also be communicated
@@ -272,7 +424,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Contact</h2>
+            <h2 className="heading m-0 text-lg font-normal">Contact</h2>
             <p style={{ margin: "8px 0 0" }}>
               For privacy questions, data deletion requests, or concerns specific to
               Tutoring Notes, email{" "}
@@ -285,15 +437,18 @@ export default function PrivacyPage() {
           </div>
         </section>
 
-        <div className="divider" style={{ margin: "20px 0" }} />
+        <Separator className="my-5" />
 
-        <p className="muted" style={{ fontSize: 13 }}>
+        <p className="text-[13px] text-muted-foreground">
           <Link href="/">Home</Link> · <Link href="/terms">Terms</Link> ·{" "}
           <a href="https://www.mortensenapps.com/privacy" target="_blank" rel="noreferrer">
             Umbrella privacy policy
           </a>
         </p>
-      </div>
-    </div>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </>
   );
 }

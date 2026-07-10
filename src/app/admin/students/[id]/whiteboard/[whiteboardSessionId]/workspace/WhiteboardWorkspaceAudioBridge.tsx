@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { UseAudioRecorderReturn } from "@/hooks/useAudioRecorder";
+import type { AudioCapturePolicy } from "@/lib/recording/audio-capture-policy";
 import RecordingControlPanel from "@/components/recording/RecordingControlPanel";
 import {
   getOrCreateUploadOutbox,
@@ -74,8 +75,15 @@ type Props = {
   whiteboardSessionId: string;
   userWantsRecording: boolean;
   recordingActive: boolean;
+  /** Block B: when "none", never start or resume capture. Defaults to "full". */
+  audioCapturePolicy?: AudioCapturePolicy;
   /** Disables standalone Start (etc.) — e.g. until the workspace toolbar arms recording. */
   panelDisabled?: boolean;
+  /**
+   * When false (default on live board), orchestration-only — no visible
+   * RecordingControlPanel. Mic device/level live in top-bar popover.
+   */
+  showPanel?: boolean;
   /**
    * Tutor workspace: forwards mic picker to `useLiveAV.setMicDevice` for
    * WebRTC `replaceTrack` + recorder graph swap.
@@ -112,8 +120,10 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     whiteboardSessionId,
     userWantsRecording,
     recordingActive,
+    audioCapturePolicy = "full",
     panelDisabled,
     onMicDeviceChange,
+    showPanel = false,
   },
   ref
 ) {
@@ -155,7 +165,7 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
   // here; the outbox is downstream of the hook's onRecorded callback.
   useEffect(() => {
     const a = audioRef.current;
-    if (!userWantsRecording) {
+    if (!userWantsRecording || audioCapturePolicy === "none") {
       if (a.state === "recording" || a.state === "paused") {
         a.stopAndUpload("final");
       }
@@ -174,7 +184,7 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     } else if (a.state === "done" || a.state === "error") {
       a.handleReset();
     }
-  }, [userWantsRecording, recordingActive, audio.state]);
+  }, [userWantsRecording, recordingActive, audioCapturePolicy, audio.state]);
 
   // Stable handle. `useImperativeHandle`'s dep array intentionally
   // omits outboxState — the closure reads through audioRef + the
@@ -205,6 +215,10 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     }),
     [whiteboardSessionId, outboxState]
   );
+
+  if (!showPanel) {
+    return null;
+  }
 
   return (
     <RecordingControlPanel

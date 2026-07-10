@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
+import { logBlobEgressEvent } from "@/lib/observability/cost-events";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
+import { checkApiShareAccess } from "@/lib/share-access-scope";
 
 /**
  * Proxy private Vercel Blob audio to browsers on the share page.
@@ -19,6 +22,8 @@ import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
  * Range support: forwards the inbound `Range` header to Vercel Blob
  * via `streamBlobWithRangeSupport` so parents can scrub the share
  * page audio. See helper docs for the full background.
+ *
+ * BLOB_EGRESS: logs optimistic egress cost when Content-Length is known (design §3.3.1).
  */
 export async function GET(
   req: Request,
@@ -32,33 +37,46 @@ export async function GET(
     return NextResponse.json({ error: "Missing token" }, { status: 401 });
   }
 
-  const link = await db.shareLink.findUnique({
-    where: { token: shareToken },
-    select: { revokedAt: true, studentId: true },
-  });
-  if (!link || link.revokedAt) {
-    return NextResponse.json({ error: "Invalid or expired link" }, { status: 403 });
+  // Auth wall check: when NOTES_AUTH_WALL=true, session must match token ownership.
+  const access = await checkApiShareAccess(
+    req,
+    shareToken,
+    `/api/audio/${recordingId}?token=${shareToken}`
+  );
+  if (!access.allowed) {
+    return NextResponse.json({ error: "Access denied." }, { status: access.status });
   }
+
+  const erasureBlocked = await assertStudentNotErasedApi(access.studentId, {
+    salToken: shareToken,
+  });
+  if (erasureBlocked) return erasureBlocked;
 
   const recording = await db.sessionRecording.findFirst({
     where: {
       id: recordingId,
-      studentId: link.studentId,
+      studentId: access.studentId,
       OR: [
         { note: { shareRecordingInEmail: true } },
         {
           note: {
-            whiteboardSessions: { some: { studentId: link.studentId } },
+            whiteboardSessions: { some: { studentId: access.studentId } },
           },
         },
         {
           whiteboardSession: {
-            studentId: link.studentId,
+            studentId: access.studentId,
           },
         },
       ],
     },
-    select: { blobUrl: true, mimeType: true },
+    select: {
+      blobUrl: true,
+      mimeType: true,
+      adminUserId: true,
+      studentId: true,
+      whiteboardSessionId: true,
+    },
   });
 
   if (!recording) {
@@ -66,5 +84,27 @@ export async function GET(
   }
 
   const { blobUrl, mimeType } = recording;
-  return streamBlobWithRangeSupport(req, blobUrl, mimeType || "audio/mpeg");
+  const response = await streamBlobWithRangeSupport(
+    req,
+    blobUrl,
+    mimeType || "audio/mpeg"
+  );
+
+  const contentLength = response.headers.get("content-length");
+  if (contentLength) {
+    const bytes = parseInt(contentLength, 10);
+    if (!Number.isNaN(bytes) && bytes > 0) {
+      void logBlobEgressEvent({
+        bytesTransferred: bytes,
+        sessionRecordingId: recordingId,
+        adminUserId: recording.adminUserId,
+        studentId: recording.studentId,
+        whiteboardSessionId: recording.whiteboardSessionId,
+        sessionId: recording.whiteboardSessionId,
+        metadata: { route: "share-audio-proxy" },
+      });
+    }
+  }
+
+  return response;
 }

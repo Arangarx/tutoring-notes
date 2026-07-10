@@ -15,7 +15,7 @@
  *      (15s budget; failed/timeout surfaces a tutor-facing error).
  *   3. `assembleEndSessionSegments(wbsid)` — read uploaded rows.
  *   4. `uploadWhiteboardEvents(...)`
- *   5. `endWhiteboardSession(wbsid, eventsUrl, { segments })` — one
+ *   5. `finalizeWhiteboardSessionFromBackend(wbsid, eventsUrl, { segments })` — one
  *      atomic transaction.
  *   6. `finalizeOutboxAfterEnd(wbsid)` — drop the persisted rows.
  *
@@ -28,6 +28,21 @@
 import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { TriggerNotesGenerationResult } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+
+async function confirmFinishAndSave() {
+  await userEvent.click(screen.getByTestId("wb-end-session"));
+  await userEvent.click(screen.getByTestId("wb-end-session-confirm-yes"));
+}
+
+jest.mock("@/components/ThemeProvider", () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useTheme: () => ({
+    mode: "system" as const,
+    resolvedTheme: "light" as const,
+    setMode: jest.fn(),
+  }),
+}));
 
 jest.mock("@/components/whiteboard/PdfImageUploadButton", () => ({
   PdfImageUploadButton: () => null,
@@ -35,8 +50,8 @@ jest.mock("@/components/whiteboard/PdfImageUploadButton", () => ({
 jest.mock("@/components/whiteboard/MathInsertButton", () => ({
   MathInsertButton: () => null,
 }));
-jest.mock("@/components/whiteboard/DesmosInsertButton", () => ({
-  DesmosInsertButton: () => null,
+jest.mock("@/components/whiteboard/GraphInsertButton", () => ({
+  GraphInsertButton: () => null,
 }));
 jest.mock("@/lib/whiteboard/ensure-native-image-asset-urls-for-sync", () => ({
   ensureNativeImageAssetUrlsForSync: jest.fn(async () => null),
@@ -64,11 +79,15 @@ jest.mock("@/lib/whiteboard/sync-client", () => ({
   generateEncryptionKeyBase64Url: () => "test-integration-key-16chars-min",
 }));
 
+// Stable router mock — shared reference so tests can assert on replace/refresh calls.
+const mockRouterReplace = jest.fn();
+const mockRouterRefresh = jest.fn();
 jest.mock("next/navigation", () => ({
   useRouter: () => ({
-    replace: jest.fn(),
-    refresh: jest.fn(),
+    replace: mockRouterReplace,
+    refresh: mockRouterRefresh,
   }),
+  useParams: () => ({}),
 }));
 
 const mockUpload = jest.fn(() =>
@@ -100,14 +119,58 @@ jest.mock("@/lib/whiteboard/snapshot-png", () => ({
     mockGenerateSnapshot(...args),
 }));
 
-const mockEnd = jest.fn(() => Promise.resolve({ endedAt: "2026-05-10T00:00:00Z", durationSeconds: 100, registeredSegments: 0 }));
+const mockFinalize = jest.fn(() =>
+  Promise.resolve({
+    ok: true as const,
+    idempotent: false as const,
+    endedAt: "2026-05-10T00:00:00Z",
+    durationSeconds: 100,
+    registeredSegments: 0,
+  })
+);
 jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
-  endWhiteboardSession: (...args: unknown[]) => mockEnd.apply(null, args),
+  finalizeWhiteboardSessionFromBackend: (...args: unknown[]) =>
+    mockFinalize.apply(null, args),
   issueJoinToken: jest.fn(() => Promise.resolve({ token: "tok" })),
   registerWhiteboardSessionAudioSegmentAction: jest.fn(() =>
     Promise.resolve({ ok: true as const, recordingId: "rec1", orderIndex: 0 })
   ),
   revokeJoinTokensForSession: jest.fn(() => Promise.resolve()),
+  // endStaleWhiteboardSession is called by WorkspaceResumeGate's "End" button
+  // (stale-session path). Not exercised by these tests, but imported by the module.
+  endStaleWhiteboardSession: jest.fn(() =>
+    Promise.resolve({ endedAt: "2026-05-10T00:00:00Z" })
+  ),
+  startWhiteboardSession: jest.fn(() => Promise.resolve({ ok: true, phase: "active" })),
+}));
+
+// notes-actions imports next/cache (revalidatePath) which requires TextEncoder
+// (not available in jsdom). Mock the whole module at the boundary.
+const mockTriggerNotesGenerationAction = jest.fn<
+  Promise<TriggerNotesGenerationResult>,
+  [string]
+>(() => Promise.resolve({ ok: true }));
+jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
+  kickSessionChunksAction: jest.fn(() => Promise.resolve({ kicked: 0 })),
+  triggerNotesGenerationAction: (whiteboardSessionId: string) =>
+    mockTriggerNotesGenerationAction(whiteboardSessionId),
+  // loadSessionReviewPayload is called by SessionReviewMode on mount.
+  // The shell-integration tests below provide per-test overrides; this
+  // default ensures the module resolves cleanly in all tests.
+  loadSessionReviewPayload: jest.fn(() =>
+    Promise.resolve({
+      studentName: "Test Student",
+      startedAtIso: "2026-05-09T10:00:00.000Z",
+      endedAtIso: "2026-05-09T11:00:00.000Z",
+      durationSeconds: 3600,
+      hasAudio: false,
+      eventCount: 0,
+      audioSegments: [],
+      eventsProxyUrl: "/api/whiteboard/ws-shell-1/events",
+      snapshotProxyUrl: null,
+      initialNote: { found: false, noteId: null, fields: null, status: null },
+    })
+  ),
 }));
 
 const mockBuildFinalEventsJson = jest.fn(
@@ -129,6 +192,7 @@ jest.mock("@/hooks/useWhiteboardRecorder", () => ({
     acceptResume: jest.fn(),
     declineResume: jest.fn(),
     buildFinalEventsJson: mockBuildFinalEventsJson,
+    flushServerPersist: jest.fn().mockResolvedValue(undefined),
     markPersisted: jest.fn(),
     checkpointMountResolved: true,
     postGateAutoCanvas: null,
@@ -270,6 +334,31 @@ const audioCtl = {
   flushPendingUploads: jest.fn(() => Promise.resolve()),
 };
 
+// useLiveAV is not the focus of this test suite (end-session flow).
+// Provide a minimal stub so the workspace component mounts without crashing.
+jest.mock("@/hooks/useLiveAV", () => ({
+  useLiveAV: () => ({
+    participants: [],
+    reachableParticipants: [],
+    localAudioStream: null,
+    localVideoStream: null,
+    hasMicPermission: "prompt" as const,
+    hasCamPermission: "prompt" as const,
+    isMicMuted: false,
+    isCamMuted: true,
+    error: null,
+    videoError: null,
+    toggleMic: jest.fn(),
+    toggleCam: jest.fn(),
+    requestMic: jest.fn().mockResolvedValue(undefined),
+    requestCam: jest.fn().mockResolvedValue(undefined),
+    isAcquiring: false,
+    isActive: false,
+    reconnectPeer: jest.fn(),
+    retryAcquire: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 jest.mock("@/hooks/useAudioRecorder", () => {
   return {
     useAudioRecorder: () => ({
@@ -278,12 +367,14 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       },
       uploadMode: null,
       elapsed: 0,
+    sessionElapsed: 0,
       segmentNumber: 1,
       doneSegmentSeconds: 0,
       localMicStream: null,
       addRemoteAudio: () => () => {},
       devices: [],
       selectedDeviceId: "",
+      pickedMicSlot: 0,
       gainLinear: 1,
       setGainLinear: jest.fn(),
       chimeEnabled: false,
@@ -307,7 +398,30 @@ jest.mock("@/hooks/useAudioRecorder", () => {
   };
 });
 
+// SessionReviewMode is a heavy component (TutorNotesSection + WorkspacePreviousSessionPreview
+// + lazy WhiteboardReplay). In the shell-integration tests below we verify that the
+// component MOUNTS after the mode flip — we don't need to exercise its internals here.
+// Stubbing it at the module boundary keeps the shell tests lightweight.
+jest.mock(
+  "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/SessionReviewMode",
+  () => ({
+    SessionReviewMode: function MockSessionReviewMode({
+      whiteboardSessionId,
+    }: {
+      whiteboardSessionId: string;
+    }) {
+      return (
+        <div
+          data-testid="wb-session-review-mode"
+          data-wbsid={whiteboardSessionId}
+        />
+      );
+    },
+  })
+);
+
 import { WhiteboardWorkspaceClient } from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient";
+import { WhiteboardSessionShell } from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell";
 
 describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   beforeAll(() => {
@@ -327,7 +441,9 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   beforeEach(() => {
     jest.useRealTimers();
     window.scrollTo = jest.fn();
-    mockEnd.mockClear();
+    mockRouterReplace.mockClear();
+    mockRouterRefresh.mockClear();
+    mockFinalize.mockClear();
     mockUpload.mockClear();
     mockSnapshotUpload.mockClear();
     mockGenerateSnapshot.mockReset();
@@ -366,6 +482,30 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
   });
 
+  test("shows inline confirm before starting the end-session pipeline", async () => {
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-confirm"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    expect(screen.getByTestId("wb-end-session-confirm")).toBeInTheDocument();
+    expect(screen.getByText("End this session?")).toBeInTheDocument();
+    expect(mockDrainOutboxOrTimeout).not.toHaveBeenCalled();
+  });
+
   test("happy path: drains outbox, uploads events, calls atomic end action with segments, finalizes outbox", async () => {
     const segments = [
       {
@@ -395,7 +535,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockDrainOutboxOrTimeout).toHaveBeenCalledWith("ws-end-happy");
@@ -406,10 +546,13 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       );
     });
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalledWith(
+      expect(mockFinalize).toHaveBeenCalledWith(
         "ws-end-happy",
-        "https://abc.blob.vercel-storage.com/blob-events",
-        { segments }
+        {
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+          snapshotBlobUrl: undefined,
+          extraSegments: segments,
+        }
       );
     });
     await waitFor(() => {
@@ -452,7 +595,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
 
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     expect(
       await screen.findByRole("button", { name: /Finalizing/i })
@@ -470,11 +613,11 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
   });
 
-  test("'Saving N segments' copy reflects live outbox count during drain", async () => {
+  test("'Saving your recording…' copy during outbox drain (not segment count)", async () => {
     // Deferred drain so we can inspect the intermediate UI.
     let resolveDrain!: (r: DrainResult) => void;
     mockDrainOutboxOrTimeout.mockImplementation(
@@ -513,13 +656,13 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
 
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     expect(
-      await screen.findByRole("button", { name: /Saving 2 segments/i })
+      await screen.findByRole("button", { name: /Saving your recording/i })
     ).toBeInTheDocument();
 
-    // Push count down to 1; copy should update live.
+    // Count may change internally; label stays friendly (not "Saving N segments").
     act(() => {
       setObserverState({
         state: "uploading",
@@ -529,8 +672,11 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     expect(
-      await screen.findByRole("button", { name: /Saving 1 segment/i })
+      await screen.findByRole("button", { name: /Saving your recording/i })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Saving \d+ segment/i })
+    ).not.toBeInTheDocument();
 
     // Resolve drain so the rest of the flow runs.
     await act(async () => {
@@ -542,7 +688,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
   });
 
@@ -570,12 +716,13 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Couldn't finalize/i);
-    expect(alert.textContent).toMatch(/1 audio segment still saving/i);
-    expect(mockEnd).not.toHaveBeenCalled();
+    expect(alert.textContent).toMatch(/Still saving audio — your work is safe/i);
+    expect(alert.textContent).not.toMatch(/Couldn't finalize/i);
+    expect(alert.textContent).not.toMatch(/audio segment/i);
+    expect(mockFinalize).not.toHaveBeenCalled();
     expect(mockFinalizeOutboxAfterEnd).not.toHaveBeenCalled();
   });
 
@@ -632,9 +779,11 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
         },
       ];
     });
-    mockEnd.mockImplementation(async () => {
-      callLog.push("endWhiteboardSession");
+    mockFinalize.mockImplementation(async () => {
+      callLog.push("finalizeWhiteboardSessionFromBackend");
       return {
+        ok: true as const,
+        idempotent: false as const,
         endedAt: "2026-05-10T00:00:00Z",
         durationSeconds: 100,
         registeredSegments: 1,
@@ -657,15 +806,15 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
 
     // The pre-fix order would have been:
     //   ["drainOutboxOrTimeout", "assembleEndSessionSegments",
-    //    "endWhiteboardSession", "stopAndUpload:final",
+    //    "finalizeWhiteboardSessionFromBackend", "stopAndUpload:final",
     //    "flushPendingUploads"]
     // Post-fix order must be:
     expect(callLog).toEqual([
@@ -673,17 +822,18 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       "flushPendingUploads",
       "drainOutboxOrTimeout",
       "assembleEndSessionSegments",
-      "endWhiteboardSession",
+      "finalizeWhiteboardSessionFromBackend",
     ]);
 
     // Specifically the segment from the in-flight recorder lands in
     // the atomic action payload — i.e. the trailing segment is no
     // longer dropped.
-    expect(mockEnd).toHaveBeenCalledWith(
+    expect(mockFinalize).toHaveBeenCalledWith(
       "ws-end-ordering",
-      "https://abc.blob.vercel-storage.com/blob-events",
       {
-        segments: [
+        finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+        snapshotBlobUrl: undefined,
+        extraSegments: [
           {
             blobUrl: "https://abc.blob.vercel-storage.com/seg-final.webm",
             mimeType: "audio/webm",
@@ -721,17 +871,17 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
 
     expect(audioCtl.stopAndUpload).not.toHaveBeenCalled();
     expect(audioCtl.flushPendingUploads).toHaveBeenCalledTimes(1);
   });
 
-  test("snapshot wiring: generated blob is uploaded and snapshotBlobUrl is forwarded to endWhiteboardSession", async () => {
+  test("snapshot wiring: generated blob is uploaded and snapshotBlobUrl is forwarded to finalizeWhiteboardSessionFromBackend", async () => {
     // Phase 1c contract — when the snapshot pipeline succeeds, the
     // blob URL must reach the atomic end-session action so the
     // SessionRecording row can render thumbnails on the parent share
@@ -759,7 +909,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockSnapshotUpload).toHaveBeenCalledWith({
@@ -769,12 +919,12 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalledWith(
+      expect(mockFinalize).toHaveBeenCalledWith(
         "ws-end-snap",
-        "https://abc.blob.vercel-storage.com/blob-events",
         {
-          segments: [],
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
           snapshotBlobUrl: "https://abc.blob.vercel-storage.com/blob-snapshot.png",
+          extraSegments: [],
         }
       );
     });
@@ -810,13 +960,16 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalledWith(
+      expect(mockFinalize).toHaveBeenCalledWith(
         "ws-end-snap-fail",
-        "https://abc.blob.vercel-storage.com/blob-events",
-        { segments: [], snapshotBlobUrl: undefined }
+        {
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+          snapshotBlobUrl: undefined,
+          extraSegments: [],
+        }
       );
     });
   });
@@ -845,10 +998,10 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
     expect(mockSnapshotUpload).not.toHaveBeenCalled();
   });
@@ -877,11 +1030,335 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Vercel Blob 500/);
-    expect(alert.textContent).toMatch(/2 audio segments still saving/i);
-    expect(mockEnd).not.toHaveBeenCalled();
+    expect(alert.textContent).toMatch(/Still saving audio — your work is safe/i);
+    expect(alert.textContent).not.toMatch(/Vercel Blob 500/);
+    expect(alert.textContent).not.toMatch(/audio segment/i);
+    expect(mockFinalize).not.toHaveBeenCalled();
+  });
+
+  // ---- A3 in-shell mode flip (Phase A) ----------------------------------------
+
+  test("A3: onSessionEnded is called instead of router.replace when prop is provided", async () => {
+    // Contract: when the shell supplies onSessionEnded, the pipeline should
+    // call it (triggering the in-shell mode flip) and must NOT call
+    // router.replace / router.refresh. This prevents nav-away on end session.
+    const onSessionEnded = jest.fn();
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-a3-shell-flip"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+        onSessionEnded={onSessionEnded}
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await confirmFinishAndSave();
+
+    // Pipeline must still complete (atomic action called).
+    await waitFor(() => {
+      expect(mockFinalize).toHaveBeenCalledWith(
+        "ws-a3-shell-flip",
+        {
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+          snapshotBlobUrl: undefined,
+          extraSegments: [],
+        }
+      );
+    });
+
+    // onSessionEnded callback must fire.
+    await waitFor(() => {
+      expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    });
+
+    // router.replace must NOT be called when onSessionEnded is provided.
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    expect(mockRouterRefresh).not.toHaveBeenCalled();
+  });
+
+  test("A3: fallback — router.replace IS called when onSessionEnded is not provided", async () => {
+    // Legacy fallback contract: without the shell prop, the old navigation
+    // behaviour is preserved (router.replace to the review page).
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-a3-legacy-nav"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+        // onSessionEnded intentionally omitted
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await confirmFinishAndSave();
+
+    await waitFor(() => {
+      expect(mockFinalize).toHaveBeenCalled();
+    });
+
+    // Legacy path: router.replace must be called with the review href.
+    await waitFor(() => {
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/admin/students/stu-1/whiteboard/ws-a3-legacy-nav/workspace"
+      );
+    });
+    expect(mockRouterRefresh).toHaveBeenCalled();
+  });
+
+  // ---- A3 shell-integration (non-theater) tests --------------------------
+  //
+  // These tests are the INDEPENDENT ORACLE the task calls for.
+  //
+  // The theater problem: the existing A3 tests render WhiteboardWorkspaceClient
+  // directly and pass onSessionEnded explicitly. They pass whether or not the
+  // shell actually wires onSessionEnded — so they cannot catch the regression
+  // where onSessionEnded is absent and router.replace fires instead.
+  //
+  // The non-theater oracle: render WhiteboardSessionShell (the real shell that
+  // page.tsx uses). The shell creates handleSessionEnded and passes it as
+  // onSessionEnded to WhiteboardWorkspaceClient internally. After End session:
+  //   - router.replace must NOT have been called (no nav-away)
+  //   - SessionReviewMode must mount (data-testid="wb-session-review-mode")
+  //
+  // Red-before / green-after proof:
+  //   RED path  — rendering WhiteboardWorkspaceClient WITHOUT onSessionEnded
+  //               (the pre-A3 / missing-prop state): router.replace IS called
+  //               with the standalone review href. The test below FAILS on
+  //               that path because we assert router.replace is NOT called.
+  //   GREEN path — rendering via WhiteboardSessionShell: the shell wires
+  //               onSessionEnded; router.replace is NOT called; SessionReviewMode
+  //               mounts. The test PASSES.
+  //
+  // Note: the root cause of the real-browser failure was
+  // `revalidatePath(...workspace)` inside `finalizeWhiteboardSessionFromBackend` triggering an
+  // RSC replacement that clobbered the shell's mode="review" state. That
+  // server-side behavior cannot be reproduced in jsdom (server actions are
+  // fully mocked here). The fix (removing that revalidatePath call) is
+  // verified by the Vercel Preview smoke. What the DOM test CAN verify — and
+  // does — is the complete prop-wiring contract: shell → client → onSessionEnded
+  // → SessionReviewMode mounts, no router.replace.
+
+  test("A3 shell-integration: E1 oracle — shell wires onSessionEnded; SessionReviewMode mounts in-place, no router.replace", async () => {
+    // Renders the full WhiteboardSessionShell stack (the component page.tsx uses).
+    // syncEnabled=false makes WorkspaceResumeGate transparent (immediately renders
+    // children) so the End-session button is reachable without a consent step.
+    render(
+      <WhiteboardSessionShell
+        role="tutor"
+        whiteboardSessionId="ws-shell-1"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording={false}
+        syncEnabled={false}
+      />
+    );
+
+    // Wait for the live canvas to mount (WorkspaceResumeGate passed through,
+    // WhiteboardWorkspaceClient rendered).
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+
+    // Confirm no review surface yet.
+    expect(screen.queryByTestId("wb-session-review-mode")).not.toBeInTheDocument();
+
+    // Click End session.
+    await confirmFinishAndSave();
+
+    // Pipeline must complete (finalizeWhiteboardSessionFromBackend called).
+    await waitFor(() => {
+      expect(mockFinalize).toHaveBeenCalledWith(
+        "ws-shell-1",
+        {
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+          snapshotBlobUrl: undefined,
+          extraSegments: [],
+        }
+      );
+    });
+
+    // REAL REQUIREMENT — reviewed in-place:
+    // (1) SessionReviewMode must mount (mode flipped to "review").
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-session-review-mode")).toBeInTheDocument();
+    });
+    // (2) The review surface is for the correct session.
+    expect(screen.getByTestId("wb-session-review-mode")).toHaveAttribute(
+      "data-wbsid",
+      "ws-shell-1"
+    );
+    // (3) No router.replace / router.refresh navigation (URL did not change).
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    expect(mockRouterRefresh).not.toHaveBeenCalled();
+    // (4) Live canvas is gone (WhiteboardWorkspaceClient unmounted).
+    expect(screen.queryByTestId("wb-mock-excalidraw-canvas")).not.toBeInTheDocument();
+  });
+
+  test("A3 shell-integration: RED path proof — without shell (no onSessionEnded), router.replace fires and review mode does NOT mount", async () => {
+    // This test documents the PRE-FIX / missing-prop failure mode.
+    // Rendering WhiteboardWorkspaceClient directly WITHOUT onSessionEnded
+    // simulates what happens if the shell prop-wiring were broken: the legacy
+    // router.replace path fires and SessionReviewMode never mounts.
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-no-shell"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording={false}
+        // onSessionEnded intentionally omitted — simulates broken/absent wiring
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await confirmFinishAndSave();
+
+    await waitFor(() => {
+      expect(mockFinalize).toHaveBeenCalled();
+    });
+
+    // router.replace IS called (legacy nav-away fires when prop is absent).
+    await waitFor(() => {
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/admin/students/stu-1/whiteboard/ws-no-shell/workspace"
+      );
+    });
+    // SessionReviewMode does NOT mount (client-side flip never happens).
+    expect(screen.queryByTestId("wb-session-review-mode")).not.toBeInTheDocument();
+  });
+
+  test("A3: step ordering with onSessionEnded — atomic pipeline still completes before flip", async () => {
+    // Verify that even with the in-shell flip, the ordering contract
+    // (stop→flush→drain→assemble→end) is preserved and onSessionEnded
+    // fires AFTER finalizeWhiteboardSessionFromBackend completes (not before).
+    const callLog: string[] = [];
+    const onSessionEnded = jest.fn(() => {
+      callLog.push("onSessionEnded");
+    });
+    audioCtl.state = "recording";
+    audioCtl.stopAndUpload.mockImplementation((mode?: unknown) => {
+      callLog.push(`stopAndUpload:${String(mode)}`);
+    });
+    audioCtl.flushPendingUploads.mockImplementation(async () => {
+      callLog.push("flushPendingUploads");
+    });
+    mockDrainOutboxOrTimeout.mockImplementation(async () => {
+      callLog.push("drainOutboxOrTimeout");
+      return {
+        timedOut: false,
+        remainingCount: 0,
+        remainingByStream: new Map<string, number>(),
+        lastError: null,
+      };
+    });
+    mockAssembleEndSessionSegments.mockImplementation(async () => {
+      callLog.push("assembleEndSessionSegments");
+      return [];
+    });
+    mockFinalize.mockImplementation(async () => {
+      callLog.push("finalizeWhiteboardSessionFromBackend");
+      return {
+        ok: true as const,
+        idempotent: false as const,
+        endedAt: "2026-05-10T00:00:00Z",
+        durationSeconds: 100,
+        registeredSegments: 0,
+      };
+    });
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-a3-ordering"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+        onSessionEnded={onSessionEnded}
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await confirmFinishAndSave();
+
+    await waitFor(() => {
+      expect(onSessionEnded).toHaveBeenCalled();
+    });
+
+    // onSessionEnded fires AFTER finalizeWhiteboardSessionFromBackend, not before.
+    expect(callLog).toEqual([
+      "stopAndUpload:final",
+      "flushPendingUploads",
+      "drainOutboxOrTimeout",
+      "assembleEndSessionSegments",
+      "finalizeWhiteboardSessionFromBackend",
+      "onSessionEnded",
+    ]);
+  });
+
+  test("WS-C: notes trigger failure is server-side only (client end still succeeds)", async () => {
+    mockTriggerNotesGenerationAction.mockResolvedValueOnce({
+      ok: false,
+      error: "You do not own this whiteboard session",
+    });
+
+    const onSessionEnded = jest.fn();
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-notes-fail"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+        onSessionEnded={onSessionEnded}
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await confirmFinishAndSave();
+
+    await waitFor(() => {
+      expect(mockFinalize).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

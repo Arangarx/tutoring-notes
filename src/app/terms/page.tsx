@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { MarketingHeader } from "@/components/marketing/MarketingHeader";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+
 /**
  * Terms of Service — Tutoring Notes (product subordinate facade).
  *
- * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-05-17.
+ * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-05-31.
+ * Product-specific COPPA cross-reference updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
  * the CANONICAL legal source for eligibility / acceptable use /
@@ -32,12 +42,17 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <div className="container" style={{ maxWidth: 720 }}>
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Terms of Use</h1>
-        <p className="muted" style={{ fontSize: 14 }}>Last updated: May 2026</p>
-
-        <p className="muted" style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6 }}>
+    <>
+      <MarketingHeader />
+      <main id="main-content" className="px-4 py-10">
+        <div className="mx-auto w-full max-w-3xl">
+          <Card>
+            <CardHeader>
+              <CardTitle className="heading text-3xl font-normal">Terms of Use</CardTitle>
+              <p className="text-sm text-muted-foreground">Last updated: July 9, 2026</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           These terms govern your use of <strong>Tutoring Notes</strong>, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
           &ldquo;us&rdquo;) under the Mortensen Apps umbrella. They supplement the umbrella
@@ -47,11 +62,11 @@ export default function TermsPage() {
           </a>. By using the app, you agree to these terms.
         </p>
 
-        <div className="divider" style={{ margin: "20px 0" }} />
+        <Separator className="my-5" />
 
-        <section style={{ display: "grid", gap: 16 }}>
+        <section className="grid gap-4">
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>The service</h2>
+            <h2 className="heading m-0 text-lg font-normal">The service</h2>
             <p style={{ margin: "8px 0 0" }}>
               Tutoring Notes is a web application that helps tutors record session
               audio, draft notes, run a shared whiteboard, and share read-only updates
@@ -60,7 +75,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Eligibility and accounts</h2>
+            <h2 className="heading m-0 text-lg font-normal">Eligibility and accounts</h2>
             <p style={{ margin: "8px 0 0" }}>
               You must be able to form a binding contract and, where applicable, have
               permission from your organization to use the service. You are responsible
@@ -70,7 +85,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Acceptable use</h2>
+            <h2 className="heading m-0 text-lg font-normal">Acceptable use</h2>
             <p style={{ margin: "8px 0 0" }}>You agree not to:</p>
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
               <li>Use the service to violate law or third-party rights.</li>
@@ -84,7 +99,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Your content</h2>
+            <h2 className="heading m-0 text-lg font-normal">Your content</h2>
             <p style={{ margin: "8px 0 0" }}>
               You retain ownership of the notes, student information, audio recordings,
               whiteboard content, and other content you enter. By using the service,
@@ -97,7 +112,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Gmail integration</h2>
+            <h2 className="heading m-0 text-lg font-normal">Gmail integration</h2>
             <p style={{ margin: "8px 0 0" }}>
               If you connect your Gmail account, the app sends emails on your behalf
               only when you explicitly click &ldquo;Send update.&rdquo; You can disconnect
@@ -107,7 +122,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Third-party services</h2>
+            <h2 className="heading m-0 text-lg font-normal">Third-party services</h2>
             <p style={{ margin: "8px 0 0" }}>
               The service relies on third parties (for example hosting, database, object
               storage, Google OAuth, OpenAI for transcription and note generation, and
@@ -120,7 +135,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Availability and changes</h2>
+            <h2 className="heading m-0 text-lg font-normal">Availability and changes</h2>
             <p style={{ margin: "8px 0 0" }}>
               We aim to keep the service available but do not guarantee uptime.
               Features may change or be removed. We will make reasonable efforts to
@@ -130,7 +145,31 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Disclaimers</h2>
+            <h2 className="heading m-0 text-lg font-normal">Children and parental consent</h2>
+            <p style={{ margin: "8px 0 0" }}>
+              Tutoring Notes knowingly serves students who may be under 13 and is subject
+              to the Children&rsquo;s Online Privacy Protection Act (COPPA),
+              16&nbsp;CFR Part&nbsp;312. By entering a child under 13 into the platform as
+              a student, the account holder (parent or guardian) represents that they are
+              that child&rsquo;s parent or legal guardian and that they have reviewed and
+              consented to the privacy practices described in our{" "}
+              <Link href="/privacy">privacy policy</Link>, including the collection of
+              session audio recordings, transcripts, and notes.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              Parents and legal guardians retain the right to review, request deletion of,
+              and revoke consent for their child&rsquo;s personal information at any time.
+              See the <Link href="/privacy">privacy policy</Link> — specifically the{" "}
+              &ldquo;Children&rsquo;s data and parental rights (COPPA)&rdquo; section — for
+              how to exercise these rights, our retention practices, and the contact address
+              for deletion requests. Withdrawing consent stops future data collection; it
+              does not automatically delete data already collected under prior consent.
+              Deletion requests are honored upon verification.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="heading m-0 text-lg font-normal">Disclaimers</h2>
             <p style={{ margin: "8px 0 0" }}>
               The service is provided &ldquo;as is&rdquo; and &ldquo;as available.&rdquo; To the
               fullest extent permitted by law, we disclaim implied warranties of
@@ -141,7 +180,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Limitation of liability</h2>
+            <h2 className="heading m-0 text-lg font-normal">Limitation of liability</h2>
             <p style={{ margin: "8px 0 0" }}>
               To the fullest extent permitted by law, the Operator will not be liable
               for any indirect, incidental, special, consequential, or punitive damages,
@@ -154,7 +193,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Indemnity</h2>
+            <h2 className="heading m-0 text-lg font-normal">Indemnity</h2>
             <p style={{ margin: "8px 0 0" }}>
               You will defend and indemnify the Operator against claims arising from
               your misuse of the service, your content, or your violation of these
@@ -163,7 +202,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Changes</h2>
+            <h2 className="heading m-0 text-lg font-normal">Changes</h2>
             <p style={{ margin: "8px 0 0" }}>
               We may modify these terms or discontinue features. We will post the
               updated terms on this site with a new &ldquo;Last updated&rdquo; date. Material
@@ -173,7 +212,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Governing law</h2>
+            <h2 className="heading m-0 text-lg font-normal">Governing law</h2>
             <p style={{ margin: "8px 0 0" }}>
               These terms are governed by the laws of the United States, without regard
               to conflict-of-law rules, except where mandatory local consumer protection
@@ -182,7 +221,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Contact</h2>
+            <h2 className="heading m-0 text-lg font-normal">Contact</h2>
             <p style={{ margin: "8px 0 0" }}>
               Questions about these terms specific to Tutoring Notes? Email{" "}
               <a href="mailto:arangarx+tutoringnotes@gmail.com">arangarx+tutoringnotes@gmail.com</a>.
@@ -194,15 +233,18 @@ export default function TermsPage() {
           </div>
         </section>
 
-        <div className="divider" style={{ margin: "20px 0" }} />
+        <Separator className="my-5" />
 
-        <p className="muted" style={{ fontSize: 13 }}>
+        <p className="text-[13px] text-muted-foreground">
           <Link href="/">Home</Link> · <Link href="/privacy">Privacy</Link> ·{" "}
           <a href="https://www.mortensenapps.com/terms" target="_blank" rel="noreferrer">
             Umbrella terms of service
           </a>
         </p>
-      </div>
-    </div>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </>
   );
 }

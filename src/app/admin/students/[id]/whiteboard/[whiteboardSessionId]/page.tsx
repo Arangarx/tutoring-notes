@@ -1,19 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth-options";
 import { db, withDbRetry } from "@/lib/db";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
-import WhiteboardNotesPanel from "@/components/whiteboard/WhiteboardNotesPanel";
-import { env } from "@/lib/env";
+import TutorNotesSection from "@/components/whiteboard/TutorNotesSection";
+import { SessionCostPanel } from "@/components/admin/SessionCostPanel";
+import { getSessionCostBreakdown } from "@/lib/observability/cost-queries";
+import { loadTutorNoteForReview } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
 
 export const dynamic = "force-dynamic";
 
 /**
- * generateNotesFromWhiteboardSessionAction (called from WhiteboardNotesPanel)
- * runs the same Whisper + LLM pipeline as the student detail page, so it
- * inherits the same multi-minute worst-case budget. See the budget
- * breakdown comment in /admin/students/[id]/page.tsx.
+ * 300s budget (Vercel Pro ceiling) — consistent with workspace page.
+ * Required because deleteWhiteboardSessionAndDataAction runs a cascade
+ * transaction that can touch many TranscriptChunk / recording rows, and
+ * must complete within the route's maxDuration window.
+ * Documented in docs/PLATFORM-ASSUMPTIONS.md §1.1.
  */
 export const maxDuration = 300;
 
@@ -96,6 +103,8 @@ export default async function WhiteboardReviewPage({
     notFound();
   }
 
+  await assertStudentNotErased(session.studentId);
+
   // Fetch display columns.
   const detail = await withDbRetry(
     () =>
@@ -109,10 +118,17 @@ export default async function WhiteboardReviewPage({
           noteId: true,
           eventsSchemaVersion: true,
           snapshotBlobUrl: true,
+          concatBlobUrl: true,
+          concatDurationSeconds: true,
           student: { select: { id: true, name: true } },
           audioRecordings: {
-            select: { id: true, mimeType: true, durationSeconds: true },
-            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              mimeType: true,
+              durationSeconds: true,
+              orderIndex: true,
+            },
+            orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
           },
         },
       }),
@@ -120,21 +136,85 @@ export default async function WhiteboardReviewPage({
   );
   if (!detail) notFound();
 
+  // Ended sessions use in-shell SessionReviewMode + WhiteboardReplayInFrame.
+  if (detail.endedAt) {
+    redirect(
+      `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace?surface=replay`
+    );
+  }
+
   const eventsApiUrl = `/api/whiteboard/${whiteboardSessionId}/events`;
   const snapshotApiUrl = `/api/whiteboard/${whiteboardSessionId}/snapshot`;
-  // Audio is served via the existing admin audio proxy.
-  const firstAudio = detail.audioRecordings[0] ?? null;
-  const audioApiUrl = firstAudio
-    ? `/api/audio/admin/${firstAudio.id}`
-    : null;
+  const replayAudio = buildReplayAudioPayload({
+    whiteboardSessionId,
+    concatBlobUrl: detail.concatBlobUrl,
+    concatDurationSeconds: detail.concatDurationSeconds,
+    audioRecordings: detail.audioRecordings,
+    audience: "admin",
+  });
+  const audioSegments = replayAudio.audioSegments;
 
   const sessionLabel = `Recording of ${detail.student.name} — ${formatDate(detail.startedAt)}`;
-  const durationLabel = detail.durationSeconds
-    ? formatDuration(detail.durationSeconds)
-    : null;
+  const recordingDurationSeconds = replayAudio.canonicalDurationSeconds
+    ? replayAudio.canonicalDurationSeconds
+    : detail.audioRecordings.reduce((sum, rec) => sum + (rec.durationSeconds ?? 0), 0);
+  const durationLabel =
+    recordingDurationSeconds > 0
+      ? formatDuration(recordingDurationSeconds)
+      : detail.durationSeconds
+        ? formatDuration(detail.durationSeconds)
+        : null;
 
   const isLive = !detail.endedAt;
-  const aiEnabled = Boolean(env.OPENAI_API_KEY);
+
+  // Load TutorNote for auto-notes section (ownership already asserted above).
+  const tutorNote = !isLive
+    ? await loadTutorNoteForReview(whiteboardSessionId)
+    : null;
+
+  const initialNote = tutorNote
+    ? {
+        found: true as const,
+        status: tutorNote.status,
+        content: tutorNote.content ?? null,
+        isPartial: tutorNote.isPartial,
+        error: tutorNote.error ?? null,
+        generatedAt: tutorNote.generatedAt?.toISOString() ?? null,
+      }
+    : { found: false as const };
+
+  // Fetch the linked SessionNote status (if any) to gate the "View attached note"
+  // link — only show for READY/SENT notes (not DRAFT which is the review-page subject).
+  const linkedNoteStatus =
+    detail.noteId
+      ? await withDbRetry(
+          () =>
+            db.sessionNote.findUnique({
+              where: { id: detail.noteId! },
+              select: { status: true },
+            }),
+          { label: "wbReview.page.noteStatus" }
+        ).then((n) => n?.status ?? null)
+      : null;
+
+  // Cost panel visibility gate — must NOT be shown to real non-test tutors (Sarah).
+  // Show only when the viewer is:
+  //   (a) an ADMIN-role account (Andrew, the operator) — not impersonating
+  //   (b) an admin actively impersonating a test account (Andrew testing as Sarah)
+  //   (c) a test-marked account (isTestAccount=true — QA accounts)
+  // A real TUTOR-role account with isTestAccount=false must never see API costs.
+  // Note: we include role==="ADMIN" so Andrew can always see his own session costs
+  // without needing to impersonate — this is a judgment call, flagged in the
+  // smoke report.
+  const viewerSession = await getServerSession(authOptions);
+  const showCostPanel =
+    viewerSession?.user?.role === "ADMIN" ||
+    viewerSession?.user?.isImpersonating === true ||
+    viewerSession?.user?.isTestAccount === true;
+
+  const sessionCost = !isLive && showCostPanel
+    ? await getSessionCostBreakdown(whiteboardSessionId)
+    : null;
 
   return (
     <div className="container" style={{ maxWidth: 1280 }}>
@@ -187,7 +267,7 @@ export default async function WhiteboardReviewPage({
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          {detail.noteId && (
+          {detail.noteId && linkedNoteStatus && linkedNoteStatus !== "DRAFT" && (
             <Link
               href={`/admin/students/${studentId}/notes`}
               className="btn"
@@ -227,26 +307,41 @@ export default async function WhiteboardReviewPage({
       {/* Replay */}
       <WhiteboardReplay
         eventsBlobUrl={eventsApiUrl}
-        audioBlobUrl={audioApiUrl}
-        audioMimeType={firstAudio?.mimeType ?? null}
+        audioSegments={audioSegments}
+        canonicalAudioBlobUrl={replayAudio.canonicalAudioBlobUrl}
+        canonicalAudioMimeType={replayAudio.canonicalAudioMimeType}
+        canonicalDurationSeconds={replayAudio.canonicalDurationSeconds}
         snapshotBlobUrl={detail.snapshotBlobUrl ? snapshotApiUrl : null}
         title={sessionLabel}
         whiteboardSessionId={whiteboardSessionId}
       />
 
-      {/* AI wedge: generate notes from this whiteboard session */}
+      {/* Auto-generated session notes (slice 3 — no manual button required) */}
       {!isLive && (
         <div style={{ marginTop: 16 }}>
-          <WhiteboardNotesPanel
+          <TutorNotesSection
             whiteboardSessionId={whiteboardSessionId}
             studentId={studentId}
-            sessionDate={detail.startedAt.toISOString().slice(0, 10)}
-            attachedNoteId={detail.noteId ?? null}
-            aiEnabled={aiEnabled}
+            initialNote={initialNote}
             hasAudio={detail.audioRecordings.length > 0}
           />
         </div>
       )}
+
+      {sessionCost ? (
+        <SessionCostPanel
+          whisperMinutes={sessionCost.whisperMinutes}
+          whisperUsd={sessionCost.whisperUsd}
+          gptInputTokens={sessionCost.gptInputTokens}
+          gptOutputTokens={sessionCost.gptOutputTokens}
+          gptUsd={sessionCost.gptUsd}
+          blobEgressBytes={sessionCost.blobEgressBytes}
+          blobEgressUsd={sessionCost.blobEgressUsd}
+          blobStorageUsd={sessionCost.blobStorageUsd}
+          computeUsd={sessionCost.computeUsd}
+          totalUsd={sessionCost.totalUsd}
+        />
+      ) : null}
 
       {/* Footer meta */}
       <div
@@ -255,12 +350,6 @@ export default async function WhiteboardReviewPage({
       >
         wbsid={whiteboardSessionId.slice(0, 8)} · schema v
         {detail.eventsSchemaVersion}
-        {detail.audioRecordings.length > 1 && (
-          <>
-            {" · "}
-            {detail.audioRecordings.length} audio segments (first shown)
-          </>
-        )}
       </div>
     </div>
   );

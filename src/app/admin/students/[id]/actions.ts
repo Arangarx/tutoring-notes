@@ -7,7 +7,7 @@ import { db, withDbRetry, isTransientDbConnectionError } from "@/lib/db";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { sendMail } from "@/lib/email";
 import { generateShareToken, parseLinksFromTextarea } from "@/lib/security";
-import { assertOwnsStudent, getStudentScope, requireStudentScope } from "@/lib/student-scope";
+import { assertOwnsMutableStudent, assertOwnsStudent, getStudentScope, requireStudentScope } from "@/lib/student-scope";
 import { generateSessionNote, estimateTokens, MAX_INPUT_TOKENS } from "@/lib/ai";
 import { parseDateOnlyInput } from "@/lib/date-only";
 import { mapWithConcurrency, transcribeAudio } from "@/lib/transcribe";
@@ -21,6 +21,7 @@ import {
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
 const HALLUCINATION_MIC_MESSAGE =
   "We couldn't detect clear speech in this recording. Whisper sometimes invents text when the mic picks up silence or the wrong device. Check the browser's microphone permission, choose the correct input, speak for at least 15–20 seconds, then try again. You can also use Upload and pick a file from another recorder.";
@@ -62,7 +63,7 @@ async function resolveTutorDisplayName(): Promise<{ signer: string; fromDisplayN
 }
 
 export async function regenerateShareLink(studentId: string) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   await db.shareLink.updateMany({
     where: { studentId, revokedAt: null },
     data: { revokedAt: new Date() },
@@ -76,7 +77,7 @@ export async function regenerateShareLink(studentId: string) {
 }
 
 export async function revokeShareLink(studentId: string) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   await db.shareLink.updateMany({
     where: { studentId, revokedAt: null },
     data: { revokedAt: new Date() },
@@ -89,7 +90,7 @@ export async function createNote(
   studentId: string,
   formData: FormData
 ): Promise<{ id: string }> {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const dateStr = String(formData.get("date") ?? "");
   const date = parseDateOnlyInput(dateStr);
   if (!date) throw new Error("Invalid date");
@@ -249,9 +250,14 @@ export async function generateNoteFromTextAction(
   studentId: string,
   sessionText: string
 ): Promise<GenerateNoteResult> {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const scope = await getStudentScope();
   const adminUserId = scope.kind === "admin" ? scope.adminId : null;
+
+  // B1 cost gate: WAITLISTED tutors cannot use AI note generation (OpenAI spend).
+  if (adminUserId) {
+    await assertTutorApproved(adminUserId);
+  }
 
   const trimmed = sessionText.trim();
   if (!trimmed) return { ok: false, error: "Please enter some session text first." };
@@ -386,7 +392,10 @@ async function _transcribeAndGenerateImpl(
     return transcribeFail(rid, "Audio features require a DB-backed tutor account.");
   }
   const tutorAdminId = scope.adminId;
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
+
+  // B1 cost gate: WAITLISTED tutors cannot run transcription (Whisper + OpenAI spend).
+  await assertTutorApproved(tutorAdminId);
 
   if (recordings.length === 0) {
     return transcribeFail(rid, "No recordings provided.");
@@ -783,7 +792,7 @@ async function _transcribeAndGenerateImpl(
 
 
 export async function setNoteStatus(noteId: string, studentId: string, status: "DRAFT" | "READY") {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const row = await db.sessionNote.findFirst({ where: { id: noteId, studentId } });
   if (!row) return;
   await db.sessionNote.update({ where: { id: noteId }, data: { status } });
@@ -791,7 +800,7 @@ export async function setNoteStatus(noteId: string, studentId: string, status: "
 }
 
 export async function renameStudent(studentId: string, formData: FormData) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required");
   await db.student.update({ where: { id: studentId }, data: { name } });
@@ -804,35 +813,8 @@ export async function deleteStudent(studentId: string) {
   revalidatePath("/admin/students");
 }
 
-/**
- * Persist the per-student default for the whiteboard "Start recording"
- * toggle. Sarah's pilot ask (Apr 2026): some students decline being
- * recorded, so the workspace toggle should remember that across
- * sessions. The tutor can still flip the toggle per session — this
- * just biases the initial value.
- *
- * Trust posture mirrors `renameStudent`:
- *   - `assertOwnsStudent` is the multi-tenant gate.
- *   - We don't touch any session-in-progress state; the workspace
- *     reads this on its NEXT mount, not retroactively. That's
- *     intentional — flipping the default mid-session must NOT silently
- *     stop recording for the active session (the tutor would be
- *     mid-lesson and not expect that).
- */
-export async function setStudentRecordingDefault(
-  studentId: string,
-  enabled: boolean
-): Promise<void> {
-  await assertOwnsStudent(studentId);
-  await db.student.update({
-    where: { id: studentId },
-    data: { recordingDefaultEnabled: enabled },
-  });
-  revalidatePath(`/admin/students/${studentId}`);
-}
-
 export async function updateNote(noteId: string, studentId: string, formData: FormData) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const existing = await db.sessionNote.findFirst({ where: { id: noteId, studentId } });
   if (!existing) return;
   const dateStr = String(formData.get("date") ?? "");
@@ -861,10 +843,83 @@ export async function updateNote(noteId: string, studentId: string, formData: Fo
 }
 
 export async function deleteNote(noteId: string, studentId: string) {
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const existing = await db.sessionNote.findFirst({ where: { id: noteId, studentId } });
   if (!existing) return;
   await db.sessionNote.delete({ where: { id: noteId } });
+  revalidatePath(`/admin/students/${studentId}`);
+}
+
+/**
+ * IAC-13: Tutor-side disconnect — severs this Student's link to its LearnerProfile.
+ *
+ * Security invariants:
+ *   - assertOwnsStudent runs first; tutor cannot disconnect a student they don't own (IDOR guard).
+ *   - updateMany WHERE guard (id + learnerProfileId) prevents racing a concurrent re-claim.
+ *   - Only THIS Student.learnerProfileId is nulled — the LearnerProfile row is untouched,
+ *     so other tutors' Student rows linked to the same profile are provably unaffected (IAC-2).
+ *   - LearnerDeviceSession rows are NOT touched; device sessions are profile-level and shared
+ *     across tutors. Revoking them globally would be a denial-of-service against multi-tutor learners.
+ *   - Pending claim invites are revoked atomically to prevent a stale link from immediately
+ *     re-connecting the wrong party after disconnect.
+ *   - Audit trail: structured [dsc] log line on every successful disconnect.
+ *     NOTE: No StudentDisconnectLog DB table — schema migration is locked by another in-flight
+ *     feature. Log-only audit until the migration lock is released (design doc §3 Delta 1 deferred).
+ */
+export async function disconnectLearnerProfile(studentId: string): Promise<void> {
+  const scope = await requireStudentScope();
+  const adminUserId = scope.kind === "admin" ? scope.adminId : null;
+
+  // Ownership gate — throws notFound if this tutor does not own the student.
+  await assertOwnsStudent(studentId);
+
+  const now = new Date();
+
+  await db.$transaction(async (tx) => {
+    // Step 1 — capture pre-disconnect state (needed for WHERE guard + audit log)
+    const student = await tx.student.findUnique({
+      where: { id: studentId },
+      select: {
+        learnerProfileId: true,
+        learnerProfile: {
+          select: { accountHolderId: true },
+        },
+      },
+    });
+
+    if (!student?.learnerProfileId) return; // already disconnected — idempotent
+
+    const { learnerProfileId } = student;
+    const accountHolderId = student.learnerProfile?.accountHolderId ?? null;
+
+    // Step 2 — null Student.learnerProfileId with WHERE guard.
+    // The guard (id AND learnerProfileId = <known>) prevents this disconnect from
+    // silently nulling a DIFFERENT profile that was re-claimed between our read and write.
+    const updated = await tx.student.updateMany({
+      where: { id: studentId, learnerProfileId },
+      data: { learnerProfileId: null },
+    });
+    if (updated.count === 0) return; // concurrent disconnect or re-claim won — idempotent
+
+    // Step 3 — revoke all pending (unclaimed, unexpired) invites.
+    // Historical completed invite records (claimedAt non-null) are intentionally preserved
+    // as business records per the tombstone principle.
+    await tx.studentClaimInvite.updateMany({
+      where: {
+        studentId,
+        claimedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { revokedAt: now },
+    });
+
+    // Step 4 — structured audit log (log-only; DB table deferred — see JSDoc above).
+    console.log(
+      `[dsc] action=tutor_disconnect_parent studentId=${studentId} adminUserId=${adminUserId ?? "env"} learnerProfileId=${learnerProfileId} accountHolderId=${accountHolderId ?? "unknown"}`
+    );
+  });
+
   revalidatePath(`/admin/students/${studentId}`);
 }
 
@@ -881,7 +936,7 @@ export async function sendUpdateEmail(
   formData: FormData
 ): Promise<SendUpdateResult> {
   const studentId = String(formData.get("studentId") ?? "").trim();
-  await assertOwnsStudent(studentId);
+  await assertOwnsMutableStudent(studentId);
   const toEmail = String(formData.get("toEmail") ?? "").trim();
   if (!studentId || !toEmail) return { ok: false, sent: false, error: "Student and email required" };
 
@@ -899,9 +954,12 @@ export async function sendUpdateEmail(
   const student = await db.student.findUniqueOrThrow({ where: { id: studentId } });
   const { signer, fromDisplayName } = await resolveTutorDisplayName();
 
-  const noteCount = await db.sessionNote.count({ where: { studentId } });
+  // Exclude DRAFT auto-notes: parents must never see unreviewed auto-generated content.
+  const noteCount = await db.sessionNote.count({
+    where: { studentId, status: { not: "DRAFT" } },
+  });
   const latestNote = await db.sessionNote.findFirst({
-    where: { studentId },
+    where: { studentId, status: { not: "DRAFT" } },
     orderBy: { date: "desc" },
   });
 
@@ -916,7 +974,7 @@ export async function sendUpdateEmail(
   const bodyText = `Hi,
 
 ${signer} has posted ${noteCountLabel} for ${student.name}.${recentPreview}
-The link below shows all notes, homework, assessment, and the plan for next time. It works on any device and does not require a login:
+Log in to see the notes, homework, assessment, and the plan for next time:
 ${linkUrl}
 
 ${noteCount > 1 ? `This email shows only the most recent session. Open the link to see all ${noteCount} notes.` : "Open the link to see the full note with homework, assessment, and the plan for next time."}
@@ -952,8 +1010,9 @@ ${noteCount > 1 ? `This email shows only the most recent session. Open the link 
     data: { parentEmail: toEmail },
   });
 
+  // Only flip READY → SENT; DRAFT auto-notes must never be marked SENT.
   await db.sessionNote.updateMany({
-    where: { studentId, status: { in: ["READY", "DRAFT"] } },
+    where: { studentId, status: "READY" },
     data: { status: "SENT", sentAt: new Date() },
   });
 
