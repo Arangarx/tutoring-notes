@@ -19,6 +19,11 @@ jest.mock("@/lib/observability/cost-events", () => ({
   logBlobEgressEvent: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock("@/lib/env", () => ({
+  __esModule: true,
+  env: { BLOB_READ_WRITE_TOKEN: "test_blob_rw_token" },
+}));
+
 jest.mock("next/navigation", () => ({
   __esModule: true,
   notFound: jest.fn(() => {
