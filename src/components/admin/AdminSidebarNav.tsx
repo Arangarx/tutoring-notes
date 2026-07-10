@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MARKETING_HOME_HREF } from "@/lib/marketing-routes";
 import type { AdminSessionMode } from "@/lib/admin-routing";
+import { adminSidebarNavLinkOpts, buildAdminNavLinks } from "@/lib/admin-nav-links";
 
 export type AdminSidebarNavProps = {
   showOperatorLinks?: boolean;
@@ -21,30 +22,6 @@ export type AdminSidebarNavProps = {
   userEmail?: string;
   userDisplayName?: string | null;
 };
-
-function buildNavLinks(props: AdminSidebarNavProps) {
-  const tutorLinks = [
-    { href: "/admin/students", label: "Students" },
-    { href: "/admin/schedule", label: "Schedule" },
-    { href: "/admin/outbox", label: "Outbox" },
-  ];
-  return [
-    ...(props.sessionMode === "real-admin-home"
-      ? [{ href: "/admin", label: "Dashboard" } as const]
-      : []),
-    ...(props.sessionMode === "tutor-experience" ? tutorLinks : []),
-    ...(props.showOperatorLinks
-      ? [
-          { href: "/admin/feedback", label: "Feedback inbox" } as const,
-          { href: "/admin/tutor-approvals", label: "Tutor approvals" } as const,
-        ]
-      : []),
-    ...(props.showCostDashboard ? [{ href: "/admin/cost", label: "Cost" } as const] : []),
-    ...(props.showCostDashboard ? [{ href: "/admin/erasure", label: "Erasure" } as const] : []),
-    { href: "/admin/settings", label: "Settings" },
-    ...(props.showDevTools ? [{ href: "/admin/dev-tools", label: "Dev tools" } as const] : []),
-  ];
-}
 
 function isNavActive(pathname: string, href: string) {
   if (href === "/admin") return pathname === "/admin";
@@ -61,13 +38,14 @@ export function AdminSidebarNav({
   userDisplayName,
 }: AdminSidebarNavProps) {
   const pathname = usePathname();
-  const links = buildNavLinks({
-    showOperatorLinks,
-    showCostDashboard,
-    sessionMode,
-    isImpersonating,
-    showDevTools,
-  });
+  const links = buildAdminNavLinks(
+    adminSidebarNavLinkOpts({
+      showOperatorLinks,
+      showCostDashboard,
+      sessionMode,
+      showDevTools,
+    })
+  );
 
   const displayName = userDisplayName?.trim() || userEmail.split("@")[0] || "Tutor";
   const initials = displayName
