@@ -12,36 +12,13 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MARKETING_HOME_HREF } from "@/lib/marketing-routes";
-import type { AdminSessionMode } from "@/lib/admin-routing";
 import type { AdminSidebarNavProps } from "@/components/admin/AdminSidebarNav";
+import { adminNavLinkOpts, buildAdminNavLinks } from "@/lib/admin-nav-links";
 
 type AdminNavProps = AdminSidebarNavProps & {
   /** `mobile` = compact top bar (desktop uses sidebar). Omit for legacy full nav. */
   layout?: "mobile" | "full";
 };
-
-function buildNavLinks(props: AdminSidebarNavProps) {
-  const tutorLinks = [
-    { href: "/admin/students", label: "Students" },
-    { href: "/admin/schedule", label: "Schedule" },
-    { href: "/admin/outbox", label: "Outbox" },
-  ];
-  return [
-    { href: "/admin", label: "Dashboard" },
-    ...(props.sessionMode === "tutor-experience" ? tutorLinks : []),
-    ...(props.showOperatorLinks
-      ? [
-          { href: "/admin/feedback", label: "Feedback inbox" } as const,
-          { href: "/admin/tutor-approvals", label: "Tutor approvals" } as const,
-        ]
-      : []),
-    ...(props.showCostDashboard ? [{ href: "/admin/cost", label: "Cost" } as const] : []),
-    ...(props.showCostDashboard ? [{ href: "/admin/erasure", label: "Erasure" } as const] : []),
-    { href: "/feedback", label: "Send feedback" },
-    { href: "/admin/settings", label: "Settings" },
-    ...(props.showDevTools ? [{ href: "/admin/dev-tools", label: "Dev tools" } as const] : []),
-  ];
-}
 
 export function AdminNav({
   showOperatorLinks = false,
@@ -51,13 +28,14 @@ export function AdminNav({
   showDevTools = false,
   layout = "full",
 }: AdminNavProps) {
-  const adminLinks = buildNavLinks({
-    showOperatorLinks,
-    showCostDashboard,
-    sessionMode,
-    isImpersonating,
-    showDevTools,
-  });
+  const adminLinks = buildAdminNavLinks(
+    adminNavLinkOpts({
+      showOperatorLinks,
+      showCostDashboard,
+      sessionMode,
+      showDevTools,
+    })
+  );
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLElement>(null);
