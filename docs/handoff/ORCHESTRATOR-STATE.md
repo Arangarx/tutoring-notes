@@ -8,15 +8,17 @@
 
 ## HEAD
 
-**🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
+**🚀 MASTER CUT (2026-07-09 ~22:39 MT) — Andrew EXPLICIT WAIVE of red `test:wb-sync` for Sarah delivery.** Redesign → master so Sarah sees the new product. Post-cut: cleanup REAL-FAILs + known UX (PDF placeholders, device-loading, reopen-at-0).
 
-**Tip:** `v1-redesign` — Pause-copy correction in flight (`fix/replay-pause-copy-review-vs-share`).
+**Tip:** `v1-redesign` @ `1c07b5ba` (+ waive docs) → merging to `master`.
 
-**Last action:** Andrew corrected Pause copy over-apply (review must stay “Pause and hide replay”). Also: reopen-at-0 non-blocking; cancel→new link PASS; parent replay new surface but PDF placeholders.
+**Last action:** Andrew waived red wb-sync; documenting durable knowns then `merge --no-ff` to master.
 
-**In-flight:** merge Pause-copy fix.
+**In-flight:** master merge.
 
-**Next action(s):** land Pause-copy → triage wb-sync REAL-FAILs / PDF placeholders. No master cut until wb-sync green (or Andrew waives).
+**Next action(s):** After push — post-cut cleanup queue (wb-sync REAL-FAILs triage, WB-REPLAY-PDF-PLACEHOLDER, WB-WTR-DEVICE-LOADING). Heavy ORCHESTRATOR-STATE restructure after merge.
+
+**Waive record:** see BACKLOG **MASTER-CUT-2026-07-09**. Green: `next build` + `test:regression`. Red: 9 REAL-FAIL / 2 ENV-FLAKE (listed in BACKLOG). Product waived: reopen-at-0, share PDF placeholders, device-loading spinner.
 
 **Evening smoke final:**
 | Item | Result |
@@ -24,8 +26,11 @@
 | Admin icons | PASS |
 | PDF stroke bleed E5 | Did not repro (watch) |
 | Blob token / camOn | Watch |
-| AUDIO-1 #3 | FAIL — unrecoverable ~5.8s |
-| AUDIO-1 #4 | **PASS** — video+audio armed; long cold wait → **WB-WTR-DEVICE-LOADING** |
+| AUDIO-1 #4 | PASS |
+| Cancel → new join link | PASS |
+| Parent new replay | PASS (PDF placeholders) |
+| Review Pause and hide | Restored `1c07b5ba` |
+| Reopen-at-0 | Known / waived |
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
