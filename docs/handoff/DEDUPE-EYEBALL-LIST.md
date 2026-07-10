@@ -62,12 +62,10 @@ Admin / account / student / share shells.
 - [ ] Student shell _(if touched)_
 - [ ] Share shell _(if touched)_
 
-### SubNav
+### SubNav _(merged `f59a1ead`)_
 
-Settings + account child nav.
-
-- [ ] Settings sub-nav
-- [ ] Account child nav
+- [ ] Settings — `/admin/settings/profile` (any sub-page): vertical left rail, active pill, all links incl. Known issues
+- [ ] Account child — `/account/children/<id>` (+ notes/devices/consent): horizontal tabs, active underline, no stray vertical scrollbar
 
 ### consent-write
 
