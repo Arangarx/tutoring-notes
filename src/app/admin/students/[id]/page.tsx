@@ -19,15 +19,12 @@ import { getRequestBaseUrl } from "@/lib/public-url";
 import { Button } from "@/components/ui/button";
 import { ClaimInviteSection } from "./ClaimInviteSection";
 import { ConnectedParentSection, type ConnectedParent } from "./ConnectedParentSection";
-import {
-  StudentDetailShell,
-  defaultIcons,
-} from "@/components/admin/StudentDetailShell";
+import { StudentDetailShell } from "@/components/admin/StudentDetailShell";
 import { StudentErasurePendingBanner } from "@/components/admin/StudentErasureStatus";
 import { StudentOverflowActions } from "@/components/admin/StudentOverflowActions";
 import { deriveStudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
 import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
-import { Users } from "lucide-react";
+import { FileText, LayoutGrid, Link2, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -335,21 +332,21 @@ export default async function StudentDetailPage({
       id: "session",
       label: "Whiteboard",
       mobileLabel: "Session",
-      icon: defaultIcons.session,
+      icon: <LayoutGrid className="size-5" aria-hidden />,
       content: sessionSection,
     },
     {
       id: "share",
       label: "Share link",
       mobileLabel: "Share",
-      icon: defaultIcons.share,
+      icon: <Link2 className="size-5" aria-hidden />,
       content: shareSection,
     },
     {
       id: "notes",
       label: "Notes & email",
       mobileLabel: "Notes",
-      icon: defaultIcons.notes,
+      icon: <FileText className="size-5" aria-hidden />,
       content: notesSection,
       badge: noteCount > 0 ? noteCount : undefined,
     },
