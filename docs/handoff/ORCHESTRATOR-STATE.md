@@ -10,17 +10,16 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `bed79060` — **✅ PDF blob-token retry MERGED** ([PDF blob](ed9dda2f-64ce-45c5-9d82-8e11eaad04b2) → `d9026cc3`).
+**Tip:** `v1-redesign` @ `a97722df` — PDF blob-token + **admin icons/Pause copy** merged.
 
-**Last action:** Merged `fix/wb-pdf-blob-token-retry`.
+**Last action:** Merged `fix/admin-icons-pause-copy` (`75125d80`).
 
 **In-flight subagents:**
-- [icons + Pause copy](2551b14b-dc51-4b90-88d8-3f16be3e921c) Composer
 - [bleed E4 residual](00064894-4e81-46fa-ad64-ee7693de8801) Sonnet — ONE attempt
 - [AUDIO-1 cancel→refresh](f04a71df-0441-48a6-9ab6-ba08a6d30cbb) Sonnet — ONE attempt
 - [camOn acquire gate](d11ae23d-1805-4b5c-a40f-4a6869ad57ba) Sonnet — premature camOn:false latch
 
-**Next action(s):** land remaining → merge train → full master gates.
+**Next action(s):** land remaining 3 → full master gates.
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
