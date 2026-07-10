@@ -8,17 +8,17 @@
 
 ## HEAD
 
-**🚀 MASTER CUT (2026-07-09 ~22:39 MT) — Andrew EXPLICIT WAIVE of red `test:wb-sync` for Sarah delivery.** Redesign → master so Sarah sees the new product. Post-cut: cleanup REAL-FAILs + known UX (PDF placeholders, device-loading, reopen-at-0).
+**🚀 MASTER CUT COMPLETE (2026-07-09) — Sarah delivery on `master` @ [`bb5c876e`](https://github.com/Arangarx/tutoring-notes/commit/bb5c876e).** Andrew EXPLICIT WAIVE of red `test:wb-sync`. Redesign is now what Sarah sees.
 
-**Tip:** `v1-redesign` @ `1c07b5ba` (+ waive docs) → merging to `master`.
+**Tip:** `master` @ `bb5c876e` (= `v1-redesign` @ `65814c0e` + merge).
 
-**Last action:** Andrew waived red wb-sync; documenting durable knowns then `merge --no-ff` to master.
+**Last action:** `merge --no-ff v1-redesign` → `master` + push.
 
-**In-flight:** master merge.
+**In-flight:** none.
 
-**Next action(s):** After push — post-cut cleanup queue (wb-sync REAL-FAILs triage, WB-REPLAY-PDF-PLACEHOLDER, WB-WTR-DEVICE-LOADING). Heavy ORCHESTRATOR-STATE restructure after merge.
+**Next action(s):** Post-cut cleanup queue — triage MASTER-CUT REAL-FAILs; WB-REPLAY-PDF-PLACEHOLDER; WB-WTR-DEVICE-LOADING; reopen-at-0 when convenient. Heavy ORCHESTRATOR-STATE restructure recommended (Composer from template).
 
-**Waive record:** see BACKLOG **MASTER-CUT-2026-07-09**. Green: `next build` + `test:regression`. Red: 9 REAL-FAIL / 2 ENV-FLAKE (listed in BACKLOG). Product waived: reopen-at-0, share PDF placeholders, device-loading spinner.
+**Waive record:** BACKLOG **MASTER-CUT-2026-07-09**. Green at cut: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE. Product knowns: reopen-at-0, share PDF placeholders, device-loading spinner.
 
 **Evening smoke final:**
 | Item | Result |
