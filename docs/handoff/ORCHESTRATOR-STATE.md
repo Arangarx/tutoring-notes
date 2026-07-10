@@ -10,22 +10,22 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `3468262d` — AUDIO-1 attempt #4 merged (`ad7bf4bd`).
+**Tip:** `v1-redesign` @ `6f7109a7` — AUDIO-1 attempt #4 **HARDWARE PASS** (Andrew).
 
-**Last action:** Merged `fix/smoke-audio-1-attempt4-mutex-swap` → `v1-redesign`.
+**Last action:** Andrew confirmed #4 arms video+audio; filed **WB-WTR-DEVICE-LOADING** (long cold settle / empty cam picker).
 
-**In-flight:** none (awaiting Andrew Brio re-smoke).
+**In-flight:** none.
 
-**Next action(s):** Andrew cancel→refresh Brio smoke. Filter `silent_track` for `userPickedSlot=true` / recovered vs unrecoverable. **No master cut while AUDIO-1 fails on Brio.** If #4 fails → product mitigation (explicit re-arm), not another backoff.
+**Next action(s):** Master-cut path unblocked on AUDIO-1 for Brio (still need full `test:wb-sync` + `test:regression` + `next build` before master). Optional: ship loading-devices affordance when convenient. Watch bleed/blob/camOn.
 
-**Evening smoke + #3 fail / #4 shipped:**
+**Evening smoke final:**
 | Item | Result |
 |------|--------|
 | Admin icons | PASS |
 | PDF stroke bleed E5 | Did not repro (watch) |
 | Blob token / camOn | Watch |
-| AUDIO-1 #3 | FAIL — unrecoverable ~5.8s / 3 slots |
-| AUDIO-1 #4 | Shipped — needs hardware re-smoke |
+| AUDIO-1 #3 | FAIL — unrecoverable ~5.8s |
+| AUDIO-1 #4 | **PASS** — video+audio armed; long cold wait → **WB-WTR-DEVICE-LOADING** |
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
