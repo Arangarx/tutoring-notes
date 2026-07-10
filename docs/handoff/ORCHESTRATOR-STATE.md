@@ -43,7 +43,7 @@
 
 **agenticPipeline:** Phase 1 (change-run + fail-closed verify) **greenlit** — can start in `agenticPipeline` repo. Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** Wave B grind — **SectionCard first** (executor → independent verifier → merge); Andrew runs Google Console checklist (Andrew-owned); agenticPipeline Phase 1 can start in parallel in `agenticPipeline`.
+**Next action(s):** On SectionCard executor done → independent Sonnet verifier → merge `--no-ff` if green; then next Wave B item. Andrew: Google Console checklist (hybrid calendar).
 
 ---
 
@@ -51,12 +51,11 @@
 
 **🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).
 
-**Tip:** `master` @ [`1ec83f8d`](https://github.com/Arangarx/tutoring-notes/commit/1ec83f8de7bb0dbb5b8e0e68311789cc8d175b0b) (session-swap bootstrapper; Wave A complete). Main checkout on `master`, clean.
+**Tip:** `master` @ `18801878` (docs greenlights). Main checkout may be on feature branch during Wave B.
 
-**Last action:** Andrew greenlights recorded — Wave B go; tokens approach defined; Google hybrid sequencing answered; pipeline Phase 1 greenlit with PM north-star. Docs: eyeball list + state HEAD patch.
+**Last action:** Docs greenlights committed `18801878` (eyeball list, tokens approach, STATE/BACKLOG). Dispatched Wave B-1 SectionCard.
 
-**In-flight:** Wave B starting (`SectionCard` first).
-
+**In-flight:** Wave B-1 SectionCard executor ([a5261849](a5261849-c127-4f97-b9ee-bbfb76322eb1)) on `feat/dedupe-wave-b-sectioncard` — awaiting completion then Sonnet verify.
 **Open Andrew-confirms:**
 1. **Priority #2 Google Console** — Andrew-owned: confirm Published/`gmail.send`; `usemynk.com` Search Console; redirect URIs; hybrid calendar verification submit **after** MVP demo (Console prep now).
 2. **Priority #3 instrumentation** — first concrete slice under COPPA-first-party policy.
