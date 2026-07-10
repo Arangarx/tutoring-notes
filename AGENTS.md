@@ -32,6 +32,23 @@ The whiteboard plan
 or `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`)
 and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 
+## Non-negotiable standards + release track (ratified Andrew 2026-07-10)
+
+Master is delivered to Sarah; the doc/backlog is cleaned + release-triaged. We are now on the **release track** (expand beyond Sarah to unsupervised new pilots). From this point, three standards are **non-negotiable** — no exceptions without Andrew's **explicit, documented waiver** (agents may **never** self-authorize):
+
+1. **ZERO unjustified duplication — no bespoke bullshit.** One canonical primitive of each kind site-wide; every component a composition of primitives; every component owns its own CSS (variation only via props/inputs); one canonical implementation of each service/hook/util. [`.cursor/rules/composition-no-duplication.mdc`](.cursor/rules/composition-no-duplication.mdc) (alwaysApply). The old "agent may document a justified duplication" latitude is **revoked** — Andrew-waiver-only.
+2. **Exhaustive testing.** Nothing is done without comprehensive **red-before/green-after** tests written **to spec** (independent oracle), at the **right layer** (Playwright for layout/media/sync/geometry; jest is necessary-not-sufficient). [`.cursor/rules/exhaustive-testing-mandate.mdc`](.cursor/rules/exhaustive-testing-mandate.mdc) (alwaysApply).
+3. **Independent agentic verification.** Code/tests written by one agent are verified by a **separate specialized agent** (tests-to-spec + code soundness + no-duplication) before "done"/merge. Moving toward a fully agentic pipeline. Deferrable only with Andrew's approval if it blocks a release, never permanently. [`.cursor/rules/agentic-verification-pipeline.mdc`](.cursor/rules/agentic-verification-pipeline.mdc) (alwaysApply).
+
+**Release priorities (ordered, Andrew 2026-07-10)** — canonical list at top of [`docs/BACKLOG.md`](docs/BACKLOG.md):
+
+1. **Comprehensive component + service dedupe** — eliminate all unjustified duplication site-wide (see standard #1). Highest priority.
+2. **Everything requiring external validation/verification** — Google sign-in, Google Calendar, and anything needing OAuth scope approval/verification — get the **external approval process started now** (long lead times).
+3. **Instrument the site comprehensively** — first-party analytics; see exactly how the site is used (PostHog / usage instrumentation).
+4. **Finish scheduling** (depends on #2 calendar).
+
+Everything else is release-triaged in `docs/BACKLOG.md` § Release triage (MUST / MAYBE / 1.x). The backlog also has stale rows — a **freshness pass** against current `master` is warranted when picking items up.
+
 ## Key docs
 
 - [docs/INDEX.md](docs/INDEX.md) — **start here.** Literal "where do I
