@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { hashToken } from "@/lib/crypto/session-tokens";
 
@@ -198,7 +199,7 @@ export async function POST(
     }
     // Check for Prisma unique constraint violation (concurrent attach to same tutor-profile pair)
     const e = err as { code?: string };
-    if (e?.code === "P2002") {
+    if (isPrismaUniqueViolation(e)) {
       return NextResponse.json({ error: "already_linked_to_tutor" }, { status: 409 });
     }
     throw err;

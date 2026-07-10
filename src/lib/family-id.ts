@@ -13,6 +13,7 @@
  */
 
 import { db } from "@/lib/db";
+import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
 
 const FAMILY_ID_MIN_LEN = 3;
 const FAMILY_ID_MAX_BASE_LEN = 20;
@@ -106,7 +107,7 @@ export async function ensureFamilyId(accountHolderId: string): Promise<string> {
       break;
     } catch (e: unknown) {
       const err = e as { code?: string };
-      if (err?.code !== "P2002") throw e;
+      if (!isPrismaUniqueViolation(err)) throw e;
     }
   }
 
