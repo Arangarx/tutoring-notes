@@ -10,14 +10,13 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `144e9897` — PDF blob + icons/Pause + camOn + **AUDIO-1 cancel-refresh residual** merged.
+**Tip:** `v1-redesign` @ `b8f786c8` — evening fix batch complete (PDF blob, icons/Pause, camOn, AUDIO-1 residual, **E5 bleed**).
 
-**Last action:** Merged `fix/smoke-audio-1-cancel-refresh` (`c47ced8b`).
+**Last action:** Merged `fix/wb-stroke-bleed-pdf-import` (`010a3eb5`). All evening in-flight agents landed.
 
-**In-flight subagents:**
-- [bleed E4 residual](00064894-4e81-46fa-ad64-ee7693de8801) Sonnet — ONE attempt
+**In-flight subagents:** none.
 
-**Next action(s):** land bleed → full master gates. Andrew hardware smoke for Brio cancel→refresh (PLAYWRIGHT-GAP).
+**Next action(s):** full master gates (`test:wb-sync` + `test:regression` + `next build`); Andrew hardware smoke — Brio cancel→refresh, PDF import bleed, tab icons, student video (camOn).
 
 **Decisions locked (2026-07-09 earlier):** SEC-POLICY=both; cancel=keep-delete + fresh id; interstitial=verify host; Finish review CTA; billing round-up; wordmark `/?view=home`; replay-tab was test oracle.
 
