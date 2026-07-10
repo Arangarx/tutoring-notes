@@ -10,13 +10,13 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `6f7109a7` — AUDIO-1 attempt #4 **HARDWARE PASS** (Andrew).
+**Tip:** `v1-redesign` @ `4e7d091c` — AUDIO-1 #4 hardware PASS; WB-WTR-DEVICE-LOADING filed.
 
-**Last action:** Andrew confirmed #4 arms video+audio; filed **WB-WTR-DEVICE-LOADING** (long cold settle / empty cam picker).
+**Last action:** Kicked master-cut full gates on tip (`test:wb-sync` ∥ `next build`; `test:regression` after wb-sync to avoid DB contention).
 
-**In-flight:** none.
+**In-flight:** full gates — `test:wb-sync` + `next build` (+ `test:regression` queued).
 
-**Next action(s):** Master-cut path unblocked on AUDIO-1 for Brio (still need full `test:wb-sync` + `test:regression` + `next build` before master). Optional: ship loading-devices affordance when convenient. Watch bleed/blob/camOn.
+**Next action(s):** Await gate results → if green, Andrew master-cut smoke / merge decision. Optional WB-WTR-DEVICE-LOADING later.
 
 **Evening smoke final:**
 | Item | Result |
