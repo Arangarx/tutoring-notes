@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/operator";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 
@@ -15,7 +15,7 @@ export default async function AdminFeedbackPage() {
   });
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Feedback inbox"
       description={
         <>
@@ -64,6 +64,6 @@ export default async function AdminFeedbackPage() {
           </ul>
         )}
       </SectionCard>
-    </AdminPageShell>
+    </PageShell>
   );
 }

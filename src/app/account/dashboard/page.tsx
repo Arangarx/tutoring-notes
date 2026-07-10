@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { AccountPageShell } from "@/components/account/AccountPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { ParentJoinGapCallout } from "@/components/account/ParentJoinGapCallout";
@@ -66,7 +66,7 @@ export default async function AccountDashboardPage() {
       : "Add a learner, or wait for your tutor to send you a claim link.";
 
   return (
-    <AccountPageShell
+    <PageShell realm="account"
       title={greeting}
       eyebrow={
         <p className="label-mono m-0 text-accent-text">Family account</p>
@@ -202,6 +202,6 @@ export default async function AccountDashboardPage() {
           </Button>
         </div>
       </SectionCard>
-    </AccountPageShell>
+    </PageShell>
   );
 }

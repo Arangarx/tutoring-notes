@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { StudentsRoster } from "@/components/admin/StudentsRoster";
 import { deriveStudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
 import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
@@ -45,7 +45,7 @@ export default async function StudentsPage() {
   );
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Students"
       eyebrow={
         <p className="label-mono m-0 text-accent-text">Your roster</p>
@@ -75,6 +75,6 @@ export default async function StudentsPage() {
           };
         })}
       />
-    </AdminPageShell>
+    </PageShell>
   );
 }

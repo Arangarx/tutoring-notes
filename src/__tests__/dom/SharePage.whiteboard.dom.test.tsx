@@ -30,7 +30,7 @@ jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
 }));
 
 // Production: root layout wraps all routes in <Providers> → <ThemeProvider>.
-// ParentShareShell renders ThemeToggle (useTheme); bare render() lacks the provider.
+// PageShell share realm renders ThemeToggle (useTheme); bare render() lacks the provider.
 jest.mock("@/components/ThemeProvider", () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
   useTheme: () => ({

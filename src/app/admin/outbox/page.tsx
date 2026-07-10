@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getStudentScope } from "@/lib/student-scope";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ export default async function OutboxPage() {
   });
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Outbox"
       description="Sent and queued email messages. Use this to review what was sent and to copy share links if needed."
     >
@@ -63,6 +63,6 @@ export default async function OutboxPage() {
           </ul>
         )}
       </SectionCard>
-    </AdminPageShell>
+    </PageShell>
   );
 }

@@ -10,7 +10,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { AccountPageShell } from "@/components/account/AccountPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
 import { Badge } from "@/components/ui/badge";
@@ -102,7 +102,7 @@ export default async function LearnerNotesPage({
   const learnerName = learnerProfile.displayName;
 
   return (
-    <AccountPageShell
+    <PageShell realm="account"
       title={`${learnerName} — Session notes`}
       description="Notes from tutoring sessions, updated automatically."
       userEmail={accountHolder?.email}
@@ -184,6 +184,6 @@ export default async function LearnerNotesPage({
           </div>
         )}
       </SectionCard>
-    </AccountPageShell>
+    </PageShell>
   );
 }

@@ -9,7 +9,7 @@ import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
-import { ParentShareShell } from "@/components/share/ParentShareShell";
+import { PageShell } from "@/components/PageShell";
 import {
   parentShareRecordingsArgs,
   parentShareWhiteboardSessionsArgs,
@@ -160,7 +160,8 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
   }
 
   return (
-    <ParentShareShell
+    <PageShell
+      realm="share"
       studentName={`${student.name} — All session notes`}
       subtitle={
         <Link
@@ -226,6 +227,6 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
       <div className="mt-2">
         <PaginationNav />
       </div>
-    </ParentShareShell>
+    </PageShell>
   );
 }

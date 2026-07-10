@@ -101,27 +101,30 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
 | `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. **REQ-S3-3:** redesign must add a persistent signed-in identity indicator (display name/email; badge when impersonating or test account) — pairs with `ImpersonationBanner`. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
-| `AdminPageShell` | `src/components/admin/AdminPageShell.tsx` | Page chrome: `<h1>` title, optional eyebrow, optional description, optional actions slot. **2026-06-11:** optional `sidebar` + `sidebarWidth` for left-rail layouts. | `title`, `description`, `eyebrow`, `actions`, `children`, `className`, `sidebar`, `sidebarWidth` | Dashboard, students, settings (chunk 1) | **canonical** |
 
 ### Shared layout (cross-realm)
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
+| `PageShell` | `src/components/PageShell.tsx` | Realm-parameterized page chrome. **`realm`** selects admin page title + optional sidebar, account full-page shell, student join shell, or parent share shell (`data-page-shell-realm` on root). Admin realm = title block only (nav from `admin/layout.tsx`). Account/student compose `AppHeader`. Share realm uses distinct title typography. | Discriminated union on `realm` (`admin` \| `account` \| `student` \| `share`) — see file for per-realm props | `/admin/**`, `/account/**`, `/join`, `/s/[token]/**` | **canonical — Wave B dedupe; replaces former `AdminPageShell`, `AccountPageShell`, `StudentPageShell`, `ParentShareShell`** |
+| `AppHeader` | `src/components/AppHeader.tsx` | Top app chrome (wordmark row). **`realm`** selects account nav (email + sign-out) vs student compact header (`data-app-header-realm`; student keeps `data-testid="student-page-shell-header"`). | `realm` (`account` \| `student`), `userEmail` (account), `actions` (student) | `/account/**` via `PageShell`, `/join` via `PageShell` | **canonical — Wave B dedupe** |
 | `SectionCard` | `src/components/SectionCard.tsx` | Section grouping within a page. Wraps shadcn `Card`. Title + optional description + optional actions header + content slot. **`realm`** selects admin vs account styling contract (`data-realm` on root). | `realm` (`admin` \| `account`), `title`, `description`, `actions`, `children`, `className`, `contentClassName`, `id`, `data-testid` | `/admin/**`, `/account/**` | **canonical — Wave B dedupe; replaces former `AdminSectionCard` + `AccountSectionCard`** |
 | `SubNav` | `src/components/SubNav.tsx` | In-page section navigation. **`realm`** selects settings left-rail sidebar vs account child horizontal tab strip (`data-realm` on root). | `realm` (`admin-settings` \| `account-child`), `learnerId` (account-child only) | `/admin/settings/**`, `/account/children/[id]/**` | **canonical — Wave B dedupe; replaces former `SettingsSubNav` + `AccountChildNav`** |
+| `ShareBrowseAllLink` | `src/components/share/SharePageHelpers.tsx` | Outline CTA link for parent share “browse all notes” header action | `href`, `label`, `className` | `/s/[token]` | **canonical** |
+| `ShareDividerLabel` | `src/components/share/SharePageHelpers.tsx` | Accent/muted divider labels between unseen/seen note groups on share pages | `children`, `variant` (`accent` \| `muted`) | `/s/[token]` | **canonical** |
 
 ### Account Holder (Parent) Layout
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
-| `AccountPageShell` | `src/components/account/AccountPageShell.tsx` | Layout wrapper for authenticated AccountHolder pages. Includes its own nav with wordmark + email + sign-out. Same structural shape as `AdminPageShell` but owns its own nav (no `AdminNav`). | `title`, `description`, `eyebrow`, `actions`, `userEmail`, `children` | `/account/**` pages | **canonical — NOTE: structurally parallel to `AdminPageShell` but NOT the same component.** Both are intentional (different realms/nav); do not consolidate. |
+| _(account page chrome)_ | `PageShell` `realm="account"` + `AppHeader` `realm="account"` | See **Shared layout** — account realm wraps wordmark nav, email, sign-out, and page title block inside `max-w-4xl` main. | `title`, `description`, `eyebrow`, `actions`, `userEmail`, `children` | `/account/**` pages | **canonical — use `PageShell`, not a fork** |
 
 ### Auth Surfaces
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
 | `AuthShell` | `src/components/auth/AuthShell.tsx` | Centered card layout for public auth pages (login/signup/forgot/reset/setup) | `children`, misc | `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/setup` | **canonical** |
-| `MynkWordmark` | `src/components/auth/MynkWordmark.tsx` | "Mynk·" wordmark using `.wordmark` CSS class + Fraunces font-variation-settings | `size` (sm/md/lg) | Auth shell, `AdminNav`, `AccountPageShell`, `MarketingHeader` | **canonical** |
+| `MynkWordmark` | `src/components/auth/MynkWordmark.tsx` | "Mynk·" wordmark using `.wordmark` CSS class + Fraunces font-variation-settings | `size` (sm/md/lg) | Auth shell, `AdminNav`, `AppHeader`, `MarketingHeader` | **canonical** |
 | `AuthMortensenNotice` | `src/components/auth/AuthMortensenNotice.tsx` | Legal notice about Google OAuth via mortensenapps.com — **ONLY on Google-OAuth click-points**, NOT on credentials pages | `variant` (connect/signin), `className`, `style` | `OAuthEmailSection` "Connect Gmail" only | **canonical — placement is legally binding (see v1-redesign-STATUS.md)** |
 | `AuthFieldError` | `src/components/auth/AuthFieldError.tsx` | Inline field-level error message for form fields | `children`, `id` | Auth form fields | **canonical** |
 | `PasswordStrengthField` | `src/components/auth/PasswordStrengthField.tsx` | Password input + strength indicator (zxcvbn). Shared across credential forms. | Props TBD (see file) | Signup, reset-password, change-password | **canonical — use for all 8 credential forms per B1 acceptance criteria** |
@@ -411,7 +414,7 @@ Chip groups: `flex gap-1` inline.
 
 ### 1A.12 Persistent signed-in identity chip (REQ-S3-3)
 
-The user identity chip in the sidebar (1A.8) IS this primitive — it satisfies REQ-S3-3. On surfaces without a sidebar (auth, marketing, student join), identity is shown in `AdminNav` / `AccountPageShell` header via avatar + name display or email. The chip always shows:
+The user identity chip in the sidebar (1A.8) IS this primitive — it satisfies REQ-S3-3. On surfaces without a sidebar (auth, marketing, student join), identity is shown in `AdminNav` / `AppHeader` account realm via avatar + name display or email. The chip always shows:
 1. Current user's display name / email
 2. Current role (Tutor / Admin / AccountHolder / Student)
 3. Impersonation badge when `isImpersonating: true` (distinct from `ImpersonationBanner` which is a page-level alert)
@@ -426,25 +429,25 @@ The user identity chip in the sidebar (1A.8) IS this primitive — it satisfies 
 
 - **Page max-width (admin/tutor shell):** `max-w-6xl` (1152px) with `xl:max-w-7xl` (1280px) at xl breakpoint — set on `admin/layout.tsx` `<main>`; centered with `mx-auto px-4 py-6 md:px-6 md:py-8`. Other realms (account, marketing) may use narrower widths per surface.
 - **Page max-width (legacy default):** `max-w-4xl` (896px) where a surface has not yet adopted the admin shell width.
-- **Section spacing:** `gap-8` between `AdminPageShell` header and content; `gap-6` between sibling `SectionCard` components and between sidebar rail and main column (`AdminPageShell` sidebar layout)
+- **Section spacing:** `gap-8` between `PageShell` page-title block and content (admin/account realms); `gap-6` between sibling `SectionCard` components and between sidebar rail and main column (`PageShell` admin `sidebar` layout)
 - **Form field spacing within a section:** `space-y-4` (between field groups), `space-y-1.5` (between label and input)
 - **Content max-width within cards:** `max-w-md` or `max-w-lg` for form fields; never full card width for narrow inputs
 - **Mobile:** single-column; cards stack naturally. Min touch target: `min-h-11` (44px)
 
 ### 2.2 Page Shell Pattern
 
-Every tutor/admin page uses `AdminPageShell` inside the `admin/layout.tsx` main container:
+Every tutor/admin page uses `PageShell realm="admin"` inside the `admin/layout.tsx` main container:
 
 ```tsx
-<AdminPageShell title="Settings" description="Manage your account and preferences.">
+<PageShell realm="admin" title="Settings" description="Manage your account and preferences.">
   <SectionCard realm="admin" title="Profile" description="Your display name and password.">
     {/* form content */}
   </SectionCard>
-</AdminPageShell>
+</PageShell>
 ```
 
 - `AdminNav` is provided by `admin/layout.tsx` — never add a second nav inside a page
-- `AdminPageShell` handles the `<h1>` — never write a raw `<h1>` inside page content
+- `PageShell` admin realm handles the `<h1>` — never write a raw `<h1>` inside page content
 - The `eyebrow` prop renders a back-link or breadcrumb above the `<h1>`
 
 ### 2.3 Card-Usage Convention — CRITICAL (Andrew's explicit guidance, reconciled with mock)
@@ -795,7 +798,7 @@ Captured from Andrew smoke of `feat/recording-p1-slice3-autonotes`. **Documentat
 ### REQ-S3-3 — Signed-in identity indicator (shell)
 
 - **Gap (slice 3 smoke):** no on-page indication of which account is active — hard to confirm normal tutor vs admin vs impersonating vs test account.
-- **Required:** app shell / `AdminNav` (and parallel `AccountPageShell` nav where applicable) always shows current signed-in identity; clear badge when impersonating (`ImpersonationBanner` complements but does not replace) or on test accounts.
+- **Required:** app shell / `AdminNav` (and `AppHeader` account realm where applicable) always shows current signed-in identity; clear badge when impersonating (`ImpersonationBanner` complements but does not replace) or on test accounts.
 - **Pass:** shell / nav redesign (B3–B6), not recording slice 3.
 
 ### REQ-S3-4 — Canonical notes schema (no field drops; Plan mandatory)
@@ -907,11 +910,11 @@ The following files are locked to recording slice 3 or live-session infrastructu
 
 | Shell | Change |
 |---|---|
-| `AdminPageShell` | Optional `sidebar` + `sidebarWidth` (`default` 220px / `narrow` 180px) for dashboard + settings sub-nav layouts |
+| `PageShell` | Admin realm: optional `sidebar` + `sidebarWidth` (`default` 220px / `narrow` 180px) for dashboard + settings sub-nav layouts |
 | `Providers` | `TooltipProvider` + `Toaster` (sonner) mounted app-wide |
 | `/admin/pending-approval` | Removed duplicate `AdminNav` (layout already provides it) |
 
-Existing shells (`AdminNav`, `AuthShell`, `AccountPageShell`, `MarketingHeader`, `StudentsRoster`, etc.) already compose `ui/` primitives — no behavioral changes.
+Existing shells (`AdminNav`, `AuthShell`, `PageShell`, `AppHeader`, `MarketingHeader`, `StudentsRoster`, etc.) already compose `ui/` primitives — no behavioral changes.
 
 ### Surface conversion build order (tonight)
 
@@ -929,7 +932,7 @@ Existing shells (`AdminNav`, `AuthShell`, `AccountPageShell`, `MarketingHeader`,
 
 - `ThemeToggle` — inventory lists as planned; already in `AdminNav` but not documented as frozen here
 - `FormattedNotesBody`, `RecapEditor` — Chunk 3/B4 targets (§1 Notes inventory)
-- `AdminSidebarNav` composed component — use `AdminPageShell sidebar` + §1A.8 token patterns; no dedicated component yet
+- `AdminSidebarNav` composed component — use `PageShell` admin `sidebar` + §1A.8 token patterns; no dedicated component yet
 - `rounded-panel` (`10px`) Tailwind token — use `rounded-[10px]` until `tailwind.config` extends (§2.13)
 - Legacy `.btn` / `.card` / `.container` in `globals.css` — still required by unmigrated surfaces; remove only after full conversion
 
@@ -937,6 +940,7 @@ Existing shells (`AdminNav`, `AuthShell`, `AccountPageShell`, `MarketingHeader`,
 
 ## Changelog
 
+- **2026-07-10:** **Wave B `PageShell` + `AppHeader` dedupe** — `PageShell` (`realm`: admin/account/student/share) replaces `AdminPageShell`, `AccountPageShell`, `StudentPageShell`, `ParentShareShell`; `AppHeader` (`realm`: account/student) extracts shared top chrome; share helpers moved to `SharePageHelpers.tsx`.
 - **2026-06-12:** **Doc sync — post-review tweak wave** (library remains FROZEN): admin shell max width `max-w-6xl xl:max-w-7xl` + sidebar `gap-6` (§2.1); `CheckboxField` inventory row; `StudentAvatar` deterministic FNV-1a `--avatar-N` palette spec expanded. Shipped on `v1-design-system` @ `6587592`.
 - **2026-06-11:** **§6 Frozen foundation** — full shadcn new-york primitive catalog on `v1-design-system`; theme-agnostic reconciliation (no `dark:` in `ui/`); `AdminPageShell` sidebar props; pending-approval dup-nav fix; `Providers` toaster/tooltip; strengthened `component-reuse.mdc`; surface conversion build order.
 - **2026-06-07:** Initial doc. Component-pass chunk 1 (Settings/operator reskin). Authored by Sonnet subagent on branch `v1-component-spine`.

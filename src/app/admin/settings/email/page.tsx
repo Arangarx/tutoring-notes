@@ -7,7 +7,7 @@ import { authOptions } from "@/auth-options";
 import { isGmailConnectAllowedForEmail } from "@/lib/gmail-connect-allowed";
 import { getStudentScope } from "@/lib/student-scope";
 import { getGmailConnectionForTutor, isEmailConfiguredForTutor } from "@/lib/email";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { SubNav } from "@/components/SubNav";
 import EmailConfigForm from "./EmailConfigForm";
@@ -21,7 +21,7 @@ export default async function EmailSettingsPage({
   const params = await searchParams;
   if (typeof (db as { emailConfig?: { findFirst: unknown } }).emailConfig?.findFirst !== "function") {
     return (
-      <AdminPageShell
+      <PageShell realm="admin"
         title="Email settings"
         eyebrow={
           <Link
@@ -37,7 +37,7 @@ export default async function EmailSettingsPage({
           <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">npx prisma generate</code>
           , then restart the dev server.
         </p>
-      </AdminPageShell>
+      </PageShell>
     );
   }
 
@@ -58,7 +58,7 @@ export default async function EmailSettingsPage({
   const googleOAuthAvailable = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Email settings"
       description={
         <>
@@ -118,6 +118,6 @@ export default async function EmailSettingsPage({
           />
         </SectionCard>
       </div>
-    </AdminPageShell>
+    </PageShell>
   );
 }

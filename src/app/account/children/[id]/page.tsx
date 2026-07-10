@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { AccountPageShell } from "@/components/account/AccountPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { ParentJoinGapCallout } from "@/components/account/ParentJoinGapCallout";
@@ -80,7 +80,7 @@ export default async function ChildDetailPage({
       : null;
 
   return (
-    <AccountPageShell
+    <PageShell realm="account"
       title={fullProfile.displayName}
       description="Profile, login, and quick links."
       userEmail={accountHolder?.email}
@@ -257,6 +257,6 @@ export default async function ChildDetailPage({
           </p>
         </SectionCard>
       ) : null}
-    </AccountPageShell>
+    </PageShell>
   );
 }

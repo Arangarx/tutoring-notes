@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { AccountPageShell } from "@/components/account/AccountPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +71,7 @@ export default async function ChildDevicesPage({
   if (!profile) notFound();
 
   return (
-    <AccountPageShell
+    <PageShell realm="account"
       title={`${profile.displayName}\u2019s devices`}
       description="Devices where your child is currently signed in."
       userEmail={accountHolder?.email}
@@ -159,6 +159,6 @@ export default async function ChildDevicesPage({
           </p>
         </AlertDescription>
       </Alert>
-    </AccountPageShell>
+    </PageShell>
   );
 }

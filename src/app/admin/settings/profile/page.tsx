@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { getAdminByEmail } from "@/lib/auth-db";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { SubNav } from "@/components/SubNav";
 import ChangePasswordForm from "./ChangePasswordForm";
@@ -13,21 +13,21 @@ export default async function ProfileSettingsPage() {
   const email = session?.user?.email;
   if (!email) {
     return (
-      <AdminPageShell title="Profile">
+      <PageShell realm="admin" title="Profile">
         <p className="text-sm text-muted-foreground">
           Sign in to edit your profile.{" "}
           <Link href="/login" className="text-foreground underline-offset-4 hover:underline">
             Login
           </Link>
         </p>
-      </AdminPageShell>
+      </PageShell>
     );
   }
   const admin = await getAdminByEmail(email);
   const has2FA = !!(admin && session?.user?.twoFactorVerified);
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Profile"
       description={
         <>
@@ -80,6 +80,6 @@ export default async function ProfileSettingsPage() {
           </SectionCard>
         )}
       </div>
-    </AdminPageShell>
+    </PageShell>
   );
 }

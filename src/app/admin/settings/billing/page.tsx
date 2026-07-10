@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
-import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { SubNav } from "@/components/SubNav";
 import BillingDefaultsForm from "./BillingDefaultsForm";
@@ -14,21 +14,21 @@ export default async function BillingSettingsPage() {
   const email = session?.user?.email;
   if (!email) {
     return (
-      <AdminPageShell title="Billing">
+      <PageShell realm="admin" title="Billing">
         <p className="text-sm text-muted-foreground">
           Sign in to edit billing defaults.{" "}
           <Link href="/login" className="text-foreground underline-offset-4 hover:underline">
             Login
           </Link>
         </p>
-      </AdminPageShell>
+      </PageShell>
     );
   }
 
   const defaults = await loadBillingDefaultsForForm();
   if (!defaults) {
     return (
-      <AdminPageShell title="Billing" sidebar={<SubNav realm="admin-settings" />} sidebarWidth="narrow">
+      <PageShell realm="admin" title="Billing" sidebar={<SubNav realm="admin-settings" />} sidebarWidth="narrow">
         <SectionCard realm="admin" title="Billing defaults">
           <p className="text-sm text-muted-foreground max-w-lg">
             This session uses server environment login only. Billing defaults require a
@@ -37,12 +37,12 @@ export default async function BillingSettingsPage() {
             to create one.
           </p>
         </SectionCard>
-      </AdminPageShell>
+      </PageShell>
     );
   }
 
   return (
-    <AdminPageShell
+    <PageShell realm="admin"
       title="Billing"
       description="Defaults for how session time is rounded when a session ends."
       eyebrow={
@@ -62,6 +62,6 @@ export default async function BillingSettingsPage() {
       >
         <BillingDefaultsForm defaults={defaults} />
       </SectionCard>
-    </AdminPageShell>
+    </PageShell>
   );
 }

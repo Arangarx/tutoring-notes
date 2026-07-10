@@ -4,11 +4,11 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
+import { PageShell } from "@/components/PageShell";
 import {
-  ParentShareShell,
   ShareBrowseAllLink,
   ShareDividerLabel,
-} from "@/components/share/ParentShareShell";
+} from "@/components/share/SharePageHelpers";
 import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
 import {
   loadWhiteboardReplayIdsByNoteIds,
@@ -156,7 +156,8 @@ export default async function SharePage({
   );
 
   return (
-    <ParentShareShell
+    <PageShell
+      realm="share"
       studentName={student.name}
       subtitle={subtitle}
       headerAction={
@@ -211,6 +212,6 @@ export default async function SharePage({
           </Button>
         </div>
       ) : null}
-    </ParentShareShell>
+    </PageShell>
   );
 }
