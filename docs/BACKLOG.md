@@ -8,7 +8,7 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
 
 1. **Comprehensive component + service dedupe** — eliminate ALL unjustified duplication site-wide. Plan + audit findings: [`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md) (Wave A safe/mechanical → D fragile A/V). **Approach:** stability first; safe+tested consolidations up front, risky ones careful/small-chunk, never big-bang. New work = zero new duplication + reduce what it touches (absolute). See standard #1 below.
 2. **Everything requiring external validation** — Google sign-in, Google Calendar, and anything needing OAuth scope approval/verification. Kick off the **external approval process now** (long lead times) even before the dependent features are finished.
-3. **Comprehensive instrumentation** — first-party analytics; see EXACTLY how the site is used (PostHog / usage instrumentation — archived bootstrapper `docs/archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md`).
+3. **Comprehensive instrumentation** — see EXACTLY how the site is used. **Policy (Andrew 2026-07-10):** anything touching **minor data or minor traffic MUST be first-party** (no third-party processors on COPPA-risk surfaces). Third-party analytics (e.g. PostHog) is acceptable **only** on non-COPPA surfaces (e.g. marketing/logged-out). **Terms/Privacy stay 100% honest — do not over-share, but absolutely never under-share; default to transparency when in doubt** until a real legal review is done. Archived reference: `docs/archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md` (reframe to first-party for the app).
 4. **Finish scheduling** (depends on #2 calendar).
 
 ### Priority #2 — external Google approvals (start NOW; ~4–6 week lead)
@@ -19,7 +19,7 @@ Audit 2026-07-10. Long external lead times → kick off before the dependent cod
 - **Confirm consent-screen status** at [console](https://console.cloud.google.com/apis/credentials/consent): Published/In-production? `gmail.send` verified? (docs claim verified 2026-05-30 — confirm still true; INDEX was stale.)
 - **`usemynk.com`** — verify in Google Search Console + re-submit branding if pending ([`LEGAL-SYNC.md`](LEGAL-SYNC.md) re-verification to-do).
 - **Redirect URIs** for `usemynk.com` (+ legacy Vercel): `/api/auth/callback/google` (sign-in), `/api/auth/gmail/callback` (existing).
-- **Decide calendar scope model** (BLOCKS the submission): **outbound-only** (`calendar.events`, sensitive) vs **two-way sync** (adds `calendar.readonly` + watch infra). ← *decision needed from you.*
+- **Calendar scope model — DECIDED (Andrew 2026-07-10): TWO-WAY sync.** Request `calendar.events` + `calendar.readonly` (+ change-watch/webhook infra) in the bundled verification round. Bigger build + review, but full two-way is the target.
 - **Submit ONE bundled verification round** for calendar scopes (+ any net-new) — screencast + justification; enable Google Calendar API in the project.
 
 **Our code (parallel prep; merge after scopes approved):** `/login` "Sign in with Google" button + Playwright (backend already wired, UI-only); Calendar OAuth routes + DB models + sync (replaces mock); scheduling backend (Priority #4, depends on calendar); umbrella privacy additive copy for calendar data before reviewers see new scopes.
