@@ -175,7 +175,10 @@ describe("WhiteboardReplayInFrame", () => {
     expect(screen.getByTestId("wb-replay-global-seek-thumb")).toBeInTheDocument();
     expect(screen.getByTestId("mynk-wb-chrome-replay")).toBeInTheDocument();
     expect(screen.getByTestId("wb-replay-tool-strip")).toBeInTheDocument();
-    expect(screen.getByTestId("wb-replay-hide")).toHaveTextContent("Pause");
+    // Review surface (onHideReplay without override): honest "pause + return to notes".
+    expect(screen.getByTestId("wb-replay-hide")).toHaveTextContent(
+      "Pause and hide replay"
+    );
     await completeWebmDurationScanForReplayTest();
 
     // Replay records audio + whiteboard only — no live A/V cluster on review surface.
@@ -189,6 +192,33 @@ describe("WhiteboardReplayInFrame", () => {
     expect(
       screen.queryByLabelText(/Camera \(disabled during replay\)/i)
     ).not.toBeInTheDocument();
+  });
+
+  it("honors hideReplayLabel override for non-review surfaces", async () => {
+    render(
+      <WhiteboardReplayInFrame
+        eventsBlobUrl="/api/whiteboard/wbs-test/events"
+        audioSegments={[
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm",
+            durationSeconds: 10,
+          },
+        ]}
+        whiteboardSessionId="wbs-test"
+        studentName="Test Student"
+        onHideReplay={() => undefined}
+        hideReplayLabel="Pause"
+      />
+    );
+
+    expect(await screen.findByTestId("wb-replay-hide")).toHaveTextContent(
+      "Pause"
+    );
+    expect(screen.getByTestId("wb-replay-hide")).toHaveAttribute(
+      "title",
+      "Pause"
+    );
   });
 
   /**

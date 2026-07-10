@@ -28,6 +28,11 @@ export type WhiteboardReplayInFrameProps = {
   /** Collapse in-frame replay back to notes-prominent layout. */
   onHideReplay?: () => void;
   /**
+   * Hide-control copy. Default keeps review honesty ("Pause and hide replay").
+   * Pass `"Pause"` only for non-review surfaces that do not return to notes.
+   */
+  hideReplayLabel?: string;
+  /**
    * In-shell review toggles hero↔replay via CSS while keeping this component
    * mounted. When false, entry auto-play is suppressed and state resets.
    */
@@ -46,6 +51,7 @@ export function WhiteboardReplayInFrame({
   studentName,
   embedded = false,
   onHideReplay,
+  hideReplayLabel,
   isReviewActive = true,
 }: WhiteboardReplayInFrameProps) {
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
@@ -257,6 +263,7 @@ export function WhiteboardReplayInFrame({
     // Hide until we have a real value (scrubberMax starts at 1).
     durationLabel: scrubberMax > 1 ? formatReplayDurationMs(scrubberMax) : undefined,
     onHideReplay: handleHideReplay,
+    hideReplayLabel,
     canvas: replayCanvas,
     timelineStrip,
     replayPageList,

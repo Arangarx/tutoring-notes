@@ -10,13 +10,13 @@
 
 **🚀 ACTING (2026-07-09 ~12:35 MT) — Sarah delivery path = merge `v1-redesign` → `master`.** Andrew: Sarah has **only ever used master** (old UI); redesign preview is Andrew-only. Goal: land integrity fixes on `v1-redesign`, full gate green, then master cut so Sarah sees the new product. **HARD RULE (Andrew re-iterated):** anything mechanical/visual we touch MUST have Playwright — he must not be the regression net.
 
-**Tip:** `v1-redesign` @ `6450745b` — full gates finished (wb-sync RED).
+**Tip:** `v1-redesign` — Pause-copy correction in flight (`fix/replay-pause-copy-review-vs-share`).
 
-**Last action:** Master-cut gates completed. `test:wb-sync` EXIT 1 — 9 REAL-FAIL + 2 ENV-FLAKE after isolation. Post-wb `next build` + `test:regression` ran (see chat for verdicts).
+**Last action:** Andrew corrected Pause copy over-apply (review must stay “Pause and hide replay”). Also: reopen-at-0 non-blocking; cancel→new link PASS; parent replay new surface but PDF placeholders.
 
-**In-flight:** none.
+**In-flight:** merge Pause-copy fix.
 
-**Next action(s):** Triage REAL-FAIL list (replay scrub ×3, recording resilience, tab-kill ×2, view-whiteboard parent share, cancel→fresh link, review auto-start). Do **not** master-cut until wb-sync green.
+**Next action(s):** land Pause-copy → triage wb-sync REAL-FAILs / PDF placeholders. No master cut until wb-sync green (or Andrew waives).
 
 **Evening smoke final:**
 | Item | Result |

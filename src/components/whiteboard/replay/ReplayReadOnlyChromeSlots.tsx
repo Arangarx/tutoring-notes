@@ -73,6 +73,12 @@ export type ReplayReadOnlyChromeSlotsProps = {
   studentName?: string;
   durationLabel?: string;
   onHideReplay?: () => void;
+  /**
+   * Label for the hide/collapse control. Review surfaces (tutor post-End)
+   * use the default — the control both pauses and returns to notes.
+   * Non-review / share callers that only pause should pass `"Pause"`.
+   */
+  hideReplayLabel?: string;
   canvas: ReactNode;
   timelineStrip: ReactNode;
   /** Board tabs derived from page-switch events (E4). */
@@ -92,6 +98,7 @@ export function buildReplayReadOnlyChromeSlots({
   studentName,
   durationLabel,
   onHideReplay,
+  hideReplayLabel = "Pause and hide replay",
   canvas,
   timelineStrip,
   replayPageList,
@@ -150,7 +157,7 @@ export function buildReplayReadOnlyChromeSlots({
             type="button"
             className="mynk-wb-tb-btn"
             data-testid="wb-replay-hide"
-            title="Pause"
+            title={hideReplayLabel}
             onClick={(e) => {
               e.stopPropagation();
               onHideReplay();
@@ -159,7 +166,7 @@ export function buildReplayReadOnlyChromeSlots({
             <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>
               ‹
             </span>
-            Pause
+            {hideReplayLabel}
           </button>
         ) : null}
       </div>
