@@ -1,1657 +1,1652 @@
 # Tutoring Notes — Backlog
 
-Living document. Things to research, calibrate, build, or decide once we have real data.
-Not in priority order within sections — that comes when items move to a sprint/spec.
+Living document for open work, pilot feedback, reliability gaps, and deferred product decisions.
 
-**Authoritative for tutoring-notes:** Known open work for this app should appear in this file (or be explicitly ✅ **Shipped** here with any follow-ups cross-linked). If it is not here, assume it was never captured — add it. Day-to-day tickets/PRs can still exist; this document is the backlog of record when they disagree.
+**How to use this backlog**
 
----
+| Symbol | Meaning |
+|--------|---------|
+| **P0** | Sarah-facing breakage — blocks confident pilot use |
+| **P1** | Reliability / important — fix before scaling pilots |
+| **P2** | Enhancement — real value, not day-one blocker |
+| **P3** | Someday / post-pilot / strategic |
 
-## 🧭 Program mapping — Experience-Driven Wedge (2026-06-12)
+**Area tags:** `[REC]` recorder · `[AV]` live A/V · `[WB]` whiteboard · `[NOTES]` notes/AI · `[AUTH]` identity · `[CONSENT]` consent/COPPA · `[UX]` design/chrome · `[TEST]` harness · `[OPS]` platform · `[LEGAL]` legal · `[GTM]` commercial
 
-> **Overlay, not a re-file.** A 2026-06-12 strategy refinement adopted the **Experience-Driven Wedge** program (`~/.cursor/plans/experience-driven_wedge_ae2776e1.plan.md`; rationale: [continuity-wedge brainstorm](research/continuity-wedge-brainstorm-2026-06-12.md)). This banner maps backlog *themes* onto program phases so nothing is lost; individual rows below are NOT re-filed (deliberate — rolling-wave; only the next phase gets detailed). **Founding principle now governs all product work: no dark patterns; total honesty + transparency.**
->
-> **Fold into the program (when its phase comes up):**
-> - **Phase 1 — WB reliability floor:** the `## V1 redesign — pre-master requirements` Gate A items (waiting room / A2, live bidirectional sync / A5, replay fidelity / A6), `## Whiteboard — implementation / design queue` reliability rows, `## Recording re-architecture — Phase 1 follow-ups`, and the **audio-clock fix** (replay drift root cause). Plus the Gate A1 `@layer base` CSS cleanup + checkbox-label follow-up.
-> - **Phase 2 — continuity engine V1:** `sr-notes-in-session` (scheduled topic+notes in live session, upgraded to carryover surfacing) + the new "would you agree?" confirm mechanism + evidence-atom/provenance scaffolding. **NEW — most of this is not yet a backlog row; the brainstorm doc is its spec.**
-> - **Phase 3 — note-quality (the moat):** note-quality elevated from "`## Weeks… where the moat lives`" polish to first-class; transcription (diarization, Whisper guardrails) vs reduction (prompt iteration) split.
-> - **Phase 4 — instrumentation:** `## Cost observability` + the deferred "Phase 11a PostHog" item, **reframed first-party + learner-type-keyed (sub-learner zero 3rd-party egress).**
->
-> **Explicitly deferred (design-compatible-for, NOT near-term):** engagement/dopamine surfaces (mascot/charts/streaks), parent progress arc, marketplace substrate→live (`## Identity/access`, org items), Durability-B seasonal presence (pull/in-app, never email-default), school-handoff bigger bet. Consent v2 (BL-A tutor-visible consent, BL-B educational-use toggle) stays where logged until prioritized.
->
-> **Bank-now data-model constraints (so we never retrofit):** record portable to a future/next tutor; account/record persists free through dormancy; event schema engagement-ready (effort/coverage signals captured from session one); egress keyed on learner type.
+**Status:** `OPEN` · `VERIFY` (shipped — confirm on hardware/gates, then close) · `WATCH` (merged — monitor) · `WAIVED` (known, accepted for cut)
 
----
+**Sequencing:** wave order lives in [`docs/RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) — do not duplicate here.
 
-## Pre-Sarah phone-smoke items (Andrew, 2026-07-02) — MUST fix before Sarah gate
+**Archive:** `docs/archive/` is cold storage; authoritative open work must appear here.
 
-> Captured from Andrew's 2026-07-02 phone look at `preview.usemynk.com` (independent of the Part 3 notes-reliability smoke). All flagged **"pre Sarah."** Not yet built; to be fixed on a branch off `wb-wave5-polish` after the recording-default decision is confirmed.
-
-| Item | Priority | Notes |
-|------|----------|-------|
-| **PRESARAH-1 — recording is ALWAYS-ON with the session; remove all "recording intent" toggles (paradigm change)** | Pre-Sarah (must) | Andrew: *"Why is that block about recording still around… Recording should be completely independent of that check box which shouldn't even exist."* → resolved into a **paradigm change** (Andrew 2026-07-02): *"there's never a time a tutor wouldn't record a session; the 'start recording' was only ever the tutor's signal that the session had started — largely moot now that the waiting room is finished."* **LOCKED DECISION — option (A): recording is fully automatic, no manual control.** Recording runs whenever the session is **active** (`phaseActive`, owned by the waiting-room/activation flow) **and consent/mode allow** (`audioCapturePolicy !== "none"` — audio still suppressed for IN_PERSON + non-consenting parent; replay strokes still logged). Keep a **visible recording indicator + elapsed timer** (display-only, so the tutor SEES it's recording) but **no Start/Stop/Pause control anywhere**. **Pause (option B) DEFERRED** as a possible future enhancement — bump priority only if a tutor asks — because a pause that still allows whiteboard/audio/video is a **billing/metering-gaming hole** (tutor bills a 1-hr session but tutors 1.5–2 hrs): needs its own metering design. **Current mechanics (from code read):** `userWantsRecording` is the tutor-intent input threaded through the FSM (`tutorWantsRecording`), WB event capture (`wbEventsActive`), the session-clock signal (`wbSignal`), and the audio bridge — seeded by `Student.recordingDefaultEnabled` via workspace `page.tsx` ~L119 `initialUserWantsRecording=…`. The in-workspace `RecordingControlPanel` is **already hidden** (`showPanel={false}`), so there's no in-session toggle today — this is mostly *removing* a vestigial input. **Plan (fragile — recorder-lifecycle surface → deterministic tests + Sonnet 5-axis on the diff, on a branch, after the Part 3 smoke):** (1) remove `StudentRecordingDefaultToggle` (`src/app/admin/students/[id]/StudentRecordingDefaultToggle.tsx`) + its render in `page.tsx` ~L200; (2) retire `setStudentRecordingDefault` (`[id]/actions.ts` ~L831) + tests (`student-recording-default.test.ts`, `StudentRecordingDefaultToggle.dom.test.tsx`); (3) collapse `userWantsRecording` → always-true so recording is gated purely by `phaseActive && audioCapturePolicy !== "none"` (keep the presence gate — recorder still auto-pauses when the student drops); (4) ensure a display-only recording indicator + timer remain visible (verify/repoint the existing `presence`/`derivePresentation` indicator); (5) **keep the `Student.recordingDefaultEnabled` DB column** dormant (additive-migration rule — stop reading/writing, don't drop). |
-| **PRESARAH-2 — "Open whiteboard sessions" end-block copy needs a pass (+ End feedback)** | Pre-Sarah (must) | Andrew: *"The end copy needs fixed too pre Sarah."* Block = `ActiveWhiteboardSessionsList.tsx` (student-detail "Open whiteboard sessions" list); current paragraph is verbose/awkward (*"These rooms are still not ended from the whiteboard. Continue to pick up where you left off, or end a room to revoke its join link. You can also start a new room above — that creates an additional open session, so end ones you do not need."*). Needs tighter, clearer copy (**final wording Andrew-gated**). **Also observed:** *"Clicked end, both stuck on ending… when I went back to the tab they'd gone away."* Root cause (from code read): the End action `endStaleWhiteboardSession` is **DB-only and fast** (no blob/notes work) and the sessions **did end correctly**; `SubmitButton` uses per-form `useFormStatus`, so "both stuck on Ending…" = both rows' End tapped → Next.js dispatches server actions from one page **sequentially** (2nd queues behind 1st) + **mobile tab suspension** throttled the transition. Not a data bug — a feedback/queueing **perception** issue. Optional polish: optimistic row removal / allow parallel ends / clearer pending affordance. |
+**Program overlay:** Experience-Driven Wedge (2026-06-12) — WB reliability = gate; continuity + note-quality = moat; instrumentation = first-party post-master. Founding principle: total honesty, no dark patterns. Spec: [`docs/research/continuity-wedge-brainstorm-2026-06-12.md`](research/continuity-wedge-brainstorm-2026-06-12.md).
 
 ---
 
-## Part 3 hardware-smoke findings (Andrew, 2026-07-02) — full triage
+## 1. NOW / Sarah-facing
 
-> From Andrew's real-hardware smoke of the Part 3 notes-reliability spine ([`part3-notes-reliability-spine-smokebook.md`](handoff/part3-notes-reliability-spine-smokebook.md)). **Overall verdict: PASS** — the Part 3 spine itself (monotonic clock, disconnect freeze/resume, no wall-clock inflation, end-finalize, tutor-mic regression) all passed on hardware. The items below are the surrounding findings. Three deep ones were code-investigated 2026-07-02 (agent reports linked inline). **Severity/priority tags are proposed; Andrew confirms pre-Sarah vs defer.**
->
-> **2026-07-03 consolidated re-smoke** ([`presarah-batch-resmoke-smokebook-2026-07-03.md`](handoff/presarah-batch-resmoke-smokebook-2026-07-03.md) @ [`8e0df0d`](https://github.com/Arangarx/tutoring-notes/commit/8e0df0d)): overall **FAIL** on live A/V student reconnect (media transport not rebuilt). Security PASS. Root cause = pre-existing latent gap on **both** branches (see **BUG-8**); reachability branch only exposed it. Fix batch @ [`3bc7a8e`](https://github.com/Arangarx/tutoring-notes/commit/3bc7a8e) + [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f412767) landed.
->
-> **2026-07-03 fix-batch re-smoke** @ [`3cffbb7`](https://github.com/Arangarx/tutoring-notes/commit/3cffbb7): overall **FAIL**. **4 PASS:** SMOKE-BUG-6 Review affordance, tutor post-end nav, SMOKE-UX-2 play-button centering, empty-notes save guard. **2 regressions + 2 mis-scopes** — see corrected targets below. Triage lesson captured in [`AGENTS.md`](../AGENTS.md) § "Smoke-note triage anchoring + Playwright-to-spec".
+Hotlist: P0/P1 items affecting the live pilot. Post-cut REAL-FAIL cluster at end.
 
-### 🔴 Pre-Sarah reliability blockers
+### Recording & session lifecycle
 
-| Item | Notes |
-|------|-------|
-| **SMOKE-BLOCK-1 — reachability detection UNDER-REPORTS a genuinely-connected peer (Start stays dead + student stuck "Connecting…" though A/V actually works)** | **Most serious finding. Root cause CORRECTED 2026-07-02 — the first diagnosis (decouple Start from A/V) was WRONG and Andrew rejected it.** The A/V-required Start gate is **correct by design and STAYS** — Andrew's explicit product invariant: a session must NOT start without a stable student A/V connection. The bug is that `reachableParticipants`/`bothPartiesInRoom` **fails to recognize a peer that is genuinely media-connected**. Observed: student ended up fully A/V-connected both ways, yet the **student's** waiting-room heading stayed "Connecting…" AND the **tutor's** Start stayed disabled (both = the same `reachableParticipants.length===0` failure; the reachability derivation is symmetric across roles). Two independent, compounding mechanisms ([reachability report](c1d61fc9-4b06-460f-a4ad-1a9a6698aa93)): **(A) stale-snapshot race** — peer-mesh implicit-adds a PC on the inbound offer *before* useLiveAV's entry exists; early connection events hit `if(!entry) return` and are **dropped**; later `addPeer` is a no-op, so snapshot stays `"new"` forever while media drains. **(B) over-strict predicate** — reachability hard-requires aggregate `peerConnectionState === "connected"`, which WebKit can hold at `"connecting"` even when ICE is connected/completed and media flows. **Fix built** on isolated branch [`wb-av-reachability-detection-fix`](https://github.com/Arangarx/tutoring-notes/tree/wb-av-reachability-detection-fix) @ [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171) (Fix A + B1). **⏸ PARKED (Andrew 2026-07-03)** — branch **unmerged**; revisit only if base shown at risk. Base `wb-wave5-polish` is SAFE (2026-07-03 re-smoke exposed a separate pre-existing reconnect gap — **BUG-8** — not introduced by this branch). |
-| **SMOKE-BLOCK-2 — session-note → whiteboard-replay links must point to the UPDATED replay surface, not the old one** | ✅ **RESOLVED** @ [`c24c1a1`](https://github.com/Arangarx/tutoring-notes/commit/c24c1a1) — tutor note→replay href repointed to in-shell `/workspace` review surface. |
-| **SMOKE-BLOCK-3 — tutor cannot navigate away after saving notes** | ✅ **RESOLVED** @ [`22e20e0`](https://github.com/Arangarx/tutoring-notes/commit/22e20e0) — back-to-student + all-notes nav on review top bar. |
-| **SMOKE-BLOCK-4 — logged-in child (learner) has no logout and no navigation** | ✅ **RESOLVED** @ [`194bb40`](https://github.com/Arangarx/tutoring-notes/commit/194bb40) — learner sign-out affordance. |
+**[P0][REC] SMOKE-AUDIO-1 — first-acquire mic silent until switch-and-back**  
+Hardware PASS on attempt #4 (`3468262d`); **VERIFY** on Sarah Brio path. Residual: cold-start camera picker empty for several seconds — see **WB-WTR-DEVICE-LOADING**. Playwright surrogate + silent-RMS oracle; full fix = unify acquire path (`audio-capture-policy` / `useLiveAV`). [automated partial: `wb-tutor-recording-mute.spec.ts`]
 
-### 🟠 Notes experience — skeleton / live-notes (the "skeleton within seconds" expectation)
+**[P0][NOTES] SMOKE-NOTES-1 — post-End shimmer; form must stay visible**  
+REOPEN @ `3cffbb7`. Prior hide-the-form regression. Spec: all fields visible with per-field shimmer; placeholder only on empty fields. Playwright-to-spec required. Cross-ref **WB-NOTES-SKELETON** (historical).
 
-> **Reality check (2026-07-02 investigation — [live-notes report](32ac6f36-972c-46d6-b537-6aaea3503d29)):** During a live session the tutor sees **NO notes UI**. Backend **map** runs incrementally per chunk (silent — writes `TranscriptChunkExtraction`), but **reduce runs ONLY at end-session** (hard-requires `endedAt`). After End Session the review surface shows **"Generating notes…"** text + empty form, then fills **one-shot** when reduce completes. The `SkeletonNotes` blur/shimmer component is **dead code**. So Andrew's "skeleton within seconds as the session goes" is **not implemented**. Two separable gaps:
+**[P0][WB] SMOKE-UX-1 — replay auto-play jumps to scrubber end**  
+REOPEN on hardware; green Jest did not catch. Independent oracle: scrubber position vs `audioDurationSettled`. Waived at master cut — still Sarah-facing. Related: **SSG-3**, **WB-REPLAY-REOPEN-START-AT-0**.
 
-| Item | Notes |
-|------|-------|
-| **SMOKE-NOTES-1 — wire the existing `SkeletonNotes` into the post-End loading state (SMALL)** | **🔴 REOPEN (2026-07-03 fix-batch re-smoke FAIL @ [`3cffbb7`](https://github.com/Arangarx/tutoring-notes/commit/3cffbb7))** — prior either/or @ [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f412767) **regressed on hardware:** notes form disappeared entirely during generation. **Corrected spec:** all note fields **remain visible** with shimmer/blur across every field; placeholder/suggestion text appears **only** where a field is still empty and is rendered a touch dimmer — **NOT** hide-the-form. Requires Playwright-to-spec + real-browser gate before done. Prior wiring @ [`1480592`](https://github.com/Arangarx/tutoring-notes/commit/1480592). |
-| **SMOKE-NOTES-2 — live/progressive notes DURING the session (BIG — `p3-incremental-map`) — DEFERRED post-Sarah, possibly post-release (Andrew 2026-07-02)** | **DECISION: NOT pre-Sarah.** Sarah ships notes-at-end + the SMOKE-NOTES-1 skeleton for the generation window. Rationale + design constraints Andrew captured: (a) the notes UI isn't visible until End Session, and currently only **map** runs live (silently) while **reduce** is end-only — so there is **no live "note" to display yet anyway**; this is a real build (incremental reduce + a live surface), not a wiring change. (b) If built, it must resolve **view-only-for-reference vs. editable** — editable mid-session opens **"replace vs. append"** conflicts when the tutor edits while new info streams in. (c) Presentation should **not** be a form — likely a **slide-out panel** showing notes updating in real time as information arrives. Sequenced behind perspeaker C as the `p3-incremental-map` wave. |
-| **SMOKE-NOTES-3 — notes still fabricate slightly on non-teaching talk** | Andrew (item 6): notes were accurate for the real teaching test, but *"invent slightly … based on our non-teaching conversations."* Same grounding/faithfulness problem as the 2026-06-16 hallucination example — folds into the **notes-quality workstream** (map/reduce accuracy + abstain-on-low-content path). The PROPOSED prompt wording (`cefc5cd`, smokebook item 6) passed as "good enough to keep" but refinement is flagged. Cross-ref the "Recording re-architecture — Phase 1 follow-ups" notes-quality entry. |
+**[P0][REC] WS-B — tab-kill resume loses pre-kill audio in replay/notes**  
+Master-cut #11: post-resume segment only in transcribed notes. WS-N landed partial durability; full pre-kill segment assembly still open.
 
-### 🟡 Bugs (triage pre-Sarah vs backlog)
+**[P1][REC] SMOKE-END-WINDDOWN — disarm board + immediate student wind-down on End**  
+Andrew decided 2026-07-09; merged `e58e0826` / `69eacbf6`. **VERIFY** on hardware: `wb-end-winddown.spec.ts` `@wb-presence` `@wb-recording`. PERF-1 snapshot de-await deferred.
 
-| Item | Notes |
-|------|-------|
-| **SMOKE-BUG-1 — recurring `POST /login 405 ERR_ABORTED` on the STUDENT console** | ✅ **RESOLVED** @ [`36d4bf3`](https://github.com/Arangarx/tutoring-notes/commit/36d4bf3) — tutor-only `active-ping` gated with `role === "tutor"`. Root cause ([405 report](f3d02fb1-6494-40ea-af58-a0c77ad06941)): student's `WhiteboardWorkspaceClient` fired tutor-only billable-timer heartbeats with no role guard; route `redirect("/login")` → browser replayed POST to GET-only `/login` → 405. |
-| **SMOKE-BUG-2 — stale "Call Reconnecting" pill after the student reconnects timely** | Item 4: student reconnected fine but the upper-left pill stayed "Call reconnecting…". Same class as the known `wb-student-exit-rejoin` A/V-reconnect pill flake. Confusing to a tutor — pill should clear once reachable. |
-| **SMOKE-BUG-3 — student in-progress TEXT carries across a tutor page-switch then disappears/reappears** | Item 1: student typing text; tutor switched page mid-typing; text carried to the new page, vanished for the student after Enter (not on page 3), still visible to tutor on page 2; student regained it after changing text color + clicking away. Text-element sync/edit-state bug across page switch. Low priority, track. |
-| **SMOKE-BUG-4 — pencil stuck on full roughness** | Item 1: changing the roughness style does not change how the pencil draws. Likely pre-existing (not this work). |
-| **SMOKE-BUG-5 — replay doesn't indicate WHICH board it's showing when it switches boards** | Item 1: in replay, board-tab context isn't shown as the replay switches boards; it should surface the active board. Likely pre-existing. |
-| **SMOKE-BUG-6 — a session left without Save/Delete may not appear in the WB session list** | ✅ **RESOLVED** — group @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0): student detail surfaces ended-but-unsaved sessions in **"Ended — needs review"** group (last 30 days). Review row affordance @ [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f412767): accent **"Review"** button (mirrors "Continue" in `ActiveWhiteboardSessionsList`) → in-shell `/workspace` review. |
-| **SMOKE-BUG-7 — student must re-pick the correct mic every new session** | Item 1: student mic selection isn't persisted across sessions. Confirm whether this was a known deferral; if not, persist last-used mic for the learner/device. |
-| **BUG-8 — reconnect media-transport recovery (2026-07-03 re-smoke)** | **FRAGILE — deferred; plan + hardware/Sarah validation required.** After a peer leaves & rejoins, media transport is not rebuilt: `onPeerLeave` does track-only cleanup; an implicit-add race prevents the full `rejoin-detected` peer-connection reset. **Pre-existing on both branches** — surfaced during 2026-07-03 consolidated re-smoke; reachability branch did NOT introduce it. Fragile surface: `peer-mesh.ts` / `useLiveAV.ts`. [`ed83d47`](https://github.com/Arangarx/tutoring-notes/commit/ed83d47) exonerated. |
-| **BUG-9 — camera hotswap mid-session (2026-07-03 re-smoke)** | **FRAGILE — deferred; plan + hardware/Sarah validation required.** Switching camera mid-session does not propagate/recover cleanly (observed in same 2026-07-03 re-smoke). Same fragile A/V surface as BUG-8. |
+**[P1][AV] SMOKE-BLOCK-1 — reachability under-reports connected peer (Start dead)**  
+Fix on branch `wb-av-reachability-detection-fix` @ `a962171` **PARKED** unmerged. A/V-required Start gate is correct by design; bug is false `reachableParticipants===0`. Cross-ref **BUG-8** on reconnect.
 
-### 🔵 UX / design suggestions
+**[P1][AV] BUG-8 — reconnect media transport not rebuilt after peer leave/rejoin**  
+FRAGILE — `peer-mesh.ts` / `useLiveAV.ts`. Pre-existing; surfaced 2026-07-03 re-smoke. Plan + hardware validation before merge.
 
-| Item | Notes |
-|------|-------|
-| **SMOKE-UX-1 — replay play/copy affordance** | **🔴 REOPEN (2026-07-03 fix-batch re-smoke FAIL @ [`3cffbb7`](https://github.com/Arangarx/tutoring-notes/commit/3cffbb7))** — replay auto-play now **always jumps to the scrubber end** on real hardware (green Jest @ [`3bc7a8e`](https://github.com/Arangarx/tutoring-notes/commit/3bc7a8e) did not catch it). Needs real-browser-verified fix + Playwright-to-spec test with independent oracle. Prior partial fixes @ [`a6fa9b5`](https://github.com/Arangarx/tutoring-notes/commit/a6fa9b5)/[`254f2bf`](https://github.com/Arangarx/tutoring-notes/commit/254f2bf). |
-| **SMOKE-UX-2 — replay Play/Pause button overlaps the Board tab** | ✅ **RESOLVED** @ [`f0a14d8`](https://github.com/Arangarx/tutoring-notes/commit/f0a14d8) (footer stack, no overlap) + [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f412767) (play/pause glyph centered — CSS-only). |
-| **SMOKE-UX-3 — replay ±10-second back/forward buttons** | **DEFERRED post-Sarah (Andrew 2026-07-02).** Item 1: scrubbing convenience. Future enhancement. |
-| **SMOKE-UX-4 — many wordmarks don't navigate** | ✅ **RESOLVED** @ [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b): non-live shells → canonical `/` role-redirect; WB review + read-only replay wordmarks → `/`; live-session WB wordmark intentionally inert. |
-| **A5 end-copy — in-session End button (2026-07-03 batch)** | **↩️ REVERT mis-scope @ [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f412767)** — fix was applied to the *in-session* End button, but Andrew's note was anchored under the *student-detail open-sessions* test (wrong surface). **Revert** in-session relabel to **"End session"** (keep confirm popover; honest copy — not "Finish & save"). The open-sessions End target is separate — see row below (**SSG-2**). |
-| **Student-detail open-sessions End → End-and-review (SSG-2)** | **🔴 OPEN (corrected target, 2026-07-03)** — `ActiveWhiteboardSessionsList` **End** must implement the **End-and-review** design: **Resume** / **End and review** / **Cancel and delete** — replacing the silent `endStaleWhiteboardSession` orphan-creating path. This is **SSG-2** (no silent data loss). Distinct from in-session End (revert row above). Cross-ref **PRESARAH-2** + **SSG-2** ship-to-Sarah blocker. |
-| **Learner/student logged-in top-bar size (2026-07-03 batch)** | **🔴 REOPEN — mis-scoped @ [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f412767)** — fix touched the *in-session* `.mynk-wb-topbar`; Andrew's note was under the *learner sign-out* test. Target = the **learner/student logged-in** top bar is oversized. Root cause: **not** the shared single component; full consolidation deferred — **size fix wanted now**. |
-| **Tutor post-end nav fallback (2026-07-03 batch)** | ✅ **RESOLVED** @ [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f412767) — primary path in-shell review via `WhiteboardSessionShell.onSessionEnded` unchanged; legacy `router.replace` fallback fixed from old replay page to `/workspace` review URL (`initialMode="review"` when `endedAt` set). |
-| **Empty-notes save guard (2026-07-03 batch)** | ✅ **RESOLVED** @ [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f412767) — Save disabled when all note fields empty; `handleSave` bails with "Add at least one note field before saving." |
+**[P1][AV] BUG-9 — camera hotswap mid-session does not recover cleanly**  
+Same fragile surface as BUG-8. Deferred pending plan.
 
-### ⚪ Post-Sarah / future
+**[P1][CONSENT] CLIENT-AUDIO-CONSENT-GATE — client consent projection completeness**  
+Block B **base shipped** (`audio-capture-policy.ts`, mode-aware server audio, banners). **OPEN:** shallow client enforcement on upload/IDB/transcription paths; per-speaker lane extension (**p3-consent-recording**). Verify `enqueueChunkTranscriptionAction` gates before calling Sarah blocker closed.
 
-| Item | Notes |
-|------|-------|
-| **SMOKE-POST-1 — ghost overlay of what the other person sees** | **Pre-release required** (OK after first give to Sarah; not a Sarah-day-1 blocker). Ghosted rectangle on the canvas showing the **other end's current viewport** (tutor sees student view bounds; student sees tutor view bounds). Design already ratified: Decision K + **VP-01** role-appropriate labels ("Student view" / "Tutor view") in [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md) §5.3 + [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md). Plumbing exists (`pvs` viewport sync); rendering was deferred as Gate-A fast-follow / chrome polish. Andrew re-confirmed 2026-07-09: wants this **in before release**. |
-| **WB-REVIEW-THUMBNAIL-PDF — review hero thumbnail shows Excalidraw image placeholder for PDF boards** | **Post-Sarah / pre-release UX** (not durability). Andrew smoke 2026-07-09: ended session on/with PDF board → hero “Replay session” card shows mountain/sun placeholder, not the PDF page. **Not a regression of replay PDF fix** (`54d56a3c` / smoke-1 #12) — that fixed `WhiteboardReplay`; **`ReviewBoardThumbnail` is a parallel path** (event-log → `exportToCanvas`) that never got PDF BinaryFiles hydration gated. Same failure class: image element without `files[`wba-${id}`]` → Excalidraw missing-file glyph baked into PNG. Hero does **not** use end-session `snapshotBlobUrl`. Fix: share `registerImageAssets` with replay; optional fallback to snapshot PNG; Playwright `@wb-assets` (PDF import → End → thumbnail must not be placeholder). Cross-ref **WB-ENDSESSION-THUMBNAIL-TABS**, **WB-THUMBNAIL-GRAPH-PLACEHOLDER**. |
-| **WB-SHARE-REPLAY-VIEWPORT-PHONE — share replay on phone: tabs switch but canvas not centered / not following** | **✅ MERGED `8a6ab878` / `45236461` (2026-07-09).** Pre-Sarah phone share path. Root: scrollable `min-h-dvh` shell → zero/bad canvas rect → center-match skipped. Fix: viewport-locked `wb-share-replay-page` + flex `__player` (`min-height:0`); rAF retry (≤4) in `ReplayCanvasSurface`. Playwright `wb-share-replay-viewport-phone.spec.ts` `@wb-viewport` `@wb-chrome` (390×844 relational). Cross-ref **WB-TUTOR-REPLAY-PHONE-LAYOUT** (tutor layout polish, separate). |
-| **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER — tutor phone: notes/share/parent not findable (only Session tab)** | **✅ MERGED `b5472ab8` / `d6c99dee` (2026-07-09).** Stronger bottom tabs (larger labels, active weight, safe-area); Notes badge; More→**Parent**; Session escape hatches (note count + View notes). Playwright `admin-student-detail-mobile-tabs.spec.ts` `@wb-chrome`. Vercel preview badge overlap = preview-only, not chased. Cross-ref claim-link-buried. |
-| **WB-REVIEW-DELETE-COPY — tutor review “Cancel and delete…” → “Delete session data”** | **Copy polish** (Andrew recheck 2026-07-09). If delete stays on the tutor replay/review surface, label should be **"Delete session data"** (or similar) — not **"Cancel and delete…"** (reads like waiting-room cancel). Confirm dialog can keep the stronger consequence copy. Small Composer when touching review chrome. |
-| **WB-FINISH-REVIEW-COPY-CONTEXT — “Finish review” odd when opening replay from notes (already finished)** | **Copy / IA polish** (Andrew recheck 2026-07-09). Tutor opens replay from a **notes** link (post-save / already reviewed) → chrome still says **"Finish review"**. Feels wrong — review was already finished; same CTA as the end-session review flow. Undecided copy (e.g. “Back to student”, “Done”, hide when note already READY / entered via notes deep-link). Slate with review chrome pass; don’t invent copy without Andrew. Cross-ref Finish review CTA (`4d3e9f4`) + `?surface=replay` from notes. |
-| **WB-REPLAY-UNVISITED-BOARDS — boards never visited missing from replay tab strip** | **Post-Sarah OK** (Andrew 2026-07-09). Created Boards 5–6 but never visited them → they don’t appear in the replay board list. Expected given `page-switch`-derived strip (`deriveReplayPageListFromLog`); unvisited boards never emit switches. Optional later: seed from checkpoint `pageList` so empty/unvisited tabs still show. Not a Sarah blocker — “never looked at” ⇒ nothing to replay. |
-| **WB-TUTOR-REPLAY-PHONE-LAYOUT — tutor phone review: notes eat canvas; needs design pass** | **Slate for design review** (Andrew 2026-07-09). Tutor replay on phone: strokes/canvas **work**; layout does not — notes take ~half the screen and still scroll, leaving a **tiny** replay canvas → watching on phone sucks. Ideas (undecided): notes as popup/sheet on phone; auto-zoom / maximize canvas for phone replay; hide notes until dismissed. **Not blocking Sarah day-1** if desktop review is primary for tutors, but parents/students on phone are the share path (see **WB-SHARE-REPLAY-VIEWPORT-PHONE**). Audio not verified this run (no mic). |
-| **ADMIN-PARENT-BLOCK-LIVE — ajax/refresh Parent account block after claim** | **Future enhancement** (Andrew 2026-07-09). Tutor student-detail **Parent account** section should update reasonably soon after the child/parent completes claim — without requiring a full manual reload. Direction TBD: light poll, `router.refresh()` on focus/visibility, or server-push. Scope: `ClaimInviteSection` / connected-parent panel on `/admin/students/[id]`. Post-Sarah fine. |
-| **WB-PARENT-JOIN-AS-CHILD — parent can't join live session as child without own login (learner picker)** | **Post-Sarah product gap** (Andrew 2026-07-09). Design fast-follow `parent_session_select` was never built. Today `/join` accepts AH session **only** when `isSelfLearner` (`join-scope.ts`); parent + child `account_holder_session` (no PIN / “Set up later”) → `not_self_learner` denial. **No Playwright** for parent→child join picker (feature absent). Self-learner join **is** covered (`wb-session-lifecycle` WB-JOIN-ADULT-LEARNER). **Interim honesty (shipped):** known-issues item + `ParentJoinGapCallout` on parent dashboard / child detail when child has no credential. **Build later:** mint learner session under AH after picker; Playwright: AH + no-credential child + `/join` → picker → board. |
-| **SMOKE-POST-2 — in-app text chat (Sarah request)** | Andrew 2026-07-02: Sarah has mentioned wanting a text chat; likely wanted in the **waiting room** AND available **during the live session**. **Post-Sarah, probably pre-release.** |
-| **SMOKE-POST-3 — tutor "Start anyway" override when student lacks stable A/V** | Andrew 2026-07-02 follow-up to SMOKE-BLOCK-1: consider letting the tutor start despite no stable student A/V — **but ONLY if we can be certain the student can at least see the whiteboard** (otherwise there is no point). Post-Sarah. Depends on SMOKE-BLOCK-1 detection fix landing first (so the override is a deliberate degraded-mode choice, not a workaround for a false negative). |
+**[P1][REC] PRESARAH-1 — always-on recording; remove recording-intent toggles**  
+Locked decision. `userWantsRecording` + `StudentRecordingDefaultToggle` still in tree; gate on `phaseActive && audioCapturePolicy`. Fragile FSM surface — Sonnet 5-axis on diff.
 
-### 📋 Process note (smokebook design)
+**[P1][REC] WS-N5 — resume FSM `armed` window drops stroke capture after reopen**  
+On reopen FSM re-enters `armed` → `wbCaptureActive` false. Related to solo/in-person stroke gap; distinct from audio-only fix.
 
-Andrew is **not** executing the *"look through the console for `clock_*` logs"* steps — the console has thousands of messages and filtering is too much friction ("the main point is it seems to be working"). **Implication:** future smokebooks should not rely on console-log inspection as a primary check; prefer a visible on-screen affordance (debug HUD, a surfaced clock/pause indicator) or an automated log-assertion. The clock observability logs are still valuable for prod debugging, just not as a manual smoke step.
+**[P1][WB] WS-X — PDF board stroke leak via v3 broadcast tombstone**  
+PARKED `wb-wave5-ws-x-wip`. `applyRemoteToCanvas` tombstone + v3 broadcast does not filter `isDeleted`. Distinct from E2/E4/E5 fixes.
 
-### ✅ Confirmed working on hardware (Part 3 spine — the reason this was an overall PASS)
+**[P1][NOTES] SMOKE-NOTES-3 — notes fabricate on non-teaching talk**  
+Map/reduce accuracy + abstain path. Prompt @ `cefc5cd` PASS for teaching; refinement flagged. Cross-ref **MAP-ACC** (#1 post-master).
 
-- Full live-session arc felt seamless (item 1 PASS). Clock↔stroke/audio replay alignment held early/mid/late incl. after page switches (item 3 PASS). Disconnect→freeze→resume worked as designed — banner ~6s, recording stopped ~2s later, jump to reconnect, **first-8s strokes came through at their proper time, not jumbled** (item 4 PASS). No wall-clock inflation: ~36s outage, replay/live-clock difference matched (item 5 PASS). End-finalize + mixdown replay intact (item 7 PASS). Tutor-mic transcription unregressed by the schema labels (item 8 PASS). Notes accurate to the real teaching content (item 6 PASS).
+**[P1][WB] Gate A5 — live bidirectional sync completeness audit**  
+Enumerated bidirectional pass: strokes, shapes, text, eraser, move, pages, PDF, math, graph, undo, assets, **ST-05 laser verify**. Partial: `whiteboard-live-sync-regression.spec.ts` inv 1–12. **Laser wire shipped** (`broadcastPointer`, `useCollaboratorPointers`) — remaining work = hardware verify + color/visibility (**WB-LASER-ICON-CONTRAST**), not "never built."
 
----
+**[P1][WB] Gate A6 — replay fidelity + AV/timer sync comprehensive pass**  
+Partial tests exist; enumerated completion still open. Cross-ref **SMOKE-UX-1**, **SSG-3**.
 
-## wb-wave5-polish hardware-smoke findings (Andrew, 2026-07-04)
+**[P1][AUTH] SMOKE-PRIV-1 — learner sign-out leaves parent session on shared device**  
+Dual-cookie by design; Andrew 2026-07-04: sign-out must not leave someone else's session. Options: learner-only logout landing, device lock clearing both cookies.
 
-> From Andrew's real-hardware smoke of `wb-wave5-polish` (in-person + solo paths; wife drew strokes with no remote student joined). **2026-07-04 smoke — test coverage gap:** wb-wave5-polish Playwright teeth overwhelmingly join a **REMOTE** student and usually seed a recording; the **in-person / solo / no-audio / tutor-device** quadrant had **zero Playwright coverage**, which is why Entries 1–3 below reached hardware smoke only. New teeth for that quadrant are **required before the Sarah cut**.
+**[P1][LEGAL] SEC-POLICY-TRUTH — retention lifecycle enforcement**  
+Interim honest copy on `/privacy` (PASS recheck); no enforcing cron / account-closed state modeled. Do not claim fixed retention on `master` until built.
 
-### 🔴 Pre-Sarah reliability blockers
+**[P1][OPS] CUT-1 — comprehensive both-theme pre-master smoke**  
+Deferral ledger KEEP; full MASTER-CUT style run before next master cut.
 
-| Item | Notes |
-|------|-------|
-| **SMOKE-BLOCK-5 — in-person & solo (no-remote-student) sessions don't capture strokes → no replay** | **P1 / pre-Sarah.** Symptom (real HW smoke, Andrew's wife): drew whiteboard strokes with no student joined / in-person; at end **"Replay session"** did not appear and review showed **"No board strokes recorded"** / **"No recording available"**. Root cause: Replay is correctly gated on `hasAudio \|\| eventCount > 0` (`SessionReviewMode.tsx` ~L111), but the persisted event log is empty (`events: []`). In a LIVE, audio-allowed session with no student joined, the recording FSM stays in `armed / awaiting_first_participant` (`lifecycle-machine.ts` ~L636–644), and while armed the whiteboard stroke-capture gate `wbCaptureActive` is false for audio-policy modes (`audio-capture-policy.ts` `deriveWbCaptureActive`; `useWhiteboardRecorder.ts` ~L703 skips appending diffs when `recordingActive` is false) → strokes never enter the log → empty finalize. Also: WS-B `runServerPersist` aborts without a `boardDocument` (`useWhiteboardRecorder.ts` ~L1162), and roster **"End and review"** has no client-log upload fallback. Partly pre-existing (armed gate is Phase-4d), surfaced by **PRESARAH-1** always-on recording; WS-B/WS-C finalize+assembly are new this wave. **HAPPY path** (student joins → recording starts) **DOES** capture strokes. Scope: no-remote-participant case (in-person + solo-before-student). **No Playwright coverage** exists for strokes-only/no-audio end-to-review. **Fix requires touching the fragile recorder FSM + a design decision** on how in-person/solo should record — plan-mode pass required, likely escalate tier. **Playwright teeth requirement:** in-person/solo session, draw strokes, end, assert Replay affordance + non-empty events + strokes counted. |
+**[P1][OPS] CUT-4 — claim Sarah pilot family before NOTES_AUTH_WALL**  
+Pre-cut prerequisite; SKIP in master-cut smoke (Sarah camping).
 
-### 🟡 Bugs / gaps (triage pre-Sarah vs backlog)
+**[P1][OPS] CUT-5 — production env scoping confirm before master cut**  
+Open Andrew-confirm.
 
-| Item | Notes |
-|------|-------|
-| **SMOKE-BUG-10 — "Waiting for your student to join…" banner shows in in-person mode** | **P2.** Root cause: in-person `sessionMode=IN_PERSON` (prisma `SessionMode` enum) is wired only to the waiting-room Start-button bypass (`WhiteboardWorkspaceClient` ~L5760–5763), **NOT** to the recording FSM or banner. Banner is driven by FSM `armed/awaiting_first_participant` via `syncEnabled: !!syncUrl` + zero WebRTC participants (`lifecycle-machine.ts` ~L642; `WhiteboardWorkspaceClient` ~L2389, L2401–2407, L6508) — `sessionMode` is never consulted. Same underlying condition as **SMOKE-BLOCK-5**. Pre-existing when IN_PERSON landed; not created by wave5 polish UI. Only in-person Playwright test asserts Start-enabled, not banner-absent. **Test gap:** assert banner absent in in-person. |
-| **SMOKE-BUG-11 — tutor mic device not remembered in the picker (present-but-broken)** | **P2.** Root cause: tutor mic **IS** persisted (global `tn-mic-device-id`) and the recorder (`useAudioRecorder`) restores it for capture, but the whiteboard picker UI reads `useLiveAV.pickedMicSlot`, which is **never initialized** from `tn-mic-device-id` or from the external recorder stream on mount (`useLiveAV.ts` ~L1686–1730, comment L269–273) — so the waiting-room/overflow picker defaults to slot 0. E6 (`3a8572f`) wired the **LEARNER** mic end-to-end in `useLiveAV` (`tn-mic-device-id:<learnerProfileId>`) but left the tutor on the recorder path unbridged. Also `localStorage` is per-browser (won't sync across machines), and stale stored ids fall back to OS default (explains "only works when the right device is default"). **Enum of what persists today:** tutor cam YES, tutor mic PARTIAL (capture yes / picker no), learner cam YES, learner mic YES. Logic layer is jest-testable; picker pre-select is DOM/Playwright testable. **No tutor-mic pre-select test exists.** |
+**[P1][AUTH] CUT-6 — 2FA re-smoke on merged integration tip**  
+Not run in master-cut smokebook.
 
-### 🔵 Privacy / shared-device UX
+**[P1][TEST] iOS matrix S1–S14 — real hardware unfilled**  
+[`docs/PHASE-2-IOS-SMOKE-MATRIX.md`](PHASE-2-IOS-SMOKE-MATRIX.md) all rows empty. S3/S4/S7 dispositive on Sarah iPhone.
 
-| Item | Notes |
-|------|-------|
-| **SMOKE-PRIV-1 — learner sign-out leaves parent (account-holder) session live on a shared device** | **P2 / privacy.** By-design dual-cookie coexistence (`mynk_ah_session` + `mynk_learner_session`, identity-phase2-auth-session-design §5.1); learner logout (`/api/auth/learner/logout`) clears **ONLY** the learner layer, so navigating to `/` or `/account/*` reveals the still-authenticated parent account. There is also **no shipped learner sign-out UI** (cross-ref **SMOKE-BLOCK-4** resolved the affordance gap on a prior pass — this row is the shared-device privacy consequence). **Andrew's decision (2026-07-04):** sign-out must **NOT** leave someone else's session going; revisit the exact UX when learner-switching-for-sessions is added. Options to consider: a real learner sign-out that lands on the learner login page; and/or a **"lock this device"** that clears both cookies. Cross-realm privilege separation still holds (learner cookie can't reach `/admin`) — this is a **shared-device privacy/UX gap**, not an auth-boundary breach. Cross-ref **SMOKE-PRIV-2** (backlog priority confirm). |
+**[P0][WB] SSG-2 / PRESARAH-2 — student-detail End → End-and-review (no silent data loss)**  
+`ActiveWhiteboardSessionsList` must offer Resume / End and review / Cancel and delete; no silent `endStaleWhiteboardSession` orphan path. In-session End copy reverted to "End session" (distinct surface).
 
-### ⚪ Process / infrastructure (Andrew, 2026-07-04)
+**[P1][WB] SSG-3 / A6-1 — multi-segment replay scrubber + proportional seek**  
+DEFERRED post-Sarah per deferral ledger; still REAL-FAIL cluster. Partial: `replay-audio-timeline.ts`, WS-L. **WS-G** concat may unblock clean end-state.
 
-| Item | Notes |
-|------|-------|
-| **PIPELINE-1 — stand up real agentic pipeline (agents auditing agents) before release** | **Before release.** Stand up a real agentic pipeline (or build on the existing `agenticPipeline` project) with **agents auditing agents**. Independent roles enforced: one agent writes tests-to-spec, a **different** agent makes them green, and **different** agents review both. Every **PLAN** is auto-audited by agents that **hard-enforce** Andrew's guidelines/requirements. Every **FIX** is auto-audited for spec-tests independent of the code author. **Goal:** the pipeline catches directive drift and guideline violations, not Andrew. **Rationale:** Andrew must be able to operate as product manager and rely wholesale on the pipeline + tests; he will not have time to keep manually redirecting agents that break directives. Origin: Andrew 2026-07-04. |
-| **SMOKE-PRIV-2 — learner sign-out must not leave parent session running (backlog)** | **Backlog** (Andrew explicitly said backlog, not this-wave, 2026-07-04 — confirm if that changes). When a learner (child) is signed in at the same time as the parent and the learner signs out, the app falls back into the parent's account/session (parent's session left running). Sign-out must **NOT** leave someone else's session going. Revisit when learner session-switching for sessions lands; for now it's a privacy/correctness wart. Technical detail + options: cross-ref **SMOKE-PRIV-1**. Origin: Andrew 2026-07-04 hardware smoke. |
-| **VERIFY-ACCT-1 — duplicate-account creation block (verify-then-decide)** | **Verify** (owed to Andrew as an answer). Andrew currently has **both** a parent AND a tutor account under `arangarx@hotmail.com`. Open question: is duplicate-account creation blocked going forward? **Action owed:** verify the signup/account-creation path; if a block exists, confirm + close; if not, this becomes a real backlog gap to fix. Origin: Andrew 2026-07-04 hardware smoke. |
+**[P1][REC] Ship-to-Sarah gate checklist (Andrew confirms)**  
+Proposed gates a–d: End never silent-deletes; replay scrubber; monolithic notes path retired; waiting→WB→end stable. **PENDING** ratification ([`sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md)).
+
+### Post-cut REAL-FAIL cluster (active cleanup)
+
+**[P1][REC] recording-end-to-end — review auto-start from 0**  
+Waived at cut; overlaps **SMOKE-UX-1**, **WB-REPLAY-REOPEN-START-AT-0**.
+
+**[P1][REC] recording-resilience — SessionRecording rows after reopen**  
+Waived at cut.
+
+**[P1][WB] wb-replay-scrub-seek ×3**  
+Waived at cut; scrub drag 429 + frozen scene (**Replay scrub drag** row in §4).
+
+**[P1][WB] view-whiteboard-new-replay — parent share strict-mode locator**  
+Waived at cut.
+
+**[P1][WB] wb-tab-kill-audio-durability ×2 — empty tutor:mic segments**  
+Likely harness; waived at cut.
 
 ---
 
-## v1-redesign durability-wave user-smoke findings (Andrew, 2026-07-08)
+## 2. Post-master-cut cleanup (2026-07-09)
 
-> Post-merge user smoke of the durability wave on the `v1-redesign` preview. Chrome/CSS smoke fixes are being landed inline on `v1-redesign` (tracked in `docs/handoff/ORCHESTRATOR-STATE.md` smoke log). Durable non-chrome items land here.
+**[WAIVED] MASTER-CUT-2026-07-09 — Andrew waived red `test:wb-sync` for Sarah delivery**  
+Merge `v1-redesign` → `master` @ `1c07b5ba` (~22:39 MT). **Green:** `next build`, `test:regression` (117). **Red (isolation):** 9 REAL-FAIL + 2 ENV-FLAKE — triage as cleanup, not Sarah blockers.
 
-| Item | Priority | Detail |
-|---|---|---|
-| **SMOKE-PERF-1 — "Finalizing" slow on short sessions (end-session pipeline fixed overhead)** | **Backlog — next non-chrome work item (Andrew 2026-07-08: rated ~5–10s, tolerable; not a Sarah blocker).** FRAGILE SURFACE — recorder lifecycle / outbox / end-session; needs Sonnet-reviewed pass + full recorder-lifecycle gates incl. `npm run test:wb-sync`. | Root-caused [explore](edd1f7c4-19ad-498e-9e87-f018289ea326): "Finalizing" blocks on the full `handleEndSession` durability chain (stop → `flushPendingUploads` → `drainOutboxOrTimeout` → server-persist flush → events upload → **awaited snapshot** → `finalizeWhiteboardSessionFromBackend` → atomic end txn), which is **~session-length-independent fixed overhead** + Vercel preview cold starts (prod faster). **NOT** notes/Whisper/LLM (those run async in `after()`) and **not** ffmpeg concat (also `after()`). **Ranked fixable inefficiencies:** (1) **awaited snapshot PNG (up to 8s `toBlob` timeout) sits on the blocking path** despite RECORDER-LIFECYCLE docs saying snapshot must NEVER block End — de-block/fire-and-forget this FIRST (biggest single win, but verify review-mode/thumbnail still gets the snapshot); (2) WS-C `finalizeWhiteboardSessionFromBackend` `countEventsInBlobUrl` **downloads+parses the events blob up to 3×** every finalize (`actions.ts:793-799`); (3) redundant client `events.json` upload (step 4b) then server re-fetch of the same blob; (4) serialized per-segment register chain in drain. **Do NOT casually change drain semantics / `registerOk` gating / finalize ordering** (tripwire #2). Prod-log diagnosis prefixes: `fzb=` (WS-C assemble/end), `snp=` (snapshot skip/ok/hang — ~8s gap ⇒ snapshot), `obx=`/`drainOutboxOrTimeout`, `wbp=` (persist flush), `tnt=after_done` appearing AFTER Finalizing clears ⇒ slowness is pre-notes. Origin commit for the added server-finalize latency: `dadc01e` (WS-C moved in-live End to backend assemble). |
-| **DEVICE-PICKER-DEDUPE — collapse duplicate camera/mic entries in device pickers** | **Post-Sarah / pre-release (Andrew 2026-07-08 smoke; not a Sarah blocker).** | **Problem:** Camera and mic pickers can list the **same physical device multiple times** — browser `enumerateDevices()` returns grouped/virtual/duplicate entries (e.g. "Default" + a named entry for the same hardware, or the same camera under multiple `deviceId`s). Confusing on both tutor and student pickers. **Direction:** Collapse duplicates so each physical camera and each physical mic appears once; likely `groupId` + label normalization to dedupe. Applies to tutor and student device pickers. Device-picker polish group — cross-ref **DEVICE-PICKER-MOBILE-FACINGMODE**. Origin: Andrew smoke 2026-07-08. |
-| **DEVICE-PICKER-MOBILE-FACINGMODE — phone camera picker shows Back/Front only (Sarah request)** | **Post-Sarah / pre-release (Andrew 2026-07-08 smoke; not a Sarah blocker).** | **Problem:** On phone/touch layouts the raw enumerated camera list is confusing — multiple ultrawide/telephoto entries for what users think of as one back camera and one front camera. **Direction:** On mobile/touch, camera picker should show only simplified **"Back"** and **"Front"** options, using `facingMode` (`environment` / `user`) rather than raw `deviceId`s. Desktop picker unchanged (full enumerated list). Device-picker polish group — cross-ref **DEVICE-PICKER-DEDUPE**. Origin: Andrew smoke 2026-07-08; **direct Sarah pilot request.** |
-| **SMOKE-AUDIO-1 — first-acquire mic silent until switch-and-back (SEVERE — live A/V + likely recording)** | **✅ Attempt #4 HARDWARE PASS** (Andrew 2026-07-09 tip `3468262d` / `ad7bf4bd`): cancel→refresh path armed **video AND audio**. #3 had failed (`unrecoverable ~5.8s / 3 slots`). Fix: shared mutex + mic-before-cam + swap-aligned reopen. **UX residual:** cold/recovery path can take several seconds with empty camera picker (“allow camera access…”) before devices appear — see **WB-WTR-DEVICE-LOADING**. Cross-ref **SMOKE-AUDIO-3**. |
-| **WB-WTR-DEVICE-LOADING — waiting-room “loading devices” affordance during long mic/cam settle** | **Post-AUDIO-1 UX** (Andrew 2026-07-09). After #4, first session with cam plugged (or silent-recovery path) can look broken: camera dropdown shows “(allow camera access to choose)” / no options for a long beat while mic settle + recovery runs, then devices appear. Prefer shortening wait without regressing Brio arm; if wait stays multi-second, show explicit **loading devices** spinner/copy so tutors don’t navigate away. Gate on `!micAcquireSettled` and/or cam enumerate in flight. Playwright: assert loading affordance visible while settle=false, gone when devices listed. |
-| **ADMIN-STUDENT-DETAIL-MOBILE-ICONS — Session/Share/Notes icons invisible; only Parent Users shows** | **✅ MERGED `a97722df` / `75125d80` (2026-07-09).** **✅ Andrew smoke PASS** (evening tip). Root: `defaultIcons` from client module across RSC boundary. Fix: inline LayoutGrid/Link2/FileText `size-5`. |
-| **WB-REPLAY-PAUSE-COPY — “Pause and hide replay” → “Pause” on share (and tutor if same)** | **⚠️ OVER-APPLIED then corrected.** First merge `a97722df` changed shared `ReplayReadOnlyChromeSlots` → review also said “Pause” (Andrew 2026-07-09: wrong). **Fix:** default label back to **“Pause and hide replay”** (tutor SessionReviewMode); optional `hideReplayLabel="Pause"` only for non-review. Share player has no hide button today. |
-| **WB-REPLAY-PDF-PLACEHOLDER — parent share View whiteboard: PDF pages are placeholders** | **Post-cut cleanup** (Andrew 2026-07-09; waived with master cut). Parent share → new replay surface OK, but PDF boards show placeholders not real pages. Cross-ref asset hydrate / share proxy. |
-| **WB-REPLAY-REOPEN-START-AT-0 — pause/hide then Replay again still starts at 0** | **Known / non-blocking for Sarah** (Andrew 2026-07-09). Confirmed still present; **waived for master cut**. Cross-ref recording-end-to-end REAL-FAIL in gate. |
-| **MASTER-CUT-2026-07-09 — Andrew waived red `test:wb-sync` for Sarah delivery** | **EXPLICIT WAIVE** (Andrew 2026-07-09 ~22:39 MT): merge `v1-redesign` → `master` despite `test:wb-sync` EXIT 1. **Green:** `next build`, `test:regression` (117). **Red (isolation):** 9 REAL-FAIL + 2 ENV-FLAKE — triage post-cut as cleanup, not Sarah blockers. REAL-FAIL list: (1) `recording-end-to-end` review auto-start from 0; (2) `recording-resilience` SessionRecording rows after reopen; (3–5) `wb-replay-scrub-seek` ×3; (6) `view-whiteboard-new-replay` parent share locator (`share-wb-replay-links` strict-mode ×4); (7) `wb-cancel-pending-session` cancel→B copy link (Andrew smoke PASS); (8–9) `wb-tab-kill-audio-durability` ×2 (empty tutor:mic segments — likely harness). ENV-FLAKE: cam-off initials tile; cancel→roster URL. **Product knowns waived with cut:** reopen-at-0, share PDF placeholders (**WB-REPLAY-PDF-PLACEHOLDER**), WB-WTR-DEVICE-LOADING. Tip at cut: `v1-redesign` @ `1c07b5ba` (+ waive docs). |
-| **WB-PDF-BLOB-TOKEN — multi-page PDF import partial fail (Vercel Blob client token)** | **✅ MERGED `bed79060` / `d9026cc3` (2026-07-09).** **Watch-only** (Andrew: can’t force). 4-attempt backoffs + 250ms page spacing. |
-| **WB-STROKE-BLEED — RECURRING (blank + PDF import) — E4 did NOT hold on hardware** | **✅ MERGED E5 `b8f786c8` / `010a3eb5` (2026-07-09).** **✅ Andrew evening: did not repro** — provisional hold; keep PW gate; watch next PDF import. Guard no longer self-clears on hydration onChange. |
-| **WB-AV-STUDENT-INITIALS-ONLY — Pixel: student video initials until refresh** | **✅ MERGED `e5e71900` / `b68efd9c` (2026-07-09) — camOn acquire gate.** **Watch-only** (Andrew: can’t purposely repro). Deny-only false broadcast while acquiring. |
-| **SMOKE-END-WINDDOWN — Finalizing still live (A/V + draw); student ejects only after endedAt poll** | **Pre-Sarah UX / reliability** (Andrew + daughter 2026-07-09). After tutor confirms End, during **Finalizing…** both parties still hear/see each other and can still draw; student only gets “Session has ended” after server `endedAt` + up to 3.5s join-timer poll. Recording already stopped (`userWantsRecording=false`) → post-End strokes are **visible but not recorded**. **✅ MERGED `e58e0826` / `69eacbf6` (2026-07-09).** **✅ DECIDED (Andrew 2026-07-09 “go with that”):** (1) **disarm board on End confirm** (`wb-board-ending-overlay`); (2) **immediate student wind-down** via relay `session_ending` (`broadcastSessionLifecycle` / `onRemoteSessionLifecycle`) → `session_ended` overlay + poll backup. PERF-1 de-await snapshot **deferred** (blast radius on finalize path). Playwright: `wb-end-winddown.spec.ts` `@wb-presence`+`@wb-recording`. |
-| **NOTES-QUALITY-HOLD-DETAIL — do not scale back reduce detail without target feedback** | **Process** (Andrew recheck 2026-07-09). Prompt_wins notes PASS — “WAY better.” May need less detail later based on pilot feedback, but **do not dial down** until real-target feedback asks for it. |
+| # | Spec | Issue |
+|---|------|-------|
+| 1 | `recording-end-to-end` | Review auto-start from 0 |
+| 2 | `recording-resilience` | SessionRecording rows after reopen |
+| 3–5 | `wb-replay-scrub-seek` ×3 | Scrub seek failures |
+| 6 | `view-whiteboard-new-replay` | Share locator strict-mode ×4 |
+| 7 | `wb-cancel-pending-session` | cancel→B copy link (Andrew smoke PASS) |
+| 8–9 | `wb-tab-kill-audio-durability` ×2 | Empty tutor:mic segments (harness suspect) |
+| ENV | cam-off initials tile; cancel→roster URL | Flakes |
 
-## wb-wave5-polish full-suite baseline / relay-unblock findings (2026-07-06)
+**Product knowns waived with cut:** reopen-at-0 (**WB-REPLAY-REOPEN-START-AT-0**), share PDF placeholders (**WB-REPLAY-PDF-PLACEHOLDER**), **WB-WTR-DEVICE-LOADING**.
 
-> Context: full-suite baseline + relay-unblock effort fixed harness flakes and restored the merge-gate relay (which had silently stopped completing due to an `auth.setup` flake). Harness fixes landed: [`3cb9a7b`](https://github.com/Arangarx/tutoring-notes/commit/3cb9a7b) (shared globally-unique `uniq()` test helper — cross-test fixture email collisions), [`8a381ce`](https://github.com/Arangarx/tutoring-notes/commit/8a381ce) (auth.setup erasure-admin leg → NextAuth API-credentials login), [`0118359`](https://github.com/Arangarx/tutoring-notes/commit/0118359) (wb-wave5 item13 stale oracle `/live/i`→`/solo rehearsal|recording/i`). Cross-ref WS-T tally #10–#11 in [`wb-wave5-execution-queue.md`](handoff/wb-wave5-execution-queue.md).
+**[WATCH] WB-PDF-BLOB-TOKEN** — multi-page PDF import partial fail. Merged `bed79060`; 4-attempt backoff. Watch-only.
 
-### Reliability gaps (branch-only — must fix before WS-I merges to master)
+**[WATCH] WB-STROKE-BLEED** — E5 `b8f786c8`; Andrew evening did not repro. Keep PW gate.
 
-| Item | Notes |
-|------|-------|
-| **WS-I-PRESTART-MUTE — tutor mute before audio graph arms records at full gain** | **REAL product defect, branch-only (`wb-wave5-polish`).** `wb-tutor-recording-mute.spec.ts` › "mute before graph ready" fails: recording-branch gain stays **1** (expected 0) when tutor mutes before the audio graph arms → tutor recorded at full gain when they expected muted. Root cause: WS-I mute contract at hook layer (`tutorRecordingMutedRef` + `useAudioRecorder.ts:1136`), but real UI path (`WbTopBarMicControl.tsx:63` awaits `onAcquireMic()` before `onToggleMute()`) delivers mute intent only via async effect (`WhiteboardWorkspaceClient.tsx:2582`); mount `acquireMic` completes during the await and `createMicAudioGraph` hardcodes gain 1 (`mic-recorder-audio.ts:387`) with ref still false. **Branch-introduced with WS-I [`f748ef7`](https://github.com/Arangarx/tutoring-notes/commit/f748ef7); NOT on master** (master has no recording mute gate) → not Sarah-facing today, but a **completeness gap that MUST be fixed before WS-I merges to master.** Fix (fragile surface): synchronous `setTutorRecordingMute` on mute click (not effect-only) and/or reorder toggle-before-acquire; optional `createMicAudioGraph` init-muted param; workspace-bridge DOM test. Tier: Composer step-back plan → Sonnet review if changing acquire ordering. **Do not merge without green `wb-tutor-recording-mute.spec.ts`.** |
+**[WATCH] WB-AV-STUDENT-INITIALS-ONLY** — camOn acquire gate merged `e5e71900`.
 
-### Known follow-ups — test / harness (not product bugs)
+**[P2][WB] WB-REPLAY-PDF-PLACEHOLDER** — parent share PDF boards show placeholders. Asset hydrate / share proxy.
 
-| Item | Notes |
-|------|-------|
-| **WS-E2-APPLY-REMOTE-PDF-STROKE-LEAK-SPEC — mistimed oracle → RESOLVED 2026-07-07 ([`abfbe9a`](https://github.com/Arangarx/tutoring-notes/commit/abfbe9a))** | **RESOLVED (test-only + additive E2E seam), Sonnet.** Was: `wb-e2-apply-remote-pdf-stroke-leak.spec.ts` failed at L159 (`fingerprintActive=true`, stale — fingerprint cleared by design on first legit post-switch onChange) + intermittently L146 (`every type==="image"`, duplicate of canonical `wb-e2-pdf-stroke-leak.spec.ts` which passes 3/3). Root problem beyond stale asserts: the spec's REAL oracle (`__WBX_INJECT_APPLY_REMOTE__`) had NEVER executed (spec died at L159) AND the injection fired *after* the fingerprint window → never exercised guard `ef5fb1a`. **Fix:** added additive E2E-gated `__WBX_ON_GUARD_RELEASE__` seam in WWC `selectTutorPage`/`releaseGuard` (27 ins / 0 del, behind `NEXT_PUBLIC_WB_E2E_SCENE_HOOK`, prod-inert); retimed spec to pre-arm injection so it fires *inside* the fingerprint window; dropped L141-159 stale/duplicate asserts; oracle `toPass({10_000})`. **Red-before/green-after PROVEN:** guard intact → 2 passed; revert `!has(targetId)` clause → board-3 stroke leaks (fail both attempts). So `ef5fb1a` applyRemote fingerprint-window guard is now **test-proven, not just sound-by-review** → discharges A4 WS-X. Branch-only. |
-| **🚨 RELAY-SHARD-BLOB-MERGE — sharded runner only merges the LAST shard → FIXED [`fb3c039`](https://github.com/Arangarx/tutoring-notes/commit/fb3c039)** | **FIXED 2026-07-07** (moved `MERGE_BLOB_DIR` to repo-root `wb-shard-blobs/` outside cleaned `test-results/` + `PWTEST_BLOB_DO_NOT_REMOVE=1` to stop BlobReporter self-clean; 2-shard proof merged both). Re-run pending to get real classification of the 9 shards-2–5 reds. Was: **CRITICAL infra defect, discovered 2026-07-07 (confirming run tip `995466e`).** `scripts/wb-relay-shard-run.cjs` writes every shard's blob to `MERGE_BLOB_DIR = test-results/wb-shard-blobs`, but each shard's Playwright run cleans `test-results/` (the outputDir), wiping the prior shard's zip. At merge time only `shard-6-report.zip` survives → `merge-reports` + the isolation REAL-FAIL/ENV-FLAKE classifier only EVER see shard 6. Proof: `test-results/wb-shard-merged.json` `stats={expected:22,unexpected:0,...}`, 8 suites = shard-6 only. **Impact:** every prior "F2 validated / 163 across 6 shards / REAL-FAIL:3" verdict was hollow for shards 1–5 (the 3 known reds happened to all be shard-6 specs, so they surfaced; 9 other reds — incl. **Bug A `wb-tutor-recording-mute:70`** and canonical `wb-e2-pdf-stroke-leak:74` — were invisible). **Fix:** write each shard's blob to a distinct dir OUTSIDE the cleaned `test-results/` (or set Playwright `preserveOutput`, or move each shard zip aside immediately after its run) so all 6 blobs reach `merge-reports`; then re-run to get real classification. Composer, test-infra, well-patterned. |
-| **RELAY-MARATHON-SHARDS — `test:wb-sync` must shard, not one serial marathon** | **Infra.** Single ~20-min serial Playwright run manufactures ~18 false-red timeouts via dev-server exhaustion (`ECONNRESET`, blob/transcribe 500s, ffmpeg-unavailable, webpack cache `ENOENT` accumulate). Of 22 hard reds in a full marathon, ~18 environmental (passed in isolation on fresh server). Follow-up: run wb-regression gate as serial **SHARDS/batches** (fresh dev server per shard) so exhaustion stops masking real signal. |
-| **AUDIO-UPLOAD-SPEC-ORACLES — realigned 2026-07-07 (test-only)** | **RESOLVED (test-only), [`a12d1da`](https://github.com/Arangarx/tutoring-notes/commit/a12d1da).** The 2 deterministic `audio-upload.spec.ts` reds surfaced by the validated relay gate were **stale oracles, not product regressions** (explore triage). `:86` (dropzone hidden) — B3 always-mount upload pane is `display:none` until `activeTab==="upload"` (default `"record"`); realigned to scroll `#student-section-notes` into view + `switchToUploadTab()` waits for `audio-tab-upload-pane` visible before asserting dropzone. `:101` (transcribe disabled = RW-7) — legacy `{url,contentType,size}` stub mismatched the harness mint+PUT flow → upload never completed → `pendingAudios` empty → btn correctly disabled; realigned to harness-aware stub (`route.continue()` mint+PUT) + assert `pending-segment-list` visible + `ai-transcribe-btn` `toBeEnabled()` before click. Product behavior unchanged. **Residual flake:** `:101` occasionally fails `switchToUploadTab` on first try (scroll-spy / section-visibility timing on desktop shell), passes on Playwright retry — watch in the confirming relay run. **DEDUP DEBT (composition rule):** `installControllableUploadStub` is now duplicated inline across 3 specs (`wb-tab-kill-audio-durability`, `wb-vad-per-speaker`, `audio-upload`) — extract to a shared test helper in a follow-up de-dup pass. |
-| **JEST-ISOLATION-CLASS-2 — fire-and-forget async DB stragglers (DEFERRED 2026-07-06)** | **Infra — dedicated future pass.** Shared `uniq()` fix [`3cb9a7b`](https://github.com/Arangarx/tutoring-notes/commit/3cb9a7b) eliminated fixture email-collision class; residual non-email cross-test DB pollution remains (~1 flake/run: upload-outbox, share-audio-proxy, erasure-lifecycle, etc.). **F1 truncate FAILED (Tranche F):** global per-test `afterEach` `TRUNCATE ... CASCADE` on `tutoring_notes_test` → ~40 failed suites/run × 3 `jest --workers=1` runs (vs ~1-flake baseline) — `40P01` deadlocks + FK / "Engine is not yet connected" races. **Reframed root cause:** TRUNCATE's `AccessExclusiveLock` collides with **in-flight fire-and-forget async DB work that outlives test bodies** (same stragglers behind `Cannot log after tests are done` + `CostEvent_..._fkey` leaks) — *any* between-test cleanup races them. **Correct fix:** eliminate stragglers — await/mock every fire-and-forget DB path across ~45 integration suites — THEN per-suite/per-test cleanup works. **Medium alt:** scoped per-suite `afterAll` on aggressive-deleter suites only (`note-and-share.test.ts` unscoped `deleteMany`, erasure-lifecycle, student-crud cascade deletes). Failed truncate attempt in `git stash@{0}` on `wb-wave5-polish`; salvaged [`647ec35`](https://github.com/Arangarx/tutoring-notes/commit/647ec35) = transcription-worker extract-chunk mock only; `upload-outbox.test.ts` timing fix dropped. **Andrew (Option A):** DEFER heavy pass; merge-gate jest stays `--workers=1` + retry; classify reds in isolation per execution-queue standing doctrine (6). Cross-ref GATE/HARNESS § (f). |
+**[P2][WB] WB-REPLAY-REOPEN-START-AT-0** — pause/hide then Replay starts at 0. Non-blocking for Sarah; REAL-FAIL waived.
+
+**[P2][UX] WB-WTR-DEVICE-LOADING** — waiting-room loading affordance during long mic/cam settle. Post-AUDIO-1 UX.
+
+**[P2][UX] WB-REPLAY-PAUSE-COPY** — share uses "Pause"; tutor review keeps "Pause and hide replay."
+
+**[PROCESS] NOTES-QUALITY-HOLD-DETAIL** — do not scale back reduce detail without target feedback. Prompt_wins PASS @ recheck.
 
 ---
 
-## Login-friction thread follow-ups (2026-06-14)
+## 3. Reliability — recorder / A/V / lifecycle / outbox
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **BL-RESET-DOMAIN — password-reset email link should respect the originating host** | Medium | When a reset is requested from `preview.usemynk.com`, the emailed link is built from `VERCEL_URL` (= the branch's `*.vercel.app` alias), so it returns to the *branch-alias* domain rather than the originating domain. It's the right deployment but the "wrong" domain, so the preview SSO cookies (scoped to `preview.usemynk.com`) don't apply and continuity breaks. Fix: derive the link base from the request `Host` header (when it's an allowlisted host) instead of `VERCEL_URL`. Root: `src/lib/public-url.ts` `getPublicBaseUrl`. Found during 2FA remember-device smoke (2026-06-14). |
-| **BL-ADMIN-UUID-PICKER — easier admin UUID lookup for `adminResetTwoFactor`** | Low | The admin 2FA-reset flow requires pasting another admin's UUID, which is tedious to find. Add a picker/typeahead (or list) so the operator can select the target admin instead of hand-entering a UUID. From 2FA smokebook test 10 note (2026-06-14). |
-| **BL-RESET-GENERATE — `/reset-password` should offer Chrome's "suggest strong password"** | Low | Chrome offers its generate-password dropdown on the change-password form (it has a `current-password` field anchoring the "credential change" classification) but NOT on `/reset-password`, which only has new-password fields with no logged-in account context. Save-via-Credential-API and the strength meter already work on reset; only the generate convenience is missing. A visible read-only username field was tried (commit `ba2012a`) and did **not** help — reverted at `8483278`. Needs real investigation of Chrome's generation heuristic (form structure / autocomplete combo / possibly a hidden `current-password` anchor or different field ordering). Found during 2FA remember-device re-smoke (2026-06-14). Andrew wants this fixed eventually. |
+### Outbox & end-session
 
----
+**[P0][REC] W1-SHIP-B-FINALIZE — `finalizeOutboxAfterEnd` drops all IDB rows**  
+`finalize()` deletes every row; no `status === "uploaded"` filter. Stuck rows silently lost at End. Distinct from upload-on-retry-exhaustion (#2).
 
-## Whiteboard A/V reliability floor — PLAYWRIGHT-GAPs (wb-wave5-polish, 2026-06-26)
+**[P1][REC] W1-SHIP-B-STUCK — `stuck` semantics + UX vs `permanent-fail@50`**  
+Design: 12 attempts → `stuck`, blob retained, Retry UI. Code: 50 attempts, observer `failed`, no stuck banners.
 
-> Per [`.cursor/rules/playwright-on-fix.mdc`](../.cursor/rules/playwright-on-fix.mdc) narrow exception: some A/V failure classes only reproduce on **real hardware** because Playwright runs Chromium with `--use-fake-device-for-media-stream` (fake media always "works") and jsdom mocks WebRTC. Each fix below ships the closest reproducible surrogate (jest mechanism test and/or `@wb-av` Playwright surrogate); the **on-hardware** failure is tracked here so the gap is named, never silent.
+**[P1][REC] SMOKE-PERF-1 — Finalizing fixed overhead (~5–10s)**  
+De-await snapshot PNG on blocking path (biggest win). `countEventsInBlobUrl` triple-fetch; serialized drain. Andrew tolerates; not Sarah blocker.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-AV-GAP-1 — enumerate×acquire concurrency corruption is Windows-hardware-only** | Tracked gap | The "no webcam / wrong dropdown" corruption (concurrent `enumerateDevices()` + `getUserMedia()` on Windows) cannot be reproduced by Playwright fake devices — fake enumeration never corrupts. The Part 1A enumerate-mutex fix (route every enumerate through `chainDeviceAcquire`, coalesce, never-downgrade) is proven at the **jsdom mechanism level**: `src/__tests__/dom/useLiveAV.dom.test.tsx` › "device enumeration single-flight + never-downgrade (invariant 14)" (single-flight coalescing, per-kind never-downgrade, mutex-serialization vs in-flight acquire). **Hardware oracle:** Sarah/internal Windows multi-cam smoke — device picker stays populated + correct across layout changes and rapid re-open. Invariant 14 (`docs/LIVE-AV.md`). The broader `@wb-av` Playwright surrogate (resize→mesh intact; pick→swap; device options present) is tracked as the `p1a-tests` step of the reliability-floor plan. |
-| **WB-AV-GAP-2 — "tutor can't hear student" end-to-end is real-WebRTC-hardware-only** | Tracked gap | The actual stalled-renegotiation audio failure ("tutor can't hear student") only manifests on a **real `RTCPeerConnection`** where a `pendingRenegotiation` never flushes because the PC stays non-`stable` (lost answer / wedged PC, amplified by dual-device join). Playwright runs Chromium with fake media and jsdom mocks WebRTC entirely, so neither can reproduce a genuinely wedged peer that strands the student's late-added audio m-line. The Part 1A renegotiation-watchdog fix is proven at the **jest mechanism level**: `src/__tests__/av/peer-mesh.test.ts` › "renegotiation watchdog (deferred offer never flushes)" (forces an ICE-restart offer when the PC stays wedged past the timeout; forces a plain re-offer when stable-but-unflushed; cancels on a normal flush; does not fire on a removed peer). **Hardware oracle:** Sarah/internal two-device live session — tutor audibly hears the student after a join where the first negotiation stalls; `[peer-mesh]` logs show `event=renegotiation-watchdog-fire` followed by the tutor's `event=remote-track kind=audio`. Invariant 15 (`docs/LIVE-AV.md`). |
-| **WB-AV-GAP-3 — sync-channel disconnect → reconnect → mesh-intact is hardware-only** | Tracked gap | Mid-session **relay socket drop → reconnect** where live remote audio must survive without a manual page refresh only reproduces on real hardware with a genuine sync-channel disconnect (Playwright fake media and jsdom-mocked WebRTC never exercise a real relay socket flap). The symmetric reconnect fix is proven at the **jest mechanism level**: `src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx` › "sync-reconnect → mesh.restart for every current peer" (tutor sync-client disconnect→reconnect) and › "student sync-reconnect → mesh.restart for every current peer" (student `studentSyncClient` disconnect→reconnect calls `liveAv.reconnectPeer` for every current participant). **Hardware oracle:** [`docs/handoff/wb-wave5-polish-part1-checkpoint-smokebook.md`](handoff/wb-wave5-polish-part1-checkpoint-smokebook.md) item 3 — drop/rejoin recovery feel (stale-peer eviction + symmetric reconnect) — **PASS**. |
-| **PLAYWRIGHT-GAP: start-button-ice-flap-latch — ICE flap re-disabling Start button is hardware-only** | Tracked gap | The "dead Start button" bug (Start button goes to disabled mid-session after the student genuinely connected) only manifests on real hardware where `peerConnectionState`/`iceConnectionState` briefly leaves `connected` (transient ICE flap). In the Playwright fake-media context, ICE never real-transitions — there is no state-machine path to trigger a genuine peerConnectionState flap. The `studentHasConnectedOnceRef` latch fix (wb-wave5-polish, 2026-06-27) is proven at the **Playwright surrogate level**: `wb-session-lifecycle.spec.ts` › "Start button stays enabled once student connects — latch guards against ICE-flap dead-button" (verifies button stays enabled for 5 s after initial connection; catches any immediate re-disable regression). The actual multi-second hardware ICE-flap scenario is a named gap. **Hardware oracle:** Andrew smoke — click Start with student genuinely connected; button must not go dead even if the A/V indicator briefly shows "connecting". |
-| **PLAYWRIGHT-GAP: wb-2nd-session-true-race — true 2nd-session camera-permission race is approximated** | Tracked gap | The "student tile shows initials on 2nd session" bug (camOn:false latched prematurely because camera permission is pre-cached and `requestCam()` resolves before the presence broadcast effect can gate) requires a full session-end → new-session navigation in the same browser context to reproduce the exact timing. The Playwright surrogate (`wb-session-lifecycle.spec.ts` › "second session in same context: student tile has no initials placeholder and Start enables") approximates this by navigating two separate context pages through session 1 (establishing WebRTC once) then immediately opening session 2 in the same contexts — camera permission is pre-granted via `permissions: ["camera"]` in both cases. **Full race test** would require: (a) completing session 1 via the real end-session flow, (b) navigating away, (c) seeding session 2, (d) navigating back — all in the same browser context with the real camera-permission cache state. **Hardware oracle:** Andrew hardware smoke — 2nd session, camera on: student tile must show video (not initials); Start must be enabled. |
-| **PLAYWRIGHT-GAP: SMOKE-AUDIO-1-BRIO-SILENT — first-acquire silent track requires Brio hardware** | Tracked gap | Brio+Windows silent mic only. Surrogates: Jest `mic-first-acquire` E/F/G/H; coordinator mic-before-cam. **#4 hardware PASS** (Andrew 2026-07-09) — keep gap for regression oracle on real Brio. Related UX: **WB-WTR-DEVICE-LOADING**. |
-| **WB-TESTENV-IDB-STUDENT-SUITE — `StudentLiveWorkspaceClient.dom.test.tsx` fails 3/3 on unmocked IndexedDB** | Tracked test-env gap (pre-existing) | All 3 tests in `src/__tests__/dom/StudentLiveWorkspaceClient.dom.test.tsx` (student-role render of `WhiteboardWorkspaceClient`) throw `TypeError: idbFactory.open is not a function` from the audio-draft IndexedDB recovery passive effect (`WhiteboardWorkspaceClient.tsx` ~L1781, `dft` prefix) — the suite does not stub `indexedDB` in its jsdom env, so the recovery scan throws on mount and aggregates into a render failure. **NOT a product bug and NOT in `test:wb-jest`** (the `whiteboard|sync-client|viewport-align` selector doesn't match the filename, so it never runs in the inner loop). **Verified pre-existing via A/B at `8c9f68b`** (session baseline) — fails identically there; neither the `useLiveAvCoordinator` extraction (`e24c76a..7d3612d`) nor the WbTopBar de-dup (`8c2c444..3bca314`) introduced it. **Fix:** add an `indexedDB` stub (e.g. `fake-indexeddb/auto`) to this suite's setup, matching how other dom suites that mount the recorder path handle it. |
+**[P1][REC] network_offline FSM input not wired**  
+FSM supports `network_offline`; host passes `networkOk: true` hardcoded (`WhiteboardWorkspaceClient.tsx`).
 
-### Part 1C — known layout bugs: evidence-first outcome (wb-wave5-polish, 2026-06-26)
+**[P1][REC] WS-N-PAGEHIDE — in-progress segment flush at tab-kill**  
+N1–N3 landed; full in-progress segment flush at kill boundary still open.
 
-All four "known layout bugs" from the wave5 smokebook were **validated already-fixed** via Playwright (red-or-green evidence on real browser, not static analysis) and each now carries a **named lock** so Andrew never re-smokes them:
+**[P2][REC] WS-A-F-1 — outbox register-failure attempt cap**  
+Unbounded retries on persistently-failing register (~10-line fix).
 
-| Smokebook bug | Status | Named Playwright lock |
-|------|--------|------|
-| Half-width desktop window flips to mobile chrome | Fixed (input-capability detection in `useWbLayoutMode.ts`) | `wb-wave5-polish.spec.ts` › "item 20 — half-width desktop stays desktop chrome; touch at same width flips" (same 700px width, non-touch=desktop / touch=narrow, with a `matchMedia` coarse positive control). Pure-fn coverage: `src/__tests__/lib/useWbLayoutMode.test.ts`. |
-| Phone-landscape left rail — Shapes/More unusable | Fixed (44px scrollable rail; bottom-anchored sheets) | `wb-wave5-polish.spec.ts` › "item 21 — phone-landscape left rail: Shapes + More reachable and not clipped". **Methodology note:** sheets animate `translateY(100%→0)` over 0.25s and are always `display:flex` (closed = off-screen) — oracle waits for the `--open` class + the slide-up to settle, then asserts containment vs in-page `innerHeight`. Measuring early reads the off-screen closed box (false clip). |
-| Narrow top-bar spacing/compaction | Fixed | `wb-wave5-polish.spec.ts` › "item 22 — student narrow top bar: no horizontal overflow, controls don't overlap" (320×568; header `scrollWidth ≤ clientWidth` + pairwise non-overlap of sync-pill/overflow/exit), on top of existing containment in `assertStudentPortraitTopBarControls` + item 19. |
-| Stuck loading spinner | Fixed | Already locked: `wb-student-exit-rejoin.spec.ts` asserts `student-excalidraw-loading-guard` not visible on join AND after rejoin (smokebook item 16). No new test added (would duplicate). |
+**[P2][REC] deviceHealth FSM input + `dvc` logging**  
+W1 Ship C design; not in `src/`.
 
-**Part 1C CSS-monolith refactor half — DEFERRED (tracked under WB-COMPONENTS-PASS).** The appearance-preserving refactor portion of Part 1C (co-locate styles with extracted chrome components; scope every selector under `.mynk-wb-chrome`; split the monolith into live/review/replay; move AV tile/cluster sizing into `AVTile`/`AVTilesPanel` and delete the `!important` reach-ins) is coupled to the **deferred** role-parameterized `WbTopBar` extraction (Part 1B) and is high-blast-radius surgery on the protected `WhiteboardWorkspaceClient` + chrome CSS — to be done in a supervised session, not autonomously. The discrete layout **bugs** are resolved above; the structural CSS cleanup remains tracked debt.
+**[P2][REC] timelineStartMs / unified wall-clock session timeline**  
+`getAudioMs` freeze-on-pause; no `timelineStartMs` on outbox. Re-arch D3/D4.
 
-### CSS / chrome monolith decomposition (wb-wave5-polish, 2026-06-30)
+**[P2][REC] audioStartedAtMs ordering bug**  
+Written at enqueue from `Date.now()` vs segment start.
 
-**IN PROGRESS** — appearance-preserving co-location pass (Part 1C p1c): moved component-specific top-bar rules out of `whiteboard-chrome.css` into sibling stylesheets co-located with `WbStudentConnectionStatus` (`.mynk-wb-status-pill*`), `WbToolbarToggle` (`.mynk-wb-toolbar-toggle*` + pulse keyframe), and `WbExitButton` (student `[data-role="student"]` `.mynk-wb-tb-btn--exit` override). **Shared primitives remain single-sourced in the monolith** — `mynk-wb-tb-btn*`, `mynk-wb-topbar__desktop-only`, `mynk-wb-timer`, bottom-toolbar/props-bar `[data-toolbar-hidden]` collapse rules. `WbUndoRedoButtons` has no component-specific rules (shared primitives only). Remaining monolith is tracked debt; continue decomposing toward a wholly co-located/de-duped chrome layer (Andrew's standing direction).
+**[P2][OPS] Outbox permanent-failure Datadog/Sentry breadcrumbs**  
+`obx=` console only.
 
-### Part 1 checkpoint — hardware A/V smoke findings (Andrew, 2026-06-26)
+**[P2][REC] finalizeOutboxAfterEnd register path / legacy segment register deprecation**  
+`registerWhiteboardSessionAudioSegmentAction` still in `actions.ts`.
 
-Smokebook [`docs/handoff/wb-wave5-polish-part1-checkpoint-smokebook.md`](handoff/wb-wave5-polish-part1-checkpoint-smokebook.md) — **Overall PASS** ("a massive win"). Item 2 (tutor hears student) and item 3 (drop/rejoin) PASS; item 1 PARTIAL. Follow-ups below; none block Part 1, but each needs a Playwright test or named gap when fixed ([`.cursor/rules/playwright-on-fix.mdc`](../.cursor/rules/playwright-on-fix.mdc)).
+### Capture & device
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-P1SMOKE-1 — narrow-desktop top bar: controls fall off-screen instead of compacting to overflow; End Session must stay pinned** | ✅ DONE (2026-06-26, wb-wave5-polish) | Fixed with viewport `@media` compaction scoped to `[data-layout="desktop"]` in `whiteboard-chrome.css` (does NOT change layout mode → item-20 firewall intact): progressively reveal the already-rendered overflow `⋯` and hide inline controls lowest-priority-first (theme→grid→inserts→undo/redo→share→cam→mic) only once they'd clip — uses the whole bar first per Andrew. End Session pinned (`flex-shrink:0`, never hidden). One additive 4-line guard in `WhiteboardWorkspaceClient` (`onChromeClick` skips `.mynk-wb-topbar` so the revealed overflow button isn't instantly dismissed) + `LiveBoardChrome` `onChromeClick` prop now typed with the event. **Lock:** `wb-wave5-polish.spec.ts` › "item 23 — narrow-desktop top bar: controls compact to overflow, End Session always visible, no clip" (steps 1280→900→640→460; no horizontal clip; End Session in viewport at every width; overflow hidden+inline at ≥1100 positive control, visible+reachable below). All overflow items already existed in `renderTopBarOverflowItems` — no unreachable controls. |
-| **WB-P1SMOKE-2 — student-side camera slow to become selectable / picked up** | P3 DEFERRED — diagnosed "expected tradeoff" (2026-06-26) | Both A/V directions work; webcam just trails the mic on the student picker. **Investigation verdict (A) EXPECTED TRADEOFF, not a wiring gap** — post-acquire re-enumeration IS wired (`src/hooks/useLiveAV.ts` `enumerateDevicesCore()` at ~1170 after `requestCam` GUM, ~1307 after bundled `requestMicAndCam`); the picker does NOT depend on `devicechange`/manual re-open. Latency cause = by-design Part 1A behavior on **desktop** student join: (1) GUM gated until sync connects (`WhiteboardWorkspaceClient` student bootstrap ~1647-1674); (2) desktop acquires mic THEN cam **sequentially** (`requestMic` then `requestCam`), each holding the device-acquire mutex for GUM + enumerate (touch uses bundled `requestMicAndCam`); (3) cam `<select>` disabled until cam live or `devices.length>0` (`src/components/av/VideoControls.tsx` ~29-30) → mic populates first, camera trails. Matches Andrew's smoke note. **The one real (still-minor) residual lever:** no retry/poll when the first enumerate returns **zero cameras** after a *successful* video GUM (Windows camera warm-up) — recovery then leans on `devicechange`/focus. Polish options if revisited: a conditional delayed `refreshVideoDevices()` right after `useLiveAV.ts` ~1170 when `videoinputs.length===0` but the video track is live; and/or prime/parallelize cam acquire, or surface a "detecting cameras…" picker state. Hardware-only (fake devices enumerate instantly) → `PLAYWRIGHT-GAP`; add a jest timing surrogate + name the gap when fixed. |
-| **WB-P1SMOKE-3 — student must re-pick mic after rejoin (device selection not persisted)** | P3 (UX; from item 3) | Drop/rejoin recovery is snappy (PASS), but the student has to **re-select their mic** after rejoining — device choice isn't persisted across the rejoin. "Better than before though." Persist last-chosen mic/cam (per session or per profile) and re-apply on rejoin. Playwright: rejoin → assert prior device slot reselected (or jest mechanism if hardware-bound). |
-| **WB-P1SMOKE-4 — recording-recovery prompt: always auto-keep on reload (DECIDED — Andrew 2026-06-26)** | P3 (do with SSG-2/end-session thread) | **DECISION (Andrew): Option A — remove the reload keep/discard prompt; always auto-recover** the captured audio (the `dft` IndexedDB recording-draft checkpoint), since it lines up with the session timer and reload-time is when the user has least context to choose. **Caveat to preserve:** auto-keep ≠ unremovable — discarding a genuinely-throwaway session (**F1**) must still be possible via the **explicit end/delete path**, just not the reload prompt. Aligns with **SSG-2** (no silent data loss). Implement alongside the end-session/save-clarity surface (SSG-2/F1), not in isolation. |
+**[P1][REC] Hot-swap mic / track.onended (reliability #7)**  
+`MediaRecorder` continues on silence after device unplug. Subscribe `track.onended`, banner, auto-pause.
 
-### Plan #1 — test-health (wb-wave5-polish, 2026-06-27)
+**[P1][REC] Upload-failure blob persistence (reliability #2)**  
+Blob lost on navigation after retry exhaustion. W1 Ship B.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-FLAKE-JOIN-STALECOOKIE — `/join` stale-cookie fragment test flaky on first attempt** | Low (test-infra) | `tests/integration/wb-session-lifecycle.spec.ts:221` ("stale learner cookie + `/join/[sessionId]#k=KEY` → `JoinAuthGate` saves key to sessionStorage → `returnTo` includes session path") **timed out once** on the final-verification run (`page.waitForURL` 15s exceeded — stayed on `/join…#k=…` instead of redirecting to `/students/login`), then **passed in 1.2s on retry #1**. Almost certainly a **`next dev` on-demand cold-compile flake**: the first hit to the `/join/[sessionId]` route under 5 parallel workers triggers route compilation, occasionally exceeding the 15s nav timeout; the retry hits an already-compiled route. Not a product bug (the no-cookie + auth BLOCKER fragment tests pass first-try). **Fix when convenient:** warm the `/join` route before the assertion (a throwaway nav in `beforeAll`/setup) or bump the first-navigation timeout for this spec. Do NOT mask by widening the global retry tolerance. |
-| **WB-WTR-CAMOFF-REMOTE-TUTOR→STUDENT — extend fix-2a presence oracle to student-side remote tile** | Low (enhancement, not blocking) | The heavyweight Plan #1 test `"cam-off tiles show initials… (local preview + remote peer)"` was **retired/split** (2026-06-28): remote-via-track-mute assertions removed (hermetic relay cannot propagate inbound track mute; superseded by fix-2a `"tutor waiting-room remote tile shows initials after student turns camera off"` which uses relayed `camOn` presence). **Local-preview** cam-off→initials hermetic coverage retained in Playwright (`"cam-off local preview tiles show initials in waiting-room overlay"`) + jest (`AVTile.dom.test.tsx` › local cam placeholder). Fix-2a covers **student→tutor** remote direction only; no Playwright lock yet for **tutor→student** remote cam-off initials via presence — add when convenient using the same presence `camOn` pattern (not track mute). |
+**[P1][AV] WS-I-PRESTART-MUTE — tutor mute before audio graph arms**  
+**VERIFY shipped:** `WbTopBarMicControl.tsx:65-68` mute-before-acquire; `wb-tutor-recording-mute.spec.ts`. Close backlog row after gate green.
 
-### Plan #1 — smoke findings (Andrew, 2026-06-27)
+**[P1][AV] WS-M — two-device hardware smoke (tutor hears student)**  
+`createMicPublishGraph` shipped; real two-device smoke before declaring done.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-JOIN-ADULT-LEARNER — `/join` login redirect is hardcoded to the child PIN login; adult (self) learners can't get through** | 🟡 ROUTING DONE; **E2E BLOCKED on account-system gaps** (smoke 2026-06-28) → see **WB-ADULT-JOIN-ENABLEMENT** | **SMOKE 2026-06-28 (FAIL on hardware):** routing is correct (adult→`/account/login`, child→PIN, both verified) but the self-learner **404s after sign-in**. Root cause ([investigation](05ebe0a4-b8d3-472e-abff-eea1cd06476d)) is NOT this feature's code — it's pre-existing account-system gaps: (a) `SessionParticipant` is only seeded at session-create *if the student is already claimed* (`actions.ts` ~222) with **no backfill** when claimed later → `assertIsSessionParticipant` `not_participant` 404; (b) a stale `mynk_learner_session` cookie (from the wrong-child PIN attempt) takes precedence over the AH session because join Path A runs before Path B (`join/[sessionId]/page.tsx` ~98–110) → 404 on the child profile. Enablement + the stale-cookie fallback tracked in **WB-ADULT-JOIN-ENABLEMENT** (Thread B) + the quick-win fallback below. **Both layers fixed.** **(1) Redirect direction:** `JoinAuthGate` now branches on `isSelfLearner` (server-resolved from `LearnerProfile` via early session DB query): `isSelfLearner=true` → `/account/login`; `isSelfLearner=false` → `/students/login`. `/join/page.tsx` and `/join/preferences/page.tsx` also accept AH session (show "no active session" instead of bouncing to PIN login). **(2) Session-type acceptance:** `/join/[sessionId]/page.tsx`, `join-timer`, `wb-asset`, and `blob` API routes all additively accept `mynk_ah_session` for `isSelfLearner=true` profiles. New shared helper `src/lib/join-scope.ts::resolveAhJoinLearnerProfileId` implements the ownership + isSelfLearner check for API routes (reuses `assertOwnsLearnerProfile` pattern + `wjg=` / `lpr=` log prefixes). **Hard auth-safety:** AH session is denied for any `isSelfLearner=false` profile (child sessions hardcoded notFound()). `assertIsSessionParticipant` still runs on the AH path. **Playwright tests:** `tests/integration/wb-session-lifecycle.spec.ts` › `WB-JOIN-ADULT-LEARNER` describe block — G1 AH-denied-for-child (REQUIRED deny), G2 unauthenticated-child→PIN-login, G3 unauthenticated-self-learner→account-login, G4 AH-allow-path (whiteboard renders). Tags `@wb-presence @wb-sync`. **Note:** `WB-LABEL-PARENT-SIGNIN` still pending Andrew's term decision (unchanged below). |
-| **WB-LABEL-PARENT-SIGNIN — relabel "Parent sign in"** | Low (copy) | Andrew: the "parent" login label needs relabeling (adult learners and guardians both use it). Primary: `src/components/marketing/MarketingHeader.tsx:13` `{ href: "/account/login", label: "Parent sign in" }`. Secondary "parent/guardian" strings: `src/app/students/login/page.tsx` (description, error, PIN-forgotten hint) and `ClaimAuthGate.tsx` ("Create parent account"). The `/account/login` page title is already generic ("Sign in to your account"). **Decision needed from Andrew:** the new term (e.g. "Account holder", "Guardian / adult learner"). |
-| **WB-JOIN-LEARNER-SESSION-PERSISTENCE — student forced to re-login when switching tabs** | P2 (auth/UX; Andrew smoke 2026-06-27, `b0ec215`) | Andrew: as student, "went to a different tab" and "had to log in again." Learner session not persisting across a tab switch / new tab. Investigate: (a) is `mynk_learner_session` a real persistent cookie (correct `Max-Age`/`SameSite`/path/domain) so it's shared across tabs, or is auth/state held per-tab (sessionStorage)? (b) does the **dual-device takeover** (Plan #1, `getOrCreateDeviceId` + `student-<identityKey>-<deviceId>` peerId) treat a second tab as a new device and supersede/eject the first — and could that cascade into a re-auth? (c) does opening `/join/<id>` in a fresh tab re-trigger `JoinAuthGate` because the gate mis-reads the existing session? Confirm whether `deviceId` is `localStorage` (shared, stable per browser) vs `sessionStorage` (per-tab) in `src/lib/whiteboard/local-peer-id.ts`. Reproduce + add the appropriate Playwright/integration coverage. |
-| **WB-P1SMOKE-3 (re-flagged) — last-picked mic/cam not remembered across tab switch / re-login** | P3 (UX) | Re-surfaced in Andrew 2026-06-27 smoke (same root as the existing **WB-P1SMOKE-3** rejoin row above): device choice isn't persisted. Now also observed across a tab switch / re-login, not just drop/rejoin. Persist last-chosen mic/cam (per profile or per session) and re-apply on any re-entry (rejoin, new tab, re-login). Fold into the same fix as WB-P1SMOKE-3. |
-| **WB-DEVTOOLS-FIXTURE-LOGIN-AS — "Log in as" for parent + child fixtures (not just tutor)** | P3 (dev-tools; post-Sarah-release per Andrew 2026-06-27) | The dev-tools fixtures panel has a "Log in as" button on the **tutor** fixture only. Andrew wants the same one-click "Log in as" for the **parent (account-holder)** and **child (learner)** fixtures too, to speed multi-role smoke (esp. the adult/child join + dual-device flows). Reuse the existing tutor "Log in as" mechanism; for child, mint a learner session; for parent, an account-holder session. Explicitly **post-release-to-Sarah** priority. |
-| **WB-AV-PER-STREAM-VOLUME — per-remote-stream volume controls in waiting room / live A/V** | P3 (UX; Andrew 2026-06-27) | Andrew: "probably need volume boost controls here (at some point maybe individual volume controls for each other stream than your own)." Add per-remote-participant volume control (boost/attenuate each remote audio stream independently of your own). Applies to the waiting-room overlay tiles and live A/V tiles. Backlogged at Andrew's request. |
-| **WB-LIVEBOARD-STUDENT-CHROME — live-board student narrow-desktop chrome parity (Thread A)** | ✅ **DONE** @ `b5ac91c` on `wb-wave5-liveboard-chrome` (2026-06-29) — awaiting Andrew hardware smoke ([smokebook](handoff/wb-wave5-liveboard-chrome-smokebook-2026-06-29.md)) | **Pre-existing, surfaced by smoke 2026-06-28 item 8.** **(8a)** ✅ student `@media` compaction CSS restored (`whiteboard-chrome.css`; disclosure hidden `<1100px`); Playwright `8a` in `wb-chrome-interactions.spec.ts` (`@wb-chrome @wb-viewport`). **(8b)** ✅ `AudioControls`/`VideoControls` in student overflow for non-touch desktop (`WhiteboardWorkspaceClient.tsx`); Playwright `8b`. **(8c)** ✅ student live-board `WbTopBarMicControlLive` passes `showInlineMeter` + `overlayMicMeterStream` (bundled in `f764235`); Playwright `8c` (`@wb-chrome @wb-av @wb-presence`). **(8d)** ✅ `calibrateMicLevel` noise-floor + scale in `mic-recorder-audio.ts` (shared tutor+student); jest independent-oracle suite; **PLAYWRIGHT-GAP** for live bar animation (hardware smoke item 4). **Still open (out of scope this branch):** device-selection persistence (cross-ref WB-P1SMOKE-3 / WB-JOIN-LEARNER-SESSION-PERSISTENCE). |
-| **WB-WAITINGROOM-PICKER-LAYOUT — mic/cam toggles vs device pickers in waiting room** | Low (UX; Andrew liveboard smoke 2026-06-29) | Andrew: mic/cam toggles should sit **next to** their device pickers, **or** move the pickers to the bottom of the "More" dropdown — the on-page pickers consume a lot of space in the waiting-room overlay. |
-| **WB-OVERFLOW-MENU-PHONE-CONTAINMENT — overflow ⋯ menu must stay inside phone viewport** | Low (verify on phone; Andrew liveboard smoke 2026-06-29) | On desktop the ⋯ overflow dropdown options may render outside the browser window (acceptable). **Must verify** the menu stays **inside** the viewport on a phone — must not clip off-screen. Needs phone hardware check. |
-| **WB-ADULT-JOIN-ENABLEMENT — make adult self-learner join actually usable end-to-end (Thread B)** | **WON'T-FIX for Sarah (Andrew 2026-06-30)** — moot | **B1 WON'T-FIX:** `SessionParticipant` backfill for students claimed after session create — Andrew confirmed not a real scenario (could only arise from v1-redesign test data; data resets at master cut). **(B2-login)** ✅ done. **(B2-signup)** still open if adult onboarding resumes post-Sarah. **(B3)/(B4)** deferred with Thread B. Original scope preserved below for audit. **Pre-existing account-system gaps blocking WB-JOIN-ADULT-LEARNER E2E ([investigation](05ebe0a4-b8d3-472e-abff-eea1cd06476d)).** **(B1)** ~~`SessionParticipant` backfill~~ **WON'T-FIX.** **(B2-login)** ✅ `ClaimLoginForm` converged onto shared `AccountHolderLoginForm` (fix 7b, 2026-06-28). **(B2-signup)** `ClaimSignupForm` never passes `isSelfLearner` — still open. **(B3)** Gate claim `/setup` PIN panel to child learners only. **(B4)** Parent→self-learner toggle. **Branch off `wb-wave5-polish` after the quick-wins merge.** |
-| **WB-WAITINGPOLISH-QUICKWINS — finish tonight-scoped polish on `wb-wave5-waiting-polish` then merge** | In progress (2026-06-28) | Quick-wins to land on the branch before merging takeover + waiting-room + adult-join routing to `wb-wave5-polish`: **2a** ✅ remote off-camera tile — presence `camOn`/`micOn` on sync presence + `AVTile` signal oracle (track `enabled`/`muted` does NOT propagate receiver-side; jest + Playwright presence path; `PLAYWRIGHT-GAP` comment on raw track-mute in `wb-session-lifecycle.spec.ts`); **1a/3a** waiting-room mic meter must animate when MUTED too; **3b/1c** ✅ remove redundant in-dropdown mic picker in waiting-room overlay (`showDevicePickerInDropdown={false}` on overlay `WbTopBarMicControlLive`; on-page `.mynk-wtr-device-pickers` unchanged; live-board dropdown picker unaffected); **1b** match the camera control style to the new mic control; **7b** ✅ converge `ClaimAuthGate` login onto shared `AccountHolderLoginForm` — `email_not_verified` now maps to verify-email message in claim flow (was collapsing to generic "server" error); both `/account/login` and `/claim/[token]` use the same component (`src/components/auth/AccountHolderLoginForm.tsx`); jest test in `src/__tests__/components/auth/AccountHolderLoginForm.dom.test.tsx`; **WB-ADULT-JOIN-ENABLEMENT B2 signup convergence** (`ClaimSignupForm` + `isSelfLearner`) still open as tracked debt; **join 404 stale-cookie fallback** ✅ — `join/[sessionId]/page.tsx` Path A now uses `verifyIsSessionParticipant` (non-throwing); non-participant learner cookie falls through to AH path instead of 404'ing; fail-closed: non-participant learner cookie + no AH → still 404; Playwright tests in `wb-session-lifecycle.spec.ts` (`@wb-presence`). Re-smoke ONLY these, then merge. **8c moved to Thread A** (same live-board top-bar code as 8a/8b — avoid cross-branch conflict). |
+**[P2][REC] In-progress segment IDB on crash (reliability #1)**  
+Workspace draft store shipped (Ship A); in-progress `MediaRecorder` chunks still memory-only.
 
-### Whiteboard notes consent reframe (Andrew 2026-06-30)
+**[P2][REC] Cross-session stuck/orphaned draft surfacing (1b)**  
+Backlogged; shape with W1 never-delete principles.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME** | Post-notification-system | The "Allow session notes email" permission models nothing real today (no auto-emails are sent) and is **not** a privacy setting. Future-correct framing = a recipient-facing **subscription/communication-preferences** model, separate from consent/privacy. The real concern is **deliverability — will the recipient welcome the email, or does sending it put us in a spam pool / CAN-SPAM risk** — not a privacy toggle. **Andrew 2026-06-30** scoped it as ~2–3 separate subscription categories (copy illustrative): (1) account/learner relationship emails + reminders (the manual `sendUpdateEmail` notes-link → parent falls here), (2) informational/product emails (features/fixes/additions), (3) promotional emails (if/when added). **Interim decision (Andrew 2026-06-30):** with no subscription system yet, `sendUpdateEmail` **stays ungated and continues to send** (it's a manual tutor action, not a privacy gate). **Currently:** consent toggle hidden from UI + `allowNoteSending` unenforced in all server actions (incl. `sendUpdateEmail`); schema field retained. May fold into the account-holder communication-preferences surface — see [`docs/AUTH-IDENTITY-REDESIGN.md`](AUTH-IDENTITY-REDESIGN.md). Reframe when the notification/subscription system is built. |
-| **WB-NOTES-DIVORCE-EMAIL-STATES** | Structural cleanup (post-Sarah or with notes lifecycle work) | `SessionNote` structure must be divorced from the emailing concept: drop the DRAFT/READY states (the `nsi` bridge lifecycle), which were conceived around "ready to send." Notes are notes; no send-lifecycle. Structural cleanup of the notes lifecycle. |
-| **WB-SESSION-CONSENT-OVERRIDE** | Won't build for Sarah | Session-scoped consent override in the waiting room (one-session-only tighter setting) — Andrew 2026-06-30: durable consent only; no per-session override for Sarah merge. |
+**[P2][REC] Recovery banner stacking — audio + WB + disconnect (1c)**  
+Consolidate presentation only; keep per-system Keep/Discard.
 
-### Consent design pass — ratified decisions (Andrew 2026-06-30)
+**[P2][REC] Draft clear / handleReset edge cases (1d, 1e)**  
+Spurious recovery banner; duplicate audio risk.
 
-> **Source:** consent/recording design pass — Block A @ `691711f`; Block B + Block C ratified 2026-06-30. Cross-ref: [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) Recent architectural decisions table.
+**[P2][REC] B6 — audio recovery after external app steals mic**  
+Discord overlap; `ondevicechange` feasibility.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **CLIENT-AUDIO-CONSENT-GATE** | **Ship-to-Sarah blocker** | **Block B ratified 2026-06-30; 7a fail-closed-universal ratified 2026-06-30.** Client consent projection = Sarah-merge **BLOCKER**, hard-honored end-to-end. Today enforcement is shallow (end-session DB registration only): non-consenting student audio still captured client-side, uploaded to Blob, checkpointed to IDB, and transcribed mid-session (`enqueueChunkTranscriptionAction` has no consent gate) — only final `SessionRecording` DB row skipped (third-party egress of non-consented minor audio). **Fix:** load `SessionConsentSnapshot` into workspace (`page.tsx` loads none today); gate capture/upload/IDB/transcription — denied audio **never** captured, uploaded, persisted, or transcribed. **No snapshot → no audio** (7a fail-closed-universal). **By mode:** in-person = student audio off → **no session audio at all**; remote = keep tutor, drop student from mixdown + transcription (`recording-gain=0` path, currently unwired). Live hearing **never** gated. Honest tutor indicator when audio won't be recorded — incl. unmistakable **"no consent on file → recording & notes off"** when snapshot missing. `allowAudioRecording` copy modality-agnostic — folds into **LIVE-SESSION-CONSENT-COPY**. Build **once** so `p3-consent-recording` extends cleanly. Impl plan: [`wb-block-b-consent-gate-plan.md`](handoff/wb-block-b-consent-gate-plan.md). Cross-ref Block A: **CONSENT-HONESTY-SARAH-MERGE-BLOCKER**, **LIVE-SESSION-CONSENT-COPY**. |
-| **CONSENT-COLLECTION-COMPLETENESS** | **RATIFIED SARAH-MERGE BLOCKER** | **Andrew ratified 2026-06-30** — consent-collection completeness is a Sarah-merge **BLOCKER** (closes the 2026-06-30 reachability finding holes). **CC-1 (no session without claimed student):** tutor cannot start/create a whiteboard session unless the `Student` is claimed (linked to a `LearnerProfile`); closes hole (3) unclaimed tutor-created Student; tutor gets clear "invite the parent to claim before starting a session" affordance. **CC-2 (claim requires explicit consent choice):** parent cannot finish learner claim without choosing either "Save preferences" OR explicit "No consent now, I'll review later" — **either** choice writes a `ConsentRecord` (decline path writes ALL-OFF record); closes hole (1) claim-complete-without-consent; warning copy when claim leads to active session invite (DRAFT strings — Andrew approval pending). **Auto-resolved by CC-1 + CC-2:** ungated live join for unconsented minor — once a snapshot **always** exists post-claim, existing join gate ([`join/[sessionId]/page.tsx`](../../src/app/join/[sessionId]/page.tsx)) enforces `allowLiveSession` (all-off → `allowLiveSession=false` → live join denied); no separate live-gating mechanism needed. **7a fail-closed-universal** + Block B hold the **recording** line. **✅ RESOLVED (Andrew 2026-06-30) parent-created-learner consent linking / B2 Step 6 scope:** out of consent-honesty blocker; pilot path (tutor-invite → parent-claim) fully covered by CC-2 claim-screen choice ("Save preferences" / "No consent now, I'll review later" — both write `ConsentRecord`). Standalone B2 Step 6 parent per-tutor consent editor remains deferred (see **B2 parent consent management UI (Step 6)**). Parent-initiated tutor assignment = future **PARENT-INITIATED-TUTOR-REQUEST**. **Still PENDING Andrew:** CC-2 warning-copy approval (DRAFT). Cross-ref: [`wb-block-b-consent-gate-plan.md`](handoff/wb-block-b-consent-gate-plan.md) § Scope expansion; **CLIENT-AUDIO-CONSENT-GATE**; [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) CC-1/CC-2 rows. |
-| **WB-INPERSON-AUDIO-SUBTOGGLE** | Future (not pilot) | **Block B ratified 2026-06-30.** Context-scoped sub-toggle: "Allow audio recording only when the student is in-person with the tutor" — appears when general audio consent is off. Future granularity; **not pilot scope**. |
-| **WB-CONSENT-UNCONDITIONAL** | ✅ Ratified (Sarah merge) | Whiteboard recording is **unconditional** for Sarah merge — not separately gated. `allowWhiteboardRecording` consent toggle **hidden** from UI (same pattern as **WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME** — do not show an off-switch we don't honor). Prisma `ConsentRecord.allowWhiteboardRecording` + `SessionConsentSnapshot` field **retained** (no migration). WB capture covered by `allowLiveSession` consent + privacy policy/ToS. Re-introducing real enforcement later is additive (D-1 replay access-gate, already mapped) pending **CONSENT-LEGAL-CONSULT**. |
-| **LIVE-SESSION-CONSENT-COPY** | **Ship-to-Sarah blocker** (copy approval) | `allowLiveSession` toggle copy MUST clearly and honestly state BOTH (a) the student will be seen and heard live, AND (b) whatever goes on the whiteboard is recorded. Honest, explicit copy is the legal cover (Andrew: clear+honest = "fairly covered" pending counsel) and the anti-dark-pattern guarantee. **Literal final copy string drafted for Andrew's approval — never auto-shipped.** Part of minimal honesty fix under **CONSENT-HONESTY-SARAH-MERGE-BLOCKER**. |
-| **CONSENT-DEFAULTS-OPT-IN** | ✅ Ratified (policy) | Consent toggle defaults stay **OFF** / affirmative opt-in. Rationale: child-related consent must be affirmative (GDPR pre-ticked boxes invalid; COPPA affirmative parental consent — confirm specifics with **CONSENT-LEGAL-CONSULT**); opt-out defaults violate founding no-dark-patterns principle. **Andrew "should I default-on?" = NO.** |
-| **CONSENT-PRESENTATION-NO-TRICKS** | Fast-follow (not blocker) | Fix low activation via **presentation**, not defaults: OFF-but-recommended toggle should feel like unfinished/attention state (not neutral resting state); value-first one-line microcopy (kill the copy wall); guided-setup feel with completion indicator; distinguish required-for-feature (live session) from recommended (audio→notes). Must not go even one step toward anything construable as a "trick." Tracked for execution as **CONSENT-UX-REDESIGN**. |
-| **CONSENT-HONESTY-SARAH-MERGE-BLOCKER** | **Ship-to-Sarah blocker** | Consent UI honesty is a **Sarah-merge blocker** (not fast-follow). Rationale: Sarah merge = first no-going-back moment (real families may sign up). **Minimal honesty fix (ships WITH merge):** hide dead `allowWhiteboardRecording` toggle; rewrite `allowLiveSession` copy per **LIVE-SESSION-CONSENT-COPY**; sweep consent UI for any other shown-but-unenforced toggles. Small, well-patterned. **CONSENT-UX-REDESIGN** (fuller guided-setup / affordance / microcopy pass per **CONSENT-PRESENTATION-NO-TRICKS**) = fast-follow, NOT a blocker. Cross-ref: [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) Ship-to-Sarah gate item (4). |
-| **CONSENT-UX-REDESIGN** | Fast-follow (post-Sarah-merge blocker) | Fuller consent UX pass: guided-setup affordances, completion indicator, value-first microcopy, OFF-but-recommended attention states per **CONSENT-PRESENTATION-NO-TRICKS**. Explicitly NOT required for Sarah merge — ships after **CONSENT-HONESTY-SARAH-MERGE-BLOCKER** minimal fix. |
-| **CONSENT-LEGAL-CONSULT** | When affordable | Validate with counsel: (a) sufficiency of "live-session consent + privacy policy covers minor whiteboard capture", (b) whether minor WB capture needs its own affirmative gate, (c) child-consent opt-in requirements, **(d) transcription of minor audio** (Block B ratified 2026-06-30 — mid-session OpenAI per-chunk transcription of non-consented audio is today's shallow-enforcement gap). Andrew will pursue when he can afford counsel. |
-| **WB-SELECTIVE-REDACTION** | Future (explicitly NOT pilot) | Possible future feature to redact personal artifacts (e.g. homework PDFs/images) from whiteboard capture while keeping strokes — content-classification + legal problem. **Explicitly NOT attempted for pilot**; whiteboard is all-or-nothing per **WB-CONSENT-UNCONDITIONAL**. |
-| **PARENT-INITIATED-TUTOR-REQUEST** | Post-Sarah / pre-release nice-to-have | Parent pre-finds/selects a tutor and sets per-tutor privacy preferences up front (before tutor has created the student link). Requires tutor-side accept flow + new "pending student requests" tutor page. Consent still captured explicitly at assignment time — **never assume consent for a non-emancipated minor**; no consent bypass without an account created with explicit self-manage (adult/emancipated) declaration. Cross-ref: **CONSENT-COLLECTION-COMPLETENESS** (pilot path covered by CC-2); deferred **B2 parent consent management UI (Step 6)** (post-claim consent editor). |
-| **WB-DISCONNECT-GAMIFICATION-DEFERRED** | Deferred (Andrew 2026-06-30) | Considered disabling the WB when not both-present (anti-gamification) and/or a transparent "student disconnected" gap-marker on replay. **Andrew 2026-06-30: KEEP AS-IS** (WB usable during disconnect; strokes cluster at frozen pause instant). Revisit only if gaming becomes a real problem; gap-marker = possible future transparency upgrade. Rationale: billing is wall-clock not WB content, so WB content isn't a gaming/billing lever; locking the board on every student blip harms reliability (North Star). |
+**[P1][REC] B11 — release camera/mic tracks on session end**  
+Sarah blocked re-entering Discord. `RECORDER-LIFECYCLE` Surface 2.
 
----
+**[P2][REC] macOS ondevicechange debounce — unvalidated**  
+500ms debounce on Safari unvalidated.
 
-## Consent-honesty pre-merge smoke follow-ups (2026-07-01)
+**[P3][REC] Wire-level mute coordination**  
+Tutor mute local only; remote still receives RTP.
 
-> **Source:** Andrew hardware smoke of `wb-wave5-polish` @ [`docs/handoff/consent-honesty-smoke-findings-2026-07-01.md`](handoff/consent-honesty-smoke-findings-2026-07-01.md). Merge-blocking items (MB-*) are triaged in that doc §A — not duplicated here. Rows below = bugs (§B), UX/post-Sarah (§C), design questions (§D).
+**[P3][REC] Remote video track recording**  
+Audio-only `remote-stream-recorder`.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **CH-SMOKE-STUDENT-MIC-PERSIST — student microphone choice not remembered** | P2 (bug) | Andrew 2026-07-01 consent-honesty smoke (Block B #1): "Student microphone is still not being remembered." Cross-ref **WB-P1SMOKE-3** / **WB-JOIN-LEARNER-SESSION-PERSISTENCE** (device persistence family). Detail: findings §B-1. |
-| **CH-SMOKE-PARENT-INTERSTITIAL — interstitial absent when parent logged in** | P2 (bug; possible regression) | Block B #5: "Why do we NEVER get the interstitial anymore even when the parent is logged in?" Confirm intended behavior vs regression. Detail: findings §B-2. |
-| **CH-SMOKE-SAVE-PREFS-FEEDBACK — Save preferences click feedback on privacy manage** | P3 (bug; verify post-fix) | Block B #1: save preferences on privacy manage page gives no click feedback. Smoke ran POST `d7be4b3` — verify inadequate feedback vs pre-build test. Detail: findings §B-3. |
-| **CH-SMOKE-REPLAY-PLAYPAUSE-OVERLAP — Play/Pause overlaps Board tab on replay** | **POST SARAH PRE RELEASE** | Replay chrome layout: Play/Pause control overlaps Board tab (screenshot in smoke). Detail: findings §C-1. |
-| **CH-SMOKE-STUDENT-MIC-BOOST — student mic-boost controls like tutor** | **POST SARAH PRE RELEASE** | Block B #1: student should have mic boost controls just like the tutor. Distinct from **WB-AV-PER-STREAM-VOLUME** (per-remote-stream). Detail: findings §C-2. |
-| **CH-SMOKE-SETTINGS-SAVE-ON-TOGGLE — save-on-toggle for non-gated settings** | P3 (UX) | Block B #1: privacy manage (and similar) should save when toggle clicked — no hunt for "Save preferences" unless an "are you sure?" gate applies. Detail: findings §C-3. |
-| **CH-SMOKE-FOLLOW-MATCH-COPY — Follow vs Match tutor view copy + disable** | P3 (UX) | Block B #1: clarify "Match tutor's view" as one-time action; disable Match when "Follow tutor view" is on (consider "tutor's" rename). Cross-ref **WB-FOLLOW-TUTOR-TOGGLE-STYLE** (styling only). Detail: findings §C-4. |
-| **CH-SMOKE-SAVE-TO-NOTES-NAV — Save to notes should navigate away** | P3 (UX) | Block B #1: after Save to notes, tutor gets toast only — navigate to student detail (or equivalent) so next step is obvious. Detail: findings §C-5. |
-| **CH-SMOKE-LIGHT-CONSENT-CONTRAST — light-mode Always-off checkboxes/toggles** | P3 (UX) | Block B #2: "Always off" checkboxes and off-state toggles too light in light mode — discoverability boost. Detail: findings §C-6. |
-| **CH-SMOKE-NO-NOTES-COPY — explain why no auto-notes (in-person / no-audio)** | P3 (UX) | Block B #2: session-notes page + whiteboard should pre-warn tutor why no auto-notes (in-person / no-audio-consent) so it doesn't read as product failure. Detail: findings §C-7. |
-| **CH-SMOKE-PARENT-NAV-CONFUSION — child manage vs self-learner vs account nav** | P3 (UX) | Erasure #5: wife lost twice navigating child manage / self-learner learner page vs account page — clearer back-to-dashboard nav, possible condense. Detail: findings §C-8. |
-| **CH-SMOKE-CLAIM-CONFIGURED-DEADEND — claim page no nav when login configured** | P3 (UX) | Erasure #4: claim setup says login already configured but offers no links/nav away. Detail: findings §C-9. |
-| **CH-SMOKE-INPERSON-DISABLE-JOIN-LINK — disable Copy student link in in-person + single student** | P3 (UX) | Block B #2: when in-person mode on and only one student, disable Copy student link. Detail: findings §C-10. |
-| **CH-SMOKE-DQ-GRACE-ACCOUNT-RECOVERY — grace-period account recovery vs data grace** | Design Q (Andrew) | Erasure #2: why data grace but no account recovery within grace window? Detail: findings §DQ-1. |
-| **CH-SMOKE-DQ-ERASURE-2FA — Request erasure requires 2FA step-up** | Design Q (Andrew) | Erasure #2: admin erasure trigger should require TOTP step-up. Detail: findings §DQ-2. |
-| **CH-SMOKE-DQ-ERASURE-COPY-JARGON — tombstone/grace copy without "blob" jargon** | Design Q (Andrew) | Erasure #2: parent + operator deletion-right copy must explain tombstone/grace in non-technical terms. Detail: findings §DQ-3. |
-| **CH-SMOKE-DQ-ERASURE-ACCOUNT-LOOKUP — find-account UX for erasure targeting** | Design Q (Andrew) | Erasure #2/#5: learner profile ID hard to obtain; "family display name" semantics unclear. Detail: findings §DQ-4. |
-| **CH-SMOKE-DQ-MULTI-STUDENT-LIVE — multi-student live consent stacking** | Design Q (Andrew) | Block B #2: tutor marks WHO is live; least-permissive permission stacking; mid-session join consent switching. Detail: findings §DQ-5. |
-| **CH-SMOKE-DQ-CONSENT-CALLOUT-LIVE — live consent-satisfied notification on student page** | Design Q (Andrew) | Block B #1: ajax update of tutor "parent must set consent" callout when parent toggles consent. Detail: findings §DQ-6. |
-| **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE — CC-1/CC-2 + erasure admin items → Playwright** | Process / test debt | Andrew 2026-07-01: skipped CC-1/CC-2 (all 10) and much of erasure as "totally playwright testable." Convert listed items to e2e so manual smoke narrows to hardware-only surfaces. Detail: findings §E. |
-| **ERASURE-ORPHAN-AUDIO-BLOBS — orphan Vercel audio not in erasure inventory** | Medium (erasure coverage) | Audio segments uploaded to Vercel Blob whose `TranscriptChunk` enqueue failed (fire-and-forget enqueue) are not walked by server-side erasure inventory — orphaned blobs may remain after erasure. Extend erasure walk or add blob orphan reconciliation. Cross-ref [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) § Session-experience build status. |
-| **ERASURE-CLIENT-STORE-UNREACHABLE — client-only stores not server-purgeable** | Medium (erasure coverage) | Recording-draft / upload-outbox / whiteboard-checkpoint IndexedDB + sessionStorage scene drafts are unreachable by server-side erasure. Document as known limitation for Sarah merge or add client-purge-on-erasure signal (e.g. tombstone poll + local wipe). Cross-ref [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) § Session-experience build status. |
-| **ERASURE-INFLIGHT-CHECKPOINT — active session checkpoint writes during grace** | Medium (erasure TOCTOU) | An in-flight ACTIVE whiteboard session can still write checkpoint blobs during an active erasure window (end-session short-circuit prevents the final write; grace-expiry purge cleans them, but new content accrues mid-grace). Fragile surface (session write path / outbox) — separate scoped fix; do not bundle with content-route guards. |
-| **ERASURE-ADMIN-METADATA — admin student-detail metadata without erasure guard** | Low (consistency) | Admin student-detail / notes pages show session metadata without an erasure guard. Lower risk (tutor is data controller) but track for completeness / consistency with BLOCKER H content-route posture. |
+**[P3][AV] SFU for N>5 peers**  
+Mesh only; deferred.
 
----
+**[P3][AV] Large-mesh CPU profiling**  
+No Chromebook profiling.
 
-## Ship-to-Sarah gate — pilot feedback 2026-06-16
+**[P2][REC] End-session replay: per-student-mic mix UX**  
+Segments land; playback mixing post-v1.
 
-> **Strategic trigger (Andrew):** swap Sarah off `master`/prod onto the `v1-redesign` / Phase 1 line once waiting room → whiteboard → end session is stable both sides (P2 + P3). **Proposed gate checklist** (pending Andrew confirmation) in [`docs/handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md) §2. Rows below are the **durable BACKLOG hooks** for bugs she hit on prod 2026-06-16.
+**[P2][REC] Custom SessionAudioPlayer (D10) + stitch-path retirement**  
+`replay-audio-timeline.ts` still used.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **SSG-1 — Per-chunk auto-notes + retire monolithic "Generate notes from session"; >25 MB-per-segment hardening** | **Ship-to-Sarah blocker** | Sarah prod 2026-06-16: monolithic path failed with *"This recording is too large to split automatically…"* (`wbsid=ba7832d0`). Error in `src/lib/transcribe.ts` ~196–204 when buffer **>25 MiB** (`WHISPER_MAX_BYTES`) or ffmpeg split throw / **>240s**; legacy `generateNotesFromWhiteboardSessionAction` (`actions.ts` ~951–1091) + `WhiteboardNotesPanel.tsx` / `AiAssistPanel.tsx`. Per-chunk auto-notes (`notes-worker.ts`, `transcribe-chunk.ts`) avoids monolithic failure but **single >25 MB segment** can still fail → partial notes; ffmpeg ceiling unchanged on phase branch. **Acceptance for Sarah cut:** (a) new in-frame review surface has **no** legacy monolithic generate button; per-chunk auto-notes is the path; (b) document or harden residual >25 MB-per-segment risk. Cross-ref: `## Recording — long sessions, Whisper limits`; capture doc Bug 1. |
-| **SSG-2 — End-session save/delete clarity; no silent data loss** | **Ship-to-Sarah blocker** | Sarah prod 2026-06-16: chose **End** on resume prompt expecting save; recording **deleted**. `WorkspaceResumeGate.tsx` ~94–148 → `endStaleWhiteboardSession` (`actions.ts` ~760–859) stamps `endedAt` only — **no** outbox flush / audio save. Contrast top-bar End (`WhiteboardWorkspaceClient.tsx` ~2914–3024): stop + flush + drain + `endWhiteboardSession`. **Not** P2 B2/B3. **Elevates** existing **F1** ("Stop and delete" / discard throwaway sessions) — inverse failure mode (End without save). **Acceptance:** save-then-end OR explicit **Discard** copy naming consequence; no silent loss on any End affordance. Cross-ref: F1 row in `## Pilot feedback — action items`; capture doc Bug 2. **Andrew 2026-06-28 (smoke aside):** also covers the student-detail open-sessions list **"End"** button (`ActiveWhiteboardSessionsList.tsx` L64 → `endOpenWhiteboardFromStudentPage` → `endStaleWhiteboardSession` — same no-flush primitive). Andrew wanted clearer copy, suggested **"Cancel and delete"** — but that button today neither saves NOR deletes (it stamps `endedAt`, keeps last-uploaded `eventsBlobUrl` so review still works); a true destructive delete already exists separately as **"Cancel and delete session data"** (`TutorNotesSection.tsx` L511–541 → `deleteWhiteboardSessionAndDataAction`). **DECIDED (Andrew 2026-06-28): Option A — TWO explicit affordances on the open-sessions list, both honestly labeled:** (1) **"End & save"** → run the full save pipeline (stop + flush outbox + upload final `events.json` + `endWhiteboardSession` + transcription/notes kick — i.e. the workspace top-bar End behavior, NOT the current `endStaleWhiteboardSession` no-flush stub), AND afterward give the tutor a path to **review the notes/replay** (couple with **WB-REVIEW-SHORTCUT** — land on / link to the review surface). (2) **"Cancel & delete"** → actually discard the session data (the real `deleteWhiteboardSessionAndDataAction` destructive path), with a confirm. Note: invoking the full save pipeline from the roster (no live recorder mounted) needs care — see [`docs/RECORDER-LIFECYCLE.md`](RECORDER-LIFECYCLE.md) before touching `endWhiteboardSession`/`endStaleWhiteboardSession`/outbox. |
-| **WB-REVIEW-SHORTCUT — direct "Go to review" button on student detail (view notes/replay without rejoining)** | P3 (UX; Andrew 2026-06-28) | Andrew wants a button (on the student-detail page / open-sessions area) that takes the tutor **directly to the end-session/review screen** for an ended session — to read notes or watch the replay **without** reopening the live workspace and bringing a student back in. Targets already exist (from [explore](f5661f39-3d54-43e5-949b-6008cb95c514)): in-shell `SessionReviewMode` at `/admin/students/[id]/whiteboard/[wbsid]/workspace` (richer) OR standalone read-only `WhiteboardReviewPage` at `/admin/students/[id]/whiteboard/[wbsid]` (easier deep-link; already linked from the notes list "Watch the whiteboard recording"). Both are read-only for ended sessions and do not reopen join tokens. Just needs an affordance surfaced on the student detail roster/session list. Distinct from SSG-2 (that's the End/save/delete semantics). |
-| **SSG-3 — Multi-segment replay scrubber + legacy `WhiteboardReplay` retirement** | **Ship-to-Sarah blocker** | Sarah prod 2026-06-16: scrubber not proportional; drag-to-start jumped to ~11 min; thumb at end while audio played; no forward seek. Single-segment fixes on `phase1/wb-review-correct` (`8559ae9` `measuredTotalMs` in `replay-audio-timeline.ts` ~72–82; `f3a525e` first-play/drag). **Multi-segment** null-`durationSeconds` still collapses (`segments.length === 1` fallback only); `resolvedMaxMs` grows per segment — **A6-1 deferred**. Legacy `WhiteboardReplay.tsx` ~696–699 (2-arg mapping) still mounted `[whiteboardSessionId]/page.tsx` ~293–299. **Elevates** Gate **A6** + **A6-1** ([`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md)). **Acceptance:** multi-segment mapping correct on in-frame review; standalone legacy player unreachable for Sarah. Capture doc Bug 3. |
-| **CONSENT-HONESTY-SARAH-MERGE-BLOCKER — consent UI honesty (minimal fix)** | **Ship-to-Sarah blocker** | Andrew 2026-06-30 consent design pass: shipping to Sarah is the first no-going-back moment with real families — dishonest consent UI is unacceptable. **Minimal honesty fix ships WITH merge:** (1) hide dead `allowWhiteboardRecording` toggle (per **WB-CONSENT-UNCONDITIONAL**), (2) rewrite `allowLiveSession` copy to honestly cover live A/V + whiteboard recording (per **LIVE-SESSION-CONSENT-COPY** — Andrew approves literal string), (3) sweep consent UI for any other shown-but-unenforced toggles. Fuller **CONSENT-UX-REDESIGN** is fast-follow, not a blocker. Cross-ref: `## Consent design pass — ratified decisions`. |
+**[P2][REC] Sarah forward-migration at re-arch cutover**  
+No migration tooling.
 
----
+**[P2][REC] Live transcription (LTX) spike**  
+Not on master; timeline assembly gap.
 
-## Near-immediate post-master priorities (2026-06-17)
+**[P2][REC] Long-form transcribe smoke (60–90 min)**  
+[`SMOKE-LONG-FORM-TRANSCRIBE.md`](handoff/SMOKE-LONG-FORM-TRANSCRIBE.md); BLOCKER-PROD watch.
 
-> Andrew reclassified 2026-06-17: items below start at or immediately after master cut — not Sarah ship-blockers, but higher priority than general post-master polish deferrals.
+**[P3][REC] Tier 2 transcribe queue / VAD background job**  
+Deprioritized unless long-form smoke fails.
 
-### Full product usage instrumentation — NEAR-IMMEDIATE POST-MASTER (Andrew 2026-06-17)
+**[P3][REC] Speaker diarization (Phase 6 task 6)**  
+Deferred.
 
-Reclassified from a pre-master gate → near-immediate post-master follow-up: the app MUST be fully instrumented for usage. **Rationale:** as a solo dev, first-party usage telemetry is the only feasible way to learn what's actually used and where users struggle — without it we're flying blind on the pilot. **Scope:** product usage events across the core flows — session lifecycle (create / join / waiting-room / live / end), whiteboard tool + page usage, notes generation + review, replay, share-link access, auth/login friction — surfaced into something the solo dev can actually query.
+**[P3][REC] vad-min-tune — lower VAD_MIN_SEGMENT_SECONDS after concat**  
+25s→8–10s after WS-G.
 
-**Constraints (do NOT violate when planning/building):**
+**[P3][REC] p3-vad-chunking — per-speaker VAD silence chunking**  
+`segment-policy.ts` on tutor path; per-speaker lanes open.
 
-- **Founding principle (no dark patterns; total honesty + transparency):** instrumentation is for honest product learning; any user-facing engagement claim later derived from it must be evidence-backed with drilldowns (see the Experience-Driven Wedge program).
-- **Align with Wedge Phase 4 (first-party learner-type-keyed instrumentation):** this is the early/tactical version — design the taxonomy so Phase 4 builds on it, not a throwaway.
-- **Minor-data / FERPA / privacy:** usage telemetry on an app with minor students must be privacy-respecting — no PII in event payloads beyond what's necessary, documented retention, and NO third-party analytics egress that conflicts with the consent/legal posture (see `docs/LEGAL-SYNC.md` + the "secret handling — third-party egress" lesson in `AGENTS.md`).
+**[P2][REC] useRecordingCoordinator extraction**  
+FSM + mixdown still in `WhiteboardWorkspaceClient.tsx`. `useLiveAvCoordinator` shipped separately.
 
-**Open scoping (for the eventual plan):** event taxonomy + IDs (reuse the per-session logging prefixes where possible — `wbsid`, `avx`, `nsi`, `sal`, etc.); sink/storage (Neon table vs a privacy-respecting analytics tool); dashboards/queries; sampling + retention.
+**[DEFERRED][REC] True pause (D5)**  
+Tutor Pause calls stop+teardown; route through `MediaRecorder.pause()`.
+
+**[DEFERRED][REC] Recording clock anchor / drop 10s blind gate (D3)**  
+Start clock on activity; drop `AUDIO_FLOW_GATE_TIMEOUT_MS`.
+
+**[DEFERRED][REC] On-page recording-permissions removal**  
+Remove `AVPermissionsPrompt`; browser-native only.
+
+**[P2][REC] Session timer drift on iOS (reliability #4)**  
+Reconcile on `visibilitychange`; see §8 iOS matrix.
+
+**[P2][REC] WebM/MP4 duration unreliable for scrubbing (reliability #5)**  
+Server-side remux or stored duration.
+
+**[P2][REC] Pause vs rollover race (reliability #8)**  
+Manual Pause during auto-rollover finalize.
+
+**[P2][REC] beforeunload guard mid-recording (reliability #9)**  
+Pair with IDB persistence.
+
+**[P1][REC] rid= / lifecycle log coverage (reliability #13, #14)**  
+Partial `rid=` on actions; recording lifecycle log format incomplete.
+
+**[P2][REC] TURN (A4 Slice-C)**  
+STUN-only; slow first peer connect.
+
+**[P2][AV] Slow first peer connect**  
+Instrumentation + optional TURN; camera-grant-before-join UX.
+
+**[P2][REC] Whisper CJK / language pin**  
+Pin `language: "en"` in `transcribe.ts`.
+
+**[P2][WB] WB-IDLE-SESSION-GUARD**  
+Session-level idle auto-end / cost guard.
+
+**[P2][REC] WS-J prod migration apply**  
+`20260705140000_wsj_billable_rounding` — Andrew greenlight for prod.
+
+**[P2][REC] WS-K prod migration apply**  
+`20260705000000_wsk_live_reduce_watermark`.
+
+**[P1][NOTES] WS-K — incremental reduce; End ≤2–3s notes ready**  
+`notes-worker.ts` live reduce landed partially; **OPEN:** End fast-path invariant ≤2–3s not dedicated backlog row until now. Worker + watermark migration exist; verify End latency on hardware.
+
+**[P1][REC] WS-G — server-side tutor:mic concat replay master**  
+`concatBlobUrl` / `buildReplayAudioPayload` partial; formal `tutor:mic:concat` replay master per plan not complete.
+
+### Shipped (reference — do not re-open)
+
+Phase 1b outbox + atomic end-session · Phase 1c snapshot · Phase 4a–4d live A/V · gapless rollover B5 · Tier 1 parallel transcribe · recording re-arch Phase 1 core · audio consolidation ffmpeg · W1 Ship A workspace draft · per-chunk map extraction · VAD segment-policy · `session-clock.ts` p3-clock · per-speaker A/B/C (`useRemoteMicRecorders`, worker-driven `transcriptionOnly` enqueue) · WS-N N1–N3 · WS-L scrubber partial · IN_PERSON audio without peer (`wb-in-person-audio-start.spec.ts`) · WS-F waiting-room exit · WS-J billable rounding UI · WS-P deploy freshness · tab-kill N4 gate/roster finalize.
 
 ---
 
-## P1 replay-in-frame — post-master follow-ups (2026-06-16)
+## 4. Whiteboard — chrome / sync / replay / PDF
 
-> **Source:** `phase1/wb-review-correct` pre-master smoke session (2026-06-16). Andrew explicitly **deferred post-master follow-ups below** — NOT Sarah ship-blockers. Durable capture so decisions aren't lost.
+### Sync & capture
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-AV-VIDEO-PAINT-REAL-FIX — tutor remote student video paints only via bandaid** | Medium-high (working via bandaid; remove hack during components pass) | The tutor's remote student video only paints on arrival because of a bandaid restored from [`3b996ae`](https://github.com/Arangarx/tutoring-notes/commit/3b996ae): **Mechanism A** — `WbAVCluster` auto-fires `setSize`+`setUserResized` on remote-video arrival; **Mechanism B** — `AVTile` `ResizeObserver` + `offsetHeight` flush. Andrew confirmed on-device at `3b996ae`. The principled CSS-only fix ([`caaabf2`](https://github.com/Arangarx/tutoring-notes/commit/caaabf2), removing `aspect-ratio: unset !important` on cluster tile video bodies) was **insufficient** — video stayed black until manual resize. Real fix still open; likely tied to **WB-COMPONENTS-PASS** (componentize AV tiles/cluster so the video element gets a concrete layout box without the auto-resize hack). Fix chain: [`3261da8`](https://github.com/Arangarx/tutoring-notes/commit/3261da8) → [`40b3130`](https://github.com/Arangarx/tutoring-notes/commit/40b3130) → [`a3a94f7`](https://github.com/Arangarx/tutoring-notes/commit/a3a94f7) → [`e2c290a`](https://github.com/Arangarx/tutoring-notes/commit/e2c290a) → [`3b996ae`](https://github.com/Arangarx/tutoring-notes/commit/3b996ae) (WORKS) → [`caaabf2`](https://github.com/Arangarx/tutoring-notes/commit/caaabf2) (CSS-only, failed on-device) → bandaid restore. **Escalated (Andrew 2026-06-17 P2 smoke):** broader cluster than tutor remote-paint alone — student sees **no video at all** (neither self-view nor remote tutor); no-camera peers show **blank space with no initials** until manual resize; video tiles **flash then vanish**; disconnect-resize fix [`974fc87`](https://github.com/Arangarx/tutoring-notes/commit/974fc87) **ineffective** (cluster does not shrink when peer leaves). Triage: [`wb-student-shell-smoke-triage-2026-06-17.md`](handoff/wb-student-shell-smoke-triage-2026-06-17.md). |
-| **WB-DRY-VIEWPORT — viewport center-match DRY consolidation** | Low (maintainability) | `computeResizeScroll` in `src/lib/whiteboard/scene-paint.ts` is a second closed-form copy of the center-preserve-at-constant-zoom math that `src/lib/whiteboard/viewport-align.ts` owns (`viewportSceneCenterFromScroll` + `scrollForViewportSceneCenter`). **No active bug** — equivalence locked by test (`src/__tests__/whiteboard/viewport-align.test.ts` "matches computeResizeScroll one-shot"). Risk is drift if one copy changes without the other. **Fix:** make viewport-align the single source of truth; thin `computeResizeScroll` to a one-line delegate (add e.g. `scrollPreservingViewportCenterOnResize` to viewport-align and have `computeResizeScroll` call it). Touches scene-paint → needs `npm run test:wb-sync` before merge. |
-| **WB-REVIEW-TRANSITION — whiteboard review transition animation feels like load-flash** | Medium (polish) | Hero-notes↔docked-notes and hero→replay transitions read as an instant load/flash rather than the intended smooth ~250ms animation; on hero→replay the final-frame thumbnail and "Replay session" button visibly flash/disappear instead of cross-fading. Smokebook item #2 + #5 area. Polish, not functional — first-impression for Sarah, but deferred post-master. |
-| **WB-IMPERSONATION-SESSION — in-progress whiteboard session not recoverable after navigate-away (impersonation)** | Low (admin-only) | **Root cause:** `assertOwnsWhiteboardSession` (`src/lib/whiteboard-scope.ts`) and `canAccessStudentRow` (`src/lib/student-scope.ts`) require `session.adminUserId === scope.adminId` with **no** impersonation/`originalAdminId` bypass — so a session created under a different identity than the currently-impersonated one 404s on "Continue" and appears to vanish. Admin-QA convenience only; does **not** affect normal single-identity tutors (Sarah). **Fix option:** when impersonating, also allow `session.adminUserId === originalAdminId`. Related pre-existing UX gap already tracked as **SSG-2** (10-min resume-gate invisibility). |
-| **WB-ERASE-RELIABILITY — whiteboard eraser unreliable; partial/pixel erase (pilot request)** | Medium (pilot-requested usability) | **Hit detection:** Andrew reported the eraser took ~3 tries to erase one stroke and many tries for another (poor hit detection). **Pilot feature request** (Andrew's wife, a tutor): ability to erase **portions** of strokes (partial/pixel erase), not just delete whole elements. **Investigate separately:** (1) whether recording/sync throttling interferes with Excalidraw's eraser reliability; (2) element-erase reliability vs partial-erase feature scope. **Escalated (Andrew 2026-06-17) — first-class item for the upcoming WB reliability pass:** eraser is "busted as hell," *sometimes refuses to erase at all* (full no-op gestures, not merely poor hit detection). Likely the upstream stuck-`elementsPendingErasure` preview bug (see the "Eraser — bulk delete can leave elements dimmed-but-not-deleted" row) and/or sync/recording throttling interfering with pointer-up commit. **Further escalated (Andrew 2026-06-17 P2 smoke):** eraser is **completely non-functional for the tutor** while working well for the student — **tutor-path-specific** in the new chrome. Triage: [`wb-student-shell-smoke-triage-2026-06-17.md`](handoff/wb-student-shell-smoke-triage-2026-06-17.md). |
-| **WB-NEW-SESSION-FALSE-RECOVERY — false IndexedDB recovery banner on new session** | Medium (confuses on session start; user can Discard) | A brand-new whiteboard session shows the "Browser recovery (IndexedDB): a whiteboard event draft from \<date\> (~0:00 of logged time)" banner, and starting a new session re-triggers the recovery prompt. **Root:** stale/empty IndexedDB checkpoint draft from a prior session surfaces on a NEW session via `findLatestCheckpointForOwner(adminUserId, studentId)` fallback in `useWhiteboardRecorder` (matches owner+student, not the exact session). **Fix direction:** don't offer recovery for an empty (~0:00 logged-time) draft, and/or scope recovery to the current session id, and/or clear stale drafts on clean session end. **Not in scope:** the separate "Open whiteboard sessions / Continue" list on the student detail page is **expected** behavior (`endedAt=null` sessions), not part of this bug. |
-| **WB-COMPONENTS-PASS — whiteboard workspace componentization (real components pass)** | Tech-debt (components pass; not Phase 1 blocker) | The whiteboard chrome still relies on general/global CSS (`src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/whiteboard-chrome.css`) that reaches into and overrides component intrinsic styles, rather than being a composition of self-contained components. The WB was deliberately skipped in the first components pass. Concrete evidence of the fragility this causes: the `aspect-ratio: unset !important` override (rule A3b) on AV tile video bodies stripped `AVTile`'s intrinsic 4/3 height and caused the tutor's remote student video to render black until a manual resize (fixed pragmatically in `caaabf2` by removing the override). In the REAL components pass: (1) convert the AV video tiles / cluster to proper self-contained components with NO cluster-specific global CSS overriding component-owned styles; (2) more broadly, recompose the whole whiteboard workspace (`WhiteboardWorkspaceClient.tsx` + chrome) as a composition of components rather than a large client + a global stylesheet. Andrew (2026-06-16): "the whole whiteboard should be a composition of components." |
+**[P1][WB] WS-T-8 — roster End shows replay CTA when recording-count===0**  
+`canReplay` vs DB recording-count oracle mismatch.
+
+**[P1][WB] WS-T-9 — gate-only End IDB crash**  
+Intermittent "IDB object store not found"; `wb-review-overlay-3paths.spec.ts` fixme.
+
+**[P1][WB] SMOKE-BLOCK-5 — solo/in-person stroke capture in armed window**  
+**Audio + inPersonMode shipped** (`wb-in-person-audio-start.spec.ts`). **OPEN:** FSM `armed/awaiting_first_participant` → `wbCaptureActive` false → empty event log when no remote peer. Fix: `everHadSessionActivity` / WS-N5 family.
+
+**[P2][WB] SMOKE-BUG-10 — in-person "waiting for student" banner**  
+`sessionMode` not consulted for banner copy. `derivePresentation` partial.
+
+**[P1][WB] Ghost viewport bounds overlay (VP-01 / SMOKE-POST-1)**  
+Label-only stub (`wb-ghost-viewport-label`); bounds geometry deferred. Pre-release required.
+
+**[P1][WB] ST-05 / WB-LASER-ICON-CONTRAST — laser colors + bidirectional visibility**  
+**Wire shipped** (`broadcastPointer`, `useCollaboratorPointers`). **VERIFY** per-role colors on hardware; tutor blue / student red asymmetry.
+
+**[P1][WB] PDF cross-page stroke bleed (regression)**  
+Post-PDF-import strokes on wrong board; "solved twice" per Andrew.
+
+**[P1][WB] Student Exit → rejoin presence desync**  
+Tutor shows disconnected after student rejoins.
+
+**[P1][WB] Student undo/redo non-functional**  
+Smokebook 1b; tutor undo may break when presence wrong.
+
+**[P1][AV] Phone student A/V — bidirectional broken**  
+Item 19 FAIL wave5 polish; PLAYWRIGHT-GAP.
+
+**[P2][WB] Student bidirectional video (tiles flash/disappear)**  
+Hardware cluster; overlaps WB-AV-GAPs.
+
+**[P2][WB] Replay scrub drag — 429s + frozen scene**  
+Debounce drag; abort superseded fetches; cache segments.
+
+**[P2][WB] Hide replay must pause audio**  
+Product rule: hide = pause playback.
+
+**[P2][WB] Event log + replay multi-page**  
+Flat stream; no `pageSwitch` in log.
+
+**[P2][WB] Replay page strip PDF section grouping**  
+`deriveReplayPageListFromLog` sets `isPdf: false` always.
+
+**[P2][WB] PDF position lock / pan-clamp design spike**  
+Deferred in PHASE-PDF-STATUS.
+
+**[P2][WB] Tutor-vs-student insert origin (viewport-center)**  
+`insert-asset.ts` local Excalidraw state only.
+
+**[P2][WB] Promote math insert to toolbar + library persistence**  
+Popover-only today.
+
+**[P2][WB] WB-IMAGE-IMPORTER — image insert missing**  
+Unify smoke regression.
+
+**[P2][WB] WB-STROKE-BLEED watch**  
+E5 merged; keep regression gate.
+
+**[P2][WB] WB-HAND-TOOL-MISSING (NR-01)**  
+Hand/pan discoverable on student shell.
+
+**[P2][WB] WB-LINE-END-TOUCH**  
+Finish multi-segment line on touch.
+
+**[P2][WB] Eraser cursor vs delete path (TM-08)**  
+Mobile pointer-transform hit offset.
+
+**[P2][WB] NR-07 — transform handles with native chrome hidden**  
+Verify periodic regression.
+
+**[P2][WB] Re-enable Playwright invariant 8 (PDF center+fit)**  
+Skipped pending pdfjs headless load.
+
+**[P2][WB] Thin-viewport top-bar compaction**  
+Controls leave viewport before ⋯; End should stay visible. **WB-STUDENT-TOPBAR-CONTRACTION**.
+
+**[P2][WB] Student desktop mic level meter missing**  
+Wave5 polish item 15.
+
+**[P2][WB] Student `[student-apply]` console spam**  
+**WB-STUDENT-CONSOLE-NOISE**.
+
+**[P2][WB] WB-STUDENT-BOARD-TABS**  
+Student sees only Board 1 tab.
+
+**[P2][WB] WB-STUDENT-VIEW-LOCK-WHEN-SYNCED**  
+Student view lock when synced.
+
+**[P2][WB] AV-REFRESH-LOSS — student hard-refresh loses A/V**  
+Not proven fixed post-wave5.
+
+**[P2][WB] Exit→rejoin A/V slow / ghost**  
+Unify smoke item 21.
+
+**[P2][WB] SMOKE-BUG-2 — stale "Call Reconnecting" pill**  
+Clear when reachable.
+
+**[P2][WB] SMOKE-BUG-3 — student text cross-page sync**  
+Text carry on page switch.
+
+**[P2][WB] SMOKE-BUG-5 — replay board-tab context**  
+Which board during replay switch.
+
+**[P2][WB] SMOKE-BUG-7 / CH-SMOKE-STUDENT-MIC-PERSIST**  
+Student mic not persisted across sessions.
+
+**[P2][WB] SMOKE-UX-3 — replay ±10s skip**  
+Deferred post-Sarah.
+
+**[P2][WB] CH-SMOKE-REPLAY-PLAYPAUSE-OVERLAP**  
+Play/Pause overlaps Board tab.
+
+**[P2][WB] Freedraw latency PR-01**  
+Option A+E shipped; watch on hardware.
+
+**[P2][WB] Student dark-theme canvas background stuck white**  
+`viewBackgroundColor` not synced on theme return.
+
+**[P2][WB] Student mobile tool/chrome parity**  
+Mobile missing tools; top bar clipped.
+
+**[P2][WB] Student canvas stuck on "Loading scene…"**  
+Intermittent join sync.
+
+**[P2][WB] Preview-before-Start canvas wipe race**  
+Low reachability; escape hatches work.
+
+**[P2][WB] Native image insert broken on drag/drop**  
+Skip `uploadWhiteboardAsset` path.
+
+**[P2][WB] Cold refresh vs server truth**  
+Excalidraw IDB vs app checkpoints.
+
+**[P2][WB] Excalidraw recovery "Load draft" popup**  
+Suppress or single restore story.
+
+**[P2][WB] Whiteboard session audio wire**  
+Strokes-only workspace path (legacy row — verify if superseded by live session).
+
+**[P2][WB] Snapshot multi-page coverage**  
+Single-page snapshot only.
+
+**[P2][WB] Snapshot link discoverability**  
+Muted footer link.
+
+**[P2][WB] Active-ping 409 after End**  
+Benign; cleanup options.
+
+**[P2][WB] MathInsertButton first-open white-box**  
+MathLive race on first open.
+
+**[P2][WB] Per-page view state — student validation**  
+Tutor shipped; student follow untested.
+
+**[P2][WB] Local dev join URL parity**  
+`WHITEBOARD_SYNC_URL` vs app host triangle.
+
+**[P2][WB] Student canvas file sync (images/PDF)**  
+BinaryFiles not mirrored to student.
+
+**[P2][WB] Room policy & joiner UX**  
+1:1 vs multi-joiner; joiner list.
+
+**[P2][WB] Mobile AV pip — SR-16**  
+Fixed top-right on touch; no drag/resize.
+
+**[P2][WB] Per-board undo/redo history**  
+Cleared on page switch by design; remount strategy if Sarah asks.
+
+**[P2][WB] PDF open — fit tutor vs student view**  
+Owner-requested if Sarah raises.
+
+**[P2][WB] Post–sync-redesign smoke findings**  
+Page insert order; mobile hit offset; student mic picker (partially addressed).
+
+**[P2][WB] Eraser bulk delete dimmed-not-deleted**  
+Excalidraw upstream; workaround second tap.
+
+**[P2][WB] WB-MENU-CLICK-THROUGH**  
+Menu dismiss falls through to canvas.
+
+**[P2][WB] WB-COMPONENTS-PASS**  
+Unified `WbTopBar`; kill `whiteboard-chrome.css` monolith.
+
+**[P2][WB] WB-LEGACY-STUDENT-CLIENT-DELETE**  
+✅ DONE — unified shell.
+
+**[P2][WB] Graph JSXGraph swap follow-ups**  
+Desmos removal when complete.
+
+**[P2][WB] p3-video-seam**  
+Per-participant video finalize/replay — capture NOT built.
+
+**[P3][WB] Laser pointer in replay**  
+Not in events.json.
+
+**[P3][WB] Student tab crash — IDB pageDataRef**  
+If student-authored content grows.
+
+**[P3][WB] Measure wire bandwidth on real session**  
+Delta payload contingency.
+
+**[P3][WB] GitHub Actions wb-regression workflow**  
+Phase 2 CI gate.
+
+**[P3][WB] relayShowsCollaborator copy parity**  
+Optional tutor-presence copy.
+
+**[P3][WB] PDF large imports on mobile Safari**  
+Manual-only gap.
+
+**[P3][WB] Rename everHadAudioFlow → everHadSessionActivity**  
+FSM input rename.
+
+**[P3][WB] Replay empty-state armedReason copy**  
+vs generic "nothing recorded".
+
+**[P3][WB] NR-09 shortcuts help**  
+Optional `?` in Mynk overflow.
+
+**[P3][WB] NR-12 verify native S/G popups**  
+Periodic regression.
+
+**[P3][WB] Q9 map chrome controls to v1 tokens**  
+No one-offs.
+
+**[P3][WB] XPPen / TM-04 hardware verification**  
+Sarah hardware smoke.
+
+**[P3][WB] Graph embed — student expression entry**  
+Product decision.
+
+**[P3][WB] Tutor scratchy audio B4**  
+Record-side; not replay blocker.
+
+**[P3][WB] Mobile alt-shape picker discoverability**  
+Long-press vs tap.
+
+**[P3][WB] Multi-point line rubber-band / close-at-origin**  
+Touch UX.
+
+**[P3][WB] BL-LEARNER-JOIN-LINK**  
+Learner-side join link backup.
+
+**[P3][WB] BL-WB-SEPARATE-TAB-OPTIN**  
+Desktop-only separate-tab WB.
+
+**[P3][WB] Phone/tablet default zoom design**  
+Ghost viewport coupling.
+
+**[P3][WB] Whiteboard Phase 2 surfaces**  
+Collab essay, code, Office, Wolfram — gated on Sarah 3-session demo ([`docs/WHITEBOARD-STATUS.md`](WHITEBOARD-STATUS.md)).
+
+### Waiting room & session shell
+
+**[VERIFY][WB] Gate A2 — waiting room**  
+**SHIPPED:** `WaitingRoomOverlay.tsx`, `sessionPhase` PENDING→ACTIVE, `wtr` logs. Functional wiring beyond visual = verify against Gate A2 acceptance. In-person consent projection Plan #2 still open.
+
+**[P2][WB] Gate A3 — Pass-2 in-context end-session / review shell**  
+`SessionReviewMode.tsx` still legacy `.card`. Shell flip architecture shipped partially.
+
+**[P2][WB] Gate A3a — PDF page-tab indicator**  
+`PageStripRow.isPdf` propagation.
+
+**[P2][WB] Gate A3b — SR-04a video-tile sizing**  
+Auto-expand multi-tile.
+
+**[P2][WB] TM-09 — tutor-mobile expectations notice + host gate**  
+Desktop-only tutoring copy + block non-desktop Start.
+
+**[P2][WB] Student default AV peer-only (self-view off)**  
+Design §7.5.1; code still `defaultShowLocalVideo: true`.
+
+**[P2][WB] Session type selection UX (in-person vs remote)**  
+Open Q1 session-shell design.
+
+**[P2][WB] Student waiting room screen design**  
+Open Q2 — tutor side done.
+
+**[P2][WB] Asymmetric viewport when follow OFF**  
+Open Q7.
+
+**[P2][WB] TU-11 — keyboard-shortcut routing parity**  
+Desktop + student mobile.
+
+**[P2][WB] TU-12 / Excalidraw theme follows app data-theme**  
+Pre-master; `useExcalidrawThemeFromSystem` → app theme.
+
+**[P3][WB] SMOKE-POST-2 — in-app text chat**  
+Waiting room + live session.
+
+**[P3][WB] SMOKE-POST-3 — tutor "Start anyway" degraded mode**  
+After SMOKE-BLOCK-1 fix.
+
+**[P3][WB] Waiting room 10-minute learner timeout**  
+Deferred.
+
+**[P2][WB] In-person waiting-room consent projection (Plan #2)**  
+`WaitingRoomOverlay` explicit deferral.
+
+**[P2][WB] Unclaimed-student workspace entry redirect**  
+Replace bare `notFound()` with actionable redirect.
+
+### Replay & review chrome
+
+**[P2][WB] WB-REVIEW-THUMBNAIL-PDF**  
+Hero thumbnail placeholder for PDF boards.
+
+**[P2][WB] WB-REVIEW-DELETE-COPY**  
+"Delete session data" not "Cancel and delete…"
+
+**[P2][WB] WB-FINISH-REVIEW-COPY-CONTEXT**  
+"Finish review" odd when opened from notes link.
+
+**[P2][WB] WB-TUTOR-REPLAY-PHONE-LAYOUT**  
+Notes eat half screen on tutor phone replay.
+
+**[P2][WB] WB-SHARE-REPLAY-VIEWPORT-PHONE**  
+✅ MERGED `8a6ab878`; verify share path.
+
+**[P2][WB] Replay pause→hide→reopen state**  
+Should resume scrub position.
+
+**[P2][WB] Multi-part recording warning banner stale on replay**  
+Remove when N/A.
+
+**[P2][WB] Replay audio loading CLS**  
+Layout jump below scrubber.
+
+**[P2][WB] Replay theme click → unexpected nav**  
+Intermittent.
+
+**[P2][WB] Replay disabled top-bar buttons dimming**  
+Match sidebar disabled style.
+
+**[P2][WB] Replay board tabs missing PDF icons**  
+Live tabs have them.
+
+**[P3][WB] WB-REPLAY-UNVISITED-BOARDS**  
+Unvisited boards absent from replay strip (OK post-Sarah).
+
+**[P2][WB] WS-U-FRAGILE 2.4/2.5 — LIVE badge + sync pill visibility**  
+Presentation binding gaps.
+
+**[P2][WB] WS-U 1.4 — empty review screen copy**  
+No audio/notes empty state.
+
+**[P2][WB] Start/end session "flash reload" feel**  
+Perceived perf.
 
 ---
 
-## Phase 2 student shell — smoke triage (2026-06-17)
+## 5. Notes & AI quality
 
-> **Source:** Andrew hardware smoke of `phase2/wb-student-new-shell` @ [`5a04689`](https://github.com/Arangarx/tutoring-notes/commit/5a04689) — **FAILED**; broad regression cluster. Full triage: [`docs/handoff/wb-student-shell-smoke-triage-2026-06-17.md`](handoff/wb-student-shell-smoke-triage-2026-06-17.md). `phase2` **not mergeable** until WB stabilization.
+**[P1][NOTES] Map/reduce accuracy + abstain-on-low-content + eval harness**  
+Pre-merge quality bar; formal eval harness deferred post-master (#1 follow-up). `ai-models.ts` + prompts shipped.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-SCREEN-WAKE-LOCK — keep screen awake during active whiteboard session** | Medium (session reliability) | Andrew observed a phone whose screen turned off during a session; it recovered on return this time, but watch recoverability from phone screen-off and proactively prevent sleep during an active session (Screen Wake Lock API). |
-| **WB-THUMBNAIL-GRAPH-PLACEHOLDER — session thumbnail shows graph placeholder not render** | Low (not this phase) | Whiteboard session thumbnail/snapshot renders a graph-embed placeholder (with link) instead of the actual rendered graph. Andrew flagged: not this phase. |
-| **WB-OLD-PHONE-PERF — long sessions freeze low-end mobile Chrome** | Medium (watch) | Longer sessions on an old Android phone caused Chrome to freeze/"wig out" — watch/investigate perf + memory on low-end mobile. |
-| **WB-DEVICE-PICKER-DUPES — duplicate device entries + hotplug audio not hooking** | Medium (A/V reliability) | Device picker shows duplicate entries for one physical device (3–4 "Brio" mic entries on **both** tutor and student desktops — pre-existing, not new); selecting a newly hotplugged audio device sends **no sound**; no Teams-style "switch to new device?" prompt; unplugged devices not removed from picker. Groups **AV-HOTLOAD-AUDIO** from P2 smoke. |
-| **WB-STUDENT-VIEW-LOCK-WHEN-SYNCED — block pan/zoom while view synced to tutor** | Medium (student UX) | When the student's view is synced to the tutor, the student should **not** be able to pan/zoom at all (currently they can move and it snaps back, which feels broken). If made unlockable while unsynced, remember to add a page-swap when they re-enable sync. Smoke item 6. |
+**[P1][NOTES] WS-K — see §3** (incremental reduce + End latency).
 
----
+**[P2][NOTES] SMOKE-NOTES-2 — live/progressive notes during session**  
+DEFERRED post-Sarah. Incremental reduce + live surface; distinct from WS-K End fast-path.
 
-## wb-unify W1-3 smoke triage (2026-06-17)
+**[P2][NOTES] AI prompt v7 remainder**  
+(a) input reframe as Whisper transcript; (c) speaker-inference hint; fixture suite. Core reaction-aware Assessment shipped `2026-05-20-v7`.
 
-> **Source:** Andrew hardware smoke of `wb-unify-stabilize` W1-3 @ [`docs/handoff/wb-unify-stabilize-smokebook-2026-06-17.md`](handoff/wb-unify-stabilize-smokebook-2026-06-17.md). Non-blocking / deferred findings — merge-blockers (eraser, undo-redo, A/V rejoin recovery) tracked in the active fix wave, not here.
+**[P2][NOTES] AI prompt — literal vs interpretive Assessment**  
+Gated on Sarah/parent feedback or fixture suite.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-RECORDING-START-PAUSE — Start/Pause recording controls absent** | Low (open question) | Current WB chrome has no Start/Pause recording controls (only Stop-style). Open question: reintroduce them? (wb-unify W1-3 smoke 2026-06-17) |
-| **WB-MIC-MUTED-ACTIVITY — mic indicator shows activity while muted** | Low (polish) | Top-bar mic control animates/shows audio activity even when muted; muted state should not indicate activity. (wb-unify W1-3 smoke 2026-06-17) |
-| **WB-IMAGE-IMPORTER — image importer missing (regression)** | Medium (feature gap) | WB image importer absent for both tutor and student — long-standing omission finally logged. Higher priority than polish. Cross-ref: **Native image insert** row in `## Whiteboard — implementation / design queue`. (wb-unify W1-3 smoke 2026-06-17) |
-| **WB-STUDENT-BOARD-TABS — student board-tab strip incomplete** | Medium (parity gap) | Student only sees "Board 1" tab; additional tutor board tabs do **not** render on the student side even though strokes for those boards sync correctly. (wb-unify W1-3 smoke 2026-06-17) |
-| **WB-LASER-ICON-CONTRAST — laser icon contrast + color asymmetry** | Low (Wave-4 chrome polish) | Laser renders coral (not legacy red) and asymmetrically (student sees coral, tutor sees blue). Distinct laser **colors** per role are a known Wave-4 item — this row captures the **tool-icon poor contrast** against white canvas/background and the tutor/student color asymmetry specifically. Cross-ref: Gate A5 / **ST-05** laser row in `## Whiteboard — implementation / design queue`. (wb-unify W1-3 smoke 2026-06-17) **RE-CONFIRMED on hardware (Andrew, v1-redesign smoke 2026-07-08): student sees own laser red, tutor sees it blue — still asymmetric.** Product question to settle when actioned: make laser colors **role-deterministic + identical across both screens** (ideally matching the role/cursor accent), vs the current per-viewer collaborator-color assignment. Likely Excalidraw per-collaborator color behavior; verify whether laser is Excalidraw-native collaborator laser vs custom broadcast before fixing. |
-| **WB-STYLES-PANEL-MOUSEUP — styles panel closes on mouse-up only** | Low (polish) | WB styles/properties panel only closes on mouse-up rather than promptly on the dismiss gesture. (wb-unify W1-3 smoke 2026-06-17) |
-| **WB-STUDENT-CONSOLE-NOISE — heavy student-side console output** | Low (investigate) | Investigate heavy/constant console output on the student side — confirm whether expected sync polling or noise that should be quieted. (wb-unify W1-3 smoke 2026-06-17) |
-| **WB-AV-TILE-SESSION-IDENTITY — A/V tile label from account role, not session identity** | Medium (identity UX) | Tutor-**account** joining via a student join link mislabels A/V tiles as "Tutor" — label derives from authenticated account role rather than session/learner participant identity. Generalize: support principals holding multiple roles (a tutor who is also a learner). `data-role=student` is correct; only display-name resolution is wrong. Investigated live 2026-06-18. |
-| **WB-ENDSESSION-THUMBNAIL-TABS — end-session review thumbnail needs board tabs** | Medium (review UX) | End-session review thumbnail should include board tabs so the user can see the final state of **any** page, not just one. Extends/relates to **WB-THUMBNAIL-GRAPH-PLACEHOLDER** above. Andrew 2026-06-18. **Also see WB-REVIEW-THUMBNAIL-PDF** (PDF placeholder on hero — same surface family). |
-| **WB-FOLLOW-TUTOR-TOGGLE-STYLE — Follow tutor view toggle styling** | Low (Wave-4 chrome polish) | "Follow tutor view / Match tutor's view" toggle styling is out of line with the rest of WB chrome. (wb-unify W1-3 smoke 2026-06-17) |
+**[P2][NOTES] AI prompt v8 — homework → plan (Sarah)**  
+Collapse homework section; plan forward-looking. `ai.ts` still emits `homework`; `NewNoteForm` renders Homework.
 
----
+**[P2][NOTES] Whisper transcription accuracy / short phrase misses**  
+"good job" → "did a term"; word-list-only bias option.
 
-## Wave 4 responsive chrome smoke triage (2026-06-20)
+**[P2][NOTES] Whisper CJK false positive**  
+Pin `language: "en"`.
 
-> **Source:** Andrew hardware smoke of `wb-wave4-responsive` round 1 @ [`docs/handoff/wb-wave4-responsive-smokebook-2026-06-19.md`](handoff/wb-wave4-responsive-smokebook-2026-06-19.md). Round-2 re-smoke targets six fixes on branch `wb-wave4-responsive` @ `17dc8d4`.
+**[P2][NOTES] Whisper repetition-loop hallucination**  
+Trim loops; warn on high trim fraction.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-HAND-TOOL-MISSING — pan/hand tool absent from WB toolset** | Low | The Excalidraw hand/pan tool has been absent from the WB tool strip/menus for a long time; re-add it somewhere (left strip "more" or shapes-adjacent) "just in case" a user wants explicit pan. Surfaced in Wave 4 round-1 smoke (item 2), 2026-06-20. |
-| **WB-STUDENT-TOPBAR-CONTRACTION — polished progressive student top-bar contraction at narrow desktop** | Low (defer to component pass) | The student desktop top bar has more controls than the tutor's (recording disclosure, connection pill, follow toggle). At narrow desktop widths the current handling is intentionally simple (ellipsis + one `@media (max-width:740px)` moving disclosure/theme to the ⋯ overflow) after a bespoke ResizeObserver compaction engine was removed for repeatedly regressing (Wave 4 rounds 2-4, jsdom-blind). A *polished* progressive/priority-based contraction should be built properly during the **real WB component pass** (tested, composed components — not bespoke per-surface CSS/JS). Full-width correctness is already met. (Wave 4 round-4 smoke, 2026-06-20.) **Andrew liveboard smoke 2026-06-29:** narrow-desktop student bar currently **over-compacts** (jumps between states) rather than fine-grained progressive contraction — revisit in the proper tested contraction pass; low priority but must not be lost. |
-| **WB-WAVE5-CHROME-POLISH — deferred chrome polish from Wave-4 round-6 smoke** | Medium (Wave 5, post-Wave-4-merge) | Wave 4 (student responsive parity) merged @ `a166f6c`; these UX-polish items were explicitly deferred to Wave 5. **(a)** Student **Exit button → coral** styling. **(b)** **"Match tutor's view" / follow-toggle alignment** — Andrew clarified (2026-06-21) that his wife's "button alignment" comments were about the controls **INSIDE the "More" overflow sheet**, NOT the top bar: make control alignment consistent **within the More sheet** + add a clear **scroll affordance** there (her words: "wasn't clear there was more to scroll"). **(c)** Overflow **⋯ menu should drop DOWN, not up**. **(d)** **Grid toggle rendered as an icon** (not a text control). **(e)** **Tutor phone-landscape over-compaction + never-finished left rail** (R6-1 PARTIAL — pre-existing tutor behavior, not a Wave-4 regression). Do the polished progressive contraction in a **tested component pass** (see WB-STUDENT-TOPBAR-CONTRACTION above), not bespoke per-surface CSS/JS. (Wave 4 round-6 smoke, 2026-06-21.) |
+**[P2][NOTES] AI link extraction from spoken URLs**  
+Normalize domains; no brand-only guesses.
 
----
+**[P2][NOTES] AI note generation context hygiene**  
+Stale UI / cross-session bleed tests.
 
-## wb-wave5-polish confirm smoke triage (2026-06-29)
+**[P2][NOTES] Audio playback during note review**  
+Preview disappears after AI fill.
 
-> **Source:** Andrew hardware smoke of `wb-wave5-polish` @ [`f649c62`](https://github.com/Arangarx/tutoring-notes/commit/f649c62) — [`docs/handoff/wb-wave5-polish-confirm-2026-06-29.md`](handoff/wb-wave5-polish-confirm-2026-06-29.md).
+**[P2][NOTES] Recorder gap detection in pending list**  
+>500ms gap warning chip.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-DELAYED-STROKE-UNDO — phantom single-vertex line appears ~10s late and cannot be undone** | **High (reliability — investigate before fix)** | **Repro (Andrew hardware, 2026-06-29, clarified):** tutor selected the **line tool** and clicked **once** (placing only the **first vertex** of a polyline), then **right-clicked** to end/cancel the line. With only a single vertex placed, this should create **nothing** — a one-point "line" is not a valid element. Instead, **~10 seconds later** a **phantom line/element** appeared on the canvas (an element that should never have existed at all), and **neither tutor nor student could undo it** (Ctrl+Z and on-screen undo both ineffective). **Hypotheses:** (1) degenerate/aborted single-vertex element committed via the sync apply-path with `captureUpdate:"NEVER"`, so it never entered the local history stack → un-undoable; (2) ~10s delay points to a deferred-commit / sync-apply timing path. **Severity:** canvas content that (a) should never have been created and (b) cannot be removed by either party — a direct trust/confidence violation. **Next:** root-cause investigation + Playwright repro before fix. **Area tags:** whiteboard strokes / sync apply-path / history. |
-| **WB-MENU-CLICK-THROUGH — menu-dismiss click should not fall through to the canvas** | Medium (UX/reliability) | When a menu/flyout is open, the click that dismisses it currently **also falls through** and starts a canvas action (in Andrew's repro, the dismiss-click began the stray line). The **first click outside an open menu** should **only** dismiss the menu and be swallowed — not initiate a tool/draw action on the canvas. **Requested by Andrew 2026-06-29** as a follow-up. Likely contributes to **WB-DELAYED-STROKE-UNDO** repro but is a distinct concern. **Area tags:** whiteboard chrome / pointer capture / menu overlay. |
-| **WB-UNDO-REDO-DISABLE — undo/redo toolbar buttons should disable when stack empty** | Low (UX/chrome) | Disable the **Undo** button when there is nothing to undo; disable **Redo** when there is nothing to redo. Drive enabled state from Excalidraw history stack depth in each direction. **Requested by Andrew 2026-06-29** (wb-wave5-polish confirm). |
-| **BL-VERIFY-SUCCESS-COPY — no "successfully verified" affirmation after verify-done** | Low (UX gap) | After successful email verification + sign-in (`/auth/verify-done` → dashboard), the user sees **no** affirmative "your email was verified" confirmation. Add success affirmation (toast/notice e.g. "Your email is verified" on landing). From wb-wave5-polish confirm item 3 (2026-06-29): *"Pass, but. Shouldn't there be a 'successfully verified' style copy instead of no copy at all?"* |
+**[P2][NOTES] Audio scrubbing / duration 0:00**  
+WebM/MP4 seek index; server remux.
 
----
+**[P2][NOTES] Slice-3 S3 — notes reduce job-in-flight lock**  
+Orphan DRAFT `SessionNote` race.
 
-## WB A/V UX (2026-06-18)
+**[P2][NOTES] Slice-3 N1–N4 deferred findings**  
+See recording-slice3 adversarial review.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-STUDENT-MOBILE-VALIDATION — student mobile-web (Android + iOS) validation** | Medium | Student surface runs on mobile browsers; **Android covered** via test-student (wb-unify re-smoke). **iOS coverage = ZERO** — validate student WB/A/V on iOS Safari (WebKit). Strengthens the iOS test-device purchase case. **Tutor side is desktop Chromium = not at risk** (Sarah assumed Windows desktop). |
-| **WB-CAPTURE-PAUSED-INDICATOR — show 'student capture paused' when mobile student screen-locks** | Low-medium (UX) | When a mobile student locks their screen, capture suspends and the tutor sees a misleading **frozen last frame**. Show an explicit paused/suspended state on the tutor's tile instead. Born from Android screen-off re-verify 2026-06-18 (screen-off froze tutor's view of student; audio one-way; recovered on wake). Not a blocker. |
+**[P2][NOTES] MB-5 verify — tutor_only notes path**  
+Smoke PARTIAL; re-verify without impersonation.
 
----
+**[P2][NOTES] REQ-S3-1 — Formatted markdown `.ai-prose`**  
+`FormattedNotesBody` not in `src/`.
 
-## P2 student shell — post-hard-switch follow-ups (2026-06-17)
+**[P2][NOTES] REQ-S3-2 / REQ-S3-2a — Save notes semantics + Cancel session**  
+`RecapEditor` not shipped; SSG-2 related.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB / site composition + de-duplication audit (Andrew 2026-06-17 — COMING, not yet scheduled)** | Tech-debt (architecture; not Phase 2 blocker) | Systematic pass to (a) decompose the whiteboard workspace — tutor `WhiteboardWorkspaceClient` (~5,050 LOC monolith) + student `StudentLiveWorkspaceClient` (~1,073 LOC) — into ONE role-parameterized component composed of library components/primitives, eliminating tutor/student duplication; (b) enforce the no-bespoke / compose-to-primitives / no-unjustified-duplication principle (`.cursor/rules/composition-no-duplication.mdc`) across the site — components, primitives, and behind-service code. **Interim debt (sanctioned):** the student may ship as its own page composed of shared components until this audit runs. Originally deferred until WB-in-master; building the student surfaced the coupling. Pairs with **WB-LEGACY-STUDENT-CLIENT-DELETE**. |
-| **WB-LEGACY-STUDENT-CLIENT-DELETE** | ✅ DONE (2026-06-26, Part 1D) | ~~Delete orphaned `src/app/w/[joinToken]/StudentWhiteboardClient.tsx`~~ Deleted. Confirmed dead via evidence (route `/w/[joinToken]` → `StudentWhiteboardSessionShell` → unified `WhiteboardSessionShell role="student"`; only refs were itself + 4 tests). Component + its 3 dead-path tests removed; the live student path is covered by `WhiteboardWorkspaceClient.av-mount.dom.test.tsx` (student role) + the `@wb-*` Playwright relay surrogates. |
-| **Consent consolidation (Andrew 2026-06-17)** | P3 design | **Consent consolidation (Andrew 2026-06-17):** the P3 waiting room is the SINGLE consent surface for BOTH tutor and student. Interim (pre-P3): student A/V auto-enables with NO new in-app consent dialog — only the browser permission dialog + the existing recording-disclosure line. When P3 lands: the waiting room owns consent AND the EXISTING tutor consent dialog is REMOVED (do not keep two consent surfaces). (Resolves M1 from the parity adversarial review as proceed-as-is.) |
-| **WB-D6 — student asset inserts (PDF/image/graph)** | P2 interim / post-consolidation | Student asset inserts (PDF/image/graph) are **tutor-only** for the interim. Closing requires wiring the student `joinToken` into the insert upload path AND deciding whether students may ever add pages (PDF insert adds pages — conflicts with D4 `canSwitchPage:false`; likely keep no). Tie to **WB / site composition + de-duplication audit** + **WB-LEGACY-STUDENT-CLIENT-DELETE**. |
+**[P2][NOTES] REQ-S3-4 — canonical notes schema**  
+Map-reduce vs `NewNoteForm` field alignment.
 
----
+**[P3][NOTES] Formal eval harness + flywheel**  
+Phase 11; post-master.
 
-## Testing — real integration harness (Andrew 2026-06-18)
+**[P3][NOTES] AI edit signal Phase 1**  
+Unbuilt. Full spec: [`docs/archive/handoff/ai-edit-signal-phase-1-bootstrapper.md`](archive/handoff/ai-edit-signal-phase-1-bootstrapper.md) — `AiNoteEditSignal`, `npe` logging, per-field AI-draft columns.
 
-> **Strategic:** build comprehensive **real** integration tests that can eventually **replace manual hardware smoke** as the merge gate. **NOT before master is stable enough for a wider audience** — until then, hardware re-smoke stays the gate.
+**[P1][GTM] CONTINUITY-V1-CARRYOVER — continuity engine V1**  
+Banner-only today. First spine: open loops, pre-session brief, "would you agree?" — spec [`docs/research/continuity-wedge-brainstorm-2026-06-12.md`](research/continuity-wedge-brainstorm-2026-06-12.md).
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **TEST-REAL-INTEGRATION-SUPERSEDES-SMOKE — real-browser integration harness replaces manual smoke** | Strategic (post-master-stable) | **Andrew directive 2026-06-18.** Current automated suite (jest + `npm run test:wb-sync` Playwright relay invariants) is **necessary but NOT sufficient** — the wb-unify regression class (eraser tombstone resurrection, per-page undo isolation, exit→rejoin A/V recovery, paint-on-reconnect) is **hardware-gated** and jsdom/headless relay did not catch them before Andrew's W1-3 smoke. **Goal:** a real integration-test harness (multi-instance Excalidraw + real peer-mesh lifecycle + reconnect scenarios + tombstone/undo oracles) that catches this class **before** Andrew's two-device pass. **Gate:** do **not** start until `master` / pilot line is stable enough for a wider audience — premature investment risks building against moving surfaces. **Until shipped:** manual hardware re-smoke remains the merge boundary for whiteboard/A/V reliability changes. Cross-ref: `wb-unify-stabilize` fix waves @ `4a07cfa`/`c0d80bd`; hard-won lessons in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD (tombstone baseline + MediaStream remount). |
+**[P2][GTM] Public wedge messaging**  
+"Structured memory" not "whiteboard+" — marketing copy open.
+
+**[P2][GTM] Notes quality moat elevation timing**  
+Pull forward vs Gate A only.
+
+**[PROCESS] MAP-ACC — notes quality tuning #1 post-master**  
+Deferral ledger; prompt fix landed — recheck PASS.
 
 ---
 
-## Whiteboard — reliability / cost-safety (Andrew 2026-06-18)
+## 6. Auth / identity / consent / privacy / legal / COPPA
 
-> **Incident (2026-06-18):** Andrew left a live whiteboard session open ~16h overnight. Incremental OpenAI cost was **$0** — but only because the session was solo (no student) and prod has `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=false`, so recording never armed and no audio segments were produced (`wbsid=e542afff-5764-4f60-ba6c-447e4e82ae2f`, `activeMs=0`, 0 `SessionRecording` rows). The latent billing risk is real for with-student (or solo-record-enabled) sessions where recording stays active.
+### Consent collection & enforcement
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-IDLE-SESSION-GUARD — idle/abandoned live session cost protections** | Medium-high (cost-safety + tutor-trust) | Protective measures so a tutor can't accidentally burn transcription + notes cost by leaving a session open unattended. **Core gap:** whiteboard sessions have **no session-level auto-end** — a session can sit open 24h+ (`endedAt` stays null). **Existing caps:** only the **8h recording hard-stop** (`SESSION_SAFETY_MAX_SECONDS` in `segment-policy.ts`), and only while actively recording; segments roll every ~**50 min** (`SEGMENT_MAX_SECONDS`). **No VAD / silence skip** — when recording is active, silent audio is still billed per audio-minute (`gpt-4o-mini-transcribe` ~$0.003/audio-min, fallback `whisper-1` ~$0.006). An abandoned-but-recording session could bill up to ~8h of audio-minutes (~$1.50–$3) + notes generation for nothing. **Options to evaluate (not all required):** (1) **Session-level idle auto-end / "still there?" heartbeat** — detect inactivity (no pointer/stroke/audio + no reachable participant); after a grace window, prompt; if unacknowledged, gracefully **END** the session (flush + save — never silent discard; honor **SSG-2** / **F1** save-then-end discipline). (2) **Inactivity auto-pause of recording** — pause capture after N minutes of no audio/no interaction (pairs with existing FSM pause path). (3) **VAD / silence-skip** so silent audio isn't transcribed/billed. (4) **Confirm or lower a max session-duration cap** distinct from the 8h recording cap. **Tutor-trust bar:** a tutor would be upset to return and find they'd been billed for an abandoned session. Cross-ref: **WB-RECORDING-START-PAUSE** (missing visible Start/Pause controls — related surface); 8h `SESSION_SAFETY_MAX_SECONDS`; ~50min `segment-policy.ts` rollover; save-then-end (**SSG-2** / **F1**). |
+**[P0][CONSENT] CONSENT-COLLECTION-COMPLETENESS (CC-1/CC-2)**  
+**Largely shipped:** `assertConsentRecordExists`, claim decline path, tests. **VERIFY** Playwright e2e gaps (**CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE**).
+
+**[P1][CONSENT] CONSENT-HONESTY-SARAH-MERGE-BLOCKER**  
+**Largely shipped:** `consent-toggle-copy.ts`, hidden dead toggles. Andrew legal comfort sign-off on modal removal may still be open.
+
+**[P1][CONSENT] createChildLearnerAction — no ConsentRecord at create**  
+Learner exists before parent visits consent editor.
+
+**[P1][CONSENT] Sarah test-student audit + TEST purge**  
+Operator action before V1.
+
+**[P1][CONSENT] Essentials-vs-optional tier ratification**  
+§4.1 PROPOSED — awaiting Andrew.
+
+**[P1][LEGAL] CONSENT-LEGAL-CONSULT**  
+VPC method, OpenAI processor status, retention timeframe. Pack: [`docs/coppa-compliance-research-2026-05-31.md`](handoff/coppa-compliance-research-2026-05-31.md) → [`docs/LEGAL-SYNC.md`](LEGAL-SYNC.md).
+
+**[P1][LEGAL] Umbrella + product privacy retention (§312.10)**  
+Honest interim on `/privacy`; mortensenapps sync.
+
+**[P2][CONSENT] allowEducationalUse toggle + enforcement (BL-B)**  
+Not in schema; spine-locked in lifecycle design.
+
+**[P2][CONSENT] allowWhiteboardRecording real enforcement (WB-CONSENT-UNCONDITIONAL)**  
+Toggle hidden; frozen false — gates parent replay only, not capture paths.
+
+**[P2][CONSENT] BL-A — tutor-visible per-student consent projection**  
+Read-only `ConsentRecord` on student detail + scheduler chip.
+
+**[P2][CONSENT] assertEffectiveConsent legacy no_snapshot → pass**  
+Pre-CC-1 sessions; verify end-path fail-closed.
+
+**[P2][CONSENT] LIVE-SESSION-CONSENT-COPY**  
+Honest `allowLiveSession` copy — shipped in `consent-toggle-copy.ts`; verify.
+
+**[P2][CONSENT] WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME**  
+`allowNoteSending` not email privacy gate; manual tutor email ungated interim.
+
+**[P3][CONSENT] allowMessaging / allowVideoRecording when features ship**  
+`NOT_SHIPPING_PERMISSIONS`.
+
+**[P3][CONSENT] Child-facing ConsentRestriction UI**  
+Schema only.
+
+**[P3][CONSENT] CONSENT-UX-REDESIGN / save-on-toggle**  
+Guided setup; **CH-SMOKE-SETTINGS-SAVE-ON-TOGGLE**.
+
+**[P3][CONSENT] Mid-session learner swap (Phase 3)**  
+No `activeSwapId`; design only.
+
+**[P3][CONSENT] 90-day unclaimed-real-student sunset**  
+No cron.
+
+**[P3][CONSENT] Mid-session consent-change poll**  
+Defer unless Sarah asks.
+
+**[P3][CONSENT] Orphaned IDB audio admin re-register**  
+Post-consent admin path.
+
+**[P3][CONSENT] INTERIM MASTER GATE captureAttestationAt**  
+Never built; superseded by CC-1/CC-2.
+
+**[P3][CONSENT] H-1/H-2 canvas carry-forward on swap**  
+Product decisions.
+
+**[P3][CONSENT] PARENT-INITIATED-TUTOR-REQUEST**  
+Post-Sarah.
+
+**[P3][CONSENT] WB-INPERSON-AUDIO-SUBTOGGLE**  
+Future in-person sub-toggle.
+
+**[P3][CONSENT] WB-SESSION-CONSENT-OVERRIDE**  
+Won't build for Sarah.
+
+**[P3][CONSENT] P3 Neon test-account migration script**  
+`forward-migrate-p3-test-accounts.ts` not in repo.
+
+**[P2][CONSENT] Consent modal removal — Andrew legal sign-off**  
+If not ratified in smoke.
+
+### Erasure (grace = **access suspension**, NOT tutor read-access)
+
+**[P1][CONSENT] Parent self-service erasure (non-admin)**  
+`requestLearnerErasureAction` not built; admin-only today.
+
+**[P1][CONSENT] Erasure parent/account-holder self-serve UI + CRITICAL_ACTION**  
+Plan §3.1.
+
+**[P1][CONSENT] Non-technical tombstone/grace copy**  
+**CORRECT:** during grace, tutor access is **suspended** (`assertStudentNotErased`, `erasure-tutor-gate.spec.ts`) — NOT read-access. Admin/operator copy must not claim grace read-access.
+
+**[P2][CONSENT] Erasure operator lookup UX (MB-2)**  
+**CH-SMOKE-DQ-ERASURE-ACCOUNT-LOOKUP**.
+
+**[P2][CONSENT] Erasure 2FA step-up**  
+**CH-SMOKE-DQ-ERASURE-2FA**.
+
+**[P2][CONSENT] ERASURE-ORPHAN-AUDIO-BLOBS**  
+Inventory gaps.
+
+**[P2][CONSENT] ERASURE-CLIENT-STORE-UNREACHABLE**  
+Client IDB not server-purgeable.
+
+**[P2][CONSENT] ERASURE-INFLIGHT-CHECKPOINT**  
+In-flight checkpoint at erasure.
+
+**[P2][CONSENT] ERASURE-ADMIN-METADATA**  
+Operator metadata gaps.
+
+**[P3][CONSENT] Tutor notification when learner erased**  
+Open item.
+
+**[P3][CONSENT] WhiteboardAsset enumeration at scale (H-3)**  
+events.json parse timeout risk.
+
+**[P3][CONSENT] At-rest envelope encryption**  
+Spike: not COPPA-mandated; optional hardening.
+
+### Identity & join
+
+**[P1][AUTH] Gate B2 — parent privacy consent lattice + management UI**  
+Schema shipped; B2-AC-1/2 per-tutor re-consent at claim. Parent editor shipped (`saveParentConsentAction`).
+
+**[P1][AUTH] WB-ADULT-JOIN-ENABLEMENT B2-signup / B3 / B4**  
+B1 won't-fix. B2-signup `isSelfLearner`; B3 child-only claim PIN; B4 parent→self-learner toggle.
+
+**[P1][AUTH] WB-PARENT-JOIN-AS-CHILD — parent_session_select picker**  
+Interim `ParentJoinGapCallout` shipped.
+
+**[P1][AUTH] Join denial UX — authenticated wrong principal gets bare 404**  
+Notes path has `/account/not-my-notes`; join still `notFound()`.
+
+**[P1][AUTH] VERIFY-ACCT-1 — duplicate-account creation block**  
+Same email parent + tutor.
+
+**[P2][AUTH] BL-RESET-DOMAIN — reset email respects originating host**  
+`getPublicBaseUrl` vs request Host.
+
+**[P2][AUTH] BL-RESET-GENERATE — Chrome suggest-password on /reset-password**  
+`ba2012a` reverted.
+
+**[P2][AUTH] BL-ADMIN-UUID-PICKER — 2FA reset target picker**  
+Typeahead for admin UUID.
+
+**[P2][AUTH] BL-VERIFY-SUCCESS-COPY — post-verify affirmation**  
+Silent landing after verify.
+
+**[P2][AUTH] WB-JOIN-LEARNER-SESSION-PERSISTENCE**  
+Tab-switch re-login.
+
+**[P2][AUTH] WB-FLAKE-JOIN-STALECOOKIE**  
+Join route cold-compile flake.
+
+**[P2][AUTH] PLAYWRIGHT-GAP — /join #k= fragment preservation**  
+Middleware may drop hash before `JoinAuthGate`.
+
+**[P2][AUTH] Claim interstitial — verify claim-email host vs preview**  
+Before AuthGate fix.
+
+**[P2][AUTH] Parent→self-learner toggle post-create**  
+Waiting-polish item 7.
+
+**[P2][AUTH] Claim flow: self-learner shouldn't see child PIN setup**  
+Adult self-learner claim UX.
+
+**[P2][AUTH] Signup waitlist REJECTED + revocation UI**  
+B1 approval gating shipped; operator revocation not built.
+
+**[P2][AUTH] Signup waitlist pagination + Google OAuth auto-provision**  
+Deferred.
+
+**[P2][AUTH] 2FA remember-device open decisions**  
+`__Secure-` prefix; max devices; backup codes interaction.
+
+**[P1][AUTH] SEC-1 R3 — cross-preview impersonation SSO**  
+usemynk cutover deferred.
+
+**[P3][AUTH] AUTH-IDENTITY-REDESIGN**  
+Unified login/signup post-Sarah. Spec: [`docs/AUTH-IDENTITY-REDESIGN.md`](AUTH-IDENTITY-REDESIGN.md).
+
+**[P3][AUTH] AUTH-FAMILYID-* / AUTH-AGE-NO-HARD-CUTOFF**  
+Dot-in-segment routing; counsel on age copy.
+
+**[P3][AUTH] Cross-realm email uniqueness + Google OAuth signup**  
+IAC-14.
+
+**[P3][AUTH] Operator / true-admin login**  
+Distinct from tutor login; `/operator/*`.
+
+**[P3][AUTH] Identity Phase 3–6**  
+Messaging, ShareLink sunset, AH 2FA enrollment.
+
+**[P3][AUTH] Auth-form unification (8 credential forms)**  
+Password primitive drift.
+
+**[P3][AUTH] WB-IMPERSONATION-SESSION**  
+Continue in-progress WB after impersonation switch.
+
+**[P3][AUTH] BL-IMP-REAL — impersonate real accounts**  
+Hard-blocked today; needs step-up, audit, legal.
+
+**[P3][AUTH] SEC-1 nice-to-haves**  
+Test-account UI, active-session list, env-only admin warning.
+
+**[P3][AUTH] Real email provider (P2b)**  
+`stubSendAccountHolderEmail` still stub.
+
+**[P2][AUTH] Notes first-class authenticated chrome (P2-AC-12/13)**  
+`/s/*` wall shipped; full parent chrome integration deferred.
+
+**[P2][AUTH] ADMIN-PARENT-BLOCK-LIVE**  
+Ajax refresh parent block after claim.
+
+### Gate B fast-follow
+
+**[P1][AUTH] Gate B1 — approval-gating / waitlist**  
+**Shipped** `TutorApprovalStatus`, pending-approval. REJECTED path + revocation UI open.
+
+**[P2][AUTH] Gate B3 — security checks + final cleanups**  
+Tier B audit remainder.
+
+### Consent-honesty smoke follow-ups (CH-SMOKE-*)
+
+**[P2][CONSENT] CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE**  
+CC-1/CC-2 + erasure admin e2e gaps. Matrix in EXTRACT-D.
+
+**[P2][CONSENT] CH-SMOKE-DQ-ERASURE-ACCOUNT-LOOKUP** · **CH-SMOKE-DQ-ERASURE-2FA** · **CH-SMOKE-DQ-ERASURE-COPY-JARGON** · **CH-SMOKE-DQ-MULTI-STUDENT-LIVE** · **CH-SMOKE-DQ-CONSENT-CALLOUT-LIVE** · **CH-SMOKE-SETTINGS-SAVE-ON-TOGGLE** · **CH-SMOKE-STUDENT-MIC-PERSIST** · **CH-SMOKE-REPLAY-PLAYPAUSE-OVERLAP**  
+Details in [`consent-honesty-smoke-findings-2026-07-01.md`](handoff/consent-honesty-smoke-findings-2026-07-01.md). Andrew-only Notes fields blank in smokebooks.
+
+### Security
+
+**[P1][AUTH] npm audit Tier B (SHOULD-FIX-4)**  
+22 vulns; `npm audit fix` no-op on peer conflicts.
+
+**[P1][AUTH] Account-takeover gap on existing-email signup**  
+Mitigations: email-confirmation signup, notify-on-reset.
+
+**[P2][AUTH] Email-infrastructure prerequisite (Resend on usemynk.com)**  
+Transactional sender for confirmation + reset notify.
+
+**[P2][AUTH] Account-takeover defense (1/3) email-confirmation signup**  
+`emailConfirmedAt`, token table.
+
+**[P2][AUTH] Account-takeover defense (2/3) notify-on-password-reset**  
+Inform existing holder.
+
+**[P3][AUTH] Account-takeover defense (3/3) notify-on-new-device-signin**  
+Defense in depth.
+
+**[P2][AUTH] In-memory rate limiters → Neon**  
+`api:<ip>`, `setup:<ip>` remain. Learner PIN + auth + 2FA **shipped** durable.
+
+**[P2][SEC] SEC — tutor-asset/route.ts any-origin blob URL**  
+SSRF-adjacent; pin allowed origin.
+
+**[P2][SEC] SEC — /api/test/whiteboard/* gate hardening**  
+Pin `PLAYWRIGHT_TEST_SECRET` in prod.
+
+**[P3][LEGAL] Phase 10-pre external pen-test**  
+Before first paying customer.
+
+**[P2][LEGAL] Audio recording of minors — consent flow research**  
+Per jurisdiction before scale.
+
+**[P2][LEGAL] OpenAI vendor ops checklist**  
+DPA, ZDR, prod path verification.
+
+**[P2][LEGAL] PII / privacy policy before public launch**  
+Beyond pilot stub.
 
 ---
 
-## Smoke round 1 — master-cut branch findings (2026-06-11)
-
-> **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.
-
-| Item | Priority | Notes |
-|------|----------|-------|
-| **B2 parent consent management UI (Step 6)** | Gate B2 / HIGH | **C2** — no parent UI to view/change consent after claim; Andrew bypassed via DB. Deferred B2 Step 6; blocks `CONSENT_ENFORCEMENT=true` flip. Build `/account/children/[id]` per-tutor consent page + update route. |
-| **Claim Panel A ordering + `allowLiveSession` framing** | Design | **C3** — login setup above privacy prefs; frame "Allow live sessions" as base contract (decline = can't use service); strongly encourage audio + WB recording ON with explicit decline warnings. |
-| **Consent × retention governing principle** | Design | **C4** — if WB recording not allowed, can't retain data (PDF w/ child info); audio may still record tutor-only; future: tutor-strokes-only or protected-info flag on uploads. Reinforces C3 warnings. |
-| **Billable minutes on notes screens** | Design | **C5/N1** — live-recording notes show start/end times; consider billable minutes instead (align with WB session billing display). Informed by **X6**. |
-| **Remove stale `/admin/waitlist` route** | Medium | **W4** — dupe of `/admin/tutor-approvals`; remove or redirect. |
-| **Live video capture/display broken** | HIGH | **X1** — video off-by-default (known) AND won't turn on when toggled; student tile missing (L4). Dedicated investigation — no longer deferrable post-smoke. |
-| **v1-design-application via shared components** | Gate A1 / META | **X2** — full-site audit premature; v1 design not applied everywhere (2FA, pending-approval, signup, Connected pill, AV pip, WB start panel). DRY + design-application must proceed together; "fix once fixes everywhere." |
-| **AV pip on/off clarity** | Low | **X3** — audio/video toggle on pip less clear than top-bar distinction. |
-| **Echo cancellation + capture-start timing** | Medium | **X4** — speaker→mic loopback; audio started mid-stream (feedback noise or capture delay). |
-| **Student-initials list versioning UX** | Low | **X5** — "Child1 Kalearn"/"Child1 McFamily" reads like a glitch. |
-| **Interactive PIN strength feedback** | Medium | **P1** (enhancement) — beyond weak-PIN rejection: live strength indicator + visible weak-PIN disallowed requirement (password-style). |
-| **2FA setup page v1 redesign** | Design | **TFA2** — offcenter tile; backup codes block nearly unreadable. Fold into v1-design-application. |
-| **"Connected" status pill — new design** | Low | **L6** — not yet in v1 chrome. Fold into v1-design-application. |
-| ~~**Continue button text color inconsistency**~~ | Low | ✅ **X7 RESOLVED** — ad-hoc overnight coral pills + `Button asChild` links inherited light body text on coral (not a token regression); fixed via `Button variant="accent"`, `a:not([data-slot="button"])` guard, `.btn.btn-primary` alias. `--accent-on` unchanged. (commit ref: `e31ea76`) |
-
-**Status as of 2026-05-20:** Recent ships marked ✅ below with commit refs where applicable. **Latest merges (master):** `4118f3e` (Tier A security: security.txt + signup anti-enumeration), `249327a` (#6 reliability: note save vs transcribe race — merge-into-empty populate, 26 new tests), `939b1e3` (AI prompt v6→v7: reaction-aware Assessment extraction). **Open reliability BLOCKER-PRODs:** #1+#2 (audio data durability — IndexedDB persistence), #7 (hot-swap mic / unplug silent), #13/#14 (rid coverage on remaining mutating actions). **Blocked:** Phase 11 executor work until umbrella legal paragraphs publish to www.mortensenapps.com. **Brand Phase 2 decisions landed 2026-05-19 PM:** all four pillars decided — palette = **Mynka Blue** (`#1E3D54`), typography = Fraunces V4 wordmark + V2 heading + Inter 400 body. See `docs/MYNK-BRAND-PHASE-2-DECISIONS.md` (canonical), `docs/BRAND.md` (engineering ref), `docs/brand-previews/palette-mocks-FINAL-mynka-blue.html` (live mockup). Unblocks `docs/DESIGN-TOKENS-PLAN.md` Phase 0+1 (in-app palette migration).
-
-## wb-chrome-redo follow-ups (post-merge, 2026-06-09)
-
-| Item | Priority | Notes |
-|------|----------|-------|
-| **Pass-2 in-context end-session (Gate A3)** | **V1-required** (deferred) | **Deferred from `feat/wb-chrome-redo`** — must ship for V1, can land after chrome merge. One shared session shell; End session auto-transitions same shell into review mode in place (no nav-away); notes primary; replay lazy "Review video while editing". **P2 reference search (2026-06-09): NOT FOUND** on `feat/wb-chrome-p2` tip `6430aff` — `handleEndSession` in `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx` still `router.replace` to `/admin/students/[id]/whiteboard/[whiteboardSessionId]` (replay-first `WhiteboardReplay` + notes-below). Reconstruct from [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md) + session-shell HTML mock. Cross-ref: Gate A3 in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). |
-| **PDF page-tab indicator** | **V1-required** (deferred) | **Deferred from `feat/wb-chrome-redo`.** Board tabs that are PDF pages should show a PDF icon in `BoardTabStrip`. **Blocked on data model:** `PageStripRow` has no `isPdf` field — add field + propagate from board/session data before UI can render the icon. Ref: [`wb-chrome-redo-STATUS.md`](handoff/wb-chrome-redo-STATUS.md). |
-| **SR-04a video-tile sizing** | **V1-required** (deferred) | **Deferred from `feat/wb-chrome-redo`.** Live-A/V video does not enlarge to fill its panel; multi-tile auto-expand missing. Parent requirement **SR-04** ([`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md)). Component: `WbAVCluster.tsx`. |
-| **Playwright wb-chrome-rendered-screenshot spec** | Medium | `tests/integration/wb-chrome-rendered-screenshot.spec.ts` added but not run in CI yet. Run in a real browser (Playwright) to capture a rendered screenshot and verify interactive controls open. |
-| **Board separation integration test** | HIGH | Automated test confirming board switching works correctly in the chrome layout. Should run via `npm run test:wb-sync` or a separate Playwright spec. |
-| **A4 Slice-C: inbound-RTP audio watchdog** | Medium | Silent-track detection beyond negotiated WebRTC presence. Hook point in `peer-mesh.ts`. See `docs/handoff/live-av-split-brain-diagnosis-2026-06-08.md`. |
-| **A4 Slice-C: TURN credential path** | Medium | TURN server integration for NAT traversal reliability. |
-| **Playwright split-brain injection test** | Medium | Inject a simulated WebRTC drop in a test to verify the split-brain banner and recording pause behavior. |
-| **Share ▾ options expansion** | Low | Current Share ▾ dropdown has only "Copy student join link". Consider adding QR code or email options. |
-| **Equation legibility on white PDF in dark mode** | Post-V1 / revisit | **Andrew decision 2026-06-09 — DEFER.** Inserted math equations store dark ink; Excalidraw dark-mode inversion renders white glyphs — fine on the dark canvas, **invisible over a white PDF page**. Light mode (black glyphs) is fine over PDF. Frequency unknown; do not force always-black in dark mode now. **Candidate revisit:** black glyphs on a small light/white rounded backing plate so equations read on any background. |
-
-### Graphing tool swap: Desmos → self-hosted JSXGraph (`feat/wb-graph-jsxgraph`)
-
-**Priority: V1-tier** (graphing feature replacement — branch `feat/wb-graph-jsxgraph` on `v1-redesign`).
-
-**Decision (Andrew 2026-06-09):** Replace the Desmos graphing embed with a **self-hosted JSXGraph** widget rendered via Excalidraw's `renderEmbeddable` prop.
-
-**Rationale:** Desmos (and GeoGebra) hit Excalidraw's null-origin sandbox iframe wall — their assets fail under our parent CSP / CORS. GeoGebra additionally requires a commercial license. JSXGraph is MIT-licensed, runs as our own code on our own origin (eliminates the entire CORS/CSP/third-party class of failure), shrinks our CSP (removes all `desmos.com` origins), gives coordinate-plane + function-plot UX, and makes graph state capturable for replay.
-
-**Accepted sub-decisions:**
-- **(a)** Accept breakage of old Desmos graphs in existing pilot sessions (only Andrew + Sarah; no real graphs to preserve).
-- **(b)** Do the swap as its **own branch** after `feat/wb-chrome-redo` merges — do not fold into the current chrome-redo branch.
-
-**Phase 1 — ✅ landed `9d1264a` (tutor-side scaffold):** `jsxgraph` dep + self-hosted CSS; `GraphInsertButton` / `insertGraphOnCanvas` / `buildGraphEmbeddableElement` (`mynk://graph` sentinel); tutor `renderEmbeddable` → `GraphEmbeddable` (axes + grid, no CORS); `validate-embeddable` accepts sentinel; unit tests for insert + graph-state parse.
-
-**Phase 2a — in flight (tutor usability):** resize-fill (`resizeContainer` + full-box CSS); suppress Excalidraw `mynk://graph` hyperlink chrome (CSS `:has` on sentinel href + `onLinkOpen` preventDefault); inline expression panel (add/edit/remove, parse-error inline); persist `graphStateJson` (expressions + bbox) via public `excalidrawAPI.updateScene({ captureUpdate: "NEVER" })` on expression commit + debounced pan/zoom end.
-
-**Phase 2b — remaining (not in 2a):**
-- [ ] Wire `renderEmbeddable` on **student** whiteboard client
-- [ ] Event-log / `excalidraw-adapter`: `desmos` → `graph` type rename with **legacy read** for old sessions
-- [ ] CSP: remove `www.desmos.com` / `desmos.com` from `frame-src`, `style-src`, `font-src`, `img-src` in **both** `csp.ts` and `next.config.ts` (after student path + legacy read)
-- [ ] `docs/PLATFORM-ASSUMPTIONS.md` §5.3.1 — replace Desmos embed assumption with JSXGraph self-hosted
-- [ ] Tests: update `csp-headers`, `excalidraw-adapter` tests
-- [ ] Remove Desmos insert UI / code paths (when swap complete)
-
-**Note (Andrew 2026-06-09):** **Camera-on-by-default** is deferred to **Gate A2 (waiting room)** — A2 owns auto-starting A/V; this graph branch does not change live-A/V behavior.
-
-**Cosmetic (low priority):** On-canvas blue link badge shows on unselected graph embeds; can't hide without clearing `link` (which breaks reload). Needs an Excalidraw API/upstream change.
-
-**Cross-ref:** Sarah Q1 graphing ask (Desmos was interim); [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD.
-
-## Whiteboard — implementation / design queue
-
-**Roadmap (ordered waves, pilot vs maintenance vs Phase 2 gate):** see **`docs/WHITEBOARD-ROADMAP-NEXT.md`**. Execution YAML for Cursor Build: **`.cursor/plans/whiteboard_backlog_execution.plan.md`**.
-
-Action items not yet built; design where noted. (Live status: `docs/WHITEBOARD-STATUS.md`.) **If you add or change a row here,** update the same session: **`docs/whiteboard-smoke-log.md`**, **`WHITEBOARD-STATUS.md`**, and **`.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** (§ *Smoke + Sarah → backlog folds*).
-
-| Item | Type | Notes |
-|------|------|--------|
-| **Tutor laser/pointer-wand not visible to student** | **Gap (V1-relevant) — owned by Gate A5** | **Never built — NOT a regression** (root-cause complete 2026-06-10). Tutor wand only drives local Excalidraw `laser`; pointers never captured, broadcast, or rendered on peer. Sarah pilot 05-26; Andrew 2026-06-10: "still doesn't show to student." **Andrew decision:** fold into **Gate A5** (not a standalone thread) — includes bidirectional student laser + per-role colors (**ST-05**). **Re-observed 2026-06-10 phone-portrait smoke:** student wand/laser currently renders **red** (should be **cyan** per **ST-05**) — same Gate A5 locus; no duplicate tracking. **B8** (tutor laser offset from own cursor) is a separate local-viewport issue. Cross-ref: [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md) **ST-05**; Gate A5 in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). |
-| **Mobile alt-shape picker discoverability** | UX iteration (2026-06-10) | **Phone-portrait mobile smoke** (`feat/wb-mobile-chrome` build — bugs fixed separately; this is deliberate UX iteration). Picking a different alternate shape requires **tap-to-activate** the Shapes▾ control, then **tap again** to open the picker; **long-press does NOT** open it. Andrew wants a more discoverable mobile pattern (candidates: long-press opens shapes sheet, or always-visible shapes-sheet entry on touch). Cross-ref: **PU-05**, **TB-12** in [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md). |
-| **Multi-point line / n-gon — mobile rubber-band preview** | UX QOL (2026-06-10) | **Phone-portrait mobile smoke.** After the first tap when drawing a multi-point line or n-gon, **no live preview** of the pending segment until the second tap — want a **rubber-band preview** of the segment in flight. Partly native Excalidraw multi-point-line behavior; investigate what is controllable via custom chrome / `excalidrawAPI`. |
-| **Multi-point line / n-gon — close-at-origin snap radius (touch)** | UX QOL (2026-06-10) | **Phone-portrait mobile smoke.** "Tap near the origin node to close/finish" needs a **larger snap radius on touch** — Andrew tapped near the origin to close an n-gon and it created a **stray nearby vertex** instead of closing. Partly native Excalidraw behavior; fix may be limited / needs investigation of controllable hooks. |
-| **WB-LINE-END-TOUCH — finish/commit a multi-segment line or arrow on touch** | Medium (touch tool UX) | **Wave 4 round-2 smoke (2026-06-20).** On touch there is **no easy way to END an in-progress multi-segment line/arrow** — the touch equivalent of right-click/double-click/Escape to commit. Andrew switched to the eraser and it **kept adding line segments** (the line tool was still active/uncommitted). Need an explicit touch affordance to finish a multi-point line/arrow (e.g. a "done/commit" tap target, double-tap-to-finish, or auto-commit on tool switch). Sibling to the **right-click-to-end-line/arrow** gap from W1-3 smoke (no right-click on touch). Partly native Excalidraw behavior — investigate controllable `excalidrawAPI` hooks. |
-| **Student follow-tutor viewport (default on + toggle)** | Reminder — Phase 7 student chrome | **Re-confirmed Andrew 2026-06-10 phone-portrait smoke.** Students must **by default** track tutor pan/zoom (**follow viewport**), with an easy toggle to turn following off. Requirement already captured: **ST-01** (toggle, checked by default), **ST-02** (bottom-bar placement); belongs to **student-chrome build Phase 7** and **Gate A5** viewport sync. Verify shipped student shell before V1 reveal. Cross-ref: [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md). |
-| **BL-LEARNER-JOIN-LINK — surface session join link on learner side** | UX (LOW) | Surface the session join link on the logged-in learner's side (waiting room / learner dashboard) as a backup way to obtain the link. Today only the tutor generates/copies it via the WB Share action; the learner waiting room shows no link. Additive UX, independent of confirm (c) hybrid keep. From Andrew 2026-06-14. |
-| **BL-WB-SEPARATE-TAB-OPTIN — optional desktop-only separate-tab live WB** | UX (LOW) | Optional desktop-only setting to open the fullscreen live whiteboard in a separate browser tab. Default stays single-tab for reliability (recorder lives in the tab; separate tab raises accidental-close + iOS background-suspension wedge risk). Never a mobile default. From Andrew 2026-06-14. |
-| **BL-WB-WORDMARK-NAV — wordmark links to student detail with leave guard** | UX (LOW) | Wire the WB wordmark to link to the student detail page, with a leave-session guard (confirm / end-session route) while a session is live. Decision recorded 2026-06-14; implement as part of student-WB shell/chrome work. |
-| **Phone/tablet default zoom ≠ desktop 100% (design — discuss)** | Design (not committed) | **Spitball — needs discussion before scoping.** Make phone/tablet "100%" a zoomed-out-relative-to-desktop default so more board fits on small screens. **Catch:** cross-side **viewport ghost** (**VP-01**) must still show what the other side **actually** sees — math ties to **Gate A5** live-sync / viewport-ghost accuracy. Offer opt-out "stay at desktop scale." Mock context: [`whiteboard-mobile-mock-2026-06-10.html`](brand-previews/whiteboard-mobile-mock-2026-06-10.html). |
-| **Mobile AV pip — no drag/resize on touch layouts (fixed top-right)** | Deferred (Phase 6 / SR-16) | On touch/mobile layouts the AV pip (`WbAVCluster`) is fixed top-right; drag-handle and resize-handle are not rendered and the pointer handlers early-return on `isMobileLayout`. Acceptable for the Phase 0-3 tutor phone-portrait core (confirmed Andrew 2026-06-10). Revisit in the AV-pip phase (**SR-16** / Phase 6): decide whether mobile should allow repositioning/resizing the pip, plus the related panel show/hide-toggle idea from pilot feedback (Andrew's wife: "let me move/toggle the panel"; Sarah wants to see herself). Position default fixed to top-right in commit [`0e900b1`](https://github.com/Arangarx/tutoring-notes/commit/0e900b1). |
-| **Per-board undo/redo history (whiteboard)** | Enhancement (post-v1 / not-a-gate) | **Andrew decision 2026-06-09 — keep current behavior and log.** Current behavior: undo/redo history is cleared on every board switch (`captureUpdate:"NEVER"` + `api.history.clear()`; shipped `914fbc0`). This fixes cross-board contamination but loses the undo stack for the board you were on. Excalidraw 0.18.1 has no public history snapshot/restore API — only `history.clear()`. A per-board snapshot would require intercepting Excalidraw internals (not stable API). The cleanest feasible path is **per-board Excalidraw remount** (key-bump on the `<Excalidraw>` component when the board changes), which gives each board its own isolated instance + history stack; this requires an orchestrator-level design pass (performance, sync/recording wiring implications). Revisit if Sarah requests it. |
-| **PDF open — fit tutor view vs student view (design)** | Product (LOW) | **Owner-requested; act only if Sarah raises it.** Today a PDF page opens zoomed to fit the **tutor** viewport; the student inherits via follow (Mode B). Open question: should default fit target the **student** device instead (or offer a per-session toggle)? |
-| **Post–sync-redesign smoke findings (2026-05-30, separate from fixed viewport core)** | Smoke capture | Consolidated from desktop-tutor + phone-student pass on `master` `750d494` — **not** the offset-contamination bug (fixed `123e60e`). **(a) Live A/V — student mic picker:** no student-side input device picker (net-new product hole; tutor path has picker via `AudioRecordInput` / Phase 4). **(b) Live A/V — Phase 4:** student tile stuck on "waiting for camera"; tutor **"T" initial** not shown to student (diagnose in `peer-mesh` / `AVTile` layer, separate from whiteboard sync). **(c) Whiteboard UX:** new pages insert **after** the active page — owner finds counterintuitive; revisit insert order / strip behavior. **(d) Whiteboard mobile:** pointer-transform **up-and-left** hit offset on eraser + PDF touch targets — distinct from viewport-center sync; see eraser row below. |
-| **Whiteboard regression net — re-enable inv 8 (PDF) in headless gate** | Tooling (LOW) | The `npm run test:wb-sync` real-browser net (2 Excalidraw instances over a local Dockerized relay + local Postgres) is **GREEN + teeth-verified** — breaking the viewport-center oracle reddens inv 4 at ~322px, restoring it greens. **inv 8 (PDF opens centered+fit on student) is QUARANTINED** (`test.skip`) because pdfjs-dist won't load in headless Playwright (`Object.defineProperty called on non-object`) — an env/gate gap, **NOT** a product regression (PDF centering passed on hardware + covered by periodic manual smoke). Fast-follow: get the pdfjs-dist worker loading headless (worker copy / `postinstall` / `scripts/copy-pdfjs-worker.mjs`) then un-skip. See `docs/handoff/whiteboard-regression-net-design-2026-05-30.md` § inv 8 quarantine. |
-| **Eraser cursor mismatch — verify post-Phase-1; if still present, fix** | Verify + bug | **Priority: before next Sarah session.** Sync redesign merged `750d494`; confirm on prod/preview. If the eraser tool icon/cursor still disagrees with the stroke path on tutor or student canvas, fix cursor-rendering in a follow-up dispatch. Distinct from mobile pointer-transform offset in the smoke-findings row above. |
-| **Eraser — bulk delete can leave elements dimmed-but-not-deleted (native Excalidraw)** | Reliability (upstream) | **Investigated 2026-06-10 (read-only).** Erasing many elements in one fast gesture can leave them at low opacity (preview state) without actually deleting on pointer-up. **Root cause:** Excalidraw 0.18.1 internal `elementsPendingErasure` preview gets stuck when pointer-up doesn't reach the canvas handler — **NOT** a regression in our chrome/sync (we only select eraser via `setActiveTool`; deletion is entirely inside Excalidraw). Upstream fix documented: [excalidraw/excalidraw#4887](https://github.com/excalidraw/excalidraw/pull/4887). Likely reproduces on `master` too (same engine). Mobile chrome layout may aggravate frequency (releasing swipe over bottom toolbar / AV tile instead of canvas). **Workaround:** second tap or re-selecting eraser commits stuck deletes. No public Excalidraw API for that internal state; only engine-safe lever is chrome-side `pointer-events` hardening on canvas overlays — needs real-browser repro to validate. Revisit only if materially worse on mobile than desktop. |
-| ~~**PDF workbook in Board pages**~~ | ✅ **Shipped 2026-05-17** merge `9ff5b11` | Section-grouped per-page boards + subset page picker. Follow-ups: PDF position lock, Blob rate limit on bulk import, replay page strip — see `docs/PHASE-PDF-STATUS.md`. **Historical spec (pre-ship):** On insert: new **section** in the pages strip titled like the PDF file; **one board page per PDF page**; default **zoom to fit**; **Sarah (2026-04-24):** separate pages + Wyzant-style range picker. |
-| **Native image insert (Excalidraw drag / paste / default file flows)** | Bug + build | Smoke **2026-04:** **disk drag/drop** image → broken **placeholder on tutor and student**; native paths likely skip `uploadWhiteboardAsset` / `customData.assetUrl`. Audit and funnel like toolbar PDF. **Sarah:** phone photos are core. See **W2** in `.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md` + **`docs/whiteboard-smoke-log.md`**. |
-| **Whiteboard: cold refresh vs server truth** | Bug + product | Smoke **2026-04:** hard refresh could drop pages/strokes until Excalidraw **IndexedDB “Load draft”**; **Sarah:** after crash/reload, board must be **exactly as before** — **essential**. Tighten checkpoints / hydration (plan: W6, adversarial #1). Optional UX: one clear “restore” story vs two mechanisms (app gate vs Excalidraw banner). |
-| **Excalidraw recovery / “Load draft” popup** | UX + product | Smoke **2026-05:** after refresh/reconnect during live collab, Excalidraw’s **local recovery dialog** appears; the right action is usually **Discard** (follow **relay + app checkpoints / recorder truth**), not loading stale IndexedDB — easy to pick wrong and fork state. Backlog: investigate **suppression** (`resetScene`/`localStorage`/`localAppState` hooks per upstream API), automatic **clear stale draft** on controlled workspace mounts, or a **single in-app restore story** so this modal never fights collab. Cross-ref: row above — **cold refresh vs server truth**. Pilot note until fixed: prefer **Discard** when unsure. |
-| **Whiteboard session audio** | Build | `WhiteboardWorkspaceClient` does not yet mount the audio recorder; recording is strokes-only. Wire mic capture, persist `SessionRecording` / proxy as existing audio flow; replay already has `<audio>`. |
-| **Replay: time scrub / play without audio** | Build | `WhiteboardReplay` when `audioBlobUrl` is null: UI to scrub or play `t` off the event log (ms), not only final frame. |
-| **Event log + replay: multi-page** | Build | Per–board–page diffs in `WBEventLog` and replay, not only the tutor’s active tab at a given `t` (intersects PDF workbook and long sessions). |
-| **Student: follow vs independent view** | Product + verify | Modes: live follow, one-shot match, independent — confirm shipped behavior matches pilot copy; close gaps. |
-| **Local dev — student `/w/[token]#k=…` link parity** | DevEx + reliability | Smoke **2026-05:** “Copy student link” / join URL isn’t reliably correct for **local** runs: absolute host may assume **deployed origin** while **`WHITEBOARD_SYNC_URL`** points elsewhere; student tab + tutor tab + relay triangle breaks (blank board, stale room, CSP). Product fix: deterministic **same-origin relative** links for dev, **document `NEXT_PUBLIC_*` env overrides** where needed (sync host vs app host), smoke steps in **`docs/LOCAL-DEV.md`**, possibly a tiny **“Local join URL”** dev-only panel. Until then: tutor smoke on **hosted preview/prod**. |
-| **Snapshot PNG: multi-page coverage** | Build (Phase 1c follow-up) | Smoke **2026-05-12 (Andrew):** Phase 1c snapshot pipeline (`generateSessionSnapshotPng`) calls `excalidrawAPI.getSceneElements()` which only returns the elements of the **currently-active** Board page, so a session that used multiple pages only gets a thumbnail of the **last visited** page. Per Andrew: *"if they want 'final' images, wouldn't they want every page?"* Yes — for a multi-page math worksheet session this is the difference between "useful artifact" and "misleading thumbnail." Three plausible designs: (a) **N PNGs** uploaded with `kind: "whiteboard-snapshot"` + a per-page index column (additive migration: `WhiteboardSession.snapshotBlobUrls Json?` keyed by page id); (b) **single tall composite PNG** (vertically stacked, separator lines, page labels) — preserves the current single-`snapshotBlobUrl` column, simpler client/parent-share UX, but breaks if any page is unusually wide; (c) **page 1 only** as a stopgap with a "+N more pages — open replay to view all" footer link in the share UI. Recommend (a) for accuracy + (c) as the visible affordance until N-page support lands. **Acceptance when built:** session with 3 pages drawn → 3 PNGs uploaded → review surface shows page-strip thumbnails, parent share offers all of them. Implementation: walk the `pageList` outside Excalidraw, drive `applyAt(finalT)` per page via the scene-paint engine onto an off-DOM Excalidraw or call `exportToCanvas` per page-scene snapshot, then map `(pageId → blobUrl)`. **Best-effort contract still applies** — failure on any page must not block End-session. |
-| **Snapshot link discoverability** | UX (Phase 1c follow-up) | Smoke **2026-05-12 (Andrew):** the "Final snapshot: open as image" link in `WhiteboardReplay.tsx` (~L644) is rendered as small muted text below the canvas. Functional but **looks like a footer caption, not an action** — tutor doesn't notice it on first scan. Lift to a small icon button (e.g. 🖼️ "Open snapshot") in the replay toolbar, OR show a small thumbnail directly in the page so the tutor sees the snapshot is there even without clicking. Same affordance gap exists on the parent share page. Pair with the multi-page work above so the design covers both 1-page and N-page cases. |
-| **Active-ping 409 noise after End-session** | Polish | Smoke **2026-05-12 (Andrew):** clicking End-session reliably surfaces a single `POST /api/whiteboard/[sessionId]/active-ping → 409 Conflict` red entry in the browser network tab, because an in-flight heartbeat (or `navigator.sendBeacon` `active=false` on tab unload during the workspace→review navigation) lands at the server **after** `endedAt` is set. **Benign** — the 409 is the server's correct guard against stale pings polluting `activeMs`, and `WhiteboardSession` data is unaffected. **Cleanup options:** (a) workspace cancels the in-flight active-ping `AbortController` when End-session begins; (b) server returns 200 (no-op) instead of 409 when `endedAt` is set, since "ping after end" is a benign race not worth alerting on; (c) both. Not a Phase 1c regression — predates Phase 1c at commit `4907bdb` — but worth fixing because tutors look at devtools sometimes and red entries erode confidence. |
-| **Replay scrub drag — 429s + frozen scene** | Bug + reliability | Smoke chain **2026-05-16 → 17 (Andrew, smoke-1 #11 → smoke-5):** clicking to seek works smoothly (smoke-2 #S2-3 verified), but **dragging** the scrubber rapidly fires `GET /api/audio/admin/<id>` until the endpoint returns `429 Too Many Requests`. After the 429 the scrub stops painting live and dropping the cursor only shows state at the eventual landing position; playback from the dropped position is also broken. Replay's audio segment fetch path on drag doesn't throttle/coalesce/abort the in-flight requests, so a 2-second drag generates dozens of identical requests. **Fix axes:** (a) client — debounce drag updates (rAF or 100-200ms), abort superseded requests with `AbortController`, cache fetched segments by `(sessionId, t)`; (b) server — switch the rate-limit response to a 429 with `Retry-After` AND a cache-friendly response so a drag of repeated identical t's hits cache; (c) UI — disable scene live-update during drag, paint final state on drop (matches click-to-seek which already works). Pre-existing, not introduced by PDF branch. **Priority:** low but not "wait till complaint" — Andrew's words — this is a real UX hole every time a session is reviewed. Likely needs its own focused branch. **Cross-ref:** smoke-1 #11 / smoke-2 S2-4 / smoke-5 (`docs/PHASE-PDF-SMOKE-1.md`). |
-| **MathInsertButton — first-open white-box** | Polish | Smoke **2026-05-17 (Andrew, smoke-5 #1):** on the FIRST "Insert math" dialog open after a fresh page load, the `<math-field>` host renders as an empty white box. The mathlive module loaded (no console errors, `mathLiveReady` flipped to true), but the custom element appended in the dialog's mount effect didn't render its UI. Hypothesis: race between `customElements.define("math-field", ...)` (fires synchronously inside `import("mathlive")`) and the element prototype's `connectedCallback` chain — the element is registered but not fully "warm" when our `host.appendChild(field)` runs. Hard refresh fixes it for the rest of the session (mathlive is then in HTTP cache, import + instantiation interleave differently). **Likely fix:** defer the field-mount `useEffect` by one `requestAnimationFrame` after `mathLiveReady` flips, OR call `customElements.upgrade(field)` after appending, OR await `whenDefined("math-field")` AND a one-frame yield before declaring `mathLiveReady`. Workaround documented in pilot notes: if math editor shows blank, hard refresh. **Not a blocker** — first session of the day is mildly annoying, every subsequent open is fine. |
-| **Per-page view state — student-side validation (Phase 5 task 8 follow-up)** | Verify | Tutor side has shipped (zoom + position retained per page). Student side has NOT been validated — when the tutor changes pages mid-session, does the student's view follow? Does the student's local zoom/pan get reset or preserved? Test scenarios: (a) tutor changes page mid-session while student is on a different zoom level; (b) student joins mid-session and lands on the tutor's current page with the right view state; (c) iPhone Safari student joining a desktop tutor session. Capture iPhone matrix entries (Phase 2 iOS smoke matrix) for the student-side scenarios. **Trigger:** before any further per-page-view-state work or before pilot scope grows beyond Sarah. |
-| **Student canvas stuck on "Loading scene…" on join (intermittent)** | Reliability | **Observed 2026-06-06.** Student joins a whiteboard session and the canvas never finishes loading the scene — stuck on "Loading scene…". Intermittent; needs repro + root-cause. Likely in the initial scene-load / join-sync path. Relates to join-reliability work and the planned whiteboard re-architecture. |
-| **Preview-before-Start canvas wipe race** | Bug (Phase 1c follow-up) | Smoke chain **2026-05-12 (Andrew):** the `WorkspacePreviousSessionPreview` component (`src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WorkspacePreviousSessionPreview.tsx`) renders the read-only canvas blank for sessions with strokes drawn, even though every diagnostic upstream of Excalidraw reports success. **Reproducer:** end any session that has strokes → land on `/review` → manually edit URL bar to append `/workspace` → Enter. Expected: blue preview card on top, Excalidraw canvas below showing the final frame camera-fitted. Actual: blue card renders correctly, canvas is empty (Andrew confirmed *"hard refresh shows the strokes for one frame and then they vanish"*). Affordances all work — Start-new, Open-full-replay, and Open-last-snapshot are all reachable from the header card. **Diagnostic data captured during smoke chain (now trimmed from production code):** three-checkpoint state probes (sync / 2-rAF / 1500ms) read directly from `api.getSceneElements()` and `api.getAppState()` post-fit, showed the exact failure shape: `probe(sync): sceneElements=N>0 scrollX=<fitted> scrollY=<fitted>` followed by `probe(2-raf): sceneElements=0 scrollX=0 scrollY=0 zoom=1 bg=#ffffff`. Full elements + appState reset to defaults inside one rAF — the signature of Excalidraw re-applying its `initialData` prop. **Hypotheses ruled out across 5 hotfix commits (`296fad5`, `fd47436`, `0445e97`, `da52dc9`, `dedbe6c`):** (a) `excalidrawAPI` callback fires more than once → no, `apiCallbackCount=1`; (b) `restoreElements` lazy import returns undefined → no, `restoreElementsAvailable=yes`; (c) container measures 0×0 at fit time → no, `container rect: w=758 h=910`; (d) sync fit attempt failed → no, `fitter.fit sync result=ok`; (e) prior fitter's rAF retries write into a stale api → no, single mount + cleanup added; (f) React hydration mismatch caused subtree remount → fixed via `FormattedTime` helper, no React error #418; (g) inline `initialData` / `UIOptions` reference change → fixed via `useMemo([])`, **does not close the wipe**. **Remaining suspects:** Excalidraw history initialization on mount, `theme` prop value transition (`useExcalidrawThemeFromSystem` returns `getServerSnapshot` value during SSR-matched hydration then switches to live `getSnapshot` post-hydration), `excalidrawAPI` callback being a fresh inline arrow each render, or some other Excalidraw-internal post-mount effect. **Latent bug across both surfaces:** `WhiteboardReplay.tsx` line 148 has the same root cause warning in code form — *"Excalidraw may clear scene on `updateScene({ appState })`; re-send last paint."* Replay tolerates the wipe because its audio play-loop re-pushes the scene every ~50ms, masking each wipe; the preview-before-Start surface is one-shot and stays visible. Anyone fixing this should verify replay-without-audio sessions also benefit (currently those would also render blank — just nobody's noticed because audio is the norm). **Why deferred:** (1) reachability is genuinely low — every UI link to an ended session routes to `/review`; the workspace `/workspace` URL is reached only via pinned tabs (Sarah's pattern per AGENTS.md), browser bookmarks, or manual URL editing; (2) all functional escape hatches work — Start-new, Open-full-replay, Open-last-snapshot — and the body text now sets correct expectations rather than promising a board the canvas can't render; (3) further debugging requires opening up Excalidraw internals, which is a different shape of work from the rest of Phase 1c. **Acceptance when picked up:** with strokes drawn in a session, hitting `/workspace` for the ended session shows the strokes camera-fitted in the read-only canvas; the same fix should make replay's first paint show strokes immediately for non-audio sessions (currently requires scrubbing). Re-add the three-checkpoint probes (see commit `da52dc9`) before iterating so you have the same diagnostic harness. |
-| **Tutor toolbar reorder (Sarah U4, 2026-05-26)** | UX + build | Sarah priority #3 (May 2026-05-26 call): main drawing toolbar order **Cursor → Pencil → Eraser → Typing**, then shape tools. **Not achievable via `UIOptions` on pinned `@excalidraw/excalidraw` 0.18.1** — API only hides canvas menu actions + image tool (`tools: { image: false }`); cannot reorder toolbar or hide individual shape tools. Requires **Mynk custom chrome** (hide native toolbar, drive `excalidrawAPI.setActiveTool` etc.) — same pattern as `UndoRedoButtons` + PDF/Math/Desmos inserts. **Pre-master gate** for `v1-redesign → master` (master cut = Sarah reveal; cohesive V1). Cross-ref: [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md) U4. |
-| **Shape tool dropdown consolidation (Sarah U5/U6, 2026-05-26)** | UX + build | Consolidate **line + arrow** into one dropdown; **rectangle + diamond + ellipse** into one dropdown (Sarah May 2026-05-26). Same **custom-chrome** constraint as toolbar reorder — `UIOptions.tools` cannot regroup native tools on 0.18.1. Cross-ref: orchestrator report U5/U6; v1 redesign spec sketches shape dropdowns in [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md). |
-| **Mobile color/pen palette — dismiss on outside tap (I7)** | UX + bug | **Sarah (2026-05-26 iPhone smoke):** color palette stays open until re-tapping the palette control; wants click-away dismiss. Excalidraw 0.18.1 public API does **not** expose mobile palette dismiss behavior — requires custom chrome on **student-mobile-first** variant. Cross-ref: [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md) I7; [`docs/RELIABILITY-REDESIGN-2026-05-27.md`](RELIABILITY-REDESIGN-2026-05-27.md) axis 4. |
-| **Tutor-side mobile/tablet workspace** | Product + verify | **DEFERRED v1.1** (Fork 2 ratified 2026-06-07). Pilot norm is **desktop tutor + mobile student**. Full **tutor-mobile** chrome variant + real-device smoke → v1.1; v1 ships expectations notice + host gate per **TM-09** row below. Cross-ref: [`whiteboard-chrome-design-2026-06-07.md`](handoff/whiteboard-chrome-design-2026-06-07.md) §5. |
-| **Tutor-mobile deferral — expectations notice (TM-09)** | Product + build | **v1 requirement (ratified 2026-06-07).** (a) **Pre-subscribe/pricing copy:** tutor phone/tablet support is upcoming; **desktop tutoring only** for now. (b) **Host-time device gate:** when a tutor tries to **start** a whiteboard session from a non-desktop device, block with *"Desktop tutoring only for now; phone/tablet tutoring is coming."* Architecture must not preclude enabling tutor-mobile later. Design: [`whiteboard-chrome-design-2026-06-07.md`](handoff/whiteboard-chrome-design-2026-06-07.md) Fork 2; requirement **TM-09** in [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md). |
-| **Freedraw draw-latency (~250ms, solo tutor)** | Bug + build (**P1.1 gate**) | **Root-caused 2026-06-08** on `v1-redesign`: stroke trails cursor (~250ms lag); Phase 0 chrome POC was instant — **not** a chrome regression. **Primary:** `preserveImageAssetUrlsOnSceneWrite` deep-clones entire scene on every pointer-move in `handleExcalidrawChange` (`WhiteboardWorkspaceClient.tsx` ~L2975) — O(N) per point, blocks paint (runs solo). **Secondary:** v3 `emitDocument` every 50ms (`useTutorLiveDocumentWire.ts`), recorder `flushPendingDiff` every 100ms + `pushEvent` `setState` storm. **Andrew decision 2026-06-08:** **folded into P1.1 whiteboard-chrome build as Phase-1 acceptance gate** — **not** a standalone fix, **not** a deferred follow-up. Fix: Option A (defer `preserveImageAssetUrls` to wire/checkpoint payloads only) + Option E (`pointerup`/idle flush). **Executor tier:** **Sonnet** (fragile sync hot path). Gates: `npm run test:wb-sync` + `use-tutor-live-document-wire` cadence tests. Design: [`whiteboard-chrome-design-2026-06-07.md`](handoff/whiteboard-chrome-design-2026-06-07.md) §6 P1.1 acceptance gate; requirement **PR-01**. |
+## 7. UX / design system / brand / a11y
 
-**Framing note (2026-06-07/08, Excalidraw 0.18.1 feasibility + V1 sequencing):** Toolbar reorder (U4), shape dropdown consolidation (U5/U6), compact/replace left properties palette, pen-panel UX without native quarter-screen takeover, and mobile palette click-away dismiss (I7) all require the **custom-chrome** approach — hide native Excalidraw UI (`zenModeEnabled` + scoped CSS) and build **Mynk whiteboard chrome** (`tutor-desktop` + `student-mobile-first` variants) driving `excalidrawAPI`. `UIOptions` on 0.18.1 only hides canvas menu actions and the image tool; it cannot reorder tools, group shapes, resize the properties panel, or fix mobile palette dismissal. **Governing decision (Andrew ratified LOCKED 2026-06-07):** invest once in shared chrome rather than patching Excalidraw internals (real-iPhone gate). **Design pass complete 2026-06-07:** hybrid tutor layout, forks ratified, Phase 0–3 phasing + fail-fast POC gate — [`docs/handoff/whiteboard-chrome-design-2026-06-07.md`](handoff/whiteboard-chrome-design-2026-06-07.md). **Sequencing ratified 2026-06-07/08:** whiteboard chrome is a **pre-master gate** — `v1-redesign → master` is gated on the **entire** site redesign cohesive end-to-end (component visual review + whiteboard chrome); **master cut = Sarah reveal** (`tutoring-notes.vercel.app` / `usemynk.com` share production deployment on `master`; no UI-skin feature flag). **Operating model:** `master` stays frozen; whole redesign cooks on `v1-redesign`; isolated cherry-pick to `master` is the lever for urgent Sarah fixes. **Escape hatch (not building now):** per-email allowlist if a prod fix must ship before full reveal. Consolidated requirements: [`docs/handoff/whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md) (68 reqs incl. TM-09, TU-12–TU-14, PR-01). See `docs/WHITEBOARD-STATUS.md` § Sarah UX asks + custom chrome.
+### Gate A1 — pre-master visual / component pass
 
-## V1 redesign — pre-master requirements (Sarah reveal gate)
+**[P0][UX] Gate A1 — cohesive visual review + mock-faithful composition**  
+Andrew-confirms open. `v1-design-gap-inventory` baseline; many surfaces still legacy `.card`/`.btn`.
 
-> **Canonical two-tier gate checklist (Andrew ratified 2026-06-08):** [`docs/handoff/ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) § Pre-master gates. Rows below are durable BACKLOG entries; do not let the operational list drift from that section.
+**[P0][UX] X2 — v1 design via shared components (DRY)**  
+Kill per-page hardcoded styling; [`V1-COMPONENT-LIBRARY.md`](V1-COMPONENT-LIBRARY.md) §2.12.
 
-### Gate A — blocks `v1-redesign → master` (Sarah reveal)
+**[P1][UX] Component-duplication + @layer base CSS cleanup**  
+Unlayered `globals.css` beats Tailwind utilities. CheckboxField label weight follow-up.
 
-| Item | Type | Notes |
-|------|------|--------|
-| **Visual redesign + whiteboard chrome + theme parity** | Gate A1 (pre-master) | Component-pass cohesive visual review; Mynk custom chrome (PR-01 incl. freedraw latency); both-theme per-component gate. **Light + dark theme parity + user-facing toggle** — Andrew ratified 2026-06-07 (binding build standard). **NOT a standalone theming pass** — both themes are a **per-component acceptance gate** ([`V1-COMPONENT-LIBRARY.md`](V1-COMPONENT-LIBRARY.md) §2.11; [`.cursor/rules/both-theme-components.mdc`](../.cursor/rules/both-theme-components.mdc)). A′ theme plumbing merged 2026-06-08; `dark:`→token primitive cleanup folds into first legacy-surface migration. Cross-ref: [`DESIGN-TOKENS-PLAN.md`](DESIGN-TOKENS-PLAN.md); [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md). |
-| **Component-duplication audit + consolidation** | Gate A1 (feeds) | **Andrew 2026-06-11:** *"fix colors on separate pages"* smell — audit post-redesign component tree for **duplicated components** and **per-page hardcoded styling**; consolidate into shared library components; single-source all styling/behavior. HARD gate: [`V1-COMPONENT-LIBRARY.md`](V1-COMPONENT-LIBRARY.md) §2.12; [`.cursor/rules/component-reuse.mdc`](../.cursor/rules/component-reuse.mdc). Feeds **A1** visual-redesign gate — no surface is A1-done until duplication debt is addressed on that surface. **Sub-item — CSS cascade `@layer` cleanup (Andrew 2026-06-12):** the legacy base CSS (`src/app/globals.css` element rules + `src/styles/typography.css`) is **entirely unlayered**, so it beats Tailwind `@layer utilities` *regardless of specificity* — this silently overrode component utility/token styling. **Three instances already bit us and were fixed one-off:** `.label-mono` eyebrow color (`9783e42`), `.heading` brand-card headline color (`8c173e2`), and the global `label {}` rule (`25e3050`, which had forced every form label to `display:block`/12px/muted, breaking `CheckboxField` centering and suppressing shadcn `<Label>` styling app-wide). **Proper systemic fix:** wrap ALL legacy base element/class rules in `@layer base` so utilities always win and this whole bug class is structurally impossible — requires an audit-everything pass over both files + full re-smoke (every unlayered rule has app-wide blast radius). **Also — checkbox (Andrew 2026-06-12, "good enough for now"):** post-fix the `CheckboxField` label now renders shadcn `font-medium` (bolder than intended?) and the `gap-3` box↔text spacing may feel disconnected — revisit label weight + spacing during the `CheckboxField` component review. |
-| **Waiting room (green room)** | Gate A2 (pre-master) | **Designed, NOT built.** Google-Meet/Teams-style: grant A/V permissions + verify sound/video **before** entering the board; admit flow; session timer starts when student **leaves** the waiting room. Part of **one session shell, three modes** (waiting room / live board / review) — design together. Refs: [`session-lifecycle-consent-design-2026-05-31.md`](handoff/session-lifecycle-consent-design-2026-05-31.md); [`v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) Q-8; chrome req **TU-06**. |
-| **Pass-2 in-context end-session** | Gate A3 (pre-master) | **Tracked master gate (2026-06-08). Deferred from `feat/wb-chrome-redo` — v1-required.** One shared session shell; End session auto-transitions the **same shell** into review mode in place (no nav-away); notes primary/in-context; replay demoted to lazy "Review video while editing" drill-down. **Pass-1 INTERIM (today):** redirect off `/workspace` to `/admin/students/[id]/whiteboard/[whiteboardSessionId]` — replay-first, notes-below. **P2 reference (2026-06-09): NOT FOUND** on `feat/wb-chrome-p2` — reconstruct from [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md). Keep live engine + replay/notes engine as **separate implementations** under shared shell (reliability boundary). Ref: slice-3 Pass-2 notes in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). |
-| **PDF page-tab indicator** | Gate A3a (pre-master) | **V1-required; deferred from `feat/wb-chrome-redo`.** PDF board tabs need a PDF icon. **Blocked:** `PageStripRow` lacks `isPdf` — add field + propagate from session/board data. Ref: [`wb-chrome-redo-STATUS.md`](handoff/wb-chrome-redo-STATUS.md). |
-| **SR-04a video-tile sizing** | Gate A3b (pre-master) | **V1-required; deferred from `feat/wb-chrome-redo`.** Live-A/V tiles must enlarge to fill panel / auto-expand for multi-tile layout. Parent **SR-04** in [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md). |
-| **Live bidirectional whiteboard sync completeness** | Gate A5 (pre-master) | **V1-required; not yet started.** Comprehensive *enumerated* audit-and-fix: every tutor whiteboard action appears on the student view **live and timely**, and vice versa. Action types: freedraw strokes, shapes, lines/arrows (incl. multi-point), text, eraser, move/resize/rotate, style changes (stroke color/width/opacity/roughness/edge-sharpness), z-order, page add/switch/delete/reorder, PDF page insert, math (LaTeX→SVG), graph (JSXGraph) insert + expression edits + persisted state, image/asset insert, undo/redo, select+delete. **Sub-item:** peer-visible laser/pointer (tutor→student + bidirectional student laser, per-role colors — **ST-05**); never built, not a regression — see laser row above + fix loci in Gate A5 [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). **Acceptance:** each type verified **bidirectionally** on real browser/hardware via the hermetic relay (**not** jsdom); within a stated timeliness bound; all gaps fixed. **Prefer** extending `npm run test:wb-sync` relay invariants; documented manual matrix for non-automatable types. **Starting baseline (partial):** [`tests/integration/whiteboard-live-sync-regression.spec.ts`](../tests/integration/whiteboard-live-sync-regression.spec.ts) inv 1–12 (strokes, move, viewport/pan/zoom, image, PDF fit, page isolation, follow gating, idle welcome push, graph `graphStateJson`); [`TESTING-COVERAGE.md`](TESTING-COVERAGE.md) RB tier; [`WHITEBOARD-STATUS.md`](WHITEBOARD-STATUS.md) § view-sync. Cross-ref: Gate A5 in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). North-star: tutor must never need a backup recorder. |
-| **Replay fidelity + AV/timer sync** | Gate A6 (pre-master) | **V1-required; not yet started.** **🔴 REGRESSION (v1-redesign preview, NOT prod):** session replay broken — discovered 2026-06-10; owner Gate A6; root-cause during the A6 comprehensive replay pass. Prod/master replay unaffected. Symptom: TBD (to be characterized). Candidate causes to check first: JSXGraph graph-embed replay rendering, whiteboard chrome changes, other v1-redesign integration commits. **High priority within A6** — must fix before `v1-redesign → master` cut. Comprehensive pass: session **replay** reconstructs every whiteboard action in correct **order and timing**, in sync with session **timer** and recorded **audio**. Same enumerated action-type coverage as A5. **Acceptance:** all action types temporally aligned with audio + timer within stated tolerance; no missing, dropped, or reordered events; verified against real recorded sessions. **Starting baseline (partial):** [`tests/integration/recording-end-to-end.spec.ts`](../tests/integration/recording-end-to-end.spec.ts) (30s solo → replay strokes + audio scrubber); [`replay-scrub-audio-defer.test.ts`](../src/__tests__/whiteboard/replay-scrub-audio-defer.test.ts); `useWhiteboardRecorder` event-log tests; [`WHITEBOARD-STATUS.md`](WHITEBOARD-STATUS.md) § 1.4 replay + viewport tier-c-lite; [`TESTING-COVERAGE.md`](TESTING-COVERAGE.md) (replay scrub **M** today). A6 = comprehensive enumerated *completion* of partial coverage. Cross-ref: Gate A6 in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). North-star: tutor must never need a backup recorder. |
+**[P1][UX] dark: → semantic token migration**  
+~10 files still `dark:`; TU-12 Excalidraw theme.
 
-### Gate B — urgent fast-follow (before recruiting new pilots)
+**[P1][UX] TFA2 — 2FA setup/verify pages v1 redesign**  
+Still `className="card"`; `TwoFactorSetupForm` dark: variants.
 
-| Item | Type | Notes |
-|------|------|--------|
-| **Approval-gating / waitlist** | Gate B1 (urgent) | **NET-NEW.** Site is **already live** in production (unadvertised) — anyone who finds the URL can sign up and incur OpenAI/transcription/storage cost **today**. Requirement: sign-up allowed but user **parked** on waitlist; until Andrew approves, user cannot incur cost. Does **not** strictly block master cut; land quickly. |
-| **Parent privacy consent** | Gate B2 (V1 required) | **Real consent architecture** (not P2a stubs): versioned `ConsentRecord`, server-enforced capture gating, per-session `SessionConsentSnapshot`, parent-ceiling + learner-narrowing per identity design. **V1 toggle scope only** (`allowAudioRecording`, `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession` kill-switch) — **consent surface tracks the feature surface**; do **not** build toggles for `allowMessaging` or `allowVideoRecording` until those features ship. Replaces `/claim/[token]/setup` "Parental consent preferences — Coming soon — Phase 3" placeholder. Sarah runs real children's data — legally load-bearing. **Not** the same as `Student.recordingDefaultEnabled` (tutor UX convenience default). **B2 addendum (Andrew 2026-06-10):** claim/reconnect MUST require parent to **(re)set privacy toggles per tutor** — no silent carry-over or default-on across claim links (B2-AC-1/2 in [`authed-session-access-design-2026-06-10.md`](handoff/authed-session-access-design-2026-06-10.md) §9.1). Refs: [`identity-phase2-auth-session-design-2026-06-01.md`](handoff/identity-phase2-auth-session-design-2026-06-01.md) §7; [`session-lifecycle-consent-design-2026-05-31.md`](handoff/session-lifecycle-consent-design-2026-05-31.md) §4. |
-| **Security checks + final cleanups** | Gate B3 | Tier B audit, incident/secret runbooks, remaining hardening — before recruiting pilots. Cross-ref: `RELEASE-ROADMAP.md` Wave 4 Security Tier B. |
+**[P1][UX] L3 — student WB chrome parity on /join**  
+Student join lacks full `mynk-wb-chrome`.
 
-### Consent v2 — tutor visibility + educational use (Andrew 2026-06-12)
+**[P1][UX] L6 — WbStatusPill / connected-sync status**  
+Student legacy inline pills.
 
-> **Thread opener (2026-06-12 design-system review).** Builds on Gate B2 parent consent architecture; does **not** replace it. Data model today: per-tutor `ConsentRecord` keyed by `(learnerProfileId, adminUserId)` — consent is already scoped per tutor, not global per child.
+**[P2][UX] X3 — AV pip on/off clarity**  
+Tutor `WbAVCluster` vs student floating controls.
 
-| Item | Type | Notes |
-|------|------|--------|
-| **BL-A — Tutor-visible per-student consent state** | Gate B2 follow-on / UX | Expose the parent's per-tutor consent toggles to the **tutor** on the student detail surface and as a **scheduler indicator** (live session / audio / whiteboard replay / educational-use when BL-B ships). **Concrete payoff:** scheduling a student with live sessions **off** should visibly signal *"this is effectively just a calendar entry"* — the tutor should not discover consent gaps only at Start-session. Surfaces: student detail page + schedule/agenda row or event chip. **Data:** read-only projection of existing `ConsentRecord` per `(learnerProfileId, adminUserId)` — no new consent authority on the tutor side. |
-| **BL-B — Educational-use consent toggle** | Gate B2 follow-on / product + migration | **NEW** parent consent toggle: **"Allow tutor to use recordings for educational purposes"** — additive consent-model migration + consent editor UI + tutor-visible state (pairs with BL-A). Distinct from capture consents (`allowAudioRecording`, `allowWhiteboardRecording`) — governs tutor reuse of session artifacts for teaching/training purposes. **Executor tier when built:** **Sonnet** (consent/auth boundary + additive migration per repo convention). |
-| **F1 — `allowLiveSession` framing (decision record)** | Design / product | **Andrew 2026-06-12:** Reframe **"Allow live sessions"** as *near-required* — the app is largely pointless without it / a live-session-off student is effectively calendar-only — but keep it a **real, declinable consent**. **No hard gate** (do not block account creation or scheduling solely on this toggle). **No legal-loop expansion for now.** Audio + whiteboard-replay remain **strongly encouraged optional** consents with explicit decline warnings (C3/C4 lineage). **Rationale:** a future marketplace wants pre-existing parent accounts regardless; a hard gate is too harsh at pilot scale. Cross-ref: smoke-round-1 **C3** row above; Gate B2 parent consent. |
+**[P2][UX] Foundation pass — promote surface-local shells to library**  
+`PublicDocumentShell`, `ParentShareShell`, etc.
 
-### v1 design-system smoke follow-ups (2026-06-12)
+**[P2][UX] Missing primitives**  
+Chip, SheetMenuRow, SettingsRow, week grid, sync Badge.
 
-> **Source:** v1 design-system polish smoke session (2026-06-12). Visual/UX polish and product-strategy captures from the orchestrator ephemeral todo list — durable here so they survive chat truncation.
+**[P2][UX] Tailwind aliases rounded-panel, border-strong**  
+Still `rounded-[10px]` in places.
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| **2FA UX — inline panel on login** | UX / design | Reconsider the 2FA challenge flow: **inline panel or slide-in on the login surface** rather than navigating to a separate page — matches modern login UX (Stripe, GitHub, etc.). Distinct from **TFA2** (setup-page v1 redesign in smoke-round-1 table); this is the **verify-at-login** interaction model. |
-| **Operator / true-admin login for orgs** | Product + identity (strategic) | **Separate operator login** distinct from tutor login — required for the organization/university pitch. Surfaced repeatedly during smoke: tester kept noting *"not sign in as tutor … do we need a true admin login?"* Distinct from shipped `AdminRole` `ADMIN \| TUTOR` routing (Andrew impersonates tutors today); this is a **dedicated operator/org-admin entry** for multi-tenant operator surfaces (`/operator/*` scaffolding exists in backlog). |
-| **Theme toggle on signup pages (T9)** | UX / polish | Signup pages currently **lack the theme toggle** present on other authenticated/public shells. Gap called out as **T9** during design-system smoke. |
-| **T10 — per-tutor names as collapsible subsection** | UX / polish | **"What each tutor calls {child}"** could read better as a **distinct list / collapsible subsection** rather than inline rows on the parent child-detail surface. Gap **T10** from smoke. |
-| **Consent floor-block checkbox visibility** | UX / polish (pre-existing) | **Not a regression** — checkboxes in the consent **floor** block have light borders on the **same background color** as the surrounding panel, making them hard to see in both themes. Needs higher-contrast checkbox chrome (border and/or fill). |
-| **BG2 — students-roster search inner effect (NEEDS CLARIFICATION)** | UX / polish | Andrew wanted some visual effect **inside** the students-roster search box; what shipped was **pill rounding** on the outer shell, not the intended inner treatment. **Exact intent unclear** — flag for clarification with Andrew before building. |
-| **Impersonation pip clarity** | UX / polish (low) | The **"IMP"** pip in the user card is not self-evident. Consider a **mask/disguise icon** or an **"Impersonating"** label when space allows, plus a **click-to-exit** affordance and tooltip (*"Impersonating — click to exit"*). Cross-ref: SEC-1 shipped impersonation; open nit (a) on banner color deferred to UI redesign. |
-| **Pricing transparency — AI cost stance (STRATEGIC DISCUSSION)** | Strategy (not a build task) | Consider upfront copy committing to **reasonable per-session pricing**, while stating that if **AI costs rise**, per-session cost rises with it **OR** AI-enhanced features split into a **separate paid add-on**. Placement (pricing page / ToS / onboarding) and tone **TBD** — strategy discussion, not scoped implementation. Cross-ref: **Pricing** subsection below; **True API costs at scale** (Whisper is the cost-watch item). |
+**[P2][UX] MarketingHeader inline styles → primitives**  
+Group A follow-up.
 
-### v1.1 nice-to-have — Sarah live feedback 2026-06-08 (deferred, not V1 mock)
+**[P2][UX] PreSessionPanel / StartWhiteboardSession mock alignment**  
+PARTIAL vs mock.
 
-| Item | Type | Notes |
-|------|------|--------|
-| **Video tile docking** | UX + build (**post-V1**) | Sarah asked about **docking** the A/V tile (especially on mobile — snap to screen edge / docked pip). Andrew: **follow-up feature, NOT release.** V1 ships draggable + resizable cluster per **SR-04**; docking is a separate polish pass. Cross-ref: [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md) **SR-04**. |
-| **Triangle / n-gon shapes** | UX + design (**v1.1 nice-to-have**) | Wyzant offered resize-only triangles (right / equilateral / isosceles). **Excalidraw 0.18.1 has no native triangle/polygon** — stock shapes are rect, diamond, ellipse, arrow, line, freedraw, text (see [`whiteboard-excalidraw-function-audit-2026-06-08.md`](handoff/whiteboard-excalidraw-function-audit-2026-06-08.md)). Likely needs a **generic n-gon** approach or custom element layer — requires its own design pass. **Straight line remains the highest-priority secondary shape** (handled in V1 via **PU-05** default). |
+**[P2][UX] Parent consent editor save wiring**  
+**Shipped** `saveParentConsentAction` — morning status visual-only note obsolete.
 
-### 2.0 — post-V1 product (explicitly not V1)
+**[P2][UX] Scheduler Group F visual-only**  
+See §11 Scheduling.
 
-| Item | Type | Notes |
-|------|------|--------|
-| **Age/grade-adaptive interface complexity** | 2.0 / post-V1 | Younger children may need a simpler whiteboard UI (fewer tools, larger targets, reduced chrome). If student age/grade is later exposed on the profile, whiteboard chrome **adapts** complexity tier. **Andrew 2026-06-10: "2.0 stuff"** — do not scope for V1 reveal. |
+**[P2][UX] Error/legal/public shells legacy cleanup**  
+`not-found.tsx`, `error.tsx`.
 
-### Scheduling + external calendar integration — **DECISION (Andrew 2026-06-08): post-V1, pre-release**
+**[P2][UX] Cohesive pass open questions**  
+Settings density, validation-state coloring.
 
-> **Status (2026-06-08):** **DECISION (Andrew 2026-06-08): post-V1, pre-release.** Not a master-cut gate; required before recruiting new pilots. Needs its own design pass + sequencing within the pre-release window. Sarah considers this a **release feature** (opening to recruit/advertise new pilots). **Canonical tier vocabulary:** **V1** = master cut (Gate A); **release** = recruiting new pilots (Gate B era). See [`RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) § V1 sequencing tiers; [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) § Pre-master gates.
+**[P2][UX] REQ-S3-3 — Identity chip + test-account badge**  
+Partial; test-account badge missing.
 
-**Canonical requirements (2026-06-11):** [`docs/handoff/scheduling-requirements-2026-06-11.md`](handoff/scheduling-requirements-2026-06-11.md) — full capture; **not yet a build spec**. Overnight Group F on `v1-design-system` ships **visual-only** scheduler surface baking in connect-calendar affordance, per-event sync state, and integrations settings (no wiring tonight).
+**[P2][UX] T2 — accent-recipe pass**  
+Proposal branch awaiting Andrew.
 
-**Native-first (Andrew 2026-06-11):** Scheduling works fully through our app; external calendar is **optional**. **Apple Calendar** (Sarah's explicit request) + **Google Calendar** (Andrew) are first-class integrations; design room for "other." When connected, in-app events **also push** to the external calendar.
+**[P2][UX] Formalize IA decisions in UX-AND-A11Y-SPEC §15**  
+Scheduling=no, session-centric model — rows 2–5 still open.
 
-**Key open questions (unresolved — see requirements doc for detail):**
+**[P2][UX] Tutor toolbar reorder U4 / shape dropdowns U5-U6**  
+Custom chrome required; Excalidraw 0.18.1 cannot reorder native toolbar.
 
-| # | Question |
-|---|---|
-| **Two-way sync** | Do we need webhooks/subscriptions (Google Calendar push / Apple CalDAV) to detect changes made **on** the external calendar and reflect them back into Mynk? **Not decided.** |
-| **Google OAuth bundling** | Calendar scopes + Google Sign-in (auth) should land in the **same** Mortensen Apps consent-screen verification cycle ([`LEGAL-SYNC.md`](LEGAL-SYNC.md)) — avoid repeated verification rounds. |
-| **Apple path** | CalDAV vs EventKit bridge — not started. |
-| **Reminders / timezone** | Channels + policy — not started. |
+**[P2][UX] Mobile color palette dismiss I7**  
+Click-away dismiss on student-mobile.
 
-**Still relevant from 2026-06-08 proposal:**
+**[P2][UX] Pen panel too large (pilot-2026-06-06 U5)**  
+Quarter-screen takeover.
 
-1. **In-app schedule layer** — upcoming sessions list, reminders, per-session metadata (student, subject, soft duration), **start-session** deep links.
-2. **Student / parent surface** — upcoming session + **join** action (approved link flow; consent gates).
-3. **Soft session length** — calendar block is planning metadata only; timer and end-session remain tutor-controlled.
+**[P2][UX] Thinner default pen stroke (U6)**  
+Stroke width presets.
 
-**Out of scope (explicit):** Replacing Google/Outlook calendaring entirely; student self-scheduling without tutor; hard auto-end when calendar block elapses.
+**[P2][UX] Keyboard undo Ctrl+Z misbehaves (pilot B1)**  
+Desktop regression vs on-screen undo.
 
-**Cross-ref:** [`RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) Wave 3 IA row (scheduling Y/N); [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md) open Q8.
+**[P2][UX] Share/copy link silent clipboard failure (pilot B2)**  
+Toast + error on failure.
 
-## Pilot — Sarah (iPhone Safari, ~Apr 2026)
+**[P2][UX] Learner/student logged-in top-bar oversized**  
+Mis-scoped fix @ `f412767`; target learner shell bar.
 
-Reported via Discord after testing **Record → Transcribe** on phone. Treat as **highest priority** until reproduced or ruled out.
+**[P2][UX] ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER**  
+✅ MERGED `b5472ab8`; verify.
 
-**Sarah’s clarification (same thread):** The **first** screenshot she sent was from a **reload** of the page; the **second** description (and/or screenshot) was from **opening the link again** (fresh navigation / new visit, not only a reload). When reproducing, test **both** paths — iOS Safari can treat them differently (bfcache, service worker, auth cookie timing).
+**[P2][UX] ADMIN-STUDENT-DETAIL-MOBILE-ICONS**  
+✅ MERGED `a97722df`.
 
-**Reproduction (PO, Android Chrome, Apr 2026):** Same flow (**Record → upload → Transcribe**) **works** on a real Android phone in Chrome. Combined with Vercel showing **no** `POST` to `/admin/students/...` during Sarah’s failing session (only login `POST`), the working hypothesis is **iOS Safari / WebKit–specific** (fetch + Server Actions, storage/partitioning, background tab, or network stack) — **not** “all mobile” and not a missing server 5xx for that repro. **Next:** confirm on **Mobile Safari** when hardware access exists.
+**[P2][UX] Double scrollbars on admin pages**  
+Single architectural root.
 
-**Instrumentation (shipped):** `uploadAudioAction` and `transcribeAndGenerateAction` log **`rid=<uuid>`** at the start of each invocation (grep Vercel logs for `transcribeAndGenerateAction` or `uploadAudioAction`). Failed returns include **`debugId`**; the UI appends **`Ref: xxxxxxxx`** so screenshots can be matched to logs. **Throws** (e.g. generic “unexpected response”) still have no server `rid` — client logs `console.error` + user-facing hint; if the server log line appears, the request reached the handler.
+**[P2][UX] Known issues & roadmap — top-level sidebar link**  
+Not buried in Settings.
 
-**Sarah — desktop Chrome (Apr 19, 2026):** Recording UI ran, but **no real speech** in the capture; **Chrome did not prompt for microphone** (possible wrong default device, muted mic, or permission already “blocked” / system-level). Whisper still produced a **~65-character** transcript — classic **silence hallucination** (“thanks for watching / subscribe / like button”). The structuring LLM then returned **empty** topics/homework/nextSteps/links → Vercel warning **`[transcribeAndGenerate] AI returned all-empty fields`** with `transcriptChars: 65`. This is **not** caused by request-id logging; it is Whisper + empty structuring. **Mitigation shipped:** `src/lib/whisper-guardrails.ts` — `looksLikeSilenceHallucination()` rejects obvious boilerplate **before** the note is filled; tutor sees an explicit mic/speech message instead of junk in Topics. **Still backlog:** surface **mic permission state** (`navigator.permissions` where supported), copy when permission was never prompted.
+**[P2][UX] Unclaimed student claim link buried**  
+Top-level affordance.
 
-**Sarah — desktop Chrome follow-up (Apr 20, 2026):** OS mic level alone wasn’t the cause — **Voice Recorder + Upload** worked, **in-browser Record** still produced junk. Pattern matches **wrong device / weak signal in Chrome capture**, not Whisper. ✅ **Shipped (initial cut):** in-tab **Record** UI now has an explicit **device picker** (`enumerateDevices` after permission), a **boost slider** (digital `GainNode`, 0.25×–3.0×, persisted to `localStorage`), and a **live RMS level meter**. Web Audio graph wraps `getUserMedia` so the boosted stream is what `MediaRecorder` encodes; falls back gracefully to the raw stream if `AudioContext` fails (test stubs, very old browsers). Files: `src/lib/mic-recorder-audio.ts`, `src/app/admin/students/[id]/AudioRecordInput.tsx`. Tests: `src/__tests__/mic-recorder-audio.test.ts`; Playwright `tests/smoke/audio-recording.spec.ts` mock updated to provide `enumerateDevices` + a track with `getSettings`.
+**[P2][UX] Parent dashboard Manage button alignment**  
+Polish.
 
-**Sarah — Apr 20, 2026 partial-batch + preview-time fixes:** Two related rough edges from PO testing the new mic flow with multiple recordings: (1) when one of several recordings was accidentally short / silent, the **whole batch** failed with the scary mic-troubleshooting error, even though the other recording had real speech. (2) `Session start` / `Session end` stayed blank in the form preview because the auto-fill from recording timestamps only ran **server-side at save time** in `createNote`, so tutors couldn't see what would actually be saved. ✅ **Shipped:** per-segment hallucinations now **drop the bad segment** (delete blob + DB row, increment a counter) and `continue` instead of bailing the whole batch — only an **all-segments-bad** batch hard-fails with `HALLUCINATION_MIC_MESSAGE`. When one segment is dropped, the result returns `ok:true` with a `warning` and the existing yellow "Form partially filled — please review." block surfaces it. The action also now returns `sessionStartedAt` / `sessionEndedAt` (UTC ISO derived from the **kept** segments' `createdAt` / `durationSeconds`, so a 4-second silent stop does **not** pull the end time forward), and `NewNoteForm.populate` formats them as local-time `HH:MM` and pre-fills the time inputs (without clobbering anything the tutor already typed). Files: `src/app/admin/students/[id]/{actions.ts,transcribe-result.ts,NewNoteForm.tsx,AiAssistPanel.tsx}`. Tests: `src/__tests__/audio-isolation.test.ts` adds **partial silent segment** + **every segment silent** regression cases and asserts the derived times.
+**[P2][UX] Known-issues section headers too muted**  
+Optional polish.
 
-**Sarah — Apr 20, 2026 UX iteration (review pass):** First cut hid the picker/slider behind a **Test microphone** button — bad UX (controls weren’t discoverable, slider needed an extra click to come alive). Two real bugs surfaced too: (1) the slider was effectively un-grabbable (only moved on click) because `MicControls` was an inner function inside the parent component; the rAF meter loop called `setMeterLevel` ~60×/sec, every parent render created a *new* component identity, React unmounted/remounted the subtree mid-drag and the browser cancelled the pointer capture. (2) Tutors expected the slider to drive the **OS** mic level, but browsers cannot reach into Windows audio settings — it can only apply digital gain post-capture. ✅ **Re-shipped:** `MicControls` hoisted to module scope (stable identity); meter bar now updated **imperatively via `meterBarRef`** in the rAF loop (no React state churn → slider stays draggable, CPU drops); controls are **always visible at the top** of the Record tab with a single primary **Start recording** button; on Record-tab open, the page calls `navigator.permissions.query({ name: "microphone" })` — if **granted**, mic auto-acquires silently so picker labels + meter are live before pressing Start; if **prompt/denied/unsupported**, controls are shown disabled with explainer copy and the Start click does the prompt + acquire + record in one shot. Slider relabelled **Browser boost** with explicit help text pointing tutors to *Settings → System → Sound → Input* when the meter stays grey at 3.00× (the ground truth that browsers can’t change). Old `audio-record-test-mic` / preview-state IDs removed; smoke test still uses `audio-record-start` + `audio-record-stop`.
+**[P2][UX] Live board Sign out row dimmed/clipped**  
+Student chrome.
 
-**Sarah — Apr 24, 2026 (post-CSP + Wyzant-style-timer ship):** First end-to-end test of the live whiteboard relay (wife's phone via shared link) — surfaced four discrete pieces of feedback plus one repro of an existing transcription bug.
+**[P2][UX] Live board ⋯ More PDF affordance discoverability**  
+Chrome.
 
-  1. **Q1 — graphing tool:** Desmos confirmed. She wants a blank graph with X/Y labeled with numbers, **adjustable domain/range** to zoom in/out, and the option to **type an equation and insert it onto the whiteboard**. ✅ **Already aligned with shipped scope** — the Desmos iframe embed (Phase 1) gives the labelled-axes + domain/range UI for free, and the Track B1 math-equation render route handles the type-and-insert path. Verify on her next session that the workflow she described matches what we shipped end-to-end.
-  2. **Q2 — recording on disconnect (highest leverage NEW item):** Her words: *"I don't think that the recording needs to keep going if the student is not connected. And it should pop up with a message saying student has disconnected due to connectivity or whatever reason and recording has paused. That way I know when it happens I can pause my instruction."* This **goes beyond** the timer pause we shipped today — the timer is now correct but **the audio recorder still keeps running** when she's alone. Captured as a discrete item under "Pilot feedback — action items" (`Recording auto-pause on student disconnect`). Builds directly on `bothPresent` + the new `active-ping` infra; ~1–2 hr.
-  3. **Q3 — default = "show live + record":** Default OK as-is. Wants a **per-student override** *"that way if you know a student doesn't want to record it you can make the default appropriate to their situation."* Captured as `Per-student recording default preference` below.
-  4. **Bonus — undo button on the whiteboard:** Standard expectation. Excalidraw has Ctrl/Cmd-Z built in — needs verification on touch (no keyboard) and a visible toolbar button on the tutor + student canvases. Captured as `Whiteboard undo (mark removal) — touch + visible button`.
-  5. **Transcription bug repro (existing item, fresh data):** Her test recording was **two segments — 50:01 + 20:13** (so auto-rollover B5 is working, segments split correctly), but the combined transcribe step failed with `"The server stopped responding before transcription finished (Server Action 60ae8e0344429ba8d13bed01577ee6c04306a335c8 was not found on the server)"`. **Mitigation shipped 2026-05-17:** Vercel Pro (300s ceiling) + transcribe Tier 1 parallelize merge `5ccf1c7` — see `docs/PHASE-6-TIER-1-STATUS.md`. **Still open:** real 60–90 min smoke (item 5 under Recording — long sessions). Tier 2 background queue deferred unless Tier 1 proves insufficient.
-  6. **Competitive intel (no action — note for product positioning):** *"It seems Wyzant has added a new feature of being able to record their videos as well."* Wyzant's "Lesson recordings" page screenshotted: opt-in, 30-day retention, bills the recording as a feature. Confirms the recording-the-session category is no longer a moat *just on its existing*. Our wedge stays the **AI-notes-from-the-recording** + **tutor keeps 100% of rate** angle — Wyzant gives the recording, we give the writeup. Captured under "Product positioning."
+**[P2][UX] Password fields show/hide toggle**  
+Phone priority.
 
-**Monday readiness (process + shipped UX):** Deploy latest, then have Sarah: (1) **Hard refresh** the student page after deploy. (2) **Record tab:** confirm **Input:** shows a real device name; if “Unknown device” or junk transcription, fix **Windows sound default input** + Chrome site permission (Allow). (3) Speak **≥15 seconds** before Stop (short-clip confirm appears if under **8 seconds**). (4) **iPhone:** if “unexpected response” persists, use **Upload** with Voice Memos or **desktop Chrome** first — same account. (5) Grep Vercel for `rid=` + her **Ref:** if she reports an error. **Shipped helpers:** `maxDuration` on student page (Vercel Pro — 300s ceiling where configured), upload **retry once**, transcribe **retry once** on “Brief database hiccup”, mic label line, short-clip confirm, idle copy about mic permission.
+**[P2][UX] Verify-email success copy**  
+Polish confirm item 3.
 
-- ✅ **Shipped (B1, refactor/recorder-test-modular):** **Upload bypasses the Vercel serverless 4.5MB body limit via client-direct Vercel Blob.** Sarah's reproducible failure was a real ~30-min 17.9MB m4a — the old `uploadAudioAction` server action received the file as FormData, which Vercel's Hobby/Pro tier caps at 4.5MB per request body, and the resulting 413 surfaced as the generic "An unexpected response was received from the server." (the action threw before our code ever ran, so no `rid=` log existed). New flow uses `@vercel/blob/client.upload()` to send the file directly from the browser to Vercel Blob; the new `/api/upload/audio` route handler only generates the upload token and runs `assertOwnsStudent` in `onBeforeGenerateToken`. Both manual `AudioUploadInput` uploads and auto-rollover segments use the same client-direct path. `uploadAudioWithRetry` was reshaped to take `(uploader, studentId, blob, filename, mimeType)`. Old `uploadAudioAction` deleted. The original generic error string above can no longer be triggered by upload size; if it appears for a different reason (network drop, transcribe timeout, etc.), the `rid=` correlation logging on `transcribeAndGenerateAction` should now reach our handler.
+**[P2][UX] Recovered-audio prompt — always keep, no Discard**  
+Part1 checkpoint preference.
 
-- **Recording controls broken after closing tab and signing back in.** Pause / stop / save did not behave correctly on return session. Likely **stale `MediaStream` / `MediaRecorder` state** or mic permission edge case after navigation. **Triage:** fresh load vs restore; ensure full **cleanup on unmount** and reset UI when `getUserMedia` fails or stream ends; test **Sign out → Sign in** on iOS without only hard-closing tab.
+**[P2][UX] WS-U-FRAGILE taste/IA batch (2.8–2.15)**  
+Student Exit confirm, admin Outbox rename, etc.
 
-- **Session timer stops when phone idles / screensaver.** Elapsed timer uses `setInterval` — **iOS throttles or suspends timers** when the screen locks or Safari is backgrounded, so displayed duration drifts from real time. **Mitigations (pick one or combine):** on `visibilitychange` / `pageshow`, **reconcile elapsed** with `Date.now() - startedAt` instead of relying only on tick count; show a **muted note** on iOS: “Timer may pause when the screen locks; recording still runs” if the platform cannot guarantee ticks; optional **Screen Wake Lock** (`navigator.wakeLock`) while recording **if** user gesture allows (Safari support varies) — research before promising.
+**[P2][UX] Known issues page placement/tone**  
+Draft shipped `/admin/settings/known-issues`; Andrew review.
 
-### Recording — long sessions, Whisper limits, alerts (2026)
+**[P2][UX] Start/end session flash reload feel**  
+Nav perceived perf.
 
-**Facts (so we don’t conflate limits):**
+**[P2][UX] Time-alert UX — visible alert clock + settings**  
+Master-cut #7 PARTIAL.
 
-- **Whisper / OpenAI:** **25 MB per transcription request** (hard). ✅ **Shipped:** server-side **ffmpeg** time-split + bisect for oversized uploads (`src/lib/transcribe-ffmpeg.ts` + `src/lib/transcribe.ts`) so tutors are not blocked by a single huge file, subject to infra timeouts and available RAM/CPU on the serverless function.
-- **90 minutes** (`HARD_CAP_SECONDS` in `AudioRecordInput.tsx`) is **client-only** — it is **not** a Whisper duration limit. It exists as a **safety / UX** guard: one continuous `MediaRecorder` blob, browser memory, and a clear “this session is long” boundary.
-- **Still binding for “one take forever”:** **upload body size** (`next.config` server action limit, ~100 MB), **Vercel Blob** max (`BLOB_MAX_BYTES` 100 MB), **serverless timeout** on `transcribeAndGenerateAction`, and **browser stability** with very large blobs — so “record as long as she wants” in **one** uninterrupted capture is not guaranteed without **client-side segmentation**.
+**[P2][UX] WS-Q tutor settings — alert defaults**  
+Configurable interval, chime, DB columns.
 
-**✅ Shipped (recorder UI):** **Time alert sound** — checkbox + **volume** slider for the “approaching max length” chime (persisted per browser: `tn-recording-chime-enabled`, `tn-recording-chime-volume`). Muting disables **sound and vibration** for that alert.
+**[P2][UX] WS-J richer per-session billing display**  
+Beyond label pass.
 
-**Backlog — best UX for multi-hour sessions:**
+**[P2][UX] Part 3 student Sign out in top-bar ⋯**  
+Touch layouts; ORCHESTRATOR-STATE tracked.
 
-1. ✅ **Shipped (initial):** **Time-based auto-rollover** — ~**50 min** per `MediaRecorder` segment (`SEGMENT_MAX_SECONDS` in `src/lib/recording/segment-policy.ts`); **5 min** segment warning; soft **rollover chime** before auto split; **8h** session safety cap (`SESSION_SAFETY_MAX_SECONDS`). On rollover: upload segment → append to pending list with **`keepRecorderMounted`** (`AiAssistPanel` / `AudioInputTabs`) so the **mic stays hot** — no iOS-breaking timeslice. Files: `useAudioRecorder.ts` (hook), `AudioRecordInput.tsx` (shell), `AudioInputTabs.tsx`, `AiAssistPanel.tsx`. **Follow-ups:**
-   - ✅ **Shipped (B5, refactor/recorder-test-modular):** **Gapless segment rollover.** `useAudioRecorder.rolloverSegmentGapless()` pre-warms the next `MediaRecorder` on the same `MediaStream` BEFORE calling `.stop()` on the old one — the new recorder is already capturing audio while the old one's container finalizes + uploads in the background. The OLD recorder's chunks are snapshotted to a local array and its `ondataavailable` handler is rebound so the final-flush blob doesn't pollute the new segment's buffer (covered by a dedicated regression test). User-visible state stays `"recording"` across the boundary — no "uploading…" interstitial for auto-rollovers. iOS-Safari "no timeslice" invariant preserved. Falls back to the legacy stop-restart path if `MediaRecorder` construction throws. Tests: `src/__tests__/dom/useAudioRecorder.dom.test.tsx` (4 new B5 cases — start-before-stop ordering, state-stays-recording, segment counter exactly +1, no late-flush pollution).
-   - Optional **total session** clock alongside the per-segment timer (so tutors see "Part 2 · 0:42 · session 51:42").
-   - Tune segment length vs real-world upload sizes once we have telemetry from a few long sessions.
-   - ✅ **Shipped (refactor/recorder-test-modular branch):** Recorder test/refactor complete end-to-end. Phase 1 pure `lib/recording/*` modules with unit tests; Phase 2 `useAudioRecorder` hook + thin shell; Phase 3 jsdom hook tests with `FakeMediaRecorder`; Phase 4 component extraction (`MicControls`/`MainPanel`/`DoneCard`/`UploadingPanel`/`ErrorCard`/`AudioPreview`/`PendingSegmentList`) with their own dom tests + tab-switch regression; Phase 5 opt-in Playwright `audio-rollover.spec.ts` with stubbed MediaRecorder + `__SEGMENT_MAX_SECONDS_OVERRIDE`; B1 client-direct upload to Vercel Blob via `@vercel/blob/client` (resolves Sarah's 17.9MB fail); B3 always-mount tabs; B4 5-field terse AI prompt + `assessment` column + `nextSteps` → `Plan` rename; B5 gapless rollover. **246 unit tests** (12 hook tests in jsdom). Plan: `~/.cursor/plans/recorder_refactor_wrap_and_sarah_unblock_8301e036.plan.md`. Status detail in `docs/RECORDER-REFACTOR-STATUS.md`.
-2. **Alert sound library:** Presets (gentle chime / single beep / silent + vibrate-only on mobile). **Vibrate-only** when sound is off (accessibility). Optional mirror in a future **Settings** page.
-3. ~~**Revisit the hard 90m stop**~~ — Superseded by per-segment rollover + safety cap; only **tune segment length** if needed.
-4. ✅ **Shipped (feat/transcribe-tier-1-parallelize, merge 2026-05-17 evening):** **Tier 1 long-form transcribe parallelize.** Duration-cap ffmpeg split (`WHISPER_TARGET_CHUNK_SECONDS = 240` → small-but-long files now split into parallel-friendly chunks), inner Whisper-call concurrency cap 6, outer per-segment concurrency cap 3, 429/5xx retry with exponential backoff inside `transcribeSinglePart`, friendly timeout copy (`FRIENDLY_TRANSCRIPTION_TIMEOUT_MESSAGE`) on Vercel 300s ceiling. Order preservation across both parallel layers preserved via indexed result aggregation. See `docs/PHASE-6-TIER-1-STATUS.md`. **Smoke deferred** — Andrew chose to backlog the long-form smoke (60-min synthetic recording) rather than do it tonight; merged on the basis of 42 passing targeted tests + clean tsc + structural review. **Smoke task slotted below.**
-5. **Long-form upload + transcribe — re-baseline smoke on paid infra.** **🟢 DOWNGRADED 2026-05-30 (Andrew): treat upload as WORKING until proven otherwise.** A 58 MB synthetic file uploaded fast on the paid Preview and chunking held; on any non-terrible connection a ~58 MB blob clears well under the 300s ceiling. **W1 Ship B (upload-failure outbox/persistence) is therefore NOT being built now** — revive only if a real upload failure resurfaces in a Sarah session. Residual risk = genuinely awful cellular on a very long session (watch-item, not a build; no forced phone-network test). Original gating rationale below retained for history. Two prior investigations + Andrew's disclosure converged: when Sarah hit failures (weeks ago), stack was **free Vercel (10–60s timeouts) + free Neon**; now **Vercel Pro (300s) + paid Neon** — many failures were likely tier artifacts, not live bugs.
-   **Bucket A — likely already fixed, confirm via smoke:** (a) large audio upload — B1 (`e0e8917`) direct-to-Vercel-Blob (`BLOB_MAX_BYTES` 100 MB, 1 retry), eliminating the old 4.5 MB Server Action wall that killed Sarah's 17.9 MB m4a; (b) transcribe timeouts — free 10–60s → 300s on Pro.
-   **Bucket B — live code limits:** (a) text paste — `generateNoteFromTextAction` was **~16k chars (4k tokens) pre-`85e248d`** (smoking gun for "couldn't paste a transcript"); **now ~120k chars (30k tokens)** — plain 60–90 min transcripts (~70–80k) pass; verbose exports **>120k** still fail with "Session text is too long." (b) 60–90 min audio transcribe wall-clock vs **300s ceiling UNPROVEN** on paid infra (time risk, not upload size).
-   **Andrew priority (2026-05-30):** pipeline must **WORK** for Sarah; **upload is the fragile link** — transcription-quality work de-scoped; trust Whisper quality.
-   **Tooling:** `scripts/make-test-audio.cjs` (`588999f`) — loop short clip (`--source`), synthetic, or `--split` for 50-min rollover; see `scripts/make-test-audio.README.md` + Path C in [`docs/SMOKE-LONG-FORM-TRANSCRIBE.md`](SMOKE-LONG-FORM-TRANSCRIBE.md).
-   **Checklist (paid Preview):** upload ~50 MB / ~90 min via Upload tab → no 413, blob lands → Transcribe → completes under 300s or fails explicitly on time; paste ~90k chars (pass) + ~150k chars (reject). Tier 1 parallelize checks still apply when audio path runs: (a) `[transcribe-parallel]` `inner-cap=6 parts=N>1`; (b) `outer-cap=3`; (c) `CostEvent` per part; (d) order preservation; (e) friendly timeout copy if deliberately pushed past 300s.
-6. **Transcription SPEED — Tier 2 design (VAD / silence-boundary chunking + speed levers).** **Deprioritized 2026-05-30** unless item 5 smoke surfaces an actual **300s timeout** — Andrew trusts Whisper quality; reliability focus is upload/pipeline working, not speed. Original ask (2026-05-30): silence/VAD-aware chunking vs Tier 1's fixed `WHISPER_TARGET_CHUNK_SECONDS = 240`; levers include concurrency caps (6/3), faster providers, 300s ceiling. **Next step when revived:** Sonnet design pass quantifying speedup per lever. Files: `src/lib/transcribe.ts`, `src/lib/transcribe-ffmpeg.ts`; `docs/PHASE-6-TIER-1-STATUS.md`.
+### v1 design-system smoke follow-ups
+
+**[P2][UX] 2FA inline verify-at-login**  
+Distinct from TFA2 setup page.
+
+**[P3][UX] T9 — theme toggle on signup pages**  
+Missing vs authenticated shells.
+
+**[P3][UX] T10 — per-tutor names collapsible subsection**  
+Parent child detail.
+
+**[P3][UX] Consent floor-block checkbox contrast**  
+Light borders on same background.
+
+**[P3][UX] BG2 — students-roster search inner effect**  
+Needs Andrew clarification.
+
+**[P3][UX] Impersonation pip clarity**  
+Mask icon, click-to-exit.
+
+**[P3][UX] Video tile docking (SR-04 follow-up)**  
+Post-V1; SR-04 base shipped.
+
+**[P3][UX] Triangle / n-gon shapes v1.1**  
+No native Excalidraw triangle.
+
+**[P3][UX] Age/grade-adaptive interface complexity**  
+2.0 / post-V1.
+
+**[P3][UX] Parents marketing page Phase D v2**  
+Parent-targeted page backlogged.
+
+**[P3][UX] Per-org data-org theming**  
+University pilot bonus.
+
+**[P3][UX] Spacing/radius/motion tokens**  
+DESIGN-TOKENS-PLAN out-of-scope partial.
+
+**[P3][UX] Default light vs dark theme**  
+DESIGN-TOKENS Phase 0 kickoff Q.
+
+**[P3][STRATEGIC] Pricing transparency — AI cost stance**  
+Strategy discussion only.
+
+### Shipped design reference
+
+Phase 0 tokens · Phase A fonts/palette · Phase B1/B2 auth+dashboard · A′ theme plumbing · Groups A–G surface fan-out · Phase D landing · OAuth notice · CheckboxField · StudentAvatar · Waiting room overlay visual · Parent consent POST · Continue button color X7.
 
 ---
 
-## Adversarial review + UX audit (post-Phase-5, 2026-04-19)
+## 8. Device pickers / hardware
 
-### Real bugs (do before pilot grows past Sarah)
+**[P1][AV] SMOKE-AUDIO-1** — see §1 (Brio first-acquire).
 
-- ✅ **Shipped (B3, refactor/recorder-test-modular):** **Switching tabs while recording no longer kills the recording.** `AudioInputTabs.tsx` now always-mounts the recorder when `blobEnabled` and hides the inactive panes via `style={{ display: ... }}` instead of unmounting. `useAudioRecorder` exposes `onRecordingActive`; `AudioInputTabs` wires that into a confirm prompt that fires when the tutor tries to leave the Record tab during a live recording ("You're recording — switch tabs anyway? Audio will keep recording in the background."). The existing `hasAudio` discard prompt still fires after a recording is finalized. Regression test in `src/__tests__/dom/keep-recorder-mounted.dom.test.tsx` (mount/unmount spies on stubbed `AudioRecordInput` + `AudioUploadInput`) plus `AudioInputTabs.dom.test.tsx` for the confirm-prompt branches.
-- **Admin audio proxy broken for env-only admins.** `src/app/api/audio/admin/[recordingId]/route.ts` falls back to `student: { adminUserId: null }` for `scope.kind === "env"`, but `SessionRecording.adminUserId` is non-nullable so the recording itself wouldn't have null `adminUserId`. Latent bug — Sarah is DB-mode so it's never been hit. Decide: env-mode either needs `adminUserId: null` filter (if such recordings exist) or env-mode is documented as not supporting the admin audio proxy.
-- **No way to attach a recording to an existing saved note.** Workflow dead-end: tutor saves the note, then realizes they meant to attach the audio. They have to delete and re-create. `NoteCardActions` edit form should support recording attach.
+**[P2][AV] SMOKE-BUG-11 — tutor mic picker not initialized from tn-mic-device-id**  
+Capture restores; UI reads `pickedMicSlot` never bridged.
 
-### Slow-burn data integrity (do before scaling beyond ~5 tutors)
+**[P2][AV] DEVICE-PICKER-DEDUPE / WB-DEVICE-PICKER-DUPES**  
+Collapse duplicate enumerateDevices entries via groupId + label normalization.
 
-- **`NoteView` rows orphan on share-link revoke.** When a tutor regenerates a link, old `NoteView` rows (keyed by old `shareToken`) stay forever. Cheap per-row, unbounded over years. Fix: either cascade-delete on revoke or run periodic sweep.
-- **Bootstrap-seed in `s/[token]/page.tsx` re-runs on any zero-state.** If `NoteView` rows get deleted (cascade from a deleted note + every other note also somehow gone, or manual cleanup), the next visit re-bootstraps and marks everything "seen" again — meaning real new notes added after that visit will incorrectly show as already-seen. Edge case. Fix: track bootstrap-done with a sentinel row, OR only bootstrap notes whose `createdAt` predates the share link's `createdAt`.
-- **`SessionRecording.onDelete: SetNull` from `SessionNote`.** Deleting a note leaves both the recording row AND the blob orphaned. Compounds with the existing "orphaned blob sweep" backlog item. Decide: cascade-delete recording when note is deleted (and trigger blob delete in same path), or leave SetNull and rely on the future sweep.
-- **Recording recovery / soft-delete window.** Right now recordings can vanish *immediately* through three different paths and there is no undo: (1) per-segment / late-guard hallucination cleanup hard-deletes blob + DB row inside `transcribeAndGenerateAction`; (2) hitting "×" on a pending segment in `AiAssistPanel.handleRemoveSegment` drops it from local state and leaves the blob orphaned with no row to recover; (3) deleting a note `SetNull`s the recording row (above) so the audio is unreachable from the UI. Build a soft-delete: add `deletedAt: DateTime?` (and probably `deletedReason`) on `SessionRecording`, switch every "delete" path to set the marker instead of hard-removing the blob, hide soft-deleted rows from the normal UI, and run a background sweep that hard-deletes blob + row after a TTL (suggest **14 days**, configurable via env). Then add a "Recently removed recordings" admin view (per student or global) where the tutor can restore within the window. Resolves the per-segment-hallucination "I clicked the wrong button" panic, the X-button silent loss, and the note-delete cascade gap in one structural fix. Coordinate with the existing "orphaned blob sweep" item — same cron can drive both. Multi-tenant: scope the recovery view + the sweep query by `adminUserId` (per `docs/learning-multi-tenant.md`).
+**[P2][AV] DEVICE-PICKER-MOBILE-FACINGMODE**  
+Phone: Back/Front only via facingMode.
 
-### Scaling/abuse (do before public launch)
+**[P2][AV] Mic hot-plug requires hard refresh (B1-B4 smoke)**  
+Asymmetric vs camera; W1 ondevicechange policy.
 
-- **`/api/share/mark-seen` has no rate limiting.** Anyone with a valid share token can hammer the endpoint (each call: 2 DB reads + 1 upsert). Fine for one pilot user; needs per-token limit before public.
-- **Notes search uses `ILIKE %q%` (full table scan).** Won't index on a leading wildcard without `pg_trgm`. Fine at hundreds of notes per tutor, breaks at tens of thousands.
-- **`SeenTracker` fires N requests for N visible note cards.** Cheap, idempotent, but easy to batch. Defer until it actually matters.
-- **No CSRF on `/api/share/mark-seen`.** Only "harm" is marking already-shareable notes as seen. Not urgent.
-- **Recording IDs in audio URLs.** End up in browser history / referer logs. Acceptable for tutoring-notes confidentiality bar; flag if we ever handle anything more sensitive.
+**[P3][AV] SMOKE-AUDIO-2 — phantom tutor self-unmute**  
+Watch item.
 
-### Time-storage tech debt
+**[P3][AV] SMOKE-AUDIO-3 — wrong mic after cancel→rejoin**  
+Cancel path fixed 2026-07-09; mic wrong-device watch.
 
-- **`startTime`/`endTime` are "UTC pretending to be wall-clock."** We construct `T${HH}:${MM}:00.000Z` to store and `getUTCHours()` to read. Works only if we never display in another timezone, never compare across zones, never sort across days. Day we want true cross-timezone display (e.g. tutor in TX, parent in CA wanting "their local time"), we'll need `TIMESTAMPTZ` + an explicit `event_timezone`. Not urgent for solo-tutor pilot.
-- **Auto-fill timezone offset captured at form mount.** If the tutor crosses a DST boundary while the form is open, times shift by an hour. Theoretical; flag if anyone reports it.
-- **Session-window vs recording-window times.** When the tutor leaves the time fields blank we currently auto-fill `startTime` = first recording's `createdAt − duration`, `endTime` = last recording's `createdAt`. So the saved span is the **recording** window, not the **session** window. Fine for "the recording IS the session" usage (Sarah's mental model), and the tutor can always type explicit times to override. Becomes important when sessions are billable blocks (30-min increments etc): we'll want a real wall-clock session start captured at the moment the tutor opens the recorder (or starts a "Session" timer), with the recording window as a sub-fact of the session. Likely paired with the billable-blocks pricing work in the "Pricing" section.
+**[P3][AV] WS-H NB-1–NB-5**  
+Per-attempt timeout, log enumerate error, stale groupId clear, collision test.
 
-### UX gaps — tutor side
+**[P3][AV] Device-picker cleanup — phone front/back only**  
+Sarah ask; usersmoke quicklist.
 
-- **No raw-transcript preview before AI generates the note.** If transcription is wrong, tutor saves and then has to edit each field. Add a collapsible "see raw transcript" section in the AI panel.
-- **Template dropdown is essentially decorative.** "Math session / Reading session / Test prep" options exist on the form, are passed to the LLM as `Subject/template: ...`, and persist on the note for filtering — but (1) they're **never auto-detected** from audio/transcript content, (2) `populate()` doesn't set the dropdown when the AI fills the form (defaults to "None" until the tutor picks manually), and (3) the prompt doesn't really *use* the template — it just sees a one-line context tag at the top, no template-specific extraction rules, no field changes. Two real fixes: (a) infer the template from the transcript (cheap classifier or keyword heuristics — "we worked on chapter 4 of *Hatchet*" → Reading; "factoring quadratics" → Math), and (b) make the prompt actually template-aware (e.g. Test prep wants a "what's still weak" field, Reading wants a comprehension-question list). Until both ship, consider hiding the dropdown to avoid the "I picked one and it didn't seem to do anything" feeling.
-- **Notes history page lacks date-range filter.** Search by content only. Real workflow: "show me September 2026" is a date filter, not a keyword search.
-- **Editing a note inline expands the row and shifts the page.** Modal would be steadier than inline expansion, especially on the history page where it can shove other notes way down.
-- **Sending an email gives no confirmation of what was sent.** Currently silent. Show a toast like "Email sent to parent@example.com — link includes 5 notes." (Replaces older "X notes flipped to SENT" framing — see status-model rethink below; status mutations on send are likely going away.)
+**[P1][TEST] iOS matrix** — see §1.
 
-### UX gaps — parent side
+**[P2][REC] Android Chrome matrix fill-in**  
+Second pilot.
 
-- **"NEW since your last visit" doesn't say WHEN the last visit was.** "3 new since you visited Apr 12" lands better than just "new since last visit."
-- **No way for a parent to acknowledge / reply.** They can read homework but can't tell the tutor "got it" or ask a question without going off-channel to email. Backlog: in-app ack button or short reply.
-- **No print stylesheet.** Some parents print to keep a paper trail; the dark-mode UI prints poorly. Wait until someone asks.
-- **Mobile responsiveness of the redesigned share page hasn't been re-verified.** The dividers with mid-text labels ("New since your last visit") might compress oddly on narrow screens. Manual check needed before sending the latest link to anyone new.
-
-### Cross-cutting
-
-- **Terminology inconsistency:** "session note" / "note" / "session" used interchangeably across UI strings. Worth a small pass for a consistent voice.
-- **No analytics for tutors about parent engagement** beyond the "seen" boolean — no audio play counts, time on page, or link clicks. Shows whether share-page features actually land.
-- **No onboarding for new tutors.** Fine for Sarah (you'll walk her through). Bad for the 50th. Defer until 2nd or 3rd tutor signs up; then it becomes urgent.
-
-### What I checked and was happy with (no action needed)
-
-- `mark-seen` validates token AND note ownership before upserting.
-- Share-token audio proxy validates link not revoked, recording belongs to student, `shareRecordingInEmail` is true.
-- Multi-tenant scoping (`assertOwnsStudent`, `canAccessStudentRow`) consistent across admin endpoints.
-- Migrations guarded with `IF NOT EXISTS` / `pg_constraint` lookup pattern.
-- Bootstrap fix uses `skipDuplicates`, so it's idempotent within the request.
-- `NoteView_shareToken_noteId_key` unique index prevents double-counting.
+**[P3][REC] Firefox untested**  
+Lower priority.
 
 ---
 
-## Status-model rethink + auto-email (paired changes, post-Phase-5)
+## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
-These two are written up together because they're the same idea from two angles: the DRAFT/READY/SENT status field was a 2010s "did I push this out via email?" model used as a proxy for the thing tutors actually care about — *"does the parent know about this?"* Phase 5's `NoteView` table now answers that question directly. Once the proxy is gone, email becomes a notification mechanism (not a state mutation), and notification mechanisms can be scheduled.
+**[P1][TEST] WS-V / Part-2 site-wide mechanical test buildout**  
+P1-WB-1…10 serial relay batches; P1-ID-1…4. Pure-jest tranche DONE @ 2026-07-05.
 
-### Status-model rethink — collapse DRAFT/READY/SENT
+**[P1][TEST] CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE**  
+See §6.
 
-**Today (cruft):**
-- `status` field with three values: DRAFT, READY, SENT.
-- Tutor can manually flip DRAFT ↔ READY via "Mark ready" / "Mark draft" buttons in `NoteCardActions`.
-- `sendUpdateEmail` flips both DRAFT and READY to SENT.
-- **The share page (`s/[token]/page.tsx`) does not filter by status** — parents see DRAFT notes the moment they're saved. So the status field is essentially decorative from the parent's perspective.
+**[P1][TEST] Block B remote-surgical mixdown hardware oracle**  
+jsdom cannot prove student absent from mixdown while heard live.
 
-**Proposed model:**
-- Drop the `status` field entirely (or keep as a minimal `hidden: boolean` if the "I'm mid-writing this, don't show it yet" use case is real — TBD; see decision below).
-- Add a per-note "👁 Seen by parent" / "Not yet seen" computed badge in the tutor UI, derived from `NoteView` (no schema change).
-- Email becomes an action the tutor takes at the student level. It does **not** mutate any note state. Sending an email = sending an email; that's it.
+**[P2][TEST] RELAY-MARATHON-SHARDS**  
+~20min serial marathon; shard runner exists (`fb3c039` merge fix).
 
-**Decision needed before implementing:**
-Is "started writing mid-session, not ready for parent eyes yet" a real workflow, or do tutors just save when the note is coherent? If real → keep a `hidden: boolean` flag and filter it out of the share page. If not real → drop entirely. **Bias: ask Sarah before implementing.** Don't preserve a state field on speculation.
+**[P2][TEST] JEST-ISOLATION-CLASS-2**  
+`--workers=1` gate; eliminate fire-and-forget DB stragglers.
 
-**Migration concerns:**
-- Existing notes with `status: SENT` carry useful "I emailed about this" history. Don't blow it away — either preserve as `firstEmailedAt: DateTime?` on the note, OR rely on `EmailMessage` table joins (which already exists). Probably the latter.
-- Tests in `__tests__/note-and-share.test.ts` check `status === "READY"`; will need updating.
+**[P2][TEST] Site-wide coverage P1 gaps**  
+Blob token in PW gate, recording E2E, replay scrub gate, billing activeMs E2E, etc. (~15 items self-skip without `BLOB_READ_WRITE_TOKEN`). [`site-wide-coverage-audit.md`](handoff/site-wide-coverage-audit.md).
 
-**Scope:** ~1–2 hour rework once the decision is made. Schema migration + drop UI buttons + add seen-badge component + update `sendUpdateEmail` to stop mutating notes + update tests. **Sonnet-tier.** Worth doing *before* auto-email scheduling so the new code isn't building on a model that's about to be replaced.
+**[P2][TEST] TEST-REAL-INTEGRATION-SUPERSEDES-SMOKE**  
+Real multi-instance harness post-master.
 
-**Outbox page reframe (Andrew 2026-06-07, defer+fold):** `/admin/outbox` is an **email-notification log + SMTP-failure manual-delivery fallback** — NOT a note-state queue and NOT the recording upload-outbox (that's internal IndexedDB infra with no page). Under LOCKED B4 (notes live on Save; "send" = notification only): **keep the route** (still load-bearing when SMTP is off/fails), but **reframe as part of this cleanup wave** — rename "Outbox"/"queued" UI copy → "Notification history" / "Sent notifications"; decouple from note status (drop the `READY→SENT` `updateMany` + the `outboxOnly` mark-sent in `sendUpdateEmail`). Do NOT delete the page. Touch-points if ever removed later are scoped in the investigation. Folds together with the **Outbox UX cleanup — collapse sent items** row below (sent-item disclosure + friendlier empty state).
+**[P2][TEST] Admin notes UX Phase 0 visual regression matrix**  
+axe + 4-viewport screenshots not enrolled.
 
----
+**[P2][TEST] F-1 outbox register retry cap**  
+Pre-merge optional.
 
-### Auto-email scheduling (depends on status-model rethink)
+**[P2][TEST] audio-rollover Playwright not in CI gate**  
+`tests/e2e/audio-rollover.spec.ts` opt-in.
 
-**Why now:** Once email is decoupled from note state, sending becomes a pure side effect that can be triggered by a schedule rather than a button. Combined with `NoteView` for engagement signal, the tutor can stop babysitting "did I remember to email the parent?" entirely.
+**[P2][TEST] upload-outbox.test parallel-race flake**  
+50ms sleep concurrency test.
 
-**Triggers (per student, with a tutor-level default):**
-- **Off / manual** — today's behavior; power-user override.
-- **Per note save** — fires after the edit grace window (see below).
-- **Daily digest** — end-of-day if any new notes since last email.
-- **Weekly digest** — same, weekly cadence; tutor picks the day.
-- **After every Nth session** — niche, skip v1.
+**[P2][TEST] waitForPendingUploads debug surface removal**  
+Test/ops cleanup.
 
-**Conditions (all triggers respect):**
-- **Only if new notes since last email.** No empty digests, ever.
-- **Edit grace window** — wait N minutes after a save before firing (default 15 min) so tutor edits don't trigger N separate emails. Implementation: every save bumps a `notifyAfter` timestamp on the note; cron only sends notes whose `notifyAfter < now`. No queue needed.
-- **Skip if `hidden` flag set** (if we keep that flag from the status-model decision).
-- **Optional quiet hours** — "don't email between 9 PM and 8 AM in the parent's timezone." Nice-to-have.
+**[P2][TEST] installControllableUploadStub duplication**  
+Extract shared test helper.
 
-**Settings scope:**
-- Tutor-level default in `Settings → Email` ("New students inherit weekly Sunday digest").
-- Per-student override on the student page ("This parent prefers per-session.")
-- Per-recipient (if a student has multiple parent emails, settings apply to all unless we add per-recipient overrides — probably skip v1).
+**[P2][TEST] Recorder test refactor Phases 4–6**  
+MicControls shell split; audio-rollover PW; Opus pass.
 
-**Sensible defaults to ship with:**
-- **New students: weekly digest, Sunday morning, only if new notes.** Low-noise, predictable, mirrors how schools / activities communicate.
-- Tutors can flip a single student to per-session if a parent wants it.
-- Manual "Send update email" button stays — useful for ad-hoc pushes.
+**[P2][TEST] phase0-stop — break CSS deploy-abort verify**  
+Visual gate ritual.
 
-**Real implementation gotchas:**
+**[P2][TEST] PIPELINE-1 — agentic pipeline before release**  
+Agents auditing agents; tests-to-spec discipline.
 
-1. **Scheduler.** Vercel Cron is the obvious fit (free tier supports daily jobs). One daily cron at e.g. 7 AM UTC queries "who needs emailing today, given their schedule + last-sent + new-note count?"
-2. **Idempotency.** Cron retries / double-runs CANNOT spam parents. Track `lastEmailSentAt` per (studentId, recipientEmail) AND record which note IDs were included in each `EmailMessage` row. Refuse to re-include note IDs already sent to that recipient.
-3. **Unsubscribe link** — must be one-click per CAN-SPAM. Token-based, scoped to (studentId, recipientEmail). Tutor sees "this parent unsubscribed from auto-emails" badge; manual sends still work but show a confirmation.
-4. **Cost ceiling.** Auto-emails can blow up email-send costs and hurt deliverability (high bounce rate → spam folder for everyone). Connects to existing **Usage tracking prerequisite** backlog item — track sends per period per tutor; soft-cap warning at e.g. 50 auto-emails/month per tutor.
-5. **Test mode** — "show me what tomorrow's digest would look like" preview, both for tutor confidence and for our QA. Renders the email without sending.
-6. **Failure handling** — if cron-send fails 3 times for a recipient, alert the tutor (in-app banner + outbox row), pause auto-sends for that recipient, never the parent. Common cause: parent email bounced (changed jobs, mailbox full).
-7. **Timezone.** Tutor sets schedule in their timezone; parent receives at their timezone-equivalent moment. If we don't know parent timezone (we don't), default to tutor's. Probably fine; revisit if anyone complains.
-8. **Multi-tenant data isolation** — `cron job → for each tutor → for each student → check schedule`. The "for each tutor" loop must be the outermost; never write a query that touches other tutors' data. Test required (see `audio-isolation.test.ts` pattern).
+**[P3][TEST] Plan1 authed-join hardware failures**  
+Dual-device takeover; waiting-room A/V.
 
-**Schema changes needed:**
-- `Student.emailSchedule: { kind: "off" | "per_note" | "daily" | "weekly", weekday?: 0-6, quietHoursStart?: "HH:MM", quietHoursEnd?: "HH:MM" }` (JSON column, or split into named fields).
-- `Student.emailRecipients: String[]` (array of emails, currently we have `parentEmail` as a single string — already a backlog item to support multiple).
-- `EmailMessage.includedNoteIds: String[]` (which notes were in this email — drives idempotency and "what was in the digest you sent" UI).
-- `SessionNote.notifyAfter: DateTime?` (computed at save: `createdAt + editGraceMinutes`).
-- `EmailUnsubscribe { studentId, recipientEmail, token, createdAt }` (track unsubscribes).
-- `AdminUser.defaultEmailSchedule` — same shape as `Student.emailSchedule`, applied to new students.
+**[P3][TEST] Preview email loopback**  
+Signup on preview lands on production.
 
-**Estimate:** **Days, not nights** — ~2–3 focused sessions of work, plus a real chunk of testing because the failure modes (spamming a parent, missing a digest, unsubscribe not honored) are the kind that destroy trust if they slip through. **Opus-tier for the design pass** (multi-tenant scheduler with idempotency and legal/CAN-SPAM constraints), **Sonnet-tier for the build** once the design is locked.
+### PLAYWRIGHT-GAP hardware oracles (summary)
 
-**Why this isn't tonight-shippable:** scheduler infra + unsubscribe + per-student settings UI + idempotency model + tests is a proper feature, not a tweak. Half-shipping it (e.g. "auto-send works but unsubscribe doesn't" or "no idempotency, occasionally double-emails") would be worse than not shipping it at all — once a parent is annoyed by duplicate or unwanted emails, you don't get that goodwill back.
+| ID | Surface | Oracle |
+|----|---------|--------|
+| WB-AV-GAP-1 | enumerate×acquire corruption | Windows hardware only |
+| WB-AV-GAP-2 | tutor can't hear student E2E | real WebRTC hardware only |
+| WB-AV-GAP-3 | Brio silent-first-acquire | hardware |
+| Phone student A/V item 19 | bidirectional A/V on phone | hardware |
 
-**Dependencies before this is worth starting:**
-- Status-model rethink done (so email isn't mutating note state when it shouldn't).
-- `Usage tracking prerequisite` ledger live (so we can rate-limit auto-emails and surface usage in-app).
-- Decide on `parentEmail: string` → `emailRecipients: string[]` migration (so digests can address multiple guardians).
+Surrogates shipped in jest/dom; hardware rows remain named gaps per playwright-on-fix rule.
 
 ---
 
-## Pilot feedback — action items
+## 10. Platform / ops / cost / observability
 
-- **🟡 Whisper transcribing English speech as Asian (CJK) characters — intermittent (Andrew, May 15 evening, after hotfix #3 smoke). NOT REPRODUCED in the follow-up real-session test that produced the AI-fill screenshot below — so this is a known-intermittent, not a hard-repro.** Symptom: a prior session's `topicsCovered` and `assessment` fields came back containing CJK characters where Andrew had spoken only English. Almost certainly Whisper's language auto-detect misfiring — `client.audio.transcriptions.create({ model: "whisper-1", file, response_format: "verbose_json" })` in `src/lib/transcribe.ts` line 26 does NOT pass `language`, so Whisper auto-detects. Quiet / low-SNR English audio (set-phone-on-table ambient capture per the v7 north star) is a well-known Whisper failure mode where it mis-identifies the language as Chinese / Japanese / Korean and "transcribes" silence + noise into plausible CJK glyphs. Andrew has stage-1 English-only pilot scope. **Fix recipe (15 min):** pin `language: "en"` in the `audio.transcriptions.create` call. If we later want multi-language (parents-of-bilingual-students etc.), gate it behind a per-tutor or per-student preference — but today there's no need. Add a tiny doc-comment explaining why the language is pinned ("Whisper auto-detect false-positives CJK on quiet English audio; pin to English until multi-language support is a real product line"). **Acceptance:** every transcript on a session whose recording is in English produces Latin-only output (verifiable by a regex assertion in `transcribe.test.ts`: `expect(transcript).toMatch(/^[\x00-\x7F\s.,?!'"-]*$/)` on an English fixture). **Effort:** 15 min code + 10 min test. Haiku-tier.
-- **🟡 AI form-fill missed Assessment when speaker pivots mid-sentence from assessment to homework (Andrew, May 15 evening, real-session smoke after hotfix #3).** Real-session test produced the screenshot referenced in the May 15 evening chat: Topics covered = "sand cats", Homework = "read a book on how to handle sandy cats", Plan = "cover sandy dogs" all populated correctly; **Assessment empty.** Andrew said something to the effect of *"well your understanding seems to be okay, as homework..."* — the LLM apparently anchored on the "as homework" pivot and skipped the leading assessment statement ("your understanding seems to be okay") that ran into it without a sentence boundary. This is a different failure mode than "model dropped a field because the speaker never gave one" — Andrew DID give an assessment, the model just attached it to the wrong field (or, more likely given the empty Assessment, dropped it entirely while extracting Homework). **Diagnosis to try:** print the Whisper transcript Andrew's session produced (he has the recording — pull from /admin/students/[id]/notes if needed) and run it through `generateNoteFromTextAction` locally with a few prompt variants — does the field move to Homework, or does it just vanish? **Fix candidates:** (a) Strengthen v6/v7 prompt rule that *every clause* should be evaluated for ALL field-fits, not just the first matching field (the model may be using one-shot-best-match assignment); (b) explicitly mention the pivot pattern in the system prompt ("speakers commonly join assessment and homework in one breath — *'your understanding seems okay, as homework do X'* — split at the natural seam"); (c) consider a second extraction pass that asks "did the transcript contain any assessment-like statements?" with the current Assessment value provided as anti-context, and only fills if the answer adds non-overlapping content. **Acceptance:** new fixture transcript under `src/__tests__/fixtures/ambient-transcripts/` with the exact "assessment-then-homework-no-pause" pattern → Assessment populates with the leading clause AND Homework populates with the trailing clause; existing fixtures don't regress. **Coordinate with v7 work** (the "ambient capture" prompt rewrite already in the backlog above) — this case is exactly the kind of conversational pivot v7 was meant to handle. **Effort:** 30-60 min (mostly prompt iteration + a fixture or two). Sonnet-tier. **Why not P0:** the existing fields still got filled correctly; tutor can re-listen + type the assessment in. But for the killer-feature "set-and-forget" UX, this needs to land before v7 is declared shipped.
-- **🟡 Duplicate participant tile when a peer reloads mid-session (Andrew, May 15 evening smoke).** Wife's tab reloaded → tutor saw the stale "wife" tile remain (with broken WebRTC: no video, mute-toggle non-functional) AND, several minutes later, a NEW "wife" tile appeared from her fresh peer connection. Both tiles in the same room, two different peerIds. Visual: confusing for the tutor; structural: the stale tile's peer-connection is dead but its presence entry still sits in `liveAv.participants[]`. Root cause likely lives in either `peer-mesh.ts` (no `RTCPeerConnection.connectionState === "failed"` cleanup path) or the sync-client presence layer (no "evict stale peer after N seconds of silence" sweep). **To diagnose:** add a per-peer last-seen-ms timer on the tutor's side; when a peer's presence/signaling silence exceeds 30s AND the peer-connection has been in `failed`/`disconnected` for >10s, evict from the participants list and dispose the RTCPeerConnection. **Acceptance:** wife reloads → her stale tile disappears within ~30s, fresh tile appears at her rejoin, only one tile per active human. **Effort:** ~1-2 hrs incl. tests. Sonnet. **Why not P0:** the fresh peer connection DOES form correctly alongside, so live A/V resumes; the bug is UX clutter + a confusing fallback path, not a functional block.
-- **✅ SHIPPED 4d Commit 6 — Recording starts ~200ms–2s before remote peer audio actually flows, lopping off the start of student speech (Andrew, May 15 evening smoke).** Symptom: Sarah clicks Start (or the FSM auto-starts on `presence flips`) → MediaRecorder fires immediately → student joins via WebRTC → student's audio track lands but is still in `muted=true` state for the first 200ms–2s while WebRTC negotiates → mixdown captures tutor's voice only during that window → replay is missing the start of student's first sentence. Root cause: `evaluateLifecycle()` step 4b transitioned to `recording` as soon as `participants.size >= 1`, with no signal for "are audio frames actually arriving?". Fix: added two new optional `LifecycleInputs` — `participantsWithFlowingAudio: ReadonlySet<string>` (peers whose `MediaStreamTrack.muted === false` for ≥200ms confirm window) and `everHadAudioFlow: boolean` (sticky latch the host maintains, so a mid-session blip doesn't re-arm the FSM and cause record-stop/restart churn). Step 4b now gates `armed/awaiting_audio_flow` until the intersection of `participants` and `participantsWithFlowingAudio` is non-empty OR the latch is true. New `useAudioFlowConfirmation` hook subscribes to each peer's audio track `mute`/`unmute`/`ended` events and debounces the add-to-flowing-set by 200ms (immediate removal on remute — better to pause briefly than to record a dropout). Workspace threads it through; pre-4d callers that omit `participantsWithFlowingAudio` keep the legacy behaviour. Banner copy: "Student is here — waiting for their audio to start flowing before recording." / Pill: "Waiting for audio…" — distinct from "Waiting for student" so Sarah can tell "they haven't joined" apart from "they're here but I can't hear them yet." Tests: 8 new FSM tests covering the gate happy path, intersection-empty hold, latch release after first transition, stale-flowing-id defense, solo-tutor bypass, and presentation copy; 12 new hook tests covering initial muted/unmuted, transient flutter, mute-immediate-removal, multi-track-OR semantics, participant-removal, and unmount cleanup. **Verification:** the Group D Playwright "happy-path 2-peer" scenario is the real-browser confirmation. **Effort actual:** ~2 hr (FSM + hook + workspace wiring + tests). Sonnet-tier in retrospect.
-- **✅ SHIPPED (pre-4d; annotated 4d Commit 5) — Student-side "Mute mic" toggle does not propagate to remote participants (Andrew, May 15 evening smoke).** Original symptom: wife clicked Mute on her student tile; tutor still heard her. **Fix landed silently before the 4c merge** — likely as a side effect of the Web Audio fan-out refactor (`5ac2f76`) which forced `useLiveAV.toggleMic` to flip `track.enabled` on the live `localAudioStreamRef.current` (the SAME stream peer-mesh `getLocalTracks()` returns), removing the previous indirection where state-only flips could miss the wire-side track. The BACKLOG entry simply never got the ✅ flip. **Verified 4d Commit 5** with regression guards in `useLiveAV.dom.test.tsx`: (i) multi-track / stereo capture — every audio track flips, not just track[0]; (ii) identity check — the toggled track IS the one exposed via `result.current.localAudioStream.getAudioTracks()[i]`, so peer-mesh's `getLocalTracks()` closure is on the right ref; (iii) externalAudioStream path — when the tutor passes the recorder's publishStream as `externalAudioStream`, the same toggle path applies (recording's separate Web Audio destination keeps capturing). The Group D Playwright "student mute propagates" scenario is the real-browser confirmation. ORIGINAL DIAGNOSIS NOTE preserved for archival context: Tutor's own mute toggle works fine — asymmetric to the student side. Likely either (a) student-side `useLiveAV.toggleMic` is setting `track.enabled = false` on the wrong track (the local-preview track vs the publish-stream track diverged after the May 15 Web Audio fan-out change — but students don't have fan-out, so this is unlikely), OR (b) student-side `toggleMic` is updating React state for the UI label but not actually mutating the MediaStreamTrack, OR (c) the audio is being captured a second time by tutor's tab via... actually no, the only path from wife to tutor is her WebRTC outbound track; muting it has to silence the wire. **To diagnose:** student-side console after toggling — log every `track.enabled` flip with which track id, then on the tutor side verify the same track id is the one being mixed into the recording / played out. **Acceptance:** wife clicks Mute → tutor hears silence within 1 frame (typical WebRTC encoder latency). **Effort:** ~30-60 min once repro is reliable.
-- **🟡 Tutor-initiated join-link rotation affordance (Andrew, May 15).** `issueJoinToken` is now idempotent (May 15 fix), so the only way to invalidate an outstanding link is End-session. If a tutor ever needs to rotate a live session's link (compromised, accidentally shared with the wrong person, etc.), add an explicit `rotateJoinToken` server action + UI button. Today's gap is intentional — premature complexity — but worth a row so future-Andrew doesn't re-derive the design.
-- **🔴 Resume-session loses signaling-encryption alignment (Andrew, May 15 evening smoke). ✅ SHIPPED May 15.** Per-session encryption key now persists to `localStorage[wb-key:<sessionId>]` so any subsequent mount of the workspace recovers the key whether the URL fragment carries it or not. The "Continue" link in `ActiveWhiteboardSessionsList` (which had no `#k=…`) no longer mints a fresh key behind the still-connected peers' backs. See `src/lib/whiteboard/encryption-key.ts` for full lifecycle. **Caveat:** multi-device tutor still gets independent keys (LS is per-origin per-device). Pilot-acceptable. ORIGINAL DIAGNOSIS NOTE for context: End session → click "Resume" → console floods with 43+ `[sync-client] wbsync=... decrypt/parse failed:` warnings, and the peer never connects (tile stays "Connecting…", camera doesn't re-acquire on the other side). Hard refresh on the tutor side clears it. Read: the sync-client encrypts every signaling/presence message with the key in the URL hash (`#k=…`); after a resume, the tutor's in-memory key and the other peer's key diverge — every inbound message fails to decrypt and the peer-mesh starves for offers/answers/ICE. Likely paths: (a) resume regenerates the session's encryption key server-side without updating the URL hash on the tutor's still-open tab, OR (b) the wife's tab held the previous key while the tutor's tab refreshed its key from a re-hydrated session record. **To diagnose:** print the key fingerprint (`sha256(key).slice(0,8)`) at sync-client init and at each presence send/receive; the tutor's fingerprint should match every peer's. Either lock the key to the original session and never rotate on resume, OR force a hard reload on the tutor's tab when resume detects a key change. **Why P0-ish:** Resume is the recovery escape hatch when a tutor's tab dies mid-session; if it doesn't actually restore the call, the recording from that point on is dead. Pilot-pattern: Sarah would just see "can't reconnect" and have to start a fresh session, dropping the in-progress recording's continuity.
-- **🟡 Tutor's tab doesn't follow when a fresh session is created (Andrew, May 15).** Tutor created a new session after the resume failed, copied the new join link to wife, but the tutor's browser tab was still on the OLD session. Wife loads new-session link → sees "waiting for tutor to join" because the tutor is, server-side, in a different room. **Fix:** when a tutor creates / resumes a session from the dashboard, navigate the originating tab to the new session, OR show a clear "another session is starting in another tab" banner with a "go there" button. Today, the tutor has to manually navigate or hard refresh to land on the new session. Compounds the resume-loses-encryption bug above because the tutor's first instinct is to "try a new session", which then silently fails because the old tab stays put.
-- **✅ SHIPPED 4d Commit 7 — Tutor-side per-peer audio moderation — restore "Don't record this student" toggle (Andrew, May 15).** Per-stream `GainNode` inserted into `mic-recorder-audio.ts` `addRemoteAudio` so the path is now `remoteSource → remoteGain → recordingDest` (was `remoteSource → recordingDest`). New `setRemoteGain(stream, gainLinear)` graph method clamps to >=0 and flips the gain value live without disconnecting the source — replay sees a clean silence during the muted window rather than a gap, which is what the existing single-blob / single-row replay pipeline can carry. `useAudioRecorder` exposes `setRemoteRecordingGain(stream, gainLinear)`; `WhiteboardWorkspaceClient` re-passes the `moderation` prop to `AVControls` and runs a reconcile effect mapping `mutedPeerIdsInRecording` → gain 0/1 per participant. Wire-level mute (asking the remote peer to stop transmitting) stays out of scope — only the recording mixdown is affected; the tutor's live A/V playback (the `<audio>` element on the AVTile) is independent of the recording graph. Tests: 3 new `mic-recorder-audio.test.ts` cases covering source → gain → dest topology, live gain flip with clamp, and idempotent re-attach. **Original spec preserved below for archival reference:** ~~v1 ships a tutor-side audio mixdown via Web Audio (`mic-recorder-audio.ts` `addRemoteAudio`)~~
-- **(archived original) Tutor-side per-peer audio moderation — restore "Don't record this student" toggle (Andrew, May 15).** v1 ships a tutor-side audio mixdown via Web Audio (`mic-recorder-audio.ts` `addRemoteAudio`) — every participant's audioStream is summed into the tutor's recording stream, replacing the per-peer `useRemoteMicRecorders` orchestrator that previously made the replay UI inconsistently play either the tutor OR the student depending on which segment uploaded first. **What v1 loses:** per-peer moderation. The `mutedPeerIdsInRecording` state + the `handleToggleParticipantMod` handler still exist in `WhiteboardWorkspaceClient.tsx`, but the `moderation` prop is NOT passed to `AVControls` because flipping it has no functional effect against the mixdown. **To restore:** add a per-stream `GainNode` between each `MediaStreamAudioSourceNode` and the recording destination inside `mic-recorder-audio.ts`'s `addRemoteAudio`; expose a `setMutedForRecording(stream, muted)` (or return a `setMuted` function from `addRemoteAudio` alongside the unsubscribe); thread `mutedPeerIdsInRecording` into the workspace's participants-reconcile effect so each peer's gain flips to 0 when in the muted set. Wire-level mute (preventing the student's voice from reaching other participants live) stays out of scope per the original 4c plan — only recording-mute is in play here. **Acceptance:** with a mid-session toggle on a peer, that peer's voice does not appear in the recording from the moment the toggle flipped onward; toggling back lets their audio resume; replay shows a clean silence (not a gap) during the muted window because the source stays connected with zero gain (not disconnected). **Effort:** ~1 hr including tests. Sonnet-tier. **Why deferred to a backlog item rather than blocker:** Sarah can always verbally ask the student to mute, and the typical pilot session is 1:1 anyway — the moderation case is the "parent walks past the tablet" edge.
-- **🟡 Student naming paradigm — single-student fallback to the session's student (Andrew, May 15).** Today live-A/V participant tiles + the "Don't record &lt;peer&gt;" moderation labels surface a *peerId-derived* label like `Student · d40256` for every remote peer, even in the typical case where the join link was generated under a specific `studentId` in `WhiteboardSession.studentId`. **The asymmetry hurts UX:** Sarah glances at the tile and sees a hash where she expects "Liam". **Trivial single-student case (the typical pilot path):** the workspace already knows `studentId`; the join token is scoped to that student; if there's exactly one remote peer in the room, label them with the `Student.name` from that row. **Multi-peer case (edge):** we don't currently know which physical peer corresponds to which student (the join token only carries `whiteboardSessionId`, not a per-peer identity). Two plausible designs: (a) **stay with peerId-derived labels** for any peer beyond the first AND drop a `Student · &lt;name&gt;` label only on the *first* peer (matches the "one student per session" mental model but quietly tolerates a parent/sibling joining); (b) **explicit name capture on join** — the join page (`/w/[joinToken]`) prompts "What's your name?" with the student's known name pre-filled; the entered name flows over the presence wire's `label` field. (a) is zero-friction for Sarah's usual case; (b) is correct for the rarer "kid joins from one device + parent watches from another" scenario the user just hit. **Recommend (a) as v1** because the data is already in scope on the tutor side and it covers the pilot path; revisit (b) when a real session needs disambiguation. **Acceptance:** with one student joined, the tile reads e.g. "Liam" and the moderation row reads "Don't record Liam"; with two+ peers joined, the first reads the student name and additional peers fall back to `Student · &lt;suffix&gt;`. **Files likely touched:** `WhiteboardWorkspaceClient.tsx` (it already receives `studentId`; thread `studentName` down from the page-level `<WhiteboardWorkspace>` SSR fetch), `AVTilesPanel`/`AVTile` (consume a `peerDisplayLabel` prop instead of deriving from peerId). **Out of scope for this entry:** student-side display of their own name (today shows "You"; that's correct and stays). **Effort:** ~30 min for the single-peer fallback; (b) is a separate ~1–2 hr build with its own product call.
-- **✅ SHIPPED May 15 evening (hotfix #3) — Live-A/V — peer joining after the tutor's mesh is built gets stuck on "Connecting…" until a refresh (Andrew, May 15 evening smoke).** Both fix pieces below landed in the same commit. **`sync-client.ts`:** added a bounded webrtc-signal replay buffer (`BufferedRemoteSignal`, 64-entry cap / 8s TTL — sized to cover slow-cold-mount on cellular while bounding the never-subscribed leak). Inbound signals are pushed into the buffer before `fan()` runs; on first `onRemoteSignal` subscribe the in-TTL entries are replayed via `queueMicrotask` (same pattern as the existing `onRoomPeersChange` replay). Tested across 6 new sync-client tests covering replay ordering, no-double-delivery to multi-subscriber, TTL eviction, 64-entry cap, and unsubscribe-before-microtask. **`peer-mesh.ts`:** the `signal-no-entry → drop` guard on line ~420 now does **implicit-add for offers only** (`answer`/`ice`/`leave` still drop with the original warning — those without a prior entry are anomalies, not race victims). The host's later `addPeer(id)` is a no-op via the existing `event=add-skip reason=already-present` idempotency. Tested across 4 new peer-mesh tests covering offer→implicit-add→answer happy path, answer/ice/leave-without-entry drop, and self-targeted-offer defense-in-depth. **Regression-guard verified:** all 415 existing AV + whiteboard + useLiveAV DOM tests still pass; all 1005 unit tests in non-DB suites still pass; typecheck clean. Late-cam-acquisition / mid-session-cam-grant / perfect-negotiation-glare / ICE-end-of-candidates tests all untouched. **Original root cause description preserved below for archival reference:** Scenario from the May 15 evening pilot smoke with Andrew's wife on a second device: Andrew opens the workspace, mic auto-acquires (via `externalAudioStream` from `useAudioRecorder`), `hasEverHadLocalMedia` flips true, `useLiveAV`'s mesh-build effect runs, `signaling.createSignaling()` subscribes to `syncClient.onRemoteSignal`. **Then** Andrew sends the join link, wife clicks it, wife's `StudentWhiteboardClient` mounts but her `useLiveAV` is inert until she grants mic. In that gap: Andrew's `onRoomPeersChange` fires with wife's presence (presence DOES replay on subscribe — `lastRoomPeersSnapshot` in `sync-client.ts` is the existing fix), Andrew calls `mesh.addPeer(wifePeerId)`, `createPeerEntry` runs `getLocalTracks()` (returns Andrew's mic), `addTrack()` fires `onnegotiationneeded`, Andrew's PC creates an offer + sends via `signaling.sendOffer` → relay broadcasts → wife's `sync-client` receives it AND `fan(remoteSignalSubs, ...)` over an **empty set** (wife's signaling layer doesn't exist yet) → **offer is silently dropped on the floor.** Same for any ICE candidates Andrew has already started gathering. Wife later grants mic → her mesh builds → her signaling subscribes (FUTURE signals only) → wife's `addPeer(andrewPeerId)` creates HER offer → glare resolves → but the original ICE candidates from Andrew's first offer never arrived on wife's side, so the convergence path is partial. Andrew sees wife's tile (presence is fine) but `peerConnectionState` stays `"connecting"` forever. **Refresh works** because both sides re-init from a clean state and timing happens to align so neither side sends an offer before the other side is subscribed. Cross-confirmed against `src/lib/whiteboard/sync-client.ts` (`onRemoteSignal` has NO replay buffer, vs. `onRoomPeersChange` which DOES) and `src/lib/av/peer-mesh.ts` line ~422 (`signal-no-entry → drop with warning` when an offer arrives before `addPeer` was called). **Fix recipe** (two pieces; do both — neither alone closes every race):
-  1. **Buffer addressed-to-me signals in `sync-client.ts` until a subscriber attaches.** Mirror the `lastRoomPeersSnapshot` / `queueMicrotask` replay pattern that already exists for `onRoomPeersChange`. Hold a bounded queue (e.g. last 32 messages, ~5s TTL — large enough for slow-mounting clients on cold cellular, small enough to not leak forever if no subscriber ever attaches). When `onRemoteSignal` registers its first subscriber, drain the queue to that subscriber synchronously. Drop entries older than the TTL when draining. This solves "Andrew's offer arrives before wife's signaling subscribes."
-  2. **Add an "addPeer can implicit-create on inbound signal" path in `peer-mesh.ts`.** The line-422 `signal-no-entry → drop` guard is too strict for the realistic multi-mount race. When an offer arrives for an unknown peer, the mesh should call `createPeerEntry(fromPeerId)` itself, then apply the offer. This is exactly the "implicit-add" path that was deferred in Phase 4a (line 425 of `peer-mesh.ts` references it as out of scope). The host (`useLiveAV`) will eventually call `addPeer` for the same id when its presence subscriber fires; that path is already idempotent (line 686 `peer=${peerId} event=add-skip reason=already-present`). This solves "wife's mesh built but hadn't called addPeer for Andrew yet at the moment Andrew's offer arrived."
-  Together: even if a peer is wildly slow to mount, the first offer it receives once subscribed will trigger PC creation + answer, OR the buffered offer will be replayed on subscribe and processed normally. **Acceptance test that proves this is fixed without regressing what works today:** dom integration test in `src/__tests__/dom/useLiveAV.dom.test.tsx` with two fake `useLiveAV` instances sharing a fake `syncClient` — instance A acquires mic first and addPeer's B; B's mesh subscribes ~500ms LATER; assert B's PC reaches connection-state `"connected"` (via the fake mesh's state-transition simulator) within the test window WITHOUT either side calling `restart`. Mirror-image test (B acquires first) for symmetry. Plus a unit test on `sync-client.ts` asserting buffered signals replay on first `onRemoteSignal` subscription AND get dropped after TTL with no subscriber. **🛡️ Regression-guard note (Andrew's "for the love of sweet baby jesus don't regress this" plea, May 15 evening):** before merging the fix, verify by running the EXISTING peer-mesh + useLiveAV + workspace-mount test suites unchanged — the late-cam-acquisition + mid-session-cam-grant + perfect-negotiation glare + ICE-end-of-candidates tests must all still pass. The fix MUST stay additive: new buffer in sync-client, new auto-add branch in peer-mesh, nothing removed or changed in the existing happy paths. If video recording lands later (per the same plea), wire its mid-session track addition through `addLocalTrackToAllPeers` — do NOT touch the mesh-build effect's deps. **Effort:** ~1.5–2 hr (45 min implementation, 45 min tests, 30 min smoke). Sonnet-tier. **Priority:** the highest-leverage open A/V item, because today's "must hard-refresh after a peer joins" is the single thing standing between "live A/V works for Sarah" and "live A/V is fully transparent for Sarah."
-- **🟡 Live-A/V — slow first peer connect, video sometimes only visible at end-session (Andrew, May 15).** **Note (May 15 evening):** the *specific* "tile stays on Connecting forever until tutor refreshes" failure mode has been root-caused as a separate item — see **Live-A/V — peer joining after the tutor's mesh is built gets stuck on "Connecting…" until a refresh** above. THIS item now covers the residual slow-but-eventually-succeeds + multi-factor cases below; the buffered-signal fix in the item above should retire several of these candidates. Across the May 15 smoke testing with Sarah's wife (and again with a third device joining as another student): the WebRTC peer connection sometimes takes 30–90s to produce the first frame on the receiving side, occasionally only flashing video *as the session is shutting down*. Cause is undiagnosed and probably multi-factor — candidates: (i) **STUN-only with no TURN** means mobile-cellular peers can fail symmetric-NAT traversal and ICE retries time out before connection state reaches `connected` (we have `NEXT_PUBLIC_WEBRTC_ICE_SERVERS_JSON` plumbing from `webrtc-ice-from-env.ts` but no TURN deployed yet); (ii) the **mesh-rebuild-on-camera-grant** path tears down and re-offers when the tutor clicks "Allow camera" mid-session (intentional — see `useLiveAV` mesh-build deps including `localVideoStream`); on a mobile peer mid-negotiation, the re-offer can extend setup time materially; (iii) the **multi-student case** specifically — when a third device tries to join, the existing mesh has to addPeer + re-negotiate without disrupting the existing peer. **Backlog actions:** (a) **add TURN coverage** — pick a host (Cloudflare TURN, Twilio NTS, or self-hosted coturn on Fly behind the relay) and plumb credentials via `NEXT_PUBLIC_WEBRTC_ICE_SERVERS_JSON`; (b) **instrument** peer-connection state transitions with timestamps in the existing `avx=<sessionId> peer=<peerId>` log scrollback (we already log `pcState`/`iceState` — add `Δt` from `addPeer` to first `connected`); (c) audit whether **camera grant** can happen *before* the first peer joins (UI nudge in `AVPermissionsPrompt` so Sarah is encouraged to grant up front) which would avoid mid-session renegotiation entirely in the typical case; (d) for multi-peer rooms, verify the new peer's offer doesn't cause the **existing** peer connection to renegotiate (mesh-design property; needs a test). **Acceptance:** median first-frame latency for tutor-on-broadband + student-on-cellular under 5s on a clean room; instrumentation that surfaces the actual breakdown (ICE gathering → DTLS → first track) on the next regression. **Effort:** TURN deployment is ~2–4 hr including testing; instrumentation is ~30 min; UI-prompt-ordering polish is ~30 min. Sonnet-tier for instrumentation + UI; deployment may need a real-network smoke.
-- **🟡 Workspace SSR 500 — needs Vercel function log dig (Andrew, May 15).** During May 15 smoke with a third device joining: `GET /admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace` returned **500 Internal Server Error** at the Next.js function (`X-Vercel-Cache: MISS`, `X-Matched-Path` is the SSR'd workspace route). Page client UI subsequently appeared, suggesting the 500 was on a related route (maybe an RSC prefetch, maybe a fast subsequent navigation). Headers in the screenshot show CSP + Permissions-Policy applied correctly, so middleware ran successfully — the throw is downstream of that. **Triage steps:** (a) pull the Vercel function logs for that exact `X-Vercel-Id` (e.g. `ABjvyaDhg0u2zSOZDcKV4mVO8XXntbSp` from the May 15 capture) to see the actual error; (b) check whether `assertOwnsWhiteboardSession` is the throw site — if so, the `studentId` URL segment may have mismatched the session row's student (could happen during multi-session test churn); (c) check whether the workspace page's `findOrCreate*` calls (timer anchor, signaling room, etc.) can race with the `endWhiteboardSession` tail — same-tab end + immediate re-open is a known awkward path. **Why deferred (not blocker):** transient; a hard refresh recovered. But Sarah hitting this in pilot would be confidence-erosion, so we should at minimum log + alert. **Acceptance:** the throw is identified + the cause has either a fix or a documented "this is fine, here's the recovery path." **Effort:** 30 min to find the log line + classify; remediation depends on cause.
-- **✅ SHIPPED — Recording auto-pause on student disconnect (Sarah, Apr 24).** Landed structurally as Phase 1a lifecycle FSM (`a0586d4`, `src/lib/recording/lifecycle-machine.ts`) with the explicit auto-pause states + banner copy Sarah asked for verbatim: *"Student disconnected — recording paused. We'll resume automatically when they reconnect."* Pill label: *"Auto-paused (student offline)"*. Refined in Phase 4d (`577a60e`) to gate on confirmed peer **audio flow**, not just presence — so a student who's "in the room" but whose mic hasn't started transmitting doesn't falsely flip the recorder to "recording." FSM also distinguishes `Auto-paused (offline)` (no participant has *ever* joined) from `Auto-paused (student offline)` (someone joined then dropped), which gives the tutor a more honest signal. Tests in `src/__tests__/recording/lifecycle-machine.test.ts`. **Original spec preserved for archival reference:** ~~Tutor-side audio recorder currently runs regardless of student presence. Sarah explicitly asked: when the student drops connection, the recording should pause automatically AND a banner should surface. When the student reconnects, recorder auto-resumes.~~ ~~Implementation builds directly on what was just shipped: `bothPresent` (workspace client) is the same signal the timer pauses on; thread it into `useWhiteboardRecorder` (or the `useAudioRecorder` it composes) so the same boolean drives `recorder.pause()` / `recorder.resume()`.~~ Note: the eventual implementation went further than "thread `bothPresent` into the recorder" — the FSM became multi-stream + multi-participant from day one (`participants: ReadonlySet<string>`), so group sessions Just Work: as long as ≥1 participant is present with flowing audio, recording continues; all-disconnected flips to auto-pause. Follow-up potentially still open: replay-side gap-marker rendering (so the replay UI shows "[paused 14:32 — student disconnected — resumed 14:35]" instead of an unmarked silence) — verify whether this is already in the event-log + replay pipeline or needs its own row.
-- **Per-student recording default preference (Sarah, Apr 24).** ✅ **Shipped.** Added `Student.recordingDefaultEnabled Boolean @default(true)` (additive + idempotent migration `20260424130000_student_recording_default`), a `setStudentRecordingDefault` server action gated by `assertOwnsStudent`, and a `<StudentRecordingDefaultToggle />` switch on the student detail page (optimistic UI with revert + inline error on failure). The workspace `page.tsx` now reads `recordingDefaultEnabled` and threads it as `initialUserWantsRecording` into `WhiteboardWorkspaceClient`, biasing the Start toggle's initial state per student. The tutor can still flip mid-session — flipping the per-student default does NOT affect a session in progress (only the next mount). 10 new tests pin: action contract (multi-tenant gate ordering, no truthy coercion, revalidate path) + UI (initial checked state, click → action, optimistic-revert on failure, role=alert). All 147 whiteboard suite tests still pass; typecheck clean. **Coordinate with consent flow (B2) — if consent says "no recording," this should hard-disable, not just default-off.
-- **Whiteboard undo (mark removal) — touch + visible button (Sarah, Apr 24).** ✅ **Tutor + student shipped** — tutor: chunky ↶/↷ buttons + synthetic Ctrl/Cmd-Z on `.excalidraw` (jsdom tests). **Student (`/w/[joinToken]`)** — `StudentWhiteboardClient` mounts real Excalidraw via shared `ExcalidrawDynamic` + `useStudentWhiteboardCanvas` (E2E sync). `<UndoRedoButtons />` on the student shell (same DOM shortcut path). **Follow-up (optional):** verify undo/redo on iOS Safari touch.
-- **🟡 Whiteboard — student canvas file sync (images / PDFs).** ✅ **Strokes + shapes** sync over the encrypted relay. **Gap:** elements that use Excalidraw `fileId` / `BinaryFiles` (inserted images, PDF page rasters) may not match on the student until we mirror the tutor’s `addFiles` + stable `customData.assetUrl` into the joiner client — see `insert-asset.ts` comment about student loading by URL. **Backlog** until a pilot session proves it’s a blocker; likely `sync-client` or scene payload to include file map hints.
-- **🟡 Whiteboard — room policy & joiner UX.** The relay is a **room** per `whiteboardSessionId`; more than two sockets is technically allowed. **Product decisions not locked:** 1:1 only vs allow parent/third device; whether to show a **joiner list** (today we only show an **other-peer count** from `onPeerCountChange`; display names are not on the wire). **Wyzant policy:** we have no in-repo T&Cs — if we need legal parity, research their lesson-room rules. Capture competitive note: Wyzant **Lesson recordings** (opt-in, ~30-day) is already under Sarah Apr 24 "Product positioning" + pilot bullet — don’t re-lead on "we record" alone.
-- **🟡 Whiteboard — "follow my view" + student page + tabs (Wyzant-shaped).** ✅ **Wire v2 shipped (2026-04, e.g. `d4dbbfa` on `feature/whiteboard-phase1`):** optional **follow** (scroll + zoom) and **page** (active page + page list) on the live wire; `onRemoteScene` can carry a **third `details` argument**; tutor workspace passes **`getWireBroadcastExtras`** from `useWhiteboardRecorder` options; joiner **follows the tutor by default** with a control to **move independently**. Vercel **private Blob** URLs are not loaded directly in the browser — use same-origin read proxies: `/api/w/[joinToken]/wb-asset?u=…` and `/api/whiteboard/[sessionId]/tutor-asset?u=…` (see `blob-asset-in-scope`, `resolve-asset-read-url`, `hydrate-remote-files`). *Context / product* (unchanged): Wyzant-style **tabs** + staying on the same worksheet as the tutor; **pilot** should try it in real sessions and we can **soften defaults** if feedback says a mode is noise. **Still open (not the same as wire v2):** continuous “live camera” follow, **room policy** (1:1 vs extra joiners) — see **Whiteboard — room policy & joiner UX** above; **image/PDF file sync to student** — see **student canvas file sync** above. **Onboarding for agents:** `docs/AGENT-BOOTSTRAP.md`.
-- **🟡 Whiteboard / session — camera & video (not started).** No `getUserMedia` video path in the app today; only **microphone** is in scope for the recorder (device picker, gain, `Permissions-Policy: camera=()` in middleware — camera deliberately off). **Sarah verbal wishlist (pilot input):** "interactive whiteboard with **video** + screen/document share" — that implies **WebRTC or embedded provider** (or native screen share) as a **multi-session engineering** item, not a quick flag. **Multi-party video** (each person’s camera tile) is the same class — depends on product choosing 1:1 vs group. **Backlog of record** — do not claim shipped. **Architecture seam (post-Sarah, NOT built):** [`RECORDER-LIFECYCLE.md` § Video capture — design seam](RECORDER-LIFECYCLE.md#video-capture--design-seam-post-sarah-not-built) — `streamId` convention (`tutor:video`, `student:peer-<id>:video`), tap-before-mix analogy, deferred build list, single-replay-source + consent flags.
-- **Session time logging.** ✅ **Shipped** — optional `startTime` / `endTime` on `SessionNote`, auto-fill from recording timestamps when blank, tutor-editable in new-note and edit flows; shown on admin history and share pages. **Follow-up (not blocking):** true timezone-aware storage if cross-zone display matters — see adversarial section "Time-storage tech debt."
-- **Recordings longer than 90 min.** Some tutors run longer than the **client** 90 min cap (`HARD_CAP_SECONDS`). **Whisper** is limited by **25 MB per API request** (server **ffmpeg** split shipped). Remaining gap is **continuous capture**: single blob + upload limits. **Backlog:** seamless **auto-rollover** segments (stop + start new `MediaRecorder` without iOS-breaking timeslice) — see **“Recording — long sessions, Whisper limits, alerts (2026)”** above.
-- **Tutor playback of saved recording.** ✅ **Shipped** — preview before transcribe in the AI panel (local object URL); playback on admin notes history (`/admin/students/[id]/notes`) via `GET /api/audio/admin/[recordingId]` (session auth). **Known limitation:** env-only (legacy) admin scope may not work for that route — see adversarial review "Admin audio proxy broken for env-only admins."
-- **AI link extraction from spoken/typed URLs.** Currently the AI lifts brand mentions verbatim — e.g. "go to google for more info" becomes a "Google" entry in the Links field, not a real URL. Desired behavior: when an actual URL or domain is spoken/typed (`www.google.com`, `khanacademy.org/algebra`), normalize to `https://...` and put it in Links. When only a brand name is mentioned with no domain, leave it out of Links (don't guess). Implementation: tighten the system prompt in `generateNoteFromTextAction` and add a regex post-pass to validate/normalize what the model returns. Add a unit test covering: (a) spoken URL → captured, (b) brand-only → not captured, (c) bare domain → `https://` prepended.
-- **AI note generation — context hygiene & regression tests.** Prior production issues: stale UI text feeding the prompt, model asserting facts not present in session text, bleeding content from prior sessions. Backlog: tests and/or prompt-contract checks around `generateSessionNote` / `generateNoteFromTextAction` (e.g. placeholder-only input, no duplicate client state in prompt, optional snapshot of prompt shape). Complements "AI link extraction" above.
-- **Audio playback can't be scrubbed / seeked AND duration shows 0:00 up front — same root cause.** Reported by the PO during smoke 5 review (scrub) and again in smoke 6 (the saved-note player on the right shows `0:00 /` with no total duration even though the card label says "Recording 327s"). Root cause: `MediaRecorder` outputs WebM (Chrome) and fragmented MP4 (Safari) blobs that don't include a duration header or seek index — the browser can play them linearly but `<audio>.duration` is `Infinity` and `<audio>.seekable` ranges are empty, so any user click on the scrubber resets to currentTime AND the right-side timer never populates without scanning the whole file. Affects (a) the local-blob `<AudioPreview>` shown right after recording in `PendingSegmentList.tsx`, AND (b) saved-recording playback through `/api/audio/[recordingId]` (and the admin equivalent), since the server just streams the raw bytes back. **Stopgap (15 min, no library):** `<audio preload="metadata">` + show `formatDuration(durationSeconds)` as a label outside the player using the value already stored in `SessionRecording.durationSeconds` so the user at least sees "5:27" — does NOT fix scrub. **Two-layer real fix:** (1) **client-side blob patch** before assigning to `<audio>.src` — for WebM use `ts-ebml` (or `webm-duration-fix`, ~5KB) to inject duration + seek-cues into the EBML header in-memory; for MP4 use `mp4box.js` to move the `moov` atom to the start (faststart) so seek tables are reachable. **Apply at upload time** (run the patch on the Blob in the browser before `uploadAudioDirect()` in `src/lib/recording/upload.ts`) so every newly-uploaded file is good forever and downstream consumers don't need a shim. (2) **server-side fallback**: ffmpeg post-process on upload (we already invoke ffmpeg in `transcribe-ffmpeg.ts` for split-on-overflow) — `-c copy -movflags +faststart` for MP4 and a one-shot `ffmpeg -i in.webm -c copy out.webm` rewrite for WebM both inject the missing seek metadata without re-encoding. Useful as a backstop for any client that fails the patch (e.g. iOS Safari edge cases) and to retro-fix existing rows. **Acceptance:** (i) saved-recording player shows real total duration immediately on page load without downloading the whole file; (ii) clicking anywhere on the scrubber jumps playback to that point; (iii) `<audio>.duration` is finite and `<audio>.seekable.end(0) === durationSeconds` (within 0.5s). **Tests:** unit test on the patcher (round-trip: synthesize a small WebM blob without seek info → patch → assert `seekable.length > 0` and finite `duration`); jsdom can't fully exercise `<audio>` seek behavior, so add a Playwright smoke that records a fixed 5s blob, uploads, plays back, and asserts `audio.duration` ≈ 5 and `audio.currentTime` jumps when the scrubber is clicked.
-- **Whisper repetition-loop hallucination on quiet/silent audio (trailing AND mid-stream).** Confirmed during smoke 5 of the recorder refactor by dumping a real 5:27 m4a transcript: Whisper transcribed substantive speech correctly, then the last several seconds (where the tutor likely set the phone down or trailed off) collapsed into a long repetition loop of a single short token. Existing `looksLikeSilenceHallucination` guard only catches *wholly* hallucinated transcripts; *partial* loops at the tail (or mid-stream during a pause) pass through and poison the structuring prompt + waste tokens. **Causes Whisper exhibits this for:** (1) audio truly silent or near-silent at the boundary, (2) background room/fan/traffic noise without speech, (3) gain too low so the speech signal lives below Whisper's noise floor, (4) encoding tail artifact when the container's last fragment is partial. **Wider-than-tail risk:** if a tutor sets the phone on the table during ambient capture (the v7 north star) and the student's voice is consistently weak, we'll get sprinkled loop-junk *throughout* the transcript, not just at the end — silently corrupting Topics/Homework/Assessment/Plan extraction without any visible warning. **Backlog (in priority order):** (a) post-Whisper, detect and trim repetition loops anywhere in the transcript (heuristic: same 1–3 word pattern repeating ≥5 times consecutively); (b) surface `transcriptChars` and `loopCharsTrimmed` to dev logs so a 4200-char transcript with 1200 trimmed is debuggable; (c) when trimmed-fraction exceeds e.g. 25%, surface a yellow warning to the tutor ("Audio quality may have been low — review carefully"); (d) consider Whisper's `temperature_increment_on_fallback` / `compression_ratio_threshold` / `no_speech_threshold` parameters to reduce loop emission in the first place; (e) doc note: the in-browser **Browser boost** slider only affects in-tab `MediaRecorder` capture, NOT Sound-Recorder/Voice-Memos uploads — for upload paths, OS-level mic level is the only knob, and we should call that out in copy near the Upload tab. **Tests:** fixture transcript ending in a loop → trim leaves only real content; fixture with mid-stream loop → trimmed; fixture with legitimate emphatic repetition (e.g. `"yes yes yes that's it"`) → preserved (trimmer must not false-positive on short content-bearing repeats).
-- **Audio playback during note review (post-transcribe, pre-save).** Real PO finding from smoke 5 of the recorder refactor: tutor finishes recording, AI fills the form, tutor wants to **verify a specific field by listening back** ("did I really say homework was X?"), but the audio preview disappears. Cause: `AiAssistPanel.tsx` only renders `<PendingSegmentList>` (which contains `<AudioPreview>` per segment) inside the `panelState !== "filled"` branch. Once the AI succeeds, the success card + "Start over" replace the whole input area; clicking "Start over" then *clears* `pendingAudios` so the local Object URLs are gone too. The recording is still safe on Vercel Blob and is replayable later from `/admin/students/[id]/notes`, but that's the wrong moment — verification happens during the form review window. **Minimal fix:** in the `panelState === "filled"` branch of `AiAssistPanel.tsx`, render a compact "Recorded audio" subsection with `<AudioPreview>` for each `pendingAudios[i].previewUrl` (state is already holding them, no fetch needed). **Better fix:** also surface the players inside `NewNoteForm.tsx` after fill, since that's where the tutor's eyes actually are. **Acceptance:** after Transcribe & generate, tutor can hit play on each segment without leaving the page or losing form state. **Regression test:** dom test on `AiAssistPanel` asserting `data-testid="audio-preview"` exists in both pre- and post-fill states when `pendingAudios.length > 0`.
-- **Recorder gap detection / per-segment timestamps in pending list.** Same smoke 5 turned up a *real* audio gap (PO heard it on playback), separate from the auto-rollover B5 boundary which we believe is gapless. We currently have no way to tell from the UI whether a gap exists in a single continuous segment or only at rollover boundaries. **Backlog:** record `MediaRecorder.ondataavailable` chunk timestamps (`performance.now()`) and surface anomalous gaps (>500ms between expected ticks) as a per-segment warning in `<PendingSegmentList>`. Also helpful: show wall-clock duration of each segment (already have it server-side as `durationSeconds` after upload; surface client-side from the local `Blob.size` + `MediaRecorder` start time for the pre-transcribe view). **Acceptance:** if a recording has a >500ms gap, the segment row shows a warning chip; tutor knows to re-record that part instead of being surprised after the AI processes incomplete audio.
-- **🟡 AI prompt v7 — ambient session capture (set-it-and-forget-it). Partially shipped 2026-05-20, merge `939b1e3`.** **Core value prop:** tutor sets the phone on the table, tutors normally, never addresses the recorder, gets back useful Topics / Homework / Assessment / Plan / Links. Current v6 prompt (`src/lib/ai.ts`) is framed as *"Tutor's notes from today's session"* and enforces *"only EXPLICITLY stated"* — both fight ambient capture: real session transcripts have no speaker labels, the tutor never narrates assessment out loud ("Anya is comfortable with factoring"), and homework is phrased casually ("try problems 5–10 tonight"). **v7 plan:** (a) reframe input as *"Whisper transcript of a tutoring session — one tutor, one student, no speaker labels, conversational"*; (b) loosen rule #1 to *"only include things grounded in the transcript — explicit statements OR clearly inferable from how the session went"* (correct/incorrect answers → assessment signal; tutor saying "try X tonight" → homework); (c) add hint about inferring speaker by context (adult vocabulary / teaching cadence vs. student questions); (d) keep terse style + empty-string-when-absent rules from v6. Bump `PROMPT_VERSION` to `v7`. **What landed 2026-05-20:** (b) shipped substantially — system rule #1 now accepts "supported by the tutor's own words — either explicit statements or clear in-session reactions"; rule #2's blanket ban on "encouragement / progress statements" narrowed to fabricated claims only; rule #5 "do not infer anything" → "do not invent or fabricate"; Assessment field instruction adds explicit reaction-to-meaning mappings ("almost!" / "try again" → wrestling; "yes!" / "got it" → has it) with "cluster by topic when possible" output guidance. `PROMPT_VERSION = "2026-05-20-v7"`. Smoked via text-paste of a representative session — Assessment now populates from "good job on that" reactions, clusters to the correct topic, other fields unaffected, no fabrication. **Still open under this entry:** (a) input reframe as "Whisper transcript ... no speaker labels, conversational" — not done, v7 still says "Tutor's notes from today's session"; (c) speaker-inference hint — not done; fixture-based test suite for ambient transcripts — not done (smoke was empirical, single text-paste case). Pick up when the next round of Sarah feedback warrants it. **Killer-feature bar still applies:** when Sarah runs a real ambient session, every field must be usable without editing — if anything still looks weak we iterate v7→v8 before widening pilot. **Lesson from the 2026-05-20 ship cycle:** an attempted Whisper biasing pair (commit `c084f23`, reverted in `59577fe`) used a descriptive paragraph as the Whisper `prompt` parameter and triggered catastrophic hallucination — Whisper treats `prompt` as the previous transcript text to continue from, so descriptive sentences caused it to invent "matching" content (fake URLs, made-up "bar chart" sentences) and drop authentic speech. Future Whisper-side fixes must use the cookbook-recommended shape (vocabulary lists / proper nouns only, no descriptive sentences) AND be smoked against a diverse audio set BEFORE merging — descriptive prompts are dangerous in a way that's invisible until real audio hits.
-- **AI prompt — literal vs interpretive Assessment phrasing (gated on user feedback).** v7's Assessment field is correctly literal: the tutor says "good job on that" about order of operations, v7 produces `"good job on order of operations"`. This is grounded and avoids fabrication risk, but is less polished than a parent-facing phrasing like `"Comfortable with order of operations"` or `"Has order of operations down"`. Andrew (2026-05-20): *"I'll wait for feedback before moving away from literal. Even small steps toward interpretation require good testing because you give AI an inch it might take a mile."* **Decision rule:** do not move v7 toward translation/interpretation until either (a) Sarah or a parent explicitly flags the literal phrasing as awkward, or (b) we have a fixture-based regression suite that catches over-interpretation drift. Document this as a deliberate v7 design choice so a future agent doesn't "improve" it unilaterally.
-- **Whisper transcription accuracy — known low-accuracy on short common phrases (e.g. "good job" → "did a term").** Confirmed 2026-05-20 from a real WB session audio: Andrew said *"good job on that"* and Whisper transcribed *"did a term on that"* — wild miss on a 3-word common phrase. v7 LLM prompt can't recover this because the assessment signal is absent from the transcript. **Options when this gets prioritized (don't tackle ad-hoc):** (1) **word-list-only Whisper bias** — cookbook-shape `prompt: "good job. almost. yes. got it. perfect. exactly. right on. try again."` (no descriptive sentences — see the 2026-05-20 lesson above for why); needs careful smoke against multiple audio fixtures including non-tutoring snippets; (2) **show raw transcript in the UI** so the tutor can spot mistranscriptions during note review; pairs well with the "Audio playback during note review" entry above and the "Whisper repetition-loop hallucination" entry; (3) **improve audio capture quality at the source** — mic guidance copy, gain settings, noise-gate; closer to root cause; (4) **accept as a known limitation** — tutor reviews/edits Assessment before save anyway. Pick one or stack when the next session lands on this; do not bundle with unrelated work.
-- **🟡 Mic hot-plug requires hard refresh; webcam works on basic refresh (Andrew, 2026-05-27 B1-B4 smoke).** Plugged a webcam in mid-session: a normal refresh re-enumerated and surfaced the camera. Plugged a mic in mid-session: normal refresh did NOT re-detect; only a hard refresh worked. Asymmetric — likely either the mic enumeration path caches an `enumerateDevices()` snapshot that doesn't get invalidated on the same refresh path the camera uses, OR the recorder's mic auto-acquire short-circuits on a stale `deviceId`. **Maps to existing W1 audio durability `ondevicechange` policy** (`docs/handoff/w1-audio-durability-design-2026-05-27.md` § device-health) — the design covers `devicechange` events but the soft-refresh re-enumeration gap is adjacent. Dispatch C of the W1 ship plan should include a regression check that a soft refresh after mid-session mic plug-in re-detects the new device. **Effort:** likely small once the W1 design lands. Composer-tier fix.
-- **🟡 Session timer keeps counting during student reconnect cycle (Andrew, 2026-05-27 B1-B4 smoke).** When tutor refreshes their own page (forcing the student into a brief reconnect), the session timer continues to advance even though no student is actually loaded. **Maps to W2.5 session-log + reporting design** (`docs/RELIABILITY-REDESIGN-2026-05-27.md` § Surface 7) — `disconnectGapMs` is intended to accumulate exactly this kind of "tutor was running but participant was offline" time, and the billed time computation subtracts it. Open Q the W2.5 design needs to answer explicitly: does the *displayed* session timer pause during these gaps, or only the *billed* derivation? Sarah will need both clarity (visual feedback that the timer is paused) and correctness (billed time excludes gaps). **Folds into Wave 2.5 design dispatch.** Effort: design-decision; small to implement once decided.
-- **🟡 Whiteboard — ghost-line viewport indicators when peers are NOT synced (Andrew, 2026-05-27 B1-B4 smoke, future polish).** When "follow tutor view" is OFF (student is freely panning/zooming), tutor and student viewports drift apart, but neither side has any visual indicator of where the other is looking. **Feature:** render a translucent ghost rectangle on each peer's canvas showing the bounds of what the OTHER peer currently sees — tutor's canvas shows where the student's viewport bounds are; student's canvas shows where the tutor's viewport bounds are. Solves "I'm drawing on phone-sized viewport that the tutor can't see" / "tutor is gesturing about something off-screen for the student." **Requires:** (a) bidirectional broadcast of each peer's viewport bounds (top-left + dimensions in scene coordinates) on a small interval (e.g. 250ms throttle during pan/zoom), (b) overlay rendering of those bounds on each peer's canvas (Excalidraw API or DOM overlay), (c) labels (e.g. "Liam is here") on each ghost rectangle. **Dependencies:** B1-B4 fixes must land first (we need stable viewport-sync infrastructure before adding the inverse "ghost when not synced" affordance). **Acceptance:** with both peers in non-synced mode, drawing in the center of one peer's view shows a translucent labeled rectangle on the other peer's view at the right scene coordinates; rectangle updates live as either peer pans/zooms. **Effort:** ~3-4 hr. Composer-tier with a small Sonnet design-call upfront on the broadcast cadence + label affordance. **Why polish (not P0):** B1's default-on follow-tutor mode addresses the typical case; ghost lines are for the rare "student wants to scroll back / look ahead independently" scenario. Real-world value emerges once tutors trust the basic sync.
-- **🟡 Whiteboard appState theme not synced to app theme (Andrew, 2026-05-27 B1-B4 smoke).** App theme set to light → Excalidraw whiteboard surface stayed dark. **Fix path locked:** extend/replace `useExcalidrawThemeFromSystem` to honor **app-selected** theme from the component-pass theme plumbing (§ V1 redesign — pre-master requirements above) — **resolved by the Excalidraw-hook item in that slice**, not a separate backlog item. Pass into `<Excalidraw initialData={{ appState: { theme } }} />` + `excalidrawAPI.updateScene({ appState: { theme } })` on change. Applies to tutor + student whiteboard paths. **Cross-ref:** **TU-12**; **BACKLOG:307** → V1 pre-master row + [`V1-COMPONENT-LIBRARY.md`](V1-COMPONENT-LIBRARY.md) §2.11 A′ slice.
-- **🟡 Whiteboard — keyboard undo (Ctrl/Cmd+Z) misbehaves on desktop (`pilot-2026-06-06`, Sarah).** Real live session 2026-06-06 (Sarah tutor Mac + student PC): keyboard undo *"doesn't work properly"* / *"did weird things"*; the on-screen undo/back button **did** work. Distinct from the Apr 2026 shipped visible undo buttons + synthetic shortcut path — this is a **desktop keyboard regression or Excalidraw shortcut conflict** on the production workspace. **Repro:** tutor or student canvas, draw strokes, Ctrl+Z (Mac: Cmd+Z) vs click on-screen undo; compare behavior. **Acceptance:** Ctrl/Cmd+Z undoes the last stroke reliably on tutor + student desktop browsers; no browser-back navigation hijack; no double-undo or no-op. **Cross-ref:** [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md) B1. **Effort:** ~1–2 hr incl. regression test. Composer-tier.
-- **🟡 Whiteboard — share/copy link may fail silently (clipboard) (`pilot-2026-06-06`, Sarah).** Sarah could not find how to share the whiteboard link and copy-pasted the URL from the browser; button label (*"copy student link"*) did not make sense. Andrew asked whether clicking the button failed to copy to clipboard — **probable silent clipboard failure** to repro on prod (Mac Safari/Chrome). Separate from the local-dev join-URL parity row in the whiteboard queue (that row is `WHITEBOARD_SYNC_URL` / origin mismatch). **Acceptance:** click share/copy → clipboard contains the full join URL + visible success toast; on failure, explicit error (not silent). Rename folds into v1 workspace (**Share link** — already specced). **Cross-ref:** [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md) B2, U4. **Effort:** ~30–60 min once repro'd. Composer-tier.
-- **🔴 End-session — "Stop and delete" / discard throwaway sessions + no silent data loss (`pilot-2026-06-06` + **elevated ship-to-Sarah 2026-06-16**, Sarah).** After early connection trouble they started a fresh session but were **forced to save** the first throwaway session they did not want. Request: explicit **stop and delete** (discard artifact, no note/recording retention) — not only End → auto-save path. **2026-06-16 prod — inverse failure:** Sarah chose **End** on `WorkspaceResumeGate` prompt expecting **save**; recording was **lost** (`endStaleWhiteboardSession` stamps `endedAt` only — no outbox flush). **Ship-to-Sarah:** **SSG-2** blocker — save-then-end OR explicit Discard copy on **every** End affordance. Related but distinct from dashboard "Discard and start new" for in-progress sessions (`docs/UX-AND-A11Y-SPEC.md` § 9.3). **Acceptance:** tutor can end a session and choose **Discard** (no `SessionNote`, no retained recording blob for that session, or tombstone with no parent-visible artifact); confirm dialog names the consequence; **no** End path silently drops audio. **Cross-ref:** [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md) F1; [`docs/handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md) Bug 2 + **SSG-2**. **Effort:** design + server action ~2–4 hr. Sonnet design call if discard touches outbox/blob lifecycle.
-- **🟡 Whiteboard — pen/tool options panel too large; compact toolbar by default (`pilot-2026-06-06`, Sarah).** Pen tool opens a dropdown/panel that *"takes up a quarter of the screen."* Wants a **compact bar** with basic tools visible by default; full pen/style menu **on-demand only**. Overlaps v1 workspace collapsible left toolbar ([`docs/handoff/v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) § Workspace) and May 2026-05-26 priority #4 (close styles window without re-clicking) — **this session adds desktop-tutor evidence** that the Excalidraw style panel is still too dominant. **Acceptance:** default workspace shows slim tool strip; expanding style options is one explicit affordance, not automatic quarter-screen takeover. **Cross-ref:** [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md) U5. Fold into v1 toolbar pass where possible.
-- **🟡 Whiteboard — thinner / smaller default pen stroke (`pilot-2026-06-06`, Sarah).** Current strokes feel too thick and *"took up a lot of room"* on desktop. Request for a **smaller pen size** (additional preset or lower default width). v1 spec sets sloppiness/edges defaults but not stroke width. **Acceptance:** tutor can select a materially thinner stroke without zooming; sensible default for math annotation. **Cross-ref:** [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md) U6. **Effort:** ~30 min–1 hr (Excalidraw `currentItemStrokeWidth` presets). Composer-tier.
+**[P2][OPS] Cost observability Phase 2**  
+OpenAI `/v1/usage` reconciliation cron, monthly blob storage cron, Vercel compute API. Phase 1 **shipped:** `/admin/cost`, `CostEvent`, `rate-card.ts`.
 
----
+**[P2][OPS] Cost-event durability hardening**  
+`tutorKey`, `isTestFixture`, recent events table — V1-gating follow-ons.
 
-## Product positioning (set night 1 of pilot)
+**[P2][OPS] Full product usage instrumentation — NEAR-IMMEDIATE POST-MASTER**  
+First-party, learner-type-keyed; sub-learner zero 3rd-party egress. Reframes PostHog bootstrapper.
 
-**Tools for independent tutors who source their own clients.** Subscription-based. **Not a marketplace.** Tutor keeps 100% of their hourly rate; we provide the tooling that makes the work easier and more valuable to parents/students.
+**[P3][OPS] PostHog analytics Tier 0+1**  
+**Unbuilt** (`posthog` absent in `src/`). Event taxonomy reference: [`docs/archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md`](archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md). Product direction = first-party instrumentation above.
 
-**Direct comp:** **Wyzant** — has the interactive whiteboard, takes **25% of tutor pay**, **does not take notes for the tutor** (tutor writes manually at end of session, platform sends to parent). Sarah currently uses Wyzant occasionally and explicitly asked for a platform that *"doesn't have to connect me to clients, just have a platform that I could use to make my work easier."* That's our wedge.
+**[P3][OPS] AI edit signal Phase 1**  
+See §5 + archive bootstrapper.
 
-**Wyzant feature movement (Sarah, Apr 24, 2026):** Wyzant has rolled out **lesson recordings** as an opt-in feature — recordings stored ~30 days on the tutor's Wyzant account for "free" review. Significance: **the recording-by-itself is no longer a moat**. Our differentiator stays: (a) *AI notes generated from the recording* (Wyzant gives the file, we give the writeup), (b) *tutor keeps 100% of rate* (Wyzant takes 25%), (c) *recordings + notes flow into a parent share-page that's branded for the tutor's practice, not the platform*. Update marketing copy accordingly when public — don't lead with "we have recording" since they do too; lead with "the notes write themselves and the parent gets a share link, all without giving up 25% of your rate." Worth a paragraph in `docs/research-deploy-and-niche-2025.md` or the GTM doc next sweep.
+**[P2][OPS] Vercel Skew Protection enablement**  
+Andrew dashboard action; WS-P deliverables otherwise shipped.
 
-**Pitch shape:** *"Keep 100% of your rate. Get better tools than Wyzant gives you, for ~$20/month."*
+**[P2][OPS] SEC-POLICY-TRUTH** — see §1.
 
-**Initial target persona:** Independent tutor, primarily math/STEM, high school + college students (sometimes middle school, rare elementary). Sources own clients. Currently writes notes by hand or skips them.
+**[P3][OPS] Operator scoped test-data wipe + orphaned blob sweep**  
+No `operator:wipe` in `package.json`. Blob/branch CLIs **shipped:** `scripts/blob-cleanup.mjs`, `scripts/branch-sweep.mjs` (`blb`/`brs` in AGENTS.md).
 
----
+**[P3][OPS] scripts/smoke-long-form-transcribe.mjs headless harness**  
+UI Server Action only today.
 
-## Pending pilot input (waiting on)
+**[P3][OPS] RECORDER-LIFECYCLE.md preview-before-Start doc drift**  
+Ended sessions mount `SessionReviewMode`.
 
-- **Sarah's first real session (tomorrow morning).** Outcomes to watch: signup flow friction, whether AI notes (if shipped tonight) actually saves her the writeup, what she calls out unprompted.
+**[P3][OPS] docs/WHITEBOARD-ROADMAP-NEXT.md supersede?**  
+Doc housekeeping.
 
-## Pilot input received
+**[P3][OPS] Dev-tools adopt manual test user as fixture**  
+`arangarx+test1@gmail.com` not `isTestFixture`.
 
-- **Sarah's "would-pay" wishlist (~10:03 PM):** versatile online + in-person; interactive whiteboard with video + screen/document share; AI-summarize conversation+whiteboard into notes; in-person tablet whiteboard with audio capture + AI notes. Quote: *"I would pay for"* AI taking the conversation and turning it into notes + suggestions for next session.
-- **Sarah's disambiguators (~10:29 PM):**
-  1. **Devices online:** *Tutor* uses computer + two monitors. *Students* use Chromebook or laptop, single screen. → **Web-first, browser-based.** iPad is in-person only.
-  2. **Recording:** Yes with consent; would help her students to send the recording for review. **Killer-feature description (verbatim):** *"open a whiteboard under the students name and it would ask whether I want to record this whiteboard session. I would want it to record writing strokes as a video and record the audio that goes along with it, plus a pause button in case we end up talking about off topic things."* Her own words: **"That is a feature I have not seen."** Treat this as a **competitive moat** signal from a practitioner.
-  3. **Subjects/ages:** Primarily **math**, high school most common, college second, occasional middle school, rare elementary. Has tutored chemistry, soon physics. Has helped people write papers. → Whiteboard MVP can target **math/STEM for older students** without worrying about kid UX.
-- **Currently uses paper for notes** (in-person). Sometimes phone, but *"too small to do all the work on there"*. Tablet preferred when she has it. **Phone should be a usable fallback** when she forgets her tablet — *"I would still like it as an option"*. → UI must not break on small screens even if it's not optimized for them.
-- **In-person student** brings own iPad with Apple Pencil; they pass iPads back and forth, write directly on each other's screens, **mark up homework digitally** ("write directly on her homework in a digital format that has worked pretty well"). → PDF/image annotation isn't just an abstract future feature; it's a workflow she already does today and values.
-- **Existing notes form structure is validated.** Sarah: *"I usually give over all the things on the notes form you have, I just hate taking the time to write them up."* → She's not asking for a different schema; she's asking for AI to **fill the existing form**. This is meaningful — don't redesign the form, just add the AI fill.
-- **Existing "send notes via email" feature is liked.** Sarah: *"I think the ability for the program to put the notes info in an email is cool. I like that idea."* → Don't deprecate or hide it; it's actually one of the touchpoints that landed.
-- **Recording is dual-purpose** — not just for AI notes generation, but **for student review**. Sarah: *"it could be helpful to send to them if [they] want to review it."* → The share-link infrastructure should extend to recordings; this affects the value prop for both tutor and student.
-- **Sarah is self-aware about scope.** Closed her wishlist with *"I know my suggestion is kind of a complicated one. But it would be cool."* → She's not entitled; she'll be happy with iterative wins. Reinforces "ship in slices, communicate honestly about scope."
-- **Tomorrow's pilot smoke test (her plan):** *"I'll probably test the google oauth tomorrow."* → If Google OAuth fails for her tomorrow morning, that's the first thing to fix. Make sure her email is allowlisted (it is) and the connect flow works end-to-end.
-- **Curiosity / relationship signal:** Sarah remarked she was *"surprised you picked this type of app as your project."* → She's invested enough to wonder *why*; treat her as **co-designer**, not just tester. Worth scheduling a "watch her use it" call within the first 1–2 weeks to capture friction she won't bother to message about.
+**[P3][OPS] Dev-tools impersonation list placement**  
+Undecided UX.
+
+**[P3][OPS] ROAD-TO-GA Gate 1**  
+LLC, business bank, sales tax — [`docs/ROAD-TO-GA.md`](ROAD-TO-GA.md).
+
+**[P3][OPS] ROAD-TO-GA Gate 2 cash**  
+Scoped legal counsel consult.
+
+**[P3][OPS] ROAD-TO-GA cheap-but-early**  
+Monitoring/alerting, DR runbook drill, email deliverability.
+
+**[P3][OPS] Usage tracking prerequisite**  
+`UsageLedger` for marginal vs fully-loaded cost.
+
+**[P3][OPS] Workspace SSR 500 dig**  
+Transient; needs Vercel log correlation.
+
+**[P3][OPS] p-test-account-reset at master cut**  
+Preserve Andrew + Sarah admins.
+
+**[P3][OPS] Log prefixes slg / exp registration**  
+Before session-log B3 UI.
+
+**[P2][OPS] Session-log + Wyzant/UVU export (SESSION-LOG-EXPORT)**  
+Date-range search, consolidated export, Wyzant 25-word + UVU pay-period aggregates. Market review OQ2/O6; stubs until artifacts. [`docs/research/market-analysis-strategic-review-2026-06-12.md`](research/market-analysis-strategic-review-2026-06-12.md).
+
+**[P2][OPS] Session log billing rate / billed* column naming**  
+Andrew confirm before Wave 2.5 migration; `ratePerHour` / `billedAmount` open Q.
+
+**[P2][OPS] Historical SessionNote timezone backfill**  
+Lossy backfill vs accept UTC for old notes.
+
+**[P2][OPS] Session timer vs billed time during disconnect gaps**  
+Displayed timer pause vs billed-only subtraction.
+
+**[P2][OPS] Solo / in-person production enable + B-5 consent copy**  
+FSM supports `IN_PERSON`; production gating review.
+
+**[P2][OPS] Time-storage / billing display (billed*Local)**  
+B3 `/sessions` route not shipped.
+
+**[P3][OPS] Phase 11 blocked until umbrella legal paragraphs**  
+AI edit signal + instrumentation.
 
 ---
 
-## Tonight-shippable (high confidence, single focused session)
+## 11. Scheduling & calendar (post-V1)
 
-- **AI notes from pasted text** — server action that takes typed/pasted session content + student context, calls LLM with structured-output prompt, fills the note form fields (topics, homework, next steps). User reviews before saving. Directly hits Sarah's #1 paid pain.
-  - Provider decision: OpenAI `gpt-4o-mini` is the leaning default (cheap, JSON mode, same provider as Whisper for later).
-  - Dedicated app-specific API key in Vercel env (not a reused dev key).
-  - Provider-side spend cap on the key from day one.
-  - Per-request token cap in code.
-  - Mocked LLM call in tests so CI doesn't burn tokens.
+**Decision (Andrew 2026-06-08):** post-V1, pre-release (before recruiting new pilots). Requirements: [`docs/handoff/scheduling-requirements-2026-06-11.md`](handoff/scheduling-requirements-2026-06-11.md) (canonical; may move to archive with backlog pointer).
 
-## Days, not nights (next 1–2 weeks)
+**[P2][OPS] Scheduling — backend wiring + calendar sync**  
+**Visual-only shipped:** `src/lib/schedule/mock-data.ts`, `SchedulePageClient.tsx`, `CalendarIntegrationsPanel.tsx`. No DB models, OAuth routes, or real sync. **OPEN:** native-first scheduling + Apple + Google integrations.
 
-- **Audio upload → Whisper transcript → AI notes.** Skips live capture; tutor records on phone after session, uploads, gets notes. Cheaper & simpler than live capture; ships value while live recording is built.
-- **PDF/image attachment on a note** (just display/storage; no annotation yet).
-- **In-app onboarding polish** (signup → first student → first note flow audit; signup gap was the first thing Sarah noticed unprompted).
-- **Operator dashboard scaffolding** (`/operator/*`, separate from `/admin/*`): users list, status, manual comp flag. Required before payments are useful.
+**[P2][OPS] S5 — scheduled topic + notes visible in live session**  
+"Today's plan" panel; depends on scheduler→session linkage.
 
-## Weeks, real engineering — this is where the moat lives
+**[P3][OPS] S3 — Agenda as default scheduler view**  
+Possible tutor login landing.
 
-- **🚧 Phase 1 in progress (match Wyzant for Sarah + AI wedge)** — See `docs/WHITEBOARD-STATUS.md` for item-by-item status. Core loop delivered:
-  - Excalidraw canvas (real-time student ↔ tutor sync via `excalidraw-room` on Fly.io; E2E AES-GCM-256 encrypted relay).
-  - Whiteboard session recording: stroke event log (canonical diff format, `event-log.ts`) + audio (existing `useWhiteboardRecorder` composing `useAudioRecorder`). Crash recovery via IndexedDB (`checkpoint-store.ts`) + Vercel Blob periodic checkpoints.
-  - PDF/image upload to canvas, MathLive WYSIWYG LaTeX → MathJax SVG, Desmos iframe embed.
-  - Shared `<WhiteboardReplay>` player (audio-synced scene reconstruction, schema-version dispatch, per-client color attribution, asset prefetch).
-  - Review page (`/admin/students/[id]/whiteboard/[sessionId]`) + share-token replay (`/s/[token]/whiteboard/[sessionId]`).
-  - **AI wedge (THE moat feature):** `generateNotesFromWhiteboardSessionAction` — transcribes whiteboard audio via existing Whisper pipeline → `generateSessionNote` → creates draft note linked to the session. `attachWhiteboardToNoteAction` (link/create-blank/detach). 376 Jest tests.
-  - **Still pending before Sarah handoff:** session timer (1.6), acceptance checklist (1.13).
-- **Web-based collaborative whiteboard for online sessions.** Browser-only, works on Chromebook + tutor's desktop. `tldraw` is the leading candidate (open source, real-time sync engine available). Tutor opens a whiteboard "under the student's name" — i.e. attached to a Student record. **Both tutor and student draw on the same canvas in real time.** This is the table-stakes feature to compete with Wyzant's whiteboard.
-- **🎯 Whiteboard session recording (THE differentiator per Sarah).** When tutor opens a whiteboard, prompt: *"Record this whiteboard session?"* If yes:
-  - Record **stroke events** as a time-indexed event log (replay as scrubbable video, not flattened video file — much smaller, and lets students step through).
-  - Record **audio** (browser MediaRecorder API) synced to stroke timestamps.
-  - **Pause button** for off-topic chat — pauses both stroke recording and audio.
-  - Save recording attached to the session/note.
-  - Allow tutor to send recording link to student/parent for review (existing share-link infrastructure can extend here).
-  - **AI notes can be generated from the recording** (transcribe audio, summarize what was worked on, infer next-step suggestions). This is the integration of her #1 paid pain with her #1 moat-feature ask.
-- **Subscription billing** — Stripe Checkout, webhook → `AdminUser.subscriptionStatus`, single price to start.
-- **Live audio capture during session** with browser reliability (covered by whiteboard recording above).
+**[P3][OPS] S4 — Month view density for full-time tutors**  
+Visual prototype only.
 
-## Later: in-person mode
+**[P3][OPS] Two-way calendar sync**  
+Google watch / Apple CalDAV + conflict policy — unresolved.
 
-- **iPad whiteboard (single user)** using `tldraw` or similar — Apple Pencil via Pointer Events. For when tutor uses tablet during in-person sessions. Lower priority than online whiteboard; in-person is currently paper-based and works for her.
-- **iPad two-device handoff** — pass-the-tablet UX for in-person sessions where student writes on tutor's iPad.
-- **PDF annotation** (write on top of a worksheet with stylus, persist ink layer).
+**[P3][OPS] Google OAuth bundling with calendar scopes**  
+Same Mortensen Apps consent-screen verification cycle ([`docs/LEGAL-SYNC.md`](LEGAL-SYNC.md)).
 
-## Months, "competes with paid tools" polish
+**[P3][OPS] Apple CalDAV vs EventKit path**  
+Not started.
 
-- **Whiteboard sync hardening** — `tldraw` self-hosted sync server with proper presence, conflict resolution, network-drop recovery. Initial version can use their hosted sync; production-quality eventually self-hosted for cost + control.
-- **Discount system** (Stripe Coupons + Promotion Codes):
-  - Public promo codes (`PILOT10` first month off) via Stripe promotion codes.
-  - Per-user comp (lifetime / N months free) via customer-applied coupons.
-  - DB-side `compReason`, `compGrantedAt`, `compGrantedBy` even when Stripe holds the discount.
-  - Default to "free for 12 months, renewable manually" over true infinite.
-- **Native or PWA app store presence** (only if mobile install friction proves to matter).
+**[P3][OPS] Reminders / timezone policy**  
+Not started.
+
+In-app schedule layer, student/parent join surface, soft session length — still relevant from 2026-06-08 proposal (see requirements doc).
 
 ---
 
-## Research / calibration (waiting on real usage data)
+## 12. Org / university pilot & commercial launch (future)
 
-These are not features — they're things we don't yet know enough to decide. Revisit after some weeks of pilot usage.
+**[P2][GTM] BYU / institutional pitch track separate from Sarah solo story**  
+Org MVP Wave 5; demo flow.
 
-### Strategic lessons captured (ChatGPT brainstorm, May 15 2026)
+**[P3][GTM] Stripe / subscription billing**  
+Checkout, webhook, `subscriptionStatus`.
 
-Surfaced during a long planning conversation about naming, pricing, and competitive positioning. None are decisions yet — they refine the existing **Pricing**, **True API costs at scale**, **Unit economics**, and **Decisions deferred → branding** subsections below. Source transcript: `C:\Users\arang\Downloads\chatgptsession.txt` (kept locally; not committed).
+**[P3][GTM] Operator dashboard scaffolding**  
+`/operator/*` beyond tutor admin.
 
-- **Tie price to USAGE (sessions), not users.** Hard-learned principle from Andrew's day job. A flat "$X/month unlimited" plan pegged to seat count creates the classic SaaS antipattern where heavy-usage tutors become the least profitable customers — the tutor with 3 students subsidizes the tutor with 40 because both pay the same. Sessions are the right billable unit here because they drive every variable cost (transcription, AI summarization, storage, sync bandwidth). Tutors already think in students/sessions, so the unit is also intuitive. Note: a "session" should be defined as **up to 60 minutes**, with longer sessions consuming proportional credits — otherwise the SAT tutor doing 2-hour blocks quietly becomes the loss-leader.
-- **Variable cost per 1-hour session — current rough estimate ~$0.40–0.70 (worst case ~$1.00 with safety buffer).** Breakdown (per session):
-  - Whisper transcription: **~$0.30–0.40** (the dominant line item).
-  - AI summary / extraction: ~$0.02–0.10.
-  - Object storage (audio blob, Opus ~15–30 MB/hr): ~$0.01–0.05.
-  - Fly.io sync traffic + Neon DB writes + auth/logging/misc: low single-digit pennies each.
-  - Cross-check against existing **True API costs at scale** numbers below; this brainstorm rounded slightly higher to account for retries + waste. Action: replace these estimates with real measured numbers once telemetry is wired (see **Cost instrumentation discipline** below).
-- **Draft tier shape (NOT a decision — sanity reference).** Used by ChatGPT to stress-test the math, included here so future-me has a starting point that isn't a blank page:
+**[P3][GTM] University department pitch infrastructure**  
+Aug 2026 soft deadline per [`docs/RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md).
 
-  | Tier | Sessions/mo | Est cost | Possible price | Gross margin |
-  |------|---|---|---|---|
-  | Starter | 10 | ~$10 | $15–20 | good |
-  | Pro | 30 | ~$30 | $40–55 | good |
-  | Growth | 60 | ~$60 | $75–95 | decent |
-  | Studio | 120 | ~$120 | $140–180 | okay |
+**[P3][GTM] Wyzant + UVU export formatters**  
+See **SESSION-LOG-EXPORT** §10.
 
-  The "$2/hour charge against ~$1/hour cost" intuition gets 50% gross margin without locking us in. Andrew's stress test: "100 tutors × $20 ≈ $2k MRR ≈ $1k net" is enough buffer to start gathering real metrics. Real prices will come from pilot-tutor "would-pay-without-thinking" numbers, not from this table.
-- **Don't price so low people conclude it must be missing something.** ChatGPT's framing: $6/mo for 30 sessions reads as "small side project / might disappear." $24/mo for the same reads as "okay, that's a business tool." Tutors trust this software with student data, recordings, parent interactions, and income — sub-$10/mo for a session-recording-plus-AI-notes product can actively hurt conversion. **Anti-anchor:** an early adopter shouldn't get $15-for-30-sessions because that's literally below variable cost; we lose money per session before counting Stripe fees, support, or fixed overhead.
-- **Founding-tutor lock-in is the right early-discount pattern, NOT a permanent low list price.** Mechanism: a "founding" cohort (Sarah + first N tutors) gets a permanently-locked discounted rate. Everyone after pays full price. This rewards risk-takers without conditioning the broader market to expect cheap, and lets the public list price represent the real economics. Pair with the Stripe Coupons / DB-side `compReason` infrastructure already in **Months, "competes with paid tools" polish** below.
-- **Cost instrumentation discipline — track variable and fixed costs SEPARATELY.** The naive `total_cost / total_session_hours` formula lies as you grow: fixed costs (Fly + Vercel + Neon baseline + monitoring + auth) get amortized across more sessions, so per-hour cost magically "improves" even when no underlying unit got cheaper. Useful breakdown:
-  - **Marginal cost per session-hour** = variable line items (Whisper + AI + storage delta + bandwidth + per-session DB rows) ÷ session-hours that period. Answers "what does one more session cost me?"
-  - **Fully-loaded cost per session-hour** = (variable total + fixed total) ÷ session-hours that period. Answers "what's my business cost right now?"
-  - The first is the one that matters for unit-economic decisions; the second is the one that matters for runway. Once the **Usage tracking prerequisite** entry in *Operational follow-ups* is built, the `UsageLedger` table is the natural place to compute both — just don't conflate them. (Worth a small admin/operator dashboard view: "marginal $/hr last 30 days" alongside "fully-loaded $/hr last 30 days.")
-- **Competitive surface refresh — direct biz-software competitors to know by name.** Already captured at Wyzant level in *Product positioning* above; ChatGPT's quick search surfaced the more relevant set for our wedge (tutor business software, NOT marketplaces): **TutorBird** (solo tutor management, lighter session tooling), **TutorCruncher** (scheduling + payroll, more admin-heavy), **Teachworks** (operations automation, leans toward schools/centers), **Tutorbase**, **Fons** (scheduling + payments, less session intelligence). We're closer to "TutorBird + Notion + Zoom + Otter + a whiteboard tool fused into one" than to any single one of them. Action: spend 30 min on each competitor's marketing page + a free-trial walk-through before public launch so we can name them in our positioning copy and avoid feature-overlap surprises. Add findings to `docs/research-deploy-and-niche-2025.md` next sweep.
-- **Naming shortlist (informs the *Decisions deferred → branding* entry below).** ChatGPT's brainstorm landed on a few clusters. Andrew's reaction filtered out fantasy-coded names (`Forge`-anything reads as TTRPG/dev-tools, wrong vibe for tutoring). Strongest survivors:
-  - Practical / business-software framing: **TutorStudio**, **SessionPilot**, **TutorOS**, **LessonLoop**.
-  - More brand-distinctive / future-proof: **Mentivo**, **Lumora**, **SkillNest**, **Pathloom**, **SkillSpring**.
-  - **Drop list:** `TutorFlow` / `LearnHub` / `TutorPro` / `MentorX` / `TutorBase` (already crowded in edtech search results); any name with `.ai` suffix or `AI` in the name (aging fast, reads as feature-wrapper not business).
-  - **Pre-commitment checklist for ANY finalist:** (1) Google search to gauge crowding, (2) USPTO trademark search (TESS), (3) `.com` + alternates (`.app`/`.io`/`.co`), (4) App Store name search, (5) Discord/X/social-handle availability. Andrew's framing: surviving without the perfect `.com` is fine; surviving "first search result is another tutoring SaaS with 40k users" is not.
-- **Wyzant's revenue model is more nuanced than the headline 25%.** **25%** when Wyzant brings the student to the tutor; **0% from tutor + ~9% transaction fee from student** when the tutor brings their own student. That second clause is the actually-interesting market signal: even the dominant marketplace explicitly recognizes "we acquired the customer" vs "you brought your own customer" as two different products. Our wedge sits squarely on the second case — independent tutors with existing books of clients who want operational tooling without the 25% bite. Update marketing copy when public to reference this asymmetry rather than the headline 25% alone; the asymmetry is the more credible story.
-- **Crowded ≠ overserved.** A useful distinction surfaced when Andrew worried about market saturation after the competitive landscape conversation. The space is genuinely crowded on marketplaces and basic scheduling. It's much less crowded on what we're actually building: **session memory across weeks, AI-generated lesson notes, whiteboard + recording + notes living in one product, tutor workflow consolidation**. Sarah's pilot wishlist behavior — actively volunteering gaps in existing products — is a stronger signal than any market report. Internal mantra to revisit when doubt creeps in: *"Solve one painful problem so well tutors immediately miss it when it's gone"* — higher-probability path than "build a broad platform before proving the sharp pain point."
+**[P3][GTM] Org-aware billing rounding**  
+When multi-tutor.
 
-### Pricing
-- **RATIFIED 2026-06-11 — platform→tutor metering basis = WALL-CLOCK for both cash billing and session tokens.** NOTE: this is distinct from tutor→student billing, which is already settled (billable minutes = session-time + rounding rules). This decision is how *we* charge the *tutor* for running a session: (a) **cash** — our billing timer runs on pure wall-clock (does NOT stop during pause); (b) **tokens** ("good for up to 30m/60m") — decrement/roll over by clock-hour, not session-timer-hour. Rationale: our real marginal cost per session is content/AI-driven (storage ∝ recorded content, Whisper ∝ actual speech, OpenAI ∝ chunks+reduce, relay ∝ connected time), **not** time-driven — so any time-basis is a *pricing-model proxy*, not cost recovery, and is therefore optimized for predictability/simplicity/anti-gaming. Wall-clock gives the cleanest "time window" mental model for tokens, is ungameable, predictable, closes the pause/disconnect gaming holes (explicit pause; student-disconnect-while-tutor-side-works), and turns pauses into margin in our favor (we bill the wall-clock window while the student's billable minutes are the reduced active time). **Deferred follow-on:** any "we don't charge you for breaks" generosity is an optional grace-allowance layer to add on top later (easier to start strict and loosen than the reverse). Cross-ref: [`recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md) § I1 (session timer vs recording).
-- **Minimum viable subscription amount.** Need 3–5 independent tutors' "I'd pay for this without breaking a sweat" numbers before committing to a price.
-- **Anchor against Wyzant's 25% cut.** A tutor making $50/hr through Wyzant loses $12.50/hr (~$50/wk for 4 sessions) to the platform. Subscription priced **well below their Wyzant losses** is an easy yes if our tools match or beat Wyzant's. Use this in marketing copy.
-- **Tier structure.** Solo tutor vs tutor with multiple students vs small tutoring business. Not worth designing tiers until we know if anyone hits a ceiling on a flat plan.
-- **Per-feature gating decisions.** Should AI notes / recording be in every plan or a "Pro" feature? **Likely needs metering** — recording + transcription costs scale with session minutes, so a flat sub at any price has unbounded downside. Decide once we have a month of real usage data.
+**[P3][GTM] Marketplace substrate**  
+Explicitly deferred; design-compatible-only.
 
-### True API costs at scale
-- **OpenAI text generation (`gpt-4o-mini`):** estimate is ~$0.001–0.005 per AI-generated note. At 8 notes/week per tutor that's single-digit cents/month. **Need real measurement** once feature ships — log token counts per request, sum monthly per tutor.
-- **Whisper transcription:** $0.006/min. A 1-hour session is ~$0.36. **This is the cost-watch item** — at 10 sessions/week per tutor that's ~$15/mo in API spend alone, which eats most of a $20 sub. Need to decide:
-  - Pass through cost (transcription as a paid add-on / metered)?
-  - Cap minutes per tier?
-  - Use a cheaper transcription provider once volumes warrant?
-- **Whiteboard sync server costs** (when we get there) — bandwidth-driven, hard to estimate until we know session length and concurrent users per tutor.
-- **Hosting** — Vercel + Neon are negligible until they aren't. Watch as users grow.
+**[P3][GTM] Parent progress arc / engagement surfaces**  
+Deferred per wedge program.
 
-### Per-user usage quotas
-- Daily/monthly request quota per tutor for AI features so a runaway script or unusual usage can't blow up costs.
-- Soft limits with "you've used 80% of your monthly AI budget" UI before hard cutoff.
-- Decide threshold once we have a month or two of usage data.
+**[P3][GTM] COMMERCIAL-LAUNCH-CHECKLIST items**  
+See [`docs/COMMERCIAL-LAUNCH-CHECKLIST.md`](COMMERCIAL-LAUNCH-CHECKLIST.md).
 
-### Unit economics
-- **CAC:** unknown. Word-of-mouth-only for now; if/when paid ads enter the picture, need real conversion-rate data first.
-- **Retention/churn:** unknown until we have ≥3 months of paying users.
-- **LTV:** unknown until churn is known. Don't run paid acquisition until LTV/CAC is healthy with margin.
+**[P3][GTM] Master plan Phases 7–12**  
+Status model, Stripe, org MVP, etc. — roadmap waves 4–5.
 
-### Marketing / acquisition channels (research, not action yet)
-- Tutor subreddits (r/tutor and adjacent), tutoring Facebook groups, Discord communities.
-- "I built this for my friend who's a tutor" content angle (Twitter/LinkedIn/Reddit).
-- Referral nudge in-app (e.g. "give a tutor 50% off, get a month free") — costs margin, not cash.
-- Paid ads: **deferred** until conversion funnel is measured and LTV justifies CAC. Math doesn't work for B2B SaaS at low ASP without real funnel data.
+---
 
-**Mynk brand / handle research (captured 2026-05-18 – 2026-05-19, not product code):**
-- ✅ **Brand Phase 2 — all four pillars DECIDED 2026-05-19 PM** (`docs/MYNK-BRAND-PHASE-2-DECISIONS.md`). Pillar 1 (voice) = "helpful colleague" with marketing flex; Pillar 2 (color) = **Mynka Blue** `#1E3D54` + coral `#E27D60` + cream `#F5F4EC`; Pillar 3 (typography) = Fraunces V4 wordmark + V2 heading + Inter 400 body + JetBrains Mono labels; Pillar 4 (mascot) = mink-on-pencil minimalist (directionally locked, style iterating). Engineering quick-reference: `docs/BRAND.md`. Live visual proof at 6 product surfaces: `docs/brand-previews/palette-mocks-FINAL-mynka-blue.html`. Round-by-round exploration archived to `docs/brand-previews/archived/`. Unblocks `docs/DESIGN-TOKENS-PLAN.md` Phase 0 (tokenization) → Phase 1 (palette swap into live app).
-- ✅ **Tier 1 domains** — 7 acquired via Cloudflare (`usemynk.com` primary + defensives); see `docs/MYNK-BRAND-CAPTURE-CHECKLIST.md` (in-flight doc — do not edit in parallel agent dispatches).
-- ✅ **Partial Tier 1 social** — LinkedIn `/company/usemynk`, X `@usemynk`, Bluesky `@usemynk.bsky.social`, Reddit `/r/mynk` + `/u/usemynk` (`95afcca`, `2bc5c88`).
-- **YouTube** — Google identity / facial-recog verification **pending** (channel not claimed yet).
-- **TikTok** — **deferred** (Mynk-pattern username pool exhausted at capture time).
-- **Facebook Page** — **low-priority defensive grab** (Tier 2 sweep; not blocking pilot).
-- **Reddit methodology** — open question: whether to claim additional subreddit names beyond `/r/mynk` for defensive posture (orchestrator to decide before public launch).
-- **mynk.com** — **skipped** (~$150k aftermarket; `usemynk.com` is primary).
-- ✅ **usemynk.com brand-domain cutover — SHIPPED 2026-05-30** (merge `291288c`): DNS + Vercel custom domains + Production-only `NEXTAUTH_URL` flip + repo artifacts (`security.txt` canonical, `PLATFORM-ASSUMPTIONS.md`, `DEPLOY.md`, `LEGAL-SYNC.md` Path-A, etc.). **4/4 integration smoke pass** on usemynk.com (Gmail connect in incognito; whiteboard/upload/share via impersonating test1). **HOLD Sarah comms** until open watch-items clear (Safe Browsing false-positive, OAuth re-verify approval) — she stays on `tutoring-notes.vercel.app`. Runbook: [`docs/handoff/usemynk-domain-cutover-bootstrapper.md`](handoff/usemynk-domain-cutover-bootstrapper.md).
-- **Tier 2 defensive domains** — backlog for post–Tier-1 sweep (e.g. additional TLDs / typos — list in brand capture checklist when Andrew resumes).
+## 13. Strategy / positioning / pricing / research
 
-### Legal / trust
-- **Audio recording of minors** is jurisdiction-sensitive. Need a clear consent flow, retention policy, and a "delete on request" path before live audio capture ships. Research per state/province before enabling for users outside Sarah's pilot.
-- **PII handling** (parent emails, student names, session content) — privacy policy needs to be real, not generic, before public launch. Already have stub via Trust launch bar; revisit before opening signups beyond pilot.
+### Product positioning (ratified)
+
+Independent tutors, subscription, not marketplace. Wedge: AI notes from recording + tutor keeps 100% rate + parent share link. Wyzant has lesson recordings (~30 days) — lead with notes + economics, not recording alone. Pitch: *"Keep 100% of your rate. Better tools than Wyzant, ~$20/month."*
+
+### Pilot feedback — action items (selected open)
+
+**[P2][NOTES] End-session discard / SSG-2** — see §1.
+
+**[P2][REC] Recording auto-pause on student disconnect**  
+✅ SHIPPED structurally in lifecycle FSM; verify replay gap-marker rendering.
+
+**[P2][REC] Per-student recording default**  
+✅ Shipped `recordingDefaultEnabled`; coordinate with consent B2.
+
+**[P2][WB] Whiteboard undo touch + visible button**  
+✅ Shipped tutor+student; verify iOS Safari touch.
+
+**[P2][WB] Session time logging**  
+✅ Shipped `startTime`/`endTime`; timezone follow-up in adversarial section.
+
+**[P2][NOTES] AI link extraction, scrubbing, playback during review, gap detection**  
+See §5.
+
+**[P2][NOTES] Tutor-initiated join-link rotation**  
+`rotateJoinToken` affordance.
+
+**[P2][WB] Student naming paradigm — single-student fallback**  
+Tile shows student name not `Student · hash`.
+
+**[P2][WB] Tutor tab doesn't follow new session creation**  
+Navigate tutor tab on create/resume.
+
+**[P2][WB] Workspace SSR 500**  
+See §10.
+
+**[P3][WB] Homework image import workflow**  
+Camera roll vs email vs scanner.
+
+**[P3][GTM] Rethink claim-screen layout**  
+Post-Sarah.
+
+**[P3][AUTH] Self-service account deletion**  
+Parents/students.
+
+**[P3][WB] Replay speaker indication**  
+With video-record work.
+
+### Pending / received pilot input
+
+**[`docs/SARAH-CALL-PREP.md`](SARAH-CALL-PREP.md)** — living home for next-call questions (Q4 pain point, Wyzant/UVU artifacts, primary device, scheduling=no, log-the-time, wedge). Add: session-log billing rate question; homework import workflow.
+
+### Pricing & unit economics (research — not decisions)
+
+- **RATIFIED 2026-06-11:** platform→tutor metering = wall-clock for cash + session tokens.
+- Minimum viable subscription; anchor vs Wyzant 25% cut; tier structure; per-feature gating / metering for AI+transcription.
+- **True API costs:** gpt-4o-mini negligible per note; **Whisper ~$0.36/hr** = cost-watch; whiteboard sync TBD.
+- Per-user AI quotas; CAC/LTV unknown until ≥3 months paying users.
+- Draft tier table (Starter/Pro/Growth/Studio) — sanity reference only.
+- Founding-tutor lock-in pattern; don't price so low it signals missing product.
+- Cost instrumentation: marginal vs fully-loaded $/hr separately.
+- Competitive surface: TutorBird, TutorCruncher, Teachworks, etc.
+- Naming shortlist + pre-commitment checklist (Mynk brand).
+- Wyzant 0% on bring-your-own-student vs 25% marketplace.
+- Crowded ≠ overserved — session memory moat mantra.
+
+### Marketing / acquisition (research)
+
+Tutor subreddits, Facebook groups; referral nudge; paid ads deferred. Mynk brand capture mostly done; YouTube pending; TikTok deferred.
+
+### Legal / trust (research)
+
+Audio of minors jurisdiction-sensitive. PII honest privacy policy before public launch.
 
 ### Feedback handling discipline
-- **Tutor advisory of 3–5 honest practitioners** (Sarah is #1). Monthly check-ins, not focus groups.
-- **Watch-them-use-it sessions** — 10 minutes of screen-share reveals more than weeks of async messages. Schedule with each pilot at month 1.
-- **Distinguish universal pain from personal quirk** — only treat feedback as roadmap when ≥2 unrelated tutors say the same thing. Single-user requests are noted, not built.
-- **Track whether shipped fixes actually changed behavior** — "thanks" from a user is not the same as the metric improving.
+
+3–5 tutor advisory; watch-them-use-it sessions; ≥2 tutors for roadmap; track metric not thanks.
+
+### Status-model rethink + auto-email (paired, post-Phase-5)
+
+**[P3][NOTES] Collapse DRAFT/READY/SENT**  
+Design in backlog §815–845 legacy; revisit when triggered.
+
+**[P3][NOTES] Auto-email scheduling**  
+Depends on status-model rethink.
+
+### Adversarial review UX gaps (2026-04-19)
+
+Real bugs: admin audio proxy env-only admin; share seen-tracking; time-storage display. Slow-burn: orphan session cleanup cron, storage ledger. Scaling: rate limits partially migrated. UX tutor/parent gaps in original audit — many addressed by v1 redesign; remainder cross-linked above.
+
+### Component redesign B2 smoke (2026-06-01)
+
+NewNoteForm clear bugs, outbox responsive, a11y id/name, bold-on-teal verify — spot-check during Gate A1.
+
+### V1 marketing Phase D
+
+Public surfaces brand sign-off pending.
+
+### Strategic lessons (ChatGPT brainstorm 2026-05-15)
+
+Captured in pricing subsection; transcript local only.
+
+### Tonight / days / weeks / months buckets (historical sequencing)
+
+Many items above supersede these buckets. Remaining highlights:
+
+- **Weeks/moat:** Phase 1 WB largely shipped per [`docs/WHITEBOARD-STATUS.md`](WHITEBOARD-STATUS.md); session timer 1.6 pending.
+- **Months polish:** discount system, native/PWA, whiteboard sync hardening at scale.
+- **Later in-person:** iPad whiteboard, two-device handoff, PDF annotation.
 
 ---
 
-## Security (2026-05-18 recon + 2026-05-19 Tier A branch)
+## 14. Deferred / someday
 
-- **npm audit baseline (2026-05-18):** 22 vulnerabilities (8 high) captured during security recon — full upgrade pass slotted to **Phase 9f Tier B** (`docs/SECURITY-AUDIT-INTERNAL.md` not yet written). Non-breaking bumps first; `nanoid` (Excalidraw) and `nodemailer` (next-auth) need explicit decisions.
-- **✅ Tier A quick wins — SHIPPED 2026-05-19 evening** (merge `4118f3e` on master; branch was `chore/security-tier-a-quick-wins` commit `8cdbe58`). Landed: (a) `public/.well-known/security.txt` (RFC 9116, Contact `arangarx+security@gmail.com`, Expires 2027-05-18); (b) `src/app/signup/actions.ts` anti-enumeration — existing-email path now `redirect("/login?registered=1")` instead of returning the explicit "account already exists" error, so externally-observable behavior is identical regardless of pre-existence. Confirmed-already-green during recon (no code change needed): `/forgot-password` was already returning a generic "If an account exists..." message; `/login` was already returning generic "Invalid credentials." **Smoke passed:** Andrew verified all three paths on Vercel Preview before merge (security.txt loads with correct contact + expiry, new-email signup → `/login?registered=1` + working login, existing-email signup → same redirect with no error leakage). **Account-takeover follow-ups** (signup-confirmation email flow + password-reset notification + email-infra prereq) captured below as their own entries — that work closes the takeover gap that the redirect *inherits* (legit second owner of a recycled email can still take over via `/forgot-password`). **Phase 9f** (internal audit + full ownership-assertion review + npm audit cleanup) fires after the takeover defense ships; bootstrapper not drafted yet.
-- **Phase 10-pre external pen-test** — before first paying customer; slotted in master plan; not started.
+**[P3][WB] WB-SCREEN-WAKE-LOCK / WB-THUMBNAIL-GRAPH / WB-OLD-PHONE-PERF**  
+Unify plan out-of-scope.
 
-- **🔴 Account-takeover gap on existing-email signup (surfaced 2026-05-19 during Tier A smoke).** Pre-existing risk that the Tier A anti-enumeration redirect inherits, NOT introduces: when a legit second owner of an email (recycled mailbox, transferred work email, shared family inbox, plain typo) arrives at `/signup`, hits the `/login?registered=1` redirect, fails to log in with their typed password, then tries `/forgot-password` — they receive a reset link they DO control (because they own the inbox), reset the password, and **gain full access to the existing stranger's account, including students / sessions / recordings / parent emails / share links / blob storage.** This is a baseline property of email-as-identity auth; it existed before the Tier A merge (the explicit "account already exists" error told them the exact same recovery path), and the anti-enumeration redirect makes it slightly less discoverable but no less reachable for a savvy or persistent user. **The Tier A merge is still safe to ship**; this entry captures the pre-existing gap so the follow-up mitigations don't get lost. **Mitigations (each is its own entry below):** (a) email-confirmation signup flow — the gold standard; (b) notify-on-password-reset — informs the original holder so a stranger takeover becomes visible; (c) future notify-on-new-device-signin — defense-in-depth. **Why now:** Sarah is the only tutor today, so the realistic-attacker version of this is near-zero, but the gap should close before the pilot grows past 2-3 tutors. Surface during the Phase 9f internal audit or as standalone work on a `chore/account-takeover-defense` branch, whichever lands first.
+**[P3][WB] WB-GRAPH-PLACEHOLDER**  
+Review hero graph thumbnail.
 
-- **🟡 Email-infrastructure prerequisite for account-takeover defense (scoped 2026-05-19).** The account-takeover mitigations below (signup-confirmation + reset-notification) require Mynk's app server to send transactional emails — capability the app does NOT have today. Today's `EmailMessage` table + Gmail-OAuth flow is per-tutor (Sarah's connected Gmail sends "from Sarah" to her parents); it cannot send "from Mynk" to a user during signup because the user doesn't yet have a Mynk account, let alone a connected Gmail. **Scope decision (Andrew, 2026-05-19):** ship the minimum unblock — a transactional sender on `usemynk.com` (Tier 1 brand-locked) via Resend. Explicitly NOT in scope right now: Google Workspace on usemynk.com or mortensenapps.com (an inbox/branded-identity concern, separate evening of work, not required for outbound transactional mail); socials migration (separate, slower). **Concrete recipe (~2 hr work + DNS-propagation wait):** (1) sign up at resend.com, free tier (3k/mo, 100/day) is sufficient for pilot; (2) add `usemynk.com` (or `mail.usemynk.com` subdomain for reputation isolation, recommended) as a verified sender; (3) copy Resend's SPF / DKIM / DMARC records into Cloudflare DNS for usemynk.com; (4) wait for verification to flip green; (5) add `RESEND_API_KEY` to Vercel env (preview + prod); (6) write `src/lib/email/transactional.ts` thin wrapper around `Resend` SDK with templates for confirmation + reset-notification (see entries below). **Sender domain choice:** `noreply@mail.usemynk.com` keeps transactional reputation isolated from any future human mail on the apex; falls back to `noreply@usemynk.com` if the subdomain feels like overkill at pilot scale. NEVER use Gmail SMTP or per-tutor OAuth for these — they're rate-limited, will hurt sender reputation, and don't scale past pilot. **Cost:** $0 at pilot scale; ~$20/mo only once you cross 50k/mo emails. **Cross-references:** the deferred Workspace + multi-domain setup is captured in *Decisions deferred* below for later consideration; Sarah's existing Gmail-OAuth send path for parent emails is unaffected by any of this.
+**[P3][WB] WB-ENDSESSION-THUMBNAIL-TABS**  
+End-session thumbnail tabs.
 
-- **🟡 Account-takeover defense (1/3) — email-confirmation signup flow (scoped 2026-05-19).** **The big mitigation** for the takeover gap above. Standard pattern: signup form collects email + password → action stores a pending row (or token) but does NOT activate the account → sends confirmation email to the typed address → user clicks link → account activates and they're logged in. Critical branch: **if the email is already registered, send a DIFFERENT message to that address** — "Someone just tried to create a Mynk account with your email. If that was you, you already have one — sign in here. If not, you can ignore this; no account was created." Genuine new owner of the email gets the link → completes activation, fine. Stranger probing or recycled-mailbox confusion gets nothing actionable. Existing account holder learns about the attempt (especially valuable if they were unaware their email was being targeted). **Wires up to the v1 signup-confirmation surface** (currently flagged as a net-new design slot in the v1 work — signup today redirects straight to `/login?registered=1` with no interstitial; the email audit subagent's 2026-05-19 finding). **Schema:** likely needs `AdminUser.emailConfirmedAt: DateTime?` + a `SignupConfirmationToken { email, tokenHash, expiresAt, consumedAt }` table (additive, idempotent migration). **Code surface:** `src/app/signup/actions.ts` (split into "request signup" + "confirm signup"), `src/app/confirm/[token]/page.tsx` (new), `src/lib/email/transactional.ts` (new, from the email-infra entry above), `src/lib/auth-db.ts` (`activateAdminFromToken`). **Tests:** (a) genuine new email → token in DB → click → activated → logged in; (b) existing email → "someone tried" email sent → no token, no account change; (c) expired token → friendly error; (d) replayed token → rejected; (e) the existing-email branch must not leak the existence-check via timing (use the same code path / artificial delay as the new-email branch — anti-enumeration goes through the email layer now, not the redirect). **Effort:** ~3-5 hrs. Sonnet-tier (test-first). **Cross-link:** depends on email-infra prereq above; UX should land alongside the v1 signup surface design.
+**[P3][WB] Desmos live-state capture Phase 1.5**  
+[`docs/RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) backlog.
 
-- **🟡 Account-takeover defense (2/3) — notify on password reset (scoped 2026-05-19).** When a `/forgot-password` reset link is used to set a new password, send the account's email address a "Your Mynk password was just reset. If this wasn't you, contact security@usemynk.com immediately." notification. This is the **detection** half of the defense — even if a stranger successfully takes over an account via the recycled-mailbox path, the original holder sees the email within minutes and can act. (Action options: secure-account flow, contact support, etc. — initial v1 can just be the notification + manual support; in-app self-service revoke is a Phase 9f+ deliverable.) Some products also send a notification when the reset link is REQUESTED (not just consumed) — debatable trade-off (more noise, but earlier signal); recommend RESET-ONLY for v1 to avoid email fatigue. **Schema:** none required. **Code surface:** wherever `/forgot-password` lives (likely `src/app/forgot-password/actions.ts` or similar) — add a transactional send right after the password update succeeds. **Tests:** (a) successful reset → notification email enqueued to the account's address; (b) failed reset (expired token, mismatched user) → no notification; (c) reset using the same token twice → only one notification (idempotency). **Effort:** ~1 hr once email-infra prereq is shipped. Sonnet-tier. **Cross-link:** depends on email-infra prereq above.
+**[P3][REC] Debounced-disconnect pause trigger confirm**  
+~6s `PEER_EVICTION_TIMEOUT_MS` vs 8s freeze — Andrew confirmed freeze path.
 
-- **🔵 Account-takeover defense (3/3) — notify on first sign-in from a new device or IP (scoped 2026-05-19, FUTURE).** Defense-in-depth. After a successful login, fingerprint the request (user-agent + IP geolocation bucket, NOT raw IP for privacy), check against a small `KnownSignInFingerprint` table per `adminUserId`, send "New sign-in from <city, country> at <time>" if novel + record the fingerprint. **Why FUTURE:** mitigations (1) and (2) above close most of the practical risk; (3) is the polish layer that matters once a pilot has 10+ tutors and the surface area for "I share my laptop with a kid who clicked the wrong link" stories grows. Capture for completeness; don't build until 9f or post-pilot expansion. **Effort:** ~3-4 hrs including the fingerprint privacy review.
+**[P3][GTM] Engagement/dopamine surfaces**  
+Mascot, charts, streaks — design-compatible-only.
 
-- **✅ SEC-1 — Admin impersonation + test-account isolation — SHIPPED 2026-05-30 (A `27fb0d3` + B `6e29d57` + C `8bb7449`).** Real admin lands on a minimal `/admin` dashboard; tutor paths impersonation-only; exit returns to dashboard; admin password preserved (Q1 reversal); test accounts passwordless. Real-hardware smoke PASS. **Open nits:** (a) impersonation banner color not amber as spec'd — cosmetic, defer to UI redesign; (b) ✅ `+test1` flipped to `isTestAccount=true` on **both** `preview-dev` and `production` 2026-05-30 (sole impersonation target; `+test2/3/4` + dev-only `+sec1smoke` deleted; 126 prod sessions under `+test1` preserved); (c) cross-preview SSO deferred to usemynk cutover (R3). Original scope below for history.
-- **✅ SEC-1 follow-up — tutor-vs-admin role distinction SHIPPED 2026-05-30 (`feat/sec-1-admin-tutor-role`).** `AdminRole` enum (`ADMIN | TUTOR`) added to `AdminUser`; migration backfills `arangarx@gmail.com → ADMIN`, all others → `TUTOR`. Routing now role-based: TUTOR logins land on `/admin/students`; ADMIN gets dashboard + Log-in-as. `assertIsAdmin()` blocks TUTOR role from impersonating (covers both `isTestAccount=true` targets AND real TUTOR logins like Sarah). Session JWT carries `role`; middleware redirects TUTORs early. 50 tests green. Original description below for history. **🔴 SEC-1 follow-up — tutor-vs-admin role distinction REQUIRED before any 2nd real production login (surfaced 2026-05-30).** The Dispatch-C routing classifies **every** `isTestAccount=false` `AdminUser` as the "real admin": lands on `/admin` dashboard, **blocked from `/admin/students` + `/admin/outbox`**, tutor view only via impersonation. This is correct while Andrew (`arangarx@gmail.com`) is the **only** direct login. But the model has **no role concept** — it conflates "is the operator/admin" with "is not a test account." **The day Sarah (or any real tutor) gets her own production login**, she is `isTestAccount=false` → bounced to a bare admin dashboard and **cut off from her own students/sessions** (she can't impersonate — that's admin-only). **Fix before multi-tutor / Sarah-login:** add an explicit role (e.g. `AdminUser.role` enum `ADMIN | TUTOR`, or an `isAdmin` boolean) and route TUTORs to the tutor experience, reserving the dashboard + Log-in-as for ADMINs. Additive migration. **Gates:** Sarah production login, student-login feature, any second operator. Until then prod is single-admin and safe. Andrew's pilot smoke testing currently uses `arangarx+test1@gmail.com` with a regular password login — insecure (browser-saved password is sensitive, easy to leak in screenshots / commits) and produces prompt-fatigue across Vercel preview subdomains (Chrome's "save password" prompt fires per new preview hostname). **Pattern:** industry-standard admin impersonation (Stripe / Auth0 / Linear / Vercel all do this). Mark certain accounts as `isTestAccount = true`; password login on those accounts is **disabled at the auth layer**; the only way in is the admin user clicks "Log in as <user>" from the admin dashboard, which mints a session as the target user. Combine with **Google OAuth for the admin login** (replaces password auth on the admin tier — kills the per-preview save-password prompt forever, inherits Google's 2FA + recovery flow). **Floor-level requirements:** (1) `isTestAccount` boolean on `AdminUser` (additive migration); (2) impersonation server action with admin role check at the mutation boundary, mirroring `assertOwnsStudent` pattern; (3) audit log table `ImpersonationLog` rows (`adminUserId`, `impersonatedUserId`, `startedAt`, `endedAt`, `vercelDeploymentUrl`); (4) persistent "You are signed in as <email>. [Exit impersonation]" banner with working exit that restores the admin session; (5) admin-only authorization — test users cannot impersonate other test users; (6) Google OAuth wired for admin login (existing Gmail OAuth infra serves tutor-side parent-email sending — that's a separate OAuth surface; admin-login OAuth may share the consent screen but uses different redirect URIs); (7) admin dashboard UI listing test users with a "Log in as" button per row (nice-to-have: create-test-user form in the UI; can defer initial seed to a SQL script). **Design doc merged 2026-05-30:** [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](handoff/sec-1-impersonation-design-2026-05-30.md) (`a1c6c3f`). **Ratification (Andrew 2026-05-30):** 6 open Qs **orchestrator-discretion delegated** — use design-doc defaults; escalate to Andrew only on test failures or a specific blocking question; **do not mark Qs individually answered**. **Sequencing:** ~3 Composer ship dispatches (A: schema + admin role + Google OAuth wiring; B: impersonation endpoint + audit log + banner; C: admin dashboard UI for list + "Log in as"). **Lands BEFORE any GTM / school outreach + before Phase 10-pre external pen-test**. **Effort:** Composer ship ~6-10 hr across the 3 dispatches; total ~1-2 working days.
+**[P3][GTM] Parent progress arc**  
+Deferred.
 
-### At-rest envelope encryption for stored minor content (hybrid, app-managed — NOT zero-knowledge)
+**[P3][GTM] Durability-B seasonal presence**  
+Pull/in-app, never email-default.
 
-**Status / trigger:** 🔵 **DEFERRED** — deliberately **not** for the solo pilot. Schedule as **pre-extended-pilot / pre-world-release hardening**, coupled to Andrew's **"org-ready by end of summer"** project. The two are halves of one thing: the encryption control's value depends on the org structure behind it.
+**[P3][GTM] School-handoff bigger bet**  
+Deferred.
 
-**Scope (when built):**
+**[P3][AUTH] AUTH-AGE-NO-HARD-CUTOFF + counsel**  
+Self-attested capacity.
 
-- Envelope-encrypt stored content at existing storage choke points (`src/lib/whiteboard/upload.ts` + whiteboard asset/snapshot/events proxy routes; extend to audio recordings + transcripts): whiteboard event-log JSON, snapshot PNGs, board image/PDF/math assets, and audio/transcript artifacts.
-- **Key custody separation via KMS** — keys live in a separate access boundary from the Blob store + DB (NOT in the same Vercel env that holds the Blob token).
-- **Operator persona has NO decrypt access**; decrypt granted only to service paths that need it (notes generation, parent review, tutor review) and to dev only under break-glass.
-- **Every decrypt is audit-logged** (who / what / when).
+**[P3][TEST] Duplicate solo_recording plan files**  
+Process cleanup.
 
-**Threat model / rationale:**
+**[P3][DOCS] Docs cleanup pass**  
+[`docs/INDEX.md`](INDEX.md) § archival policy; whiteboard chrome sources swept to requirements doc.
 
-- This is **app-managed reversible** encryption, explicitly **NOT zero-knowledge**. The app still holds/uses the key per-request under authz.
-- **What it does NOT protect against:** a malicious/compromised dev with prod access (they have/can reach the key) — only true client-side zero-knowledge defeats that actor. ZK was **rejected** because it breaks notes generation, parent-review ergonomics, and content moderation. "Protect data from our own senior engineers" is explicitly a **non-goal**.
-- **What it DOES buy (real, non-theater wins):**
-  1. **Breach blast-radius reduction** — leaked Blob token, misconfigured/public bucket, stolen DB backup/snapshot, or subprocessor (Vercel/Neon) compromise yields only ciphertext, because keys are in separate custody. (Vercel Blob + Neon already encrypt at rest at the infra level, covering physical-disk theft; this app-layer adds the token-leak / misconfig / logical-breach subset.)
-  2. **Least-privilege + auditability** — support/ops can't casually view a child's session; every decrypt is logged and accountable.
-  3. **Trust / procurement signal** — "encrypted at rest, separated key custody, audited decrypt access" is a true statement for university/school procurement.
-- **The hinge (theater vs real):** the deciding factor is **key custody separation**. Keys next to the data = theater (one breach gets both). Keys in a separate KMS with own access control + decrypt audit = real. The encryption itself is not the decision; the custody separation is.
-- **Cost is MODERATE, not "everything gets harder"** — precisely because it's app-managed (not ZK): notes generation, replay, parent review, AND content moderation all still work (the app can decrypt to scan). Cost = envelope-encryption plumbing at the choke points + KMS + key rotation. Additive; does not infect feature code.
+**[P3][DOCS] Usersmoke quicklists**  
+[`docs/handoff/usersmoke-2026-07-08-problem-quicklist.md`](handoff/usersmoke-2026-07-08-problem-quicklist.md), [`usersmoke-2026-07-09-recheck-quicklist.md`](handoff/usersmoke-2026-07-09-recheck-quicklist.md) — living triage until master cut complete.
 
-**Legal grounding:** The COPPA/P2 spike ([`docs/handoff/coppa-p2-data-encryption-spike-2026-06-11.md`](handoff/coppa-p2-data-encryption-spike-2026-06-11.md)) confirmed there is **no U.S.-law mandate for operator-blind storage** — the bar is verifiable parental consent, reasonable (risk-based) security, retention/deletion, and parent review. This hardening is a **product/trust choice, not a compliance requirement**. The spike's three real get-a-lawyer items remain open: verifiable-parental-consent method/copy, published retention timeframe in `/privacy`, FERPA/SOPIPA positioning if pitching schools.
-
-**Org-readiness dependency:** The "operator persona ≠ decrypt access" control is only meaningful if the org actually separates the operator role from the dev role with least-privilege key access and audit. **Companion / dependency of the end-of-summer org-readiness project** — do not ship encryption without the org structure that makes it real.
-
-## Component redesign — B2 smoke (2026-06-01)
-
-Source: Andrew visual smoke of Component Phase B2 (`component-b2-dashboard-students`, merged to `v1-redesign` @ `0424206` as reskin floor). Pre-existing unless noted.
-
-- **New-note form (`NewNoteForm`) — Clear Form bugs (pre-existing).** Changing Template / Session start / Session end does **not** enable the "Clear Form" button; "Clear Form" does **not** clear the Template field. Fix dirty-state tracking + reset handler for all controlled fields.
-- **Outbox panel not responsive (pre-existing).** Outbox UI fails to shrink on narrow viewport; revisit when that surface is redesigned (B3+ or dedicated outbox pass).
-- **`beforeunload` deprecation warning (low).** `WhiteboardWorkspaceClient.tsx` registers `beforeunload` for viewport-persist flush (~L1642–1647) and presence/active-ping beacon (~L2282–2286). Browsers deprecate `beforeunload`; plan migration to `pagehide` / `visibilitychange`.
-- **a11y: form fields missing `id`/`name` (quick fix).** "Attach recording(s) to share link" checkbox in `NewNoteForm.tsx` (~L363–368) and read-only URL `<input>` in `ShareLinkRow.tsx` (~L21) lack `id`/`name` (autofill/console warning).
-- **Bold text contrast on teal panels (verify).** Bold Fraunces/Inter on teal `--panel` may slightly fuzz (eyeball-flagged during B2 smoke, not confirmed). Verify against WCAG AA contrast + antialiasing with tooling; likely fine.
+**Resolved / do not re-open (reference):** CONSENT_ENFORCEMENT flag removed · anonymous `/w` join retired to redirect · phantom stroke bug · Slice-3 B4 save model · Auth role-refresh · Parent-create-learner path · Weak PIN validators · Gate B1 core waitlist · SEC-1 impersonation pillar · Tier A security quick wins · Note save vs transcribe race (#6) · B5 gapless rollover · Client-direct blob upload B1 · Multi-recording schema · Share seen-tracking baseline · Billable WS-J · Housekeeping CLIs · Cost admin dashboard · Waiting room overlay · Per-speaker C transcription · In-person audio without peer · 2FA remember device · IAC-13 tutor disconnect parent · Session wrong-identity RC-A · Erasure Option A tombstone + cancel-restore · CF-1–CF-4 consent-honesty blockers · PRESARAH-1 partial (toggle removal not done) · SMOKE-BLOCK-2/3/4 · SMOKE-BUG-1/6 · SMOKE-UX-2/4 · Many wave5 polish items per known-issues DRAFT appendix.
 
 ---
 
-## Operational follow-ups (small, do when convenient)
-
-- **[TESTING] Integration coverage with teeth + smoke automation.** Canonical map: [`docs/TESTING-COVERAGE.md`](TESTING-COVERAGE.md) (2026-06-03 audit on `identity-p2-multitutor`). **Headline:** 62 user-facing surfaces audited; **24 manual-only**; **11 high-blast-radius teeth gaps** (AH login/2FA browser, claim wizard UI, child PIN UX, consent lattice, full recording on device, marketing `/`+`/features`, impersonation round-trip, verify-email, LTX spike, multitutor polish). **Roadmap:** Playwright P0 pack — tutor 2FA, AH signup/claim, child lockout UI, then gate `test:integration` pre-merge when stable; scheduled preview smokes after `playwright@test.local` on preview-dev. **Driver:** Andrew — hand-running full regression before each merge does not scale; automate highest `(frequency × blast radius)` flows first.
-- **Feedback page (admin view) has no nav back to the rest of the app (Andrew, 2026-05-30).** Landing on `/admin/feedback` as admin leaves you stranded — no header/nav link to return to the dashboard or other pages. Add the standard admin nav (or at minimum a back/dashboard link). **Open product question Andrew raised:** does an *admin* account even need a "send feedback" page? Feedback is a tutor→us channel; the operator (admin) is "us." Likely the Feedback entry should be scoped to the TUTOR experience and hidden from the ADMIN dashboard nav entirely — revisit when the admin dashboard gets its real build-out (ties to the ADMIN-vs-TUTOR role split now in flight). Until then, just give the page a way out.
-- **README cleanup — overlapping email sections.** Current `README.md` has duplicate / overlapping sections about Gmail OAuth + email features. Tighten to one canonical block; cross-reference `docs/DEPLOY.md` for setup steps. Trivial; do during next docs sweep.
-- **Local-only paths (untracked; not on other machines until committed):** `scripts/build-b3b4-transcript-doc.mjs` — also listed in `docs/AGENT-BOOTSTRAP.md`.
-- **Whiteboard live relay (separate from this repo):** Socket.IO / `excalidraw-room` is deployed from **`../../whiteboard-sync`** (sibling under `…/dev/agentic-projects/`, its own `git` remote on GitHub). The Next app only needs **`WHITEBOARD_SYNC_URL`**. Pointers: `docs/AGENT-BOOTSTRAP.md` section 2, [`../../whiteboard-sync/README.md](../../whiteboard-sync/README.md`), and *Sync host deploy notes* in `docs/WHITEBOARD-STATUS.md`.
-- ✅ **Vercel ignored build step (SHIPPED 2026-05-17; hardened 2026-05-30)** — doc/rule-only commits used to trigger a full redeploy. Now skip-handled via `vercel.json` `ignoreCommand`: `node scripts/vercel-ignore-build.cjs`. **Polarity (do not invert):** Vercel reads **exit 0 = SKIP the build**, **exit 1 = BUILD**. An early bash `grep` one-liner had inverted polarity (would skip on code, build on docs). **Safe-to-skip set** (every changed file in the diff must match one): `docs/**`, `.cursor/**`, any path ending in `.md` or `.mdc`. Anything else (e.g. `src/`, `package.json`, `vercel.json`, `prisma/`) forces a build. **Fail-safe-to-build:** unset `VERCEL_GIT_PREVIOUS_SHA` (fork/first deploy), `git diff` failure, empty diff, or empty predicate input → BUILD. Uses `VERCEL_GIT_PREVIOUS_SHA` (last deployed commit on this branch) so multi-commit pushes with mixed docs+code build once. Predicate `shouldSkipBuild()` is unit-tested in `src/__tests__/vercel-ignore-build.test.ts`. Verify: docs-only push → Vercel log shows `vercel-ignore: skipping build`; code push → `vercel-ignore: building`.
-- **Visual regression baselines (Playwright toHaveScreenshot).** The infrastructure is fully built (`tests/visual/pages.spec.ts`, `tests/visual/fixtures.ts`, `npm run test:visual:update`) but baselines have not been captured yet and the visual snapshot tests are NOT wired into the build gate. Deliberately deferred while the UI is in active churn — re-baselining on every intentional layout change would be more friction than value right now. **When to activate:** once the UI feels stable (post-Phase 2 layout fixes at minimum). Steps to enable: (1) run `npm run test:visual:update` locally, review the captured screenshots, commit them; (2) add `npm run test:e2e` to the `vercel.json` buildCommand alongside `test:regression`; (3) update `playwright.config.ts` `reuseExistingServer` for CI if needed. The console-error guard and a11y checks in the smoke test ARE already running and catching regressions — this item is only the pixel-diff layer on top.
-- **AI panel / note form layout shift** — at borderline window widths the two panels (Auto-fill + New session note) flip between stacked and side-by-side depending on content height. When the AI panel collapses from "full input" to the "Form filled" banner, the reduced height can cause the flex row to reflow. Fix: use CSS grid with fixed column widths instead of a flex row with `flex-wrap`, so the two-column layout stays locked regardless of content height.
-- **React #418 hydration mismatch on student page.** Console shows minified React error #418 (server-rendered HTML doesn't match client render) on `/admin/students/[id]`. Likely culprits: locale-formatted dates rendered without a stable timezone, dark-mode/theme detection that runs differently on server vs client, or any `Date.now()` / `Math.random()` at render time. Repro path: open the page in a fresh browser and check console. To diagnose, run `npm run dev` locally and reproduce — dev mode prints the offending element/text instead of the minified code. Pollutes the console (makes real bugs harder to spot) and can cause flickers / state desync, so worth fixing even though no user-visible damage is confirmed yet.
-- **Public / share routes — console cleanliness pass.** Parent-facing pages (`/s/[token]`, `/s/[token]/all`, login if linked from email) should be checked in production for **all** console errors and warnings (hydration, third-party, CSP, extensions excluded where possible). Anything not covered by the #418 item above gets a named fix or documented WONTFIX. Goal: trust during pilot QA — parents don’t report console noise, but tutors debugging “it’s broken” often start there.
-- **Prisma / Neon `kind: Closed` (transient DB connection drops).** Logs may show `prisma:error Error { kind: Closed, cause: None }`. Some flows already retry with user-facing copy. If frequency is non-trivial in production: investigate Neon serverless + pooler settings, Prisma client lifecycle in serverless (singleton vs request-scoped), connection string params (`pgbouncer`, limits), and add metrics or alerts on error rate. Document root cause once found; optional regression or runbook.
-- **Node `DEP0169` — `url.parse()` deprecation warning.** Console/server may warn that `url.parse()` is deprecated in favor of the WHATWG `URL` API. Usually emitted from a dependency, not app code. Trace with `NODE_OPTIONS=--trace-deprecation` locally, then upgrade/pin the offending package or track upstream issue. Low priority while it remains warning-only.
-- **`npm audit` baseline (captured 2026-05-18): 22 vulnerabilities (1 low, 13 moderate, 8 high)** — `npm audit fix` made zero changes due to peer-dep conflicts (React 19 vs. Excalidraw's older `react@^16.8 || ^17.0 || ^18.0` peer range). Targeted package-by-package upgrades needed. **Highest-risk runtime items**: (a) Next.js (13+ documented advisories — request smuggling in rewrites, middleware bypass in App Router, cache poisoning, SSRF via WebSocket upgrade, image-cache DoS, multiple XSS — `fix available via npm audit fix` but blocked here by peer conflicts; targeted `npm install next@latest` may resolve), (b) Prisma → effect → defu (prototype pollution chain — `npm install prisma@latest @prisma/client@latest` likely resolves), (c) picomatch (ReDoS, transitive — moderate runtime relevance because used in glob patterns at build time, lower at runtime). **Breaking-change items** (require `--force` or design work): nanoid via Excalidraw (would downgrade Excalidraw to 0.17.6, breaks whiteboard), nodemailer via next-auth (would bump nodemailer 8.0.7, NextAuth API change). **Slotted as Phase 9f Tier B work** (master plan) — Composer-class half-day pass: bump non-breaking packages first, run full test suite per package, then evaluate the two breaking changes with their respective design impact. **Do not let this entry get stale** — re-run `npm audit` quarterly even before Phase 9f to catch new CVEs against the current pinned versions.
-- **Google OAuth / Gmail — first-connect UX audit.** First-time “Connect Google” can feel like double authentication or unclear cancel vs continue. Audit end-to-end: `/admin/settings/email`, NextAuth callbacks, session cookie timing, error states. Success criteria: one clear “connected” outcome, no unexplained second prompt, accurate copy if the user abandons mid-flow.
-- **Sign-in button reverts to "Sign in" before auth completes.** Reported by Andrew 2026-05-30. On the login form, after clicking the submit button it shows a pending/loading state briefly but then snaps back to the idle "Sign in" label **before** the sign-in has actually finished (redirect/session establishment still in flight). Misleads the user into thinking the click failed or didn't register, inviting a double-click. Likely the button's `pending`/`isSubmitting` state clears too early — e.g. resolves on the `signIn()` promise settling rather than staying pending through the navigation/redirect, or a `useFormStatus`/local-state mismatch. Fix: keep the button in its disabled/pending state until the redirect actually occurs (or the error surfaces), so the label never flips back to idle mid-flight. Low effort; pure UX-confidence polish on the auth entry point. Every page load logs a 404 for `/favicon.ico`. Add a real favicon (16/32/48px ico, plus an SVG and apple-touch-icon) under `src/app/` per Next.js App Router convention so browsers stop 404'ing on every tab. Trivial fix; mostly polish + cleaner logs.
-- **Operator: scoped test-data wipe.** Andrew (operator) accumulates test recordings/notes/students during dev that he wants to clear without nuking real users. Build an operator-only action (initially CLI `npm run operator:wipe-my-data`, UI later when operator dashboard exists) that deletes all `SessionRecording` + `SessionNote` + `Student` rows where `adminUserId = <current operator's user id>` AND deletes the matching Vercel Blob objects. **Hard guards (all required, not optional):** (1) operator-role check at action entry (`session.user.role === "operator"`), 403 otherwise; (2) tenant scope at the **query level** — every `prisma.delete*` call MUST include `where: { adminUserId: session.user.id }`, with an integration test that creates a second tenant's data and asserts the wipe leaves it untouched; (3) **type-to-confirm UI gate** (user types own email to enable button, like GitHub repo deletion); (4) **dry-run by default** — first call returns counts ("would delete 12 recordings, 8 notes, 3 students"), only `?confirm=true` actually executes; (5) audit log row written to a new `OperatorAuditLog` table (or simpler: console.log + Sentry breadcrumb) recording who/when/what counts; (6) blob deletes happen **after** DB deletes succeed, not before, so partial failures leave orphans (recoverable by orphan sweep) rather than dangling DB rows pointing to deleted blobs; (7) **never available in `NODE_ENV=production`** until at least 2 successful staging dry-runs are documented here. Initial release is dev-only via CLI script.
-- **Operator: orphaned blob sweep.** Vercel Blob storage accumulates files that no `SessionRecording.blobUrl` points to (failed uploads, deleted notes from before cascade-delete-blob existed, etc.). Build a sweep job that lists blobs and deletes ones with no matching DB row. **Hard guards:** (1) **default to dry-run** — first call always returns the list of orphans + total bytes, explicit `--execute` flag required to actually delete; (2) **minimum age filter** — never delete a blob younger than 24h to protect in-flight uploads where the DB row hasn't been written yet (race condition during note creation); (3) cross-reference rule — a blob is "orphan" iff its URL appears in zero `SessionRecording.blobUrl` values across **all tenants** (orphan sweep is global, not per-tenant) AND `createdAt` >24h ago; (4) **hard cap per run** — refuse to delete more than 100 blobs in a single run (or 5% of total, whichever is smaller); forces operator to confirm batches and protects against a Prisma query bug suddenly classifying every blob as orphan; (5) CLI only initially: `npm run operator:sweep-orphan-blobs [--execute]`, UI version after operator dashboard exists; (6) **test with mocked Vercel Blob client** — must not hit real blob storage in tests (see `src/__tests__/audio-isolation.test.ts` for the existing mock pattern); (7) required regression test: seed N recordings with matching blob mocks, seed M orphan blobs (mocks only, no DB row), assert dry-run reports M orphans and 0 valid deletions, assert `--execute` deletes exactly M and the N intact recordings remain queryable.
-
-- **Usage tracking prerequisite (do before first paying user).** Before metered billing or subscription tiers can be enforced, the data model needs to count consumption. Add a `UsageLedger` table (or `monthlyUsageRollup` denormalized on `AdminUser`) that records: `adminUserId`, `periodStart` (first of month), `transcriptionMinutes` (float), `aiGenerations` (int), `recordingStorageBytes` (int). Increment on each Whisper call (`durationSeconds / 60`), AI generation call, and blob upload. **Schema-first, enforcement-later:** wire the writes now so data exists; gates and limits come when tiers are designed. This means no retrofit when billing ships. **Soft-cap warning UI:** when transcription minutes in the current period cross 80% of a future tier ceiling, surface an in-app banner so the tutor isn't surprised. **Regression test required:** verify that a transcription call increments `transcriptionMinutes` by the correct amount and that the increment is scoped to the correct `adminUserId` (multi-tenant isolation, same pattern as `audio-isolation.test.ts`).
-
-- **Outbox UX cleanup — collapse sent items.** *(Folds with status-model rethink § Outbox page reframe above.)* The outbox currently shows all sent emails in a flat list. Once a message is sent it's rarely actioned again; showing it at full height buries anything still needing attention. Desired behavior: sent items collapsed by default into a "Sent (N)" disclosure/details section, expandable on demand; unsent/queued items stay full-height at the top. Pattern mirrors the notes-history page cleanup (compact summary → expand for detail). Also give the first-time empty state a friendlier message ("No emails sent yet — send your first update from a student's page").
-- Friendlier empty states throughout (especially Outbox first-time, Students first-time).
-- "What's this for?" tooltips on Settings sections.
-- Add an obvious "Send feedback" CTA inside the app (already exists in nav, but not yet contextual on key screens).
-- **Mobile/phone responsive audit.** Sarah may fall back to phone if tablet is forgotten. Notes form, students list, and "Send update" flow should at minimum *work* on a phone, even if not optimized.
-- **Schedule a "watch her use it" call** within first 1–2 weeks of pilot. 10 minutes of screen-share reveals friction users never bother to message about.
-- Document for future agents: tutoring-notes is a **service** for tutors, not a product Andrew uses himself. Feedback loop must come from real users, not intuition. (Echoed in PRINCIPLES + multi-tenant learning; worth a per-app reminder here.)
-- **Brand-name social accounts — preservation pass before launch (do soon, not "convenient").** Andrew has secured the "Mynk" socials + the `mortensenapps.com` site domain, but most platforms (especially Reddit) reclaim or retire inactive handles. Highest-risk account: **`/r/usemynk`** — Reddit auto-archives subreddits with zero activity over a long-enough window, and a sniped/reclaimed brand subreddit is painful to recover. **Action items**: (1) Reddit `/r/usemynk` — post at least one pinned welcome/coming-soon thread, set sub description + sidebar, configure as "Restricted" or "Private" so randoms can't squat content, schedule a recurring auto-post (Reddit's scheduled-post feature) at a low cadence to keep activity flag green; (2) audit other secured handles (X/Twitter, Instagram, TikTok, YouTube, Bluesky, Threads, GitHub org if any) — confirm each has at least a profile picture + bio + one pinned post or equivalent so they don't read as "abandoned" to platform crawlers OR to anyone who finds them via search; (3) document the inventory in a short `docs/BRAND-SOCIAL-INVENTORY.md` (or extend `docs/BRAND.md`) with platform / handle / login method / preservation status per row, so future-Andrew knows what's where without digging through password manager. Note: brand WAS NOT publicly visible to Sarah this session because the UI refresh hasn't shipped yet — this is purely about preserving the handles before the brand goes public, not about brand-presence-in-app.
-- **Auth-button umbrella-OAuth notice (UX, LOW).** Near the **Connect Gmail** button (Settings) and any future Google sign-in button, add a one-line note that Google's consent screen will appear as **"Mortensen Apps"** (our umbrella OAuth account that powers sign-in), so users aren't confused by the brand mismatch with Mynk / usemynk. Tied to the **Path-A umbrella-OAuth decision** (`docs/LEGAL-SYNC.md` 2026-05-30). Suggested copy along the lines of: *"Google will show this as Mortensen Apps -- our parent account that powers secure sign-in."*
-- **🟡 WATCH — usemynk.com Safe Browsing / Search Console "Deceptive pages" (2026-05-31).** As of 2026-05-31 the flag has propagated into Google Search Console as a domain-level **"Deceptive pages"** issue (Security & Manual Actions -> Security Issues; **"Sample URLs: N/A"** = domain-level reputation, not a specific page). Andrew filed **Request Review** in Search Console on 2026-05-31 (authoritative owner appeal; supersedes the earlier safebrowsing.google.com `report_error` submission on 2026-05-30). Expected turnaround ~a few days. Diagnosis: false positive from a brand-new zero-reputation domain serving a login + Google OAuth flow. **HOLD:** Sarah stays on `tutoring-notes.vercel.app` until the wall clears. Re-test at the **48h** mark; if still walled, re-submit/escalate. **Do NOT file repeated reviews** (each rejection lengthens cool-down).
-- **🟡 WATCH — usemynk.com Google OAuth brand re-verification (ops).** **Submitted 2026-05-30** (Path A: umbrella "Mortensen Apps" consent screen; `usemynk.com` added as authorized domain). **Awaiting Google approval.** Verify `usemynk.com` ownership in Search Console (`arangarx@gmail.com`) may still be in flight — confirm in console. App keeps working on the existing verified config meanwhile; consent screen stays "Mortensen Apps". Cross-ref: `docs/LEGAL-SYNC.md` § Decision (2026-05-30) -- Path A.
-
----
-
-## V1 marketing — Phase D (public surfaces)
-
-Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pages. Execution branch: `feature/phase-d-landing-about`. Design rationale: [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) § Phase D v2.
-
-- **About-us page (company story / origin / mission) — deferred from Phase D v2.** The real **About us** page (founder story, mission, trust) — distinct from the **Features** page now at `/features`. **Reserve route `/about`**; do not repurpose for product features.
-- **Parents-facing marketing page.** Parent-targeted public page: what families get, privacy posture, how parent and student sign-in work, and how updates appear in the parent account. Repeatedly requested in brand review; not built in Phase D v2.
-- **Async / desynced transcription + post-session durability (HIGH, reliability-tied).** Do not force the tutor to validate or transcribe notes the instant a session ends. Kick off transcription on the backend the moment the session ends so work is in-flight before the tutor opens the recap — perceived latency drops and transcription may finish before they click. Long-term: explicit **"We'll notify you when your notes are ready for review"** flow (estimate derived from audio length when we have empirical data). **Hard reliability requirement:** notes must **not** be lost if the tutor closes the browser after the session has ended — ties to recorder-lifecycle FSM/outbox pillars ([`docs/RECORDER-LIFECYCLE.md`](RECORDER-LIFECYCLE.md)) and the reliability north star. **Why marketing dropped time promises (Andrew, 2026-06-02):** we removed "90 seconds" and similar copy because we lack empirical latency data; this async redesign is how we eventually earn the right to make any speed claim.
-
----
-
-## Cost observability — V1-gating (instrumentation slice)
-
-- **Cost-event durability hardening (V1-gating, cost-obs instrumentation slice).** Add `isTestFixture`, `tutorKey`, and `tutorLabel` snapshot columns on `CostEvent` (populated at `logCostEvent` write time); surface an explicit **Unattributed / deleted accounts** bucket in `/admin/cost` per-tutor view so rows reconcile to month totals; pricing-floor / cost-per-real-session view defaults to **real-only** (`isTestFixture = false`), operator total-burn includes test usage. Spec: [`docs/handoff/cost-observability-design-2026-06-06.md`](handoff/cost-observability-design-2026-06-06.md) §3.2.4.
-- **Recent cost events list on `/admin/cost` (non-blocking, 2026-06-07 slice 3 smoke).** `/admin/cost` shows aggregates only — operator could not easily verify per-session `CostEvent` rows during smoke. Add a **recent N cost events** table (most-recent first, filterable by session / `wbsid`) so per-session verification is possible without DB queries. Cross-ref **cost-event durability hardening** above. Effort: small; observability polish, not V1-gating.
-- **Full recurring-cost coverage on `/admin/cost` (Andrew 2026-06-12).** The cost dashboard today is missing **Neon storage** (and likely other fixed/recurring line items). Expand operator cost observability to capture **all recurring platform costs** — at minimum **Neon**, **Vercel**, **Vercel Blob**, **OpenAI** (variable, already partially instrumented via `CostEvent` / `[cev]` logs), **domain/DNS**, and any other load-bearing subscriptions — so month totals reconcile to real burn, not just per-session API events. **May exclude Cursor** (dev tooling, not product COGS). Implementation locus: `src/lib/observability/cost-queries.ts` + `/admin/cost` UI; may combine automated provider APIs, manual operator entry for non-API costs, and existing `cev` session-level events. Cross-ref: [`docs/handoff/cost-observability-design-2026-06-06.md`](handoff/cost-observability-design-2026-06-06.md).
-
----
-
----
-
-## Phase 1 in-frame review — follow-ups (2026-06-15)
-
-| Item | Priority | Notes |
-|------|----------|-------|
-| **WB-STYLE-MENU-CLOSE — style-options submenu should close on click-outside** | Low | Currently waits for a stroke to finish before closing the style-options submenu; should dismiss on click-outside like other popovers. Found during Phase 1 in-frame review smoke (2026-06-14). |
-| **WB-NOTES-SKELETON — auto-notes skeleton is BUILT-BUT-NOT-WIRED (correction 2026-07-02)** | **Pre-Sarah? (Andrew to decide — see SMOKE-NOTES-1/2)** | **⚠️ CORRECTION — the earlier "skeleton SHIPPED" claim was WRONG.** `SkeletonNotes` exists in `src/components/whiteboard/TutorNotesSection.tsx` (~L690) but has **ZERO call sites** — it is **dead code, never rendered** (confirmed by 2026-07-02 investigation). What actually renders after End Session is a muted **"Generating notes…"** text line above an empty form; fields fill in **one-shot** when reduce completes (~2–4s, 3s poll). During the LIVE session there is **no notes UI at all**. Two distinct gaps → see the 2026-07-02 smoke-findings section: **SMOKE-NOTES-1** (wire the existing `SkeletonNotes` into the post-End loading state — small) and **SMOKE-NOTES-2** (live/progressive notes DURING the session = `p3-incremental-map`, deferred behind perspeaker C — bigger). Cross-ref Part 3 spine in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). |
-| **WB-TRANSCRIBE-LATENCY — near-silent / short sessions** | Medium (backend) | A ~2-min near-zero-audio session took very long to transcribe. Backend watch item — recording re-arch / notes pipeline (currently parked). |
-| **WB-REVIEW-HEADER-POLISH — top review header feels basic** | Low | Visual polish pass on the session-review top bar after unified-surface correction lands. |
-
----
-
-## Recording re-architecture — Phase 1 follow-ups
-
-Cross-ref: [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md). Slice 3 (auto-notes / notes-bridge) ships on `feat/recording-p1-slice3-autonotes`.
-
-- **Map/reduce auto-notes ACCURACY is its own first-class workstream (2026-06-11).** Currently poor quality per Andrew — must be genuinely good before V1 ship (Sarah merge bar: notes are **good**, not merely "they exist, expect heavy editing"). Decoupled from audio storage/consolidation plumbing — regenerate path proved notes depend only on `TranscriptChunk` / `TranscriptChunkExtraction` rows. Cross-ref: design doc § notes-pipeline contract (regression guard). **PRE-MERGE (Part 3, in scope):** strong first-pass high-quality map/reduce — initial prompt + pipeline materially leveraging **per-voice-stream labeled transcripts** (speaker attribution should lift quality on its own) plus swappable **model abstraction** (`p3-incremental-map` / `p3-model-abstraction`). **POST-MASTER (deferred — Andrew 2026-07-01):** formal **eval harness** + **flywheel iteration loop** (systematic measurement + iterating toward near-100%) — #1 post-master follow-up at master cut; tune against Sarah's real-session examples. Supersedes interim 2026-06-16 "defer quality bar" wording in [`docs/handoff/pre-master-smoke-deferral-ledger-2026-06-16.md`](handoff/pre-master-smoke-deferral-ledger-2026-06-16.md). **Concrete hallucination example (2026-06-16, Andrew):** A whiteboard session that was just Andrew talking to his wife and kid and making faces (NO tutoring content, no whiteboard work) produced confident, fully-fabricated tutoring notes — Topics covered: "technical issues, personal anecdotes, student engagement"; Assessment: "struggles with technical setup, engaged in conversation, shares personal experiences"; Plan/Next steps + Links empty. **Design insight:** The generator FABRICATES plausible tutoring notes instead of ABSTAINING when there is little/no actual teaching content in the audio. The fix must include a low-confidence / "not enough session content to generate notes" path (abstain or emit an explicit low-content state) rather than always producing confident-sounding output. This is a grounding/faithfulness problem, not just a prose-quality problem. Use this as a seed example for the notes-quality eval set Sarah will contribute to.
-
-### Slice-3 notes-bridge — deferred review findings (2026-06-07)
-
-**Source:** adversarial review of slice-3 Save-bridge ([`acd41cf`](https://github.com/Arangarx/tutoring-notes/commit/acd41cf)). **Already fixed** in [`770f370`](https://github.com/Arangarx/tutoring-notes/commit/770f370) on `feat/recording-p1-slice3-autonotes` — do not reopen: **B1** (BLOCKER), **S1**, **S2** (hardening).
-
-- **S3 [FOLLOW-UP — reliability, medium, migration-bearing]:** Notes reduce has no job-in-flight lock. The immediate `after()` fire and the cron sweep (`runNotesSweep` in `src/lib/recording/`) can both run `processNotesReduceJob` for the same session concurrently — both read `WhiteboardSession.noteId = null` before either writes it back, creating a **second orphaned DRAFT `SessionNote`**. The sweep only filters `status in (pending, generating)` with a 60s staleness threshold; that is not a true lock. **Fix options:** (a) unique constraint on `WhiteboardSession.noteId` (+ additive migration), or (b) `SELECT … FOR UPDATE` inside a transaction around create+link. **Slot into the upcoming migration wave** — migration-bearing; not a hotfix without a migration pass.
-
-- **N1 [minor]:** Dashboard note-count includes DRAFT auto-notes → inflated count visible to the tutor.
-
-- **N2 [minor]:** No downgrade path if a SENT note needs to revert to READY.
-
-- **N3 [minor]:** `mark-seen` endpoint accepts a DRAFT-status note (should reject or no-op).
-
-- **N4 [minor]:** `regenerateNotesAction` update path lacks a cross-student ownership check (create path has `assertOwnsStudent`; verify and tighten the update path).
-
----
-
-## Identity / access — V1 redesign
-
-Items tied to the identity/access/consent epic ([`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md), IAC ledger in [`docs/handoff/identity-phase2-auth-session-design-2026-06-01.md`](handoff/identity-phase2-auth-session-design-2026-06-01.md)).
-
-- **Gate B2 — per-tutor privacy re-consent at claim/reconnect (Andrew 2026-06-10).** When B2 consent toggles ship, a parent completing a **claim link** (connect or reconnect to a tutor) MUST set privacy options **for that tutor** at claim time — consent is per-tutor; no silent inherit from another tutor or prior connection. **Not Phase 1** (view-login is ownership-only today). Spec: [`authed-session-access-design-2026-06-10.md`](handoff/authed-session-access-design-2026-06-10.md) §9.1 (B2-AC-1/2).
-- **Notes page — first-class authenticated site integration (Andrew 2026-06-10).** Redesign notes view as a page **inside** parent/child authenticated chrome (normal nav; can navigate to dashboard etc.) — not a standalone dead-end share page. Aligns with deprecating anonymous `/s/[token]` in favor of dashboards. **Phase 2 / notes-page redesign**, not Phase 1. Andrew: *"no reason to not just have the notes page as part of the parent/child's site."* Spec: [`authed-session-access-design-2026-06-10.md`](handoff/authed-session-access-design-2026-06-10.md) §4.10 (P2-AC-12/13).
-- **Editable family ID (IAC-7, ratified 2026-06-02, intentionally deferred 2026-06-02).** At first child setup, IAC-7 specified: suggest a default `familyId` but allow custom edit with global-uniqueness validation; and allow editing later via a family-settings page. **Current state:** only backend `updateFamilyId()` exists (no UI). **Deferred this pass** per Andrew: changing `familyId` after children have memorized/saved their `username@familyid` handle breaks their login until they relearn it. **Cascade when built:** login resolution keys on `familyId`; hard-lock keys use `familyId:username`; any edit-later needs careful design (e.g. grace period, old-handle aliasing) so existing handles keep working during transition.
-- **Co-guardian / delegated access to a child learner (FUTURE — not V1).** Source: Andrew's wife, 2026-06-02. Allow the primary Mynk family account owner to grant **another individual** access to a **specific** child `LearnerProfile` **without** sharing the primary guardian's credentials — e.g. a divorced/separated co-parent who will not share one login. Sketch: co-guardian gets their **own** adult-style account (password-based, own `@familyid`-style identity where applicable), access **scoped** to that child only, flow **initiated/authorized by the primary account owner**, co-guardian completes their own credential setup. **Forward-compat for schema (do not block in IAC-2 / V1):** implies `AccountHolder`↔`LearnerProfile` becomes a **many-to-many** guardianship relation (multiple guardians per child), vs today's single `LearnerProfile.accountHolderId` owner. **Additive later:** introduce a guardian join table; migrate existing single owner to "primary guardian." Current single-owner model + IAC-2 one-child-many-tutors **do not** need to build this now, but **must not** add DB constraints that would prevent a future many-guardians-per-child join table. **Open when built:** which guardian controls consent (likely primary owner; co-guardian scoped/limited), what the co-guardian can see/do, owner-initiated invite + co-guardian self-setup UX.
-- **Auth-form unification (fold into component redesign / Phase B batch pass).** No shared composite exists today — each credential form assembles its own password UI, so they've drifted: show/hide toggle missing on tutor reset (`src/app/reset-password/page.tsx`), admin change-password (`src/app/admin/settings/profile/ChangePasswordForm.tsx`), and Change-PIN (`src/app/account/children/[id]/ChangePinForm.tsx`); strength meter missing on tutor reset, admin change-password, and all PIN forms; the inline claim signup (`src/app/claim/[token]/ClaimAuthGate.tsx` `ClaimSignupForm`) help text mentions a strength meter but renders none. **Resolution:** build ONE reusable password primitive (password + confirm + show/hide + strength) during the component redesign and apply it across all **8** credential forms. Intended home for unification (deferred 2026-06-03 per Andrew — the redesign re-smokes everything anyway). Tracked as a named acceptance requirement in [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) Phase B acceptance.
-- **[SECURITY] Password-reset policy drift — tutor reset enforces `minLength 8`** (`src/app/reset-password/page.tsx`) **while signup enforces 10 + zxcvbn.** A reset can set a weaker password than signup allows. One-line fix (bump to 10 + apply the same zxcvbn gate); close during auth-form unification above. Tagged security, not cosmetic, so it isn't silently buried.
-- **Marketing sign-in chooser hover too light (cosmetic, fold into component pass).** The `/` sign-in dropdown (`.sign-in-menuitem` in `src/app/globals.css`, used by `src/components/marketing/MarketingHeader.tsx`) got a hover/focus state in `cf9dd84` (Phase D), but Andrew smoke (2026-06-03) flags the hover background as **too light/subtle**. Bump the hover contrast during the real component/Phase B pass that re-smokes the marketing chrome anyway. Accepted as-is for now.
-- **[SECURITY] Tutor disconnect + connected-account visibility for claimed students (intercepted-claim-link threat) — IAC-13, V1 required.** **Threat model:** a claim invite URL is a bearer token. If intercepted (forwarded email, shoulder-surf, shared device), an unintended third party can complete claim while signed in as *their* `AccountHolder` and gain access to a **minor's** tutoring data (recordings, transcripts, notes) — COPPA/privacy exposure, not mere UX. **V1 mitigations:** **(a) Tutor visibility** — tutor must see which account (email/identity) is connected to each student and ideally when it connected. **(b) Tutor-side disconnect** — tutor must be able to sever the `AccountHolder`↔`Student` tie (define: revoke that `LearnerProfile`'s learner device sessions + `AccountHolderSession` rows for sessions acting on that child; clear or null `Student.learnerProfileId` per product rules; audit log). **(c) Defense-in-depth** — keep claim links single-use + short expiry; tighten residual window if needed. **Investigation (2026-06-03, `identity-p2-multitutor`):** **(a) NO** — `src/app/admin/students/[id]/page.tsx` + `ClaimInviteSection` only show "already claimed" via `student.learnerProfileId`; `StudentClaimInvite.claimedByAccountHolderId` / `claimedAt` are not surfaced. **(b) NO** — no unlink/disconnect API or UI for post-claim ties (grep: revoke applies to pending `StudentClaimInvite` + share links, not `Student.learnerProfileId`). **(c) PARTIAL** — **single-use YES** (`claimedAt` set in `POST /api/claim/[token]/complete`; reuse → 409); **expiry YES** (`expiresAt`, `CLAIM_INVITE_TTL_MS` = 48 hours; expired → 410); **email verified** required on complete; sibling pending invites revoked post-claim. **Residual risk:** 48-hour bearer window + up to 3 concurrent pending links; no tutor visibility to spot a wrong claimant; no tutor recovery after wrongful claim. **Deferred (not V1):** parent-initiated account unlink/deletion — lower urgency when the connecting parent is normally legitimate; needs separate design. **Capture:** [`docs/handoff/session-identity-access-design-2026-05-31.md`](handoff/session-identity-access-design-2026-05-31.md) §4.5; ledger cross-ref [`identity-phase2-auth-session-design-2026-06-01.md`](handoff/identity-phase2-auth-session-design-2026-06-01.md) **IAC-13**.
-- **Legacy JWT role-fallback: middleware mis-route window (cosmetic, hardening follow-up).** Pre-migration sessions can carry a JWT cookie with `sub` but no `role`. Fix B (`auth-options.ts` jwt callback) re-reads `role` from DB on every SSR/`getServerSession` refresh (immediate on first hit when `_roleCheckedAt` is absent, then throttled 5 min), so the cookie self-heals permanently after the first SSR load. **Symptom:** middleware (`getToken()` — does NOT run the jwt callback) may cause **one spurious redirect bounce** for a real TUTOR before that first SSR refresh. **Not a security issue:** all privilege gates (`assertIsAdmin`, `assertAdminOrNotFound`, SSR redirects, cost panel) check DB role, not the cookie; a stale/missing-role cookie cannot grant admin-only access. **Deferred from `v1-redesign → master`:** touches high-blast-radius auth middleware for a one-time self-healing cosmetic window. **Suggested fix (dedicated branch + smoke):** in `src/middleware.ts`, when `token.sub` is present, `token.sub !== "admin"`, not impersonating, and `token.role` is absent → skip mode-based redirects (let SSR refresh + route), or fail-closed redirect to `/login` with a `session_stale` hint. **Tier:** Sonnet (auth-boundary touch); must pass real-browser smoke of the stale-role proxy recipe.
-- **Google OAuth sign-in + sign-up for parents and tutors (post-V1 fast-follow, NOT in V1 scope).** Today authentication is **credentials-only** (email + password) on tutor and parent signup/login — there is no "Sign in with Google" on those paths. The only Google/Gmail OAuth in the app today is the **Gmail send-notes consent flow** (`/admin/settings/email`) — a separate scope, not authentication. **Decision (Andrew 2026-06-07):** **one email = exactly one account** — enforce **cross-domain email uniqueness (Option A)**; the same email MUST NOT exist in both Operator realm (`AdminUser`) and AccountHolder realm. **Persona ruling:** "tutor who is also parent of their own student" is **NOT a supported persona** — a genuine dual-role person uses a separate email / `+alias`; **no** account-linking / multi-role identity (Option B rejected for now). **Same-wave timing:** uniqueness guard ships **with this OAuth-signup wave**, not as a separate near-term build — OAuth is what introduces the sharpest collision risk (one Google identity → ambiguous destination). **Status quo low-risk:** realms isolated at DB/handler layer (no auth bleed/takeover today); gap = UX confusion + future-OAuth risk — no emergency build. **OAuth work:** expose OAuth sign-in/sign-up on tutor login + signup and parent (AccountHolder) login + signup; OAuth signup resolves to a single realm per email and rejects if email exists in the other domain; new OAuth signups default to **TUTOR** on tutor path; parent path lands on `AccountHolder` session. **Head start:** NextAuth Google provider in `src/auth-options.ts` (not surfaced on login/signup UI). Cross-ref umbrella-OAuth notice (`docs/LEGAL-SYNC.md` Path A — consent screen shows "Mortensen Apps"). **When:** fast-follow immediately after V1 redesign ships (Wave 3 credential surfaces); do not block or expand V1 scope. **Same-wave scope (folded in):** **(1) Cross-domain email-uniqueness guard on ALL account-creation paths** — block creating an account in one domain when the email already exists in the other; paths to guard: tutor self-signup `src/app/signup/actions.ts` (~L51, `AdminUser` only today); first-admin setup `src/app/setup/actions.ts` (~L42, no email check today); `createAdmin` `src/lib/auth-db.ts` (~L31–44); parent signup API `src/app/api/auth/account-holder/signup/route.ts` (~L53, `AccountHolder` only today); new OAuth paths (both realms). Anti-enumeration responses consistent with existing signup flows (don't leak which domain owns an email). **(2) Login-page cross-links (cheap UX):** `/login` ↔ `/account/login` mutual "are you a parent/tutor? sign in here" links — wrong-portal users currently dead-ended (known papercut). **(3) One-time existing-collision cleanup** (greenlight-gated, destructive — Andrew approval at execution): reconcile pre-existing cross-domain collisions (e.g. `arangarx@hotmail.com` — known IAC-13 smoke artifact in BOTH `AdminUser` and `AccountHolder`); pick canonical domain per row; delete/re-email the other; document grandfather policy.
-
-- **IAC-PARENT-TERMINOLOGY — "Parent" login/signup wording too narrow (Andrew 2026-06-18).** Replace "Parent login / Parent sign up" framing with wording inclusive of a **self-learner signing up for themselves**, while preserving Parent/Guardian framing for dependent-learner consent flows. Candidates: "Parent/Guardian (or self-learner)" on entry points, or role-neutral "Account holder" where space-constrained. Copy pass across signup/login/consent surfaces. **Subsumed by** [`docs/AUTH-IDENTITY-REDESIGN.md`](AUTH-IDENTITY-REDESIGN.md) when that build ships; do not one-off rename in isolation.
-
-| Item | Priority | Notes |
-|------|----------|-------|
-| **AUTH-AGE-NO-HARD-CUTOFF — no hard age gate in logic or copy** | Post-Sarah (auth/identity redesign) | **Design constraint (Andrew 2026-06-30).** Signup fork and account-holder framing must turn on **self-attested capacity/role** (*"I can create and manage this account for myself"*) — NOT a birthdate threshold. **Forbidden:** hard age cutoff in logic; absolute age claims in copy ("18+", "adults only", "under 18", etc.). **Rationale:** real-world edge cases — under-18 living independently; jurisdictions with lower age of majority; advanced minors (e.g. 17-year-old in college). **Legal framing open — needs counsel:** who can self-consent, COPPA/under-13 for genuine minors whose data we process, FERPA, international age-of-majority variance — do NOT assert legal conclusions in product copy until reviewed. **Separate axis:** COPPA/parental-consent for actual children's data still applies (guardian flows, claim/setup, per-tutor consent lattice) — distinct from the self-attestation account-creation gate. Spec: [`docs/AUTH-IDENTITY-REDESIGN.md`](AUTH-IDENTITY-REDESIGN.md) §7.9. Pairs with auth/identity redesign build. |
-| **AUTH-FAMILYID-NO-DOT-INVARIANT — `familyId` must never contain `.`** | Post-Sarah (auth redesign); guard test cheap sooner | **Hard invariant.** Unified non-tutor login routes by dot in the segment after `@`: `username@familyid` (no dot → child PIN) vs `local@domain.tld` (dot → email/password). A dotted `familyId` silently misroutes logins. **Guarantee dot-free across ALL paths:** (1) auto-generation/slugify minting, (2) parent set/change validation, (3) all test fixtures/seed data. **Acceptance:** explicit guard tests asserting a dot is never accepted or produced on any path. Today satisfied by slugify + `^[a-z0-9_]{3,24}$` on update but not guarded as an invariant — future grammar change or hand-written fixture could break routing. Spec: [`docs/AUTH-IDENTITY-REDESIGN.md`](AUTH-IDENTITY-REDESIGN.md) §5.4. |
-
----
-
-## Decisions deferred (revisit when triggered)
-
-- **Whiteboard: feature of tutoring-notes vs sibling product?** Currently leaning toward **feature** (single app, single account, one subscription). "Tutoring Notes" branding may need to grow into something broader once whiteboard + recording ship — the current name undersells the product. Worth a deliberate naming decision before public launch. **Shortlist + clearance checklist:** see *Strategic lessons captured (ChatGPT brainstorm, May 15 2026) → Naming shortlist* under *Research / calibration* above; condensed: practical = TutorStudio / SessionPilot / TutorOS / LessonLoop; brand-distinctive = Mentivo / Lumora / SkillNest / Pathloom / SkillSpring; drop = TutorFlow / LearnHub / TutorPro / anything `.ai` or AI-suffix. Run Google / USPTO / `.com` / App Store / social-handle clearance before committing.
-- **Native app vs PWA** — defer until we know if iPad install friction is a real pain (vs just adding the web app to Home Screen). Online flow is browser-only per Sarah, so PWA is fine for MVP.
-- **Choosing OpenAI vs Anthropic** — coin-flip for current use case; revisit if cost or quality differs meaningfully on real workloads. OpenAI has the advantage of also providing Whisper, keeping audio + text on one provider/key.
-- **Recording storage:** stroke event log (JSON, small) is easy. Audio (MB-scale per session) needs a real plan: object storage (S3/R2/Vercel Blob), retention policy, cost per tutor. Decide before shipping recording feature publicly.
-- **Audio blob retention policy.** Once a recording is transcribed, there are two options: (a) delete immediately — transcript is in the DB, blob has no further purpose unless we offer re-download; (b) keep for N days (30-day window?) so tutor can re-transcribe or download before it expires. Currently blobs are never cleaned up. Also: student/note delete should cascade to blob deletion. Decide: do we want recordings to be re-downloadable by the tutor? If no, delete on successful transcription. If yes, set a retention window and a cron/cleanup job. Either way, add `deleteBlob()` calls to the note and student delete paths.
-- **Replay video format:** stroke-event-replay (custom player) vs flatten-to-MP4 server-side (familiar to students, larger file). Probably stroke-event-replay first (cheaper, scrubbable, smaller); add MP4 export if students ask.
-- **Per-org theming hook (`[data-org]` selectors).** When the second institutional pilot lands (UVU is the first), wire per-org token overrides via `[data-org="<orgSlug>"]` selectors in `globals.css`. Spec lives in `docs/DESIGN-TOKENS-PLAN.md` § "Per-org theming" — copy concrete CSS pattern from there at execution time. Trigger: signed second-org pilot agreement.
-- **Organization-aware rounding rules (UVU, Wyzant, etc.).** v1 (Wave 2.5) ships per-tutor rounding rules on `User` (`defaultRoundingIncrementMin` + `defaultRoundingMode`) that flow onto each session and freeze on close. Future: an `Organization` model with its own rounding rule; tutor designates a session as belonging to a specific organization (e.g. "UVU session") and the org's rule overrides the tutor default for that session. Curated preset list of known orgs (UVU, Wyzant) with their rules baked in; admin can add custom orgs. Sarah works with UVU regularly — she'd benefit from a "UVU session" toggle that auto-applies UVU's rounding requirements without her having to remember the rule. **Invariant preservation:** `WhiteboardSession.billedRoundingIncrementMin` + `billedRoundingMode` still freeze at close; they capture the org rule's increment + mode at the moment of close, not a foreign key to a mutable `Organization` row. Trigger: Sarah requests it OR a second institutional pilot signs (also see Per-org theming hook above — same trigger).
-
----
-
-## Reliability gaps — audit findings (2026-04-23)
-
-Audit run as part of the Whiteboard plan rollout — applying the new
-`.cursor/rules/reliability-bar.mdc` 5-axis lens (data durability, clock/ordering,
-race conditions, cross-platform parity, observability) to the existing recorder
-+ note flow.
-
-These items are **not** speculative blue-sky risks. They are concrete gaps the
-audit found by reading `useAudioRecorder.ts`, `lib/recording/upload.ts`,
-`lib/ai.ts`, the `actions.ts` server actions, and the `/api/upload/audio`,
-`/api/audio/[recordingId]` routes. Each one is the same class of bug Sarah
-already hit in the earlier rounds (17.9 MB silent drop, slider unmount,
-silence hallucination, iOS Server Action) — caught during planning instead
-of after.
-
-Tagged `[BLOCKER-PROD]` if the gap can lose user data or silently confuse a
-real session; `[FOLLOW-UP]` if it's a polish/scaling concern. BLOCKER-PROD
-items should be on the active path before the next pilot tutor is added.
-
-### Axis 1 — Data durability (recorder)
-
-**W1 durability principles (Andrew 2026-05-30, ratified):**
-
-- **Never delete without confirm** — no recording or draft is removed without explicit user confirmation.
-- **Auto-recover tutor-tied orphans** — attempt auto-recovery on anything orphaned that is tied to the tutor; leave it recoverable until pilot feedback says auto-recovery is annoying. Exact copy + metadata TBD.
-
-1. **[BLOCKER-PROD] In-progress segment dies on browser crash / refresh / OOM.**
-   `useAudioRecorder` keeps the live `MediaRecorder`'s chunks in `chunksRef`
-   (in-memory only). A 50-min segment with 49 min recorded + tab crash = 49 min
-   of audio lost. The completed *previous* segments are uploaded to Blob, but
-   the in-progress one has no IndexedDB safety net. Mirror the pattern from
-   the whiteboard plan blocker #1: serialize partial chunks to IndexedDB on a
-   30-second cadence, surface a "Recover unfinished recording from XX:XX?"
-   banner on next mount. Same `findInProgressSession` shape works for both
-   features.
-   **Partial fix (Ship A, `feat/audio-draft-store` @ `2cde72e`):** workspace
-   recorder only (`WhiteboardWorkspaceClient`, key `{whiteboardSessionId}:tutor:mic`).
-   Student-page note recorder (surface A) unprotected — **lower-priority** (see 1a).
-1a. **[RESOLVED 2026-05-30 — Andrew] W1 surface-A coverage — protect the student-page note recorder against crash/refresh.**
-   **Decision:** Sarah almost always records inside the whiteboard workspace (even
-   one-sided solo sessions); straight note-recorder use is rarer. W1 ship A
-   protected the **right** surface (workspace). Surface-A coverage stays
-   **LOWER-PRIORITY backlog**, not ship A-prime.
-   W1 ship A wires IndexedDB draft store + recovery banner **only** into surface B.
-   Surface A (`NoteEntrySection → AiAssistPanel → AudioInputTabs → AudioRecordInput`)
-   does **not** pass `recordingDraft` — by design for ship A scope.
-   **To close (when prioritized):** pass a stable session key into
-   `AudioRecordInput`'s `useAudioRecorder` via `recordingDraft` opt-in; mount-time
-   `findInProgress` + recovery banner; decide `sessionId` for note-only recordings
-   (studentId? ephemeral per mount?).
-1d. **[FOLLOW-UP — ship-B-adjacent] Draft `clear()` failure after clean End → spurious recovery banner.**
-   Pre-merge verifier on `feat/audio-draft-store`: if IDB `clear()` fails after a
-   clean End, next session shows recovery banner; Keep re-enqueues with draft's
-   `segmentId` → **duplicate outbox row / duplicate audio** (not data loss). Low/medium.
-1e. **[FOLLOW-UP — ship-B-adjacent] `handleReset` clears scheduling but not IDB draft.**
-   Same verifier: reset path leaves draft in store; can contribute to spurious recovery.
-   Low/medium; worst case = duplicate audio, not loss.
-1b. **[FOLLOW-UP] Cross-session stuck/orphaned draft surfacing (backlogged 2026-05-30).**
-   Stuck rows and orphaned drafts from prior sessions only surface when the user
-   reopens that specific session's workspace. Andrew ratified **backlog, not Ship
-   B** — but the never-delete + auto-recover principles above shape any future
-   surfacing work (Ship B outbox stuck UI + surface-A coverage). Exact copy and
-   metadata to surface TBD; expected edge cases.
-1c. **[UX — fold into upcoming redesign] Consolidate the *presentation* of post-crash recovery affordances — WITHOUT merging the underlying systems.**
-   After a hard crash / tab-kill, the workspace can stack **three independent
-   banners at once** with no de-duplication (verified 2026-05-30, Andrew's
-   screenshot): (1) **W1-A audio draft** — "Audio recording was interrupted. We
-   recovered MM:SS." Keep/Discard, store `tutoring-notes-recording-draft`; (2)
-   **whiteboard event-draft** — "Browser recovery (IndexedDB): … Load draft into
-   board" / Discard, store `tutoring-notes-checkpoints` (pre-existing, separate
-   from W1-A); (3) **"Student disconnected — recording paused"** — live FSM
-   state, **NOT a recovery prompt**. Goal: one coherent recovery *moment* in the
-   redesign instead of three overlapping "something interrupted" prompts.
-   **CRITICAL CONSTRAINT (Andrew 2026-05-30): consolidate VISUAL/stacking
-   treatment only — do NOT merge the mechanisms or force a single shared
-   Keep/Discard.** These recover genuinely different things and must stay
-   **individually decidable**: audio tail (store A) vs board events (store B) are
-   separate decisions — a tutor may legitimately want to Keep audio but Discard a
-   board draft, or vice versa, so each needs its own Keep/Discard. And banner (3)
-   is a **live-state notice, not recovery** — it must NOT be folded into a
-   "recover?" construct at all; it should coexist (styled distinctly) or render in
-   the normal session-status area. Acceptable shape: a single recovery *container*
-   with per-item Keep/Discard rows + preserved per-system semantics; unacceptable
-   shape: one "Recover everything? Y/N" that couples audio and board (or that
-   swallows the live-state notice). Stacking-order + dedup logic lives in
-   `WhiteboardWorkspaceClient.tsx`.
-2. **[BLOCKER-PROD] Upload-failure persistence dies on page navigation — W1 ship B (prioritized next build).**
-   Andrew (2026-05-30): **upload has to work** — this is the prioritized reliability
-   build after upload re-baseline smoke (Recording item 5) confirms actual failure modes.
-   **Do not dispatch until smoke lands.**
-   `uploadAudioWithRetry` retries once. If both attempts fail (network outage, Blob 5xx),
-   the blob in browser memory dies on navigation. No IndexedDB hold-the-blob-until-retry.
-   **Ship B scope:** persist blob to IndexedDB on retry exhaustion; retry/resume;
-   survive page navigation — targeting Sarah on flaky cellular. Same pattern as
-   whiteboard plan blocker #7. Hardening adjacents: items 1d/1e (draft clear/reset edge cases).
-3. **[FOLLOW-UP] No cross-device recovery.** Even with IndexedDB persistence,
-   a tutor who switches from desktop to phone mid-session loses the local copy.
-   Acceptable for v1; track if anyone reports it.
-3b. **[SEEN — NOT REPRODUCED 2026-05-30] "No audio recorded" on End after student-drop auto-pause.**
-   Andrew on `fix/replay-audio-fetch-on-scrub-drop` (master-based, no W1-A): recorded with
-   student → student dropped (recording auto-paused, confirmed seen) → ended a bit later →
-   review said "no audio recorded" despite believing audio was captured. **Re-ran with console
-   open (`rid=`/`obx=` filter): could NOT reproduce** — recording timer climbed to 1:14,
-   capture logs fired, auto-pause on drop, clean stop/save worked. Code trace (paused→End →
-   `stopAndUpload("final")` → `recorder.stop()`) shows no path that discards paused chunks;
-   end-session explicitly flushes a paused recorder. Most-likely original cause: capture never
-   reached `recordingActive` that first time (audio-flow gate / both muted at start) so "no audio"
-   was technically correct, OR a one-off upload/outbox failure. **Watch-item, not an active chase.**
-   If it recurs: capture `rid=` blob size on stop + `obx=` enqueue/upload/drain at End. W1 ship A
-   (draft store) + ship B (upload persistence) are the structural safety nets if it's real.
-3c. **🟢 COSMETIC / LOW — End-session "saving 0 segments" copy (re-observed 2026-05-30; triaged 2026-05-31).** During
-   usemynk cutover smoke (impersonating test1, short recording, End-session button) UI showed
-   **"saving 0 segments"** again. **Audio persists:** production Neon query confirmed --
-   `SessionRecording` row id `8a34b5f5-3aa8-48d5-bb1f-0248fa4762a8`, streamId `tutor:mic`,
-   whiteboardSessionId `343da5d4-fa9a-41f4-819f-f712ab8489ca`, sizeBytes 1,576,755 (~1.5MB),
-   blobUrl present, createdAt `2026-05-31T04:09:27Z` -- created by the exact smoke session that
-   showed "0 segments". **Root cause:** End button copy reads `inFlightStreamCount` (uploads still
-   in flight), which is structurally ~always 0 because the workspace finishes uploading **before**
-   enqueue, so it never reflects the real saved segment count. **Fix in flight:** branch
-   `fix/end-session-segment-copy` (phase copy: "Uploading..." / "Finalizing..." or meaningful N).
-   Cross-ref: `docs/RELEASE-ROADMAP.md` "Saving last 0 segments…" copy fix. **Separate low-pri
-   follow-up:** `durationSeconds` is null on that row (duration not computed/stored; audio itself is fine).
-
-### Recorder capture reliability — re-arch Phase 2 deferred (2026-06-07)
-
-From Andrew's read-only recorder smoke on the slice-3 preview (2026-06-07). **Not slice-3 blockers** — queued behind slice-3 autonotes + three pending merges. Maps to ratified [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md) Phase 2 decisions; guarded-lifecycle work per [`docs/RECORDER-LIFECYCLE.md`](RECORDER-LIFECYCLE.md).
-
-1. **[DEFERRED] On-page recording-permissions removal (Sarah request).** Remove bespoke in-app "Allow recording / Allow microphone" UI (`src/components/av/AVPermissionsPrompt.tsx`; related hints in `RecordingControlPanel` / `MicControls`) so the **only** mic permission prompt is the browser-native `getUserMedia` dialog. Capture intent stays gated by **parent privacy consent** (Gate B2 — `ConsentRecord` / `SessionConsentSnapshot`), **not** `Student.recordingDefaultEnabled` (tutor UX convenience default for the Start toggle — orthogonal). Separate from OS permission UI. Future redesign; not started. **Tier:** Sonnet.
-2. **[DEFERRED] Tutor "Pause recording" → true pause (ratified D5).** Toolbar Pause today calls `stopAndUpload("final")` + `teardownMicStream()` (`WhiteboardWorkspaceAudioBridge.tsx` / `useAudioRecorder.ts`) — (a) re-shows `AVPermissionsPrompt` on resume because `localMicStream` goes null, (b) finalizes a segment on every pause, (c) collapses the recording clock (FSM → idle). Correct pattern already exists for student-disconnect auto-pause: real `MediaRecorder.pause()` / `resumeRecording()` with mic hot. **Fix:** route tutor-pause through the same true-pause path per **D5**; **iOS-hardware-gated** before ship. Known architectural debt ([`docs/handoff/pause-disconnect-code-analysis-2026-06-04.md`](handoff/pause-disconnect-code-analysis-2026-06-04.md)), not a regression. **Tier:** Sonnet (FSM + bridge + `useAudioRecorder` + LIVE-AV external-stream contract).
-3. **[DEFERRED] Leading "start silence" — anchor recording clock to first activity (ratified D3).** No synthetic silence is generated; the audio-flow gate (`sessionGateReleased` in `WhiteboardWorkspaceClient.tsx` / `lifecycle-machine.ts`) releases recording on whiteboard activity, real audio flow, solo-rehearsal, OR a blind **10 s** `AUDIO_FLOW_GATE_TIMEOUT_MS` timeout — so `MediaRecorder` captures a live but silent mixdown before anyone speaks (leading dead air). **Andrew gate policy (2026-06-07):** start the recording clock on **audio OR whiteboard activity**; **drop the blind 10 s timeout release**. Trade-off: the 10 s timeout was a smoke-4 safety net against "both mics muted → never record"; dropping it accepts that if real conversation happens but the audio-flow detector false-negatives AND nobody draws, nothing records (judged acceptable: no audio + no WB activity = nothing worth recording). Replay A/V sync is currently aligned at t=0 — fix must move the recording-clock anchor in lockstep per **D3**; do **not** strip silence from the blob alone; defer post-hoc blob trimming to D3/D6. **Tier:** Sonnet (gate policy + clock anchor + tests); Opus only if a full multi-clock model is opened in the same pass.
-
-### Axis 2 — Clock + ordering correctness
-
-4. **[FOLLOW-UP] Session timer drift on iOS.** Already in BACKLOG as
-   "Session timer stops when phone idles" (line 32). Reframe under reliability
-   gaps so it gets the same triage discipline. Fix is also already proposed
-   (reconcile against `Date.now() - startedAt` on `visibilitychange`); this
-   item just elevates priority.
-5. **[FOLLOW-UP] WebM/MP4 duration is unreliable for scrubbing.** Already in
-   BACKLOG (search "scrub"). Reframe under reliability gaps. The fix is to
-   either re-mux server-side on upload to add a proper `cues` atom or to
-   pre-compute duration via `ffprobe` and store it on `SessionRecording`.
-   Today the share-link audio player can't scrub long segments accurately,
-   which is a real parent-side trust hit.
-
-### Axis 3 — Race conditions on user input
-
-6. **✅ SHIPPED 2026-05-20, merge `249327a` (smoked OK by Andrew) — Note save vs transcribe race.** Was: if a tutor typed
-   into the note form while `transcribeAndGenerateAction` was running on a
-   fresh recording, the action's `populate()` callback overwrote the form
-   fields when the AI response arrived. Sarah-class silent-loss bug.
-   **Fix shipped on branch (option c, the gentlest of the three proposals):**
-   `NewNoteForm.populate()` is now **merge-into-empty** for every AI-fillable
-   text field (topics / homework / assessment / plan / links). The tutor's
-   typed content is NEVER clobbered, no matter when they typed it (before
-   the action, during the wait, etc.). `AiAssistPanel.checkOverwrite()`
-   becomes `checkOverwriteAndPrepare()`: on confirmed "yes replace," it
-   **clears the form synchronously BEFORE dispatching the action**, so the
-   tutor's explicit "discard mine, use AI" intent is honored AND the same
-   race protection applies to content typed during the wait.
-   Coverage: 19 form-level tests in
-   `src/__tests__/dom/NewNoteForm.populate.dom.test.tsx` + 7 flow-level
-   tests in `src/__tests__/dom/AiAssistPanel.race.dom.test.tsx` covering
-   empty-form populate, race-during-wait, decline-confirm, confirm-clears,
-   audio path, multiple-dirty-fields, AI provenance fields. Mark SHIPPED
-   after Andrew smokes the Preview and the merge lands on master.
-7. **[BLOCKER-PROD] Hot-swap mic / headphones unplug mid-record is silent.**
-   `MediaRecorder` keeps producing data even after the underlying device
-   disappears (the stream becomes silence), and `useAudioRecorder` does not
-   subscribe to `MediaStreamTrack.onended` or check `track.readyState`. Sarah
-   yanks her USB headset, the next 20 minutes is silence, Whisper hallucinates,
-   note is empty. Fix: subscribe to `track.onended`, surface a banner "Audio
-   device disconnected — recording paused. Reconnect or change device to
-   continue.", optionally auto-pause the recording. This is the device-side
-   analog of the silence-hallucination guard.
-8. **[FOLLOW-UP] Pause clicked while a segment is mid-finalize.** Possible
-   race between the user-driven Pause and the auto-rollover finalize path.
-   B5's "single-shot rollover guard" (`rolloverInProgressRef`) handles
-   double-rollovers but doesn't gate against a manual Pause arriving in the
-   gap. Low probability; verify with a stress test before declaring fixed.
-9. **[FOLLOW-UP] Browser back button mid-recording.** No `beforeunload` guard
-   exists. Tutor accidentally backs out, recording is lost (would benefit from
-   the IndexedDB persistence in #1). Add a `beforeunload` confirm when
-   `recordingActive`, paired with the IndexedDB safety net so even a confirmed
-   navigation doesn't lose data.
-
-### Axis 4 — Cross-platform parity
-
-10. **[BLOCKER-PROD] iOS Safari real-hardware test matrix is implicit.** The
-    code has iOS-Safari-specific branches (no-timeslice MP4 guard, iOS Server
-    Action HTML response, mic permission re-prompt on rollover) but the
-    "tested on a real iPhone" checklist is in `RECORDER-REFACTOR-STATUS.md`
-    smoke as a single line, not a matrix. Build a real explicit list:
-
-    | Feature                              | Real iOS Safari | jsdom | Playwright WebKit |
-    |---|---|---|---|
-    | Cold mic acquire + record + stop     | Sarah's flow    | yes   | yes               |
-    | Auto-rollover at segment cap         | **untested**    | yes   | opt-in            |
-    | Tab background → return → keep going | **untested**    | no    | no                |
-    | Screen lock → unlock mid-record      | **untested**    | no    | no                |
-    | Hot-swap from speaker to headphones  | **untested**    | no    | no                |
-    | Sign-out → sign-in (BACKLOG line 30) | **broken**      | no    | no                |
-    | Upload of >10 MB blob                | **untested**    | yes   | yes               |
-    | Audio draft recovery banner (W1-A)   | **untested**    | yes   | no                |
-    | Whiteboard cross-device view-sync    | **untested**    | n/a   | Chromium harness  |
-
-    Each "untested" cell is a Sarah-might-hit-it bug waiting to happen. Either
-    test on real hardware and tick the cell, or add an explicit iOS-Safari
-    "limitations" copy block in the recorder UI so the user knows what we have
-    and haven't validated.
-
-    **iOS-device status (2026-05-30):** Andrew currently has **no iOS device**
-    on hand. All `untested` iOS-Safari cells stay open until a Sarah session or
-    a purchased test iPhone is available. **Andrew ratified 2026-05-30: iOS
-    validation is NOT a release gate** — no evidence modern Safari diverges from
-    modern Chrome; track as backlogged risk, prioritize on Sarah sessions or when
-    a test device is acquired. **Recent work pending iOS validation (non-blocking):**
-    (1) **W1-A audio draft recovery banner** — the `MediaRecorder`
-    `timeslice` + `pagehide`/`visibilitychange` checkpoint path that persists
-    the draft is the exact surface iOS Safari/WebKit historically diverges on
-    (no-timeslice MP4 guard already exists for live recording, but the new
-    *checkpoint-on-hide* path is unproven on iOS); (2) **Whiteboard Phase-1
-    cross-device view-sync fix** — the 5/5 real-hardware smoke that resolved the
-    2-week offset bug was **Android (student) + desktop**, never re-smoked on a
-    real iPhone since the `123e60e` offset-invariant fix. Both are
-    desktop/Android-green; iOS is the only unvalidated axis.
-11. **[FOLLOW-UP] Android Chrome is "passes Sarah's flow" but otherwise
-    untested.** Same matrix as #10 should be filled in for Android Chrome
-    once a second pilot tutor or PO test happens.
-12. **[FOLLOW-UP] Firefox is completely untested.** Lower priority because
-    no current user uses Firefox; flag if anyone ever reports a Firefox
-    issue.
-
-### Axis 5 — Observability
-
-13. **[BLOCKER-PROD] `rid=` coverage is partial.** Audit findings:
-    - **`transcribeAndGenerateAction`** (`actions.ts:291`) — has `rid`
-      logged at begin / ok / returned-ok-false / thrown.
-    - **`/api/upload/audio` route** (`route.ts:66`) — has `rid` on token
-      generation.
-    - **`createNote` / `editNote` / `deleteNote` / `regenerateShareLink` /
-      `revokeShareLink` / `deleteRecording` / `generateNoteFromTextAction`**
-      — no `rid`. When Sarah reports "I saved a note and it disappeared" we
-      have no way to correlate her timestamp to a specific server-side
-      execution. Fix: thread `createActionCorrelationId()` through every
-      mutating server action; log `[<actionName>] rid=<uuid> studentId=<id>
-      noteId=<id> begin/ok/error`. Mechanical; pure Sonnet work.
-    - **Client-side errors** are `console.error`-only with no per-action
-      `rid` echoed back to the user. Add the `Ref:` short-id to non-action
-      client-side errors too where possible.
-14. **[BLOCKER-PROD] No structured per-recording lifecycle log.** A
-    `SessionRecording` row goes through Created → Uploaded → Transcribed →
-    AttachedToNote → Deleted, but each transition logs in a different format
-    (or not at all). Build a single grep-friendly format:
-    `[recording] rid=<id> recordingId=<id> studentId=<id> phase=<created|uploaded|transcribed|attached|deleted> ok=<bool> details=<short>`.
-    Lets us trace any single recording end-to-end through Vercel logs in 30
-    seconds.
-15. **[FOLLOW-UP] Whisper API call observability.** When Whisper returns a
-    junk transcript, the existing silence-hallucination guard catches it but
-    there's no log line saying "Whisper returned <N> chars for a <M>-second
-    segment, looked like silence boilerplate." Add at warn level, link by
-    `rid + recordingId`, so we can correlate "Sarah's note has Topics: 'thanks
-    for watching'" to the exact Whisper response.
-
-### Triage suggestion
-
-| Priority | Items | Rough scope |
-|---|---|---|
-| **Active path next** (BLOCKER-PROD on data loss) | 1, 2, 6, 7 | ~3-5 evenings: IndexedDB persistence module reused by recorder + whiteboard, dirty-field guard on `populate`, `track.onended` subscription. |
-| **Active path soon** (BLOCKER-PROD on observability + iOS) | 10, 13, 14 | ~2-3 evenings: rid plumbing through remaining actions, recording-lifecycle log helper, real iPhone test pass + matrix. |
-| **Track for next sweep** | 3, 4, 5, 8, 9, 11, 12, 15 | Backlog — bring up at next planning when scope allows. |
-
-The first row could plausibly be folded into the whiteboard Phase 1 hook +
-checkpoint-store work — `useWhiteboardRecorder` and `useAudioRecorder` would
-share the IndexedDB persistence module, and the dirty-field + `track.onended`
-patterns can be added to the recorder hook in the same session.
-
-### Why this audit lives in BACKLOG.md and not in a separate doc
-
-These are **recorder-and-note** gaps, and BACKLOG.md is the canonical list
-for the recorder/note flow. The whiteboard feature gets its own
-`docs/WHITEBOARD-STATUS.md` for its sub-phases and audit. Both are governed
-by the same `.cursor/rules/reliability-bar.mdc` standard.
-
----
-
-## Security — in-memory rate limiters (cold-start / multi-instance gap)
-
-**Context (2026-06-03):** Vercel serverless isolates each cold start with fresh in-memory state, and concurrent instances never share memory. Any rate limiter backed only by module-global `Map`/`Set` will reset on cold start and not accumulate across instances, weakening brute-force protection. The learner PIN hard lock was the highest-severity instance (minor data, short PINs, parent-unlockable hard lock).
-
-**✅ Fixed (commit on `identity-p2-multitutor`, 2026-06-03):** `LearnerLoginThrottle` Neon table — durable learner PIN soft cooldown + hard lock. The durable pattern (Prisma `LearnerLoginThrottle`, atomic `INSERT … ON CONFLICT DO UPDATE … RETURNING`) is the **template** for migrating the remaining limiters below.
-
-**[SECURITY] Remaining in-memory rate limiters — migrate to Neon using `LearnerLoginThrottle` pattern:**
-
-| Limiter | Key | Severity | Notes |
-|---|---|---|---|
-| `learner_ip:<ip>` 30 req/min | `rateLimit()` in `checkLearnerPinCooldown` | **LOW** | Per-IP overflow guard for learner PIN login. Cold-start reset is *more* generous (harder to DDoS). Lower priority; no auth state. |
-| ~~`auth:<ip>` AH login~~ | ~~`rateLimit()` in `src/middleware.ts`~~ | ~~**MEDIUM**~~ | **✅ DONE (branch `security/durable-auth-2fa-limiters`, 2026-06-04):** Ported to Neon-backed `AuthThrottle` table. Primary key is now `ah-login:<normalizedEmail>` (stable, IP-independent). IP coarse check in middleware preserved as defense-in-depth (LOW). |
-| ~~`2fa:<ip>` TOTP verify~~ | ~~`rateLimit()` in `src/middleware.ts`~~ | ~~**MEDIUM**~~ | **✅ DONE (branch `security/durable-auth-2fa-limiters`, 2026-06-04):** Ported to Neon-backed `AuthThrottle` table. Primary key is now `2fa-verify:<adminUserId>` (stable, IP-independent). Check added in `verifyTotpCode` server action. |
-| `api:<ip>` / `api-wb-poll:<ip>` general API | `rateLimit()` in middleware via `api-rate-buckets.ts` | **LOW** | General API abuse prevention. Reset on cold start is acceptable for pilot scale; upgrade before high-volume traffic. |
-| `setup:<ip>` setup route | `rateLimit()` in `src/middleware.ts` | **LOW** | One-time claim/setup routes. Low risk. |
-
-**How to migrate each:** Create a `<prefix>RateLimit` Neon table or reuse a generic `IpRateLimit` table with a `scopeKey` column (same pattern as `LearnerLoginThrottle`). Use the atomic `INSERT … ON CONFLICT DO UPDATE SET count = count + 1 … RETURNING count` pattern. Make the check async and update any call sites.
-
-**Scope discipline:** Do NOT fix these in the same pass as the learner PIN limiter (already fixed above). Each needs its own branch + smoke + `--no-ff` merge.
-
----
-
-## Dev-tools / admin operator UX
-
-Items captured from 2026-06-06 Andrew smoke of `/admin/dev-tools` fixture dashboard.
-
-- **Dev-tools: adopt existing manual test user as a managed fixture.** `arangarx+test1@gmail.com` (and any other hand-created test accounts) are not marked `isTestFixture=true` and therefore fall outside the "Clear all fixtures" sweep. Options: (a) a one-shot "adopt as fixture" action in dev-tools that sets `isTestFixture=true` on the existing `AdminUser`/`AccountHolder` by email, or (b) a migration script that bulk-marks known test emails. Either way, the fixture dashboard and clear-all should cover them going forward. (Andrew, 2026-06-06 smoke.)
-
-- **Dev-tools / admin UX (undecided — discuss):** consider moving the impersonation list off the main admin dashboard into dev-tools only, and redirecting to dev-tools after exiting impersonation. Andrew noted the main admin landing is now heavily test-oriented; unsure if that's the permanent shape or if impersonation lives better in dev-tools where all the other fixture/test machinery lives. Revisit once the pilot grows beyond solo use and the admin dashboard's permanent information hierarchy is clearer. (Andrew, 2026-06-06 smoke.)
-
-- **[BL-IMP-REAL] Support impersonation of REAL accounts (operator/support "login as user").** Standard SaaS support/debugging pattern. Currently HARD-blocked: `startImpersonation` enforces `isTestAccount=true` on both the caller (via `assertIsRealAdmin`) and the target (explicit guard "Can only impersonate test accounts.") — enabling real-account impersonation is a distinct feature that requires ALL of:
-  - **Unforgeable audit trail** — extend existing `ImpersonationLog` + `imp` log prefix + on-screen banner to record the real user's email/id and the operator's identity. Must be non-repudiable.
-  - **MANDATORY TOTP step-up** (the B1 gate removed 2026-06-14 returns here as essential — this was the primary motivation for B1 in the first place; dropped only because impersonation is currently test-only).
-  - **Consent / notification** — consider notifying the impersonated account holder (email or in-app) when their session is entered.
-  - **Scope constraints** — consider read-only mode and/or time-boxed sessions to limit blast radius.
-  - **Minor-data legal review** — FERPA/SOPIPA/parental consent implications when impersonating a parent who has access to a minor's tutoring data. "After lawyer consult" (Andrew, 2026-06-14).
-  - **Real-account impersonation UI** — separate trigger from the current test-account `isTestAccount` panel; clear labeling so operators cannot accidentally impersonate real users via the test-account path.
-  *Added 2026-06-14 when B1 step-up was removed from the test-only impersonation path.*
-
----
-
-## Docs cleanup pass (next)
-
-**Policy:** [docs/INDEX.md](docs/INDEX.md) § Docs cleanup / archival policy. On each pass: verify still-valid content is captured in a canonical roll-up **before** archiving redundant copies. Never archive unique valid information.
-
-**Ready example — whiteboard chrome feedback:** consolidated in [docs/handoff/whiteboard-chrome-requirements.md](docs/handoff/whiteboard-chrome-requirements.md) (commit `c6cf6ed`) with a **Sources swept** list. Whiteboard sections in those source docs are **archival candidates** once a cleanup pass verifies each item is truly in the roll-up — **do not archive yet.** Candidates include:
-
-- `docs/whiteboard-smoke-log.md` (whiteboard chrome sections)
-- `docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`, `docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md` (whiteboard chrome rows)
-- Redesign docs with overlapping chrome content — e.g. `docs/handoff/v1-component-redesign-design-2026-05-31.md`, `docs/handoff/whiteboard-sync-redesign-2026-05-27.md`, `docs/RELIABILITY-REDESIGN-2026-05-27.md` (see full **Sources swept** table in the roll-up)
+*Last reorganized: 2026-07-09 (doc-cleanup master). Sources: EXTRACT-A through J2, prior BACKLOG.md, RELEASE-ROADMAP.md. Item count reflects deduplicated open work — verify shipped rows before deleting.*
