@@ -19,12 +19,11 @@ import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
 
 /**
- * Generalized client-direct Vercel Blob upload route.
+ * Canonical client-direct Vercel Blob upload route.
  *
- * Supersedes `/api/upload/audio` (which still exists for backwards
- * compatibility with the audio recorder during the whiteboard rollout).
- * The whiteboard hook + replay player + PDF/image upload toolbar all
- * use THIS route.
+ * Handles every upload kind (audio segments, whiteboard events/snapshots/
+ * assets) through one handleUpload handler so auth policy and
+ * @vercel/blob upgrades stay in one place.
  *
  * Auth model: every kind has a per-kind `onBeforeGenerateToken` gate
  * that loads the relevant ownership row (student, whiteboard session)
@@ -32,26 +31,19 @@ import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
  * is the actual gate — without a valid token signed for this
  * pathname, the PUT can't happen.
  *
- * Why one route handles every kind: `handleUpload` does the heavy
- * lifting (signed-token mint, content-type allow-list, size cap),
- * and we want exactly one place to keep up with @vercel/blob version
- * upgrades. The kind discriminator carries enough info to route to
- * the right ownership check + size cap + content-type allow-list.
- *
- * As with `/api/upload/audio`, we deliberately do NOT pass
- * `onUploadCompleted` — see that file's header for the local-dev
- * incompatibility this avoids.
+ * We deliberately do NOT pass `onUploadCompleted` — embedding a
+ * callback URL in the signed token breaks localhost dev when no
+ * VERCEL_BLOB_CALLBACK_URL is configured (see upload-route-no-callback
+ * regression test).
  */
 
 /**
  * `kind` is the discriminator that decides which ownership check fires
  * and which size + content-type policy applies.
  *
- *  - "audio" — backwards-compat path; same behaviour as
- *    `/api/upload/audio`. New audio uploads should still go through
- *    the dedicated route until we migrate the recorder. Kept here so
- *    the whiteboard recorder hook can also push audio segments through
- *    a single uploader without two routes.
+ *  - "audio" — tutor mic segments + Upload tab files. Same auth as
+ *    the former `/api/upload/audio` route (ownership, erasure, tutor
+ *    approval). Client: `uploadAudioDirect` in lib/recording/upload.ts.
  *  - "whiteboard-events" — the canonical event log JSON
  *    (`events.json`). Owned via WhiteboardSession.
  *  - "whiteboard-snapshot" — final-canvas PNG thumbnail. Owned via

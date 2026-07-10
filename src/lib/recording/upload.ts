@@ -12,11 +12,12 @@
  *
  *  2. The default uploader (uploadAudioDirect). Browser → Vercel Blob
  *     directly via @vercel/blob/client.upload(), routed through our
- *     handleUpload route handler at /api/upload/audio. This bypasses
- *     Vercel server functions' 4.5MB request body cap (which is what
- *     made Sarah's 17.9MB m4a fail with "unexpected response from the
- *     server"). The route handler enforces auth + ownership before
- *     signing the upload token; see app/api/upload/audio/route.ts.
+ *     handleUpload route handler at /api/upload/blob (kind: "audio").
+ *     This bypasses Vercel server functions' 4.5MB request body cap
+ *     (which is what made Sarah's 17.9MB m4a fail with "unexpected
+ *     response from the server"). The route handler enforces auth +
+ *     ownership before signing the upload token; see
+ *     app/api/upload/blob/route.ts.
  *
  * Tests: see __tests__/recording/upload.test.ts. The retry policy is
  * exercised against an injected stub uploader so we don't need to spin
@@ -48,7 +49,7 @@ export type UploadAudioFn = (
 /**
  * Upload an audio blob directly from the browser to Vercel Blob.
  *
- * The browser fetches a single-use token from /api/upload/audio (which
+ * The browser fetches a single-use token from /api/upload/blob (which
  * checks the tutor owns this student) and then PUTs the bytes straight
  * to Vercel's edge — our function never touches the audio stream, so
  * the only practical size cap is BLOB_MAX_BYTES enforced server-side.
@@ -67,6 +68,7 @@ export async function uploadAudioDirect(
   mimeType: string
 ): Promise<UploadAudioResult> {
   const pathname = `sessions/${studentId}/${Date.now()}-${safeName(filename, "recording.bin")}`;
+  const clientPayload = JSON.stringify({ kind: "audio", studentId });
   // Strip any codec parameter from the content-type before handing it to
   // Vercel Blob. Chrome's MediaRecorder reports "audio/webm;codecs=opus"
   // for `recorder.mimeType`, but Vercel Blob's allowedContentTypes
@@ -83,8 +85,8 @@ export async function uploadAudioDirect(
         pathname,
         blob,
         contentType: cleanContentType,
-        handleUploadUrl: "/api/upload/audio",
-        clientPayload: JSON.stringify({ studentId }),
+        handleUploadUrl: "/api/upload/blob",
+        clientPayload,
       });
       return {
         ok: true,
@@ -108,9 +110,9 @@ export async function uploadAudioDirect(
     // the recorded URL is never served directly to the browser.
     const result = await upload(pathname, blob, {
       access: "private",
-      handleUploadUrl: "/api/upload/audio",
+      handleUploadUrl: "/api/upload/blob",
       contentType: cleanContentType,
-      clientPayload: JSON.stringify({ studentId }),
+      clientPayload,
     });
     return {
       ok: true,

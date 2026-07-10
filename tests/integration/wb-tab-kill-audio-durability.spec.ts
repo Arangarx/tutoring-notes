@@ -1,7 +1,7 @@
 /**
  * WS-N — tutor:mic enqueue-at-cut survives tab-kill (N1/N2/N3).
  *
- * Teeth test: stub /api/upload/audio with controllable delay so VAD-cut
+ * Teeth test: stub /api/upload/blob with controllable delay so VAD-cut
  * segments are still uploading when context.close() simulates tab-kill.
  * After resume, durable IDB outbox rows must exist; worker drain + End must
  * register segments server-side.
@@ -141,7 +141,7 @@ function installControllableUploadStub(
   opts: { block: boolean; delayMs: number }
 ) {
   let uploadSeq = 0;
-  return context.route("**/api/upload/audio**", async (route) => {
+  return context.route("**/api/upload/blob**", async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;

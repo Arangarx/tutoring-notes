@@ -8,7 +8,7 @@
  * 4. The recording section + share checkbox appear in the note form.
  *
  * Strategy:
- * - Stub the Vercel Blob upload endpoint (/api/upload/audio) to return a fake blob URL.
+ * - Stub the Vercel Blob upload endpoint (/api/upload/blob) to return a fake blob URL.
  * - Stub the server action POST (transcribeAndGenerateAction) to return fixed note fields.
  * - Avoids real OpenAI/Whisper and Vercel Blob calls.
  */
@@ -94,7 +94,7 @@ function installControllableUploadStub(
   opts: { block: boolean; delayMs: number }
 ) {
   let uploadSeq = 0;
-  return context.route("**/api/upload/audio**", async (route) => {
+  return context.route("**/api/upload/blob**", async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;

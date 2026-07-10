@@ -95,7 +95,7 @@ Use Wi-Fi; keep the tab **foregrounded** on mobile (iOS background throttling �
 When no DB rows exist:
 
 1. Build a **60–75 min** English speech file (Voice Memos, Audacity, ffmpeg concat of shorter clips, or **`node scripts/make-test-audio.cjs`** — see `scripts/make-test-audio.README.md`; prefer `--source` with a short real speech clip for Whisper-faithful smokes).
-2. **Upload** tab → client-direct Blob upload (`/api/upload/audio` token route).
+2. **Upload** tab → client-direct Blob upload (`/api/upload/blob` token route, `kind: "audio"`).
 3. For **multi-segment** smoke, upload **two** files (~50 min + ~20 min) to mirror Sarah's repro (`--split` on the script emits ~50 min + remainder).
 
 **ffmpeg concat sketch** (local machine; re-encode if codecs differ):
