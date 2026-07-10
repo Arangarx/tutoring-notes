@@ -23,6 +23,8 @@
  * up Vercel Blob during unit tests.
  */
 
+import { safeName } from "@/lib/blob-path";
+
 export type UploadAudioResult =
   | { ok: true; blobUrl: string; mimeType: string; sizeBytes: number }
   | { ok: false; error: string; debugId?: string };
@@ -42,15 +44,6 @@ export type UploadAudioFn = (
   filename: string,
   mimeType: string
 ) => Promise<UploadAudioResult>;
-
-/**
- * Sanitise a user-supplied filename for use in a Vercel Blob pathname.
- * Vercel itself accepts the full character set, but we're conservative
- * here so log lines and URLs stay copy-pasteable.
- */
-function safeName(filename: string): string {
-  return filename.replace(/[^a-zA-Z0-9._-]/g, "_") || "recording.bin";
-}
 
 /**
  * Upload an audio blob directly from the browser to Vercel Blob.
@@ -73,7 +66,7 @@ export async function uploadAudioDirect(
   filename: string,
   mimeType: string
 ): Promise<UploadAudioResult> {
-  const pathname = `sessions/${studentId}/${Date.now()}-${safeName(filename)}`;
+  const pathname = `sessions/${studentId}/${Date.now()}-${safeName(filename, "recording.bin")}`;
   // Strip any codec parameter from the content-type before handing it to
   // Vercel Blob. Chrome's MediaRecorder reports "audio/webm;codecs=opus"
   // for `recorder.mimeType`, but Vercel Blob's allowedContentTypes
