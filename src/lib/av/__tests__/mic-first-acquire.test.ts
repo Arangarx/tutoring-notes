@@ -251,6 +251,7 @@ describe("useAudioRecorder first-acquire (SMOKE-AUDIO-1)", () => {
 
   afterEach(() => {
     delete (window as SilentTrackTestWindow).__VAD_TEST_SILENT_TRACK__;
+    delete (window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }).__VAD_WARM_RETRY_DELAY_MS__;
   });
 
   // ── B: Option A — enumerate-based re-acquire ─────────────────────────────
@@ -333,6 +334,99 @@ describe("useAudioRecorder first-acquire (SMOKE-AUDIO-1)", () => {
     // It must have been called with the active (live) stream, not the silent initial one.
     const calledWithStream = mockCreateMicAudioGraph.mock.calls[0]?.[0] as MediaStream;
     expect(calledWithStream).not.toBe(initialStream);
+  });
+
+  // ── E: Delayed-retry recovery — cancel→refresh class (SMOKE-AUDIO-1 residual) ──
+
+  it("E: recovers with delayed retry when all enumerate slots are initially silent", async () => {
+    // Simulate the cancel → page-reload path: the OS audio pipeline isn't ready
+    // in the initial + recovery-loop windows, but warms up by the delayed retry.
+    //
+    // Two distinct stream objects so we can assert which one was committed:
+    //   silentStream   — all initial + recovery-loop GUM calls (oracle: silent)
+    //   recoveredStream — ONLY the delayed-retry GUM call (oracle: live)
+    const silentStream   = makeFakeStream("brio-dev-abc123", STORED_GROUP_ID);
+    const recoveredStream = makeFakeStream("brio-dev-recovered", STORED_GROUP_ID);
+
+    // getUserMediaAudioForEnumerateEntry with priorFp=null makes exactly 1 GUM
+    // call per invocation (returns on the first successful constraint attempt).
+    // Total calls in this test:
+    //   Call 1 : initial bare-exact GUM           → silentStream
+    //   Call 2 : Option A enumerate GUM           → silentStream
+    //   Call 3 : recovery-loop slot 0 GUM         → silentStream
+    //   Call 4+: delayed-retry GUM                → recoveredStream
+    let gumCallCount = 0;
+    mockGetUM.mockImplementation(async () => {
+      gumCallCount++;
+      return gumCallCount < 4 ? silentStream : recoveredStream;
+    });
+    mockEnumerate.mockResolvedValue(ENUMERATE_LIST); // 1 entry
+
+    // Set the warm-retry delay to 0 so the test doesn't wait 500 ms.
+    (window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }).__VAD_WARM_RETRY_DELAY_MS__ = 0;
+
+    // Spy on isMicStreamSilent so we can control per-call return values without
+    // the double-read issue that affects window-property getters (the real
+    // isMicStreamSilent reads __VAD_TEST_SILENT_TRACK__ twice per call:
+    // once for typeof and once to return the value).
+    //
+    // Oracle call sequence for this test (1 enumerate entry):
+    //   Call 1: Option B initial detect  → silent (true)
+    //   Call 2: recovery-loop slot 0     → silent (true)
+    //   Call 3: delayed-retry check      → live (false)  ← fix under test
+    // Use the __VAD_TEST_SILENT_TRACK__ window seam with a pair-tracker because
+    // isMicStreamSilent reads the property TWICE per logical call (once for
+    // typeof, once to return the value). Without pairing, a call-index counter
+    // would advance twice per isMicStreamSilent invocation.
+    //
+    // Oracle call sequence for this test (1 enumerate entry):
+    //   Logical call 1: Option B initial detect  → silent (true)
+    //   Logical call 2: recovery-loop slot 0     → silent (true)
+    //   Logical call 3: delayed-retry check      → live (false)  ← fix under test
+    let logicalOracleIdx = 0;
+    let _lastOracleValue = true;
+    let _pairIsFirst = true; // alternates: first read in pair vs second read
+    (window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }).__VAD_WARM_RETRY_DELAY_MS__ = 0;
+    Object.defineProperty(window, "__VAD_TEST_SILENT_TRACK__", {
+      configurable: true,
+      get() {
+        if (_pairIsFirst) {
+          // First read in pair (the typeof check): decide the logical value.
+          logicalOracleIdx++;
+          _lastOracleValue = logicalOracleIdx <= 2;
+          _pairIsFirst = false;
+        } else {
+          // Second read in pair (the return statement): return cached value.
+          _pairIsFirst = true;
+        }
+        return _lastOracleValue;
+      },
+    });
+
+    const { useAudioRecorder } = await import("@/hooks/useAudioRecorder");
+
+    await act(async () => {
+      renderHook(() =>
+        useAudioRecorder({
+          studentId: "student-1",
+          onRecorded: jest.fn(),
+        })
+      );
+      // With __VAD_WARM_RETRY_DELAY_MS__ = 0, the delayed retry skips the
+      // setTimeout gate and runs entirely via microtasks — same as Options A+B.
+      // A single 50ms wait is sufficient to drain all async work.
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    });
+
+    // createMicAudioGraph must have been called exactly once.
+    expect(mockCreateMicAudioGraph).toHaveBeenCalledTimes(1);
+
+    // The graph must have been called with the recovered (delayed-retry) stream,
+    // NOT one of the earlier silent streams. This proves the delayed-retry path
+    // ran and committed recoveredStream rather than silentStream.
+    const calledWithStream = mockCreateMicAudioGraph.mock.calls[0]?.[0] as MediaStream;
+    expect(calledWithStream).toBe(recoveredStream);
+    expect(calledWithStream).not.toBe(silentStream);
   });
 
   // ── D: No-op path — no stored deviceId ───────────────────────────────────

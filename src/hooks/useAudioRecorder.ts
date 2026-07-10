@@ -1234,9 +1234,68 @@ export function useAudioRecorder({
           /* proceed with current stream — don't block acquisition entirely */
         }
       } else if (!recovered) {
-        console.warn(
-          `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}`
-        );
+        // All enumerate slots tried and all reported silent.
+        //
+        // On Windows (Logitech Brio after cancel → page-reload) the OS audio
+        // pipeline re-initialises after track.stop() and may need more than
+        // 250 ms × N_slots to produce real audio frames. Every slot in the
+        // recovery loop sampled at 250 ms intervals came back silent because
+        // the pipeline hadn't finished warming up. One final try after a short
+        // delay is enough to cover this class of startup latency without
+        // blocking acquisition on every other code path.
+        const _warmRetryDelayMs: number =
+          typeof window !== "undefined" &&
+          process.env.NODE_ENV !== "production" &&
+          typeof (
+            window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }
+          ).__VAD_WARM_RETRY_DELAY_MS__ === "number"
+            ? (
+                window as unknown as { __VAD_WARM_RETRY_DELAY_MS__?: number }
+              ).__VAD_WARM_RETRY_DELAY_MS__!
+            : 500;
+
+        const preferredEntry =
+          opts.deviceId
+            ? (enumeratedInputs.find((d) => d.deviceId === opts.deviceId) ??
+                enumeratedInputs[0])
+            : enumeratedInputs[0];
+
+        if (preferredEntry) {
+          if (_warmRetryDelayMs > 0) {
+            await new Promise<void>((r) => setTimeout(r, _warmRetryDelayMs));
+          }
+          try {
+            const { stream: delayedStream } =
+              await getUserMediaAudioForEnumerateEntry(
+                navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
+                preferredEntry,
+                enumeratedInputs,
+                null,
+                { userPickedSlot: false }
+              );
+            const delayedIsSilent = await isMicStreamSilent(delayedStream);
+            if (!delayedIsSilent) {
+              disposeStreamTracks(stream);
+              stream = delayedStream;
+              console.log(
+                `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_recovered_after_delay`
+              );
+            } else {
+              disposeStreamTracks(delayedStream);
+              console.warn(
+                `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}`
+              );
+            }
+          } catch {
+            console.warn(
+              `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}`
+            );
+          }
+        } else {
+          console.warn(
+            `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=silent_track_unrecoverable all_slots_tried=${enumeratedInputs.length}`
+          );
+        }
       }
     }
 
