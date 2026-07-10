@@ -8,6 +8,16 @@
 
 ## HEAD
 
+**🚦 RELEASE TRACK (Andrew 2026-07-10) — expand beyond Sarah to unsupervised new pilots.** Ordered priorities (canonical in [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities): **(1) comprehensive component + service dedupe (zero unjustified duplication)** → **(2) everything requiring external validation — Google sign-in, Calendar, OAuth scope approval — start the external process NOW** → **(3) instrument the site comprehensively (first-party analytics)** → **(4) finish scheduling.**
+
+**⛔ NON-NEGOTIABLE STANDARDS (2026-07-10) — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize:** (1) zero unjustified duplication — no bespoke bullshit ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec on every touched surface ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification of code + tests before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)) — moving rapidly toward a fully agentic dev pipeline (deferrable only with Andrew approval if it blocks release, never permanently).
+
+**Backlog release-triaged:** 79 MUST / 260 MAYBE / 145 1.x (`docs/BACKLOG.md` § Release triage). Andrew swing-review corrections applied (WS-M resolved; device-dedupe best-effort/non-blocking; clipboard verify-moot; laser colors-only; student-video + prompt-v8 "M" need clarification). Backlog has stale rows → **freshness pass vs `master` warranted when picking items up.**
+
+**Next action(s):** (a) merge `chore/release-governance-and-priorities` → master; (b) scope Priority #1 (dedupe) — needs a plan + duplication inventory; (c) kick off Priority #2 external-approval process in parallel (long lead time); (d) build Priority #3 instrumentation. Clarify swing item "M" (prompt v8 "already relabeled").
+
+---
+
 **🚀 MASTER CUT COMPLETE (2026-07-09) — Sarah delivery on `master` @ [`bb5c876e`](https://github.com/Arangarx/tutoring-notes/commit/bb5c876e).** Andrew EXPLICIT WAIVE of red `test:wb-sync`. Redesign is now what Sarah sees.
 
 **🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).

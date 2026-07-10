@@ -1,12 +1,41 @@
 ---
-description: Composition over duplication — no bespoke code; compose from primitives and shared services; unjustified duplication is tracked debt.
+description: ZERO-TOLERANCE no duplication. Every primitive is the single shared primitive site-wide; every component is a composition of primitives; every component owns its own CSS. Exceptions require Andrew's explicit documented waiver — agents may NEVER self-authorize.
 alwaysApply: true
 ---
 
-# Composition over duplication — no bespoke code
+# NO bespoke bullshit — zero unjustified duplication (NON-NEGOTIABLE)
 
-No bespoke code or components. Every component is a composition of smaller compositions, down to primitives; every primitive and component is reused, not re-implemented. No component, primitive, or behind-the-service (backend/service-layer) code may duplicate another **unless there is a specific, justified reason documented at the point of duplication.**
+**Ratified Andrew 2026-07-10, non-negotiable going forward.** There is to be **zero** unnecessary or unjustified duplication anywhere in this codebase — UI, primitives, components, hooks, services, backend/service-layer logic, CSS, types, constants. Not one single bit.
 
-When a feature seems to need new bespoke UI or logic: first compose it from existing library components/primitives and shared services. Introduce a NEW primitive only when nothing composable already exists.
+## The law
 
-Duplication taken on for expediency (e.g. an interim separate page that copies an existing flow) is **tracked debt** — log it in `docs/BACKLOG.md` and it must be eliminated by the composition/de-duplication consolidation. "It was faster to copy" is not a justified reason; "the two genuinely diverge for <documented reason>" is.
+1. **One primitive, everywhere.** Every primitive (button, input, card, badge, dialog, toast, etc.) is **the same single shared primitive across the entire site.** There is exactly one canonical implementation of each primitive. Re-implementing a primitive — even slightly — is forbidden.
+2. **Every component is a composition of primitives.** No component contains bespoke UI that should be a primitive/shared composition. Components compose primitives and smaller shared compositions — down to primitives. No inline one-off JSX that reinvents a shared piece.
+3. **Every component owns its own CSS.** A component's styling is **controlled by the component itself** (its own module/tokens/props). No global or bespoke CSS reaching in to override a component's intrinsic styles. No page-local hardcoded colors/spacing. Variation is expressed **only** through the component's **parameters/inputs** (props/variants) — never by forking or by external CSS overrides.
+4. **No duplicated logic/services.** Behind-the-service and shared logic (hooks, utils, server actions, service layer) has exactly one canonical implementation. No copy-paste, no parallel re-implementations. One `Providers`, one toast host, one theme hook, one of each service.
+5. **Compose, never copy.** When a feature seems to need something new: first compose it from existing primitives/shared components/services. Introduce a NEW primitive **only** when nothing composable already exists — and it immediately becomes the single canonical primitive for that concept.
+6. **Differences are parameters, not forks.** Two things that are "almost the same" are **the same** component/service, parameterized. A single differing internal piece does **not** justify a new composition — make the composition handle that piece being present/absent via input.
+
+## Exceptions — Andrew-waiver-only
+
+Duplication or divergence is permitted **only** with **Andrew's explicit, documented waiver.**
+
+- **Agents may NEVER self-authorize an exception.** "It was faster to copy," "the two genuinely diverge," "expedient for now," or any agent-authored justification is **not** sufficient and is a rule violation. The previous version of this rule allowed agent-documented justifications — that latitude is **revoked.**
+- A valid waiver is: Andrew explicitly approved it, and it is documented **both** at the point of duplication (code comment referencing the waiver) **and** in [`docs/BACKLOG.md`](../../docs/BACKLOG.md) with the date and Andrew's approval.
+- Absent that waiver, if you find yourself about to duplicate: **STOP.** Compose/extend the canonical instead, or if you believe an exception is genuinely warranted, surface it to Andrew and wait for an explicit "approved" — do not proceed on assumption.
+
+## Acceptance gate (a surface is NOT done if…)
+
+- The "fix a color/spacing/behavior in two places" smell exists anywhere.
+- Any primitive has more than one implementation.
+- Any component carries CSS that lives outside the component (global override reaching in).
+- Any grep for a shared structure finds a duplicated/forked copy.
+- A new page/route introduced bespoke JSX/logic a library component/service should own.
+
+Modifying a shared component/service requires grepping **all** consumers, verifying each, and a green `npx next build`.
+
+## References
+
+- [`.cursor/rules/component-reuse.mdc`](component-reuse.mdc) — component-tree library discipline (globbed detail).
+- [`docs/V1-COMPONENT-LIBRARY.md`](../../docs/V1-COMPONENT-LIBRARY.md) — canonical primitive/component inventory. Check before adding anything.
+- Companion non-negotiables: [`.cursor/rules/exhaustive-testing-mandate.mdc`](exhaustive-testing-mandate.mdc), [`.cursor/rules/agentic-verification-pipeline.mdc`](agentic-verification-pipeline.mdc).

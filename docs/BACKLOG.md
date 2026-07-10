@@ -2,6 +2,33 @@
 
 Living document for open work, pilot feedback, reliability gaps, and deferred product decisions.
 
+## 🎯 Release priorities (Andrew 2026-07-10) — do these first, in order
+
+We are on the **release track**: expand beyond Sarah to unsupervised new pilots. Ordered priorities:
+
+1. **Comprehensive component + service dedupe** — eliminate ALL unjustified duplication site-wide. One canonical primitive of each kind; every component a composition of primitives; every component owns its own CSS (variation via props only); one canonical implementation of each service/hook. See standard #1 below. **Highest priority.**
+2. **Everything requiring external validation** — Google sign-in, Google Calendar, and anything needing OAuth scope approval/verification. Kick off the **external approval process now** (long lead times) even before the dependent features are finished.
+3. **Comprehensive instrumentation** — first-party analytics; see EXACTLY how the site is used (PostHog / usage instrumentation — archived bootstrapper `docs/archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md`).
+4. **Finish scheduling** (depends on #2 calendar).
+
+### Non-negotiable standards (no exceptions without Andrew's explicit documented waiver — agents may NEVER self-authorize)
+
+1. **ZERO unjustified duplication — no bespoke bullshit.** [`.cursor/rules/composition-no-duplication.mdc`](../.cursor/rules/composition-no-duplication.mdc).
+2. **Exhaustive red/green testing to spec on every touched surface.** [`.cursor/rules/exhaustive-testing-mandate.mdc`](../.cursor/rules/exhaustive-testing-mandate.mdc).
+3. **Independent agentic verification** of code + tests before done/merge; moving to a fully agentic pipeline. [`.cursor/rules/agentic-verification-pipeline.mdc`](../.cursor/rules/agentic-verification-pipeline.mdc).
+
+### Triage corrections (Andrew 2026-07-10, on the swing-item review)
+
+- **WS-M** (two-device: tutor hears student) — **RESOLVED**, working for a while. Close; drop from MAYBE.
+- **DEVICE-PICKER-DEDUPE / mobile Back-Front** — **best-effort; do NOT delay release** over it. Stays MAYBE, non-blocking.
+- **Share/copy-link silent clipboard failure** — likely **fixed/moot**; VERIFY then close.
+- **ST-05 laser** — bidirectional works; remaining is **color review only** (WB-LASER-ICON-CONTRAST), not functionality.
+- **Student bidirectional video / dark-canvas (swing item H)** — status uncertain; **verify whether still an issue** against current `master`.
+- **prompt v8 (swing item M)** — Andrew: "already relabeled" — **needs clarification** before action (ambiguous which item this maps to).
+- **General:** backlog has stale/slightly-out-of-date rows — a **freshness pass against current `master`** is warranted when picking items up (many were extracted from now-archived docs).
+
+---
+
 **How to use this backlog**
 
 | Symbol | Meaning |

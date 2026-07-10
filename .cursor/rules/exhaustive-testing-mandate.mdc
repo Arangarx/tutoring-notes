@@ -1,0 +1,30 @@
+---
+description: NON-NEGOTIABLE. Nothing is "done" without comprehensive red/green tests. Any surface you touch gets exhaustive testing. No exceptions without Andrew's explicit documented waiver.
+alwaysApply: true
+---
+
+# Exhaustive testing mandate (NON-NEGOTIABLE)
+
+**Ratified Andrew 2026-07-10.** From this point forward: **nothing is done if it does not have comprehensive tests.** If we touch a surface, it gets **exhaustive red-before / green-after testing.** There are no exceptions to quality or testing without Andrew's **explicit, documented waiver.**
+
+## The bar
+
+1. **Touched surface = exhaustively tested.** Any code you write or change ships with tests that comprehensively cover the behavior — happy paths, edge cases, failure modes, and the specific bug/behavior being fixed.
+2. **Red-before / green-after, always.** Every test must be shown to **fail on the pre-change state and pass after** (or, for new behavior, fail without the implementation and pass with it). A test that cannot go red is theater and does not count.
+3. **Tests to spec, never to the implementation.** Assert the **user-observable requirement** via an **independent oracle** — never constants/logic back-derived from the code under test (that passes by construction and proves nothing). See [`.cursor/rules/visual-layout-oracles.mdc`](visual-layout-oracles.mdc).
+4. **Right layer for the failure class.** Jest/jsdom does **not** satisfy this for layout, coordinates, media/replay timing, real render cadence, sync/multi-peer, or Excalidraw embed behavior — those require Playwright/real-browser ([`.cursor/rules/playwright-on-fix.mdc`](playwright-on-fix.mdc)). Use unit + integration + Playwright as the behavior demands; "green jest" is necessary, never sufficient, for those classes.
+5. **"Done" is defined by tests existing AND passing** on the merge-tier gate ([`.cursor/rules/test-selection.mdc`](test-selection.mdc)). No feature/fix is complete, and no branch is mergeable, without them.
+
+## Waivers
+
+- The **only** way to skip or reduce testing on a touched surface is Andrew's **explicit, documented waiver** (approved by Andrew + recorded in [`docs/BACKLOG.md`](../../docs/BACKLOG.md) or the branch's handoff with date). 
+- A genuine environment-only gap (no hermetic reproduction possible) is handled per [`.cursor/rules/playwright-on-fix.mdc`](playwright-on-fix.mdc): ship the closest surrogate + an explicit `PLAYWRIGHT-GAP:` + `docs/BACKLOG.md` entry. **Silent omission is forbidden.**
+- Agents may **never** self-authorize skipping tests.
+
+## Checklist before calling anything done
+
+- [ ] Every changed behavior has a test that was **red before** the change.
+- [ ] Tests assert the spec via an independent oracle, not the implementation.
+- [ ] Correct layer (Playwright for layout/media/sync/geometry; unit for pure logic).
+- [ ] Merge-tier gate green ([`test-selection.mdc`](test-selection.mdc)).
+- [ ] No untested surface was touched without a documented Andrew waiver.

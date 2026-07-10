@@ -1,0 +1,38 @@
+---
+description: Independent-agent verification. Code or tests written by one agent MUST be verified by a separate specialized agent (tests-to-spec + code soundness + no-duplication) before being called done. Moving toward a fully agentic dev pipeline.
+alwaysApply: true
+---
+
+# Agentic verification pipeline (NON-NEGOTIABLE, phasing in)
+
+**Ratified Andrew 2026-07-10.** We are moving rapidly toward a **truly agentic development pipeline** where quality, testing, and no-duplication are **enforced by agents**, not trusted by convention. Priority order is: **quality + features + release first**; agentifying is non-negotiable and rides alongside — it may be **deferred only with Andrew's explicit approval if it actively blocks a release, and never deferred forever.**
+
+## Core contract — independent verification
+
+When an agent writes or changes **code or tests**, a **separate, specialized reviewer agent** MUST verify it before it is called done / merged. The author agent does not self-certify.
+
+The reviewer agent verifies, at minimum:
+
+1. **Tests are written to spec** — they assert the user-observable requirement via an **independent oracle**, are genuinely **red-before / green-after**, cover edge/failure cases, and are at the **correct layer** for the failure class (per [`exhaustive-testing-mandate.mdc`](exhaustive-testing-mandate.mdc)). Reject tests derived from the implementation.
+2. **Code is sound** — correctness, edge/failure handling, no regressions to the touched surface, adherence to the fragile-surface protections ([`whiteboard-engine-protection.mdc`](whiteboard-engine-protection.mdc), recorder/A/V lifecycle docs).
+3. **No duplication** — the change adds **zero** unjustified duplication and composes from canonical primitives/components/services ([`composition-no-duplication.mdc`](composition-no-duplication.mdc)). Any duplication without an Andrew waiver is a rejection.
+
+The reviewer is a **different agent instance** from the author (dispatch a separate review subagent; for adversarial/large diffs use a higher tier — see `AGENTS.md` § Model usage protocol). A rejection blocks "done"; the author fixes and re-submits for verification.
+
+## What this looks like now (bootstrapping)
+
+- Any executor dispatch that writes code/tests is followed by a **verification dispatch** (separate agent) against the three checks above before merge. The orchestrator does not merge on the author's say-so alone.
+- Use the existing review subagents (`bugbot`, `security-review`) and a dedicated tests-to-spec/no-duplication review pass as the interim mechanism until a standing pipeline exists.
+- Build toward: automated, standing agentic gates that run this verification on every change without manual dispatch.
+
+## Deferral
+
+- The **only** acceptable deferral of an agentic-verification step is Andrew's **explicit approval** when it is genuinely blocking a release, documented in [`docs/handoff/ORCHESTRATOR-STATE.md`](../../docs/handoff/ORCHESTRATOR-STATE.md). It must carry a re-enable date/trigger — **never deferred permanently.**
+- Agents may not self-authorize skipping verification.
+
+## References
+
+- [`.cursor/rules/composition-no-duplication.mdc`](composition-no-duplication.mdc)
+- [`.cursor/rules/exhaustive-testing-mandate.mdc`](exhaustive-testing-mandate.mdc)
+- [`.cursor/rules/playwright-on-fix.mdc`](playwright-on-fix.mdc), [`.cursor/rules/test-selection.mdc`](test-selection.mdc)
+- `AGENTS.md` § Model usage protocol (reviewer tier selection).
