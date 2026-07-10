@@ -43,14 +43,16 @@ Pure functions and low-risk shared helpers; unit-testable; near-zero regression 
 
 **Status:** approach-defined; ready to execute after Wave B or as a parallel small branch when Andrew says go.
 
-## Wave B — admin/account composition (medium risk)
+## Wave B — admin/account composition (medium risk) — ✅ COMPLETE (2026-07-10)
 
-- `SectionCard` (realm param) ← `AdminSectionCard` + `AccountSectionCard` + `AccountSectionCardLike`. **DECIDED (Andrew 2026-07-10): parameterize into one `SectionCard` with a realm prop** — new zero-dup rule wins over the old "do not consolidate" note (update `V1-COMPONENT-LIBRARY.md` accordingly). Do carefully — every realm-specific style/behavior difference must survive as a prop.
-- `PageShell` + `AppHeader` ← duplicated headers across `AdminPageShell` / `AccountPageShell` / `StudentPageShell` / `ParentShareShell`.
-- `SubNav` (variant) ← `SettingsSubNav` + `AccountChildNav`.
-- `consent-write.ts` service ← versioned `ConsentRecord` create dup (claim setup + parent consent action) — prevents consent drift (security-relevant; test hard).
-- `proxy-blob-asset.ts` + `proxy-share-resource.ts` ← triplicated wb-asset/tutor-asset routes + public-* share proxies (~200 lines; security-sensitive — one place to audit).
-- Migrate audio uploads → `/api/upload/blob`, delete `/api/upload/audio` parallel route.
+All 6 chunks executor → Sonnet verifier → `merge --no-ff` to master. Eyeball: [`docs/handoff/DEDUPE-EYEBALL-LIST.md`](handoff/DEDUPE-EYEBALL-LIST.md).
+
+- ✅ `SectionCard` realm prop (`a8a31e46`)
+- ✅ `SubNav` realms (`f59a1ead`)
+- ✅ `PageShell` + `AppHeader` realms (`f297e092`)
+- ✅ `consent-write.ts` (`b0b78582`)
+- ✅ `proxy-blob-asset` + `proxy-share-resource` (`6d65edd5`)
+- ✅ Kill `/api/upload/audio` → `/api/upload/blob` (`0ce5ff4e`)
 
 ## Wave C — whiteboard chrome (higher risk; pair with `@wb-chrome` Playwright)
 

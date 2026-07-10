@@ -2,7 +2,7 @@
 
 Lightweight Andrew eyeball tracker after agent executor→verifier→merge passes land. **Not** a full smokebook — quick visual sanity on consolidated surfaces.
 
-**Branch:** `master` @ _(tip at run time)_  
+**Branch:** `master` @ `0ce5ff4e` (Wave B complete)  
 **Preview:** _(fill from Vercel `branchAlias` when running)_
 
 ---
@@ -79,9 +79,9 @@ No UI — **agent gates**; optional share-link asset load smoke.
 
 - [ ] N/A — agent gates _(optional: share-link asset load)_
 
-### Kill `/api/upload/audio`
+### Kill `/api/upload/audio` _(merged `0ce5ff4e`)_
 
-No UI if callers migrated — **agent gates**.
+No UI — **agent gates**. Audio now via `/api/upload/blob` `{ kind: "audio" }`.
 
 - [ ] N/A — agent gates
 

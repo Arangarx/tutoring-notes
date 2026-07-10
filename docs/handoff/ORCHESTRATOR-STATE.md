@@ -38,12 +38,12 @@
 
 **Remaining dedupe queue:**
 - **tokens.css** — approach-defined; execute after Wave B or parallel small branch when Andrew says go.
-- **Wave B (in flight):** `SectionCard` realm-param first, then `PageShell`/`AppHeader`, `SubNav`, `consent-write`, blob/share proxy, kill `/api/upload/audio`. Per [`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md).
+- **Wave B:** COMPLETE 6/6 (`0ce5ff4e`).
 - **Wave C/D:** whiteboard chrome monolith + A/V primitives (fragile) — Opus-grade.
 
 **agenticPipeline:** Phase 1 (change-run + fail-closed verify) **greenlit** — can start in `agenticPipeline` repo. Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** kill upload/audio → Wave B COMPLETE. Then tokens.css approach or pipeline Phase 1 / Google Console (Andrew).
+**Next action(s):** Andrew pick — (1) tokens.css dark-palette (approach defined), (2) Google Console checklist (hybrid calendar), (3) agenticPipeline Phase 1 (greenlit), (4) remaining Wave A leftovers (parseClientPayload now easier, SubmitButton, StatTile, …). Andrew eyeball: DEDUPE-EYEBALL-LIST. Do NOT start Wave C/D without explicit OK.
 
 ---
 
@@ -51,14 +51,15 @@
 
 **🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).
 
-**Tip:** `master` @ `6d65edd5` (blob-proxy Wave B-5 merged).
+**Tip:** `master` @ `0ce5ff4e` (Wave B complete).
 
-**Last action:** Wave B-5 blob/share proxy APPROVE → `merge --no-ff` `6d65edd5`. Residual: clarify `proxy-blob-asset` header comment (SSRF is caller-enforced).
+**Last action:** Wave B-6 kill upload/audio APPROVE → `merge --no-ff` `0ce5ff4e`. Full Wave B done (SectionCard, SubNav, PageShell, consent-write, blob/share proxy, kill upload-audio).
 
-**In-flight:** Wave B-6 kill `/api/upload/audio` dispatching (final Wave B chunk).
+**In-flight:** none. **Wave B COMPLETE** (6/6 verified→merged).
 **Open Andrew-confirms:**
-1. **Priority #2 Google Console** — Andrew-owned: confirm Published/`gmail.send`; `usemynk.com` Search Console; redirect URIs; hybrid calendar verification submit **after** MVP demo (Console prep now).
-2. **Priority #3 instrumentation** — first concrete slice under COPPA-first-party policy.
+1. Google Console status + calendar verification package (hybrid sequencing locked).
+2. Priority #3 instrumentation first slice.
+3. Which next: tokens.css / pipeline Phase 1 / remaining Wave A / pause for eyeball.
 
 **Cleared this session:** Wave B greenlight; `tokens.css` approach; agenticPipeline Phase 1.
 
