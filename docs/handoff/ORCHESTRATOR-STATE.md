@@ -10,13 +10,15 @@
 
 **🚀 MASTER CUT COMPLETE (2026-07-09) — Sarah delivery on `master` @ [`bb5c876e`](https://github.com/Arangarx/tutoring-notes/commit/bb5c876e).** Andrew EXPLICIT WAIVE of red `test:wb-sync`. Redesign is now what Sarah sees.
 
-**Tip:** `master` @ `bb5c876e` (= `v1-redesign` @ `65814c0e` + merge).
+**🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).
 
-**Last action:** `merge --no-ff v1-redesign` → `master` + push.
+**Tip:** `chore/doc-cleanup-master` (branch off `master`/`v1-redesign` @ `fc8e1804`); merges back to master after review.
+
+**Last action:** Doc cleanup phases 0–5 complete; committing INDEX + state; push branch.
 
 **In-flight:** none.
 
-**Next action(s):** Post-cut cleanup queue — triage MASTER-CUT REAL-FAILs; WB-REPLAY-PDF-PLACEHOLDER; WB-WTR-DEVICE-LOADING; reopen-at-0 when convenient. Heavy ORCHESTRATOR-STATE restructure recommended (Composer from template).
+**Next action(s):** Merge `chore/doc-cleanup-master` → master when ready. Then next cleanup thread / triage BACKLOG §1 NOW hotlist (post-cut REAL-FAILs, SMOKE-AUDIO-1 Brio verify, SMOKE-NOTES-1, SMOKE-UX-1).
 
 **Waive record:** BACKLOG **MASTER-CUT-2026-07-09**. Green at cut: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE. Product knowns: reopen-at-0, share PDF placeholders, device-loading spinner.
 
