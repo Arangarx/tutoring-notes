@@ -8,9 +8,10 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 /**
  * Privacy policy — Tutoring Notes (product subordinate facade).
  *
- * SYNCED FROM https://www.mortensenapps.com/privacy as of 2026-05-31.
+ * SYNCED FROM https://www.mortensenapps.com/privacy as of 2026-09-10.
  * Product-specific retention + inventory copy updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  * Google Calendar connect section added 2026-08-14 (honest stub — no sync claim).
+ * Umbrella Calendar + Limited Use sync 2026-09-10 (OAuth review).
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -40,7 +41,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="August 14, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 10, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -103,11 +104,12 @@ export default function PrivacyPage() {
             </p>
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
               <li>
-                <strong>Google.</strong> When you connect a Google account or use Gmail
-                through the app, data needed for that feature is processed by Google
-                under Google&apos;s terms and your Google account settings (OAuth tokens,
-                API calls to send mail you initiate, and metadata Google logs as part of
-                those APIs). We do not control Google&apos;s servers; we follow Google&apos;s
+                <strong>Google.</strong> When you connect a Google account, use Gmail, or
+                connect Google Calendar through the app, data needed for that feature is
+                processed by Google under Google&apos;s terms and your Google account
+                settings (OAuth tokens, API calls to send mail you initiate, Calendar API
+                calls the product documents, and metadata Google logs as part of those
+                APIs). We do not control Google&apos;s servers; we follow Google&apos;s
                 applicable API and limited-use requirements for data we receive from
                 Google APIs.
               </li>
@@ -289,7 +291,7 @@ export default function PrivacyPage() {
               <li><strong>Hosting and data stores.</strong> We rely on Vercel and Neon&apos;s protections for servers, databases, and object storage (access controls, network isolation, and encryption at rest where the vendor provides it by default for the tiers we use).</li>
               <li><strong>Authentication and access.</strong> Every tutor request requires sign-in; application logic enforces ownership boundaries so a tutor only sees their own students and sessions.</li>
               <li><strong>Secrets and OAuth tokens.</strong> API keys, client secrets, and OAuth refresh tokens are kept in server-side configuration or secure storage — not embedded in web pages or public repositories.</li>
-              <li><strong>Limited use of Google data.</strong> Google user data obtained through Google APIs is used only to provide the user-facing features you asked for (sending mail you trigger), consistent with this policy and Google&apos;s applicable Limited Use requirements.</li>
+              <li><strong>Limited use of Google data.</strong> Google user data obtained through Google APIs is used only to provide the user-facing features you asked for (for example sending mail you trigger, or a Calendar connection you initiate), consistent with this policy and Google&apos;s applicable Limited Use requirements.</li>
             </ul>
             <p style={{ margin: "8px 0 0" }}>
               No method of transmission or storage is 100% secure; if you have a specific

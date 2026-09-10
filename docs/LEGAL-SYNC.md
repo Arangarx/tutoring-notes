@@ -155,7 +155,7 @@ first, then re-submit. The consent screen will continue to display
 | What data we collect | **Hybrid** — umbrella framing, product-specific inventory |
 | How we use your data | **Umbrella** — includes the "do not sell Google user data" and "do not sell personal information to data brokers" language verbatim |
 | Sharing, disclosure, and recipients | **Umbrella** — full bulleted enumeration (Google / Infrastructure / People you direct / Legal / Business transfers). Product-specific subprocessors (Vercel, Neon, Vercel Blob, OpenAI) listed under Infrastructure. |
-| Google account and Gmail | **Hybrid** — umbrella's Limited Use / scope / token-storage / disconnect language + product-specific scope details (`gmail.send`, `userinfo.email`) and Settings → Email instruction |
+| Google account and Gmail | **Hybrid** — umbrella's Limited Use / scope / token-storage / disconnect language + product-specific scope details (`gmail.send`, `userinfo.email`) and Settings → Email instruction. Umbrella heading is now &ldquo;Google account, Gmail, and Calendar&rdquo; (2026-09-10). |
 | Google Calendar (Connect Google Calendar) | **Hybrid** — umbrella Limited Use / token-storage / disconnect framing + product-specific scope details (`calendar.events`, `calendar.readonly`, `userinfo.email`), honest no-sync-yet stub, Settings → Calendar integrations instruction |
 | AI note generation (OpenAI) | Product |
 | Session audio recordings (Vercel Blob) | Product |

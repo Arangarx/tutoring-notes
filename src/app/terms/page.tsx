@@ -8,7 +8,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 /**
  * Terms of Service — Tutoring Notes (product subordinate facade).
  *
- * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-05-31.
+ * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-09-10.
  * Product-specific COPPA cross-reference updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  * Google Calendar connect section added 2026-08-14 (honest stub — no sync claim).
  *
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalDocumentShell title="Terms of Use" lastUpdated="August 14, 2026">
+    <LegalDocumentShell title="Terms of Use" lastUpdated="September 10, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           These terms govern your use of <strong>Tutoring Notes</strong>, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
@@ -81,6 +81,7 @@ export default function TermsPage() {
               <li>Interfere with or disrupt the service or its infrastructure.</li>
               <li>Use automated means to abuse, scrape, or overload the service without permission.</li>
               <li>Send unsolicited bulk email or deceptive messages through any integration (including Gmail).</li>
+              <li>Use a Calendar integration to create or change events you are not authorized to manage, or to spam invitees.</li>
               <li>Enter student or parent information without obtaining any consent required for that data and the use you intend.</li>
               <li>Record session audio or share whiteboard / audio replays without obtaining appropriate consent, especially for sessions involving minors.</li>
             </ul>
@@ -124,10 +125,12 @@ export default function TermsPage() {
             <h2 className="heading m-0 text-lg font-normal">Third-party services</h2>
             <p style={{ margin: "8px 0 0" }}>
               The service relies on third parties (for example hosting, database, object
-              storage, Google OAuth, OpenAI for transcription and note generation, and
-              email delivery). Your use of those features is also subject to the third
-              party&apos;s terms and policies. We are not responsible for outages or
-              changes caused solely by third-party platforms. The current list of
+              storage, Google OAuth, Gmail, Google Calendar, OpenAI for transcription and
+              note generation, and email delivery). Your use of those features is also
+              subject to the third party&apos;s terms and policies. We are not responsible
+              for outages or changes caused solely by third-party platforms. Google
+              Calendar connect stores a token before event sync is live; see Google
+              Calendar integration above. The current list of
               subprocessors is in the{" "}
               <Link href="/privacy">privacy policy</Link>.
             </p>
