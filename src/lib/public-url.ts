@@ -72,7 +72,8 @@ export async function getRequestBaseUrl(): Promise<string> {
  *
  * Allowlist covers:
  *   localhost / 127.0.0.1 (any port) — local dev
- *   tutoring-notes.vercel.app — the project's legacy default Vercel domain
+ *   tutoring-notes.vercel.app — legacy default Vercel domain (production
+ *     requests 308 to usemynk.com; see src/lib/seo/canonical-host.ts)
  *   tutoring-notes-*-arangarx-5209s-projects.vercel.app — per-deployment
  *     and branch-alias preview URLs scoped to this project + Vercel team.
  *     The team slug in the pattern means an attacker would need to own the

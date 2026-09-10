@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { LegalDocumentShell } from "@/components/LegalDocumentShell";
 import { Separator } from "@/components/ui/separator";
+import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 
 /**
  * Privacy policy — Tutoring Notes (product subordinate facade).
@@ -34,6 +35,7 @@ import { Separator } from "@/components/ui/separator";
 export const metadata: Metadata = {
   title: "Privacy Policy — Tutoring Notes",
   description: "How Tutoring Notes collects, uses, and protects your data.",
+  ...productionCanonicalMetadata("/privacy"),
 };
 
 export default function PrivacyPage() {

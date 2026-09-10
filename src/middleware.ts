@@ -19,6 +19,10 @@ import {
   applySignupIntentCookieToResponse,
 } from "@/lib/signup-intent";
 import { isPlaywrightHarnessActive } from "@/lib/playwright-harness";
+import {
+  productionCanonicalRedirect,
+  shouldNoindexHost,
+} from "@/lib/seo/canonical-host";
 
 // ---------------------------------------------------------------------------
 // Security headers — applied to every response
@@ -55,7 +59,8 @@ const staticSecurityHeaders: Record<string, string> = {
 
 function addSecurityHeaders(
   response: NextResponse,
-  pathname: string
+  pathname: string,
+  host?: string
 ): NextResponse {
   for (const [key, value] of Object.entries(staticSecurityHeaders)) {
     response.headers.set(key, value);
@@ -64,6 +69,9 @@ function addSecurityHeaders(
     "Permissions-Policy",
     buildPermissionsPolicy(pathname)
   );
+  if (host && shouldNoindexHost(host)) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
   return response;
 }
 
@@ -87,7 +95,8 @@ function getClientIp(req: NextRequest): string {
 
 function rateLimitResponse(
   retryAfterMs: number,
-  pathname: string
+  pathname: string,
+  host: string
 ): NextResponse {
   const retryAfterSec = Math.ceil(retryAfterMs / 1000);
   // All rate-limited paths are API endpoints — return JSON so callers handle
@@ -101,7 +110,8 @@ function rateLimitResponse(
         headers: { "Retry-After": String(retryAfterSec) },
       }
     ),
-    pathname
+    pathname,
+    host
   );
 }
 
@@ -111,6 +121,31 @@ function rateLimitResponse(
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const ip = getClientIp(req);
+  const requestHost =
+    req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const requestProto =
+    req.headers.get("x-forwarded-proto") ??
+    req.nextUrl.protocol.replace(":", "");
+
+  // Production aliases (tutoring-notes.vercel.app, www, http) → usemynk.com.
+  // Preview / local must not redirect — see productionCanonicalRedirect tests.
+  const aliasRedirect = productionCanonicalRedirect({
+    host: requestHost,
+    pathname,
+    search: req.nextUrl.search,
+    proto: requestProto,
+    vercelEnv: process.env.VERCEL_ENV,
+  });
+  if (aliasRedirect) {
+    return addSecurityHeaders(
+      NextResponse.redirect(aliasRedirect, 308),
+      pathname,
+      requestHost
+    );
+  }
+
+  const headersFor = (response: NextResponse, path: string) =>
+    addSecurityHeaders(response, path, requestHost);
 
   // --- Rate limiting on sensitive endpoints ---
   //
@@ -128,7 +163,7 @@ export async function middleware(req: NextRequest) {
       pathname === "/api/auth/account-holder/login")
   ) {
     const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname, requestHost);
   } else if (
     !isPlaywrightHarnessActive() &&
     (pathname.startsWith("/admin/settings/2fa/verify") ||
@@ -136,7 +171,7 @@ export async function middleware(req: NextRequest) {
       pathname.startsWith("/admin/settings/2fa"))
   ) {
     const rl = rateLimit(`2fa:${ip}`, TOTP_RATE_LIMIT.max, TOTP_RATE_LIMIT.windowMs);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname, requestHost);
   } else if (pathname.startsWith("/api/")) {
     // TEST-ONLY bypass: when isPlaywrightHarnessActive() (WB_E2E_HARNESS=1 locally),
     // skip all per-IP middleware API rate limits. The identity-e2e suite runs 16
@@ -149,14 +184,14 @@ export async function middleware(req: NextRequest) {
     if (!isPlaywrightHarnessActive()) {
       const bucket = apiRateBucketForPath(pathname);
       const rl = rateLimit(`${bucket.prefix}:${ip}`, bucket.max, bucket.windowMs);
-      if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
+      if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname, requestHost);
     }
   } else if (
     !isPlaywrightHarnessActive() &&
     pathname === "/setup"
   ) {
     const rl = rateLimit(`setup:${ip}`, SETUP_RATE_LIMIT.max, SETUP_RATE_LIMIT.windowMs);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname, requestHost);
   }
 
   // --- Admin route protection ---
@@ -166,7 +201,7 @@ export async function middleware(req: NextRequest) {
       const loginUrl = req.nextUrl.clone();
       loginUrl.pathname = "/login";
       loginUrl.searchParams.set("callbackUrl", pathname);
-      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
+      return headersFor(NextResponse.redirect(loginUrl), pathname);
     }
 
     const mode = getAdminSessionMode({
@@ -202,7 +237,7 @@ export async function middleware(req: NextRequest) {
         const pendingUrl = req.nextUrl.clone();
         pendingUrl.pathname = "/admin/pending-approval";
         pendingUrl.search = "";
-        return addSecurityHeaders(NextResponse.redirect(pendingUrl), pathname);
+        return headersFor(NextResponse.redirect(pendingUrl), pathname);
       }
     }
 
@@ -231,7 +266,7 @@ export async function middleware(req: NextRequest) {
           const setupUrl = req.nextUrl.clone();
           setupUrl.pathname = "/admin/settings/2fa/setup";
           setupUrl.search = "";
-          return addSecurityHeaders(NextResponse.redirect(setupUrl), pathname);
+          return headersFor(NextResponse.redirect(setupUrl), pathname);
         }
       }
     }
@@ -244,7 +279,7 @@ export async function middleware(req: NextRequest) {
       const home = req.nextUrl.clone();
       home.pathname = realAdminHomePath();
       home.search = "";
-      return addSecurityHeaders(NextResponse.redirect(home), pathname);
+      return headersFor(NextResponse.redirect(home), pathname);
     }
 
     // TUTOR sessions (real login, e.g. Sarah) landing on /admin dashboard → send to workspace.
@@ -264,7 +299,7 @@ export async function middleware(req: NextRequest) {
         const students = req.nextUrl.clone();
         students.pathname = tutorExperienceLandingPath();
         students.search = "";
-        return addSecurityHeaders(NextResponse.redirect(students), pathname);
+        return headersFor(NextResponse.redirect(students), pathname);
       }
     }
   }
@@ -279,7 +314,7 @@ export async function middleware(req: NextRequest) {
       const loginUrl = req.nextUrl.clone();
       loginUrl.pathname = "/account/login";
       loginUrl.searchParams.set("returnTo", pathname);
-      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
+      return headersFor(NextResponse.redirect(loginUrl), pathname);
     }
   }
 
@@ -325,12 +360,12 @@ export async function middleware(req: NextRequest) {
       loginUrl.pathname = "/account/login";
       loginUrl.searchParams.set("returnTo", pathname);
       loginUrl.searchParams.set("source", "notes_email");
-      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
+      return headersFor(NextResponse.redirect(loginUrl), pathname);
     }
   }
 
   // --- All other routes: pass through with security headers ---
-  const response = addSecurityHeaders(NextResponse.next(), pathname);
+  const response = headersFor(NextResponse.next(), pathname);
 
   // Signup-intent cookie: proves OAuth started from /signup (not /login).
   if (pathname === "/signup") {
@@ -361,9 +396,11 @@ export const config = {
      * Match all request paths except:
      * - _next/static (static files)
      * - _next/image (image optimization)
-     * - favicon.ico, sitemap.xml, robots.txt
+     * - favicon.ico
      * - public assets
+     * sitemap.xml + robots.txt stay in the matcher so production
+     * vercel.app aliases 308 to usemynk.com (Search Console).
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico).*)",
   ],
 };

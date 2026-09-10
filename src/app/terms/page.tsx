@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { LegalDocumentShell } from "@/components/LegalDocumentShell";
 import { Separator } from "@/components/ui/separator";
+import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 
 /**
  * Terms of Service — Tutoring Notes (product subordinate facade).
@@ -33,6 +34,7 @@ import { Separator } from "@/components/ui/separator";
 export const metadata: Metadata = {
   title: "Terms of Use — Tutoring Notes",
   description: "Terms of use for the Tutoring Notes application.",
+  ...productionCanonicalMetadata("/terms"),
 };
 
 export default function TermsPage() {

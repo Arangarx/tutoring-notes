@@ -21,7 +21,7 @@
 | Auth | NextAuth | v4.24.x | Credentials + Google OAuth. Session JWT. |
 | AI | OpenAI API | Tier 1 paid (presumed) | Whisper for transcribe; gpt-4o-mini for notes/AI assist. |
 | Email | SMTP (optional) | depends on operator config | Falls back to no-op when unset. |
-| Domain | Vercel custom + legacy alias | n/a | Production canonical **`https://usemynk.com`** (cutover 2026-05-30); legacy **`tutoring-notes.vercel.app`**. `NEXTAUTH_URL` must match the browser origin. |
+| Domain | Vercel custom + legacy alias | n/a | Production canonical **`https://usemynk.com`** (cutover 2026-05-30). Legacy **`tutoring-notes.vercel.app`** 308s to apex in production (`src/lib/seo/canonical-host.ts`). `NEXTAUTH_URL` must match the browser origin. |
 
 **Total fixed/mo as of this audit**: ~$39 (Neon $19 + Vercel $20). OpenAI variable, tracked via `CostEvent`.
 
@@ -405,13 +405,21 @@
 - **Why it exists**: Vercel preview deployments assign a per-deployment `VERCEL_URL` host AND a stable branch-alias host. Before RC-A fix, `getPublicBaseUrl()` returned the per-deployment URL; the user might be browsing on the branch-alias URL. Different hosts = different cookie jars = the `mynk_ah_session` cookie misses on the claim page. Reflecting the request host into the verify email link aligns the cookie domain with the user's browsing host.
 - **Allowlist contents** (project-scoped; see `src/lib/public-url.ts:ALLOWLISTED_HOST_PATTERNS`):
   - `localhost` / `127.0.0.1` (any port) — local dev
-  - `tutoring-notes.vercel.app` — project legacy default Vercel domain
+  - `tutoring-notes.vercel.app` — project legacy default Vercel domain (production HTTP requests 308 to `https://usemynk.com`; host stays allowlisted for email-link reflection)
   - `tutoring-notes-*-arangarx-5209s-projects.vercel.app` — per-deployment and branch-alias preview URLs for this project+team; team slug scopes it to the `arangarx-5209s-projects` Vercel team only
-  - `usemynk.com`, `www.usemynk.com` — production canonical hosts
+  - `usemynk.com`, `www.usemynk.com` — production canonical hosts (`www` 308s to apex in production)
 - **Injection guard**: a host NOT in the allowlist is NEVER reflected; `getPublicBaseUrl()` is used instead. Tests in `src/__tests__/public-url-allowlist.test.ts` enforce this contract.
 - **Where baked in**: `src/lib/public-url.ts:getRequestBaseUrlSafe`, `src/lib/public-url.ts:isHostAllowlisted`; used in `src/app/api/auth/account-holder/signup/route.ts` for the verify-email link.
 - **What breaks if violated**: loosening the allowlist (e.g. accepting `*.vercel.app` without team-slug scoping) opens a host-header injection vector — an attacker with a different `tutoring-notes-*` Vercel project could redirect a parent's verify-email link to an attacker-controlled domain, stealing the handoff token.
 - **Migration check**: if the Vercel team slug changes (account rename), update `ALLOWLISTED_HOST_PATTERNS` and the tests in `src/__tests__/public-url-allowlist.test.ts`. If the production domain changes from `usemynk.com`, add the new domain and retain the old during the transition window.
+
+### 5.9 Production SEO host (Search Console canonical)
+
+- **Assumption**: Google should index **`https://usemynk.com`** only. Production requests whose `Host` is `tutoring-notes.vercel.app`, any other `*.vercel.app`, or `www.usemynk.com`, or whose proto is `http`, **308** to `https://usemynk.com` + the same path/query. Preview (`VERCEL_ENV=preview`) and local never 308.
+- **Why it exists**: Search Console (first detected 2026-09-04) listed `https://usemynk.com/` as "Duplicate without user-selected canonical" and selected `https://tutoring-notes.vercel.app/` as the Google-chosen homepage.
+- **Where baked in**: `src/lib/seo/canonical-host.ts`; `src/middleware.ts` (308 + `X-Robots-Tag: noindex, nofollow` on `*.vercel.app`); `metadataBase` + per-page `alternates.canonical` on public marketing routes; `src/app/sitemap.ts` / `src/app/robots.ts`.
+- **What breaks if violated**: Google keeps ranking the default Vercel URL; branded domain stays unindexed. Redirecting preview hosts would break smoke aliases and OAuth callbacks on `*.vercel.app`.
+- **Migration check**: if the production domain changes, update `PRODUCTION_CANONICAL_HOST` / `PRODUCTION_CANONICAL_ORIGIN` and this section in the same commit.
 
 ---
 
