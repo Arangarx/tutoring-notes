@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
@@ -6,9 +7,14 @@ import {
   getAccountHolderSessionFromHeaders,
   getLearnerSessionFromHeaders,
 } from "@/lib/server-session";
+import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 import { LandingPageContent } from "./LandingPageContent";
 
 export const dynamic = "force-dynamic";
+
+export function generateMetadata(): Metadata {
+  return productionCanonicalMetadata("/");
+}
 
 type HomePageProps = {
   searchParams: Promise<{ view?: string }>;

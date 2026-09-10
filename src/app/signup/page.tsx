@@ -3,12 +3,14 @@ import Link from "next/link";
 
 import { AuthShell } from "@/components/auth/AuthShell";
 import { env } from "@/lib/env";
+import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 
 import SignupForm from "./SignupForm";
 
 export const metadata: Metadata = {
   title: "Sign up — Tutoring Notes",
   description: "Create a tutor account for Tutoring Notes.",
+  ...productionCanonicalMetadata("/signup"),
 };
 
 export default async function SignupPage() {

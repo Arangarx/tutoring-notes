@@ -39,6 +39,10 @@ test.beforeAll(async () => {
 test("login page — visual + a11y", async ({ guardedPage, checkPageA11y }) => {
   await guardedPage.goto("/login");
   await guardedPage.waitForLoadState("networkidle");
+  await expect(guardedPage.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://usemynk.com/login"
+  );
   await checkPageA11y();
   await expect(guardedPage).toHaveScreenshot("login.png");
 });
@@ -46,6 +50,10 @@ test("login page — visual + a11y", async ({ guardedPage, checkPageA11y }) => {
 test("signup page — visual + a11y", async ({ guardedPage, checkPageA11y }) => {
   await guardedPage.goto("/signup");
   await guardedPage.waitForLoadState("networkidle");
+  await expect(guardedPage.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://usemynk.com/signup"
+  );
   await checkPageA11y();
   await expect(guardedPage).toHaveScreenshot("signup.png");
 });
@@ -60,8 +68,22 @@ test("share page — visual + a11y", async ({ guardedPage, checkPageA11y }) => {
 test("feedback page — visual + a11y", async ({ guardedPage, checkPageA11y }) => {
   await guardedPage.goto("/feedback");
   await guardedPage.waitForLoadState("networkidle");
+  await expect(guardedPage.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://usemynk.com/feedback"
+  );
   await checkPageA11y();
   await expect(guardedPage).toHaveScreenshot("feedback.png");
+});
+
+test("marketing homepage declares the usemynk.com canonical", async ({
+  guardedPage,
+}) => {
+  await guardedPage.goto("/?view=home");
+  await expect(guardedPage.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://usemynk.com/"
+  );
 });
 
 // ---------------------------------------------------------------------------

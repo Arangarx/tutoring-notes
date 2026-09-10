@@ -5,11 +5,13 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 
 export const metadata: Metadata = {
   title: "Features — Mynk",
   description:
     "Mynk is tutoring infrastructure for independent tutors — session recording, AI-drafted notes, and secure parent updates. Mynk doesn't take a cut of what you charge.",
+  ...productionCanonicalMetadata("/features"),
 };
 
 const PRODUCT_FEATURES = [

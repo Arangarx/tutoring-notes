@@ -4,11 +4,13 @@ import { Providers } from "@/components/Providers";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getBuildIdentity } from "@/lib/build-identity";
 import { getPreviewBranchBadgeData } from "@/lib/preview-branch-badge";
+import { PRODUCTION_CANONICAL_ORIGIN } from "@/lib/seo/canonical-host";
 import { getThemeBootstrapScript } from "@/lib/theme";
 import { fraunces, inter, jetbrainsMono } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(PRODUCTION_CANONICAL_ORIGIN),
   title: "Tutoring Notes",
   description: "Fast session notes and clean parent updates for tutors.",
 };
