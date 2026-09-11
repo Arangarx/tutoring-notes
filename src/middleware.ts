@@ -13,6 +13,7 @@ import {
   isApprovalExemptAdminPath,
   isTutorExperiencePath,
   realAdminHomePath,
+  shouldRedirectToTutorEmailVerify,
   tutorExperienceLandingPath,
 } from "@/lib/admin-routing";
 import {
@@ -239,6 +240,27 @@ export async function middleware(req: NextRequest) {
         pendingUrl.search = "";
         return headersFor(NextResponse.redirect(pendingUrl), pathname);
       }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Tutor email-verify gate (confirm-link). After approval, before 2FA.
+    // Redirect target is /verify-tutor-email (outside /admin) so waitForURL(/admin)
+    // cannot silently pass a verify bounce.
+    // ---------------------------------------------------------------------------
+    if (
+      shouldRedirectToTutorEmailVerify(pathname, {
+        sub: token.sub,
+        emailVerified: token.emailVerified as boolean | undefined,
+        isImpersonating: token.isImpersonating as boolean | undefined,
+      })
+    ) {
+      console.log(
+        `[evf] evf=middleware adminUserId=${token.sub ?? "?"} action=redirect_verify pathname=${pathname}`
+      );
+      const verifyUrl = req.nextUrl.clone();
+      verifyUrl.pathname = "/verify-tutor-email";
+      verifyUrl.search = "";
+      return headersFor(NextResponse.redirect(verifyUrl), pathname);
     }
 
     // ---------------------------------------------------------------------------

@@ -156,4 +156,36 @@ test.describe("P1-ID-EVF — tutor confirm-link", () => {
       await prisma.$disconnect();
     }
   });
+
+  test("APPROVED + unverified tutor hitting /admin/students lands on /verify-tutor-email", async ({
+    page,
+  }) => {
+    assertLocalDatabaseUrlForHarness();
+    const prisma = new PrismaClient();
+    const email = `pw-evf-gate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.local`;
+    const password = "GateFlip!99";
+
+    try {
+      await prisma.adminUser.create({
+        data: {
+          email,
+          passwordHash: await bcrypt.hash(password, 10),
+          displayName: "PW Confirm Gate",
+          role: "TUTOR",
+          approvalStatus: "APPROVED",
+          isTestAccount: false,
+          emailVerifiedAt: null,
+        },
+      });
+
+      await loginTutorWithPassword(page, { email, password });
+      await page.goto("/admin/students");
+      await page.waitForURL(/\/verify-tutor-email/, { timeout: 30_000 });
+      await expect(page.getByTestId("tutor-verify-email-form")).toBeVisible();
+      expect(page.url()).not.toMatch(/\/admin\/students/);
+    } finally {
+      await prisma.adminUser.deleteMany({ where: { email } });
+      await prisma.$disconnect();
+    }
+  });
 });

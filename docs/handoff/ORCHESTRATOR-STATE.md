@@ -43,7 +43,7 @@
 
 **agenticPipeline:** Phase 1 **merged to agenticPipeline `master`** @ [`aa56225`](https://github.com/Arangarx/agenticPipeline/commit/aa56225) (change mode + fail-closed + TN template; Sonnet APPROVE after REJECT fixes). Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** Finish Workstream 1 on `feat/auth-ship-ready` — **middleware gate flip LAST** after identity-e2e + `test:integration` prove seeds still authenticate. Then independent verify (try Sonnet). Then 1b. Plan: `tutor_auth_ship-ready_0cc151a0`. Remaining #5 Google write + invite-link product call stay Andrew-blocked. Checklist → [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md).
+**Next action(s):** Independent verify of the email-verify middleware gate, then Workstream 1b (AH stubs → platform mail). Plan: `tutor_auth_ship-ready_0cc151a0`. Remaining #5 Google write + invite-link product call stay Andrew-blocked. Checklist → [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md).
 
 ---
 
@@ -53,13 +53,13 @@
 
 **Tip:** `master` after this replay — legal Calendar facade (`5038f794` replayed) + Sarah 2026-09-10 Discord/SMS docs. Prior SEO merge [`e6726b28`](https://github.com/Arangarx/tutoring-notes/commit/e6726b28).
 
-**Last action:** Workstream 1 implementation (no middleware gate) @ `095d086e`, then resend-path tests after independent verify REJECT (unknown / already-verified / unverified + anti-enumeration route + Playwright form round-trip).
+**Last action:** WS1 resend tests independently APPROVE. Email-verify middleware gate implemented (uncommitted until this lands): `shouldRedirectToTutorEmailVerify` after approval / before 2FA; absent JWT claim grandfathered; Playwright APPROVED+unverified → `/verify-tutor-email`. identity-e2e 55 passed / 5 failed (claim-setup parent + erasure 404-vs-200 suspension page — not the gate; tutor admin chrome still authenticates). integration-setup + /admin student-detail + schedule specs green.
 
 **Neon cost pass (2026-08-28, still in effect):** scale-to-zero enabled (`suspend_timeout_seconds=300`); transcribe-sweep cron `*/15 * * * *` (layer 1 + end-session still cover live work). Backlogged **TXC-SWEEP-METRICS** + **NEON-SCALE-TO-ZERO-REVISIT**.
 
 **Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
 
-**In-flight:** `feat/auth-ship-ready` — WS0 done; Workstream 1 coded **without** the middleware gate. Next: identity-e2e (confirm-link + waitlisted signup) then gate-flip commit, then Sonnet verify. `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
+**In-flight:** `feat/auth-ship-ready` — WS0 + WS1 impl + resend tests committed; **gate flip about to commit**. Then independent verify. `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
 **Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
 **Open Andrew human work:** [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — calendar callback URI + Calendar API + **one** verification submit when live. Platform SMTP (Resend + `usemynk.com` DNS + Vercel `SMTP_*`) after email chunks are coded. Later: **NEON-SCALE-TO-ZERO-REVISIT** once real lessons are regular.
 **Cleared:** Sign-In UI; #2 findability; #3 Google signup + reject/revoke; Calendar connect+stub; #4 email OTP; #5 native schedule CRUD; #6 security chunks + join denial; #7 ProductEvent tutor funnel.
