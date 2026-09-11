@@ -59,7 +59,7 @@
 
 **Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
 
-**In-flight:** `feat/auth-ship-ready` — WS0 + WS1 (impl `095d086e`, resend tests `fc03c8e0`, gate `c25f16cb`) done + verified. Next: 1b. `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
+**In-flight:** `feat/auth-ship-ready` — WS1 done. **WS1b dispatch in progress** (AH stubs → `sendPlatformMail` + AH resend UI). `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
 **Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
 **Open Andrew human work:** [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — calendar callback URI + Calendar API + **one** verification submit when live. Platform SMTP (Resend + `usemynk.com` DNS + Vercel `SMTP_*`) after email chunks are coded. Later: **NEON-SCALE-TO-ZERO-REVISIT** once real lessons are regular.
 **Cleared:** Sign-In UI; #2 findability; #3 Google signup + reject/revoke; Calendar connect+stub; #4 email OTP; #5 native schedule CRUD; #6 security chunks + join denial; #7 ProductEvent tutor funnel.
