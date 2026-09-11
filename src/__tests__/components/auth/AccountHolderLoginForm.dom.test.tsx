@@ -41,6 +41,48 @@ describe("AccountHolderLoginForm — error code mapping", () => {
     jest.resetAllMocks();
   });
 
+  test("email_not_verified → resend button POSTs resend route and shows status", async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({ error: "email_not_verified" }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          message: "If that email needs confirmation, we sent a new link. Check your inbox.",
+        }),
+      } as Response);
+    global.fetch = fetchMock;
+
+    renderForm();
+    await fillAndSubmit("unverified@example.com", "pw");
+
+    await waitFor(() => {
+      expect(screen.getByText(/please verify your email first/i)).toBeInTheDocument();
+    });
+
+    await userEvent.setup().click(
+      screen.getByRole("button", { name: /resend confirmation email/i })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(
+        /if that email needs confirmation/i
+      );
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/auth/account-holder/resend-verification");
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      email: "unverified@example.com",
+    });
+  });
+
   test("email_not_verified → shows verify-email message (fix 7b)", async () => {
     global.fetch = jest.fn().mockResolvedValueOnce({
       ok: false,

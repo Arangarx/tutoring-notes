@@ -55,6 +55,8 @@ export function AccountHolderLoginForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendBusy, setResendBusy] = useState(false);
   const { retryAfterSec, isRateLimited, startCountdown } = useRetryAfterCountdown();
   const [busy, setBusy] = useState(false);
 
@@ -72,6 +74,7 @@ export function AccountHolderLoginForm({
 
     setBusy(true);
     setError(null);
+    setResendMessage(null);
 
     try {
       const res = await fetch("/api/auth/account-holder/login", {
@@ -167,10 +170,53 @@ export function AccountHolderLoginForm({
         </AuthFieldError>
       ) : null}
       {error === "email_not_verified" ? (
-        <AuthFieldError
-          id={errorId}
-          message="Please verify your email first. Check your inbox for a confirmation link."
-        />
+        <>
+          <AuthFieldError
+            id={errorId}
+            message="Please verify your email first. Check your inbox for a confirmation link."
+          />
+          {resendMessage ? (
+            <p className="text-sm text-success" role="status">
+              {resendMessage}
+            </p>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={resendBusy || !email.trim()}
+            className="min-h-11 w-full"
+            onClick={async () => {
+              setResendBusy(true);
+              setResendMessage(null);
+              try {
+                const res = await fetch("/api/auth/account-holder/resend-verification", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email }),
+                });
+                const data = (await res.json()) as {
+                  ok?: boolean;
+                  message?: string;
+                  error?: string;
+                };
+                if (!res.ok || !data.ok) {
+                  setResendMessage(data.error ?? "Something went wrong.");
+                  return;
+                }
+                setResendMessage(
+                  data.message ??
+                    "If that email needs confirmation, we sent a new link. Check your inbox."
+                );
+              } catch {
+                setResendMessage("Couldn't reach Mynk. Check your connection and try again.");
+              } finally {
+                setResendBusy(false);
+              }
+            }}
+          >
+            {resendBusy ? "Sending…" : "Resend confirmation email"}
+          </Button>
+        </>
       ) : null}
       {error === "too_many_requests" ? (
         <AuthFieldError

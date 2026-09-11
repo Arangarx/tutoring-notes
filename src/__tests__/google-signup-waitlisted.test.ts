@@ -4,7 +4,7 @@
  * - createAdminFromGoogle → WAITLISTED, null passwordHash, TUTOR role
  * - signup-intent token mint/validate
  * - signIn callback: provision with valid intent; reject without intent; login unchanged
- * - notifyOperatorsOfNewSignup on credentials + Google create (mocked sendMail)
+ * - notifyOperatorsOfNewSignup on credentials + Google create (mocked sendPlatformMail)
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -106,9 +106,9 @@ describe("notifyOperatorsOfNewSignup", () => {
     process.env.NEXTAUTH_URL = "https://app.example.com";
   });
 
-  it("sends to OPERATOR_EMAILS ∪ ADMIN_EMAIL (fail-open on sendMail error)", async () => {
-    const sendMail = jest.fn().mockResolvedValue({ sent: false, error: "no smtp" });
-    jest.doMock("@/lib/email", () => ({ sendMail }));
+  it("sends to OPERATOR_EMAILS ∪ ADMIN_EMAIL (fail-open on sendPlatformMail error)", async () => {
+    const sendPlatformMail = jest.fn().mockResolvedValue({ sent: false, error: "no smtp" });
+    jest.doMock("@/lib/email", () => ({ sendPlatformMail }));
 
     const { notifyOperatorsOfNewSignup } = await import(
       "@/lib/notify-operator-new-signup"
@@ -119,8 +119,8 @@ describe("notifyOperatorsOfNewSignup", () => {
       method: "credentials",
     });
 
-    expect(sendMail).toHaveBeenCalledTimes(1);
-    const call = sendMail.mock.calls[0][0];
+    expect(sendPlatformMail).toHaveBeenCalledTimes(1);
+    const call = sendPlatformMail.mock.calls[0][0];
     expect(call.to).toContain("ops@example.com");
     expect(call.to).toContain("admin@example.com");
     expect(call.subject).toMatch(/WAITLISTED/i);
@@ -129,8 +129,8 @@ describe("notifyOperatorsOfNewSignup", () => {
   });
 
   it("labels Google method in notification body", async () => {
-    const sendMail = jest.fn().mockResolvedValue({ sent: true });
-    jest.doMock("@/lib/email", () => ({ sendMail }));
+    const sendPlatformMail = jest.fn().mockResolvedValue({ sent: true });
+    jest.doMock("@/lib/email", () => ({ sendPlatformMail }));
 
     const { notifyOperatorsOfNewSignup } = await import(
       "@/lib/notify-operator-new-signup"
@@ -140,15 +140,15 @@ describe("notifyOperatorsOfNewSignup", () => {
       method: "google",
     });
 
-    expect(sendMail.mock.calls[0][0].text).toMatch(/Google OAuth/i);
+    expect(sendPlatformMail.mock.calls[0][0].text).toMatch(/Google OAuth/i);
   });
 
   it("no-ops when operator set is empty", async () => {
     delete process.env.OPERATOR_EMAILS;
     delete process.env.ADMIN_EMAIL;
 
-    const sendMail = jest.fn();
-    jest.doMock("@/lib/email", () => ({ sendMail }));
+    const sendPlatformMail = jest.fn();
+    jest.doMock("@/lib/email", () => ({ sendPlatformMail }));
     jest.doMock("@/lib/env", () => ({
       env: {
         OPERATOR_EMAILS: undefined,
@@ -165,7 +165,7 @@ describe("notifyOperatorsOfNewSignup", () => {
       method: "credentials",
     });
 
-    expect(sendMail).not.toHaveBeenCalled();
+    expect(sendPlatformMail).not.toHaveBeenCalled();
   });
 });
 

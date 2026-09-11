@@ -18,7 +18,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { generateRawToken, hashToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
-import { stubSendClaimInviteEmail } from "@/lib/account-holder-email";
+import { sendClaimInviteEmail } from "@/lib/account-holder-email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 
@@ -94,9 +94,18 @@ export async function POST(
   const inviteLink = `/claim/${rawToken}`;
   const inviteUrl = `${base}${inviteLink}`;
 
-  // Send invite email if student has parentEmail
   if (student.parentEmail) {
-    await stubSendClaimInviteEmail(student.parentEmail, inviteUrl, student.name);
+    const mailed = await sendClaimInviteEmail(
+      student.parentEmail,
+      inviteUrl,
+      student.name,
+      { inviteId: invite.id }
+    );
+    if (!mailed.sent) {
+      console.error(
+        `[clm] clm=${invite.id} action=send_fail studentId=${studentId}`
+      );
+    }
   }
 
   return NextResponse.json({ inviteLink });

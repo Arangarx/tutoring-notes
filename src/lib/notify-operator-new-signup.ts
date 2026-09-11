@@ -6,7 +6,7 @@
  */
 
 import { getOperatorEmailSet } from "@/lib/operator";
-import { sendMail } from "@/lib/email";
+import { sendPlatformMail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 
 export type NewSignupMethod = "credentials" | "google";
@@ -24,7 +24,7 @@ export async function notifyOperatorsOfNewSignup(opts: {
     opts.method === "google" ? "Google OAuth" : "email and password";
 
   try {
-    await sendMail({
+    await sendPlatformMail({
       to: recipients.join(", "),
       subject: `New tutor signup (WAITLISTED): ${opts.email}`,
       text: [

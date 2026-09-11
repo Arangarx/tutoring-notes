@@ -11,7 +11,7 @@
 import { createHash, randomInt } from "node:crypto";
 import type { AdminUser2FAEmailChallengePurpose } from "@prisma/client";
 import { db } from "@/lib/db";
-import { sendMail } from "@/lib/email";
+import { sendPlatformMail } from "@/lib/email";
 import { checkAndIncrementAuthThrottle } from "@/lib/auth-rate-limit";
 
 export const EMAIL_OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -154,7 +154,7 @@ export async function sendEmailOtpChallenge(params: {
       ? "Enter this code to finish setting up two-factor authentication on your Mynk account:"
       : "Enter this code to finish signing in to your Mynk account:";
 
-  const result = await sendMail({
+  const result = await sendPlatformMail({
     to: params.email,
     subject,
     text: `${intro}\n\n${plaintext}\n\nThis code expires in 10 minutes and can only be used once.\n\nIf you did not request this, you can ignore this email.`,
