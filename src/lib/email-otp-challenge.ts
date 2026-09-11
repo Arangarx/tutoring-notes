@@ -161,6 +161,14 @@ export async function sendEmailOtpChallenge(params: {
   });
 
   if (!result.sent) {
+    // Playwright identity harness: challenge row is already in DB; allow UI enrollment
+    // flows without SMTP (codes are seeded or read from DB in helpers).
+    if (process.env.PLAYWRIGHT_TEST === "1") {
+      console.log(
+        `[tfa] adminUserId=${params.adminUserId} action=email-otp-sent-harness-skip purpose=${params.purpose}`
+      );
+      return { ok: true };
+    }
     console.log(
       `[tfa] adminUserId=${params.adminUserId} action=email-otp-send-fail purpose=${params.purpose}`
     );

@@ -6,6 +6,14 @@
 
 import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   startTotpEnrollment,
   confirmTotpEnrollment,
@@ -30,9 +38,11 @@ type Step =
 export function TwoFactorSetupForm({
   pendingEmailEnrollment,
   pendingMaskedEmail,
+  smsEnrollmentAvailable = false,
 }: {
   pendingEmailEnrollment?: boolean;
   pendingMaskedEmail?: string;
+  smsEnrollmentAvailable?: boolean;
 }) {
   const router = useRouter();
   const [method, setMethod] = useState<SetupMethod>("email");
@@ -163,21 +173,69 @@ export function TwoFactorSetupForm({
           Two-factor authentication adds a second layer of security. By default we email a
           one-time code to your account address — no app required.
         </p>
-        <button
-          onClick={handleStartEmail}
-          disabled={loading}
-          className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-        >
-          {loading && method === "email" ? "Sending code…" : "Set up 2FA"}
-        </button>
-        <button
-          type="button"
-          onClick={switchToTotp}
-          disabled={loading}
-          className="block text-sm underline text-muted-foreground hover:text-foreground"
-        >
-          Use authenticator app instead
-        </button>
+        <div className="grid gap-3 sm:grid-cols-1">
+          <Card
+            className="border-primary ring-1 ring-primary/30"
+            data-testid="tfa-choose-email"
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Email code</CardTitle>
+              <CardDescription>
+                Default — we send a 6-digit code to your account email at sign-in.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleStartEmail}
+                disabled={loading}
+                className="w-full sm:w-auto"
+              >
+                {loading && method === "email" ? "Sending code…" : "Set up with email"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="tfa-choose-totp">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Authenticator app</CardTitle>
+              <CardDescription>
+                Use Google Authenticator, 1Password, or another TOTP app.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={switchToTotp}
+                disabled={loading}
+                className="w-full sm:w-auto"
+              >
+                {loading && method === "totp" ? "Preparing…" : "Set up with authenticator"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="tfa-choose-sms" className="opacity-80">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Text message (SMS)</CardTitle>
+              <CardDescription>
+                {smsEnrollmentAvailable
+                  ? "Receive codes by text message."
+                  : "Not available yet — SMS sender is not configured."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                type="button"
+                variant="outline"
+                disabled
+                className="w-full sm:w-auto"
+              >
+                SMS not available
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

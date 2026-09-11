@@ -44,7 +44,9 @@ test.describe("Email OTP 2FA — enroll + login (chunk 1)", () => {
     await expect(page.getByText(/invalid or expired code/i)).toBeVisible({ timeout: 15_000 });
   });
 
-  test("enroll default: unenrolled tutor sees email setup first", async ({ page }) => {
+  test("enroll default: unenrolled tutor sees first-class chooser with email default", async ({
+    page,
+  }) => {
     await seedUnenrolled2faTutor();
 
     await loginTutorWithPassword(page, {
@@ -54,7 +56,11 @@ test.describe("Email OTP 2FA — enroll + login (chunk 1)", () => {
 
     await page.waitForURL(/\/admin\/settings\/2fa\/setup/, { timeout: 30_000 });
     await expect(page.getByText(/by default we email/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Use authenticator app instead" })).toBeVisible();
+    await expect(page.getByTestId("tfa-choose-email")).toBeVisible();
+    await expect(page.getByTestId("tfa-choose-totp")).toBeVisible();
+    await expect(page.getByTestId("tfa-choose-sms")).toBeVisible();
+    await expect(page.getByTestId("tfa-choose-email")).toHaveClass(/border-primary/);
+    await expect(page.getByRole("button", { name: "SMS not available" })).toBeDisabled();
   });
 
   test("enroll confirm: seeded email OTP completes setup and reaches students", async ({
@@ -81,9 +87,43 @@ test.describe("Email OTP 2FA — enroll + login (chunk 1)", () => {
     });
     await page.waitForURL(/\/admin\/settings\/2fa\/setup/, { timeout: 30_000 });
 
-    await page.getByRole("button", { name: "Use authenticator app instead" }).click();
+    await page.getByTestId("tfa-choose-totp").getByRole("button", { name: /authenticator/i }).click();
     const qrImg = page.getByRole("img", { name: "TOTP QR code" });
     await expect(qrImg).toBeVisible({ timeout: 30_000 });
     await expect(qrImg).toHaveAttribute("src", /^data:image\/png;base64,/);
+  });
+
+  test("chooser email card starts email-sent enrollment step", async ({ page }) => {
+    await seedUnenrolled2faTutor();
+
+    await loginTutorWithPassword(page, {
+      email: "playwright-tfa-enroll@test.local",
+      password: "TwofaEnrollPw!789",
+    });
+    await page.waitForURL(/\/admin\/settings\/2fa\/setup/, { timeout: 30_000 });
+
+    await page
+      .getByTestId("tfa-choose-email")
+      .getByRole("button", { name: /set up with email/i })
+      .click();
+
+    await expect(page.getByPlaceholder("000000")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/sent a 6-digit code/i)).toBeVisible();
+  });
+
+  test("email-enrolled confirmed tutor sees manage page not setup chooser", async ({ page }) => {
+    const { loginCode } = await seedEmailOtpEnrolledTutor();
+
+    await loginTutorWithPassword(page, TEST_EMAIL_2FA_TUTOR);
+    await waitFor2faVerifyChallenge(page);
+    await submitEmailOtpOnVerifyPage(page, loginCode);
+    await expectTutorAuthedLanding(page);
+
+    await page.goto("/admin/settings/2fa");
+    await expect(page).toHaveURL(/\/admin\/settings\/2fa$/);
+    await expect(page.getByRole("heading", { name: "Two-Factor Authentication" })).toBeVisible();
+    await expect(page.getByText(/two-factor authentication is on/i)).toBeVisible();
+    await expect(page.getByTestId("tfa-choose-email")).not.toBeVisible();
+    await expect(page.getByRole("heading", { name: "Set up Two-Factor Authentication" })).not.toBeVisible();
   });
 });

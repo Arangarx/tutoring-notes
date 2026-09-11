@@ -14,6 +14,7 @@
 
 import { useState, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import {
   rotateTotpStart,
   rotateTotpConfirm,
@@ -22,6 +23,7 @@ import {
   listTrustedDevices,
   revokeTrustedDevice,
   revokeAllTrustedDevices,
+  sendLoginEmailOtp,
   type ListTrustedDevicesResult,
 } from "./actions";
 
@@ -35,6 +37,7 @@ interface TrustedDevice {
 }
 
 interface Props {
+  method: string;
   enrolledAt: string;       // ISO string
   remainingBackupCodes: number;
   isAdmin: boolean;
@@ -56,11 +59,13 @@ type ViewState =
   | "reset-done";
 
 export function TwoFactorManageView({
+  method,
   enrolledAt,
   remainingBackupCodes,
   isAdmin,
   userId,
 }: Props) {
+  const isEmailOtp = method === "EMAIL_OTP";
   const router = useRouter();
   const [view, setView] = useState<ViewState>("idle");
   const [error, setError] = useState("");
@@ -76,6 +81,8 @@ export function TwoFactorManageView({
   // Step-up state (shared across rotate/regen/reset actions)
   const [stepUpCode, setStepUpCode] = useState("");
   const [stepUpFor, setStepUpFor] = useState<"rotate" | "regen" | "reset-self" | "reset-other" | null>(null);
+  const [stepUpOtpMsg, setStepUpOtpMsg] = useState<string | null>(null);
+  const [stepUpOtpPending, setStepUpOtpPending] = useState(false);
 
   // Regen state
   const [regenCodes, setRegenCodes] = useState<string[]>([]);
@@ -347,38 +354,82 @@ export function TwoFactorManageView({
       else if (stepUpFor === "reset-other") handleResetOtherWithCode(code);
     }
 
-    const canSubmit = stepUpCode.trim().length >= 6 && !isPending;
+    function handleSendStepUpEmailOtp() {
+      setStepUpOtpMsg(null);
+      setStepUpOtpPending(true);
+      startTransition(async () => {
+        const result = await sendLoginEmailOtp();
+        setStepUpOtpPending(false);
+        if (result.ok) setStepUpOtpMsg(`Code sent to ${result.maskedEmail}.`);
+        else setStepUpOtpMsg(result.error ?? "Could not send code.");
+      });
+    }
+
+    const minCodeLength = isEmailOtp ? 6 : 6;
+    const maxCodeLength = isEmailOtp ? 6 : 8;
+    const canSubmit = stepUpCode.trim().length >= minCodeLength && !isPending;
 
     return (
       <div className="space-y-4">
         <div className="rounded-md border border-border p-4">
           <h2 className="text-base font-semibold mb-1">Confirm your identity</h2>
-          <p className="text-sm text-muted-foreground mb-3">
-            Enter your 6-digit authenticator code or 8-character backup code to {label}.
-          </p>
+          {isEmailOtp ? (
+            <p className="text-sm text-muted-foreground mb-3">
+              Request a verification code, then enter it below to {label}.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground mb-3">
+              Enter your 6-digit authenticator code or 8-character backup code to {label}.
+            </p>
+          )}
+          {isEmailOtp && (
+            <div className="mb-3 space-y-2">
+              {stepUpOtpMsg ? (
+                <p className="text-xs text-muted-foreground" role="status">
+                  {stepUpOtpMsg}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={stepUpOtpPending || isPending}
+                onClick={handleSendStepUpEmailOtp}
+              >
+                {stepUpOtpPending ? "Sending…" : "Send verification code"}
+              </Button>
+            </div>
+          )}
           {error && <p className="text-sm text-destructive mb-2">{error}</p>}
-          <form onSubmit={(e) => { e.preventDefault(); handleStepUpConfirm(); }} className="flex gap-2 items-center">
+          <form onSubmit={(e) => { e.preventDefault(); handleStepUpConfirm(); }} className="flex gap-2 items-center flex-wrap">
             <input
               type="text"
               inputMode="numeric"
-              maxLength={8}
+              maxLength={maxCodeLength}
               placeholder="000000"
               value={stepUpCode}
-              onChange={(e) => setStepUpCode(e.target.value.replace(/[^0-9A-Za-z]/g, "").slice(0, 8))}
+              onChange={(e) =>
+                setStepUpCode(
+                  isEmailOtp
+                    ? e.target.value.replace(/\D/g, "").slice(0, 6)
+                    : e.target.value.replace(/[^0-9A-Za-z]/g, "").slice(0, 8)
+                )
+              }
               className="border rounded-md px-3 py-2 text-sm w-36 font-mono tracking-widest"
               autoComplete="one-time-code"
               autoFocus
             />
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-            >
+            <Button type="submit" disabled={!canSubmit}>
               {isPending ? "Verifying…" : "Continue"}
-            </button>
+            </Button>
             <button
               type="button"
-              onClick={() => { setStepUpFor(null); setView("idle"); setError(""); }}
+              onClick={() => {
+                setStepUpFor(null);
+                setView("idle");
+                setError("");
+                setStepUpOtpMsg(null);
+              }}
               disabled={isPending}
               className="text-sm text-muted-foreground underline disabled:opacity-50"
             >
@@ -642,8 +693,15 @@ export function TwoFactorManageView({
           Two-factor authentication is on
         </p>
         <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-          Enrolled {enrolledDate} &middot; {remainingBackupCodes} backup code
-          {remainingBackupCodes !== 1 ? "s" : ""} remaining
+          Enrolled {enrolledDate}
+          {isEmailOtp ? (
+            <> &middot; Email verification codes</>
+          ) : (
+            <>
+              {" "}&middot; {remainingBackupCodes} backup code
+              {remainingBackupCodes !== 1 ? "s" : ""} remaining
+            </>
+          )}
         </p>
       </div>
 
@@ -741,47 +799,51 @@ export function TwoFactorManageView({
         )}
       </div>
 
-      <hr className="border-border" />
+      {!isEmailOtp && (
+        <>
+          <hr className="border-border" />
 
-      {/* Rotate authenticator */}
-      <div className="space-y-1">
-        <h2 className="text-sm font-semibold">Rotate authenticator</h2>
-        <p className="text-sm text-muted-foreground">
-          Got a new phone? Generate a new QR code and scan it with your new app.
-          Your current authenticator keeps working until you confirm the new one.
-        </p>
-        <button
-          type="button"
-          onClick={handleRotateStart}
-          disabled={isPending}
-          className="mt-2 text-sm border rounded-md px-4 py-2 hover:bg-muted transition-colors disabled:opacity-50"
-        >
-          Rotate authenticator
-        </button>
-      </div>
+          {/* Rotate authenticator */}
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold">Rotate authenticator</h2>
+            <p className="text-sm text-muted-foreground">
+              Got a new phone? Generate a new QR code and scan it with your new app.
+              Your current authenticator keeps working until you confirm the new one.
+            </p>
+            <button
+              type="button"
+              onClick={handleRotateStart}
+              disabled={isPending}
+              className="mt-2 text-sm border rounded-md px-4 py-2 hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              Rotate authenticator
+            </button>
+          </div>
 
-      <hr className="border-border" />
+          <hr className="border-border" />
 
-      {/* Regenerate backup codes */}
-      <div className="space-y-1">
-        <h2 className="text-sm font-semibold">Regenerate backup codes</h2>
-        <p className="text-sm text-muted-foreground">
-          Generate a new set of backup codes. Your old codes will be invalidated immediately.
-          {remainingBackupCodes < 3 && (
-            <span className="text-yellow-700 dark:text-yellow-400 font-medium">
-              {" "}Only {remainingBackupCodes} code{remainingBackupCodes !== 1 ? "s" : ""} left — consider regenerating soon.
-            </span>
-          )}
-        </p>
-        <button
-          type="button"
-          onClick={handleRegenStart}
-          disabled={isPending}
-          className="mt-2 text-sm border rounded-md px-4 py-2 hover:bg-muted transition-colors disabled:opacity-50"
-        >
-          Regenerate backup codes
-        </button>
-      </div>
+          {/* Regenerate backup codes */}
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold">Regenerate backup codes</h2>
+            <p className="text-sm text-muted-foreground">
+              Generate a new set of backup codes. Your old codes will be invalidated immediately.
+              {remainingBackupCodes < 3 && (
+                <span className="text-yellow-700 dark:text-yellow-400 font-medium">
+                  {" "}Only {remainingBackupCodes} code{remainingBackupCodes !== 1 ? "s" : ""} left — consider regenerating soon.
+                </span>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={handleRegenStart}
+              disabled={isPending}
+              className="mt-2 text-sm border rounded-md px-4 py-2 hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              Regenerate backup codes
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Admin-only reset section */}
       {isAdmin && (

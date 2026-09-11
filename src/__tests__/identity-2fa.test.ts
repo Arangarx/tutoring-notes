@@ -1046,4 +1046,17 @@ describe("Item 2: autofocus code entry fields on 2FA screens", () => {
     // The 6-digit code input in the show-qr/confirming step must have autoFocus.
     expect(content).toContain("autoFocus");
   });
+
+  it("TwoFactorSetupForm idle step exposes three first-class chooser cards", () => {
+    const formPath = path.resolve(
+      __dirname, "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx"
+    );
+    const content = fs.readFileSync(formPath, "utf-8");
+    expect(content).toContain('data-testid="tfa-choose-email"');
+    expect(content).toContain('data-testid="tfa-choose-totp"');
+    expect(content).toContain('data-testid="tfa-choose-sms"');
+    expect(content).toContain("SMS not available");
+    expect(content).toContain('from "@/components/ui/button"');
+    expect(content).toContain('from "@/components/ui/card"');
+  });
 });

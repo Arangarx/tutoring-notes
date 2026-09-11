@@ -5,6 +5,7 @@ import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { TwoFactorSetupForm } from "./TwoFactorSetupForm";
 import { ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
+import { isTwoFactorEnrollmentConfirmed, isSms2faEnrollmentAvailable } from "@/lib/two-factor-enrollment";
 
 export const dynamic = "force-dynamic";
 
@@ -28,14 +29,14 @@ export default async function TwoFactorSetupPage() {
         },
       },
     });
-    // An enrollment is CONFIRMED when:
-    //   EMAIL_OTP — enrolledAt is set after code confirmation
-    //   TOTP — backup codes exist (created by confirmTotpEnrollment)
     const twoFa = admin?.twoFactor;
-    const isConfirmed =
-      twoFa?.method === "EMAIL_OTP"
-        ? !!twoFa.enrolledAt
-        : (twoFa?._count?.backupCodes ?? 0) > 0;
+    const isConfirmed = twoFa
+      ? isTwoFactorEnrollmentConfirmed({
+          method: twoFa.method,
+          enrolledAt: twoFa.enrolledAt,
+          backupCodeCount: twoFa._count.backupCodes,
+        })
+      : false;
 
     if (isConfirmed && !session.user.twoFactorVerified && session.user.id) {
       // Trusted-device skip: route to the Route Handler if the cookie is present.
@@ -84,6 +85,7 @@ export default async function TwoFactorSetupPage() {
       <TwoFactorSetupForm
         pendingEmailEnrollment={pendingEmailEnrollment}
         pendingMaskedEmail={pendingMaskedEmail}
+        smsEnrollmentAvailable={isSms2faEnrollmentAvailable()}
       />
     </div>
   );
