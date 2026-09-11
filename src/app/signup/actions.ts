@@ -3,9 +3,13 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createAdmin } from "@/lib/auth-db";
+import { db } from "@/lib/db";
 import { findEmailRealmPresence } from "@/lib/cross-realm-email";
 import { notifyOperatorsOfNewSignup } from "@/lib/notify-operator-new-signup";
 import { validatePasswordStrength, MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
+import { normalizeEmail } from "@/lib/normalize-email";
+import { sendTutorSignupVerifyEmail } from "@/lib/admin-email-verify";
+import { getRequestBaseUrlSafeFromHeaders } from "@/lib/public-url";
 
 const SignupSchema = z
   .object({
@@ -44,6 +48,7 @@ export async function signup(
   }
 
   const { email, password, displayName } = parsed.data;
+  const normalized = normalizeEmail(email);
 
   const strengthCheck = validatePasswordStrength(password);
   if (!strengthCheck.ok) {
@@ -54,21 +59,29 @@ export async function signup(
   if (presence.inAdmin || presence.inAccountHolder) {
     // Anti-enumeration: a malicious actor can otherwise probe which emails
     // have accounts. Redirect to the same /login?registered=1 destination
-    // a successful signup would hit, so the externally-observable outcome
-    // is identical regardless of pre-existence. Real new accounts get the
-    // expected "Sign in with the email and password you just chose"
-    // confirmation; existing accounts also land on /login (no duplicate
-    // row created, no password silently changed) and the legitimate user
-    // who genuinely forgot they had an account just signs in or uses the
-    // /forgot-password flow from there.
-    //
-    // (Tradeoff: legitimate "I forgot I already have an account" users
-    // get no explicit "account exists" hint. Acceptable; the Forgot-password
-    // affordance on /login covers that path.)
+    // a successful signup would historically hit, so the externally-observable
+    // outcome stays identical for existing emails. New accounts go to
+    // /verify-tutor-email after a confirm mail is sent.
     redirect("/login?registered=1");
   }
 
-  const created = await createAdmin(email, password, displayName ?? null);
+  const created = await createAdmin(normalized, password, displayName ?? null);
+  const baseUrl = await getRequestBaseUrlSafeFromHeaders();
+  const mailed = await sendTutorSignupVerifyEmail({
+    adminUserId: created.id,
+    email: normalized,
+    baseUrl,
+  });
+
+  if (!mailed.sent) {
+    await db.adminUser.delete({ where: { id: created.id } });
+    return {
+      error:
+        mailed.error ??
+        "We couldn't send a confirmation email. Try again later, or contact support if this keeps happening.",
+    };
+  }
+
   const { logProductEvent } = await import("@/lib/observability/product-events");
   await logProductEvent({
     kind: "TUTOR_SIGNUP",
@@ -76,9 +89,9 @@ export async function signup(
     metadata: { method: "credentials" },
   });
   await notifyOperatorsOfNewSignup({
-    email: email.trim().toLowerCase(),
+    email: normalized,
     displayName: displayName ?? null,
     method: "credentials",
   });
-  redirect("/login?registered=1");
+  redirect("/verify-tutor-email");
 }

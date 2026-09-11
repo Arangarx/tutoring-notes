@@ -31,6 +31,7 @@ async function seedTutorFixture(input: {
         role: "TUTOR",
         approvalStatus: input.approvalStatus,
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
@@ -38,6 +39,7 @@ async function seedTutorFixture(input: {
         isTestAccount: false,
         approvedAt: input.approvalStatus === "APPROVED" ? new Date() : null,
         approvedByAdminId: null,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });

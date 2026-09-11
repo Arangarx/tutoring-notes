@@ -49,12 +49,14 @@ export async function seedEmailOtpEnrolledTutor(): Promise<{
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });
@@ -107,12 +109,14 @@ export async function seedEmailOtpEnrollChallenge(): Promise<{
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });

@@ -54,6 +54,7 @@
 import {
   isApprovalExemptAdminPath,
   is2faExemptAdminPath,
+  isEmailVerifyExemptAdminPath,
 } from "@/lib/admin-routing";
 
 // ---------------------------------------------------------------------------
@@ -158,5 +159,34 @@ describe("Loop-impossibility invariant", () => {
     // And /admin/pending-approval is exempt from BOTH → stays put
     expect(isApprovalExemptAdminPath("/admin/pending-approval")).toBe(true);
     expect(is2faExemptAdminPath("/admin/pending-approval")).toBe(true);
+  });
+});
+
+describe("isEmailVerifyExemptAdminPath — 3-way gate loop prevention", () => {
+  it("MW-EV-1: /admin/pending-approval is email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/admin/pending-approval")).toBe(true);
+  });
+
+  it("MW-EV-2: /admin/pending-approval/* sub-paths are email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/admin/pending-approval/status")).toBe(true);
+  });
+
+  it("MW-EV-3: /api/auth/* is email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/api/auth/session")).toBe(true);
+  });
+
+  it("MW-EV-4: /admin/students is NOT email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/admin/students")).toBe(false);
+  });
+
+  it("MW-EV-5: /admin/settings/2fa/setup is NOT email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/admin/settings/2fa/setup")).toBe(false);
+  });
+
+  it("3-way: pending-approval is exempt from approval + email-verify + 2FA", () => {
+    const pending = "/admin/pending-approval";
+    expect(isApprovalExemptAdminPath(pending)).toBe(true);
+    expect(isEmailVerifyExemptAdminPath(pending)).toBe(true);
+    expect(is2faExemptAdminPath(pending)).toBe(true);
   });
 });

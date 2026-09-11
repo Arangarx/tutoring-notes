@@ -126,6 +126,7 @@ export async function createTutorFixture(): Promise<TutorFixture> {
       isTestAccount: true,
       isTestFixture: true,
       role: "TUTOR",
+      emailVerifiedAt: new Date(),
     },
     select: { id: true, email: true },
   });

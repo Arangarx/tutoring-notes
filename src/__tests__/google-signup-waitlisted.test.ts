@@ -63,6 +63,10 @@ describe("createAdminFromGoogle", () => {
     }));
   });
 
+  afterEach(() => {
+    jest.dontMock("@/lib/db");
+  });
+
   it("creates WAITLISTED TUTOR with null passwordHash", async () => {
     mockCreate.mockResolvedValue({
       id: "g-1",
@@ -85,6 +89,7 @@ describe("createAdminFromGoogle", () => {
         role: "TUTOR",
         isTestAccount: false,
         approvalStatus: "WAITLISTED",
+        emailVerifiedAt: expect.any(Date),
       },
     });
   });
@@ -364,6 +369,11 @@ describe("Google signIn — signup intent dual path", () => {
 // credentials signup action notifies operators
 // ---------------------------------------------------------------------------
 describe("signup server action — operator notification", () => {
+  afterEach(() => {
+    jest.dontMock("@/lib/db");
+    jest.resetModules();
+  });
+
   it("calls notifyOperatorsOfNewSignup after createAdmin", async () => {
     jest.resetModules();
 
@@ -377,6 +387,9 @@ describe("signup server action — operator notification", () => {
     });
     const logProductEvent = jest.fn().mockResolvedValue(undefined);
 
+    const sendTutorSignupVerifyEmail = jest.fn().mockResolvedValue({ sent: true, tokenId: "tok1" });
+    const getRequestBaseUrlSafeFromHeaders = jest.fn().mockResolvedValue("https://app.example.com");
+
     jest.doMock("@/lib/auth-db", () => ({
       createAdmin,
       getAdminByEmail,
@@ -389,6 +402,12 @@ describe("signup server action — operator notification", () => {
     }));
     jest.doMock("@/lib/observability/product-events", () => ({
       logProductEvent,
+    }));
+    jest.doMock("@/lib/admin-email-verify", () => ({
+      sendTutorSignupVerifyEmail,
+    }));
+    jest.doMock("@/lib/public-url", () => ({
+      getRequestBaseUrlSafeFromHeaders,
     }));
     jest.doMock("next/navigation", () => ({
       redirect: jest.fn(() => {
@@ -407,6 +426,11 @@ describe("signup server action — operator notification", () => {
     await expect(signup(null, form)).rejects.toThrow("REDIRECT");
 
     expect(createAdmin).toHaveBeenCalled();
+    expect(sendTutorSignupVerifyEmail).toHaveBeenCalledWith({
+      adminUserId: "u1",
+      email: "brand-new@example.com",
+      baseUrl: "https://app.example.com",
+    });
     expect(notify).toHaveBeenCalledWith({
       email: "brand-new@example.com",
       displayName: "Brand New",
@@ -417,6 +441,65 @@ describe("signup server action — operator notification", () => {
       adminUserId: "u1",
       metadata: { method: "credentials" },
     });
+  });
+
+  it("rolls back the AdminUser when confirm mail cannot be sent", async () => {
+    jest.resetModules();
+
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const createAdmin = jest.fn().mockResolvedValue({ id: "u-rollback" });
+    const deleteAdmin = jest.fn().mockResolvedValue({ id: "u-rollback" });
+    const findEmailRealmPresence = jest.fn().mockResolvedValue({
+      normalizedEmail: "rollback@example.com",
+      inAdmin: false,
+      inAccountHolder: false,
+    });
+    const logProductEvent = jest.fn().mockResolvedValue(undefined);
+    const sendTutorSignupVerifyEmail = jest.fn().mockResolvedValue({
+      sent: false,
+      error: "Platform SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS.",
+      tokenId: "tok-fail",
+    });
+
+    jest.doMock("@/lib/auth-db", () => ({
+      createAdmin,
+      getAdminByEmail: jest.fn(),
+    }));
+    jest.doMock("@/lib/db", () => ({
+      db: { adminUser: { delete: deleteAdmin } },
+    }));
+    jest.doMock("@/lib/cross-realm-email", () => ({
+      findEmailRealmPresence,
+    }));
+    jest.doMock("@/lib/notify-operator-new-signup", () => ({
+      notifyOperatorsOfNewSignup: notify,
+    }));
+    jest.doMock("@/lib/observability/product-events", () => ({
+      logProductEvent,
+    }));
+    jest.doMock("@/lib/admin-email-verify", () => ({
+      sendTutorSignupVerifyEmail,
+    }));
+    jest.doMock("@/lib/public-url", () => ({
+      getRequestBaseUrlSafeFromHeaders: jest.fn().mockResolvedValue("https://app.example.com"),
+    }));
+    const redirect = jest.fn(() => {
+      throw new Error("REDIRECT");
+    });
+    jest.doMock("next/navigation", () => ({ redirect }));
+
+    const { signup } = await import("@/app/signup/actions");
+    const form = new FormData();
+    form.set("email", "rollback@example.com");
+    form.set("password", "StrongPassphrase!99");
+    form.set("passwordConfirm", "StrongPassphrase!99");
+
+    const result = await signup(null, form);
+    expect(result?.error).toMatch(/couldn't send a confirmation email|SMTP is not configured/i);
+    expect(deleteAdmin).toHaveBeenCalledWith({ where: { id: "u-rollback" } });
+    expect(notify).not.toHaveBeenCalled();
+    expect(logProductEvent).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
   });
 });
 
@@ -449,10 +532,12 @@ describe("createAdminFromGoogle — DB integration", () => {
       expect(row.passwordHash).toBeNull();
       expect(row.role).toBe("TUTOR");
       expect(row.isTestAccount).toBe(false);
+      expect(row.emailVerifiedAt).toBeInstanceOf(Date);
 
       const fetched = await prisma.adminUser.findUnique({ where: { email } });
       expect(fetched?.approvalStatus).toBe("WAITLISTED");
       expect(fetched?.passwordHash).toBeNull();
+      expect(fetched?.emailVerifiedAt).toBeInstanceOf(Date);
     } finally {
       await prisma.adminUser.deleteMany({ where: { email } });
       await prisma.$disconnect();

@@ -197,6 +197,7 @@ export async function seedEphemeralAdminForDeletion(): Promise<{
         role: "ADMIN",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });

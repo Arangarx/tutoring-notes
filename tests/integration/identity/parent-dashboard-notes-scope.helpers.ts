@@ -64,6 +64,7 @@ export async function seedParentChildWithNote(opts?: {
         email: `pw-parent-scope-tutor-${suffix}@test.local`,
         role: "TUTOR",
         approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });
@@ -144,6 +145,7 @@ export async function seedOtherFamilyChildWithNote(opts?: {
         email: `pw-other-family-tutor-${suffix}@test.local`,
         role: "TUTOR",
         approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });

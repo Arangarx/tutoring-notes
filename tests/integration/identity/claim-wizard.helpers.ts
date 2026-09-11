@@ -58,6 +58,7 @@ export async function seedUnclaimedClaimInvite(opts?: {
           email: `pw-claim-wizard-tutor-${suffix}@test.local`,
           role: "TUTOR",
           approvalStatus: "APPROVED",
+          emailVerifiedAt: new Date("2026-01-01"),
         },
         select: { id: true },
       });
@@ -195,6 +196,7 @@ export async function seedClaimedInviteWithCredential(opts: {
         email: `pw-attach-tutor-${suffix}@test.local`,
         role: "TUTOR",
         approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });

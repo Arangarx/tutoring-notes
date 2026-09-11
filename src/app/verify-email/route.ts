@@ -1,16 +1,8 @@
 /**
- * GET /verify-email?token=<rawToken>&type=ah[&returnTo=<path>]
+ * GET /verify-email?token=<rawToken>&type=ah|admin[&returnTo=<path>]
  *
- * Verifies an AccountHolder email (signup or email-change).
- * On success: marks emailVerifiedAt, revokes prior sessions (Q2-A), creates a
- * new session, then redirects SAME-SITE to /auth/verify-done?t=<handoffToken>
- * — that page sets the mynk_ah_session cookie on a clean same-site response,
- * fixing the RC-B redirect-Set-Cookie timing race (Q1-A fix).
- *
- * On failure: redirects to /account/signup?error=link_expired.
- *
- * P2a: only `type=ah` is handled (AccountHolder SIGNUP_VERIFY).
- * The EMAIL_CHANGE purpose with targetLearnerProfileId is Phase 2c.
+ * type=ah — AccountHolder signup/email-change (session + handoff cookie).
+ * type=admin — tutor confirm-link. No auto-session. Success → /login?verified=1.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,16 +13,18 @@ import {
   revokeAllAccountHolderSessions,
 } from "@/lib/account-holder-session";
 import { createHandoffToken } from "@/lib/crypto/handoff-token";
+import { consumeTutorSignupVerifyToken } from "@/lib/admin-email-verify";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const rawToken = searchParams.get("token") ?? "";
   const type = searchParams.get("type") ?? "";
   const returnToRaw = searchParams.get("returnTo") ?? "";
-
-  // Use req.nextUrl.origin for same-deployment redirects (not getPublicBaseUrl)
-  // so preview smoke-testing stays on the preview domain.
   const origin = req.nextUrl.origin;
+
+  if (type === "admin") {
+    return handleAdminVerify(origin, rawToken);
+  }
 
   if (type !== "ah" || !rawToken) {
     return NextResponse.redirect(`${origin}/account/signup?error=link_invalid`);
@@ -144,4 +138,23 @@ export async function GET(req: NextRequest) {
 
   console.log(`[ahx] ahx=${accountHolder.id} action=verify_redirecting_to_verify_done`);
   return NextResponse.redirect(verifyDoneUrl.toString());
+}
+
+async function handleAdminVerify(origin: string, rawToken: string) {
+  if (!rawToken.trim()) {
+    return NextResponse.redirect(`${origin}/verify-tutor-email?error=link_invalid`);
+  }
+
+  const result = await consumeTutorSignupVerifyToken(rawToken);
+  if (!result.ok) {
+    const code =
+      result.reason === "expired"
+        ? "link_expired"
+        : result.reason === "already_used"
+          ? "link_already_used"
+          : "link_invalid";
+    return NextResponse.redirect(`${origin}/verify-tutor-email?error=${code}`);
+  }
+
+  return NextResponse.redirect(`${origin}/login?verified=1`);
 }

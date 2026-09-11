@@ -107,3 +107,20 @@ export function is2faExemptAdminPath(pathname: string): boolean {
     pathname.startsWith("/admin/pending-approval/")
   );
 }
+
+/**
+ * Paths exempt from the tutor email-verify gate.
+ *
+ * Precedence (when the middleware gate is on): approval → email-verify → 2FA.
+ * /admin/pending-approval must be exempt from all three so WAITLISTED users
+ * cannot ping-pong (W1/TFA1, now 3-way). The confirm page lives outside /admin
+ * (`/verify-tutor-email`, `/verify-email`) so `waitForURL(/admin…)` cannot
+ * silently pass a verify redirect.
+ */
+export function isEmailVerifyExemptAdminPath(pathname: string): boolean {
+  return (
+    pathname === "/admin/pending-approval" ||
+    pathname.startsWith("/admin/pending-approval/") ||
+    pathname.startsWith("/api/auth/")
+  );
+}

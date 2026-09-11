@@ -109,6 +109,18 @@ export function isHostAllowlisted(host: string): boolean {
   return false;
 }
 
+/** Allowlisted request host → origin, or null if the host must not be reflected. */
+function allowlistedOriginFromHost(
+  rawHost: string | null,
+  proto: string | null
+): string | null {
+  if (!rawHost) return null;
+  const host = rawHost.trim().replace(/\.$/, "");
+  if (!isHostAllowlisted(host)) return null;
+  const safeProto = proto === "http" ? "http" : "https";
+  return `${safeProto}://${host}`;
+}
+
 /**
  * Safe request-host base URL for auth email links (verify-email, etc.).
  *
@@ -128,17 +140,33 @@ export function isHostAllowlisted(host: string): boolean {
 export function getRequestBaseUrlSafe(req: NextRequest): string {
   const rawHost =
     req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const origin = allowlistedOriginFromHost(
+    rawHost,
+    req.headers.get("x-forwarded-proto")
+  );
+  if (origin) return origin;
   if (rawHost) {
-    const host = rawHost.trim().replace(/\.$/, "");
-    if (isHostAllowlisted(host)) {
-      const proto = req.headers.get("x-forwarded-proto") ?? "https";
-      const safeProto = proto === "http" ? "http" : "https";
-      return `${safeProto}://${host}`;
-    }
-    // Host present but not allowlisted — log for observability without leaking the host
     console.warn(
       `[ahx] getRequestBaseUrlSafe: host not allowlisted, falling back to getPublicBaseUrl()`
     );
+  }
+  return getPublicBaseUrl();
+}
+
+/**
+ * Same allowlist as getRequestBaseUrlSafe, for server actions that have
+ * `headers()` but not a NextRequest (tutor signup / resend).
+ */
+export async function getRequestBaseUrlSafeFromHeaders(): Promise<string> {
+  try {
+    const h = await headers();
+    const origin = allowlistedOriginFromHost(
+      h.get("x-forwarded-host") ?? h.get("host"),
+      h.get("x-forwarded-proto")
+    );
+    if (origin) return origin;
+  } catch {
+    // headers() throws outside a request context.
   }
   return getPublicBaseUrl();
 }

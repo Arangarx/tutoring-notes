@@ -151,6 +151,8 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
   stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when
   the DB row is missing, `[rol] sub=<id> refresh_error fail_open` on transient DB error),
+  `evf` (tutor email confirm — `src/lib/admin-email-verify.ts`; every send/consume/resend
+  writes `[evf] evf=<tokenId:8> adminUserId=<id> action=sent|verified|expired|already_used|resent`),
   `sal` (share-link access — `src/lib/share-access-scope.ts`; emitted on every
   `/s/*` page and API access decision; writes
   `[sal] sal=<token:8> action=access_granted principal=account_holder|learner studentId=<id>`,

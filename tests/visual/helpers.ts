@@ -58,9 +58,11 @@ export async function seedTestAdmin(): Promise<string> {
         passwordHash: hash,
         displayName: TEST_ADMIN.displayName,
         approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
         // Harness admin should always reflect current app billing defaults (null → DEFAULT_*).
         defaultRoundingMode: null,
         defaultRoundingIncrementMin: null,

@@ -23,6 +23,7 @@ async function seedTutorEmail(email: string): Promise<void> {
         role: "TUTOR",
         approvalStatus: "WAITLISTED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
     });
   } finally {

@@ -17,7 +17,13 @@ export async function getAdminByEmail(email: string) {
 export async function getAdminById(id: string) {
   return db.adminUser.findUnique({
     where: { id },
-    select: { id: true, role: true, isTestAccount: true, approvalStatus: true },
+    select: {
+      id: true,
+      role: true,
+      isTestAccount: true,
+      approvalStatus: true,
+      emailVerifiedAt: true,
+    },
   });
 }
 
@@ -33,6 +39,7 @@ export async function createTestAccount(email: string, displayName?: string | nu
       passwordHash: null,
       isTestAccount: true,
       displayName: displayName?.trim() || null,
+      emailVerifiedAt: new Date(),
     },
   });
 }
@@ -58,7 +65,8 @@ export async function createAdmin(
   });
 }
 
-/** Google OAuth signup from /signup — no password; same WAITLISTED gate as credentials. */
+/** Google OAuth signup from /signup — no password; same WAITLISTED gate as credentials.
+ * Google already proved the inbox — set emailVerifiedAt at provision. */
 export async function createAdminFromGoogle(
   email: string,
   displayName?: string | null
@@ -72,6 +80,7 @@ export async function createAdminFromGoogle(
       role: "TUTOR",
       isTestAccount: false,
       approvalStatus: "WAITLISTED",
+      emailVerifiedAt: new Date(),
     },
   });
 }

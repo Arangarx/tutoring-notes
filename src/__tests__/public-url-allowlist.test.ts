@@ -230,6 +230,7 @@ describe("getRequestBaseUrlSafe — host reflection + injection guard", () => {
 
 jest.mock("@/lib/db", () => ({
   db: {
+    adminUser: { findUnique: jest.fn() },
     accountHolder: { findUnique: jest.fn(), create: jest.fn() },
     learnerProfile: { create: jest.fn() },
     accountHolderEmailToken: { create: jest.fn() },
@@ -274,6 +275,7 @@ function makeSignupRequest(
 describe("Signup route — injection guard: forged Host does not appear in verify URL", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (mockDb.adminUser.findUnique as jest.Mock).mockResolvedValue(null);
     (mockDb.accountHolder.findUnique as jest.Mock).mockResolvedValue(null);
     (mockDb.accountHolder.create as jest.Mock).mockResolvedValue({
       id: "ah-new-001",

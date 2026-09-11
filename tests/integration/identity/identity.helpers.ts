@@ -98,11 +98,13 @@ export async function seedTestAdminWithRole(
         displayName: creds.displayName,
         role,
         approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
         role,
         approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });
@@ -134,6 +136,7 @@ export async function seedClaimInvite(opts: {
           email: `pw-claim-tutor-${suffix}@test.local`,
           role: "TUTOR",
           approvalStatus: "APPROVED",
+          emailVerifiedAt: new Date("2026-01-01"),
         },
         select: { id: true },
       });
@@ -209,6 +212,7 @@ export async function seedParentConsentFixture(opts?: {
           role: "TUTOR",
           displayName: "E2E Consent Tutor",
           approvalStatus: "APPROVED",
+          emailVerifiedAt: new Date("2026-01-01"),
         },
         select: { id: true },
       });

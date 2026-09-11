@@ -44,6 +44,7 @@ export default function LoginForm({
   const callbackUrl = searchParams.get("callbackUrl") ?? "/admin";
   const resetOk = searchParams.get("reset") === "1";
   const registeredOk = searchParams.get("registered") === "1";
+  const verifiedOk = searchParams.get("verified") === "1";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   // Seed error state from URL param (safety-net for NextAuth redirects).
@@ -94,6 +95,11 @@ export default function LoginForm({
       {registeredOk ? (
         <p className="mb-4 text-sm text-success" role="status">
           Account created. Sign in with the email and password you just chose.
+        </p>
+      ) : null}
+      {verifiedOk ? (
+        <p className="mb-4 text-sm text-success" role="status">
+          Email confirmed. Sign in with your password.
         </p>
       ) : null}
       {setupHint ? (
