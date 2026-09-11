@@ -103,4 +103,57 @@ test.describe("P1-ID-EVF — tutor confirm-link", () => {
       await prisma.$disconnect();
     }
   });
+
+  test("resend form round-trips: same copy for unknown vs unverified; unverified gets a token", async ({
+    page,
+  }) => {
+    assertLocalDatabaseUrlForHarness();
+    const prisma = new PrismaClient();
+    const unverifiedEmail = `pw-evf-resend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.local`;
+    const unknownEmail = `pw-evf-resend-unknown-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.local`;
+
+    try {
+      const admin = await prisma.adminUser.create({
+        data: {
+          email: unverifiedEmail,
+          passwordHash: await bcrypt.hash("ResendLink!99", 10),
+          displayName: "PW Confirm Resend",
+          role: "TUTOR",
+          approvalStatus: "WAITLISTED",
+          isTestAccount: false,
+          emailVerifiedAt: null,
+        },
+        select: { id: true },
+      });
+
+      async function submitResend(email: string): Promise<string> {
+        await page.goto("/verify-tutor-email");
+        await expect(page.getByTestId("tutor-verify-email-form")).toBeVisible();
+        await page.locator("#tutor-verify-email").fill(email);
+        await page.getByRole("button", { name: /resend confirmation email/i }).click();
+        const status = page.getByRole("status");
+        await expect(status).toBeVisible({ timeout: 15_000 });
+        return (await status.textContent()) ?? "";
+      }
+
+      const unknownCopy = await submitResend(unknownEmail);
+      const unverifiedCopy = await submitResend(unverifiedEmail);
+      expect(unknownCopy).toBe(unverifiedCopy);
+      expect(unknownCopy).toMatch(/if that email needs confirmation/i);
+
+      expect(await prisma.adminUser.findUnique({ where: { email: unknownEmail } })).toBeNull();
+      expect(
+        await prisma.adminUserEmailToken.count({
+          where: {
+            adminUserId: admin.id,
+            purpose: "SIGNUP_VERIFY",
+            consumedAt: null,
+          },
+        })
+      ).toBe(1);
+    } finally {
+      await prisma.adminUser.deleteMany({ where: { email: unverifiedEmail } });
+      await prisma.$disconnect();
+    }
+  });
 });

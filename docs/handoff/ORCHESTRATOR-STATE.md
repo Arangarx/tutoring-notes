@@ -53,7 +53,7 @@
 
 **Tip:** `master` after this replay — legal Calendar facade (`5038f794` replayed) + Sarah 2026-09-10 Discord/SMS docs. Prior SEO merge [`e6726b28`](https://github.com/Arangarx/tutoring-notes/commit/e6726b28).
 
-**Last action:** Workstream 1 implementation (no middleware gate): `AdminUser.emailVerifiedAt` + `AdminUserEmailToken` + backfill UPDATE in the same migration; confirm mail via `sendPlatformMail`; signup rollback on send fail; JWT `emailVerified` claim (not implied by `isTestAccount`); tutor reset fail-closed; `/verify-tutor-email` outside `/admin`; login-fixture seeds set `emailVerifiedAt`. Gate flip is a separate commit.
+**Last action:** Workstream 1 implementation (no middleware gate) @ `095d086e`, then resend-path tests after independent verify REJECT (unknown / already-verified / unverified + anti-enumeration route + Playwright form round-trip).
 
 **Neon cost pass (2026-08-28, still in effect):** scale-to-zero enabled (`suspend_timeout_seconds=300`); transcribe-sweep cron `*/15 * * * *` (layer 1 + end-session still cover live work). Backlogged **TXC-SWEEP-METRICS** + **NEON-SCALE-TO-ZERO-REVISIT**.
 

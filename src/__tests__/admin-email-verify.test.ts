@@ -7,9 +7,14 @@
 import { db } from "@/lib/db";
 import { hashToken, EMAIL_TOKEN_TTL_MS_24H } from "@/lib/crypto/session-tokens";
 import { createAdmin } from "@/lib/auth-db";
-import { consumeTutorSignupVerifyToken } from "@/lib/admin-email-verify";
+import {
+  consumeTutorSignupVerifyToken,
+  resendTutorSignupVerifyEmail,
+} from "@/lib/admin-email-verify";
 import { setPlatformMailSenderForTests } from "@/lib/email";
 import { requestPasswordReset } from "@/lib/password-reset";
+import { POST as resendVerification } from "@/app/api/auth/tutor/resend-verification/route";
+import { NextRequest } from "next/server";
 
 const FIXTURE_EMAILS = [
   "tutor-evf-consume@test.com",
@@ -18,6 +23,11 @@ const FIXTURE_EMAILS = [
   "tutor-evf-used@test.com",
   "tutor-pwd-reset-fail@test.com",
   "tutor-pwd-reset-ok@test.com",
+  "tutor-evf-resend-unknown@test.com",
+  "tutor-evf-resend-verified@test.com",
+  "tutor-evf-resend-unverified@test.com",
+  "tutor-evf-resend-route-a@test.com",
+  "tutor-evf-resend-route-b@test.com",
 ] as const;
 
 async function cleanup() {
@@ -158,4 +168,116 @@ test("requestPasswordReset deletes the unused token and logs when platform mail 
   expect(leftover).toHaveLength(0);
   expect(errorSpy).toHaveBeenCalledWith("[pwd] action=reset_send_fail");
   errorSpy.mockRestore();
+});
+
+const RESEND_BASE = "https://localhost:3000";
+
+test("resendTutorSignupVerifyEmail does not send for an unknown email", async () => {
+  const sent = jest.fn().mockResolvedValue({ sent: true });
+  setPlatformMailSenderForTests(sent);
+
+  const result = await resendTutorSignupVerifyEmail({
+    email: "tutor-evf-resend-unknown@test.com",
+    baseUrl: RESEND_BASE,
+  });
+
+  expect(result).toEqual({ attempted: false });
+  expect(sent).not.toHaveBeenCalled();
+  expect(
+    await db.adminUser.findUnique({
+      where: { email: "tutor-evf-resend-unknown@test.com" },
+    })
+  ).toBeNull();
+});
+
+test("resendTutorSignupVerifyEmail does not send for an already-verified tutor", async () => {
+  const admin = await createAdmin(
+    "tutor-evf-resend-verified@test.com",
+    "Sunrise-Kangaroo-Pluto-47!"
+  );
+  await db.adminUser.update({
+    where: { id: admin.id },
+    data: { emailVerifiedAt: new Date("2026-01-01") },
+  });
+  const sent = jest.fn().mockResolvedValue({ sent: true });
+  setPlatformMailSenderForTests(sent);
+
+  const result = await resendTutorSignupVerifyEmail({
+    email: admin.email,
+    baseUrl: RESEND_BASE,
+  });
+
+  expect(result).toEqual({ attempted: false });
+  expect(sent).not.toHaveBeenCalled();
+  expect(
+    await db.adminUserEmailToken.count({ where: { adminUserId: admin.id } })
+  ).toBe(0);
+});
+
+test("resendTutorSignupVerifyEmail sends and persists a token for an unverified tutor", async () => {
+  const admin = await createAdmin(
+    "tutor-evf-resend-unverified@test.com",
+    "Sunrise-Kangaroo-Pluto-47!"
+  );
+  expect(admin.emailVerifiedAt).toBeNull();
+  const sent = jest.fn().mockResolvedValue({ sent: true });
+  setPlatformMailSenderForTests(sent);
+
+  const result = await resendTutorSignupVerifyEmail({
+    email: admin.email,
+    baseUrl: RESEND_BASE,
+  });
+
+  expect(result).toEqual({ attempted: true });
+  expect(sent).toHaveBeenCalledTimes(1);
+  expect(sent.mock.calls[0][0]).toEqual(
+    expect.objectContaining({
+      to: "tutor-evf-resend-unverified@test.com",
+      subject: "Confirm your Mynk tutor email",
+    })
+  );
+  expect(String(sent.mock.calls[0][0].text)).toMatch(
+    /\/verify-email\?type=admin&token=/
+  );
+
+  const tokens = await db.adminUserEmailToken.findMany({
+    where: { adminUserId: admin.id, purpose: "SIGNUP_VERIFY", consumedAt: null },
+  });
+  expect(tokens).toHaveLength(1);
+});
+
+function resendRequest(email: string): NextRequest {
+  return new NextRequest("https://localhost/api/auth/tutor/resend-verification", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", host: "localhost" },
+    body: JSON.stringify({ email }),
+  });
+}
+
+test("POST /api/auth/tutor/resend-verification is anti-enumerating: same body for unknown vs unverified", async () => {
+  setPlatformMailSenderForTests(async () => ({ sent: true }));
+  const unverified = await createAdmin(
+    "tutor-evf-resend-route-a@test.com",
+    "Sunrise-Kangaroo-Pluto-47!"
+  );
+
+  const unknownRes = await resendVerification(
+    resendRequest("tutor-evf-resend-route-b@test.com")
+  );
+  const unverifiedRes = await resendVerification(resendRequest(unverified.email));
+
+  expect(unknownRes.status).toBe(200);
+  expect(unverifiedRes.status).toBe(200);
+  expect(await unknownRes.json()).toEqual(await unverifiedRes.json());
+
+  expect(
+    await db.adminUser.findUnique({
+      where: { email: "tutor-evf-resend-route-b@test.com" },
+    })
+  ).toBeNull();
+  expect(
+    await db.adminUserEmailToken.count({
+      where: { adminUserId: unverified.id, purpose: "SIGNUP_VERIFY", consumedAt: null },
+    })
+  ).toBe(1);
 });
