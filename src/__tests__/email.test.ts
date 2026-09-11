@@ -2,7 +2,7 @@
  * Email module: when SMTP is not configured, sendMail returns { sent: false }.
  * When configured, integration would require a real or mock transport (tested via e2e or manual).
  */
-import { sendMail } from "@/lib/email";
+import { sendMail, sendPlatformMail } from "@/lib/email";
 
 test("sendMail when SMTP not configured returns sent: false", async () => {
   const result = await sendMail({
@@ -11,4 +11,14 @@ test("sendMail when SMTP not configured returns sent: false", async () => {
     text: "Body",
   });
   expect(result.sent).toBe(false);
+});
+
+test("sendPlatformMail when SMTP not configured fails closed with an explicit error", async () => {
+  const result = await sendPlatformMail({
+    to: "test@example.com",
+    subject: "Test",
+    text: "Body",
+  });
+  expect(result.sent).toBe(false);
+  expect(result.error).toMatch(/SMTP/i);
 });

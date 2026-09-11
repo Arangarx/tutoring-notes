@@ -127,6 +127,74 @@ export async function isEmailConfiguredForTutor(adminUserId: string | null): Pro
   return isEmailConfigured();
 }
 
+export type PlatformMailResult =
+  | { sent: true }
+  | { sent: false; error: string };
+
+export type PlatformMailSender = (options: {
+  to: string;
+  subject: string;
+  text: string;
+}) => Promise<PlatformMailResult>;
+
+let platformMailSenderOverride: PlatformMailSender | null = null;
+
+/** Test-only seam. Pass `null` to restore the env-SMTP implementation. */
+export function setPlatformMailSenderForTests(sender: PlatformMailSender | null): void {
+  platformMailSenderOverride = sender;
+}
+
+function platformSmtpMissingError(): string {
+  return "Platform SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS.";
+}
+
+function buildPlatformSmtpTransport(): {
+  transport: nodemailer.Transporter;
+  fromEmail: string;
+} {
+  const port = env.SMTP_PORT ? parseInt(env.SMTP_PORT, 10) : 587;
+  const transport = nodemailer.createTransport({
+    host: env.SMTP_HOST!,
+    port: Number.isNaN(port) ? 587 : port,
+    secure: env.SMTP_SECURE === "true",
+    auth: { user: env.SMTP_USER!, pass: env.SMTP_PASS! },
+  });
+  const fromEmail = env.SMTP_FROM ?? env.SMTP_USER ?? "noreply@tutoring-notes.local";
+  return { transport, fromEmail };
+}
+
+/**
+ * Auth / system mail: env SMTP only. Never Gmail OAuth, never DB EmailConfig.
+ * Fail-closed: missing SMTP_* returns `{ sent: false, error }` — never a silent miss.
+ */
+export async function sendPlatformMail(options: {
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<PlatformMailResult> {
+  if (platformMailSenderOverride) {
+    return platformMailSenderOverride(options);
+  }
+
+  if (!isEmailConfigured()) {
+    return { sent: false, error: platformSmtpMissingError() };
+  }
+
+  const { transport, fromEmail } = buildPlatformSmtpTransport();
+  try {
+    await transport.sendMail({
+      from: fromEmail,
+      to: options.to,
+      subject: options.subject,
+      text: options.text,
+    });
+    return { sent: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { sent: false, error: message };
+  }
+}
+
 export async function sendMail(options: {
   to: string;
   subject: string;
