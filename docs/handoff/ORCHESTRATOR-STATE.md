@@ -43,7 +43,7 @@
 
 **agenticPipeline:** Phase 1 **merged to agenticPipeline `master`** @ [`aa56225`](https://github.com/Arangarx/agenticPipeline/commit/aa56225) (change mode + fail-closed + TN template; Sonnet APPROVE after REJECT fixes). Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** Workstream 3 (SMS enroll/login/change-method + legal 2FA+SMS honesty) on `feat/auth-ship-ready`. SMS is Sonnet/Grok-tier (new vendor seam). Plan: `tutor_auth_ship-ready_0cc151a0`. Remaining #5 Google write + invite-link product call stay Andrew-blocked. Checklist → [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md).
+**Next action(s):** WS4 (allowlist) on `feat/auth-ship-ready`. Plan: `tutor_auth_ship-ready_0cc151a0` § WS4. WS3 (SMS) landed and awaits independent verification before merge consideration. Remaining #5 Google write + invite-link product call stay Andrew-blocked. Twilio account + Vercel env are Andrew leftover ([`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) § SMS 2FA).
 
 ---
 
@@ -53,13 +53,15 @@
 
 **Tip:** `master` after this replay — legal Calendar facade (`5038f794` replayed) + Sarah 2026-09-10 Discord/SMS docs. Prior SEO merge [`e6726b28`](https://github.com/Arangarx/tutoring-notes/commit/e6726b28).
 
-**Last action:** WS2 complete + independently APPROVE on `feat/auth-ship-ready` [`113f7ec9`](https://github.com/Arangarx/tutoring-notes/commit/113f7ec9). Shared `isTwoFactorEnrollmentConfirmed` (EMAIL_OTP → `enrolledAt`, TOTP → backup codes); three-card chooser (email default, SMS disabled); email-enrolled tutors see manage not setup; manage email step-up uses existing `sendLoginEmailOtp`.
+**Last action:** WS3 (SMS OTP 2FA) landed on `feat/auth-ship-ready` [`778618cc`](https://github.com/Arangarx/tutoring-notes/commit/778618cc) — NOT yet independently verified, NOT merged. Adds SMS enroll/login/step-up/change-method (Twilio HTTP, fail-closed), a `startSmsOtpEnrollment` guard against wiping a confirmed enrollment (new `two-factor-method-change.test.ts` covers the atomic-swap invariants + guard red-before/green-after), and a Privacy Security-bullet correction (email OTP + authenticator are the general disclosure, SMS called out as enabled-only). Gates green: jest pattern 193/193 ×3, `next build` exit 0, identity-e2e 60 passed (all 5 new SMS specs + existing email-2FA fallback spec) / 7 failed — all verified pre-existing/unrelated (itemized in `docs/BACKLOG.md` § 9). Twilio account + Vercel env remain Andrew leftover — SMS stays disabled in prod until then.
+
+**Previous:** WS2 complete + independently APPROVE on `feat/auth-ship-ready` [`113f7ec9`](https://github.com/Arangarx/tutoring-notes/commit/113f7ec9). Shared `isTwoFactorEnrollmentConfirmed` (EMAIL_OTP → `enrolledAt`, TOTP → backup codes); three-card chooser (email default, SMS disabled); email-enrolled tutors see manage not setup; manage email step-up uses existing `sendLoginEmailOtp`.
 
 **Neon cost pass (2026-08-28, still in effect):** scale-to-zero enabled (`suspend_timeout_seconds=300`); transcribe-sweep cron `*/15 * * * *` (layer 1 + end-session still cover live work). Backlogged **TXC-SWEEP-METRICS** + **NEON-SCALE-TO-ZERO-REVISIT**.
 
 **Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
 
-**In-flight:** `feat/auth-ship-ready` — WS0 + WS1 + WS1b + WS2 done + verified. Next: WS3 SMS. `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
+**In-flight:** `feat/auth-ship-ready` — WS0–WS2 verified, **WS3 SMS landed [`778618cc`](https://github.com/Arangarx/tutoring-notes/commit/778618cc) awaiting independent verification** (not self-certified, not merged). Next: WS4 allowlist. `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
 **Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
 **Open Andrew human work:** [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — calendar callback URI + Calendar API + **one** verification submit when live. Platform SMTP (Resend + `usemynk.com` DNS + Vercel `SMTP_*`) after email chunks are coded. Later: **NEON-SCALE-TO-ZERO-REVISIT** once real lessons are regular.
 **Cleared:** Sign-In UI; #2 findability; #3 Google signup + reject/revoke; Calendar connect+stub; #4 email OTP; #5 native schedule CRUD; #6 security chunks + join denial; #7 ProductEvent tutor funnel.
