@@ -4,9 +4,17 @@
 
 ---
 
-## Next call (next Sarah thread after 2026-05-26)
+## Next call (priority interview — after 2026-09-10 Discord)
 
-**Context.** 2026-05-26 evening call + 12:03–12:17 AM Discord follow-up largely answered the prior prep list. Full capture: [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md). See § Answers landed (2026-05-26) below for what landed.
+**Context.** Sarah pinged 2026-09-10 (~3:23–3:30 PM MT, Discord `malmesae`). She’s interviewing with an online-tutoring company that is standing up a **mentor program with no platform**; she mentioned Mynk. She will help when she can but is busy — don’t wait on perfect availability. Andrew offered a **deep interview to rank priorities**, optional Tyson sit-in, and said Google auth + site re-verify is the current finish line. See § Answers landed (2026-09-10) below.
+
+**Call purpose (Andrew’s words):** interview her + the product so we can determine the biggest priorities. Don’t block on Tyson.
+
+**Spoken commitments to her (do not contradict):**
+- Finish **auth via Google**, then **one site re-verify** (calendar bundled — see [`handoff/ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)).
+- Site is basically ready; needs to be **put through its paces**.
+- **More auth options for her** — she hates authenticator extra steps (email OTP default already shipped; Google Sign-In is the remaining near-term friction).
+- **SMS 2FA — Sarah-stated (2026-09-10 5:00 PM MT).** Andrew asked: if she could only have one today, email code or SMS code? Sarah: *“Either would work for me, but I prefer sms.”* Email OTP stays the shipped default; SMS is the #4 leftover (do not pull ahead of Google Console). Authenticator remains the upgrade.
 
 ### 0. Sarah primary tutoring device — OPEN verify (2026-06-18)
 
@@ -53,6 +61,15 @@ Invite her to share anything else (*"if I do I'll let you know"* from Q1 continu
 ---
 
 ## Answers landed
+
+### 2026-09-10 (Discord ~3:23–3:30 PM MT — Jarek ↔ malmesae)
+
+- **Why she pinged.** Lighting a fire; asking what’s happening with the app. Interviewing for online-tutoring jobs; one company **doesn’t have a platform for a new tutoring mentor program**. She told them she has a friend building one.
+- **Her availability.** Second interview timing unknown. Always busy; will help when she can; didn’t take Andrew’s “didn’t want to bug you” as a dig. Expect delayed feedback, not a no.
+- **Auth friction (explicit).** Authenticator apps aren’t commonly used; she doesn’t want the extra step (“why I gotta do this”). Validates email-OTP-as-default (`ab70f002`). Google Sign-In + fewer steps is what she needs next.
+- **SMS vs email (Sarah-stated, 5:00 PM).** Andrew: “If you could only have one today, email or SMS?” Sarah: “Either would work for me, but I prefer sms.” Email is acceptable; SMS is the preference. Not a build-now — still after Google Console.
+- **Andrew told her.** Deep interview to prioritize; Google auth in progress then re-verify; site ready pending paces; more auth options for her; Tyson may sit in if available — don’t wait on him.
+- **Product implication.** Possible **org / mentor-program** lead behind Sarah (not a signed prospect). Treat as context for the interview, not a new build track until she has a real intro / timing.
 
 ### 2026-06-06 (Discord — post live whiteboard session, ~10:28–10:43 PM)
 
