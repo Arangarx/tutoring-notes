@@ -15,6 +15,9 @@
 import { useState, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TwoFactorMethodChooserCards } from "./TwoFactorMethodChooserCards";
 import {
   rotateTotpStart,
   rotateTotpConfirm,
@@ -24,6 +27,17 @@ import {
   revokeTrustedDevice,
   revokeAllTrustedDevices,
   sendLoginEmailOtp,
+  sendLoginSmsOtp,
+  startMethodChangeStepUp,
+  startEmailOtpMethodChange,
+  resendEmailOtpMethodChange,
+  confirmEmailOtpMethodChange,
+  startSmsOtpMethodChange,
+  resendSmsOtpMethodChange,
+  confirmSmsOtpMethodChange,
+  startTotpMethodChange,
+  confirmTotpMethodChange,
+  abandonMethodChange,
   type ListTrustedDevicesResult,
 } from "./actions";
 
@@ -42,6 +56,9 @@ interface Props {
   remainingBackupCodes: number;
   isAdmin: boolean;
   userId: string;
+  smsEnrollmentAvailable?: boolean;
+  /** Pre-masked phone (e.g. "+1•••••1234") when method is SMS_OTP. */
+  maskedPhone?: string;
 }
 
 type ViewState =
@@ -56,7 +73,14 @@ type ViewState =
   | "reset-confirm"
   | "reset-target"
   | "reset-loading"
-  | "reset-done";
+  | "reset-done"
+  | "change-stepup"
+  | "change-choose"
+  | "change-email-sent"
+  | "change-sms-phone"
+  | "change-sms-sent"
+  | "change-totp-qr"
+  | "change-done";
 
 export function TwoFactorManageView({
   method,
@@ -64,8 +88,12 @@ export function TwoFactorManageView({
   remainingBackupCodes,
   isAdmin,
   userId,
+  smsEnrollmentAvailable = false,
+  maskedPhone: initialMaskedPhone,
 }: Props) {
   const isEmailOtp = method === "EMAIL_OTP";
+  const isSmsOtp = method === "SMS_OTP";
+  const isOtpMethod = isEmailOtp || isSmsOtp;
   const router = useRouter();
   const [view, setView] = useState<ViewState>("idle");
   const [error, setError] = useState("");
@@ -78,9 +106,11 @@ export function TwoFactorManageView({
   const [newBackupCodes, setNewBackupCodes] = useState<string[]>([]);
   const [codeCopied, setCodeCopied] = useState(false);
 
-  // Step-up state (shared across rotate/regen/reset actions)
+  // Step-up state (shared across rotate/regen/reset/change-method actions)
   const [stepUpCode, setStepUpCode] = useState("");
-  const [stepUpFor, setStepUpFor] = useState<"rotate" | "regen" | "reset-self" | "reset-other" | null>(null);
+  const [stepUpFor, setStepUpFor] = useState<
+    "rotate" | "regen" | "reset-self" | "reset-other" | "change" | null
+  >(null);
   const [stepUpOtpMsg, setStepUpOtpMsg] = useState<string | null>(null);
   const [stepUpOtpPending, setStepUpOtpPending] = useState(false);
 
@@ -90,6 +120,18 @@ export function TwoFactorManageView({
 
   // Admin reset state
   const [resetTargetId, setResetTargetId] = useState("");
+
+  // Change-method state
+  const [changeStepUpCode, setChangeStepUpCode] = useState("");
+  const [changeMethod, setChangeMethod] = useState<"email" | "sms" | "totp" | null>(null);
+  const [changePhoneInput, setChangePhoneInput] = useState("");
+  const [changeMaskedEmail, setChangeMaskedEmail] = useState("");
+  const [changeMaskedPhone, setChangeMaskedPhone] = useState(initialMaskedPhone ?? "");
+  const [changeToken, setChangeToken] = useState("");
+  const [changeQr, setChangeQr] = useState("");
+  const [changeSecret, setChangeSecret] = useState("");
+  const [changeBackupCodes, setChangeBackupCodes] = useState<string[]>([]);
+  const [changeCodeCopied, setChangeCodeCopied] = useState(false);
 
   // Trusted devices state
   const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[]>([]);
@@ -316,6 +358,159 @@ export function TwoFactorManageView({
   }
 
   // ---------------------------------------------------------------------------
+  // Change 2FA method
+  // ---------------------------------------------------------------------------
+  function handleChangeMethodStart() {
+    setError("");
+    setStepUpCode("");
+    setStepUpFor("change");
+    setView("step-up" as ViewState);
+  }
+
+  function handleChangeStepUpWithCode(code: string) {
+    startTransition(async () => {
+      const result = await startMethodChangeStepUp(code);
+      if (!result.ok) {
+        setError(result.error);
+        setStepUpFor(null);
+        setView("idle");
+        return;
+      }
+      setStepUpFor(null);
+      setChangeMethod(null);
+      setChangePhoneInput("");
+      setChangeToken("");
+      setView("change-choose");
+    });
+  }
+
+  function handleChangeChooseEmail() {
+    setError("");
+    setChangeMethod("email");
+    startTransition(async () => {
+      const result = await startEmailOtpMethodChange();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setChangeMaskedEmail(result.maskedEmail);
+      setView("change-email-sent");
+    });
+  }
+
+  function handleChangeChooseTotp() {
+    setError("");
+    setChangeMethod("totp");
+    startTransition(async () => {
+      const result = await startTotpMethodChange();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setChangeQr(result.qrDataUri);
+      setChangeSecret(result.secret);
+      setView("change-totp-qr");
+    });
+  }
+
+  function handleChangeChooseSms() {
+    setError("");
+    setChangeMethod("sms");
+    setChangePhoneInput("");
+    setView("change-sms-phone");
+  }
+
+  function handleChangeSendSms() {
+    if (!changePhoneInput.trim()) return;
+    setError("");
+    startTransition(async () => {
+      const result = await startSmsOtpMethodChange(changePhoneInput.trim());
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setChangeMaskedPhone(result.maskedPhone);
+      setView("change-sms-sent");
+    });
+  }
+
+  function handleChangeResendEmail() {
+    setError("");
+    startTransition(async () => {
+      const result = await resendEmailOtpMethodChange();
+      if (!result.ok) setError(result.error);
+    });
+  }
+
+  function handleChangeResendSms() {
+    setError("");
+    startTransition(async () => {
+      const result = await resendSmsOtpMethodChange();
+      if (!result.ok) setError(result.error);
+    });
+  }
+
+  function handleChangeConfirmEmail() {
+    if (!changeToken.trim()) return;
+    setError("");
+    startTransition(async () => {
+      const result = await confirmEmailOtpMethodChange(changeToken.trim());
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setChangeToken("");
+      setView("change-done");
+    });
+  }
+
+  function handleChangeConfirmSms() {
+    if (!changeToken.trim()) return;
+    setError("");
+    startTransition(async () => {
+      const result = await confirmSmsOtpMethodChange(changeToken.trim());
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setChangeToken("");
+      setView("change-done");
+    });
+  }
+
+  function handleChangeConfirmTotp() {
+    if (!changeToken.trim()) return;
+    setError("");
+    startTransition(async () => {
+      const result = await confirmTotpMethodChange(changeToken.trim());
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setChangeBackupCodes(result.backupCodes);
+      setChangeToken("");
+      setView("change-done");
+    });
+  }
+
+  function handleChangeCancel() {
+    startTransition(async () => {
+      await abandonMethodChange();
+    });
+    setChangeMethod(null);
+    setChangePhoneInput("");
+    setChangeToken("");
+    setError("");
+    setView("idle");
+  }
+
+  const handleCopyChangeBackupCodes = useCallback(async () => {
+    await navigator.clipboard.writeText(changeBackupCodes.join("\n"));
+    setChangeCodeCopied(true);
+    setTimeout(() => setChangeCodeCopied(false), 2000);
+  }, [changeBackupCodes]);
+
+  // ---------------------------------------------------------------------------
   // Render helpers
   // ---------------------------------------------------------------------------
   function BackupCodeGrid({ codes }: { codes: string[] }) {
@@ -342,6 +537,7 @@ export function TwoFactorManageView({
       "regen": "regenerate backup codes",
       "reset-self": "reset your own 2FA",
       "reset-other": "reset another admin's 2FA",
+      "change": "change your 2FA method",
     };
     const label = stepUpFor ? labels[stepUpFor] : "continue";
 
@@ -352,28 +548,35 @@ export function TwoFactorManageView({
       else if (stepUpFor === "regen") handleRegenWithCode(code);
       else if (stepUpFor === "reset-self") handleResetSelfWithCode(code);
       else if (stepUpFor === "reset-other") handleResetOtherWithCode(code);
+      else if (stepUpFor === "change") handleChangeStepUpWithCode(code);
     }
 
-    function handleSendStepUpEmailOtp() {
+    function handleSendStepUpOtp() {
       setStepUpOtpMsg(null);
       setStepUpOtpPending(true);
       startTransition(async () => {
-        const result = await sendLoginEmailOtp();
+        const result = isSmsOtp ? await sendLoginSmsOtp() : await sendLoginEmailOtp();
         setStepUpOtpPending(false);
-        if (result.ok) setStepUpOtpMsg(`Code sent to ${result.maskedEmail}.`);
-        else setStepUpOtpMsg(result.error ?? "Could not send code.");
+        if (result.ok) {
+          const destination = isSmsOtp
+            ? (result as { maskedPhone: string }).maskedPhone
+            : (result as { maskedEmail: string }).maskedEmail;
+          setStepUpOtpMsg(`Code sent to ${destination}.`);
+        } else {
+          setStepUpOtpMsg(result.error ?? "Could not send code.");
+        }
       });
     }
 
-    const minCodeLength = isEmailOtp ? 6 : 6;
-    const maxCodeLength = isEmailOtp ? 6 : 8;
+    const minCodeLength = 6;
+    const maxCodeLength = isOtpMethod ? 6 : 8;
     const canSubmit = stepUpCode.trim().length >= minCodeLength && !isPending;
 
     return (
       <div className="space-y-4">
         <div className="rounded-md border border-border p-4">
           <h2 className="text-base font-semibold mb-1">Confirm your identity</h2>
-          {isEmailOtp ? (
+          {isOtpMethod ? (
             <p className="text-sm text-muted-foreground mb-3">
               Request a verification code, then enter it below to {label}.
             </p>
@@ -382,7 +585,7 @@ export function TwoFactorManageView({
               Enter your 6-digit authenticator code or 8-character backup code to {label}.
             </p>
           )}
-          {isEmailOtp && (
+          {isOtpMethod && (
             <div className="mb-3 space-y-2">
               {stepUpOtpMsg ? (
                 <p className="text-xs text-muted-foreground" role="status">
@@ -394,7 +597,7 @@ export function TwoFactorManageView({
                 variant="outline"
                 size="sm"
                 disabled={stepUpOtpPending || isPending}
-                onClick={handleSendStepUpEmailOtp}
+                onClick={handleSendStepUpOtp}
               >
                 {stepUpOtpPending ? "Sending…" : "Send verification code"}
               </Button>
@@ -410,7 +613,7 @@ export function TwoFactorManageView({
               value={stepUpCode}
               onChange={(e) =>
                 setStepUpCode(
-                  isEmailOtp
+                  isOtpMethod
                     ? e.target.value.replace(/\D/g, "").slice(0, 6)
                     : e.target.value.replace(/[^0-9A-Za-z]/g, "").slice(0, 8)
                 )
@@ -683,6 +886,268 @@ export function TwoFactorManageView({
   }
 
   // ---------------------------------------------------------------------------
+  // Change 2FA method views
+  // ---------------------------------------------------------------------------
+  if (view === "change-choose") {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold">Choose a new 2FA method</h2>
+        <p className="text-sm text-muted-foreground">
+          Your current method stays active until you finish setting up the new one.
+        </p>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <TwoFactorMethodChooserCards
+          onChooseEmail={handleChangeChooseEmail}
+          onChooseTotp={handleChangeChooseTotp}
+          onChooseSms={handleChangeChooseSms}
+          smsEnrollmentAvailable={smsEnrollmentAvailable}
+          loading={isPending}
+          loadingMethod={changeMethod}
+          emailCardHighlighted={isEmailOtp}
+        />
+        <button
+          type="button"
+          onClick={handleChangeCancel}
+          disabled={isPending}
+          className="text-sm text-muted-foreground underline disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (view === "change-email-sent") {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold">Confirm your email</h2>
+        <p className="text-sm text-muted-foreground">
+          We sent a 6-digit code to {changeMaskedEmail}. Enter it below to switch to email
+          verification codes.
+        </p>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleChangeConfirmEmail(); }}
+          className="flex gap-2 items-center flex-wrap"
+        >
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="000000"
+            value={changeToken}
+            onChange={(e) => setChangeToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            className="border rounded-md px-3 py-2 text-sm w-36 font-mono tracking-widest"
+            autoComplete="one-time-code"
+            autoFocus
+          />
+          <Button type="submit" disabled={isPending || changeToken.trim().length < 6}>
+            {isPending ? "Confirming…" : "Confirm"}
+          </Button>
+          <button
+            type="button"
+            onClick={handleChangeResendEmail}
+            disabled={isPending}
+            className="text-sm text-muted-foreground underline disabled:opacity-50"
+          >
+            Resend code
+          </button>
+        </form>
+        <button
+          type="button"
+          onClick={handleChangeCancel}
+          disabled={isPending}
+          className="text-sm text-muted-foreground underline disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (view === "change-sms-phone") {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold">Enter your phone number</h2>
+        <p className="text-sm text-muted-foreground">
+          US numbers only. We&apos;ll text you a 6-digit code to confirm.
+        </p>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleChangeSendSms(); }}
+          className="flex gap-2 items-center flex-wrap"
+        >
+          <Label htmlFor="change-sms-phone" className="sr-only">
+            Phone number
+          </Label>
+          <Input
+            id="change-sms-phone"
+            type="tel"
+            placeholder="(555) 555-1234"
+            value={changePhoneInput}
+            onChange={(e) => setChangePhoneInput(e.target.value)}
+            className="w-48"
+            autoFocus
+          />
+          <Button type="submit" disabled={isPending || !changePhoneInput.trim()}>
+            {isPending ? "Sending…" : "Send code"}
+          </Button>
+        </form>
+        <button
+          type="button"
+          onClick={handleChangeCancel}
+          disabled={isPending}
+          className="text-sm text-muted-foreground underline disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (view === "change-sms-sent") {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold">Confirm your phone number</h2>
+        <p className="text-sm text-muted-foreground">
+          We texted a 6-digit code to {changeMaskedPhone}. Enter it below to switch to text
+          message codes.
+        </p>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleChangeConfirmSms(); }}
+          className="flex gap-2 items-center flex-wrap"
+        >
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="000000"
+            value={changeToken}
+            onChange={(e) => setChangeToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            className="border rounded-md px-3 py-2 text-sm w-36 font-mono tracking-widest"
+            autoComplete="one-time-code"
+            autoFocus
+          />
+          <Button type="submit" disabled={isPending || changeToken.trim().length < 6}>
+            {isPending ? "Confirming…" : "Confirm"}
+          </Button>
+          <button
+            type="button"
+            onClick={handleChangeResendSms}
+            disabled={isPending}
+            className="text-sm text-muted-foreground underline disabled:opacity-50"
+          >
+            Resend code
+          </button>
+        </form>
+        <button
+          type="button"
+          onClick={handleChangeCancel}
+          disabled={isPending}
+          className="text-sm text-muted-foreground underline disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (view === "change-totp-qr") {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-base font-semibold mb-2">Step 1 — Scan with your authenticator</h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            Add this account to your authenticator app.
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={changeQr} alt="TOTP QR code" width={200} height={200} className="border rounded-md" />
+          <details className="mt-3">
+            <summary className="text-xs text-muted-foreground cursor-pointer select-none">
+              Can&apos;t scan? Enter the key manually
+            </summary>
+            <code className="block mt-2 text-xs bg-muted px-3 py-2 rounded break-all select-all">
+              {changeSecret}
+            </code>
+          </details>
+        </div>
+        <div>
+          <h2 className="text-base font-semibold mb-2">Step 2 — Confirm with a code</h2>
+          <p className="text-sm text-muted-foreground mb-2">
+            Enter the 6-digit code shown by your authenticator to switch to authenticator app
+            verification.
+          </p>
+          {error && <p className="text-sm text-destructive mb-2">{error}</p>}
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleChangeConfirmTotp(); }}
+            className="flex gap-2 items-center"
+          >
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              placeholder="000000"
+              value={changeToken}
+              onChange={(e) => setChangeToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="border rounded-md px-3 py-2 text-sm w-32 font-mono tracking-widest"
+              autoComplete="one-time-code"
+              autoFocus
+            />
+            <Button type="submit" disabled={isPending || changeToken.length < 6}>
+              {isPending ? "Confirming…" : "Confirm"}
+            </Button>
+            <button
+              type="button"
+              onClick={handleChangeCancel}
+              disabled={isPending}
+              className="text-sm text-muted-foreground underline disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === "change-done") {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm font-medium text-green-700 dark:text-green-400">
+          2FA method changed successfully.
+        </p>
+        {changeBackupCodes.length > 0 && (
+          <div className="rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 p-4">
+            <h2 className="text-base font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
+              Backup codes — shown once only
+            </h2>
+            <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+              Save these in a safe place.
+            </p>
+            <BackupCodeGrid codes={changeBackupCodes} />
+            <button
+              type="button"
+              onClick={handleCopyChangeBackupCodes}
+              className="text-xs border rounded-md px-3 py-1.5 mt-3 hover:bg-muted transition-colors"
+            >
+              {changeCodeCopied ? "Copied!" : "Copy codes"}
+            </button>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => { router.refresh(); setChangeBackupCodes([]); setView("idle"); }}
+          className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90"
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Idle: main management view
   // ---------------------------------------------------------------------------
   return (
@@ -696,6 +1161,8 @@ export function TwoFactorManageView({
           Enrolled {enrolledDate}
           {isEmailOtp ? (
             <> &middot; Email verification codes</>
+          ) : isSmsOtp ? (
+            <> &middot; Text message codes{changeMaskedPhone ? ` to ${changeMaskedPhone}` : ""}</>
           ) : (
             <>
               {" "}&middot; {remainingBackupCodes} backup code
@@ -799,7 +1266,7 @@ export function TwoFactorManageView({
         )}
       </div>
 
-      {!isEmailOtp && (
+      {method === "TOTP" && (
         <>
           <hr className="border-border" />
 
@@ -844,6 +1311,26 @@ export function TwoFactorManageView({
           </div>
         </>
       )}
+
+      <hr className="border-border" />
+
+      {/* Change 2FA method */}
+      <div className="space-y-1">
+        <h2 className="text-sm font-semibold">Change 2FA method</h2>
+        <p className="text-sm text-muted-foreground">
+          Switch to a different verification method. Your current method (
+          {isEmailOtp ? "email" : isSmsOtp ? "text message" : "authenticator app"}) stays active
+          until you confirm the new one.
+        </p>
+        <button
+          type="button"
+          onClick={handleChangeMethodStart}
+          disabled={isPending}
+          className="mt-2 text-sm border rounded-md px-4 py-2 hover:bg-muted transition-colors disabled:opacity-50"
+        >
+          Change method
+        </button>
+      </div>
 
       {/* Admin-only reset section */}
       {isAdmin && (

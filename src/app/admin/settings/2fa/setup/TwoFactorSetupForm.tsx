@@ -1,19 +1,16 @@
 "use client";
 
 /**
- * 2FA Setup Client Component — email OTP default + TOTP opt-in.
+ * 2FA Setup Client Component — email OTP default, TOTP or SMS opt-in.
+ * Only one method may be enrolled at a time (see two-factor-enrollment.ts).
  */
 
 import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TwoFactorMethodChooserCards } from "../TwoFactorMethodChooserCards";
 import {
   startTotpEnrollment,
   confirmTotpEnrollment,
@@ -21,15 +18,21 @@ import {
   startEmailOtpEnrollment,
   confirmEmailOtpEnrollment,
   resendEmailOtpEnrollment,
+  startSmsOtpEnrollment,
+  confirmSmsOtpEnrollment,
+  resendSmsOtpEnrollment,
 } from "../actions";
 
-type SetupMethod = "email" | "totp";
+type SetupMethod = "email" | "totp" | "sms";
 
 type Step =
   | "idle"
   | "loading-start"
   | "email-sent"
   | "email-confirming"
+  | "sms-phone"
+  | "sms-sent"
+  | "sms-confirming"
   | "show-qr"
   | "confirming"
   | "show-backup"
@@ -38,18 +41,24 @@ type Step =
 export function TwoFactorSetupForm({
   pendingEmailEnrollment,
   pendingMaskedEmail,
+  pendingSmsEnrollment,
+  pendingMaskedPhone,
   smsEnrollmentAvailable = false,
 }: {
   pendingEmailEnrollment?: boolean;
   pendingMaskedEmail?: string;
+  pendingSmsEnrollment?: boolean;
+  pendingMaskedPhone?: string;
   smsEnrollmentAvailable?: boolean;
 }) {
   const router = useRouter();
-  const [method, setMethod] = useState<SetupMethod>("email");
+  const [method, setMethod] = useState<SetupMethod>(pendingSmsEnrollment ? "sms" : "email");
   const [step, setStep] = useState<Step>(
-    pendingEmailEnrollment ? "email-sent" : "idle"
+    pendingSmsEnrollment ? "sms-sent" : pendingEmailEnrollment ? "email-sent" : "idle"
   );
   const [maskedEmail, setMaskedEmail] = useState(pendingMaskedEmail ?? "");
+  const [maskedPhone, setMaskedPhone] = useState(pendingMaskedPhone ?? "");
+  const [phoneInput, setPhoneInput] = useState("");
   const [qrDataUri, setQrDataUri] = useState<string>("");
   const [secret, setSecret] = useState<string>("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
@@ -147,6 +156,50 @@ export function TwoFactorSetupForm({
     });
   }
 
+  function handleStartSms() {
+    setMethod("sms");
+    setStep("sms-phone");
+    setError("");
+    setPhoneInput("");
+  }
+
+  function handleSendSms() {
+    if (!phoneInput.trim()) return;
+    setError("");
+    startTransition(async () => {
+      const result = await startSmsOtpEnrollment(phoneInput.trim());
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setMaskedPhone(result.maskedPhone);
+      setStep("sms-sent");
+    });
+  }
+
+  function handleResendSms() {
+    setError("");
+    startTransition(async () => {
+      const result = await resendSmsOtpEnrollment();
+      if (!result.ok) setError(result.error);
+    });
+  }
+
+  function handleConfirmSms() {
+    if (!tokenInput.trim()) return;
+    setError("");
+    setStep("sms-confirming");
+    startTransition(async () => {
+      const result = await confirmSmsOtpEnrollment(tokenInput.trim());
+      if (!result.ok) {
+        setError(result.error);
+        setStep("sms-sent");
+        return;
+      }
+      router.push("/admin/students");
+    });
+  }
+
   function switchToTotp() {
     setTokenInput("");
     setError("");
@@ -173,69 +226,14 @@ export function TwoFactorSetupForm({
           Two-factor authentication adds a second layer of security. By default we email a
           one-time code to your account address — no app required.
         </p>
-        <div className="grid gap-3 sm:grid-cols-1">
-          <Card
-            className="border-primary ring-1 ring-primary/30"
-            data-testid="tfa-choose-email"
-          >
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Email code</CardTitle>
-              <CardDescription>
-                Default — we send a 6-digit code to your account email at sign-in.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={handleStartEmail}
-                disabled={loading}
-                className="w-full sm:w-auto"
-              >
-                {loading && method === "email" ? "Sending code…" : "Set up with email"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="tfa-choose-totp">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Authenticator app</CardTitle>
-              <CardDescription>
-                Use Google Authenticator, 1Password, or another TOTP app.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={switchToTotp}
-                disabled={loading}
-                className="w-full sm:w-auto"
-              >
-                {loading && method === "totp" ? "Preparing…" : "Set up with authenticator"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="tfa-choose-sms" className="opacity-80">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Text message (SMS)</CardTitle>
-              <CardDescription>
-                {smsEnrollmentAvailable
-                  ? "Receive codes by text message."
-                  : "Not available yet — SMS sender is not configured."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                type="button"
-                variant="outline"
-                disabled
-                className="w-full sm:w-auto"
-              >
-                SMS not available
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+        <TwoFactorMethodChooserCards
+          onChooseEmail={handleStartEmail}
+          onChooseTotp={switchToTotp}
+          onChooseSms={handleStartSms}
+          smsEnrollmentAvailable={smsEnrollmentAvailable}
+          loading={loading}
+          loadingMethod={method}
+        />
       </div>
     );
   }
@@ -252,6 +250,45 @@ export function TwoFactorSetupForm({
           className="text-sm underline"
         >
           Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (step === "sms-phone") {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Enter your US mobile number. We&apos;ll text you a 6-digit code to confirm it.
+        </p>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSendSms();
+          }}
+          className="flex flex-wrap gap-2 items-end"
+        >
+          <div className="grid gap-1.5">
+            <Label htmlFor="tfa-sms-phone">Mobile number</Label>
+            <Input
+              id="tfa-sms-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              value={phoneInput}
+              onChange={(e) => setPhoneInput(e.target.value)}
+              className="w-48"
+              autoFocus
+            />
+          </div>
+          <Button type="submit" disabled={isPending || !phoneInput.trim()}>
+            {isPending ? "Sending…" : "Send code"}
+          </Button>
+        </form>
+        <button type="button" onClick={switchToEmail} disabled={isPending} className="text-sm underline text-muted-foreground">
+          Back to email code
         </button>
       </div>
     );
@@ -297,6 +334,52 @@ export function TwoFactorSetupForm({
           </button>
           <button type="button" onClick={switchToTotp} disabled={isPending} className="underline text-muted-foreground">
             Use authenticator app instead
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "sms-sent" || step === "sms-confirming") {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          We sent a 6-digit code to <strong>{maskedPhone}</strong>. Enter it below to finish setup.
+        </p>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleConfirmSms();
+          }}
+          className="flex flex-wrap gap-2 items-center"
+        >
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            placeholder="000000"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            className="border rounded-md px-3 py-2 text-sm w-32 font-mono tracking-widest"
+            autoComplete="one-time-code"
+            autoFocus
+          />
+          <button
+            type="submit"
+            disabled={isPending || tokenInput.length < 6}
+            className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+          >
+            {isPending ? "Verifying…" : "Confirm"}
+          </button>
+        </form>
+        <div className="flex flex-wrap gap-3 text-sm">
+          <button type="button" onClick={handleResendSms} disabled={isPending} className="underline">
+            Resend code
+          </button>
+          <button type="button" onClick={switchToEmail} disabled={isPending} className="underline text-muted-foreground">
+            Use email code instead
           </button>
         </div>
       </div>

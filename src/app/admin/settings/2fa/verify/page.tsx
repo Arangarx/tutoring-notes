@@ -5,6 +5,7 @@ import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { TwoFactorVerifyForm } from "./TwoFactorVerifyForm";
 import { ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
+import { maskE164 } from "@/lib/sms";
 
 export const dynamic = "force-dynamic";
 
@@ -58,29 +59,35 @@ export default async function TwoFactorVerifyPage({ searchParams }: Props) {
 
   const safe = safeReturnTo(callbackUrl);
 
-  let verifyMethod: "EMAIL_OTP" | "TOTP" = "TOTP";
+  let verifyMethod: "EMAIL_OTP" | "SMS_OTP" | "TOTP" = "TOTP";
+  let maskedPhone: string | undefined;
   if (session.user.id) {
     const admin = await db.adminUser.findUnique({
       where: { id: session.user.id },
       select: {
         email: true,
-        twoFactor: { select: { method: true, enrolledAt: true } },
+        twoFactor: { select: { method: true, enrolledAt: true, phoneE164: true } },
       },
     });
     if (admin?.twoFactor?.enrolledAt) {
       verifyMethod = admin.twoFactor.method;
+      if (verifyMethod === "SMS_OTP" && admin.twoFactor.phoneE164) {
+        maskedPhone = maskE164(admin.twoFactor.phoneE164);
+      }
     }
   }
+
+  const copyByMethod: Record<"EMAIL_OTP" | "SMS_OTP" | "TOTP", string> = {
+    EMAIL_OTP: "Enter the verification code we email to your account.",
+    SMS_OTP: "Enter the verification code we text to your phone.",
+    TOTP: "Enter the code from your authenticator app to continue.",
+  };
 
   return (
     <div className="card" style={{ maxWidth: 480 }}>
       <h1 style={{ marginTop: 0 }}>Two-Factor Verification</h1>
-      <p className="muted" style={{ marginBottom: 20 }}>
-        {verifyMethod === "EMAIL_OTP"
-          ? "Enter the verification code we email to your account."
-          : "Enter the code from your authenticator app to continue."}
-      </p>
-      <TwoFactorVerifyForm callbackUrl={safe} method={verifyMethod} />
+      <p className="muted" style={{ marginBottom: 20 }}>{copyByMethod[verifyMethod]}</p>
+      <TwoFactorVerifyForm callbackUrl={safe} method={verifyMethod} maskedPhone={maskedPhone} />
     </div>
   );
 }

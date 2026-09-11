@@ -65,23 +65,42 @@ describe("isTwoFactorEnrollmentConfirmed", () => {
 describe("isSms2faEnrollmentAvailable", () => {
   const originalSid = process.env.TWILIO_ACCOUNT_SID;
   const originalToken = process.env.TWILIO_AUTH_TOKEN;
+  const originalFrom = process.env.TWILIO_FROM_NUMBER;
 
   afterEach(() => {
     if (originalSid === undefined) delete process.env.TWILIO_ACCOUNT_SID;
     else process.env.TWILIO_ACCOUNT_SID = originalSid;
     if (originalToken === undefined) delete process.env.TWILIO_AUTH_TOKEN;
     else process.env.TWILIO_AUTH_TOKEN = originalToken;
+    if (originalFrom === undefined) delete process.env.TWILIO_FROM_NUMBER;
+    else process.env.TWILIO_FROM_NUMBER = originalFrom;
   });
 
-  it("returns false when Twilio env is absent", () => {
+  it("returns false when Twilio env is absent entirely", () => {
     delete process.env.TWILIO_ACCOUNT_SID;
     delete process.env.TWILIO_AUTH_TOKEN;
+    delete process.env.TWILIO_FROM_NUMBER;
     expect(isSms2faEnrollmentAvailable()).toBe(false);
   });
 
-  it("returns true when Twilio env is present", () => {
+  it("returns false when only SID + TOKEN are present (FROM_NUMBER required too)", () => {
     process.env.TWILIO_ACCOUNT_SID = "AC_test";
     process.env.TWILIO_AUTH_TOKEN = "token";
+    delete process.env.TWILIO_FROM_NUMBER;
+    expect(isSms2faEnrollmentAvailable()).toBe(false);
+  });
+
+  it("returns false when FROM_NUMBER is present but SID or TOKEN are missing", () => {
+    delete process.env.TWILIO_ACCOUNT_SID;
+    process.env.TWILIO_AUTH_TOKEN = "token";
+    process.env.TWILIO_FROM_NUMBER = "+15551234567";
+    expect(isSms2faEnrollmentAvailable()).toBe(false);
+  });
+
+  it("returns true when SID + TOKEN + FROM_NUMBER are all present", () => {
+    process.env.TWILIO_ACCOUNT_SID = "AC_test";
+    process.env.TWILIO_AUTH_TOKEN = "token";
+    process.env.TWILIO_FROM_NUMBER = "+15551234567";
     expect(isSms2faEnrollmentAvailable()).toBe(true);
   });
 });

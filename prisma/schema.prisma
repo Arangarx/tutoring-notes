@@ -79,16 +79,26 @@ enum AdminRole {
   TUTOR
 }
 
-/// Admin/tutor 2FA method — EMAIL_OTP (default for new enrollments) or TOTP authenticator.
+/// Admin/tutor 2FA method — EMAIL_OTP (default for new enrollments), SMS_OTP, or TOTP authenticator.
+/// Only one method is enrolled at a time.
 enum TwoFactorMethod {
   EMAIL_OTP
+  SMS_OTP
   TOTP
 }
 
-/// Purpose for one-time email OTP challenges during 2FA enroll or login verify.
+/// Purpose for one-time OTP challenges during 2FA enroll or login verify.
 enum AdminUser2FAEmailChallengePurpose {
   ENROLL
   LOGIN
+}
+
+/// Delivery channel for AdminUser2FAEmailChallenge rows. Additive (SMS chunk) —
+/// the Prisma model name (AdminUser2FAEmailChallenge) is kept for existing imports;
+/// the table now carries both email and SMS OTP challenges, distinguished by channel.
+enum AdminUser2FAEmailChallengeChannel {
+  EMAIL
+  SMS
 }
 
 /// Tutor account approval status (B1 signup-waitlist).
@@ -797,24 +807,39 @@ model AdminUser2FA {
   id                   String                   @id @default(uuid())
   adminUserId          String                   @unique
   adminUser            AdminUser                @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-  /// EMAIL_OTP (default for new enrollments) or TOTP (existing Sarah-style authenticator).
+  /// EMAIL_OTP (default for new enrollments), SMS_OTP, or TOTP (authenticator app).
+  /// Only one method is confirmed/active at a time.
   method               TwoFactorMethod          @default(TOTP)
   /// AES-256-GCM ciphertext. Format: base64url(iv) + "." + base64url(ciphertext+authTag).
-  /// The plaintext TOTP secret is NEVER stored or logged. Null when method=EMAIL_OTP.
+  /// The plaintext TOTP secret is NEVER stored or logged. Null when method != TOTP.
   totpSecretEnc        String?
+  /// US E.164 phone number (+1XXXXXXXXXX). Set ONLY after SMS_OTP enroll/change confirm —
+  /// never written on send-fail. Null when method != SMS_OTP.
+  phoneE164            String?
   enrolledAt           DateTime?
   lastVerifiedAt       DateTime?
-  /// Rotation: new pending secret stored here while current totpSecretEnc remains valid.
-  /// Swapped atomically to totpSecretEnc on rotateTotpConfirm; cleared on success/abandon.
+  /// Rotation (same-method TOTP) or change-method (any method -> TOTP): new pending
+  /// secret stored here while the current totpSecretEnc/method remains valid.
+  /// Swapped atomically on confirm; cleared on success/abandon.
   pendingTotpSecretEnc String?
-  /// When rotation was started. Null when no rotation is in progress.
+  /// Change-method (any method -> SMS_OTP): phone collected but not yet confirmed.
+  /// Copied to phoneE164 on confirm; cleared on success/abandon. Never used for the
+  /// active method — only for a change-in-progress.
+  pendingPhoneE164     String?
+  /// Non-null while a rotation or method change is in progress (the TARGET method).
+  /// Null when no change is in progress. The CURRENT confirmed method stays valid
+  /// (usable for login/step-up) until confirm swaps it atomically.
+  pendingMethod        TwoFactorMethod?
+  /// When the current rotation/method-change was started. Null when none in progress.
   pendingEnrolledAt    DateTime?
   backupCodes          AdminUser2FABackupCode[]
   emailChallenges      AdminUser2FAEmailChallenge[]
 }
 
-/// Single-use hashed email OTP for 2FA enroll or login verify.
+/// Single-use hashed OTP challenge for 2FA enroll or login verify — email or SMS.
 /// codeHash: SHA-256 hex digest of the 6-digit OTP. Plaintext NEVER stored or logged.
+/// Model name kept as "AdminUser2FAEmailChallenge" (predates SMS) for existing imports;
+/// `channel` distinguishes EMAIL vs SMS rows sharing this table (no second challenge table).
 model AdminUser2FAEmailChallenge {
   id          String                            @id @default(uuid())
   adminUserId String
@@ -823,11 +848,14 @@ model AdminUser2FAEmailChallenge {
   twoFa       AdminUser2FA?                     @relation(fields: [twoFaId], references: [id], onDelete: Cascade)
   codeHash    String
   purpose     AdminUser2FAEmailChallengePurpose
+  /// Delivery channel. Default EMAIL — existing pre-SMS rows are all email.
+  channel     AdminUser2FAEmailChallengeChannel @default(EMAIL)
   expiresAt   DateTime
   usedAt      DateTime?
   createdAt   DateTime                          @default(now())
 
   @@index([adminUserId, purpose])
+  @@index([adminUserId, purpose, channel])
   @@index([twoFaId])
 }
 

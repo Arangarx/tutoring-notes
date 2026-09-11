@@ -1,45 +1,72 @@
 "use client";
 
 /**
- * 2FA Verify Client Component — email OTP or TOTP based on enrollment method.
- * TOTP-enrolled users may switch to email OTP as a login alternative (chunk 2).
+ * 2FA Verify Client Component — EMAIL_OTP, SMS_OTP, or TOTP based on
+ * enrollment method. SMS- or TOTP-enrolled users may switch to email OTP as
+ * a login alternative (one method enrolled at a time; email is always the
+ * universal fallback channel).
  */
 
 import { useState, useTransition } from "react";
-import { sendLoginEmailOtp, verifyEmailOtpCode, verifyTotpCode } from "../actions";
+import {
+  sendLoginEmailOtp,
+  sendLoginSmsOtp,
+  verifyEmailOtpCode,
+  verifySmsOtpCode,
+  verifyTotpCode,
+} from "../actions";
+
+type ActiveChannel = "EMAIL" | "SMS" | "TOTP";
 
 export function TwoFactorVerifyForm({
   callbackUrl,
   method,
+  maskedPhone,
 }: {
   callbackUrl: string;
-  method: "EMAIL_OTP" | "TOTP";
+  method: "EMAIL_OTP" | "SMS_OTP" | "TOTP";
+  /** Pre-masked phone (e.g. "+1•••••1234") when method is SMS_OTP. */
+  maskedPhone?: string;
 }) {
+  const primaryChannel: ActiveChannel =
+    method === "TOTP" ? "TOTP" : method === "SMS_OTP" ? "SMS" : "EMAIL";
+
   const [codeInput, setCodeInput] = useState("");
   const [rememberDevice, setRememberDevice] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [maskedEmail, setMaskedEmail] = useState("");
-  const [emailSent, setEmailSent] = useState(false);
-  const [useEmailAlt, setUseEmailAlt] = useState(method === "EMAIL_OTP");
+  const [codeSent, setCodeSent] = useState(false);
+  const [activeChannel, setActiveChannel] = useState<ActiveChannel>(primaryChannel);
   const [isPending, startTransition] = useTransition();
 
-  function handleSendEmail() {
+  const isOtpChannel = activeChannel === "EMAIL" || activeChannel === "SMS";
+  const channelNoun = activeChannel === "SMS" ? "phone" : "email";
+
+  function handleSendCode() {
     setError("");
     setInfo("");
     startTransition(async () => {
-      const result = await sendLoginEmailOtp();
-      if (!result.ok) {
-        setError(result.error);
-        return;
+      if (activeChannel === "SMS") {
+        const result = await sendLoginSmsOtp();
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+      } else {
+        const result = await sendLoginEmailOtp();
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setMaskedEmail(result.maskedEmail);
       }
-      setMaskedEmail(result.maskedEmail);
-      setEmailSent(true);
       setInfo(
-        emailSent
-          ? "We sent a new verification code to your email."
-          : "We sent a verification code to your email."
+        codeSent
+          ? `We sent a new verification code to your ${channelNoun}.`
+          : `We sent a verification code to your ${channelNoun}.`
       );
+      setCodeSent(true);
     });
   }
 
@@ -49,9 +76,12 @@ export function TwoFactorVerifyForm({
     setError("");
     setInfo("");
     startTransition(async () => {
-      const result = useEmailAlt
-        ? await verifyEmailOtpCode(input, { rememberDevice })
-        : await verifyTotpCode(input, { rememberDevice });
+      const result =
+        activeChannel === "TOTP"
+          ? await verifyTotpCode(input, { rememberDevice })
+          : activeChannel === "SMS"
+            ? await verifySmsOtpCode(input, { rememberDevice })
+            : await verifyEmailOtpCode(input, { rememberDevice });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -60,27 +90,45 @@ export function TwoFactorVerifyForm({
     });
   }
 
+  function switchChannel(next: ActiveChannel) {
+    setActiveChannel(next);
+    setCodeInput("");
+    setCodeSent(false);
+    setError("");
+    setInfo("");
+  }
+
   const normalized = codeInput.replace(/\s/g, "");
   const isBackupLen = normalized.length === 8;
   const isTotpLen = normalized.length === 6;
-  const canSubmit = useEmailAlt
+  const canSubmit = isOtpChannel
     ? isTotpLen && !isPending
     : (isTotpLen || isBackupLen) && !isPending;
 
-  if (useEmailAlt) {
+  if (isOtpChannel) {
+    const destination =
+      activeChannel === "SMS"
+        ? maskedPhone || "your phone"
+        : maskedEmail || "";
+
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          {emailSent ? (
+          {codeSent ? (
             <>
-              Enter the 6-digit code we emailed
-              {maskedEmail ? (
+              Enter the 6-digit code we {activeChannel === "SMS" ? "texted" : "emailed"}
+              {activeChannel === "SMS" || maskedEmail ? (
                 <>
                   {" "}
-                  to <strong>{maskedEmail}</strong>
+                  to <strong>{destination}</strong>
                 </>
               ) : null}
               .
+            </>
+          ) : activeChannel === "SMS" ? (
+            <>
+              Send a verification code to <strong>{maskedPhone || "your phone"}</strong>, then
+              enter it below.
             </>
           ) : (
             <>Send a verification code to your email, then enter it below.</>
@@ -113,25 +161,30 @@ export function TwoFactorVerifyForm({
         </div>
         <button
           type="button"
-          onClick={handleSendEmail}
+          onClick={handleSendCode}
           disabled={isPending}
           className="text-sm underline"
         >
-          {emailSent ? "Resend code" : "Send verification code"}
+          {codeSent ? "Resend code" : "Send verification code"}
         </button>
-        {method === "TOTP" && (
+        {activeChannel !== "EMAIL" && (
           <button
             type="button"
-            onClick={() => {
-              setUseEmailAlt(false);
-              setCodeInput("");
-              setError("");
-              setInfo("");
-            }}
+            onClick={() => switchChannel("EMAIL")}
             disabled={isPending}
-            className="text-sm underline"
+            className="text-sm underline text-muted-foreground"
           >
-            Use authenticator app instead
+            Email me a code instead
+          </button>
+        )}
+        {activeChannel === "EMAIL" && primaryChannel !== "EMAIL" && (
+          <button
+            type="button"
+            onClick={() => switchChannel(primaryChannel)}
+            disabled={isPending}
+            className="text-sm underline text-muted-foreground"
+          >
+            {primaryChannel === "SMS" ? "Use text message instead" : "Use authenticator app instead"}
           </button>
         )}
         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -183,12 +236,7 @@ export function TwoFactorVerifyForm({
       </div>
       <button
         type="button"
-        onClick={() => {
-          setUseEmailAlt(true);
-          setCodeInput("");
-          setError("");
-          setInfo("");
-        }}
+        onClick={() => switchChannel("EMAIL")}
         disabled={isPending}
         className="text-sm underline"
       >

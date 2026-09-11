@@ -68,7 +68,7 @@ describe("email OTP challenge DB behaviour", () => {
     const { db } = await import("@/lib/db");
     await db.adminUser2FAEmailChallenge.deleteMany({ where: { adminUserId } });
     await db.authThrottle.deleteMany({
-      where: { scopeKey: { startsWith: "2fa-email-send:" } },
+      where: { scopeKey: { startsWith: "2fa-otp-send:EMAIL:" } },
     });
   });
 
@@ -76,7 +76,7 @@ describe("email OTP challenge DB behaviour", () => {
     const { db } = await import("@/lib/db");
     await db.adminUser2FAEmailChallenge.deleteMany({ where: { adminUserId } });
     await db.authThrottle.deleteMany({
-      where: { scopeKey: { startsWith: "2fa-email-send:" } },
+      where: { scopeKey: { startsWith: "2fa-otp-send:EMAIL:" } },
     });
     await db.adminUser2FA.deleteMany({ where: { adminUserId } });
     await db.adminUser.deleteMany({ where: { id: adminUserId } });
@@ -268,7 +268,7 @@ describe("email OTP logging hygiene", () => {
         where: { adminUserId: "log-hygiene-admin" },
       });
       await db.authThrottle.deleteMany({
-        where: { scopeKey: "2fa-email-send:log-hygiene-admin" },
+        where: { scopeKey: "2fa-otp-send:EMAIL:log-hygiene-admin" },
       });
       await db.adminUser.deleteMany({ where: { id: "log-hygiene-admin" } });
     }

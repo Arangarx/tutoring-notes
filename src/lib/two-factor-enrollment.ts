@@ -16,10 +16,11 @@ export function isTwoFactorEnrollmentConfirmed(row: {
   return row.backupCodeCount > 0;
 }
 
-/** True when SMS 2FA enrollment can be offered (Twilio sender configured). */
+/** True when SMS 2FA enrollment can be offered (Twilio sender fully configured). */
 export function isSms2faEnrollmentAvailable(): boolean {
   return !!(
     process.env.TWILIO_ACCOUNT_SID?.trim() &&
-    process.env.TWILIO_AUTH_TOKEN?.trim()
+    process.env.TWILIO_AUTH_TOKEN?.trim() &&
+    process.env.TWILIO_FROM_NUMBER?.trim()
   );
 }

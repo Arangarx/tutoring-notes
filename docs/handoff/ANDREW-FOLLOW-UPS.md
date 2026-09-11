@@ -33,6 +33,19 @@ Notes:
 
 ---
 
+## SMS 2FA (Twilio) — code shipped, needs your account + env (Andrew-only)
+
+SMS OTP two-factor auth is **fully coded** on `feat/auth-ship-ready` (enroll, login verify, step-up, change-method) but is **fail-closed until you provision Twilio** — no agent can do this part.
+
+| # | Action | Why | Blocks code? |
+|---|--------|-----|--------------|
+| 1 | Create/confirm a Twilio account + buy a Programmable SMS-capable number | Source number for outbound OTP texts | No — SMS card stays disabled until done |
+| 2 | Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` on the Vercel env for the target deployment (see `.env.example`) | `isSms2faEnrollmentAvailable()` requires all three or SMS stays hidden | No for merge; **yes for live SMS smoke** |
+
+**Not a blocker for merging this branch** — the feature is designed to be safely mergeable with SMS disabled (email OTP + TOTP keep working exactly as today). Do this whenever convenient; SMS just won't be selectable in the UI until then.
+
+---
+
 ## Background eyeballs (not merge-blocking)
 
 | Item | Doc | Notes |

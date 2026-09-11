@@ -66,6 +66,10 @@ describe("TD-10-A / TD-15-A: verifyTotpStepUp rate limit first (B3)", () => {
       verifyEmailOtpChallenge: jest.fn(),
     }));
 
+    jest.mock("@/lib/otp-challenge", () => ({
+      verifyOtpChallenge: jest.fn(),
+    }));
+
     const { verifyTotpStepUp } = await import("@/lib/two-factor-step-up");
     await verifyTotpStepUp("admin-td10a", "123456");
 
@@ -95,6 +99,10 @@ describe("TD-10-A / TD-15-A: verifyTotpStepUp rate limit first (B3)", () => {
       verifyEmailOtpChallenge: jest.fn(),
     }));
 
+    jest.mock("@/lib/otp-challenge", () => ({
+      verifyOtpChallenge: jest.fn(),
+    }));
+
     const { verifyTotpStepUp } = await import("@/lib/two-factor-step-up");
     const result = await verifyTotpStepUp("admin-td15a", "123456");
 
@@ -118,6 +126,10 @@ describe("TD-10-A / TD-15-A: verifyTotpStepUp rate limit first (B3)", () => {
 
     jest.mock("@/lib/email-otp-challenge", () => ({
       verifyEmailOtpChallenge: jest.fn(),
+    }));
+
+    jest.mock("@/lib/otp-challenge", () => ({
+      verifyOtpChallenge: jest.fn(),
     }));
 
     const { verifyTotpStepUp } = await import("@/lib/two-factor-step-up");
@@ -157,6 +169,10 @@ describe("verifyTotpStepUp — EMAIL_OTP method", () => {
 
     jest.mock("@/lib/email-otp-challenge", () => ({
       verifyEmailOtpChallenge: mockVerifyEmail,
+    }));
+
+    jest.mock("@/lib/otp-challenge", () => ({
+      verifyOtpChallenge: jest.fn(),
     }));
 
     const { verifyTotpStepUp } = await import("@/lib/two-factor-step-up");
@@ -214,6 +230,10 @@ describe("verifyTotpStepUp — EMAIL_OTP method", () => {
       Secret: { fromBase32: jest.fn() },
     }));
 
+    jest.mock("@/lib/otp-challenge", () => ({
+      verifyOtpChallenge: jest.fn(),
+    }));
+
     const { verifyTotpStepUp } = await import("@/lib/two-factor-step-up");
     const result = await verifyTotpStepUp("admin-email-fail", "000000");
 
@@ -252,6 +272,10 @@ describe("verifyTotpStepUp — EMAIL_OTP method", () => {
       verifyEmailOtpChallenge: mockVerifyEmail,
     }));
 
+    jest.mock("@/lib/otp-challenge", () => ({
+      verifyOtpChallenge: jest.fn(),
+    }));
+
     const { verifyTotpStepUp } = await import("@/lib/two-factor-step-up");
 
     // verifyTotpStepUp has no rememberDevice / twoFactorVerified parameters —
@@ -262,5 +286,110 @@ describe("verifyTotpStepUp — EMAIL_OTP method", () => {
     expect(mockVerifyEmail).toHaveBeenCalledWith(
       expect.objectContaining({ purpose: "LOGIN", code: "999888" })
     );
+  });
+});
+
+describe("verifyTotpStepUp — SMS_OTP method", () => {
+  it("delegates to verifyOtpChallenge with purpose LOGIN + channel SMS and returns its result", async () => {
+    const mockVerifyOtp = jest.fn().mockResolvedValue({ ok: true, challengeId: "chal-1" });
+
+    jest.mock("@/lib/auth-rate-limit", () => ({
+      check2faVerifyRateLimit: jest.fn().mockResolvedValue({
+        allowed: true,
+        requestCount: 1,
+        retryAfterMs: 0,
+      }),
+    }));
+
+    jest.mock("@/lib/db", () => ({
+      db: {
+        adminUser2FA: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: "tfa-sms-otp",
+            method: "SMS_OTP",
+            totpSecretEnc: null,
+          }),
+        },
+      },
+    }));
+
+    jest.mock("@/lib/email-otp-challenge", () => ({
+      verifyEmailOtpChallenge: jest.fn(),
+    }));
+
+    jest.mock("@/lib/otp-challenge", () => ({
+      verifyOtpChallenge: mockVerifyOtp,
+    }));
+
+    const { verifyTotpStepUp } = await import("@/lib/two-factor-step-up");
+    const result = await verifyTotpStepUp("admin-sms-otp", "123456");
+
+    expect(result.ok).toBe(true);
+    expect(mockVerifyOtp).toHaveBeenCalledTimes(1);
+    expect(mockVerifyOtp).toHaveBeenCalledWith({
+      adminUserId: "admin-sms-otp",
+      code: "123456",
+      purpose: "LOGIN",
+      channel: "SMS",
+    });
+  });
+
+  it("propagates verifyOtpChallenge failure for SMS — no trusted-device shortcut", async () => {
+    const mockVerifyOtp = jest.fn().mockResolvedValue({
+      ok: false,
+      error: "Invalid or expired code.",
+    });
+
+    jest.mock("@/lib/auth-rate-limit", () => ({
+      check2faVerifyRateLimit: jest.fn().mockResolvedValue({
+        allowed: true,
+        requestCount: 1,
+        retryAfterMs: 0,
+      }),
+    }));
+
+    jest.mock("@/lib/db", () => ({
+      db: {
+        adminUser2FA: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: "tfa-sms-fail",
+            method: "SMS_OTP",
+            totpSecretEnc: null,
+          }),
+        },
+      },
+    }));
+
+    jest.mock("@/lib/email-otp-challenge", () => ({
+      verifyEmailOtpChallenge: jest.fn(),
+    }));
+
+    jest.mock("@/lib/otp-challenge", () => ({
+      verifyOtpChallenge: mockVerifyOtp,
+    }));
+
+    jest.mock("@/lib/two-factor-db", () => ({
+      redeemBackupCode: jest.fn(),
+    }));
+
+    jest.mock("@/lib/crypto/totp-secret", () => ({
+      decryptTotpSecret: jest.fn(),
+    }));
+
+    jest.mock("otpauth", () => ({
+      TOTP: jest.fn(),
+      Secret: { fromBase32: jest.fn() },
+    }));
+
+    const { verifyTotpStepUp } = await import("@/lib/two-factor-step-up");
+    const result = await verifyTotpStepUp("admin-sms-fail", "000000");
+
+    expect(result).toEqual({ ok: false, error: "Invalid or expired code." });
+    expect(mockVerifyOtp).toHaveBeenCalledWith({
+      adminUserId: "admin-sms-fail",
+      code: "000000",
+      purpose: "LOGIN",
+      channel: "SMS",
+    });
   });
 });

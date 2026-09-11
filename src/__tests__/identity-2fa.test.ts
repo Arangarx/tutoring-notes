@@ -677,13 +677,22 @@ describe("auth-flow redirect mechanics", () => {
         "../app/admin/settings/2fa/actions.ts"
       );
       const content = fs.readFileSync(actionsPath, "utf-8");
+      // mintVerifiedSessionFromCookie() wraps mintTwoFactorVerifiedSession — extracted
+      // (composition-no-duplication) since 4 call sites needed the same cookie-decode
+      // + mint logic (confirmTotpEnrollment, confirmEmailOtpEnrollment, verifyTotpCode,
+      // verifyEmailOtpCode). Assert the helper itself calls the real mint function, and
+      // that confirmTotpEnrollment calls the helper.
+      const helperIdx = content.indexOf("async function mintVerifiedSessionFromCookie");
       const confirmIdx = content.indexOf("async function confirmTotpEnrollment");
       const verifyIdx = content.indexOf("async function verifyTotpCode");
+      expect(helperIdx).toBeGreaterThan(-1);
       expect(confirmIdx).toBeGreaterThan(-1);
       expect(verifyIdx).toBeGreaterThan(-1);
-      // Mint call must appear inside confirmTotpEnrollment (before verifyTotpCode starts).
+      const helperSection = content.slice(helperIdx, helperIdx + 800);
+      expect(helperSection).toContain("mintTwoFactorVerifiedSession");
+      // Mint helper call must appear inside confirmTotpEnrollment (before verifyTotpCode starts).
       const confirmSection = content.slice(confirmIdx, verifyIdx);
-      expect(confirmSection).toContain("mintTwoFactorVerifiedSession");
+      expect(confirmSection).toContain("mintVerifiedSessionFromCookie");
     });
 
     it("TwoFactorSetupForm backup-codes step navigates to /admin (source check)", () => {
@@ -1048,15 +1057,24 @@ describe("Item 2: autofocus code entry fields on 2FA screens", () => {
   });
 
   it("TwoFactorSetupForm idle step exposes three first-class chooser cards", () => {
+    // The chooser cards are extracted into TwoFactorMethodChooserCards (shared with the
+    // manage-page change-method flow — composition-no-duplication) — assert the setup
+    // form composes it, and that the shared component itself carries the testids.
     const formPath = path.resolve(
       __dirname, "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx"
     );
-    const content = fs.readFileSync(formPath, "utf-8");
-    expect(content).toContain('data-testid="tfa-choose-email"');
-    expect(content).toContain('data-testid="tfa-choose-totp"');
-    expect(content).toContain('data-testid="tfa-choose-sms"');
-    expect(content).toContain("SMS not available");
-    expect(content).toContain('from "@/components/ui/button"');
-    expect(content).toContain('from "@/components/ui/card"');
+    const formContent = fs.readFileSync(formPath, "utf-8");
+    expect(formContent).toContain("TwoFactorMethodChooserCards");
+
+    const chooserPath = path.resolve(
+      __dirname, "../app/admin/settings/2fa/TwoFactorMethodChooserCards.tsx"
+    );
+    const chooserContent = fs.readFileSync(chooserPath, "utf-8");
+    expect(chooserContent).toContain('data-testid="tfa-choose-email"');
+    expect(chooserContent).toContain('data-testid="tfa-choose-totp"');
+    expect(chooserContent).toContain('data-testid="tfa-choose-sms"');
+    expect(chooserContent).toContain("SMS not available");
+    expect(chooserContent).toContain('from "@/components/ui/button"');
+    expect(chooserContent).toContain('from "@/components/ui/card"');
   });
 });

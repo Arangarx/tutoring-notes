@@ -32,6 +32,7 @@ import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { SubNav } from "@/components/SubNav";
 import { isTwoFactorEnrollmentConfirmed, isSms2faEnrollmentAvailable } from "@/lib/two-factor-enrollment";
+import { maskE164 } from "@/lib/sms";
 import { TwoFactorSetupForm } from "./setup/TwoFactorSetupForm";
 import { TwoFactorManageView } from "./TwoFactorManageView";
 
@@ -49,6 +50,7 @@ export default async function TwoFactorManagePage() {
     id: string;
     method: string;
     enrolledAt: Date | null;
+    phoneE164: string | null;
     _count: { backupCodes: number };
   } | null = null;
   let remainingBackupCodes = 0;
@@ -138,6 +140,8 @@ export default async function TwoFactorManagePage() {
             remainingBackupCodes={remainingBackupCodes}
             isAdmin={isAdmin}
             userId={session.user.id ?? ""}
+            smsEnrollmentAvailable={isSms2faEnrollmentAvailable()}
+            maskedPhone={twoFaRow.phoneE164 ? maskE164(twoFaRow.phoneE164) : undefined}
           />
         </SectionCard>
     </PageShell>

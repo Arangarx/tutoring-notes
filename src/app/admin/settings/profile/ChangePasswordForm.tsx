@@ -10,14 +10,14 @@ import { Label } from "@/components/ui/label";
 import { storePasswordCredential } from "@/lib/credential-manager";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 import { changePassword, sendPasswordResetEmail } from "./actions";
-import { sendLoginEmailOtp } from "../2fa/actions";
+import { sendLoginEmailOtp, sendLoginSmsOtp } from "../2fa/actions";
 
 interface Props {
   /** The signed-in admin's email — used as a hidden username anchor for password managers. */
   email: string;
   /** When true, a 2FA step-up field is shown above the submit button. */
   has2FA?: boolean;
-  twoFactorMethod?: "EMAIL_OTP" | "TOTP";
+  twoFactorMethod?: "EMAIL_OTP" | "SMS_OTP" | "TOTP";
 }
 
 export default function ChangePasswordForm({ email, has2FA, twoFactorMethod }: Props) {
@@ -105,7 +105,7 @@ export default function ChangePasswordForm({ email, has2FA, twoFactorMethod }: P
 
         {has2FA && (
           <div className="space-y-1.5">
-            {twoFactorMethod === "EMAIL_OTP" ? (
+            {twoFactorMethod === "EMAIL_OTP" || twoFactorMethod === "SMS_OTP" ? (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
                   Request a verification code, then enter it below to confirm the password change.
@@ -123,9 +123,15 @@ export default function ChangePasswordForm({ email, has2FA, twoFactorMethod }: P
                   onClick={() => {
                     setOtpMsg(null);
                     startOtpSend(async () => {
-                      const r = await sendLoginEmailOtp();
-                      if (r.ok) setOtpMsg(`Code sent to ${r.maskedEmail}.`);
-                      else setOtpMsg(r.error ?? "Could not send code.");
+                      if (twoFactorMethod === "SMS_OTP") {
+                        const r = await sendLoginSmsOtp();
+                        if (r.ok) setOtpMsg(`Code sent to ${r.maskedPhone}.`);
+                        else setOtpMsg(r.error ?? "Could not send code.");
+                      } else {
+                        const r = await sendLoginEmailOtp();
+                        if (r.ok) setOtpMsg(`Code sent to ${r.maskedEmail}.`);
+                        else setOtpMsg(r.error ?? "Could not send code.");
+                      }
                     });
                   }}
                 >
@@ -139,7 +145,7 @@ export default function ChangePasswordForm({ email, has2FA, twoFactorMethod }: P
               name="totpCode"
               type="text"
               inputMode="numeric"
-              maxLength={twoFactorMethod === "EMAIL_OTP" ? 6 : 8}
+              maxLength={twoFactorMethod === "EMAIL_OTP" || twoFactorMethod === "SMS_OTP" ? 6 : 8}
               placeholder="000000"
               autoComplete="one-time-code"
               className="w-36 font-mono tracking-widest"
@@ -147,7 +153,9 @@ export default function ChangePasswordForm({ email, has2FA, twoFactorMethod }: P
             <p className="text-xs text-muted-foreground">
               {twoFactorMethod === "EMAIL_OTP"
                 ? "Enter the 6-digit code from your email."
-                : "Enter your authenticator code or backup code to confirm the password change."}
+                : twoFactorMethod === "SMS_OTP"
+                  ? "Enter the 6-digit code from your text message."
+                  : "Enter your authenticator code or backup code to confirm the password change."}
             </p>
           </div>
         )}
