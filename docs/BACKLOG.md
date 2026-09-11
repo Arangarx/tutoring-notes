@@ -1471,7 +1471,7 @@ Hard-blocked today; needs step-up, audit, legal.
 Test-account UI, active-session list, env-only admin warning.
 
 **[P3][AUTH] Real email provider (P2b)**  
-`stubSendAccountHolderEmail` still stub.
+SHIPPED on `feat/auth-ship-ready` [`673c54f3`](https://github.com/Arangarx/tutoring-notes/commit/673c54f3) — parent/claim/2FA-OTP/operator mail uses `sendPlatformMail` (env SMTP). Live Resend + `usemynk.com` DNS + Vercel `SMTP_*` remain Andrew leftover ([`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)).
 
 **[P2][AUTH] Notes first-class authenticated chrome (P2-AC-12/13)**  
 `/s/*` wall shipped; full parent chrome integration deferred.
