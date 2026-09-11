@@ -53,7 +53,7 @@
 
 **Tip:** `master` after this replay — legal Calendar facade (`5038f794` replayed) + Sarah 2026-09-10 Discord/SMS docs. Prior SEO merge [`e6726b28`](https://github.com/Arangarx/tutoring-notes/commit/e6726b28).
 
-**Last action:** WS4 tutor email allowlist pre-approve shipped on `feat/auth-ship-ready` (commit SHA updates on push). `TutorEmailAllowlist` table, create-time APPROVED gate for credentials + Google, operator UI on `/admin/tutor-approvals`, jest + identity-e2e coverage. Not merged; awaiting independent verify.
+**Last action:** WS4 tutor email allowlist pre-approve shipped on `feat/auth-ship-ready` [`08dbd9d0`](https://github.com/Arangarx/tutoring-notes/commit/08dbd9d0). `TutorEmailAllowlist` table, create-time APPROVED gate for credentials + Google, operator UI on `/admin/tutor-approvals`, jest + identity-e2e coverage. Not merged; awaiting independent verify.
 
 **Previous:** WS2 complete + independently APPROVE on `feat/auth-ship-ready` [`113f7ec9`](https://github.com/Arangarx/tutoring-notes/commit/113f7ec9). Shared `isTwoFactorEnrollmentConfirmed` (EMAIL_OTP → `enrolledAt`, TOTP → backup codes); three-card chooser (email default, SMS disabled); email-enrolled tutors see manage not setup; manage email step-up uses existing `sendLoginEmailOtp`.
 
