@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
+import { resolveSignupApproval } from "@/lib/tutor-approval-scope";
 
 const SALT_ROUNDS = 10;
 
@@ -44,6 +45,18 @@ export async function createTestAccount(email: string, displayName?: string | nu
   });
 }
 
+async function buildSignupApprovalFields(email: string) {
+  const approval = await resolveSignupApproval(email);
+  if (approval.status === "APPROVED") {
+    return {
+      approvalStatus: "APPROVED" as const,
+      approvedAt: new Date(),
+      approvedByAdminId: approval.approvedByAdminId,
+    };
+  }
+  return { approvalStatus: "WAITLISTED" as const };
+}
+
 export async function createAdmin(
   email: string,
   plainPassword: string,
@@ -51,18 +64,27 @@ export async function createAdmin(
 ) {
   const hash = await bcrypt.hash(plainPassword, SALT_ROUNDS);
   const dn = displayName?.trim() || null;
-  // B1: new signups always land WAITLISTED. The schema @default(WAITLISTED) also
-  // covers it, but being explicit here makes intent clear and testable.
-  return db.adminUser.create({
+  const normalized = normalizeEmail(email);
+  const approvalFields = await buildSignupApprovalFields(email);
+
+  const row = await db.adminUser.create({
     data: {
-      email: normalizeEmail(email),
+      email: normalized,
       passwordHash: hash,
       displayName: dn,
       role: "TUTOR",
       isTestAccount: false,
-      approvalStatus: "WAITLISTED",
+      ...approvalFields,
     },
   });
+
+  if (approvalFields.approvalStatus === "APPROVED") {
+    console.log(
+      `[tap] tap=${row.id} action=allowlist_signup_approved email=${normalized}`
+    );
+  }
+
+  return row;
 }
 
 /** Google OAuth signup from /signup — no password; same WAITLISTED gate as credentials.
@@ -72,17 +94,28 @@ export async function createAdminFromGoogle(
   displayName?: string | null
 ) {
   const dn = displayName?.trim() || null;
-  return db.adminUser.create({
+  const normalized = normalizeEmail(email);
+  const approvalFields = await buildSignupApprovalFields(email);
+
+  const row = await db.adminUser.create({
     data: {
-      email: normalizeEmail(email),
+      email: normalized,
       passwordHash: null,
       displayName: dn,
       role: "TUTOR",
       isTestAccount: false,
-      approvalStatus: "WAITLISTED",
+      ...approvalFields,
       emailVerifiedAt: new Date(),
     },
   });
+
+  if (approvalFields.approvalStatus === "APPROVED") {
+    console.log(
+      `[tap] tap=${row.id} action=allowlist_signup_approved email=${normalized}`
+    );
+  }
+
+  return row;
 }
 
 export async function updateAdminDisplayName(email: string, displayName: string | null) {

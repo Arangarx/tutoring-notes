@@ -20,6 +20,7 @@ import "server-only";
  */
 
 import { db } from "@/lib/db";
+import { normalizeEmail } from "@/lib/normalize-email";
 import type { TutorApprovalStatus } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,69 @@ export class TutorNotApprovedError extends Error {
     this.adminUserId = adminUserId;
     this.status = status;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Signup allowlist — pre-approve by normalized email
+// ---------------------------------------------------------------------------
+
+export type SignupApprovalResolution =
+  | { status: "WAITLISTED" }
+  | { status: "APPROVED"; approvedByAdminId: string };
+
+/**
+ * Resolve signup approval from TutorEmailAllowlist.
+ * Allowlisted emails → APPROVED at create time (email verify + 2FA still required).
+ */
+export async function resolveSignupApproval(
+  email: string
+): Promise<SignupApprovalResolution> {
+  const normalized = normalizeEmail(email);
+  const row = await db.tutorEmailAllowlist.findUnique({
+    where: { email: normalized },
+    select: { createdByAdminId: true },
+  });
+  if (!row) {
+    return { status: "WAITLISTED" };
+  }
+  return { status: "APPROVED", approvedByAdminId: row.createdByAdminId };
+}
+
+export type TutorEmailAllowlistEntry = {
+  id: string;
+  email: string;
+  createdAt: Date;
+};
+
+export async function listTutorEmailAllowlist(): Promise<TutorEmailAllowlistEntry[]> {
+  return db.tutorEmailAllowlist.findMany({
+    select: { id: true, email: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+export async function addTutorEmailAllowlistEntry(
+  email: string,
+  operatorId: string
+): Promise<TutorEmailAllowlistEntry> {
+  const normalized = normalizeEmail(email);
+  const row = await db.tutorEmailAllowlist.create({
+    data: {
+      email: normalized,
+      createdByAdminId: operatorId,
+    },
+    select: { id: true, email: true, createdAt: true },
+  });
+
+  console.log(
+    `[tap] tap=${operatorId} action=allowlist_add email=${normalized}`
+  );
+
+  return row;
+}
+
+export async function removeTutorEmailAllowlistEntry(id: string): Promise<void> {
+  await db.tutorEmailAllowlist.delete({ where: { id } });
 }
 
 // ---------------------------------------------------------------------------

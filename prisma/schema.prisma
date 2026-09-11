@@ -782,6 +782,17 @@ model AdminUser {
   defaultRoundingMode         String?
   /// IANA timezone for billing local-time display (e.g. America/Denver).
   tutorTimezone               String?
+  tutorEmailAllowlistCreated  TutorEmailAllowlist[] @relation("TutorEmailAllowlistCreatedBy")
+}
+
+/// Pre-approved tutor signup emails — normalized at write time.
+/// Signups matching this list land APPROVED (still require email verify + 2FA).
+model TutorEmailAllowlist {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  createdByAdminId  String
+  createdByAdmin    AdminUser @relation("TutorEmailAllowlistCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  createdAt         DateTime  @default(now())
 }
 
 /// One-time hashed tokens for tutor signup email confirm. Do not reuse AccountHolderEmailToken.

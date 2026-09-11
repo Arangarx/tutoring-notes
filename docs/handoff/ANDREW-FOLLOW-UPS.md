@@ -33,6 +33,16 @@ Notes:
 
 ---
 
+## Tutor email allowlist — add pilot emails in operator UI (Andrew-only)
+
+Pre-approved signup allowlist is coded on `feat/auth-ship-ready`. **Do not seed Sarah/Tyson emails from the repo** — after merge, add their real addresses on [`/admin/tutor-approvals`](/admin/tutor-approvals) under **Pre-approved emails**. They still confirm email (unless Google) and still set up 2FA; allowlist only skips the waitlist.
+
+| # | Action | Why | Blocks code? |
+|---|--------|-----|--------------|
+| 1 | Add Sarah + Tyson emails via operator UI | Skip waitlist for pilot tutors | No — mergeable without this |
+
+---
+
 ## SMS 2FA (Twilio) — code shipped, needs your account + env (Andrew-only)
 
 SMS OTP two-factor auth is **fully coded** on `feat/auth-ship-ready` (enroll, login verify, step-up, change-method) but is **fail-closed until you provision Twilio** — no agent can do this part.

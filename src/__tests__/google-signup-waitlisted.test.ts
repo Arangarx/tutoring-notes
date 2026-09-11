@@ -52,10 +52,16 @@ describe("signup-intent token", () => {
 // ---------------------------------------------------------------------------
 describe("createAdminFromGoogle", () => {
   const mockCreate = jest.fn();
+  const mockResolveSignupApproval = jest.fn();
 
   beforeEach(() => {
     jest.resetModules();
     mockCreate.mockReset();
+    mockResolveSignupApproval.mockReset();
+    mockResolveSignupApproval.mockResolvedValue({ status: "WAITLISTED" });
+    jest.doMock("@/lib/tutor-approval-scope", () => ({
+      resolveSignupApproval: mockResolveSignupApproval,
+    }));
     jest.doMock("@/lib/db", () => ({
       db: {
         adminUser: { create: mockCreate },
@@ -65,6 +71,7 @@ describe("createAdminFromGoogle", () => {
 
   afterEach(() => {
     jest.dontMock("@/lib/db");
+    jest.dontMock("@/lib/tutor-approval-scope");
   });
 
   it("creates WAITLISTED TUTOR with null passwordHash", async () => {
@@ -81,6 +88,7 @@ describe("createAdminFromGoogle", () => {
     const { createAdminFromGoogle } = await import("@/lib/auth-db");
     await createAdminFromGoogle("pilot@gmail.com", "Pilot");
 
+    expect(mockResolveSignupApproval).toHaveBeenCalledWith("pilot@gmail.com");
     expect(mockCreate).toHaveBeenCalledWith({
       data: {
         email: "pilot@gmail.com",
@@ -91,6 +99,30 @@ describe("createAdminFromGoogle", () => {
         approvalStatus: "WAITLISTED",
         emailVerifiedAt: expect.any(Date),
       },
+    });
+  });
+
+  it("creates APPROVED TUTOR when allowlisted", async () => {
+    mockResolveSignupApproval.mockResolvedValue({
+      status: "APPROVED",
+      approvedByAdminId: "operator-1",
+    });
+    mockCreate.mockResolvedValue({
+      id: "g-approved",
+      email: "pilot@gmail.com",
+      approvalStatus: "APPROVED",
+    });
+
+    const { createAdminFromGoogle } = await import("@/lib/auth-db");
+    await createAdminFromGoogle("pilot@gmail.com", "Pilot");
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        approvalStatus: "APPROVED",
+        approvedByAdminId: "operator-1",
+        approvedAt: expect.any(Date),
+        emailVerifiedAt: expect.any(Date),
+      }),
     });
   });
 });

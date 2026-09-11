@@ -163,4 +163,34 @@ test.describe("P1-ID-TAP — operator tutor approvals reject + revoke", () => {
     await page.waitForURL(/\/admin\/pending-approval/, { timeout: 30_000 });
     await expect(page.getByText("Account pending approval")).toBeVisible();
   });
+
+  test("operator can add a pre-approved email on tutor-approvals", async ({
+    page,
+  }) => {
+    const email = uniqueEmail("allowlist-add");
+    const normalized = email.trim().toLowerCase();
+
+    await openTutorApprovals(page);
+    await expect(page.getByTestId("tutor-allowlist-section")).toBeVisible();
+
+    await page.getByTestId("tutor-allowlist-email").fill(email);
+    await expect(page.getByTestId("tutor-allowlist-add")).toBeEnabled();
+    await page.getByTestId("tutor-allowlist-add").click();
+
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByText(normalized)).toBeVisible({ timeout: 15_000 });
+
+    const prisma = new PrismaClient();
+    try {
+      const row = await prisma.tutorEmailAllowlist.findUnique({
+        where: { email: normalized },
+      });
+      expect(row?.email).toBe(normalized);
+      if (row) {
+        await prisma.tutorEmailAllowlist.delete({ where: { id: row.id } });
+      }
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
 });

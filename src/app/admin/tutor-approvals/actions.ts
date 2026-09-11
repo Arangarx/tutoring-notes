@@ -5,12 +5,16 @@ import { authOptions } from "@/auth-options";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { isOperatorEmail } from "@/lib/operator";
+import { z } from "zod";
 import {
+  addTutorEmailAllowlistEntry,
   approveTutor,
   rejectTutor,
+  removeTutorEmailAllowlistEntry,
   revokeTutorApproval,
 } from "@/lib/tutor-approval-scope";
 import { db } from "@/lib/db";
+import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
 
 export type TutorApprovalActionResult =
   | { ok: true }
@@ -126,5 +130,58 @@ export async function revokeTutorApprovalAction(
 
   revalidatePath("/admin/tutor-approvals");
 
+  return { ok: true };
+}
+
+const allowlistEmailSchema = z.object({
+  email: z.string().trim().email("Enter a valid email address."),
+});
+
+/**
+ * Add a normalized email to the pre-approve allowlist. Operator-only.
+ */
+export async function addTutorEmailAllowlist(
+  email: string
+): Promise<TutorApprovalActionResult> {
+  const operator = await requireOperatorSession();
+  if (!operator.ok) return operator;
+
+  const parsed = allowlistEmailSchema.safeParse({ email });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid email." };
+  }
+
+  try {
+    await addTutorEmailAllowlistEntry(parsed.data.email, operator.operatorId);
+  } catch (error) {
+    if (isPrismaUniqueViolation(error)) {
+      return { ok: false, error: "That email is already on the allowlist." };
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin/tutor-approvals");
+  return { ok: true };
+}
+
+/**
+ * Remove an allowlist row before signup. Operator-only.
+ */
+export async function removeTutorEmailAllowlist(
+  id: string
+): Promise<TutorApprovalActionResult> {
+  const operator = await requireOperatorSession();
+  if (!operator.ok) return operator;
+
+  const row = await db.tutorEmailAllowlist.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!row) {
+    return { ok: false, error: "Allowlist entry not found." };
+  }
+
+  await removeTutorEmailAllowlistEntry(id);
+  revalidatePath("/admin/tutor-approvals");
   return { ok: true };
 }
