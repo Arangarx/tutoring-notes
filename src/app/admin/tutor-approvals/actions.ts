@@ -15,9 +15,14 @@ import {
 } from "@/lib/tutor-approval-scope";
 import { db } from "@/lib/db";
 import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
+import type { TutorEmailAllowlistEntry } from "@/lib/tutor-approval-scope";
 
 export type TutorApprovalActionResult =
   | { ok: true }
+  | { ok: false; error: string };
+
+export type TutorAllowlistAddResult =
+  | { ok: true; entry: TutorEmailAllowlistEntry }
   | { ok: false; error: string };
 
 async function requireOperatorSession(): Promise<
@@ -139,10 +144,13 @@ const allowlistEmailSchema = z.object({
 
 /**
  * Add a normalized email to the pre-approve allowlist. Operator-only.
+ * Returns the created row so the client can update local list state directly
+ * (same pattern as removeTutorEmailAllowlist / TutorWaitlistActions) instead
+ * of forcing a full page reload.
  */
 export async function addTutorEmailAllowlist(
   email: string
-): Promise<TutorApprovalActionResult> {
+): Promise<TutorAllowlistAddResult> {
   const operator = await requireOperatorSession();
   if (!operator.ok) return operator;
 
@@ -151,8 +159,9 @@ export async function addTutorEmailAllowlist(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid email." };
   }
 
+  let entry: TutorEmailAllowlistEntry;
   try {
-    await addTutorEmailAllowlistEntry(parsed.data.email, operator.operatorId);
+    entry = await addTutorEmailAllowlistEntry(parsed.data.email, operator.operatorId);
   } catch (error) {
     if (isPrismaUniqueViolation(error)) {
       return { ok: false, error: "That email is already on the allowlist." };
@@ -161,7 +170,7 @@ export async function addTutorEmailAllowlist(
   }
 
   revalidatePath("/admin/tutor-approvals");
-  return { ok: true };
+  return { ok: true, entry };
 }
 
 /**

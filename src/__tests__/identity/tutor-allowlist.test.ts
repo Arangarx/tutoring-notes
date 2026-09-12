@@ -160,14 +160,17 @@ describe("operator allowlist actions", () => {
     });
   });
 
-  it("addTutorEmailAllowlist normalizes email and stores row", async () => {
+  it("addTutorEmailAllowlist normalizes email, stores row, and returns the created entry", async () => {
     const result = await addTutorEmailAllowlist("MixedCase@TEST.local");
-    expect(result).toEqual({ ok: true });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.entry.email).toBe("mixedcase@test.local");
 
     const row = await db.tutorEmailAllowlist.findUnique({
       where: { email: "mixedcase@test.local" },
     });
     expect(row?.createdByAdminId).toBe(operatorId);
+    expect(row?.id).toBe(result.entry.id);
   });
 
   it("addTutorEmailAllowlist rejects duplicate with honest error", async () => {

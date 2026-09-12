@@ -33,7 +33,7 @@ export function TutorAllowlistSection({
         return;
       }
       formRef.current?.reset();
-      window.location.reload();
+      setEntries((current) => [...current, result.entry]);
     });
   }
 
