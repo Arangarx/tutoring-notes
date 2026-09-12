@@ -43,7 +43,7 @@
 
 **agenticPipeline:** Phase 1 **merged to agenticPipeline `master`** @ [`aa56225`](https://github.com/Arangarx/agenticPipeline/commit/aa56225) (change mode + fail-closed + TN template; Sonnet APPROVE after REJECT fixes). Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** Independent verify of WS4 allowlist on `feat/auth-ship-ready` (tip updates on WS4 commit). Then wave is code-complete pending Twilio/SMTP leftovers + master merge gates. Remaining #5 Google write + invite-link product call stay Andrew-blocked. Andrew adds Sarah/Tyson emails in operator UI after merge ([`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) § Tutor email allowlist).
+**Next action(s):** Tutor-auth ship-ready **code-complete** on `feat/auth-ship-ready`. Do **not** merge to `master` until full gates (`test:wb-sync` + `test:regression` + `npx next build`) and Andrew leftovers: platform SMTP, Twilio env, Sarah/Tyson allowlist emails, Privacy/Terms eyeball. Remaining #5 Google write + invite-link product call stay Andrew-blocked. Checklist → [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md).
 
 ---
 
@@ -53,7 +53,7 @@
 
 **Tip:** `master` after this replay — legal Calendar facade (`5038f794` replayed) + Sarah 2026-09-10 Discord/SMS docs. Prior SEO merge [`e6726b28`](https://github.com/Arangarx/tutoring-notes/commit/e6726b28).
 
-**Last action:** WS4 tutor email allowlist pre-approve shipped on `feat/auth-ship-ready` [`08dbd9d0`](https://github.com/Arangarx/tutoring-notes/commit/08dbd9d0). `TutorEmailAllowlist` table, create-time APPROVED gate for credentials + Google, operator UI on `/admin/tutor-approvals`, jest + identity-e2e coverage. Not merged; awaiting independent verify.
+**Last action:** Independent Sonnet **APPROVE** of WS4 allowlist on `feat/auth-ship-ready` [`08dbd9d0`](https://github.com/Arangarx/tutoring-notes/commit/08dbd9d0); verifier fix [`e791db61`](https://github.com/Arangarx/tutoring-notes/commit/e791db61) (allowlist add uses local state, not `location.reload`). Wave WS0–WS4 independently verified. Not merged.
 
 **Previous:** WS2 complete + independently APPROVE on `feat/auth-ship-ready` [`113f7ec9`](https://github.com/Arangarx/tutoring-notes/commit/113f7ec9). Shared `isTwoFactorEnrollmentConfirmed` (EMAIL_OTP → `enrolledAt`, TOTP → backup codes); three-card chooser (email default, SMS disabled); email-enrolled tutors see manage not setup; manage email step-up uses existing `sendLoginEmailOtp`.
 
@@ -61,7 +61,7 @@
 
 **Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
 
-**In-flight:** `feat/auth-ship-ready` — WS0–WS3 independently APPROVE; **WS4 allowlist committed, independent verify pending.** `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
+**In-flight:** `feat/auth-ship-ready` — **WS0–WS4 independently APPROVE, code-complete, not merged.** `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
 **Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
 **Open Andrew human work:** [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — calendar callback URI + Calendar API + **one** verification submit when live. Platform SMTP (Resend + `usemynk.com` DNS + Vercel `SMTP_*`) after email chunks are coded. Later: **NEON-SCALE-TO-ZERO-REVISIT** once real lessons are regular.
 **Cleared:** Sign-In UI; #2 findability; #3 Google signup + reject/revoke; Calendar connect+stub; #4 email OTP; #5 native schedule CRUD; #6 security chunks + join denial; #7 ProductEvent tutor funnel.
