@@ -43,7 +43,7 @@
 
 **agenticPipeline:** Phase 1 **merged to agenticPipeline `master`** @ [`aa56225`](https://github.com/Arangarx/agenticPipeline/commit/aa56225) (change mode + fail-closed + TN template; Sonnet APPROVE after REJECT fixes). Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** `merge --no-ff origin/feat/auth-ship-ready` into `master` from the **master-ops** worktree (never check out `master` in the main checkout). Andrew 2026-09-15: **do not block this merge on `test:wb-sync`** — the reds are the pre-existing MASTER-CUT cluster (full list below). Then: Andrew leftovers in [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) (platform SMTP, Twilio, Sarah/Tyson allowlist, Privacy/Terms eyeball). Remaining #5 Google write + invite-link stay Andrew-blocked. **Do not reopen a recorder/replay fix episode as part of auth.**
+**Next action(s):** Auth wave **merged** to `master` [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Andrew leftovers: platform SMTP, Twilio env, Sarah/Tyson allowlist on `/admin/tutor-approvals`, Privacy/Terms eyeball — [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md). Remaining #5 Google write + invite-link stay Andrew-blocked. **Do not reopen a recorder/replay fix episode from the known `test:wb-sync` cluster** (table below; AUTH-SHIP-READY-2026-09-15).
 
 ---
 
@@ -51,9 +51,9 @@
 
 **🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).
 
-**Tip:** `master` after this replay — legal Calendar facade (`5038f794` replayed) + Sarah 2026-09-10 Discord/SMS docs. Prior SEO merge [`e6726b28`](https://github.com/Arangarx/tutoring-notes/commit/e6726b28).
+**Tip:** `master` @ [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) — tutor-auth ship-ready merged (`feat/auth-ship-ready`). Prior: legal Calendar facade + Sarah 2026-09-10 Discord/SMS docs.
 
-**Last action:** Andrew 2026-09-15: pre-existing `test:wb-sync` reds — **move on, do not re-triage**. Auth wave WS0–WS4 independently APPROVE on `feat/auth-ship-ready` (tip [`ecc8760f`](https://github.com/Arangarx/tutoring-notes/commit/ecc8760f)). Gates: `npx next build` exit 0; `test:regression` 149/149; `test:wb-sync` isolation **8 REAL-FAIL + 3 ENV-FLAKE** (same MASTER-CUT-2026-07-09 cluster; auth diff does not touch those specs or recorder/A/V/apply-path). Not yet merged — successor merges `--no-ff` from master-ops.
+**Last action:** `merge --no-ff feat/auth-ship-ready` → `master` [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Andrew 2026-09-15: pre-existing `test:wb-sync` reds — move on, do not re-triage (itemized below). WS0–WS4 independently APPROVE. Gates: `next build` + `test:regression` green; `test:wb-sync` isolation 8 REAL-FAIL + 3 ENV-FLAKE (MASTER-CUT cluster).
 
 **Previous:** WS2 complete + independently APPROVE on `feat/auth-ship-ready` [`113f7ec9`](https://github.com/Arangarx/tutoring-notes/commit/113f7ec9). Shared `isTwoFactorEnrollmentConfirmed` (EMAIL_OTP → `enrolledAt`, TOTP → backup codes); three-card chooser (email default, SMS disabled); email-enrolled tutors see manage not setup; manage email step-up uses existing `sendLoginEmailOtp`.
 
@@ -61,7 +61,7 @@
 
 **Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
 
-**In-flight:** `feat/auth-ship-ready` — WS0–WS4 independently APPROVE, **ready to merge**. Andrew 2026-09-15 waived blocking on the known `test:wb-sync` cluster (do not treat as auth regressions). `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
+**In-flight:** none for tutor-auth. `master` @ [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) includes ship-ready auth. Known `test:wb-sync` cluster remains red (do not re-triage). `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
 **Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
 **Open Andrew human work:** [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — calendar callback URI + Calendar API + **one** verification submit when live. Platform SMTP (Resend + `usemynk.com` DNS + Vercel `SMTP_*`) after email chunks are coded. Later: **NEON-SCALE-TO-ZERO-REVISIT** once real lessons are regular.
 **Cleared:** Sign-In UI; #2 findability; #3 Google signup + reject/revoke; Calendar connect+stub; #4 email OTP; #5 native schedule CRUD; #6 security chunks + join denial; #7 ProductEvent tutor funnel.

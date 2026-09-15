@@ -85,7 +85,7 @@ See [`docs/DEPLOY.md`](../DEPLOY.md). Tests inject the sender; do not wait on DN
 | #1 next | Calendar OAuth **connect + stub** | **DONE** — merged [`da93ab78`](https://github.com/Arangarx/tutoring-notes/commit/da93ab78). Add callback URI + enable Calendar API; **submit one bundled verification** when this is on prod/preview |
 | #2 | Student-detail Start / consent / claim findability | **DONE** — merged [`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5) |
 | #3 | Tutor signup / self-serve auth | **DONE** first chunk + REJECTED/revoke [`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111). Leftover: pagination, invite links. |
-| #4 | Email OTP 2FA + SMS + allowlist | **CODE DONE** on `feat/auth-ship-ready` (not merged at last refresh). Email confirm, platform mail, 2FA chooser, SMS fail-closed, tutor email allowlist. Your leftover: SMTP + Twilio env + add Sarah/Tyson in operator UI. |
+| #4 | Email OTP 2FA + SMS + allowlist | **MERGED** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Email confirm, platform mail, 2FA chooser, SMS fail-closed, tutor email allowlist. Your leftover: SMTP + Twilio env + add Sarah/Tyson in operator UI. |
 | #5 | Native schedule CRUD | **DONE** — merged [`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216). Google outbound write waits on your Console verification. |
 | #6 | Security MUST for strangers | Composer-sized holes **DONE** (origin pin, VERIFY-ACCT-1, test-route hard-404, SMOKE-PRIV-1). Leftovers: npm audit (blast radius), join-404 UX (intentional), Resend/legal-blocked. |
 | #7 | First-party instrumentation | **DONE** chunk 1 — merged [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4) (`ProductEvent` tutor funnel). Chunk 2 later (no PostHog). |
@@ -106,4 +106,4 @@ See [`docs/DEPLOY.md`](../DEPLOY.md). Tests inject the sender; do not wait on DN
 
 ## One-liner “where are we?”
 
-> Release track option B. Tutor-auth ship-ready **code-complete** on `feat/auth-ship-ready` (WS0–WS4 verified). Andrew 2026-09-15: do not block merge on the pre-existing `test:wb-sync` cluster (see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD). Your open work = platform SMTP + Twilio env + Sarah/Tyson allowlist + calendar verification + Privacy/Terms eyeball.
+> Release track option B. Tutor-auth ship-ready **merged** to `master` [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Andrew 2026-09-15: do not re-triage the pre-existing `test:wb-sync` cluster (see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD). Your open work = platform SMTP + Twilio env + Sarah/Tyson allowlist + calendar verification + Privacy/Terms eyeball.
