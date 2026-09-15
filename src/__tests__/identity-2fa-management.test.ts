@@ -33,11 +33,11 @@ describe("setup page — p1-reenroll-trap fix (BLOCKER: unconfirmed must not be 
     expect(fs.existsSync(setupPagePath)).toBe(true);
   });
 
-  it("uses backup codes count (isConfirmed) to determine enrollment completion", () => {
+  it("uses shared isTwoFactorEnrollmentConfirmed helper for enrollment completion", () => {
     // The old 'isEnrolled = !!admin?.twoFactor' pattern only checked row existence,
     // trapping users with unconfirmed (interrupted) enrollments at /verify.
+    expect(content).toContain("isTwoFactorEnrollmentConfirmed");
     expect(content).toContain("isConfirmed");
-    expect(content).toMatch(/_count.*backupCodes|backupCodes.*_count/i);
   });
 
   it("unconfirmed enrollment falls through to setup form (not redirected to verify)", () => {
@@ -89,16 +89,18 @@ describe("management page — /admin/settings/2fa/page.tsx", () => {
     expect(content).toContain('redirect("/admin/settings/2fa/verify")');
   });
 
-  it("uses backup codes count to determine enrollment confirmation (closes p1-reenroll-trap)", () => {
+  it("uses shared isTwoFactorEnrollmentConfirmed helper (closes p1-reenroll-trap + email oracle)", () => {
+    expect(content).toContain("isTwoFactorEnrollmentConfirmed");
     expect(content).toContain("isConfirmed");
-    expect(content).toMatch(/_count.*backupCodes|backupCodes.*_count/i);
+    expect(content).not.toMatch(/isConfirmed\s*=\s*\(twoFaRow\?\._count\?\.backupCodes/);
   });
 
   it("does NOT reference api.qrserver.com", () => {
     expect(content).not.toContain("api.qrserver.com");
   });
 
-  it("TwoFactorManageView receives enrolledAt, remainingBackupCodes, isAdmin, userId props", () => {
+  it("TwoFactorManageView receives method, enrolledAt, remainingBackupCodes, isAdmin, userId props", () => {
+    expect(content).toContain("method=");
     expect(content).toContain("enrolledAt=");
     expect(content).toContain("remainingBackupCodes=");
     expect(content).toContain("isAdmin=");
@@ -505,6 +507,12 @@ describe("BUG-FIX 2026-06-01: rotate and regen backup-code display requires expl
     expect(section).not.toContain("router.push");
     expect(section).not.toContain("router.refresh");
     expect(section).not.toContain("router.replace");
+  });
+
+  it("EMAIL_OTP manage step-up offers sendLoginEmailOtp (not authenticator-only copy)", () => {
+    expect(content).toContain("sendLoginEmailOtp");
+    expect(content).toContain('method === "EMAIL_OTP"');
+    expect(content).toContain("Send verification code");
   });
 
   it("rotating-done view has an explicit Done button that is the sole navigation trigger", () => {

@@ -4,7 +4,7 @@
  * - createAdminFromGoogle → WAITLISTED, null passwordHash, TUTOR role
  * - signup-intent token mint/validate
  * - signIn callback: provision with valid intent; reject without intent; login unchanged
- * - notifyOperatorsOfNewSignup on credentials + Google create (mocked sendMail)
+ * - notifyOperatorsOfNewSignup on credentials + Google create (mocked sendPlatformMail)
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -52,15 +52,26 @@ describe("signup-intent token", () => {
 // ---------------------------------------------------------------------------
 describe("createAdminFromGoogle", () => {
   const mockCreate = jest.fn();
+  const mockResolveSignupApproval = jest.fn();
 
   beforeEach(() => {
     jest.resetModules();
     mockCreate.mockReset();
+    mockResolveSignupApproval.mockReset();
+    mockResolveSignupApproval.mockResolvedValue({ status: "WAITLISTED" });
+    jest.doMock("@/lib/tutor-approval-scope", () => ({
+      resolveSignupApproval: mockResolveSignupApproval,
+    }));
     jest.doMock("@/lib/db", () => ({
       db: {
         adminUser: { create: mockCreate },
       },
     }));
+  });
+
+  afterEach(() => {
+    jest.dontMock("@/lib/db");
+    jest.dontMock("@/lib/tutor-approval-scope");
   });
 
   it("creates WAITLISTED TUTOR with null passwordHash", async () => {
@@ -77,6 +88,7 @@ describe("createAdminFromGoogle", () => {
     const { createAdminFromGoogle } = await import("@/lib/auth-db");
     await createAdminFromGoogle("pilot@gmail.com", "Pilot");
 
+    expect(mockResolveSignupApproval).toHaveBeenCalledWith("pilot@gmail.com");
     expect(mockCreate).toHaveBeenCalledWith({
       data: {
         email: "pilot@gmail.com",
@@ -85,7 +97,32 @@ describe("createAdminFromGoogle", () => {
         role: "TUTOR",
         isTestAccount: false,
         approvalStatus: "WAITLISTED",
+        emailVerifiedAt: expect.any(Date),
       },
+    });
+  });
+
+  it("creates APPROVED TUTOR when allowlisted", async () => {
+    mockResolveSignupApproval.mockResolvedValue({
+      status: "APPROVED",
+      approvedByAdminId: "operator-1",
+    });
+    mockCreate.mockResolvedValue({
+      id: "g-approved",
+      email: "pilot@gmail.com",
+      approvalStatus: "APPROVED",
+    });
+
+    const { createAdminFromGoogle } = await import("@/lib/auth-db");
+    await createAdminFromGoogle("pilot@gmail.com", "Pilot");
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        approvalStatus: "APPROVED",
+        approvedByAdminId: "operator-1",
+        approvedAt: expect.any(Date),
+        emailVerifiedAt: expect.any(Date),
+      }),
     });
   });
 });
@@ -101,9 +138,9 @@ describe("notifyOperatorsOfNewSignup", () => {
     process.env.NEXTAUTH_URL = "https://app.example.com";
   });
 
-  it("sends to OPERATOR_EMAILS ∪ ADMIN_EMAIL (fail-open on sendMail error)", async () => {
-    const sendMail = jest.fn().mockResolvedValue({ sent: false, error: "no smtp" });
-    jest.doMock("@/lib/email", () => ({ sendMail }));
+  it("sends to OPERATOR_EMAILS ∪ ADMIN_EMAIL (fail-open on sendPlatformMail error)", async () => {
+    const sendPlatformMail = jest.fn().mockResolvedValue({ sent: false, error: "no smtp" });
+    jest.doMock("@/lib/email", () => ({ sendPlatformMail }));
 
     const { notifyOperatorsOfNewSignup } = await import(
       "@/lib/notify-operator-new-signup"
@@ -114,8 +151,8 @@ describe("notifyOperatorsOfNewSignup", () => {
       method: "credentials",
     });
 
-    expect(sendMail).toHaveBeenCalledTimes(1);
-    const call = sendMail.mock.calls[0][0];
+    expect(sendPlatformMail).toHaveBeenCalledTimes(1);
+    const call = sendPlatformMail.mock.calls[0][0];
     expect(call.to).toContain("ops@example.com");
     expect(call.to).toContain("admin@example.com");
     expect(call.subject).toMatch(/WAITLISTED/i);
@@ -124,8 +161,8 @@ describe("notifyOperatorsOfNewSignup", () => {
   });
 
   it("labels Google method in notification body", async () => {
-    const sendMail = jest.fn().mockResolvedValue({ sent: true });
-    jest.doMock("@/lib/email", () => ({ sendMail }));
+    const sendPlatformMail = jest.fn().mockResolvedValue({ sent: true });
+    jest.doMock("@/lib/email", () => ({ sendPlatformMail }));
 
     const { notifyOperatorsOfNewSignup } = await import(
       "@/lib/notify-operator-new-signup"
@@ -135,15 +172,15 @@ describe("notifyOperatorsOfNewSignup", () => {
       method: "google",
     });
 
-    expect(sendMail.mock.calls[0][0].text).toMatch(/Google OAuth/i);
+    expect(sendPlatformMail.mock.calls[0][0].text).toMatch(/Google OAuth/i);
   });
 
   it("no-ops when operator set is empty", async () => {
     delete process.env.OPERATOR_EMAILS;
     delete process.env.ADMIN_EMAIL;
 
-    const sendMail = jest.fn();
-    jest.doMock("@/lib/email", () => ({ sendMail }));
+    const sendPlatformMail = jest.fn();
+    jest.doMock("@/lib/email", () => ({ sendPlatformMail }));
     jest.doMock("@/lib/env", () => ({
       env: {
         OPERATOR_EMAILS: undefined,
@@ -160,7 +197,7 @@ describe("notifyOperatorsOfNewSignup", () => {
       method: "credentials",
     });
 
-    expect(sendMail).not.toHaveBeenCalled();
+    expect(sendPlatformMail).not.toHaveBeenCalled();
   });
 });
 
@@ -364,6 +401,11 @@ describe("Google signIn — signup intent dual path", () => {
 // credentials signup action notifies operators
 // ---------------------------------------------------------------------------
 describe("signup server action — operator notification", () => {
+  afterEach(() => {
+    jest.dontMock("@/lib/db");
+    jest.resetModules();
+  });
+
   it("calls notifyOperatorsOfNewSignup after createAdmin", async () => {
     jest.resetModules();
 
@@ -377,6 +419,9 @@ describe("signup server action — operator notification", () => {
     });
     const logProductEvent = jest.fn().mockResolvedValue(undefined);
 
+    const sendTutorSignupVerifyEmail = jest.fn().mockResolvedValue({ sent: true, tokenId: "tok1" });
+    const getRequestBaseUrlSafeFromHeaders = jest.fn().mockResolvedValue("https://app.example.com");
+
     jest.doMock("@/lib/auth-db", () => ({
       createAdmin,
       getAdminByEmail,
@@ -389,6 +434,12 @@ describe("signup server action — operator notification", () => {
     }));
     jest.doMock("@/lib/observability/product-events", () => ({
       logProductEvent,
+    }));
+    jest.doMock("@/lib/admin-email-verify", () => ({
+      sendTutorSignupVerifyEmail,
+    }));
+    jest.doMock("@/lib/public-url", () => ({
+      getRequestBaseUrlSafeFromHeaders,
     }));
     jest.doMock("next/navigation", () => ({
       redirect: jest.fn(() => {
@@ -407,6 +458,11 @@ describe("signup server action — operator notification", () => {
     await expect(signup(null, form)).rejects.toThrow("REDIRECT");
 
     expect(createAdmin).toHaveBeenCalled();
+    expect(sendTutorSignupVerifyEmail).toHaveBeenCalledWith({
+      adminUserId: "u1",
+      email: "brand-new@example.com",
+      baseUrl: "https://app.example.com",
+    });
     expect(notify).toHaveBeenCalledWith({
       email: "brand-new@example.com",
       displayName: "Brand New",
@@ -417,6 +473,65 @@ describe("signup server action — operator notification", () => {
       adminUserId: "u1",
       metadata: { method: "credentials" },
     });
+  });
+
+  it("rolls back the AdminUser when confirm mail cannot be sent", async () => {
+    jest.resetModules();
+
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const createAdmin = jest.fn().mockResolvedValue({ id: "u-rollback" });
+    const deleteAdmin = jest.fn().mockResolvedValue({ id: "u-rollback" });
+    const findEmailRealmPresence = jest.fn().mockResolvedValue({
+      normalizedEmail: "rollback@example.com",
+      inAdmin: false,
+      inAccountHolder: false,
+    });
+    const logProductEvent = jest.fn().mockResolvedValue(undefined);
+    const sendTutorSignupVerifyEmail = jest.fn().mockResolvedValue({
+      sent: false,
+      error: "Platform SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS.",
+      tokenId: "tok-fail",
+    });
+
+    jest.doMock("@/lib/auth-db", () => ({
+      createAdmin,
+      getAdminByEmail: jest.fn(),
+    }));
+    jest.doMock("@/lib/db", () => ({
+      db: { adminUser: { delete: deleteAdmin } },
+    }));
+    jest.doMock("@/lib/cross-realm-email", () => ({
+      findEmailRealmPresence,
+    }));
+    jest.doMock("@/lib/notify-operator-new-signup", () => ({
+      notifyOperatorsOfNewSignup: notify,
+    }));
+    jest.doMock("@/lib/observability/product-events", () => ({
+      logProductEvent,
+    }));
+    jest.doMock("@/lib/admin-email-verify", () => ({
+      sendTutorSignupVerifyEmail,
+    }));
+    jest.doMock("@/lib/public-url", () => ({
+      getRequestBaseUrlSafeFromHeaders: jest.fn().mockResolvedValue("https://app.example.com"),
+    }));
+    const redirect = jest.fn(() => {
+      throw new Error("REDIRECT");
+    });
+    jest.doMock("next/navigation", () => ({ redirect }));
+
+    const { signup } = await import("@/app/signup/actions");
+    const form = new FormData();
+    form.set("email", "rollback@example.com");
+    form.set("password", "StrongPassphrase!99");
+    form.set("passwordConfirm", "StrongPassphrase!99");
+
+    const result = await signup(null, form);
+    expect(result?.error).toMatch(/couldn't send a confirmation email|SMTP is not configured/i);
+    expect(deleteAdmin).toHaveBeenCalledWith({ where: { id: "u-rollback" } });
+    expect(notify).not.toHaveBeenCalled();
+    expect(logProductEvent).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
   });
 });
 
@@ -449,10 +564,12 @@ describe("createAdminFromGoogle — DB integration", () => {
       expect(row.passwordHash).toBeNull();
       expect(row.role).toBe("TUTOR");
       expect(row.isTestAccount).toBe(false);
+      expect(row.emailVerifiedAt).toBeInstanceOf(Date);
 
       const fetched = await prisma.adminUser.findUnique({ where: { email } });
       expect(fetched?.approvalStatus).toBe("WAITLISTED");
       expect(fetched?.passwordHash).toBeNull();
+      expect(fetched?.emailVerifiedAt).toBeInstanceOf(Date);
     } finally {
       await prisma.adminUser.deleteMany({ where: { email } });
       await prisma.$disconnect();

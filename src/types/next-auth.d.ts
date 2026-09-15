@@ -45,6 +45,12 @@ declare module "next-auth" {
        * Refreshed via the role-refresh interval (same cadence as `role`).
        */
       approvalStatus?: TutorApprovalStatus;
+      /**
+       * Tutor confirm-link (inbox ownership). Independent of 2FA.
+       * True when AdminUser.emailVerifiedAt is set, or env-only sub=admin.
+       * isTestAccount does NOT imply this — seed the column.
+       */
+      emailVerified?: boolean;
     };
   }
 }
@@ -69,5 +75,6 @@ declare module "next-auth/jwt" {
      * Refreshed at the same interval as `role` via the role-refresh block in auth-options.ts.
      */
     approvalStatus?: TutorApprovalStatus;
+    emailVerified?: boolean;
   }
 }

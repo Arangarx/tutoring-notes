@@ -56,6 +56,7 @@ import {
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { generateRawToken, hashToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
 import { NextRequest } from "next/server";
+import { setPlatformMailSenderForTests } from "@/lib/email";
 
 // Import route handlers directly for unit-style integration tests
 import { POST as revokeOneHandler } from "@/app/api/learner-profiles/[id]/device-sessions/[sessionId]/revoke/route";
@@ -79,9 +80,11 @@ const TEST_HMAC_SECRET_LEARNER = "test-learner-session-secret-minimum-32-bytes";
 beforeAll(async () => {
   process.env.AH_SESSION_HMAC_SECRET = TEST_HMAC_SECRET_AH;
   process.env.LEARNER_SESSION_HMAC_SECRET = TEST_HMAC_SECRET_LEARNER;
+  setPlatformMailSenderForTests(async () => ({ sent: true }));
 });
 
 afterAll(async () => {
+  setPlatformMailSenderForTests(null);
   await db.$disconnect();
 });
 

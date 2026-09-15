@@ -315,6 +315,24 @@
 - **Assumption**: SMTP server is optional. When unset (`SMTP_HOST` empty), emails are skipped (no error, no crash). Per `src/lib/env.ts:isEmailConfigured`.
 - **Migration check**: if email becomes mandatory for any feature (e.g. dunning in Phase 10), `isEmailConfigured` check needs to fail-loud not fail-silent.
 
+### 4.5 Twilio Programmable SMS (SMS 2FA)
+
+- **Assumption**: Twilio Programmable SMS delivers one-time verification codes for tutor/admin **SMS-channel two-factor authentication** — an alternative to email OTP and TOTP authenticator enrollment at login, step-up, and change-method flows.
+- **Integration style**: raw HTTP `fetch` to the Twilio REST API (`POST https://api.twilio.com/2010-04-01/Accounts/{SID}/Messages.json`) with Basic Auth — **not** the `twilio` npm SDK (deliberate dependency-avoidance choice). See `src/lib/sms.ts`.
+- **Required env vars** (all three must be set; any missing → fail-closed):
+  - `TWILIO_ACCOUNT_SID`
+  - `TWILIO_AUTH_TOKEN`
+  - `TWILIO_FROM_NUMBER` — E.164 sender number provisioned in Twilio
+- **Fail-closed behavior**: when any env var is unset, `sendSms()` returns `{ sent: false, error }` and SMS 2FA is **hidden** from enrollment and change-method UI (`twilioEnvConfigured()` in `src/lib/sms.ts`). No silent miss; no throw.
+- **Test seam**: CI and Playwright never call the real Twilio API. Tests inject a sender via `setSmsSenderForTests()` in `src/lib/sms.ts` or seed OTP challenges directly in the test DB.
+- **Phone format**: US-only E.164 (`+1` + 10 digits) enforced client- and server-side via `normalizeUsPhoneToE164()` / `isValidUsE164()` — no international numbers.
+- **Logging**: plaintext OTP codes and full E.164 numbers must never appear in logs; use `maskE164()` for any log/UI surface.
+- **What breaks if violated**:
+  - Missing or partial env: SMS 2FA option invisible; tutors on SMS method cannot receive codes.
+  - Invalid `TWILIO_FROM_NUMBER`: Twilio API rejects sends; enrollment/verify surfaces generic failure.
+  - International numbers submitted: rejected before send (validation returns null / false).
+- **Migration check**: to move off Twilio, replace `sendViaTwilioHttp()` in `src/lib/sms.ts` with an equivalent HTTP sender (or SDK) for the new provider; update `TWILIO_*` env vars to the new provider's credentials; re-validate US E.164 assumptions if the new provider supports international; update Privacy/Terms subprocessor disclosures and `docs/LEGAL-SYNC.md`; confirm `setSmsSenderForTests` seam still works for CI.
+
 ---
 
 ## 5. Networking, security, real-time

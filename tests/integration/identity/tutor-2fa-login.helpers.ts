@@ -93,12 +93,14 @@ export async function seedEnrolled2faTutor(): Promise<{
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });
@@ -152,12 +154,14 @@ export async function seedTotpTutorWithEmailLoginChallenge(): Promise<{
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });
@@ -214,12 +218,14 @@ export async function seedUnenrolled2faTutor(): Promise<string> {
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true },
     });

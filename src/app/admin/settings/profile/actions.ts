@@ -135,7 +135,14 @@ export async function sendPasswordResetEmail(): Promise<{ ok: boolean; message?:
     };
   }
 
-  await requestPasswordReset(email);
+  const { emailed } = await requestPasswordReset(email);
+  if (!emailed) {
+    return {
+      ok: false,
+      error:
+        "We couldn't send a reset email. Check that platform email is configured, or try again later.",
+    };
+  }
   return {
     ok: true,
     message:

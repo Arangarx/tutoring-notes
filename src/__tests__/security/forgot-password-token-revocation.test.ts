@@ -31,7 +31,7 @@ jest.mock("@/lib/db", () => ({
 }));
 
 jest.mock("@/lib/account-holder-email", () => ({
-  stubSendAccountHolderEmail: (...args: unknown[]) => mockStubSendEmail(...args),
+  sendAccountHolderEmail: (...args: unknown[]) => mockStubSendEmail(...args),
 }));
 
 jest.mock("@/lib/public-url", () => ({
@@ -62,7 +62,7 @@ describe("POST /api/auth/account-holder/forgot-password — token revocation", (
     jest.clearAllMocks();
     mockDeleteMany.mockResolvedValue({ count: 2 });
     mockCreate.mockResolvedValue({ id: "tok-001" });
-    mockStubSendEmail.mockResolvedValue(undefined);
+    mockStubSendEmail.mockResolvedValue({ sent: true });
   });
 
   test("deleteMany revokes existing PASSWORD_RESET tokens before creating a new one", async () => {

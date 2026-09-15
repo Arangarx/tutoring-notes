@@ -43,7 +43,7 @@
 
 **agenticPipeline:** Phase 1 **merged to agenticPipeline `master`** @ [`aa56225`](https://github.com/Arangarx/agenticPipeline/commit/aa56225) (change mode + fail-closed + TN template; Sonnet APPROVE after REJECT fixes). Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** Cut `feat/auth-ship-ready` from `origin/master` (do not check out `master` in the main checkout — this ops worktree holds it). Start workstream 0 (`sendPlatformMail`). Plan: `tutor_auth_ship-ready_0cc151a0`. Remaining #5 Google write + invite-link product call stay Andrew-blocked. Checklist → [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md).
+**Next action(s):** `merge --no-ff origin/feat/auth-ship-ready` into `master` from the **master-ops** worktree (never check out `master` in the main checkout). Andrew 2026-09-15: **do not block this merge on `test:wb-sync`** — the reds are the pre-existing MASTER-CUT cluster (full list below). Then: Andrew leftovers in [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) (platform SMTP, Twilio, Sarah/Tyson allowlist, Privacy/Terms eyeball). Remaining #5 Google write + invite-link stay Andrew-blocked. **Do not reopen a recorder/replay fix episode as part of auth.**
 
 ---
 
@@ -53,20 +53,41 @@
 
 **Tip:** `master` after this replay — legal Calendar facade (`5038f794` replayed) + Sarah 2026-09-10 Discord/SMS docs. Prior SEO merge [`e6726b28`](https://github.com/Arangarx/tutoring-notes/commit/e6726b28).
 
-**Last action:** Reviewed + hardened the tutor-auth ship-ready plan. Caught that an `emailVerifiedAt` middleware gate would break **every** Playwright project via `integration-setup` (`playwright@test.local` is a real non-test APPROVED row; `waitForURL` `startsWith("/admin")` would silently pass a verify redirect). Gate is now sequenced **last**, behind a seed/JWT-claim audit. Sarah 2026-09-10 Discord captured (prefers SMS). Replayed stranded legal `5038f794` onto master (keep SEO `productionCanonicalMetadata` + Sep 10 Calendar/Limited Use copy). Parked Sarah docs from `6d8445d5` (STATE hunk dropped — it would have reverted the Neon cost-pass Last action).
+**Last action:** Andrew 2026-09-15: pre-existing `test:wb-sync` reds — **move on, do not re-triage**. Auth wave WS0–WS4 independently APPROVE on `feat/auth-ship-ready` (tip [`ecc8760f`](https://github.com/Arangarx/tutoring-notes/commit/ecc8760f)). Gates: `npx next build` exit 0; `test:regression` 149/149; `test:wb-sync` isolation **8 REAL-FAIL + 3 ENV-FLAKE** (same MASTER-CUT-2026-07-09 cluster; auth diff does not touch those specs or recorder/A/V/apply-path). Not yet merged — successor merges `--no-ff` from master-ops.
+
+**Previous:** WS2 complete + independently APPROVE on `feat/auth-ship-ready` [`113f7ec9`](https://github.com/Arangarx/tutoring-notes/commit/113f7ec9). Shared `isTwoFactorEnrollmentConfirmed` (EMAIL_OTP → `enrolledAt`, TOTP → backup codes); three-card chooser (email default, SMS disabled); email-enrolled tutors see manage not setup; manage email step-up uses existing `sendLoginEmailOtp`.
 
 **Neon cost pass (2026-08-28, still in effect):** scale-to-zero enabled (`suspend_timeout_seconds=300`); transcribe-sweep cron `*/15 * * * *` (layer 1 + end-session still cover live work). Backlogged **TXC-SWEEP-METRICS** + **NEON-SCALE-TO-ZERO-REVISIT**.
 
 **Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
 
-**In-flight:** none. `feat/join-denial-not-my-session` shipped in August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24); after this replay it is empty and deletable. Auth ship-ready wave starts next on `feat/auth-ship-ready`.
+**In-flight:** `feat/auth-ship-ready` — WS0–WS4 independently APPROVE, **ready to merge**. Andrew 2026-09-15 waived blocking on the known `test:wb-sync` cluster (do not treat as auth regressions). `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
 **Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
 **Open Andrew human work:** [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — calendar callback URI + Calendar API + **one** verification submit when live. Platform SMTP (Resend + `usemynk.com` DNS + Vercel `SMTP_*`) after email chunks are coded. Later: **NEON-SCALE-TO-ZERO-REVISIT** once real lessons are regular.
 **Cleared:** Sign-In UI; #2 findability; #3 Google signup + reject/revoke; Calendar connect+stub; #4 email OTP; #5 native schedule CRUD; #6 security chunks + join denial; #7 ProductEvent tutor funnel.
 
 **Durable decisions (2026-07-10 + 2026-08-14):** Calendar verification = **one bundled round** — connect+stub ships **before** submit so scopes are in that one review; full two-way sync later does **not** trigger a second verify. Sign-In/Sign-Up Google stay `openid email profile` (never calendar). Apple Calendar = CalDAV/defer. Skip Facebook. Microsoft optional. Eyeball: [`docs/handoff/DEDUPE-EYEBALL-LIST.md`](DEDUPE-EYEBALL-LIST.md).
 
-**Waive record:** BACKLOG **MASTER-CUT-2026-07-09**. Green at cut: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE.
+**Waive record:**
+- BACKLOG **MASTER-CUT-2026-07-09** — Andrew waived red `test:wb-sync` for Sarah delivery. Green: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE.
+- **AUTH-SHIP-READY-2026-09-15** — Andrew: same cluster is pre-existing; **move on; do not re-triage as this branch.** Green for this wave: `next build` + `test:regression`. `test:wb-sync` still red (itemized below). Does **not** authorize skipping `test:wb-sync` on unrelated future branches.
+
+### `test:wb-sync` reds successor MUST already know (2026-09-12 run on `feat/auth-ship-ready`)
+
+Do **not** start a recorder/replay investigation from these. Auth did not touch the specs. Mix of leftover product bugs vs harness (Andrew asked 2026-09-12; classified then):
+
+**8 REAL-FAIL** (same specs as MASTER-CUT-2026-07-09 #1, #3–9):
+| Spec | Failure | Class |
+|------|---------|--------|
+| `recording-end-to-end` — replay auto-starts from position 0 | `currentTime(0)` near end; duration ~0.3s | **Product** — SMOKE-UX-1 / WB-REPLAY-REOPEN-START-AT-0 |
+| `wb-replay-scrub-seek` ×3 | scrub/seek not at independent target ms | **Product** — Replay scrub drag |
+| `view-whiteboard-new-replay` | parent share View whiteboard | **Harness** — strict-mode locator |
+| `wb-cancel-pending-session` | cancel A → copy link still A | **Harness** — Andrew smoke PASS |
+| `wb-tab-kill-audio-durability` ×2 | pre-kill tutor:mic segments `[]` (need ≥2) | **Harness** — VAD/outbox never armed |
+
+**3 ENV-FLAKE:** `wb-wave5-polish` item 19 (portrait topbar) + item 22 (narrow top bar) — **not** on the July ENV list; `recording-resilience` reopen rows (July REAL-FAIL #2, isolated-green this run).
+
+**Also do not “fix” as auth:** identity-e2e known-unrelated (BACKLOG §9) — claim-setup parent, erasure 404 vs 200, stale “Use authenticator app instead” (WS2 chooser predates WS3), operator reject alertdialog flake.
 
 **Evening smoke final:**
 | Item | Result |

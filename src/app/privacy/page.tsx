@@ -12,6 +12,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Product-specific retention + inventory copy updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  * Google Calendar connect section added 2026-08-14 (honest stub — no sync claim).
  * Umbrella Calendar + Limited Use sync 2026-09-10 (OAuth review).
+ * SMS 2FA (Twilio) product-specific disclosure 2026-09-11.
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 10, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 11, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -69,6 +70,7 @@ export default function PrivacyPage() {
             <h2 className="heading m-0 text-lg font-normal">What data we collect</h2>
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
               <li><strong>Account information:</strong> email address, hashed password, and optional display name when you create a tutor account.</li>
+              <li><strong>Optional phone number</strong> (tutor/admin accounts only, collected only if you enable two-factor authentication via text message — never required).</li>
               <li><strong>Session notes:</strong> student names, session dates, topics, homework, assessment, plan, and links you enter.</li>
               <li><strong>Session audio recordings</strong> when you use the Record or Upload feature (stored in Vercel Blob — see below).</li>
               <li><strong>Whiteboard session data:</strong> timestamped stroke logs, optional PDF / image inserts, and a session snapshot used for the parent replay surface.</li>
@@ -288,6 +290,7 @@ export default function PrivacyPage() {
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
               <li><strong>Encryption in transit.</strong> All connections to the application use HTTPS (TLS).</li>
               <li><strong>Password storage.</strong> Tutor account passwords are hashed with bcrypt before storage; raw passwords are never written to logs or the database.</li>
+              <li><strong>Two-factor authentication.</strong> Tutors and admins may use email one-time codes or an authenticator app for two-factor authentication. <strong>When SMS two-factor is enabled</strong>, we send codes via <strong>Twilio</strong> (a third-party SMS provider) to the US phone number the tutor confirmed. Twilio does not receive student session data.</li>
               <li><strong>Hosting and data stores.</strong> We rely on Vercel and Neon&apos;s protections for servers, databases, and object storage (access controls, network isolation, and encryption at rest where the vendor provides it by default for the tiers we use).</li>
               <li><strong>Authentication and access.</strong> Every tutor request requires sign-in; application logic enforces ownership boundaries so a tutor only sees their own students and sessions.</li>
               <li><strong>Secrets and OAuth tokens.</strong> API keys, client secrets, and OAuth refresh tokens are kept in server-side configuration or secure storage — not embedded in web pages or public repositories.</li>

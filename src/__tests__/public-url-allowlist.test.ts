@@ -230,6 +230,7 @@ describe("getRequestBaseUrlSafe — host reflection + injection guard", () => {
 
 jest.mock("@/lib/db", () => ({
   db: {
+    adminUser: { findUnique: jest.fn() },
     accountHolder: { findUnique: jest.fn(), create: jest.fn() },
     learnerProfile: { create: jest.fn() },
     accountHolderEmailToken: { create: jest.fn() },
@@ -237,7 +238,8 @@ jest.mock("@/lib/db", () => ({
 }));
 
 jest.mock("@/lib/account-holder-email", () => ({
-  stubSendAccountHolderEmail: jest.fn(),
+  sendAccountHolderSignupVerifyEmail: jest.fn(),
+  sendAccountHolderEmail: jest.fn(),
 }));
 
 jest.mock("@/lib/account-holder-auth", () => ({
@@ -251,12 +253,12 @@ jest.mock("@/lib/crypto/session-tokens", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { stubSendAccountHolderEmail } from "@/lib/account-holder-email";
+import { sendAccountHolderSignupVerifyEmail } from "@/lib/account-holder-email";
 import { POST as signupPOST } from "@/app/api/auth/account-holder/signup/route";
 
 const mockDb = db as jest.Mocked<typeof db>;
-const mockEmail = stubSendAccountHolderEmail as jest.MockedFunction<
-  typeof stubSendAccountHolderEmail
+const mockSignupVerifyEmail = sendAccountHolderSignupVerifyEmail as jest.MockedFunction<
+  typeof sendAccountHolderSignupVerifyEmail
 >;
 
 function makeSignupRequest(
@@ -274,14 +276,14 @@ function makeSignupRequest(
 describe("Signup route — injection guard: forged Host does not appear in verify URL", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (mockDb.adminUser.findUnique as jest.Mock).mockResolvedValue(null);
     (mockDb.accountHolder.findUnique as jest.Mock).mockResolvedValue(null);
     (mockDb.accountHolder.create as jest.Mock).mockResolvedValue({
       id: "ah-new-001",
       email: "parent@example.com",
       isSelfLearner: false,
     });
-    (mockDb.accountHolderEmailToken.create as jest.Mock).mockResolvedValue({});
-    mockEmail.mockResolvedValue({ sent: true });
+    mockSignupVerifyEmail.mockResolvedValue({ sent: true, tokenId: "tok-test" });
   });
 
   it("INJECTION GUARD: verify link must NOT contain evil.com when Host is forged", async () => {
@@ -299,13 +301,9 @@ describe("Signup route — injection guard: forged Host does not appear in verif
 
     await signupPOST(req);
 
-    expect(mockEmail).toHaveBeenCalledTimes(1);
-    const callArgs = mockEmail.mock.calls[0][0];
-    // Primary security criterion: attacker host must never appear in the sent email
-    expect(callArgs.actionUrl).not.toContain("evil.com");
-    expect(callArgs.text).not.toContain("evil.com");
-    // The verify link must still be a valid URL pointing to /verify-email
-    expect(callArgs.actionUrl).toContain("/verify-email");
+    expect(mockSignupVerifyEmail).toHaveBeenCalledTimes(1);
+    const callArgs = mockSignupVerifyEmail.mock.calls[0][0];
+    expect(callArgs.baseUrl).not.toContain("evil.com");
   });
 
   it("verify link uses request host when host is allowlisted (Vercel branch alias)", async () => {
@@ -325,10 +323,9 @@ describe("Signup route — injection guard: forged Host does not appear in verif
 
     await signupPOST(req);
 
-    expect(mockEmail).toHaveBeenCalledTimes(1);
-    const callArgs = mockEmail.mock.calls[0][0];
-    expect(callArgs.actionUrl).toContain(branchAlias);
-    expect(callArgs.actionUrl).toContain("/verify-email");
+    expect(mockSignupVerifyEmail).toHaveBeenCalledTimes(1);
+    const callArgs = mockSignupVerifyEmail.mock.calls[0][0];
+    expect(callArgs.baseUrl).toContain(branchAlias);
   });
 
   it("verify link uses request host for localhost dev signup", async () => {
@@ -346,9 +343,8 @@ describe("Signup route — injection guard: forged Host does not appear in verif
 
     await signupPOST(req);
 
-    expect(mockEmail).toHaveBeenCalledTimes(1);
-    const callArgs = mockEmail.mock.calls[0][0];
-    expect(callArgs.actionUrl).toContain("http://localhost:3000");
-    expect(callArgs.actionUrl).toContain("/verify-email");
+    expect(mockSignupVerifyEmail).toHaveBeenCalledTimes(1);
+    const callArgs = mockSignupVerifyEmail.mock.calls[0][0];
+    expect(callArgs.baseUrl).toContain("http://localhost:3000");
   });
 });

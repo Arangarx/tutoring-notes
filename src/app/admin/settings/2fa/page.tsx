@@ -31,6 +31,8 @@ import { db } from "@/lib/db";
 import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { SubNav } from "@/components/SubNav";
+import { isTwoFactorEnrollmentConfirmed, isSms2faEnrollmentAvailable } from "@/lib/two-factor-enrollment";
+import { maskE164 } from "@/lib/sms";
 import { TwoFactorSetupForm } from "./setup/TwoFactorSetupForm";
 import { TwoFactorManageView } from "./TwoFactorManageView";
 
@@ -44,7 +46,13 @@ export default async function TwoFactorManagePage() {
   if (session.user.isTestAccount) redirect("/admin");
 
   // Determine enrollment state via DB.
-  let twoFaRow: { id: string; enrolledAt: Date | null; _count: { backupCodes: number } } | null = null;
+  let twoFaRow: {
+    id: string;
+    method: string;
+    enrolledAt: Date | null;
+    phoneE164: string | null;
+    _count: { backupCodes: number };
+  } | null = null;
   let remainingBackupCodes = 0;
 
   if (session.user.id) {
@@ -58,7 +66,13 @@ export default async function TwoFactorManagePage() {
     });
     twoFaRow = admin?.twoFactor ?? null;
 
-    const isConfirmed = (twoFaRow?._count?.backupCodes ?? 0) > 0;
+    const isConfirmed = twoFaRow
+      ? isTwoFactorEnrollmentConfirmed({
+          method: twoFaRow.method,
+          enrolledAt: twoFaRow.enrolledAt,
+          backupCodeCount: twoFaRow._count.backupCodes,
+        })
+      : false;
 
     if (twoFaRow && isConfirmed) {
       // Confirmed enrollment — check session verification state.
@@ -83,7 +97,7 @@ export default async function TwoFactorManagePage() {
     return (
       <PageShell realm="admin"
         title="Set up Two-Factor Authentication"
-        description="Protect your account with a one-time code from an authenticator app."
+        description="Protect your account with a one-time code — emailed by default, or use an authenticator app."
         eyebrow={
           <Link
             href="/admin/settings"
@@ -95,8 +109,8 @@ export default async function TwoFactorManagePage() {
         sidebar={<SubNav realm="admin-settings" />}
         sidebarWidth="narrow"
       >
-          <SectionCard realm="admin" title="Authenticator setup">
-            <TwoFactorSetupForm />
+          <SectionCard realm="admin" title="Choose your verification method">
+            <TwoFactorSetupForm smsEnrollmentAvailable={isSms2faEnrollmentAvailable()} />
           </SectionCard>
       </PageShell>
     );
@@ -121,10 +135,13 @@ export default async function TwoFactorManagePage() {
     >
         <SectionCard realm="admin" title="Authentication status">
           <TwoFactorManageView
+            method={twoFaRow.method}
             enrolledAt={(twoFaRow.enrolledAt ?? new Date(0)).toISOString()}
             remainingBackupCodes={remainingBackupCodes}
             isAdmin={isAdmin}
             userId={session.user.id ?? ""}
+            smsEnrollmentAvailable={isSms2faEnrollmentAvailable()}
+            maskedPhone={twoFaRow.phoneE164 ? maskE164(twoFaRow.phoneE164) : undefined}
           />
         </SectionCard>
     </PageShell>

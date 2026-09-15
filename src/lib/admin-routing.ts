@@ -107,3 +107,45 @@ export function is2faExemptAdminPath(pathname: string): boolean {
     pathname.startsWith("/admin/pending-approval/")
   );
 }
+
+/**
+ * Paths exempt from the tutor email-verify gate.
+ *
+ * Precedence (when the middleware gate is on): approval → email-verify → 2FA.
+ * /admin/pending-approval must be exempt from all three so WAITLISTED users
+ * cannot ping-pong (W1/TFA1, now 3-way). The confirm page lives outside /admin
+ * (`/verify-tutor-email`, `/verify-email`) so `waitForURL(/admin…)` cannot
+ * silently pass a verify redirect.
+ */
+export function isEmailVerifyExemptAdminPath(pathname: string): boolean {
+  return (
+    pathname === "/admin/pending-approval" ||
+    pathname.startsWith("/admin/pending-approval/") ||
+    pathname.startsWith("/api/auth/")
+  );
+}
+
+/** JWT fields the email-verify middleware gate reads. */
+export type EmailVerifyGateToken = {
+  sub?: string;
+  emailVerified?: boolean;
+  isImpersonating?: boolean;
+};
+
+/**
+ * Whether /admin traffic should bounce to /verify-tutor-email.
+ *
+ * Precedence is enforced by the caller (approval gate runs first).
+ * Missing `emailVerified` is grandfathered (cookie minted before the claim);
+ * only an explicit `false` redirects. Env-only `sub=admin` and impersonation
+ * are exempt. `isTestAccount` is NOT an exemption — seed `emailVerifiedAt`.
+ */
+export function shouldRedirectToTutorEmailVerify(
+  pathname: string,
+  token: EmailVerifyGateToken
+): boolean {
+  if (isEmailVerifyExemptAdminPath(pathname)) return false;
+  if (token.sub === "admin") return false;
+  if (token.isImpersonating === true) return false;
+  return token.emailVerified === false;
+}

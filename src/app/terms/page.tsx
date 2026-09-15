@@ -11,6 +11,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-09-10.
  * Product-specific COPPA cross-reference updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  * Google Calendar connect section added 2026-08-14 (honest stub — no sync claim).
+ * Twilio (SMS 2FA) added to third-party services list 2026-09-11.
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
  * the CANONICAL legal source for eligibility / acceptable use /
@@ -39,7 +40,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalDocumentShell title="Terms of Use" lastUpdated="September 10, 2026">
+    <LegalDocumentShell title="Terms of Use" lastUpdated="September 11, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           These terms govern your use of <strong>Tutoring Notes</strong>, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
@@ -126,7 +127,8 @@ export default function TermsPage() {
             <p style={{ margin: "8px 0 0" }}>
               The service relies on third parties (for example hosting, database, object
               storage, Google OAuth, Gmail, Google Calendar, OpenAI for transcription and
-              note generation, and email delivery). Your use of those features is also
+              note generation, email delivery, and Twilio for optional SMS two-factor
+              authentication code delivery). Your use of those features is also
               subject to the third party&apos;s terms and policies. We are not responsible
               for outages or changes caused solely by third-party platforms. Google
               Calendar connect stores a token before event sync is live; see Google

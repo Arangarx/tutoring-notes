@@ -159,6 +159,7 @@ export async function mintImpersonationSession(opts: {
       impersonationLogId: opts.impersonationLogId,
       // Impersonation target is always TUTOR — test accounts are TUTOR by default.
       role: opts.targetRole ?? "TUTOR",
+      emailVerified: true,
     },
     secret: env.NEXTAUTH_SECRET,
     maxAge: SESSION_MAX_AGE_S,
@@ -204,6 +205,7 @@ export async function mintAdminSession(opts: {
       // twoFactorVerified: invariant — any admin who started impersonation
       // necessarily had twoFactorVerified=true (middleware gate proof above).
       twoFactorVerified: true,
+      emailVerified: true,
     },
     secret: env.NEXTAUTH_SECRET,
     maxAge: SESSION_MAX_AGE_S,

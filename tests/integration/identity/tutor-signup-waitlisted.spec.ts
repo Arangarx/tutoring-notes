@@ -26,11 +26,13 @@ async function seedWaitlistedTutor(email: string, password: string): Promise<voi
         role: "TUTOR",
         approvalStatus: "WAITLISTED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
         approvalStatus: "WAITLISTED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
     });
   } finally {
@@ -52,6 +54,7 @@ async function seedRejectedTutor(email: string, password: string): Promise<void>
         role: "TUTOR",
         approvalStatus: "REJECTED",
         isTestAccount: false,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         passwordHash,
@@ -96,10 +99,8 @@ test.describe("P1-ID-SIGNUP — tutor signup WAITLISTED gate", () => {
     await page.locator("#signup-password-confirm").fill(password);
     await page.getByRole("button", { name: /create account/i }).click();
 
-    await page.waitForURL(/\/login\?registered=1/, { timeout: 30_000 });
-    await expect(
-      page.getByText(/account created/i)
-    ).toBeVisible();
+    await page.waitForURL(/\/verify-tutor-email/, { timeout: 30_000 });
+    await expect(page.getByTestId("tutor-verify-email-form")).toBeVisible();
 
     await loginTutorWithPassword(page, { email, password });
 

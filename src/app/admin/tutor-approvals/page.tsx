@@ -1,6 +1,7 @@
 import { requireOperator } from "@/lib/operator";
 import {
   listApprovedTutors,
+  listTutorEmailAllowlist,
   listWaitlistedTutors,
 } from "@/lib/tutor-approval-scope";
 import { PageShell } from "@/components/PageShell";
@@ -10,6 +11,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { TutorWaitlistActions } from "./TutorWaitlistActions";
 import { RevokeTutorAccessButton } from "./RevokeTutorAccessButton";
+import { TutorAllowlistSection } from "./TutorAllowlistSection";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +51,10 @@ function TutorApprovalListItem({
 
 export default async function TutorApprovalsPage() {
   await requireOperator();
-  const [waitlisted, approved] = await Promise.all([
+  const [waitlisted, approved, allowlist] = await Promise.all([
     listWaitlistedTutors(),
     listApprovedTutors(),
+    listTutorEmailAllowlist(),
   ]);
 
   return (
@@ -65,6 +68,15 @@ export default async function TutorApprovalsPage() {
         </Button>
       }
     >
+      <SectionCard
+        realm="admin"
+        title="Pre-approved emails"
+        description="Signups from these addresses skip the waitlist. Tutors still confirm email (unless Google) and set up 2FA."
+        data-testid="tutor-allowlist-section"
+      >
+        <TutorAllowlistSection initialEntries={allowlist} />
+      </SectionCard>
+
       <SectionCard
         realm="admin"
         title="Pending approval"

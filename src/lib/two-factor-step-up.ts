@@ -22,6 +22,7 @@ import { decryptTotpSecret } from "@/lib/crypto/totp-secret";
 import { redeemBackupCode } from "@/lib/two-factor-db";
 import { check2faVerifyRateLimit } from "@/lib/auth-rate-limit";
 import { verifyEmailOtpChallenge } from "@/lib/email-otp-challenge";
+import { verifyOtpChallenge } from "@/lib/otp-challenge";
 
 const APP_ISSUER = "Mynk";
 const TOTP_DIGITS = 6;
@@ -75,6 +76,27 @@ export async function verifyTotpStepUp(
     }
     console.log(
       `[tfa] tfa=${row.id} adminUserId=${adminUserId} action=step-up-success type=email-otp`
+    );
+    return { ok: true };
+  }
+
+  if (row.method === "SMS_OTP") {
+    // Step-up matches channel as well as purpose (SMS LOGIN challenge only) — same
+    // rate-limit bucket as verifyTotpStepUp's own check2faVerifyRateLimit above.
+    const verified = await verifyOtpChallenge({
+      adminUserId,
+      code: input,
+      purpose: "LOGIN",
+      channel: "SMS",
+    });
+    if (!verified.ok) {
+      console.log(
+        `[tfa] tfa=${row.id} adminUserId=${adminUserId} action=step-up-fail type=sms-otp`
+      );
+      return verified;
+    }
+    console.log(
+      `[tfa] tfa=${row.id} adminUserId=${adminUserId} action=step-up-success type=sms-otp`
     );
     return { ok: true };
   }

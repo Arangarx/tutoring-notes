@@ -9,7 +9,7 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
 1. **External Google validation** — Sign-In UI + Calendar scopes / Console prep + hybrid verification (long lead times). Detail below (§ Priority #1).
 2. **Student-detail Start / consent / claim findability (P0)** — **DONE** 2026-08-14 (`f08d56b5`, verified). Top `UnclaimedParentClaimBanner` + `SessionStartBlockedCallout`. Optional leftover: flag-off Playwright, mobile viewport, desktop double mint button.
 3. **Tutor signup / self-serve auth** — first chunk + REJECTED/revoke **DONE** ([`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111)). Pagination **deferred** (list won’t exceed one screen at pilot scale). Invite links **deferred** (needs Andrew: operator-invite vs open `/signup`).
-4. **2FA pilots will finish** — email OTP **DONE** (`ab70f002` enroll + `529f619e` TOTP login email-alt). SMS later; TOTP stays as upgrade. **Sarah 2026-09-10 (Discord):** if she could only have one today, *“Either would work for me, but I prefer sms.”*
+4. **2FA pilots will finish** — email OTP **DONE** (`ab70f002` enroll + `529f619e` TOTP login email-alt). SMS OTP **code DONE (shipped on `feat/auth-ship-ready`, not yet merged to master)** — enroll, login verify, step-up, and change-method flows all support SMS alongside email/TOTP, fail-closed until Twilio is configured. **NOT live in production yet** — Twilio account creation + Vercel `TWILIO_*` env vars remain **Andrew leftover** (see `docs/handoff/ANDREW-FOLLOW-UPS.md`); until those are set, `isSms2faEnrollmentAvailable()` stays false and the SMS card stays disabled everywhere. TOTP stays as upgrade. **Sarah 2026-09-10 (Discord):** if she could only have one today, *“Either would work for me, but I prefer sms.”*
 5. **Finish scheduling** — **native CRUD DONE** 2026-08-14 ([`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216)). Google outbound event write later (after Console verification). Two-way sync still P3.
 6. **Security MUST for strangers** — release-triage MUST security/ownership holes before unsupervised pilots.
 7. **Comprehensive instrumentation** — **chunk 1 DONE** 2026-08-14 ([`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4)): first-party `ProductEvent` tutor funnel (signup/login/approval/session). No PostHog. No COPPA-path events yet. **Terms/Privacy stay 100% honest.** Queued: **TXC-SWEEP-METRICS** (§10) — how often `/api/cron/transcribe-sweep` runs vs actually recovers work (cadence slowed to 15 min 2026-08-28).
@@ -633,6 +633,9 @@ Merge `v1-redesign` → `master` @ `1c07b5ba` (~22:39 MT). **Green:** `next buil
 | 7 | `wb-cancel-pending-session` | cancel→B copy link (Andrew smoke PASS) |
 | 8–9 | `wb-tab-kill-audio-durability` ×2 | Empty tutor:mic segments (harness suspect) |
 | ENV | cam-off initials tile; cancel→roster URL | Flakes |
+
+**[WAIVED] AUTH-SHIP-READY-2026-09-15 — Andrew: pre-existing `test:wb-sync` cluster; move on (do not re-triage as this branch)**  
+`feat/auth-ship-ready` merge gates 2026-09-12: `next build` exit 0; `test:regression` 149/149; `test:wb-sync` isolation **8 REAL-FAIL + 3 ENV-FLAKE**. Auth diff does not touch recorder/A/V/whiteboard apply-path or these specs. Andrew 2026-09-15: treat as the MASTER-CUT-2026-07-09 cluster; **do not block this merge**; successor orchestrator must still *know* they are red (canonical list in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD). Classification: replay auto-start + scrub-seek ×3 = leftover **product** (SMOKE-UX-1 / scrub drag); tab-kill ×2, cancel-PENDING copy-link (smoke PASS), parent-share locator = **harness**; wave5 polish ×2 + recording-resilience = **ENV-FLAKE**. Does not authorize skipping `test:wb-sync` on unrelated future branches.
 
 **Product knowns waived with cut:** reopen-at-0 (**WB-REPLAY-REOPEN-START-AT-0**), share PDF placeholders (**WB-REPLAY-PDF-PLACEHOLDER**), **WB-WTR-DEVICE-LOADING**.
 
@@ -1471,7 +1474,7 @@ Hard-blocked today; needs step-up, audit, legal.
 Test-account UI, active-session list, env-only admin warning.
 
 **[P3][AUTH] Real email provider (P2b)**  
-`stubSendAccountHolderEmail` still stub.
+SHIPPED on `feat/auth-ship-ready` [`673c54f3`](https://github.com/Arangarx/tutoring-notes/commit/673c54f3) — parent/claim/2FA-OTP/operator mail uses `sendPlatformMail` (env SMTP). Live Resend + `usemynk.com` DNS + Vercel `SMTP_*` remain Andrew leftover ([`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)).
 
 **[P2][AUTH] Notes first-class authenticated chrome (P2-AC-12/13)**  
 `/s/*` wall shipped; full parent chrome integration deferred.
@@ -1769,6 +1772,15 @@ Lower priority.
 ---
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
+
+**[P2][TEST] identity-e2e known-unrelated failures observed on `feat/auth-ship-ready` (2026-09-11, WS3 SMS 2FA gate run)**  
+Full `npm run test:identity-e2e` run (60 passed, 7 failed) surfaced failures unrelated to the SMS 2FA change under test:
+- `claim-setup-skip-credential.spec.ts` (both tests) — "consent done → Set up later" and "attach_existing" flows; pre-existing, not touched by WS3.
+- `erasure.spec.ts` (both "404 during grace" tests) + `erasure-post-grace-purge.spec.ts` (hard-purge oracle) — all assert `404` during/after erasure grace but receive `200`; pre-existing per prior orchestrator note, not touched by WS3.
+- `tutor-2fa-login.spec.ts` › "security teeth: enrollment QR is local data-URI" — times out waiting for **"Use authenticator app instead"** button immediately after navigating to `/admin/settings/2fa/setup` for a brand-new unenrolled tutor. Verified via `git show HEAD:...TwoFactorSetupForm.tsx`/`page.tsx` that the idle-state method-chooser-requires-a-click structure is **identical pre- and post-WS3** (SMS work only added a 3rd chooser card via composition, did not change the email-default gating) — this test's setup already assumed a since-superseded "auto-start email on mount" behavior that isn't present in the checked-in component on either side of this diff. NOT caused by WS3.
+- `tutor-approvals-operator.spec.ts` › "operator rejects WAITLISTED tutor" — `alertdialog` never becomes visible after clicking reject; file untouched by WS3, unrelated surface (tutor-approvals admin flow).
+
+None of these were fixed as part of WS3 (SMS 2FA) — flagged per the "report, don't fix unless you caused it" scope discipline. Needs its own investigation pass.
 
 **[P1][TEST] WS-V / Part-2 site-wide mechanical test buildout**  
 P1-WB-1…10 serial relay batches; P1-ID-1…4. Pure-jest tranche DONE @ 2026-07-05.

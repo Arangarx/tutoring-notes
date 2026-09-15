@@ -44,6 +44,14 @@ import {
   sendEmailOtpChallenge,
   verifyEmailOtpChallenge,
 } from "@/lib/email-otp-challenge";
+import { sendSmsOtpChallenge, verifyOtpChallenge } from "@/lib/otp-challenge";
+import { normalizeUsPhoneToE164, maskE164 } from "@/lib/sms";
+import {
+  isSms2faEnrollmentAvailable,
+  isTwoFactorEnrollmentConfirmed,
+} from "@/lib/two-factor-enrollment";
+import { hmacToken } from "@/lib/crypto/session-tokens";
+import { timingSafeEqual } from "node:crypto";
 
 const APP_ISSUER = "Mynk";
 const TOTP_DIGITS = 6;
@@ -68,6 +76,136 @@ async function getCurrentAdminId(): Promise<{ adminId: string; isTestAccount: bo
   });
   if (!admin) redirect("/login");
   return { adminId: admin.id, isTestAccount: admin.isTestAccount };
+}
+
+// ---------------------------------------------------------------------------
+// Shared session-mint + remember-device helpers (extracted — same logic was
+// previously duplicated across verifyTotpCode / confirmTotpEnrollment /
+// confirmEmailOtpEnrollment / verifyEmailOtpCode; SMS verify is a 4th call
+// site, so this is factored out rather than copied a 4th time).
+// ---------------------------------------------------------------------------
+
+/** Re-mints the NextAuth session cookie with twoFactorVerified=true. Non-fatal on failure. */
+async function mintVerifiedSessionFromCookie(): Promise<void> {
+  try {
+    const cookieName =
+      process.env.NODE_ENV === "production"
+        ? "__Secure-next-auth.session-token"
+        : "next-auth.session-token";
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get(cookieName)?.value;
+    if (sessionToken) {
+      const currentToken = await decode({
+        token: sessionToken,
+        secret: process.env.NEXTAUTH_SECRET!,
+      });
+      if (currentToken) {
+        await mintTwoFactorVerifiedSession(currentToken as Record<string, unknown>);
+      }
+    }
+  } catch (e) {
+    console.error("[tfa] mintTwoFactorVerifiedSession failed:", e);
+  }
+}
+
+/** Mints a 30-day trusted-device cookie if requested and none valid already exists. Non-fatal on failure. */
+async function maybeRememberDevice(
+  adminId: string,
+  rememberDevice: boolean | undefined,
+  typeLabel: string
+): Promise<void> {
+  if (rememberDevice !== true) return;
+  try {
+    const isDev = process.env.NODE_ENV !== "production";
+    const headerStore = await headers();
+    const userAgent = headerStore.get("user-agent") ?? undefined;
+    const cookieStore = await cookies();
+
+    const existingRawToken = cookieStore.get(ADMIN_TFA_DEVICE_COOKIE)?.value;
+    if (existingRawToken) {
+      const existing = await validateAdminTrustedDevice(existingRawToken, adminId);
+      if (existing) {
+        console.log(
+          `[tfa] tfa=${existing.deviceId} adminUserId=${adminId} action=device_trust_noop_existing type=${typeLabel}`
+        );
+        return;
+      }
+    }
+
+    const { rawToken, deviceId, expiresAt } = await mintAdminTrustedDevice(adminId, userAgent);
+    cookieStore.set(ADMIN_TFA_DEVICE_COOKIE, rawToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: !isDev,
+      path: "/",
+      maxAge: Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+    });
+    console.log(`[tfa] tfa=${deviceId} adminUserId=${adminId} action=device_trusted type=${typeLabel}`);
+  } catch (e) {
+    console.error("[tfa] mintAdminTrustedDevice failed (non-critical):", e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Change-method step-up grant — short-lived, HMAC-signed cookie proving the
+// user freshly stepped up with their CURRENT method before choosing a new
+// one. Avoids re-verifying a (possibly already-consumed, single-use)
+// email/SMS step-up code once per start-action; mirrors the tfa-post-enroll
+// cookie pattern already used by confirmTotpEnrollment.
+// ---------------------------------------------------------------------------
+
+const CHANGE_METHOD_GRANT_COOKIE = "tfa-change-grant";
+const CHANGE_METHOD_GRANT_TTL_SEC = 300;
+
+function changeMethodGrantSecret(): string {
+  return process.env.ADMIN_TFA_DEVICE_HMAC_SECRET || process.env.NEXTAUTH_SECRET || "";
+}
+
+async function mintChangeMethodGrant(adminId: string): Promise<void> {
+  const secret = changeMethodGrantSecret();
+  if (!secret) return; // fail-closed: no grant minted, checkChangeMethodGrant will also fail closed.
+  const sig = hmacToken(adminId, secret);
+  const cookieStore = await cookies();
+  cookieStore.set(CHANGE_METHOD_GRANT_COOKIE, `${adminId}.${sig}`, {
+    maxAge: CHANGE_METHOD_GRANT_TTL_SEC,
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/admin/settings/2fa",
+    secure: process.env.NODE_ENV === "production",
+  });
+}
+
+async function checkChangeMethodGrant(adminId: string): Promise<boolean> {
+  const secret = changeMethodGrantSecret();
+  if (!secret) return false;
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(CHANGE_METHOD_GRANT_COOKIE)?.value;
+  if (!raw) return false;
+  const dotIdx = raw.indexOf(".");
+  if (dotIdx < 1) return false;
+  const id = raw.slice(0, dotIdx);
+  const sig = raw.slice(dotIdx + 1);
+  if (id !== adminId || !sig) return false;
+  const expected = hmacToken(adminId, secret);
+  const sigBuf = Buffer.from(sig, "utf8");
+  const expectedBuf = Buffer.from(expected, "utf8");
+  if (sigBuf.length !== expectedBuf.length) return false;
+  return timingSafeEqual(sigBuf, expectedBuf);
+}
+
+async function clearChangeMethodGrant(): Promise<void> {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.set(CHANGE_METHOD_GRANT_COOKIE, "", {
+      maxAge: 0,
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/admin/settings/2fa",
+      secure: process.env.NODE_ENV === "production",
+    });
+  } catch (_) {
+    // Non-critical — 5-minute TTL is the safety net.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,25 +357,7 @@ export async function confirmTotpEnrollment(
   // Mint twoFactorVerified session immediately — the user just proved they know the
   // TOTP code, so they are considered verified for this session without a separate
   // /verify step. Mirrors the same pattern used in verifyTotpCode.
-  try {
-    const cookieName =
-      process.env.NODE_ENV === "production"
-        ? "__Secure-next-auth.session-token"
-        : "next-auth.session-token";
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(cookieName)?.value;
-    if (sessionToken) {
-      const currentToken = await decode({
-        token: sessionToken,
-        secret: process.env.NEXTAUTH_SECRET!,
-      });
-      if (currentToken) {
-        await mintTwoFactorVerifiedSession(currentToken as Record<string, unknown>);
-      }
-    }
-  } catch (e) {
-    console.error("[tfa] mintTwoFactorVerifiedSession after enroll-confirm failed:", e);
-  }
+  await mintVerifiedSessionFromCookie();
 
   // Suppress the setup page's enrolled+verified redirect while the client is on the
   // backup-codes step. The Server Action re-render reads this cookie (Next.js App Router
@@ -358,74 +478,10 @@ export async function verifyTotpCode(
   });
 
   // Mint a new session with twoFactorVerified=true.
-  // Read the session token directly from the cookie store — the fake-Request pattern
-  // (getToken + synthetic req object) fails in server action context because Next.js's
-  // SessionStore reads req.cookies (an object), not req.headers.get("cookie"), so
-  // req.cookies=undefined always yields a null token and the session is never updated.
-  try {
-    const cookieName =
-      process.env.NODE_ENV === "production"
-        ? "__Secure-next-auth.session-token"
-        : "next-auth.session-token";
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(cookieName)?.value;
-    if (sessionToken) {
-      const currentToken = await decode({
-        token: sessionToken,
-        secret: process.env.NEXTAUTH_SECRET!,
-      });
-      if (currentToken) {
-        await mintTwoFactorVerifiedSession(currentToken as Record<string, unknown>);
-      }
-    }
-  } catch (e) {
-    // If session minting fails (e.g. in test env), log but don't fail the verify.
-    // The middleware will re-check on next request.
-    console.error("[tfa] mintTwoFactorVerifiedSession failed:", e);
-  }
+  await mintVerifiedSessionFromCookie();
 
   // Remember-device: mint a 30-day trusted-device cookie if opted in.
-  // Dedup: if the browser already has a valid trusted-device cookie/row, skip minting
-  // a new row. Each login with "remember device" would otherwise create a duplicate.
-  if (opts?.rememberDevice === true) {
-    try {
-      const isDev = process.env.NODE_ENV !== "production";
-      const headerStore = await headers();
-      const userAgent = headerStore.get("user-agent") ?? undefined;
-      const cookieStore = await cookies();
-
-      // Check for an existing valid trusted-device cookie before minting.
-      const existingRawToken = cookieStore.get(ADMIN_TFA_DEVICE_COOKIE)?.value;
-      if (existingRawToken) {
-        const existing = await validateAdminTrustedDevice(existingRawToken, adminId);
-        if (existing) {
-          // Valid device already present — no new row needed.
-          const type = isBackupCode ? " type=backup" : "";
-          console.log(
-            `[tfa] tfa=${existing.deviceId} adminUserId=${adminId} action=device_trust_noop_existing${type}`
-          );
-          return { ok: true };
-        }
-      }
-
-      // No valid existing device — mint a fresh one.
-      const { rawToken, deviceId, expiresAt } = await mintAdminTrustedDevice(adminId, userAgent);
-      cookieStore.set(ADMIN_TFA_DEVICE_COOKIE, rawToken, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: !isDev,
-        path: "/",
-        maxAge: Math.floor((expiresAt.getTime() - Date.now()) / 1000),
-      });
-      const type = isBackupCode ? " type=backup" : "";
-      console.log(
-        `[tfa] tfa=${deviceId} adminUserId=${adminId} action=device_trusted${type}`
-      );
-    } catch (e) {
-      // Non-critical — verify succeeded even if trust cookie mint fails.
-      console.error("[tfa] mintAdminTrustedDevice failed (non-critical):", e);
-    }
-  }
+  await maybeRememberDevice(adminId, opts?.rememberDevice, isBackupCode ? "backup" : "totp");
 
   return { ok: true };
 }
@@ -578,25 +634,263 @@ export async function confirmEmailOtpEnrollment(
 
   console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=email-enroll-confirm`);
 
-  try {
-    const cookieName =
-      process.env.NODE_ENV === "production"
-        ? "__Secure-next-auth.session-token"
-        : "next-auth.session-token";
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(cookieName)?.value;
-    if (sessionToken) {
-      const currentToken = await decode({
-        token: sessionToken,
-        secret: process.env.NEXTAUTH_SECRET!,
-      });
-      if (currentToken) {
-        await mintTwoFactorVerifiedSession(currentToken as Record<string, unknown>);
-      }
-    }
-  } catch (e) {
-    console.error("[tfa] mintTwoFactorVerifiedSession after email-enroll-confirm failed:", e);
+  await mintVerifiedSessionFromCookie();
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// SMS OTP enrollment + login verify (Workstream 3 — Twilio Programmable SMS)
+// ---------------------------------------------------------------------------
+
+export type StartSmsOtpEnrollmentResult =
+  | { ok: true; maskedPhone: string }
+  | { ok: false; error: string };
+
+/**
+ * Starts SMS OTP enrollment: validates + normalizes the phone number, creates a
+ * pending AdminUser2FA row (method=SMS_OTP, phoneE164 left null until confirm,
+ * pendingPhoneE164 holds the unconfirmed number), and sends the first 6-digit
+ * code. No silent enroll on send failure — the row is deleted if send fails.
+ */
+export async function startSmsOtpEnrollment(
+  phoneInput: string
+): Promise<StartSmsOtpEnrollmentResult> {
+  if (!isSms2faEnrollmentAvailable()) {
+    return { ok: false, error: "SMS 2FA is not available right now." };
   }
+
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) {
+      return { ok: false, error: "Test accounts do not require 2FA." };
+    }
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const phoneE164 = normalizeUsPhoneToE164(phoneInput);
+  if (!phoneE164) {
+    return { ok: false, error: "Enter a valid US mobile number (10 digits)." };
+  }
+
+  // Guard: refuse to blow away an already-confirmed enrollment. A confirmed
+  // user should go through the step-up-gated change-method flow (see
+  // startMethodChangeStepUp + start*MethodChange below), not re-run first-time
+  // enrollment, which used to unconditionally deleteMany a LIVE row.
+  const existing = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { method: true, enrolledAt: true, _count: { select: { backupCodes: true } } },
+  });
+  if (
+    existing &&
+    isTwoFactorEnrollmentConfirmed({
+      method: existing.method,
+      enrolledAt: existing.enrolledAt,
+      backupCodeCount: existing._count.backupCodes,
+    })
+  ) {
+    return {
+      ok: false,
+      error: "You already have two-factor authentication enrolled. Use \"Change method\" from the manage page instead.",
+    };
+  }
+
+  console.log(`[tfa] adminUserId=${adminId} action=sms-enroll-start`);
+
+  await db.adminUser2FA.deleteMany({ where: { adminUserId: adminId } });
+  const twoFa = await db.adminUser2FA.create({
+    data: {
+      adminUserId: adminId,
+      method: "SMS_OTP",
+      totpSecretEnc: null,
+      enrolledAt: null,
+      pendingPhoneE164: phoneE164,
+    },
+    select: { id: true },
+  });
+
+  const sent = await sendSmsOtpChallenge({
+    adminUserId: adminId,
+    toE164: phoneE164,
+    purpose: "ENROLL",
+    twoFaId: twoFa.id,
+  });
+  if (!sent.ok) {
+    await db.adminUser2FA.deleteMany({ where: { adminUserId: adminId } });
+    return sent;
+  }
+
+  return { ok: true, maskedPhone: maskE164(phoneE164) };
+}
+
+export type ResendSmsOtpEnrollmentResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function resendSmsOtpEnrollment(): Promise<ResendSmsOtpEnrollmentResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, method: true, enrolledAt: true, pendingPhoneE164: true },
+  });
+  if (!row || row.method !== "SMS_OTP" || row.enrolledAt || !row.pendingPhoneE164) {
+    return { ok: false, error: "No pending SMS enrollment found. Start setup first." };
+  }
+
+  return sendSmsOtpChallenge({
+    adminUserId: adminId,
+    toE164: row.pendingPhoneE164,
+    purpose: "ENROLL",
+    twoFaId: row.id,
+  });
+}
+
+export type ConfirmSmsOtpEnrollmentResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function confirmSmsOtpEnrollment(
+  code: string
+): Promise<ConfirmSmsOtpEnrollmentResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const rl = await check2faVerifyRateLimit(adminId);
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Too many verification attempts. Try again in ${Math.ceil(rl.retryAfterMs / 1000)} seconds.`,
+    };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, method: true, enrolledAt: true, pendingPhoneE164: true },
+  });
+  if (!row || row.method !== "SMS_OTP" || !row.pendingPhoneE164) {
+    return { ok: false, error: "No pending SMS enrollment found. Start setup first." };
+  }
+  if (row.enrolledAt) {
+    return { ok: false, error: "2FA is already enrolled." };
+  }
+
+  const verified = await verifyOtpChallenge({
+    adminUserId: adminId,
+    code,
+    purpose: "ENROLL",
+    channel: "SMS",
+  });
+  if (!verified.ok) return verified;
+
+  // phoneE164 is set ONLY here, on confirmed enrollment — never on send-fail.
+  await db.adminUser2FA.update({
+    where: { id: row.id },
+    data: { enrolledAt: new Date(), phoneE164: row.pendingPhoneE164, pendingPhoneE164: null },
+  });
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=sms-enroll-confirm`);
+
+  await mintVerifiedSessionFromCookie();
+
+  return { ok: true };
+}
+
+export type SendLoginSmsOtpResult =
+  | { ok: true; maskedPhone: string }
+  | { ok: false; error: string };
+
+export async function sendLoginSmsOtp(): Promise<SendLoginSmsOtpResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, method: true, enrolledAt: true, phoneE164: true },
+  });
+  if (!row?.enrolledAt || row.method !== "SMS_OTP" || !row.phoneE164) {
+    return { ok: false, error: "SMS verification is not enabled for this account." };
+  }
+
+  const sent = await sendSmsOtpChallenge({
+    adminUserId: adminId,
+    toE164: row.phoneE164,
+    purpose: "LOGIN",
+    twoFaId: row.id,
+  });
+  if (!sent.ok) return sent;
+
+  return { ok: true, maskedPhone: maskE164(row.phoneE164) };
+}
+
+export type VerifySmsOtpResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function verifySmsOtpCode(
+  codeInput: string,
+  opts?: { rememberDevice?: boolean }
+): Promise<VerifySmsOtpResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const rl = await check2faVerifyRateLimit(adminId);
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Too many verification attempts. Try again in ${Math.ceil(rl.retryAfterMs / 1000)} seconds.`,
+    };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, method: true, enrolledAt: true },
+  });
+  if (!row?.enrolledAt || row.method !== "SMS_OTP") {
+    return { ok: false, error: "SMS verification is not enabled for this account." };
+  }
+
+  const verified = await verifyOtpChallenge({
+    adminUserId: adminId,
+    code: codeInput,
+    purpose: "LOGIN",
+    channel: "SMS",
+  });
+  if (!verified.ok) return verified;
+
+  await db.adminUser2FA.update({
+    where: { id: row.id },
+    data: { lastVerifiedAt: new Date() },
+  });
+
+  await mintVerifiedSessionFromCookie();
+  await maybeRememberDevice(adminId, opts?.rememberDevice, "sms-otp");
 
   return { ok: true };
 }
@@ -628,8 +922,9 @@ export async function sendLoginEmailOtp(): Promise<SendLoginEmailOtpResult> {
   if (!row?.enrolledAt) {
     return { ok: false, error: "2FA not enrolled. Complete enrollment first." };
   }
-  // LOGIN email OTP: primary path for EMAIL_OTP enroll; alternate for TOTP enroll (chunk 2).
-  if (row.method !== "EMAIL_OTP" && row.method !== "TOTP") {
+  // LOGIN email OTP: primary path for EMAIL_OTP enroll; universal alternate for
+  // TOTP- or SMS_OTP-enrolled users (email is always available as a fallback channel).
+  if (row.method !== "EMAIL_OTP" && row.method !== "TOTP" && row.method !== "SMS_OTP") {
     return { ok: false, error: "Email verification is not enabled for this account." };
   }
 
@@ -687,7 +982,7 @@ export async function verifyEmailOtpCode(
     if (!row.enrolledAt) {
       return { ok: false, error: "2FA not enrolled. Complete enrollment first." };
     }
-    if (row.method !== "EMAIL_OTP" && row.method !== "TOTP") {
+    if (row.method !== "EMAIL_OTP" && row.method !== "TOTP" && row.method !== "SMS_OTP") {
       return { ok: false, error: "Email verification is not enabled for this account." };
     }
   }
@@ -707,59 +1002,8 @@ export async function verifyEmailOtpCode(
   }
 
   if (purpose === "LOGIN") {
-    try {
-      const cookieName =
-        process.env.NODE_ENV === "production"
-          ? "__Secure-next-auth.session-token"
-          : "next-auth.session-token";
-      const cookieStore = await cookies();
-      const sessionToken = cookieStore.get(cookieName)?.value;
-      if (sessionToken) {
-        const currentToken = await decode({
-          token: sessionToken,
-          secret: process.env.NEXTAUTH_SECRET!,
-        });
-        if (currentToken) {
-          await mintTwoFactorVerifiedSession(currentToken as Record<string, unknown>);
-        }
-      }
-    } catch (e) {
-      console.error("[tfa] mintTwoFactorVerifiedSession failed:", e);
-    }
-
-    if (opts?.rememberDevice === true) {
-      try {
-        const isDev = process.env.NODE_ENV !== "production";
-        const headerStore = await headers();
-        const userAgent = headerStore.get("user-agent") ?? undefined;
-        const cookieStore = await cookies();
-
-        const existingRawToken = cookieStore.get(ADMIN_TFA_DEVICE_COOKIE)?.value;
-        if (existingRawToken) {
-          const existing = await validateAdminTrustedDevice(existingRawToken, adminId);
-          if (existing) {
-            console.log(
-              `[tfa] tfa=${existing.deviceId} adminUserId=${adminId} action=device_trust_noop_existing type=email-otp`
-            );
-            return { ok: true };
-          }
-        }
-
-        const { rawToken, deviceId, expiresAt } = await mintAdminTrustedDevice(adminId, userAgent);
-        cookieStore.set(ADMIN_TFA_DEVICE_COOKIE, rawToken, {
-          httpOnly: true,
-          sameSite: "lax",
-          secure: !isDev,
-          path: "/",
-          maxAge: Math.floor((expiresAt.getTime() - Date.now()) / 1000),
-        });
-        console.log(
-          `[tfa] tfa=${deviceId} adminUserId=${adminId} action=device_trusted type=email-otp`
-        );
-      } catch (e) {
-        console.error("[tfa] mintAdminTrustedDevice failed (non-critical):", e);
-      }
-    }
+    await mintVerifiedSessionFromCookie();
+    await maybeRememberDevice(adminId, opts?.rememberDevice, "email-otp");
   }
 
   return { ok: true };
@@ -990,6 +1234,558 @@ export async function regenerateBackupCodes(totpCode: string): Promise<RegenBack
 
   console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=regen-backup`);
   return { ok: true, backupCodes: codes.map((c) => c.plaintext) };
+}
+
+// ---------------------------------------------------------------------------
+// Change 2FA method (self-service) — Workstream 3
+//
+// Distinct from adminResetTwoFactor (ADMIN-only nuclear reset, deletes the row
+// outright). Here, the OLD method stays fully valid until the NEW method is
+// confirmed — a failed send/confirm leaves the user on their old method,
+// never unenrolled. One row, atomic swap via the pending* shadow fields.
+//
+// Flow: startMethodChangeStepUp(code) [fresh proof of CURRENT method, mints a
+// 5-min grant cookie since the underlying OTP code is single-use and can't be
+// re-verified per start-action] -> start*MethodChange -> resend*MethodChange?
+// -> confirm*MethodChange (atomic swap) | abandonMethodChange (cancel, old
+// method untouched).
+// ---------------------------------------------------------------------------
+
+export type StartMethodChangeStepUpResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Verifies the CURRENT 2FA method with a fresh code, then mints a short-lived
+ * grant cookie authorizing the chooser + one change-method flow. Required
+ * because email/SMS step-up codes are single-use — re-verifying the same code
+ * once per start-action would fail on the 2nd+ use; TOTP step-up is time-window
+ * based but goes through the same gate for a uniform, always-fresh-proof flow.
+ */
+export async function startMethodChangeStepUp(
+  stepUpCode: string
+): Promise<StartMethodChangeStepUpResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { enrolledAt: true },
+  });
+  if (!row?.enrolledAt) {
+    return { ok: false, error: "2FA is not enrolled. Complete enrollment first." };
+  }
+
+  if (!stepUpCode?.trim()) {
+    return { ok: false, error: "Your current 2FA code is required to change method." };
+  }
+  const stepUp = await verifyTotpStepUp(adminId, stepUpCode.trim());
+  if (!stepUp.ok) return { ok: false, error: stepUp.error };
+
+  await mintChangeMethodGrant(adminId);
+  console.log(`[tfa] adminUserId=${adminId} action=method-change-stepup`);
+  return { ok: true };
+}
+
+/** Gate for every start*MethodChange action — requires a fresh, unexpired grant. */
+async function requireChangeMethodGrant(
+  adminId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const granted = await checkChangeMethodGrant(adminId);
+  if (!granted) {
+    return {
+      ok: false,
+      error: "Step-up verification expired. Verify your current 2FA code again to change method.",
+    };
+  }
+  return { ok: true };
+}
+
+/** Clears all pending-change shadow fields, leaving the current method untouched. */
+async function clearPendingMethodChange(twoFaId: string): Promise<void> {
+  await db.adminUser2FA.update({
+    where: { id: twoFaId },
+    data: {
+      pendingMethod: null,
+      pendingPhoneE164: null,
+      pendingTotpSecretEnc: null,
+      pendingEnrolledAt: null,
+    },
+  });
+}
+
+export type StartEmailOtpMethodChangeResult =
+  | { ok: true; maskedEmail: string }
+  | { ok: false; error: string };
+
+export async function startEmailOtpMethodChange(): Promise<StartEmailOtpMethodChangeResult> {
+  let adminId: string;
+  let email: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+    const adminUser = await db.adminUser.findUnique({
+      where: { id: adminId },
+      select: { email: true },
+    });
+    email = adminUser?.email?.trim().toLowerCase() ?? "";
+    if (!email) return { ok: false, error: "Account email is missing." };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const grant = await requireChangeMethodGrant(adminId);
+  if (!grant.ok) return grant;
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, enrolledAt: true },
+  });
+  if (!row?.enrolledAt) {
+    return { ok: false, error: "2FA is not enrolled. Complete enrollment first." };
+  }
+
+  await db.adminUser2FA.update({
+    where: { id: row.id },
+    data: { pendingMethod: "EMAIL_OTP" },
+  });
+
+  const sent = await sendEmailOtpChallenge({
+    adminUserId: adminId,
+    email,
+    purpose: "ENROLL",
+    twoFaId: row.id,
+  });
+  if (!sent.ok) {
+    await clearPendingMethodChange(row.id);
+    return sent;
+  }
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=method-change-start target=EMAIL_OTP`);
+
+  const at = email.indexOf("@");
+  const maskedEmail = at > 1 ? `${email[0]}***${email.slice(at - 1)}` : `${email[0]}***`;
+  return { ok: true, maskedEmail };
+}
+
+export type ResendEmailOtpMethodChangeResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function resendEmailOtpMethodChange(): Promise<ResendEmailOtpMethodChangeResult> {
+  let adminId: string;
+  let email: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+    const adminUser = await db.adminUser.findUnique({
+      where: { id: adminId },
+      select: { email: true },
+    });
+    email = adminUser?.email?.trim().toLowerCase() ?? "";
+    if (!email) return { ok: false, error: "Account email is missing." };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, pendingMethod: true },
+  });
+  if (!row || row.pendingMethod !== "EMAIL_OTP") {
+    return { ok: false, error: "No pending method change found. Start the change again." };
+  }
+
+  return sendEmailOtpChallenge({ adminUserId: adminId, email, purpose: "ENROLL", twoFaId: row.id });
+}
+
+export type ConfirmEmailOtpMethodChangeResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function confirmEmailOtpMethodChange(
+  code: string
+): Promise<ConfirmEmailOtpMethodChangeResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const rl = await check2faVerifyRateLimit(adminId);
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Too many verification attempts. Try again in ${Math.ceil(rl.retryAfterMs / 1000)} seconds.`,
+    };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, pendingMethod: true },
+  });
+  if (!row || row.pendingMethod !== "EMAIL_OTP") {
+    return { ok: false, error: "No pending method change found. Start the change again." };
+  }
+
+  const verified = await verifyEmailOtpChallenge({ adminUserId: adminId, code, purpose: "ENROLL" });
+  if (!verified.ok) return verified;
+
+  await db.$transaction(async (tx) => {
+    await tx.adminUser2FA.update({
+      where: { id: row.id },
+      data: {
+        method: "EMAIL_OTP",
+        enrolledAt: new Date(),
+        totpSecretEnc: null,
+        phoneE164: null,
+        pendingMethod: null,
+        pendingPhoneE164: null,
+        pendingTotpSecretEnc: null,
+        pendingEnrolledAt: null,
+      },
+    });
+    await tx.adminUser2FABackupCode.deleteMany({ where: { twoFaId: row.id } });
+  });
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=method-change-confirm method=EMAIL_OTP`);
+
+  await clearChangeMethodGrant();
+  await mintVerifiedSessionFromCookie();
+  // Cascade: method change invalidates all trusted devices (new auth baseline).
+  await revokeAllAdminTrustedDevices(adminId);
+
+  return { ok: true };
+}
+
+export type StartSmsOtpMethodChangeResult =
+  | { ok: true; maskedPhone: string }
+  | { ok: false; error: string };
+
+export async function startSmsOtpMethodChange(
+  phoneInput: string
+): Promise<StartSmsOtpMethodChangeResult> {
+  if (!isSms2faEnrollmentAvailable()) {
+    return { ok: false, error: "SMS 2FA is not available right now." };
+  }
+
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const grant = await requireChangeMethodGrant(adminId);
+  if (!grant.ok) return grant;
+
+  const phoneE164 = normalizeUsPhoneToE164(phoneInput);
+  if (!phoneE164) {
+    return { ok: false, error: "Enter a valid US mobile number (10 digits)." };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, enrolledAt: true },
+  });
+  if (!row?.enrolledAt) {
+    return { ok: false, error: "2FA is not enrolled. Complete enrollment first." };
+  }
+
+  await db.adminUser2FA.update({
+    where: { id: row.id },
+    data: { pendingMethod: "SMS_OTP", pendingPhoneE164: phoneE164 },
+  });
+
+  const sent = await sendSmsOtpChallenge({
+    adminUserId: adminId,
+    toE164: phoneE164,
+    purpose: "ENROLL",
+    twoFaId: row.id,
+  });
+  if (!sent.ok) {
+    await clearPendingMethodChange(row.id);
+    return sent;
+  }
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=method-change-start target=SMS_OTP`);
+
+  return { ok: true, maskedPhone: maskE164(phoneE164) };
+}
+
+export type ResendSmsOtpMethodChangeResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function resendSmsOtpMethodChange(): Promise<ResendSmsOtpMethodChangeResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, pendingMethod: true, pendingPhoneE164: true },
+  });
+  if (!row || row.pendingMethod !== "SMS_OTP" || !row.pendingPhoneE164) {
+    return { ok: false, error: "No pending method change found. Start the change again." };
+  }
+
+  return sendSmsOtpChallenge({
+    adminUserId: adminId,
+    toE164: row.pendingPhoneE164,
+    purpose: "ENROLL",
+    twoFaId: row.id,
+  });
+}
+
+export type ConfirmSmsOtpMethodChangeResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function confirmSmsOtpMethodChange(
+  code: string
+): Promise<ConfirmSmsOtpMethodChangeResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const rl = await check2faVerifyRateLimit(adminId);
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Too many verification attempts. Try again in ${Math.ceil(rl.retryAfterMs / 1000)} seconds.`,
+    };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, pendingMethod: true, pendingPhoneE164: true },
+  });
+  if (!row || row.pendingMethod !== "SMS_OTP" || !row.pendingPhoneE164) {
+    return { ok: false, error: "No pending method change found. Start the change again." };
+  }
+
+  const verified = await verifyOtpChallenge({
+    adminUserId: adminId,
+    code,
+    purpose: "ENROLL",
+    channel: "SMS",
+  });
+  if (!verified.ok) return verified;
+
+  const newPhone = row.pendingPhoneE164;
+  await db.$transaction(async (tx) => {
+    await tx.adminUser2FA.update({
+      where: { id: row.id },
+      data: {
+        method: "SMS_OTP",
+        phoneE164: newPhone,
+        enrolledAt: new Date(),
+        totpSecretEnc: null,
+        pendingMethod: null,
+        pendingPhoneE164: null,
+        pendingTotpSecretEnc: null,
+        pendingEnrolledAt: null,
+      },
+    });
+    await tx.adminUser2FABackupCode.deleteMany({ where: { twoFaId: row.id } });
+  });
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=method-change-confirm method=SMS_OTP`);
+
+  await clearChangeMethodGrant();
+  await mintVerifiedSessionFromCookie();
+  // Cascade: method change invalidates all trusted devices (new auth baseline).
+  await revokeAllAdminTrustedDevices(adminId);
+
+  return { ok: true };
+}
+
+export type StartTotpMethodChangeResult =
+  | { ok: true; qrDataUri: string; secret: string }
+  | { ok: false; error: string };
+
+export async function startTotpMethodChange(): Promise<StartTotpMethodChangeResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const grant = await requireChangeMethodGrant(adminId);
+  if (!grant.ok) return grant;
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, enrolledAt: true },
+  });
+  if (!row?.enrolledAt) {
+    return { ok: false, error: "2FA is not enrolled. Complete enrollment first." };
+  }
+
+  const adminUser = await db.adminUser.findUnique({
+    where: { id: adminId },
+    select: { email: true },
+  });
+  const totpAccountLabel = adminUser?.email?.trim() || adminId;
+
+  const totp = new OTPAuth.TOTP({
+    issuer: APP_ISSUER,
+    label: totpAccountLabel,
+    algorithm: TOTP_ALGORITHM,
+    digits: TOTP_DIGITS,
+    period: TOTP_PERIOD,
+  });
+  const newSecret = totp.secret.base32;
+  const otpauthUri = totp.toString();
+
+  let enc: string;
+  try {
+    enc = encryptTotpSecret(newSecret);
+  } catch (e) {
+    console.error("[tfa] encrypt failed:", e);
+    return { ok: false, error: "2FA encryption not available. Contact your administrator." };
+  }
+
+  await db.adminUser2FA.update({
+    where: { id: row.id },
+    data: { pendingMethod: "TOTP", pendingTotpSecretEnc: enc, pendingEnrolledAt: new Date() },
+  });
+
+  const qrDataUri = await QRCode.toDataURL(otpauthUri, { width: 200, margin: 1 });
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=method-change-start target=TOTP`);
+  return { ok: true, qrDataUri, secret: newSecret };
+}
+
+export type ConfirmTotpMethodChangeResult =
+  | { ok: true; backupCodes: string[] }
+  | { ok: false; error: string };
+
+export async function confirmTotpMethodChange(
+  token: string
+): Promise<ConfirmTotpMethodChangeResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, pendingMethod: true, pendingTotpSecretEnc: true },
+  });
+  if (!row || row.pendingMethod !== "TOTP" || !row.pendingTotpSecretEnc) {
+    return { ok: false, error: "No pending method change found. Start the change again." };
+  }
+
+  let pendingSecret: string;
+  try {
+    pendingSecret = decryptTotpSecret(row.pendingTotpSecretEnc);
+  } catch (e) {
+    console.error("[tfa] decrypt failed:", e);
+    return { ok: false, error: "Encryption key mismatch. Contact your administrator." };
+  }
+
+  const totp = new OTPAuth.TOTP({
+    issuer: APP_ISSUER,
+    label: adminId,
+    algorithm: TOTP_ALGORITHM,
+    digits: TOTP_DIGITS,
+    period: TOTP_PERIOD,
+    secret: OTPAuth.Secret.fromBase32(pendingSecret),
+  });
+
+  const delta = totp.validate({ token: token.replace(/\s/g, ""), window: 1 });
+  if (delta === null) {
+    console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=method-change-fail target=TOTP`);
+    return { ok: false, error: "Invalid code from authenticator. Try again." };
+  }
+
+  const codes = await generateBackupCodes();
+  await db.$transaction(async (tx) => {
+    await tx.adminUser2FA.update({
+      where: { id: row.id },
+      data: {
+        method: "TOTP",
+        totpSecretEnc: row.pendingTotpSecretEnc!,
+        enrolledAt: new Date(),
+        phoneE164: null,
+        pendingMethod: null,
+        pendingPhoneE164: null,
+        pendingTotpSecretEnc: null,
+        pendingEnrolledAt: null,
+      },
+    });
+    await tx.adminUser2FABackupCode.deleteMany({ where: { twoFaId: row.id } });
+    await tx.adminUser2FABackupCode.createMany({
+      data: codes.map((c) => ({ twoFaId: row.id, codeHash: c.hash })),
+    });
+  });
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=method-change-confirm method=TOTP`);
+
+  await clearChangeMethodGrant();
+  await mintVerifiedSessionFromCookie();
+  // Cascade: method change invalidates all trusted devices (new/changed auth baseline).
+  await revokeAllAdminTrustedDevices(adminId);
+
+  return { ok: true, backupCodes: codes.map((c) => c.plaintext) };
+}
+
+export type AbandonMethodChangeResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/** Cancels an in-progress method change. The current (old) method is untouched. */
+export async function abandonMethodChange(): Promise<AbandonMethodChangeResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true },
+  });
+  if (row) {
+    await clearPendingMethodChange(row.id);
+  }
+  await clearChangeMethodGrant();
+  console.log(`[tfa] adminUserId=${adminId} action=method-change-abandoned`);
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

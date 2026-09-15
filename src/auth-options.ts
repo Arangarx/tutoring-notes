@@ -83,6 +83,7 @@ export const authOptions: NextAuthOptions = {
             isTestAccount: admin.isTestAccount,
             role: admin.role,
             approvalStatus: admin.approvalStatus,
+            emailVerified: admin.emailVerifiedAt != null,
           };
         }
 
@@ -91,12 +92,14 @@ export const authOptions: NextAuthOptions = {
             return null;
           // Legacy env-only admin: map to ADMIN role so it keeps its existing
           // tutor-experience access (sub=admin path in getAdminSessionMode).
+          // No DB row — treat inbox as verified (env credentials are the operator).
           return {
             id: "admin",
             email: env.ADMIN_EMAIL,
             name: "Admin",
             isTestAccount: false,
             role: "ADMIN" as AdminRole,
+            emailVerified: true,
           };
         }
 
@@ -165,10 +168,17 @@ export const authOptions: NextAuthOptions = {
           role?: AdminRole;
           approvalStatus?: TutorApprovalStatus;
           email?: string;
+          emailVerified?: boolean;
         };
         token.isTestAccount = u.isTestAccount ?? false;
         if (u.role !== undefined) token.role = u.role;
         if (u.approvalStatus !== undefined) token.approvalStatus = u.approvalStatus;
+        // Env-only operator has no AdminUser row. Do not auto-true from isTestAccount.
+        if (user.id === "admin") {
+          token.emailVerified = true;
+        } else {
+          token.emailVerified = u.emailVerified === true;
+        }
         // Fresh login: 2FA not yet verified this session (non-test accounts must pass the gate).
         // isTestAccount accounts are exempt — we mark them pre-verified so middleware skips them.
         // Playwright wb-regression harness: credentials login for playwright@test.local
@@ -190,6 +200,7 @@ export const authOptions: NextAuthOptions = {
           token.isTestAccount = admin.isTestAccount;
           token.role = admin.role;
           token.approvalStatus = admin.approvalStatus;
+          token.emailVerified = admin.emailVerifiedAt != null;
           // Google login: same 2FA gate — not verified yet.
           // isTestAccount exempts (Google path can't produce test accounts per signIn callback,
           // but guard anyway for safety).
@@ -256,17 +267,21 @@ export const authOptions: NextAuthOptions = {
               const roleChanged = dbAdmin.role !== (token.role as string | undefined);
               const testChanged = dbAdmin.isTestAccount !== (token.isTestAccount as boolean | undefined);
               const approvalChanged = dbAdmin.approvalStatus !== (token.approvalStatus as string | undefined);
-              if (roleChanged || testChanged || approvalChanged) {
+              const emailVerifiedNow = dbAdmin.emailVerifiedAt != null;
+              const emailVerifiedChanged = emailVerifiedNow !== (token.emailVerified as boolean | undefined);
+              if (roleChanged || testChanged || approvalChanged || emailVerifiedChanged) {
                 console.log(
                   `[rol] sub=${token.sub} role_corrected` +
                     (roleChanged ? ` role=${String(token.role)}->${dbAdmin.role}` : "") +
                     (testChanged ? ` isTestAccount=${String(token.isTestAccount)}->${String(dbAdmin.isTestAccount)}` : "") +
-                    (approvalChanged ? ` approvalStatus=${String(token.approvalStatus)}->${dbAdmin.approvalStatus}` : "")
+                    (approvalChanged ? ` approvalStatus=${String(token.approvalStatus)}->${dbAdmin.approvalStatus}` : "") +
+                    (emailVerifiedChanged ? ` emailVerified=${String(token.emailVerified)}->${String(emailVerifiedNow)}` : "")
                 );
               }
               token.role = dbAdmin.role;
               token.isTestAccount = dbAdmin.isTestAccount;
               token.approvalStatus = dbAdmin.approvalStatus;
+              token.emailVerified = emailVerifiedNow;
               token._roleCheckedAt = now;
             }
           } catch (err) {
@@ -293,6 +308,7 @@ export const authOptions: NextAuthOptions = {
           (token.impersonationLogId as string | null | undefined) ?? null;
         session.user.role = (token.role as AdminRole | undefined);
         session.user.approvalStatus = (token.approvalStatus as TutorApprovalStatus | undefined);
+        session.user.emailVerified = (token.emailVerified as boolean | undefined) ?? false;
         session.user.twoFactorVerified =
           (token.twoFactorVerified as boolean | undefined) ?? false;
       }

@@ -54,6 +54,8 @@
 import {
   isApprovalExemptAdminPath,
   is2faExemptAdminPath,
+  isEmailVerifyExemptAdminPath,
+  shouldRedirectToTutorEmailVerify,
 } from "@/lib/admin-routing";
 
 // ---------------------------------------------------------------------------
@@ -158,5 +160,109 @@ describe("Loop-impossibility invariant", () => {
     // And /admin/pending-approval is exempt from BOTH → stays put
     expect(isApprovalExemptAdminPath("/admin/pending-approval")).toBe(true);
     expect(is2faExemptAdminPath("/admin/pending-approval")).toBe(true);
+  });
+});
+
+describe("isEmailVerifyExemptAdminPath — 3-way gate loop prevention", () => {
+  it("MW-EV-1: /admin/pending-approval is email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/admin/pending-approval")).toBe(true);
+  });
+
+  it("MW-EV-2: /admin/pending-approval/* sub-paths are email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/admin/pending-approval/status")).toBe(true);
+  });
+
+  it("MW-EV-3: /api/auth/* is email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/api/auth/session")).toBe(true);
+  });
+
+  it("MW-EV-4: /admin/students is NOT email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/admin/students")).toBe(false);
+  });
+
+  it("MW-EV-5: /admin/settings/2fa/setup is NOT email-verify-exempt", () => {
+    expect(isEmailVerifyExemptAdminPath("/admin/settings/2fa/setup")).toBe(false);
+  });
+
+  it("3-way: pending-approval is exempt from approval + email-verify + 2FA", () => {
+    const pending = "/admin/pending-approval";
+    expect(isApprovalExemptAdminPath(pending)).toBe(true);
+    expect(isEmailVerifyExemptAdminPath(pending)).toBe(true);
+    expect(is2faExemptAdminPath(pending)).toBe(true);
+  });
+});
+
+describe("shouldRedirectToTutorEmailVerify — middleware gate", () => {
+  const students = "/admin/students";
+
+  it("explicit emailVerified=false on /admin/students redirects", () => {
+    expect(
+      shouldRedirectToTutorEmailVerify(students, {
+        sub: "tutor-1",
+        emailVerified: false,
+        isImpersonating: false,
+      })
+    ).toBe(true);
+  });
+
+  it("emailVerified=true does not redirect", () => {
+    expect(
+      shouldRedirectToTutorEmailVerify(students, {
+        sub: "tutor-1",
+        emailVerified: true,
+      })
+    ).toBe(false);
+  });
+
+  it("missing emailVerified claim is grandfathered (pre-claim cookies)", () => {
+    expect(
+      shouldRedirectToTutorEmailVerify(students, { sub: "tutor-1" })
+    ).toBe(false);
+  });
+
+  it("pending-approval is exempt even when emailVerified=false", () => {
+    expect(
+      shouldRedirectToTutorEmailVerify("/admin/pending-approval", {
+        sub: "tutor-1",
+        emailVerified: false,
+      })
+    ).toBe(false);
+  });
+
+  it("/api/auth is exempt so sign-out still works", () => {
+    expect(
+      shouldRedirectToTutorEmailVerify("/api/auth/signout", {
+        sub: "tutor-1",
+        emailVerified: false,
+      })
+    ).toBe(false);
+  });
+
+  it("env-only sub=admin is exempt", () => {
+    expect(
+      shouldRedirectToTutorEmailVerify(students, {
+        sub: "admin",
+        emailVerified: false,
+      })
+    ).toBe(false);
+  });
+
+  it("impersonating session is exempt", () => {
+    expect(
+      shouldRedirectToTutorEmailVerify(students, {
+        sub: "target-1",
+        emailVerified: false,
+        isImpersonating: true,
+      })
+    ).toBe(false);
+  });
+
+  it("isTestAccount is NOT an exemption — seed emailVerifiedAt", () => {
+    expect(
+      shouldRedirectToTutorEmailVerify(students, {
+        sub: "tutor-1",
+        emailVerified: false,
+      })
+    ).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { getAdminByEmail, hasAdminUsers, updateAdminPassword } from "@/lib/auth-db";
-import { sendMail } from "@/lib/email";
+import { sendPlatformMail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { validatePasswordStrength } from "@/lib/password-strength";
 import { revokeAllAdminTrustedDevices } from "@/lib/admin-trusted-device";
@@ -48,13 +48,21 @@ export async function requestPasswordReset(email: string): Promise<{
   const base = getPublicBaseUrl();
   const url = `${base}/reset-password?token=${encodeURIComponent(raw)}`;
 
-  const result = await sendMail({
+  const result = await sendPlatformMail({
     to: normalized,
     subject: "Reset your Tutoring Notes password",
     text: `We received a request to reset the password for this account.\n\nOpen this link (valid for one hour):\n${url}\n\nIf you did not ask for this, you can ignore this email.`,
   });
 
-  return { emailed: result.sent };
+  if (!result.sent) {
+    await db.passwordResetToken.deleteMany({
+      where: { tokenHash, usedAt: null },
+    });
+    console.error("[pwd] action=reset_send_fail");
+    return { emailed: false };
+  }
+
+  return { emailed: true };
 }
 
 /** Read-only: email tied to a valid, unused, unexpired reset token (for password-manager username anchor). */

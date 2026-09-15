@@ -46,12 +46,14 @@ export async function seedImpersonationTarget(): Promise<ImpersonationTargetFixt
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: true,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       update: {
         displayName: IMPERSONATION_TARGET.displayName,
         role: "TUTOR",
         approvalStatus: "APPROVED",
         isTestAccount: true,
+        emailVerifiedAt: new Date("2026-01-01"),
       },
       select: { id: true, email: true },
     });

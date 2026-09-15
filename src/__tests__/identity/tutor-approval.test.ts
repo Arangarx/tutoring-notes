@@ -305,33 +305,43 @@ describe("TAP-6 — approveTutor updates DB", () => {
 });
 
 // ---------------------------------------------------------------------------
-// TAP-8: createAdmin sets approvalStatus=WAITLISTED
+// TAP-8: createAdmin uses resolveSignupApproval (WAITLISTED by default)
 // ---------------------------------------------------------------------------
-describe("TAP-8 — createAdmin sets WAITLISTED", () => {
+describe("TAP-8 — createAdmin uses resolveSignupApproval", () => {
+  const mockResolveSignupApproval = jest.fn();
+  const mockCreate = jest.fn();
+
   beforeEach(() => {
     jest.resetModules();
-    process.env.ADMIN_EMAIL = "admin@test.com";
-    process.env.ADMIN_PASSWORD = "pass";
-    process.env.NEXTAUTH_SECRET = "test-secret-32-chars-minimum-pad";
-    process.env.DATABASE_URL = "file:./test.db";
-    process.env.DIRECT_URL = "file:./test.db";
-  });
-
-  it("passes approvalStatus: WAITLISTED to db.adminUser.create", async () => {
-    const mockCreate = jest.fn().mockResolvedValue({ id: "new-001" });
-    jest.mock("@/lib/db", () => ({
+    mockResolveSignupApproval.mockReset();
+    mockCreate.mockReset();
+    mockResolveSignupApproval.mockResolvedValue({ status: "WAITLISTED" });
+    jest.doMock("@/lib/tutor-approval-scope", () => ({
+      resolveSignupApproval: mockResolveSignupApproval,
+    }));
+    jest.doMock("@/lib/db", () => ({
       db: {
         adminUser: { create: mockCreate },
       },
     }));
+  });
 
-    // Verify that the code in createAdmin explicitly sets approvalStatus: "WAITLISTED"
-    // (The schema default also covers it, but this tests the explicit intent.)
-    const src = await import("fs").then((m) => m.default.readFileSync(
-      require("path").join(process.cwd(), "src/lib/auth-db.ts"),
-      "utf-8"
-    ));
-    expect(src).toContain('approvalStatus: "WAITLISTED"');
+  afterEach(() => {
+    jest.dontMock("@/lib/tutor-approval-scope");
+    jest.dontMock("@/lib/db");
+  });
+
+  it("passes approvalStatus WAITLISTED when not allowlisted", async () => {
+    mockCreate.mockResolvedValue({ id: "new-001" });
+    const { createAdmin } = await import("@/lib/auth-db");
+    await createAdmin("new@example.com", "Password123!");
+
+    expect(mockResolveSignupApproval).toHaveBeenCalledWith("new@example.com");
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        approvalStatus: "WAITLISTED",
+      }),
+    });
   });
 });
 

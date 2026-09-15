@@ -161,7 +161,7 @@ first, then re-submit. The consent screen will continue to display
 | Session audio recordings (Vercel Blob) | Product |
 | Where data is stored | Product |
 | Data retention and deletion | **Hybrid** — umbrella framing, product-specific delete-from-app instruction. **Expanded 2026-05-31:** added COPPA §312.10 child-specific retention schedule paragraph (active relationship + 24 months post-closure; no indefinite retention; verified deletion requests honored earlier). Original general-retention and delete-from-app paragraph preserved verbatim. |
-| Security | **Umbrella** — full enumerated list (encryption in transit / hosting / authentication / secrets / Limited Use). Product-specific bcrypt password storage added. |
+| Security | **Hybrid** — umbrella enumerated list (encryption in transit / hosting / authentication / secrets / Limited Use) + product-specific bcrypt password storage and optional SMS 2FA via Twilio disclosure (2026-09-11). |
 | Children | **Hybrid** — umbrella's framing, product-specific tutor-consent and share-link minor handling. **Expanded 2026-05-31:** added full COPPA §312.10 children's data inventory, subprocessor disclosure, retention schedule (active + 24 months), parental rights bullet list (review/delete/revoke), deletion-request contact path, consent-revocation two-track mechanics, and educational-use consent disclosure. The original tutor-responsibility and share-link paragraphs are preserved verbatim; COPPA disclosures are a separate adjacent `<div>` headed "Children's data and parental rights (COPPA)". |
 | Changes | **Umbrella** |
 | Contact | Product — uses `arangarx+tutoringnotes@gmail.com` for product-specific addressing, links to mortensenapps.com for general inquiries |
@@ -177,7 +177,7 @@ first, then re-submit. The consent screen will continue to display
 | Your content | Product |
 | Gmail integration | Product |
 | Google Calendar integration | Product |
-| Third-party services | **Hybrid** — umbrella's framing, product-specific subprocessor list with link to privacy policy |
+| Third-party services | **Hybrid** — umbrella's framing, product-specific subprocessor list (incl. Twilio for optional SMS 2FA, 2026-09-11) with link to privacy policy |
 | Children and parental consent | **Hybrid** — umbrella now has this section (added 2026-05-31 on `coppa-312-10-disclosure` branch); product facade adds Tutoring-Notes-specific COPPA language (COPPA applicability, representation-of-consent, cross-reference to privacy policy COPPA section). |
 | Availability and changes | Product (combines umbrella's posture with product-specific notification language) |
 | Disclaimers | **Umbrella** — adds product-specific "Educational outcomes are not guaranteed" sentence |
@@ -240,6 +240,8 @@ repo lands a verification-team-driven change before the deploy):
   changes.
 
 ## History
+
+- **2026-09-11** — SMS 2FA (Twilio) — added product-specific Security bullet to Privacy (third-party SMS processor disclosure) and Terms (Twilio added to third-party services list); no umbrella-derived section touched; date bumped to September 11, 2026.
 
 - **2026-05-31** — COPPA §312.10 compliance sync (disclosure floor, not counsel-gated per
   Andrew 2026-05-31 decision). Branch `coppa-312-10-disclosure` in the umbrella repo;
