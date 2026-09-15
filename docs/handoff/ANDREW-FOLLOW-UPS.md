@@ -2,7 +2,7 @@
 
 > **For you when you’re back after a gap.** Agents keep this current. Code work continues without waiting on these unless a row says “blocks code.”
 
-**Last refreshed:** 2026-08-28  
+**Last refreshed:** 2026-09-15  
 **Canonical priorities:** [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities (option B)  
 **Living orchestrator state:** [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md)
 
@@ -54,6 +54,17 @@ SMS OTP two-factor auth is **fully coded** on `feat/auth-ship-ready` (enroll, lo
 
 **Not a blocker for merging this branch** — the feature is designed to be safely mergeable with SMS disabled (email OTP + TOTP keep working exactly as today). Do this whenever convenient; SMS just won't be selectable in the UI until then.
 
+## Platform SMTP (Resend) — auth/system mail (Andrew-only)
+
+Confirm-link, reset, 2FA email OTP, parent/claim mail all use `sendPlatformMail` (env SMTP only; fail-closed; never tutor Gmail). Live mail needs:
+
+| # | Action | Why | Blocks code? |
+|---|--------|-----|--------------|
+| 1 | Resend account + verify `usemynk.com` DNS (SPF/DKIM) | Domain must be allowed to send | No for merge |
+| 2 | Vercel env: `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=resend`, `SMTP_PASS=<key>`, `SMTP_FROM=noreply@usemynk.com` | Without these, live confirm/reset/2FA-email/claim fail-closed with an honest error | No for merge; **yes for live auth-mail smoke** |
+
+See [`docs/DEPLOY.md`](../DEPLOY.md). Tests inject the sender; do not wait on DNS to merge.
+
 ---
 
 ## Background eyeballs (not merge-blocking)
@@ -74,7 +85,7 @@ SMS OTP two-factor auth is **fully coded** on `feat/auth-ship-ready` (enroll, lo
 | #1 next | Calendar OAuth **connect + stub** | **DONE** — merged [`da93ab78`](https://github.com/Arangarx/tutoring-notes/commit/da93ab78). Add callback URI + enable Calendar API; **submit one bundled verification** when this is on prod/preview |
 | #2 | Student-detail Start / consent / claim findability | **DONE** — merged [`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5) |
 | #3 | Tutor signup / self-serve auth | **DONE** first chunk + REJECTED/revoke [`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111). Leftover: pagination, invite links. |
-| #4 | Email OTP 2FA (TOTP stays) | **DONE** — enroll [`ab70f002`](https://github.com/Arangarx/tutoring-notes/commit/ab70f002) + TOTP login email-alt [`529f619e`](https://github.com/Arangarx/tutoring-notes/commit/529f619e) |
+| #4 | Email OTP 2FA + SMS + allowlist | **CODE DONE** on `feat/auth-ship-ready` (not merged at last refresh). Email confirm, platform mail, 2FA chooser, SMS fail-closed, tutor email allowlist. Your leftover: SMTP + Twilio env + add Sarah/Tyson in operator UI. |
 | #5 | Native schedule CRUD | **DONE** — merged [`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216). Google outbound write waits on your Console verification. |
 | #6 | Security MUST for strangers | Composer-sized holes **DONE** (origin pin, VERIFY-ACCT-1, test-route hard-404, SMOKE-PRIV-1). Leftovers: npm audit (blast radius), join-404 UX (intentional), Resend/legal-blocked. |
 | #7 | First-party instrumentation | **DONE** chunk 1 — merged [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4) (`ProductEvent` tutor funnel). Chunk 2 later (no PostHog). |
@@ -95,4 +106,4 @@ SMS OTP two-factor auth is **fully coded** on `feat/auth-ship-ready` (enroll, lo
 
 ## One-liner “where are we?”
 
-> Release track option B. Composer-sized #1–#7 slices + join denial shipped. Agents idle on unblocked security/auth holes. Your open work = calendar callback URI + **one** Google verification when live. Optional: tutor invite-link vs open signup.
+> Release track option B. Tutor-auth ship-ready **code-complete** on `feat/auth-ship-ready` (WS0–WS4 verified). Andrew 2026-09-15: do not block merge on the pre-existing `test:wb-sync` cluster (see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD). Your open work = platform SMTP + Twilio env + Sarah/Tyson allowlist + calendar verification + Privacy/Terms eyeball.

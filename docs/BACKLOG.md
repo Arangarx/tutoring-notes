@@ -634,6 +634,9 @@ Merge `v1-redesign` → `master` @ `1c07b5ba` (~22:39 MT). **Green:** `next buil
 | 8–9 | `wb-tab-kill-audio-durability` ×2 | Empty tutor:mic segments (harness suspect) |
 | ENV | cam-off initials tile; cancel→roster URL | Flakes |
 
+**[WAIVED] AUTH-SHIP-READY-2026-09-15 — Andrew: pre-existing `test:wb-sync` cluster; move on (do not re-triage as this branch)**  
+`feat/auth-ship-ready` merge gates 2026-09-12: `next build` exit 0; `test:regression` 149/149; `test:wb-sync` isolation **8 REAL-FAIL + 3 ENV-FLAKE**. Auth diff does not touch recorder/A/V/whiteboard apply-path or these specs. Andrew 2026-09-15: treat as the MASTER-CUT-2026-07-09 cluster; **do not block this merge**; successor orchestrator must still *know* they are red (canonical list in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD). Classification: replay auto-start + scrub-seek ×3 = leftover **product** (SMOKE-UX-1 / scrub drag); tab-kill ×2, cancel-PENDING copy-link (smoke PASS), parent-share locator = **harness**; wave5 polish ×2 + recording-resilience = **ENV-FLAKE**. Does not authorize skipping `test:wb-sync` on unrelated future branches.
+
 **Product knowns waived with cut:** reopen-at-0 (**WB-REPLAY-REOPEN-START-AT-0**), share PDF placeholders (**WB-REPLAY-PDF-PLACEHOLDER**), **WB-WTR-DEVICE-LOADING**.
 
 **[WATCH] WB-PDF-BLOB-TOKEN** — multi-page PDF import partial fail. Merged `bed79060`; 4-attempt backoff. Watch-only.
