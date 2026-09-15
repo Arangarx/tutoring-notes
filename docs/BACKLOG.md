@@ -6,10 +6,10 @@ Living document for open work, pilot feedback, reliability gaps, and deferred pr
 
 We are on the **release track**: expand beyond Sarah to unsupervised new pilots. **Re-ranked after Sarah 2026-07-29 meeting** (Andrew chose **B**: Google external before student-detail UX). Ordered priorities:
 
-1. **External Google validation** — Sign-In UI + Calendar scopes / Console prep + hybrid verification (long lead times). Detail below (§ Priority #1).
-2. **Student-detail Start / consent / claim findability (P0)** — **DONE** 2026-08-14 (`f08d56b5`, verified). Top `UnclaimedParentClaimBanner` + `SessionStartBlockedCallout`. Optional leftover: flag-off Playwright, mobile viewport, desktop double mint button.
-3. **Tutor signup / self-serve auth** — first chunk + REJECTED/revoke **DONE** ([`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111)). Pagination **deferred** (list won’t exceed one screen at pilot scale). Invite links **deferred** (needs Andrew: operator-invite vs open `/signup`).
-4. **2FA pilots will finish** — email OTP **DONE** (`ab70f002` enroll + `529f619e` TOTP login email-alt). SMS OTP **code DONE (shipped on `feat/auth-ship-ready`, not yet merged to master)** — enroll, login verify, step-up, and change-method flows all support SMS alongside email/TOTP, fail-closed until Twilio is configured. **NOT live in production yet** — Twilio account creation + Vercel `TWILIO_*` env vars remain **Andrew leftover** (see `docs/handoff/ANDREW-FOLLOW-UPS.md`); until those are set, `isSms2faEnrollmentAvailable()` stays false and the SMS card stays disabled everywhere. TOTP stays as upgrade. **Sarah 2026-09-10 (Discord):** if she could only have one today, *“Either would work for me, but I prefer sms.”*
+1. **External Google validation** — Sign-In UI **DONE on `master`**; **Calendar remainder** = ICS feed + `calendar.events.owned` write + verification resubmit ([`CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md)). Console prep Andrew-only ([`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)).
+2. **Student-detail Start / consent / claim findability (P0)** — **DONE on `master`** 2026-08-14 ([`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5)). Optional leftover: flag-off Playwright, mobile viewport, desktop double mint button.
+3. **Tutor signup / self-serve auth** — **DONE on `master`** ([`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111) + auth ship-ready merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca): email confirm, allowlist, platform mail). Pagination **deferred**. Invite links **deferred** (needs Andrew: operator-invite vs open `/signup`).
+4. **2FA pilots will finish** — **DONE on `master`** (email OTP, 2FA chooser, SMS OTP code — merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)). SMS **not live in production** until Twilio env (`TWILIO_*`) — fail-closed; see [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md). TOTP stays as upgrade. **Sarah 2026-09-10 (Discord):** prefers SMS when available.
 5. **Finish scheduling** — **native CRUD DONE** 2026-08-14 ([`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216)). Google outbound event write later (after Console verification). Two-way sync still P3.
 6. **Security MUST for strangers** — release-triage MUST security/ownership holes before unsupervised pilots.
 7. **Comprehensive instrumentation** — **chunk 1 DONE** 2026-08-14 ([`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4)): first-party `ProductEvent` tutor funnel (signup/login/approval/session). No PostHog. No COPPA-path events yet. **Terms/Privacy stay 100% honest.** Queued: **TXC-SWEEP-METRICS** (§10) — how often `/api/cron/transcribe-sweep` runs vs actually recovers work (cadence slowed to 15 min 2026-08-28).
@@ -36,24 +36,17 @@ Each specimen: light/dark, canonical path, confidence badge (`isolated` | `compo
 
 **Status:** `OPEN` — queued for next available executor wave (not Wave C/D fragile).
 
-### Priority #1 — external Google approvals (ACTIVE; ~4–6 week lead)
+### Priority #1 — external Google approvals (ACTIVE; Calendar-only remainder)
 
-Audit 2026-07-10; **elevated to #1** (Andrew option B, 2026-07-30). Long external lead times → kick off before dependent features finish.
+Sign-In UI + self-serve auth slices **shipped on `master`**. **Remaining #1 work = Calendar:** real write + verification resubmit + ICS feed — canonical plan [`docs/handoff/CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md).
 
-**Andrew (Google Cloud Console — no code):**
-- **Confirm consent-screen status** at [console](https://console.cloud.google.com/apis/credentials/consent): Published/In-production? `gmail.send` verified? (docs claim verified 2026-05-30 — confirm still true; INDEX was stale.)
-- **`usemynk.com`** — verify in Google Search Console + re-submit branding if pending ([`LEGAL-SYNC.md`](LEGAL-SYNC.md) re-verification to-do).
-- **Redirect URIs** for `usemynk.com` (+ legacy Vercel): `/api/auth/callback/google` (sign-in), `/api/auth/gmail/callback` (existing), **`/api/auth/calendar/callback`** (Calendar connect — add now).
-- **Calendar scope model — DECIDED (Andrew 2026-07-10): TWO-WAY sync.** Request `calendar.events` + `calendar.readonly` in the bundled verification. Watch/webhooks later.
-- **ONE bundled verification (Andrew 2026-08-14):** hook up Calendar OAuth **now** (connect + token store + honest stub) even if sync is not implemented, so Andrew does **not** re-verify later when sync lands. Do **not** put calendar scopes on NextAuth Sign-In/Sign-Up (`openid email profile` only). Submit review only after the Connect demo is crawlable.
+**Supersedes 2026-08-14 bundled-stub strategy:** Google rejected prior submission 2026-09-11 (`calendar.readonly` / `calendar.events` — demo did not justify scopes). **Ship real `calendar.events.owned` write + ICS subscription feed before resubmit.** Drop stub `calendarList.list` / old scopes in the implementation wave. Apple-primary tutors: **ICS feed** (in wave); CalDAV two-way stays deferred.
 
-**Sequencing (Andrew 2026-07-10):** Calendar verification = **hybrid** — Console prep **NOW** + MVP demo build, **then** submit bundled verification. **Apple Calendar** = CalDAV / no Google-style app review — **defer**. **Sign in with Apple** = optional (Apple Developer enrollment only if pursued). **Skip Facebook.** **Microsoft** = optional.
+**Andrew (Google Cloud Console — no code):** [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md) — check **OAuth Clients first** (Sign-In vs Gmail vs Calendar blast radius; `gmail.send` verified 2026-05-30), then Verification Center, Audience, Branding. Calendar API **enabled** (confirmed 2026-09-11). `calendar.events.owned` available in scope picker.
 
-**Our code (parallel prep):** `/login` Sign in with Google — **DONE** (`122bf761`). Calendar **connect+stub DONE** 2026-08-14 (`da93ab78`, verified) — scopes exist for the one verification; sync not live. Scheduling backend (Priority #5) is real two-way sync later.
+**Our code:** Sign-In **DONE** ([`122bf761`](https://github.com/Arangarx/tutoring-notes/commit/122bf761)). Legacy connect+stub **DONE** ([`da93ab78`](https://github.com/Arangarx/tutoring-notes/commit/da93ab78)) — to be replaced/narrowed in calendar wave. Native schedule CRUD **DONE** ([`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216)).
 
-**State:** Gmail send = shipped. Google Sign-In UI = shipped. Calendar connect+stub = shipped. Andrew Console: [`docs/handoff/ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md) — add calendar callback URI + enable Calendar API; submit bundled verification after this commit is on a crawlable URL.
-
-**Follow-ups from Calendar verify (non-blocking):** extract shared Gmail/Calendar OAuth helper before a third Google connect flow; tag `calendar-oauth-connect.spec.ts`; reconcile schedule mock `SessionSyncBadge` “Synced” vs stub honesty.
+**Follow-ups (non-blocking):** shared Gmail/Calendar OAuth helper; tag `calendar-oauth-connect.spec.ts`; schedule sync badge honesty after write ships.
 
 **Optional follow-ups (non-blocking, from Sign-In verify):** update `login.png` visual baseline; Playwright DOM-order assert (Mortensen notice above button); negative test when Google env unset; pre-existing login `page-has-heading-one` a11y.
 
@@ -635,7 +628,7 @@ Merge `v1-redesign` → `master` @ `1c07b5ba` (~22:39 MT). **Green:** `next buil
 | ENV | cam-off initials tile; cancel→roster URL | Flakes |
 
 **[WAIVED] AUTH-SHIP-READY-2026-09-15 — Andrew: pre-existing `test:wb-sync` cluster; move on (do not re-triage as this branch)**  
-`feat/auth-ship-ready` merge gates 2026-09-12: `next build` exit 0; `test:regression` 149/149; `test:wb-sync` isolation **8 REAL-FAIL + 3 ENV-FLAKE**. Auth diff does not touch recorder/A/V/whiteboard apply-path or these specs. Andrew 2026-09-15: treat as the MASTER-CUT-2026-07-09 cluster; **do not block this merge**; successor orchestrator must still *know* they are red (canonical list in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD). Classification: replay auto-start + scrub-seek ×3 = leftover **product** (SMOKE-UX-1 / scrub drag); tab-kill ×2, cancel-PENDING copy-link (smoke PASS), parent-share locator = **harness**; wave5 polish ×2 + recording-resilience = **ENV-FLAKE**. Does not authorize skipping `test:wb-sync` on unrelated future branches.
+Auth ship-ready merged to `master` [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca); merge gates 2026-09-12: `next build` exit 0; `test:regression` 149/149; `test:wb-sync` isolation **8 REAL-FAIL + 3 ENV-FLAKE**. Auth diff does not touch recorder/A/V/whiteboard apply-path or these specs. Andrew 2026-09-15: treat as the MASTER-CUT-2026-07-09 cluster; **do not block this merge**; successor orchestrator must still *know* they are red (canonical list in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD). Classification: replay auto-start + scrub-seek ×3 = leftover **product** (SMOKE-UX-1 / scrub drag); tab-kill ×2, cancel-PENDING copy-link (smoke PASS), parent-share locator = **harness**; wave5 polish ×2 + recording-resilience = **ENV-FLAKE**. Does not authorize skipping `test:wb-sync` on unrelated future branches.
 
 **Product knowns waived with cut:** reopen-at-0 (**WB-REPLAY-REOPEN-START-AT-0**), share PDF placeholders (**WB-REPLAY-PDF-PLACEHOLDER**), **WB-WTR-DEVICE-LOADING**.
 
@@ -1474,7 +1467,7 @@ Hard-blocked today; needs step-up, audit, legal.
 Test-account UI, active-session list, env-only admin warning.
 
 **[P3][AUTH] Real email provider (P2b)**  
-SHIPPED on `feat/auth-ship-ready` [`673c54f3`](https://github.com/Arangarx/tutoring-notes/commit/673c54f3) — parent/claim/2FA-OTP/operator mail uses `sendPlatformMail` (env SMTP). Live Resend + `usemynk.com` DNS + Vercel `SMTP_*` remain Andrew leftover ([`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)).
+SHIPPED on `master` ([`673c54f3`](https://github.com/Arangarx/tutoring-notes/commit/673c54f3) via [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — parent/claim/2FA-OTP/operator mail uses `sendPlatformMail` (env SMTP). Live Resend + `usemynk.com` DNS + Vercel `SMTP_*` remain Andrew leftover ([`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)).
 
 **[P2][AUTH] Notes first-class authenticated chrome (P2-AC-12/13)**  
 `/s/*` wall shipped; full parent chrome integration deferred.
@@ -1773,7 +1766,7 @@ Lower priority.
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
-**[P2][TEST] identity-e2e known-unrelated failures observed on `feat/auth-ship-ready` (2026-09-11, WS3 SMS 2FA gate run)**  
+**[P2][TEST] identity-e2e known-unrelated failures observed on auth ship-ready gate (2026-09-11, WS3 SMS 2FA run; merged [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca))**  
 Full `npm run test:identity-e2e` run (60 passed, 7 failed) surfaced failures unrelated to the SMS 2FA change under test:
 - `claim-setup-skip-credential.spec.ts` (both tests) — "consent done → Set up later" and "attach_existing" flows; pre-existing, not touched by WS3.
 - `erasure.spec.ts` (both "404 during grace" tests) + `erasure-post-grace-purge.spec.ts` (hard-purge oracle) — all assert `404` during/after erasure grace but receive `200`; pre-existing per prior orchestrator note, not touched by WS3.
@@ -1967,8 +1960,11 @@ Visual prototype only.
 **[P3][OPS] Two-way calendar sync**  
 Google watch / Apple CalDAV + conflict policy — unresolved.
 
-**[P3][OPS] Google OAuth bundling with calendar scopes**  
-Connect+stub shipped (`da93ab78`). Andrew submits **one** bundled verification after demo is crawlable. Two-way sync later does not add scopes.
+**[P1][OPS] Calendar integration wave (ICS feed + Google `calendar.events.owned` write)**  
+**OPEN** — plan [`docs/handoff/CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md). Supersedes bundled-stub verification strategy (Google rejection 2026-09-11). Auth merge complete [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca).
+
+**[P3][OPS] Google OAuth calendar scopes (legacy row — see calendar wave)**  
+Old connect+stub (`da93ab78`) being replaced in calendar wave; resubmit verification only after real write demo on crawlable URL.
 
 **[P3][OPS] Apple CalDAV vs EventKit path**  
 Not started.

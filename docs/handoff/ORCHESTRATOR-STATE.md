@@ -8,11 +8,87 @@
 
 ## HEAD
 
-**🚦 RELEASE TRACK (Andrew 2026-07-30 option B) — expand beyond Sarah to unsupervised new pilots.** Ordered priorities (canonical in [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities): **(1) Google external — Sign-In UI + Calendar Console/hybrid verify** → **(2) student-detail Start/consent/claim findability** → **(3) tutor signup / self-serve auth** → **(4) email-OTP 2FA (+ SMS later)** → **(5) scheduling** → **(6) security MUST** → **(7) instrumentation**. Wave C/D dedupe + pipeline Phase 2 = background.
+**🚦 RELEASE TRACK (Andrew 2026-07-30 option B).** Canonical ordered list: [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities. **On `master` after [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca):** agent slices **#2, #3, #4 shipped**; **#5 native schedule CRUD shipped**; **#7 instrumentation chunk 1 shipped**; **#1 remains open on Calendar only** (Sign-In UI cleared; Calendar write + verification per [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md)); **#6 security MUST** still queued for unsupervised pilots.
 
-**⛔ NON-NEGOTIABLE STANDARDS (2026-07-10) — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize:** (1) zero unjustified duplication — no bespoke bullshit ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec on every touched surface ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification of code + tests before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)) — moving rapidly toward a fully agentic dev pipeline (deferrable only with Andrew approval if it blocks release, never permanently).
+**⛔ NON-NEGOTIABLE STANDARDS (2026-07-10)** — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize: (1) zero unjustified duplication ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)).
 
-**Backlog release-triaged:** 79 MUST / 260 MAYBE / 145 1.x (`docs/BACKLOG.md` § Release triage). Andrew swing-review corrections applied (WS-M resolved; device-dedupe best-effort/non-blocking; clipboard verify-moot; laser colors-only; student-video + prompt-v8 "M" need clarification). Backlog has stale rows → **freshness pass vs `master` warranted when picking items up.**
+**Tip:** `master` @ [`c0413752`](https://github.com/Arangarx/tutoring-notes/commit/c0413752) (docs); code tip auth merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) (`merge --no-ff feat/auth-ship-ready`, branch tip [`8bf44e16`](https://github.com/Arangarx/tutoring-notes/commit/8bf44e16)).
+
+| Field | Value |
+|---|---|
+| **Last action completed** | Tutor-auth **ship-ready wave merged to `master`** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Conductor session that built the wave **handed back and closed**. |
+| **Next action(s)** | **OPEN CONFIRM (Andrew)** — pick the next orchestrator episode: **Option A (recommendation):** **calendar wave** — platform ICS subscription feed + Google `calendar.events.owned` write — per Andrew 2026-09-11 ratification (follows auth merge); unblocks release **#1** (longest external lead time). **Option B:** release **#6 security MUST**, after a broader BACKLOG freshness pass. Prior handback suggested **B**; Andrew's 2026-09-11 ratification points to **A** — **Andrew breaks the tie**; orchestrator does not choose. |
+| **Open Andrew-confirms** | **Next wave: A vs B** (above). Human-only leftovers unchanged: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) (platform SMTP, Twilio, Sarah/Tyson allowlist in operator UI, Privacy/Terms 2FA/SMS eyeball, Google Console checks **Clients first**). **Not agent-pickable:** invite-link product call (operator-invite vs open signup). |
+| **In-flight subagents** | **None.** Main checkout `tutoring-notes` still on branch `feat/auth-ship-ready` (harmless; merge already on `master`). |
+| **Uncommitted / unmerged** | **`tutoring-notes-master-ops`:** clean on `master`, synced with `origin/master`. No open auth merge. |
+
+**Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
+
+| WS | Summary | Tip |
+|---|---|---|
+| WS0 | `sendPlatformMail` — env SMTP only, fail-closed, injectable; tutor notes `sendMail` unchanged | [`1b28eb83`](https://github.com/Arangarx/tutoring-notes/commit/1b28eb83) |
+| WS1 | Tutor email confirm + JWT `emailVerified` + middleware gate; order approval → email-verify → 2FA; UI `/verify-tutor-email` (not under `/admin`); absent JWT claim grandfathered; `isTestAccount` does **not** auto-verify | [`095d086e`](https://github.com/Arangarx/tutoring-notes/commit/095d086e) / [`c25f16cb`](https://github.com/Arangarx/tutoring-notes/commit/c25f16cb) |
+| WS1b | Parent/claim mail off stubs; account-holder resend; no Gmail fallthrough | [`673c54f3`](https://github.com/Arangarx/tutoring-notes/commit/673c54f3) |
+| WS2 | 2FA chooser; email default; SMS card disabled without Twilio env; manage oracle `isTwoFactorEnrollmentConfirmed` | [`113f7ec9`](https://github.com/Arangarx/tutoring-notes/commit/113f7ec9) |
+| WS3 | SMS OTP — additive `SMS_OTP` + `phoneE164`; single challenge table + `channel`; injectable Twilio HTTP (no SDK); enroll/login/step-up/change-method via atomic swap (not `adminResetTwoFactor`); legal honesty for 2FA/Twilio | [`778618cc`](https://github.com/Arangarx/tutoring-notes/commit/778618cc) |
+| WS4 | `TutorEmailAllowlist`; `createAdmin` + `createAdminFromGoogle` share `resolveSignupApproval`; operator UI `/admin/tutor-approvals` (allowlist add uses local state — [`e791db61`](https://github.com/Arangarx/tutoring-notes/commit/e791db61)) | [`08dbd9d0`](https://github.com/Arangarx/tutoring-notes/commit/08dbd9d0) |
+
+**Merge gates:** `npx next build` exit 0; `npm run test:regression` 12 suites / 149 tests; `npm run test:wb-sync` red on pre-existing July cluster — Andrew waived (**AUTH-SHIP-READY-2026-09-15**).
+
+**Product locks — do not reopen:**
+
+- Confirm-link is **not** 2FA. Email 2FA is default; SMS is fail-closed until all three Twilio env vars are set.
+- Auth/system mail is **`sendPlatformMail` ONLY** — never tutor Gmail / `EmailConfig`.
+- Exactly **one** 2FA method enrolled at a time; change-method = step-up + atomic swap.
+- Allowlist skips the waitlist **only** — allowlisted tutors still email-confirm (unless Google) and still 2FA.
+- **Do NOT** seed Sarah's or Tyson's email addresses in the repo.
+- **Do NOT** wire `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c).
+- **Do NOT** touch recorder FSM / live-A/V / whiteboard apply-path as auth follow-up.
+
+**Durable decisions (calendar + OAuth — current):**
+
+- **Calendar verification (supersedes 2026-08-14 bundled-stub strategy):** Google rejected the prior submission 2026-09-11 — demo did not justify `calendar.readonly` / `calendar.events`. **Real functionality must ship before resubmit.** Scope narrows to **`calendar.events.owned`** (primary calendar write). Same wave ships a platform-agnostic **ICS subscription feed** (no OAuth/scopes/verification). Re-verification philosophy (Andrew): never verify twice for the **same** capability; verifying again for a genuinely **new** capability is normal. Full plan: [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md).
+- **Apple Calendar:** CalDAV two-way remains **deferred** (hard). **ICS one-way subscription feed is in scope** for the calendar wave (pilot Sarah: Apple-first, Gmail second — Discord 2026-09-11).
+- Sign-In/Sign-Up Google stay `openid email profile` only (never calendar scopes on NextAuth). Skip Facebook. Microsoft optional.
+
+**Neon cost pass (2026-08-28, still in effect):** scale-to-zero enabled (`suspend_timeout_seconds=300`); transcribe-sweep cron `*/15 * * * *` (layer 1 + end-session still cover live work). Backlogged **TXC-SWEEP-METRICS** + **NEON-SCALE-TO-ZERO-REVISIT**.
+
+**Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
+
+**Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
+
+**Waive record:**
+- BACKLOG **MASTER-CUT-2026-07-09** — Andrew waived red `test:wb-sync` for Sarah delivery. Green: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE.
+- **AUTH-SHIP-READY-2026-09-15** — Andrew: same cluster is pre-existing; **move on; do not re-triage as this branch.** Green for this wave: `next build` + `test:regression`. `test:wb-sync` still red (itemized below). Does **not** authorize skipping `test:wb-sync` on unrelated future branches.
+
+### `test:wb-sync` reds successor MUST already know (2026-09-12 run on `feat/auth-ship-ready`)
+
+Do **not** start a recorder/replay investigation from these. Auth did not touch the specs. Mix of leftover product bugs vs harness (Andrew asked 2026-09-12; classified then):
+
+**8 REAL-FAIL** (same specs as MASTER-CUT-2026-07-09 #1, #3–9):
+| Spec | Failure | Class |
+|------|---------|--------|
+| `recording-end-to-end` — replay auto-starts from position 0 | `currentTime(0)` near end; duration ~0.3s | **Product** — SMOKE-UX-1 / WB-REPLAY-REOPEN-START-AT-0 |
+| `wb-replay-scrub-seek` ×3 | scrub/seek not at independent target ms | **Product** — Replay scrub drag |
+| `view-whiteboard-new-replay` | parent share View whiteboard | **Harness** — strict-mode locator |
+| `wb-cancel-pending-session` | cancel A → copy link still A | **Harness** — Andrew smoke PASS |
+| `wb-tab-kill-audio-durability` ×2 | pre-kill tutor:mic segments `[]` (need ≥2) | **Harness** — VAD/outbox never armed |
+
+**3 ENV-FLAKE:** `wb-wave5-polish` item 19 (portrait topbar) + item 22 (narrow top bar) — **not** on the July ENV list; `recording-resilience` reopen rows (July REAL-FAIL #2, isolated-green this run).
+
+**Also do not “fix” as auth:** identity-e2e known-unrelated (BACKLOG §9) — claim-setup parent, erasure 404 vs 200, stale “Use authenticator app instead” (WS2 chooser predates WS3), operator reject alertdialog flake.
+
+**Worktree guidance (2026-09-15):** Git ops on `master` run only in `tutoring-notes-master-ops` (owns `master`). Executors use the main `tutoring-notes` checkout — **strictly sequential** (shared working tree). `node_modules` in the main checkout is a **junction** to master-ops — use `npm exec -- jest`, not bare `npx jest`. After schema changes run `npx prisma generate` from the branch whose schema you mean.
+
+**Hygiene (low priority):** `git worktree list` shows ~11 worktrees (several stale/detached: verify-join-denial, verify-tutor-waitlist, fix-tsc-2fa, merge-audio, signup-merge, smoke-priv-1, product-events-chunk1, wb-asset-origin-pin, docs-phase3-consent-model). Branch/worktree sweep owed (`brs` CLI) — not urgent, not merge-blocking.
+
+---
+
+## Historical archive (demoted from HEAD — not current guidance)
+
+> **Do not execute** overnight autonomous / grok-executor defaults below. Kept for audit; `git log -p` on this file is authoritative.
+
+### July 2026 overnight + dedupe HEAD (obsolete)
 
 **🌙 OVERNIGHT AUTONOMOUS RUN (2026-07-10 ~02:13 MT, Andrew asleep).** Act autonomously. **Executors dispatch to `grok-4.5-xhigh` tonight** (NOT fast) instead of Composer 2.5; **verifiers stay on Sonnet** for genuine independence. Grind **Wave A dedupe** ([`docs/DEDUPE-PLAN.md`](../DEDUPE-PLAN.md)) one safe chunk at a time — each: executor → independent Sonnet verifier → `next build`/tests green → `merge --no-ff` to master. Sequential (shared working tree); nothing merges unverified. Priority stays functionality/stability/responsiveness; zero catchable regressions.
 
@@ -43,51 +119,13 @@
 
 **agenticPipeline:** Phase 1 **merged to agenticPipeline `master`** @ [`aa56225`](https://github.com/Arangarx/agenticPipeline/commit/aa56225) (change mode + fail-closed + TN template; Sonnet APPROVE after REJECT fixes). Plan: [`docs/AGENTIC-PIPELINE-INTEGRATION.md`](../AGENTIC-PIPELINE-INTEGRATION.md).
 
-**Next action(s):** Auth wave **merged** to `master` [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Andrew leftovers: platform SMTP, Twilio env, Sarah/Tyson allowlist on `/admin/tutor-approvals`, Privacy/Terms eyeball — [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md). Remaining #5 Google write + invite-link stay Andrew-blocked. **Do not reopen a recorder/replay fix episode from the known `test:wb-sync` cluster** (table below; AUTH-SHIP-READY-2026-09-15).
-
----
+### MASTER CUT + doc-cleanup (2026-07-09)
 
 **🚀 MASTER CUT COMPLETE (2026-07-09) — Sarah delivery on `master` @ [`bb5c876e`](https://github.com/Arangarx/tutoring-notes/commit/bb5c876e).** Andrew EXPLICIT WAIVE of red `test:wb-sync`. Redesign is now what Sarah sees.
 
 **🧹 DOC-CLEANUP COMPLETE (2026-07-09, branch `chore/doc-cleanup-master`).** Full doc + plan cleanup: reviewed every transient doc (12 code-verified extraction batches) + 29 tutoring plans; **all open work consolidated into the reorganized [`docs/BACKLOG.md`](BACKLOG.md)** (P0–P3 area taxonomy, 484 deduped items); **133 transient docs + 29 plans archived** to `docs/archive/` + `~/.cursor/plans/archive/` ([`ARCHIVE-LEDGER.md`](../archive/ARCHIVE-LEDGER.md)); [`docs/INDEX.md`](../INDEX.md) refreshed to surviving canonical set only. Protected living docs (INDEX, BACKLOG, RELEASE-ROADMAP, architecture cheat-sheets, brand, legal, runbooks, templates, SARAH-CALL-PREP, iOS matrix) kept in place. Extraction scratch under `docs/handoff/_cleanup-scratch/` (audit; deletable later).
 
-**Tip:** `master` @ [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) — tutor-auth ship-ready merged (`feat/auth-ship-ready`). Prior: legal Calendar facade + Sarah 2026-09-10 Discord/SMS docs.
-
-**Last action:** `merge --no-ff feat/auth-ship-ready` → `master` [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Andrew 2026-09-15: pre-existing `test:wb-sync` reds — move on, do not re-triage (itemized below). WS0–WS4 independently APPROVE. Gates: `next build` + `test:regression` green; `test:wb-sync` isolation 8 REAL-FAIL + 3 ENV-FLAKE (MASTER-CUT cluster).
-
-**Previous:** WS2 complete + independently APPROVE on `feat/auth-ship-ready` [`113f7ec9`](https://github.com/Arangarx/tutoring-notes/commit/113f7ec9). Shared `isTwoFactorEnrollmentConfirmed` (EMAIL_OTP → `enrolledAt`, TOTP → backup codes); three-card chooser (email default, SMS disabled); email-enrolled tutors see manage not setup; manage email step-up uses existing `sendLoginEmailOtp`.
-
-**Neon cost pass (2026-08-28, still in effect):** scale-to-zero enabled (`suspend_timeout_seconds=300`); transcribe-sweep cron `*/15 * * * *` (layer 1 + end-session still cover live work). Backlogged **TXC-SWEEP-METRICS** + **NEON-SCALE-TO-ZERO-REVISIT**.
-
-**Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
-
-**In-flight:** none for tutor-auth. `master` @ [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) includes ship-ready auth. Known `test:wb-sync` cluster remains red (do not re-triage). `feat/join-denial-not-my-session` deleted after replay (shipped August via [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)).
-**Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
-**Open Andrew human work:** [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — calendar callback URI + Calendar API + **one** verification submit when live. Platform SMTP (Resend + `usemynk.com` DNS + Vercel `SMTP_*`) after email chunks are coded. Later: **NEON-SCALE-TO-ZERO-REVISIT** once real lessons are regular.
-**Cleared:** Sign-In UI; #2 findability; #3 Google signup + reject/revoke; Calendar connect+stub; #4 email OTP; #5 native schedule CRUD; #6 security chunks + join denial; #7 ProductEvent tutor funnel.
-
-**Durable decisions (2026-07-10 + 2026-08-14):** Calendar verification = **one bundled round** — connect+stub ships **before** submit so scopes are in that one review; full two-way sync later does **not** trigger a second verify. Sign-In/Sign-Up Google stay `openid email profile` (never calendar). Apple Calendar = CalDAV/defer. Skip Facebook. Microsoft optional. Eyeball: [`docs/handoff/DEDUPE-EYEBALL-LIST.md`](DEDUPE-EYEBALL-LIST.md).
-
-**Waive record:**
-- BACKLOG **MASTER-CUT-2026-07-09** — Andrew waived red `test:wb-sync` for Sarah delivery. Green: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE.
-- **AUTH-SHIP-READY-2026-09-15** — Andrew: same cluster is pre-existing; **move on; do not re-triage as this branch.** Green for this wave: `next build` + `test:regression`. `test:wb-sync` still red (itemized below). Does **not** authorize skipping `test:wb-sync` on unrelated future branches.
-
-### `test:wb-sync` reds successor MUST already know (2026-09-12 run on `feat/auth-ship-ready`)
-
-Do **not** start a recorder/replay investigation from these. Auth did not touch the specs. Mix of leftover product bugs vs harness (Andrew asked 2026-09-12; classified then):
-
-**8 REAL-FAIL** (same specs as MASTER-CUT-2026-07-09 #1, #3–9):
-| Spec | Failure | Class |
-|------|---------|--------|
-| `recording-end-to-end` — replay auto-starts from position 0 | `currentTime(0)` near end; duration ~0.3s | **Product** — SMOKE-UX-1 / WB-REPLAY-REOPEN-START-AT-0 |
-| `wb-replay-scrub-seek` ×3 | scrub/seek not at independent target ms | **Product** — Replay scrub drag |
-| `view-whiteboard-new-replay` | parent share View whiteboard | **Harness** — strict-mode locator |
-| `wb-cancel-pending-session` | cancel A → copy link still A | **Harness** — Andrew smoke PASS |
-| `wb-tab-kill-audio-durability` ×2 | pre-kill tutor:mic segments `[]` (need ≥2) | **Harness** — VAD/outbox never armed |
-
-**3 ENV-FLAKE:** `wb-wave5-polish` item 19 (portrait topbar) + item 22 (narrow top bar) — **not** on the July ENV list; `recording-resilience` reopen rows (July REAL-FAIL #2, isolated-green this run).
-
-**Also do not “fix” as auth:** identity-e2e known-unrelated (BACKLOG §9) — claim-setup parent, erasure 404 vs 200, stale “Use authenticator app instead” (WS2 chooser predates WS3), operator reject alertdialog flake.
+### July 2026 smoke / wave-5 conductor narrative (obsolete)
 
 **Evening smoke final:**
 | Item | Result |
@@ -274,176 +312,29 @@ Do **not** start a recorder/replay investigation from these. Auth did not touch 
 **Wave-5 queue (authoritative backlog):** [`wb-wave5-execution-queue.md`](wb-wave5-execution-queue.md). **Andrew's smoke results:** [`go-to-sarah-master-cut-smokebook.md`](go-to-sarah-master-cut-smokebook.md) (do not edit).
 
 ---
-
-## Project arc + North Star
-
-Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGENTS.md): *"People need to use the app with confidence. Sarah is being patient, but that won't last forever."* Reliability bar: [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc).
-
-**Strategic posture:** Experience-driven wedge — WB + reliability = ground floor (GATE); the win = accreting honest tutor-first continuity. [`experience-driven_wedge_ae2776e1.plan.md`](../../../../.cursor/plans/experience-driven_wedge_ae2776e1.plan.md).
-
-**Active execution:** **go-to-Sarah master-cut** on `wb-wave5-polish` — durability pillars WS-A..D landed; P1/P2 fix trains largely complete; fragile-fix train done; parked at **merge gate** for Andrew hardware re-smoke + relay proofs. **Ship-to-Sarah gate** governs cut to `v1-redesign → master` (see below).
-
 ---
 
-## Branch layering
-
-```
-master  ←  v1-redesign  (integration base; Wave 4 merged; held for Sarah gate)
-              ↑
-                    └── wb-wave5-polish @ 8ff2553  (active; worktree tutoring-notes-polishwt)
-                    ├── wb-av-reachability-detection-fix @ a962171  (isolated; PARKED)
-                    └── wb-wave5-ws-x-wip @ 5d80ea8  (WIP seam preserved; superseded by ef5fb1a on polish)
-```
-
-| Branch | Role | Tip |
-|---|---|---|
-| **`v1-redesign`** | Integration base; not yet merged to `master` | [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3) |
-| **`wb-wave5-polish`** | **Active** — Wave 5 + master-cut plan + Part-2 test buildout | [`8ff2553`](https://github.com/Arangarx/tutoring-notes/commit/8ff2553) (code tip; state-doc [`b357ebb`](https://github.com/Arangarx/tutoring-notes/commit/b357ebb)) |
-| **`wb-av-reachability-detection-fix`** | SMOKE-BLOCK-1 reachability; Andrew parked 2026-07-03 | [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171) |
-
-**Merge discipline:** single `merge --no-ff` to `v1-redesign` only after comprehensive both-theme master-cut smoke PASS. No interim merge. Ledger: [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md).
-
----
-
-## Wave-5 status (reconciled with execution queue)
-
-### Landed on branch (do not re-do)
-
-| Area | Status | Tip / note |
-|---|---|---|
-| **Durability pillars** | ✅ WS-A (VAD + per-speaker + outbox mid-session register `234c6d7`), WS-B (~1s persist), WS-C (end→review), WS-D (resume-from-backend) | Overnight wave; relay @ `c2ca8f5` workers=4 honest |
-| **P1 fix train** | ✅ WS-I, WS-N/N4, WS-L, WS-G (`d20ea9a`), WS-K (`859f695`), WS-W (`610ee90`), WS-P 1/3/4 (`b386ef6`), **WS-P 2** (`9ca410e`→`2c7a7bd`, 5-axis'd) | Each fragile item 5-axis reviewed |
-| **P2 UX train** | ✅ WS-F, WS-H, WS-J (`1d23fc6`), WS-M, WS-Q copy, WS-R, WS-U-COPY (`dfe1bf4`), WS-U-FRAGILE 2.4+2.5 (`65f6a93`) | P2 train **COMPLETE** |
-| **Fragile-fix train** | ✅ In-person audio `3bf3a7e`; WS-X BUG-3 `ef5fb1a` | See § Fragile-fix outcomes |
-| **Known-issues page** | ✅ In-app `/admin/settings/known-issues` | `89d8d02`; FOR ANDREW: copy/tone |
-| **PART-2 pure-jest tranche** | ✅ P1-J1..J8, P2-J2/J3/J4, RW-B1/B3/B4 | `jest --workers=1` green (283 suites / 3062); parallel-DB flake debt |
-| **Blob-gate harness** | ✅ Phase 1+2 (`a1cc2bd`→`eb3fb5d`); build-green `2278013` | 5-axis SHIP-WITH-FIXES; SF applied |
-| **Master-cut smokebook** | ✅ Authored; CUT-3 filled | PARKED at merge gate |
-
-### Open / next tranche
-
-| Item | Priority | Notes |
-|---|---|---|
-| **WS-P deliverable 2** | P1 | Version poll + capture-defer registry; WS-P-A tutor-only defer + WS-P-B WWC read-only `useEffect` **acknowledged** — implementation queued |
-| **WS-G-A** | P1 polish | "Preparing seamless replay…" poll when concat async; default was ship core + defer UX |
-| **WS-A F-1** | Pre-merge SHOULD-FIX | Outbox register-failure attempt cap (~10 lines); own 5-axis before merge |
-| **WS-N5** | P1 follow-up | Resume FSM armed stroke window |
-| **WS-U-FRAGILE 1.2** | PARKED | Dead Start / SMOKE-BLOCK-1 reachability — hardest; peer-mesh surface |
-| **WS-U-FRAGILE 1.3 copy** | PARKED | In-person waiting copy mooted by in-person fix (no longer sits in `awaiting_first_participant`) |
-| **PART-2 relay/identity** | In flight | P1-WB-1..10, P1-ID-*, RW-B2, P2/P3 batches — **serial**, attended + Docker |
-| **Jest isolation** | Infra | `--workers=1` gate until dedicated pass; do not rush unattended |
-| **PART 3 slim smokebook** | After PART-2 | Human-only surfaces |
-
-**Standing rules:** new teeth specs → enroll in `wb-regression.testMatch` + `@wb-*` tag + `--list` verify. Merge-gate jest → `--workers=1` until isolation pass lands.
-
----
-
-## Fragile-fix train outcomes (durable)
-
-### In-person audio — BACKLOG SMOKE-BLOCK-5 resolved
-
-- **Product call (Andrew):** treat IN_PERSON like solo — start tutor mic on Start, no remote peer required.
-- **Implementation [`9740b1b`](https://github.com/Arangarx/tutoring-notes/commit/9740b1b) + fold [`3bf3a7e`](https://github.com/Arangarx/tutoring-notes/commit/3bf3a7e):** additive `LifecycleInputs.inPersonMode?` + step-3b in `lifecycle-machine.ts` (after `!syncEnabled`, before `!networkOk`); `derivePresentation` guard; two WWC call-site lines. **No engine rewrite.**
-- **Teeth:** 4 jest units (authoritative); Playwright `wb-in-person-audio-start.spec.ts` in **`wb-in-person-unmasked`** project (port 3101, no solo env flag) — **not** `wb-regression` (solo flag masks → synthetic green).
-- **5-axis:** SHIP-WITH-FIXES; SHOULD-FIXes folded (`clock_start` log `mode=`, spec enrollment fix).
-- **Owed:** relay run for `wb-in-person-unmasked` at attended merge boundary.
-
-### WS-X BUG-3 — PDF stroke leak resolved
-
-- **Root cause:** stale scene merged via `applyRemoteToCanvas` during post-page-switch fingerprint window; v3 broadcast tombstone rebroadcast class (filter-isDeleted on broadcast was **rejected** — breaks erasure propagation).
-- **Fix [`ef5fb1a`](https://github.com/Arangarx/tutoring-notes/commit/ef5fb1a):** additive guard — `onTargetReadTime` also requires `!pageSceneSetFingerprintRef.current.has(targetId)` → falls back to clean `pageDataRef[targetId]` during window. Prerequisite infra from WIP branch (`pageSceneSetFingerprintRef`, stale-onChange rejection). **No v3 broadcast filter change.**
-- **Teeth:** `wb-e2-apply-remote-pdf-stroke-leak.spec.ts` + `__WBX_*` seams (prod-inert double-gate).
-- **5-axis:** **CLEAN** — no over-suppression; tombstone/erase path unchanged.
-- **Owed:** relay red/green at attended `test:wb-sync`.
-
-**Serialize rule preserved:** in-person, WS-X, and WS-P deliverable-2 all touch WWC — never two code-writers at once.
-
----
-
-## Settled Andrew decisions (2026-07-05)
-
-Resolved FOR-ANDREW batch — treat as facts, not open questions:
-
-| Topic | Resolution |
-|---|---|
-| **IN_PERSON audio** | Start recording on Start without remote peer (`inPersonMode` boolean; LIVE→IN_PERSON mid-session toggle N/A — mode fixed at creation) |
-| **WS-K/G tuning** | No pre-flush; 5-chunk/2min debounce; full reduce; libopus re-encode; cap 400; duration free-ride |
-| **WS-G-A** | **POLL** — "preparing seamless replay…" when concat ready (follow-up, not blocking core) |
-| **WS-N4** | Defaults ratified; NO concurrent-tab End-block |
-| **WS-J** | Nearest/5 + `America/Denver`; IN_PERSON wall-elapsed incl. pauses; ≥1-increment min; prod migration apply = merge HARD STOP |
-| **WS-P-A/B** | Tutor-only defer; read-only-of-FSM `useEffect` in WWC approved → deliverable 2 unblocked |
-| **WS-X** | Fix (a) fingerprint-guard approved (filter-isDeleted reversal accepted) — **shipped `ef5fb1a`** |
-| **Known-issues** | IN-APP (Help/Settings); internal WS-* appendix excluded |
-| **`.env` → preview-dev** | Informational; prod verified clean for WS-K/G/J migrations |
-
----
-
-## Merge-gate items owed (before master)
-
-1. **`npm run test:wb-sync`** once on integrated tip — branch cumulatively touches whiteboard/apply-adjacent surfaces. **Component proofs (2026-07-06):** A2 WS-P defer-reload seam ✅ **DISCHARGED** (committed [`4b085db`](https://github.com/Arangarx/tutoring-notes/commit/4b085db)); in-person `wb-in-person-unmasked` ✅ **PROVEN** (A3); **WS-X `wb-e2-apply-remote-pdf-stroke-leak` ❌ RED (A4) — deferred, NOT proven**. Full-suite `test:wb-sync` still owed on integrated tip.
-2. ~~**`npx next build`** — build-surface touched (`next.config.ts` WS-P).~~ **✅ DISCHARGED 2026-07-05** — exit 0 on code-tip `2c7a7bd`/`21378c9` (no TS/ESLint errors; `/api/version` + `/admin/settings/billing` present). Re-run only if the tip advances with further build-surface edits.
-3. **WS-M** — two-device real-hardware A/V smoke (jsdom cannot verify tutor hears student).
-4. **WS-A F-1** — outbox register attempt cap (~10 lines) + own 5-axis (SHOULD-FIX deferred from `234c6d7` review).
-5. **Migrations** — WS-K/G/J additive nullable authored; applied on preview-dev only; **prod apply = Andrew greenlight** at cut.
-6. **Andrew hardware re-smoke** — master-cut smokebook [`go-to-sarah-master-cut-smokebook.md`](go-to-sarah-master-cut-smokebook.md).
-
-**HARD STOPS:** merge to master; Neon/prod migrations; account reset; force-push.
-
-**Harness note:** Playwright workers 14→4 recommended (contention resolved at w=4 on `c2ca8f5`); not yet applied to config.
-
----
-
-## Ship-to-Sarah gate (governing)
-
-Andrew wants Sarah on `v1-redesign` once waiting room → WB → end is stable for tutor **and** student — backend pipeline included. Capture: [`sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](sarah-pilot-feedback-2026-06-16-orchestrator-report.md).
-
-**Confirmed gate items:** per-chunk notes only (no legacy monolithic); End/Continue never silently deletes recording; single-segment seek at every review entry; consent UI honesty (`CONSENT-HONESTY-SARAH-MERGE-BLOCKER`). Deferral ledger: [`pre-master-smoke-deferral-ledger-2026-06-16.md`](pre-master-smoke-deferral-ledger-2026-06-16.md).
-
-Sarah remains on production `master` until gate passes.
-
----
-
-## Parked / deferred (not blocking next tranche)
-
-| Item | Notes |
-|---|---|
-| **E3 reconnect pill** | PARKED — conflicts with Andrew 2026-07-03 park of `a962171`; BUG-8/BUG-9 fragile A/V; needs hardware |
-| **Reachability branch** | `wb-av-reachability-detection-fix` @ `a962171` — revisit only if base at risk |
-| **WS-U-FRAGILE 1.2** | SMOKE-BLOCK-1 dead Start — peer-mesh/presence |
-| **Post-Sarah** | SMOKE-NOTES-2 live notes display; SMOKE-UX-3 ±10s scrub; perspeaker-C runtime wiring; eval harness |
-| **SEC** | `tutor-asset/route.ts` any-origin blob URL — pre-existing; backlog |
-
----
-
-## How we work (pointers)
-
-- **Orchestration:** [`AGENTS.md`](../../AGENTS.md) § Model usage protocol; dispatch boundary [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc)
-- **Conductor tier:** Opus for fragile durability design + judgment; Composer 2.5 executes; Sonnet 5-axis on fragile diffs. **Fragile-serial** in one worktree.
-- **Merging:** smokeable branch → Andrew smoke → `merge --no-ff`; WB sync at merge boundary; build-surface → `npx next build`
-- **Smokebooks:** [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md); preview URL via Vercel MCP (never guessed)
-- **Process:** preview links in pairs (Vercel `branchAlias` + `preview.usemynk.com` when repointed); behavior tests to spec not code; swap chats ~60–70% context
-
----
-
-## Reading list
+## Bootstrap reading list
 
 Fresh orchestrator — read in order:
 
-1. [`AGENTS.md`](../../AGENTS.md)
-2. **This file** — HEAD first
-3. [`wb-wave5-execution-queue.md`](wb-wave5-execution-queue.md) — wave-5 backlog
-4. [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md) — executor spec
-5. [`part2-test-buildout-plan.md`](part2-test-buildout-plan.md) — Part-2 test batches
-6. [`docs/LIVE-AV.md`](../LIVE-AV.md) — before A/V / per-speaker
-7. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — before FSM/outbox/end-session
-8. [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md)
-9. [`docs/BACKLOG.md`](../BACKLOG.md)
-10. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
+1. [AGENTS.md](../../AGENTS.md)
+2. **This file — HEAD first**
+3. [docs/BACKLOG.md](../BACKLOG.md) § Release priorities
+4. [CALENDAR-WAVE-PLAN.md](CALENDAR-WAVE-PLAN.md) when calendar wave is active
+5. [ANDREW-FOLLOW-UPS.md](ANDREW-FOLLOW-UPS.md) — Andrew-only gates
+6. [docs/RECORDER-LIFECYCLE.md](../RECORDER-LIFECYCLE.md) before recorder/outbox/end-session
+7. [docs/LIVE-AV.md](../LIVE-AV.md) before A/V mesh
+8. [docs/WHITEBOARD-STATUS.md](../WHITEBOARD-STATUS.md) before sync/chrome
+9. [docs/RELEASE-ROADMAP.md](../RELEASE-ROADMAP.md)
 
 ---
 
 ## History / audit trail
 
-Updated in place; `git log -p docs/handoff/ORCHESTRATOR-STATE.md`. Heavy-restructure template: [`orchestrator-state-template.md`](orchestrator-state-template.md). Commit truth: `git log --oneline -30 wb-wave5-polish`.
+Updated in place; `git log -p docs/handoff/ORCHESTRATOR-STATE.md`. Heavy-restructure template: [orchestrator-state-template.md](orchestrator-state-template.md).
 
-**2026-07-05 crash recovery (resolved):** Andrew's machine crash zeroed loose ref `refs/heads/wb-wave5-polish` (41 null bytes); recovered via reflog to `970aa18`, no committed work lost. CRLF-flip artifact on `EndedUnsavedSessionsList.tsx` later reverted; tree clean.
+**2026-09-15:** HEAD heavy restructure after auth merge; calendar plan in-repo; falsified bundled-calendar verification corrected.
+
+**2026-07-05 crash recovery (resolved):** Andrew's machine crash zeroed loose ref `refs/heads/wb-wave5-polish` (41 null bytes); recovered via reflog to `970aa18`, no committed work lost.
+

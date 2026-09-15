@@ -1,32 +1,39 @@
 # Andrew follow-ups — drop-in checklist
 
-> **For you when you’re back after a gap.** Agents keep this current. Code work continues without waiting on these unless a row says “blocks code.”
+> **For you when you're back after a gap.** Agents keep this current. Code work continues without waiting on these unless a row says "blocks code."
 
-**Last refreshed:** 2026-09-15  
+**Last refreshed:** 2026-09-15 (post auth merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca))  
 **Canonical priorities:** [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities (option B)  
-**Living orchestrator state:** [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md)
+**Living orchestrator state:** [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md)  
+**Calendar wave plan:** [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md)
 
 ---
 
-## Do these when you have 15–30 minutes (Google Console)
+## Do these when you have 15–30 minutes (Google Cloud Console)
 
-These are **Andrew-only** (no agent can finish them). They do **not** block the Sign-in-with-Google UI code chunk.
+**Andrew-only.** Check in this order (blast radius first):
 
-| # | Action | Why | Blocks code? |
-|---|--------|-----|--------------|
-| 1 | Open [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) — note status (Testing / In production) and whether `gmail.send` is still verified | Confirms we can ship Sign-In + plan calendar verify | No |
-| 2 | Confirm redirect URIs include `{host}/api/auth/callback/google` for **prod** (`usemynk.com`) and **localhost** (and any preview hosts you care about) | Sign-In button will 302 to Google; bad URI → `oauth_error` on `/login` | No for UI merge; **yes for live Sign-In smoke** |
-| 3 | Confirm `{host}/api/auth/gmail/callback` still listed (existing Gmail connect) | Don’t break Sarah’s Gmail | No |
-| 4 | [Search Console](https://search.google.com/search-console) — `usemynk.com` verified? Branding re-submit if pending ([`LEGAL-SYNC.md`](../LEGAL-SYNC.md)) | Needed before bundled calendar verification | No |
-| 5 | **Add** `{host}/api/auth/calendar/callback` (prod + localhost) — **do not submit verification yet** | Agents are wiring Calendar connect (scopes only; sync stubbed) so this URI will be live | No for code; **yes for live Calendar connect smoke** |
-| 6 | Enable **Google Calendar API** on the Mortensen Apps client. Add scopes `calendar.events` + `calendar.readonly` to the consent screen. **Submit ONE bundled verification** only after the Connect-Calendar demo is on a crawlable URL (honest stub is enough — no two-way sync required for the screencast) | Andrew 2026-08-14: **one re-verify only** when scopes change | Yes for Google review submit |
+| Order | Action | Why |
+|-------|--------|-----|
+| **1 — Clients** | [Credentials / OAuth clients](https://console.cloud.google.com/apis/credentials) — how many clients; do Sign-In, Gmail connect, and Calendar connect share one client? | `gmail.send` already verified 2026-05-30 on the Mortensen Apps client — scope changes may affect other apps under the umbrella |
+| **2 — Verification Center** | Per-check status (Home, Branding, Privacy, App functionality, Data access, Minimum scopes) | Determines whether calendar resubmit is a narrow scope fix or other fronts still open |
+| **3 — Audience** | Publishing status (expect In production), user cap, unverified-user quota consumed | |
+| **4 — Branding** | Registered app name, homepage, privacy, terms URLs (mortensenapps.com umbrella) | |
+| **5 — Data access / scopes** | Confirm **selected** sensitive scopes (not just picker availability). Target for resubmit: **`calendar.events.owned`** + `userinfo.email` — drop `calendar.events` / `calendar.readonly` in the implementation wave | Picker confirmed `calendar.events.owned` 2026-09-11; Calendar API **enabled** (picker banner: "Only scopes for enabled APIs are listed below") |
+| **6 — Redirect URIs** | Prod + localhost: `/api/auth/callback/google`, `/api/auth/gmail/callback`, `/api/auth/calendar/callback` | Live connect smoke |
+| **7 — Search Console** | [`usemynk.com`](https://search.google.com/search-console) verified; re-submit branding if pending ([`LEGAL-SYNC.md`](../LEGAL-SYNC.md)) | Before verification resubmit |
 
-**Paste status here when done** (agents will fold into BACKLOG/STATE):
+**Submit Google Calendar verification only after** real event write (create/edit/delete) is on a crawlable URL with Source Account Impact in the tutor's Google Calendar UI — **not** the old connect+stub demo. See [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md) demo requirements.
+
+**Paste status here when done** (agents fold into BACKLOG/STATE):
 
 ```
-Consent screen: 
-gmail.send verified?: 
-Sign-in callback URIs OK?: 
+Clients (count / shared?): 
+gmail.send still verified?: 
+Verification Center: 
+Audience: 
+Selected calendar scopes: 
+Sign-in + gmail + calendar callback URIs OK?: 
 Search Console usemynk.com?: 
 Notes:
 ```
@@ -35,35 +42,41 @@ Notes:
 
 ## Tutor email allowlist — add pilot emails in operator UI (Andrew-only)
 
-Pre-approved signup allowlist is coded on `feat/auth-ship-ready`. **Do not seed Sarah/Tyson emails from the repo** — after merge, add their real addresses on [`/admin/tutor-approvals`](/admin/tutor-approvals) under **Pre-approved emails**. They still confirm email (unless Google) and still set up 2FA; allowlist only skips the waitlist.
+Pre-approved signup allowlist is on **`master`**. **Do not seed Sarah/Tyson emails from the repo** — add their real addresses on [`/admin/tutor-approvals`](/admin/tutor-approvals) under **Pre-approved emails**. They still confirm email (unless Google) and still set up 2FA; allowlist only skips the waitlist.
 
 | # | Action | Why | Blocks code? |
 |---|--------|-----|--------------|
-| 1 | Add Sarah + Tyson emails via operator UI | Skip waitlist for pilot tutors | No — mergeable without this |
+| 1 | Add Sarah + Tyson emails via operator UI | Skip waitlist for pilot tutors | No |
 
 ---
 
-## SMS 2FA (Twilio) — code shipped, needs your account + env (Andrew-only)
+## SMS 2FA (Twilio) — code on master, needs your account + env (Andrew-only)
 
-SMS OTP two-factor auth is **fully coded** on `feat/auth-ship-ready` (enroll, login verify, step-up, change-method) but is **fail-closed until you provision Twilio** — no agent can do this part.
+SMS OTP is **on `master`** (fail-closed until Twilio is provisioned).
 
 | # | Action | Why | Blocks code? |
 |---|--------|-----|--------------|
-| 1 | Create/confirm a Twilio account + buy a Programmable SMS-capable number | Source number for outbound OTP texts | No — SMS card stays disabled until done |
-| 2 | Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` on the Vercel env for the target deployment (see `.env.example`) | `isSms2faEnrollmentAvailable()` requires all three or SMS stays hidden | No for merge; **yes for live SMS smoke** |
+| 1 | Twilio account + Programmable SMS-capable US number | Outbound OTP source | No — SMS card stays disabled until done |
+| 2 | Vercel env: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | All three required or SMS stays hidden | No for code; **yes for live SMS smoke** |
 
-**Not a blocker for merging this branch** — the feature is designed to be safely mergeable with SMS disabled (email OTP + TOTP keep working exactly as today). Do this whenever convenient; SMS just won't be selectable in the UI until then.
+---
 
 ## Platform SMTP (Resend) — auth/system mail (Andrew-only)
 
-Confirm-link, reset, 2FA email OTP, parent/claim mail all use `sendPlatformMail` (env SMTP only; fail-closed; never tutor Gmail). Live mail needs:
+Confirm-link, password reset, 2FA email OTP, parent/claim mail use **`sendPlatformMail`** only (env SMTP; fail-closed; never tutor Gmail). Until configured, live auth mail fails closed with an honest error.
 
 | # | Action | Why | Blocks code? |
 |---|--------|-----|--------------|
-| 1 | Resend account + verify `usemynk.com` DNS (SPF/DKIM) | Domain must be allowed to send | No for merge |
-| 2 | Vercel env: `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=resend`, `SMTP_PASS=<key>`, `SMTP_FROM=noreply@usemynk.com` | Without these, live confirm/reset/2FA-email/claim fail-closed with an honest error | No for merge; **yes for live auth-mail smoke** |
+| 1 | Resend + verify `usemynk.com` DNS (SPF/DKIM) | Sending domain allowlist | No |
+| 2 | Vercel: `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=resend`, `SMTP_PASS=<key>`, `SMTP_FROM=noreply@usemynk.com` | Live confirm/reset/2FA-email/claim | No for merge; **yes for live auth-mail smoke** |
 
-See [`docs/DEPLOY.md`](../DEPLOY.md). Tests inject the sender; do not wait on DNS to merge.
+See [`docs/DEPLOY.md`](../DEPLOY.md).
+
+---
+
+## Privacy / Terms eyeball (Andrew-only)
+
+After auth merge: read the **2FA + SMS** paragraphs on [`/privacy`](../src/app/privacy/page.tsx) and [`/terms`](../src/app/terms/page.tsx) for honesty vs shipped behavior (email default, SMS fail-closed, Twilio subprocessors). Calendar wave will require further legal updates — see [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md).
 
 ---
 
@@ -71,39 +84,29 @@ See [`docs/DEPLOY.md`](../DEPLOY.md). Tests inject the sender; do not wait on DN
 
 | Item | Doc | Notes |
 |------|-----|-------|
-| Dedupe Wave A/B + tokens visual pass | [`DEDUPE-EYEBALL-LIST.md`](DEDUPE-EYEBALL-LIST.md) | Partial 2026-07-27; finish when convenient |
-| Design-system gallery | BACKLOG § QUEUED | Not built yet — queued |
-| Neon scale-to-zero revisit | BACKLOG **NEON-SCALE-TO-ZERO-REVISIT** (§10) | Enabled 5-min suspend 2026-08-28 to stop idle CU-hours. Re-check once real lessons are regular (first-hit cold start / Prisma timeout). Do not flip always-on just because compute is Active during a session. |
+| Dedupe Wave A/B + tokens visual pass | [`DEDUPE-EYEBALL-LIST.md`](DEDUPE-EYEBALL-LIST.md) | Partial 2026-07-27 |
+| Design-system gallery | BACKLOG § QUEUED | Not built |
+| Neon scale-to-zero revisit | BACKLOG **NEON-SCALE-TO-ZERO-REVISIT** (§10) | 5-min suspend 2026-08-28 |
 
 ---
 
-## What agents are doing without you
+## What agents shipped on `master` (you do not re-smoke regressions)
 
 | Priority | Work | Status |
 |----------|------|--------|
-| **#1** | `/login` Sign in with Google + Playwright | **DONE** — merged [`122bf761`](https://github.com/Arangarx/tutoring-notes/commit/122bf761) |
-| #1 next | Calendar OAuth **connect + stub** | **DONE** — merged [`da93ab78`](https://github.com/Arangarx/tutoring-notes/commit/da93ab78). Add callback URI + enable Calendar API; **submit one bundled verification** when this is on prod/preview |
-| #2 | Student-detail Start / consent / claim findability | **DONE** — merged [`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5) |
-| #3 | Tutor signup / self-serve auth | **DONE** first chunk + REJECTED/revoke [`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111). Leftover: pagination, invite links. |
-| #4 | Email OTP 2FA + SMS + allowlist | **MERGED** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Email confirm, platform mail, 2FA chooser, SMS fail-closed, tutor email allowlist. Your leftover: SMTP + Twilio env + add Sarah/Tyson in operator UI. |
-| #5 | Native schedule CRUD | **DONE** — merged [`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216). Google outbound write waits on your Console verification. |
-| #6 | Security MUST for strangers | Composer-sized holes **DONE** (origin pin, VERIFY-ACCT-1, test-route hard-404, SMOKE-PRIV-1). Leftovers: npm audit (blast radius), join-404 UX (intentional), Resend/legal-blocked. |
-| #7 | First-party instrumentation | **DONE** chunk 1 — merged [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4) (`ProductEvent` tutor funnel). Chunk 2 later (no PostHog). |
-| #3 leftover | Waitlist REJECTED + revoke | **DONE** [`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111). Pagination deferred. Invite links need your call (operator-invite vs open signup). |
-| #6 leftover | Join denial UX | **DONE** [`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24). Wrong AH on `/join` → `/account/not-my-session`. |
+| **#1** | Sign in with Google | **DONE** [`122bf761`](https://github.com/Arangarx/tutoring-notes/commit/122bf761) |
+| **#1 remainder** | Calendar ICS + `calendar.events.owned` write | **OPEN** — [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md) |
+| **#2** | Student-detail Start / consent / claim | **DONE** [`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5) |
+| **#3** | Tutor signup / auth ship-ready | **DONE** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) |
+| **#4** | Email OTP + 2FA chooser + SMS code + allowlist | **DONE** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) — your leftover: SMTP + Twilio + allowlist UI |
+| **#5** | Native schedule CRUD | **DONE** [`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216) |
+| **#6** | Security MUST (Composer chunks) | Partial — full MUST backlog still open for strangers |
+| **#7** | ProductEvent tutor funnel chunk 1 | **DONE** [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4) |
 
-**You do not need to smoke** Sign-In UI until feature DONE (Playwright green + verify + merge). Then one hardware pass: real Google account that already exists as `AdminUser` → `/login` → Google → land past 2FA setup as today.
-
-**Live Sign-In smoke (after merge) also needs:**
-- Redirect URI: `https://<host>/api/auth/callback/google` (prod `usemynk.com`) and `http://localhost:3100/api/auth/callback/google` (or your local port)
-- `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` set on the Vercel env for that deployment
-- Same Mortensen Apps umbrella OAuth client as Gmail; scopes `openid email profile` only
-- Google does **not** auto-provision — email must already be an `AdminUser`
-
-**Known leftover (not this PR):** visual `login.png` baseline + pre-existing login `page-has-heading-one` a11y (`AuthShell` title is a `<div>`). Follow-up, not a Sign-In blocker.
+**Andrew-blocked / not agent-pickable:** invite-link product call (operator-invite vs open signup).
 
 ---
 
-## One-liner “where are we?”
+## One-liner "where are we?"
 
-> Release track option B. Tutor-auth ship-ready **merged** to `master` [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Andrew 2026-09-15: do not re-triage the pre-existing `test:wb-sync` cluster (see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD). Your open work = platform SMTP + Twilio env + Sarah/Tyson allowlist + calendar verification + Privacy/Terms eyeball.
+> Release track option B. Tutor-auth **merged** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). **Next orchestrator episode:** Andrew confirms calendar wave (**A**) vs security MUST pass (**B**) — see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD. Your open work: platform SMTP, Twilio, Sarah/Tyson allowlist, Google Console (Clients first), Privacy/Terms eyeball, then calendar verification after the write wave ships.
