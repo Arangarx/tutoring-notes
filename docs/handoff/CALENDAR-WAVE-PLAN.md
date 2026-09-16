@@ -197,9 +197,9 @@ Release priorities **#1** (External Google validation — Sign-In UI) and **#3**
 
 ---
 
-## Queued doc corrections (apply AFTER `feat/auth-ship-ready` merges)
+## Queued doc corrections — ✅ APPLIED 2026-09-15 (historical; do NOT re-apply)
 
-****Applied 2026-09-15** on ``master`` doc pass — BACKLOG, ORCHESTRATOR-STATE, ANDREW-FOLLOW-UPS updated; this plan remains canonical for the implementation wave\.
+**Applied on `master` in [`9aa86958`](https://github.com/Arangarx/tutoring-notes/commit/9aa86958)** — `docs/BACKLOG.md`, `docs/handoff/ORCHESTRATOR-STATE.md`, and `docs/handoff/ANDREW-FOLLOW-UPS.md` are all corrected. The falsified "one bundled round" durable decision is gone. Retained below only as the record of what was wrong and why; this plan remains canonical for the implementation wave.
 
 ### `docs/BACKLOG.md` (line 48)
 
