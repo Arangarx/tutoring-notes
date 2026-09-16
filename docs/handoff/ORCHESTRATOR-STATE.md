@@ -16,11 +16,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar **WS0 independently verified APPROVE WITH NITS** ([3a9b620d](https://github.com/Arangarx/tutoring-notes/commit/3a9b620d)). Jest 20/20; Playwright `calendar-oauth-connect.spec.ts` **3/3**. Nits (not blocking WS1): demonstrate red-before before wave merge; NULL-`adminUserId` OAuth path still deleteMany+create. |
-| **Next action(s)** | **WS1 in flight** — ICS subscription feed (`/api/…`), B1 ICS-side timezone via `resolveTutorTimezone`, B4a–d, B5 UID/DTSTAMP, B6 SUMMARY. Then Sonnet-tier verifier (security boundary). Then WS2→WS4. Andrew asleep — proceed until a tripwire. Do **not** merge to `master` or apply Neon prod migration. |
+| **Last action completed** | Calendar **WS1 landed** on `feat/calendar-wave` [`7ac024f5`](https://github.com/Arangarx/tutoring-notes/commit/7ac024f5): `GET /api/calendar/ics/[token]`, B4a–d / B5 / B6 / B1 ICS-side. Jest 18 passed on WS1 suites. Author noted TZID-without-VTIMEZONE, `@js-temporal/polyfill` prod dep, B6 `toContain`. |
+| **Next action(s)** | **WS1 Sonnet verifier in flight** (public ICS = security boundary). If APPROVE: WS2 Google write (B1 Google side, B2, B3). Then WS3–WS4. Andrew asleep — proceed until a tripwire. Do **not** merge to `master`. |
 | **Open Andrew-confirms** | **None blocking this wave.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md). |
-| **In-flight subagents** | **WS1 author** (composer-2.5 `generalPurpose`) — ICS feed on `feat/calendar-wave`. |
-| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`** tracking `origin/feat/calendar-wave`. `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
+| **In-flight subagents** | **WS1 verifier** (Sonnet `generalPurpose`, non-author) — tests-to-spec / B4 security / no-duplication of [`7ac024f5`](https://github.com/Arangarx/tutoring-notes/commit/7ac024f5). |
+| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`** @ [`7ac024f5`](https://github.com/Arangarx/tutoring-notes/commit/7ac024f5) (+ STATE docs commit if present). `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
