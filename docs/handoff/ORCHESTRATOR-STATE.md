@@ -16,11 +16,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar **WS3 independently verified APPROVE WITH NITS** ([902de821](https://github.com/Arangarx/tutoring-notes/commit/902de821)). Playwright 4/4. Nit: `calendar-oauth.test.ts` upsert missing `reconnectRequiredAt: null` — fix in WS4 before merge-green. |
-| **Next action(s)** | **WS4 in flight** — B8 legal honesty (privacy/terms ICS + owned-scope write + disconnect), verification write-up, oauth test nit, then independent verifier. Do **not** merge to `master`. Andrew asleep. |
-| **Open Andrew-confirms** | **None blocking this wave.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) (Console Clients-first, demo video after preview). |
-| **In-flight subagents** | **WS4 author** (composer-2.5 `generalPurpose`) — legal + verification docs on `feat/calendar-wave`. |
-| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`**. `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
+| **Last action completed** | Calendar **WS4 landed** [`0b3b0fa1`](https://github.com/Arangarx/tutoring-notes/commit/0b3b0fa1): privacy/terms honest for ICS + `calendar.events.owned`; LEGAL-SYNC 2026-09-16; verification justification doc; oauth `reconnectRequiredAt` test fix. |
+| **Next action(s)** | **WS4 Sonnet verifier in flight** (B8). If APPROVE: smokebook (human-only + PLAYWRIGHT-GAP) + fetch Vercel `branchAlias` — **do not merge to master**; Andrew smokes once when DONE. |
+| **Open Andrew-confirms** | **None blocking code.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) (Console Clients-first, demo video). Eyeball privacy/terms before master merge if he wants. |
+| **In-flight subagents** | **WS4 verifier** (Sonnet, non-author) — [`0b3b0fa1`](https://github.com/Arangarx/tutoring-notes/commit/0b3b0fa1). |
+| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`** @ [`0b3b0fa1`](https://github.com/Arangarx/tutoring-notes/commit/0b3b0fa1). `master` stays in `tutoring-notes-master-ops`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
