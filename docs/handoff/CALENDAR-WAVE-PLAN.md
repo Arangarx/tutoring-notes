@@ -107,7 +107,7 @@ An ICS/webcal subscription feed is **polled by the client**, never pushed by us.
 
 4. **Phase 1 scope:** `https://www.googleapis.com/auth/calendar.events.owned` — "see, create, change, and delete events on Google calendars you own." Sessions write to the tutor's **primary** calendar (`primary` calendar ID in Calendar API terms).
 
-5. **Drop old scopes and stub read.** Remove `calendar.readonly` and `calendar.events` entirely. Delete the `calendarList.list` "screencast helper" in the callback route and remove the `calendarCount` column as part of cleanup.
+5. **Drop old scopes and stub read.** Remove `calendar.readonly` and `calendar.events` entirely. Delete the `calendarList.list` "screencast helper" in the callback route and remove all **code** that reads, writes, or displays `calendarCount` (`src/lib/calendar-oauth.ts`, integrations panel). **Do not** drop the Neon column — keep `calendarCount` on `OAuthCalendarConnection` in `prisma/schema.prisma` with a comment marking it dead/no-longer-written; physical drop is a deferred multi-step migration per `AGENTS.md` § Conventions.
 
 6. **No calendar-picker UI in phase 1.** A picker requires reading the calendar list — another scope to justify. Primary calendar only.
 
@@ -288,7 +288,7 @@ No Google calls in any of these today.
 - Target calendar: tutor's **primary** calendar (no picker UI in phase 1).
 - Populate existing **`googleEventId`** on `ScheduledSession` after successful insert; clear on delete; update on patch.
 - Update **`src/app/api/auth/calendar/connect/route.ts`** scope list to `calendar.events.owned` + `userinfo.email` only.
-- Remove **`calendarList.list`** from callback; drop **`calendarCount`** from schema, `src/lib/calendar-oauth.ts`, and any UI that displayed it.
+- Remove **`calendarList.list`** from callback; remove **`calendarCount`** read/write/UI from `src/lib/calendar-oauth.ts` and any panel that displayed it. **Keep** the Prisma field and DB column — annotate the field in `prisma/schema.prisma` as dead/no-longer-written (no `DROP COLUMN` in this wave).
 
 ### OAuth token refresh — reuse, do not duplicate
 
@@ -494,7 +494,7 @@ Four **separate** tests:
 - Add `Student.icsShowFullName Boolean @default(false)` (migration additive).
 - New per-tutor feed token table (opaque token, `adminUserId`, `revokedAt`; mint via `generateShareToken()` only).
 - `@@unique([provider, adminUserId])` on `OAuthCalendarConnection` + upsert callback path (**should-fix elevated** — include in WS0 if touching callback anyway).
-- Remove `calendarCount` (schema, `src/lib/calendar-oauth.ts`, callback route, panel) per ratified scope cleanup.
+- Remove `calendarCount` **code paths** (`calendar-oauth.ts`, callback `calendarList.list`, integrations panel) per ratified scope cleanup. **Keep** Prisma field + Neon column; add schema comment that the column is dead and no longer written — physical drop deferred.
 
 **Acceptance:**
 
@@ -572,7 +572,7 @@ Resolve in branch when low-risk; **not** merge-blocking unless noted.
 | `CreateSessionDialog` submit lock | Client-side guard against double-submit during Google round-trip. |
 | Verification doc | Cite Google documentation on external calendar refresh intervals. |
 | `/api/` + robots | Confirm ICS route path under `/api/` for `robots.ts` disallow. |
-| `calendarCount` removal | Three touch points — do in WS0. |
+| `calendarCount` code removal | WS0: remove `calendarList.list` and all read/write/display code; **keep** DB column + Prisma field (annotated dead). |
 
 ---
 
@@ -584,6 +584,8 @@ Resolve in branch when low-risk; **not** merge-blocking unless noted.
 | `reliability-bar.mdc` path | `../../agenticPipeline/.cursor/rules/reliability-bar.mdc` **resolves** from this repo — do not "fix" AGENTS.md link. |
 | RRULE / recurring | **N/A** — `ScheduledSession` is one row = one occurrence; not deferred. |
 | Connect allowlist | Correctly deferred; `isApprovalExemptAdminPath` already blocks WAITLISTED/REJECTED from `/admin/settings/integrations`. |
+
+**`calendarCount` column is NOT dropped in this wave.** Code references are removed (mandatory — `calendarList.list` needs the `calendar.readonly` scope this wave drops), but the Neon column stays. `AGENTS.md` § Conventions: migrations are additive; never drop or rename a column without a multi-step migration. The physical drop is deferred to a future release and is not a blocker for anything here.
 
 ---
 
@@ -634,6 +636,7 @@ A **new table** for the per-tutor ICS feed token is **correct** — not a `compo
 | Platform | `docs/PLATFORM-ASSUMPTIONS.md` updated **same commit** as new Google scope + ICS dependency |
 | Legal | B8 checklist complete |
 | Agentic | Independent verifier green per WS |
+| Migrations | **Additive only** — new feed-token table and `Student.icsShowFullName` are in scope; no `DROP` or `RENAME` of any existing column (including `calendarCount`). |
 
 ---
 
