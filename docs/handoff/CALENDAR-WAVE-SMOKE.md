@@ -1,7 +1,7 @@
 # Calendar wave — smoke runbook
 
 **Branch:** `feat/calendar-wave`
-**Tip commit:** [`b2ef47b`](https://github.com/Arangarx/tutoring-notes/commit/b2ef47b619bf84704d080e9093fa5d5dda751a45)
+**Tip commit:** [`d90a337d`](https://github.com/Arangarx/tutoring-notes/commit/d90a337d3494a2ee65be9d91f81af5696c612203)
 **Preview:** [feat/calendar-wave preview](https://tutoring-notes-git-feat-calendar-wave-arangarx-5209s-projects.vercel.app)
 
 ---

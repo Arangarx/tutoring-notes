@@ -16,11 +16,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar **WS4 landed** [`0b3b0fa1`](https://github.com/Arangarx/tutoring-notes/commit/0b3b0fa1): privacy/terms honest for ICS + `calendar.events.owned`; LEGAL-SYNC 2026-09-16; verification justification doc; oauth `reconnectRequiredAt` test fix. |
-| **Next action(s)** | **WS4 Sonnet verifier in flight** (B8). If APPROVE: smokebook (human-only + PLAYWRIGHT-GAP) + fetch Vercel `branchAlias` — **do not merge to master**; Andrew smokes once when DONE. |
-| **Open Andrew-confirms** | **None blocking code.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) (Console Clients-first, demo video). Eyeball privacy/terms before master merge if he wants. |
-| **In-flight subagents** | **WS4 verifier** (Sonnet, non-author) — [`0b3b0fa1`](https://github.com/Arangarx/tutoring-notes/commit/0b3b0fa1). |
-| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`** @ [`0b3b0fa1`](https://github.com/Arangarx/tutoring-notes/commit/0b3b0fa1). `master` stays in `tutoring-notes-master-ops`. |
+| **Last action completed** | Calendar wave **execution complete** on `feat/calendar-wave` @ [`d90a337d`](https://github.com/Arangarx/tutoring-notes/commit/d90a337d) (isolation; WS4 code [`0b3b0fa1`](https://github.com/Arangarx/tutoring-notes/commit/0b3b0fa1)). WS0–WS4 independently APPROVE. Overnight gates: calendar+legal jest 40 pass, `test:regression` 149 pass, `npx next build` exit 0. Calendar Playwright **4 passed** after isolating specs onto `wb-regression` workers:1 ([Isolation](bdca0048-55de-4af7-8b64-78d595e6d336)). Smokebook: [`CALENDAR-WAVE-SMOKE.md`](CALENDAR-WAVE-SMOKE.md). Preview READY: [feat/calendar-wave](https://tutoring-notes-git-feat-calendar-wave-arangarx-5209s-projects.vercel.app). |
+| **Next action(s)** | **Andrew smokes once** when awake (human/hardware only). **Do not merge to `master`.** Before merge still: full `test:wb-sync` (expected red = July cluster only) + confirm Neon preview migrated. Independent verifier on isolation commit in flight. |
+| **Open Andrew-confirms** | Smoke [`CALENDAR-WAVE-SMOKE.md`](CALENDAR-WAVE-SMOKE.md). Leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) Console Clients-first, demo film per [`CALENDAR-VERIFICATION-JUSTIFICATION.md`](CALENDAR-VERIFICATION-JUSTIFICATION.md), privacy/terms eyeball. |
+| **In-flight subagents** | **Isolation verifier** (non-author, composer-2.5) on [`d90a337d`](https://github.com/Arangarx/tutoring-notes/commit/d90a337d). |
+| **Uncommitted / unmerged** | **`feat/calendar-wave`** unmerged — do not merge overnight. `master` stays in `tutoring-notes-master-ops`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
