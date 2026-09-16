@@ -16,11 +16,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar **WS1 landed** on `feat/calendar-wave` [`7ac024f5`](https://github.com/Arangarx/tutoring-notes/commit/7ac024f5): `GET /api/calendar/ics/[token]`, B4a–d / B5 / B6 / B1 ICS-side. Jest 18 passed on WS1 suites. Author noted TZID-without-VTIMEZONE, `@js-temporal/polyfill` prod dep, B6 `toContain`. |
-| **Next action(s)** | **WS1 Sonnet verifier in flight** (public ICS = security boundary). If APPROVE: WS2 Google write (B1 Google side, B2, B3). Then WS3–WS4. Andrew asleep — proceed until a tripwire. Do **not** merge to `master`. |
+| **Last action completed** | Calendar **WS1 independently verified APPROVE WITH NITS** ([7ac024f5](https://github.com/Arangarx/tutoring-notes/commit/7ac024f5)). Sonnet: B4a–d real; parser oracles; Temporal justified; TZID-without-VTIMEZONE = nit. Carry to WS4: `PLATFORM-ASSUMPTIONS.md` for `@js-temporal/polyfill`; optional VTIMEZONE backlog (Outlook). |
+| **Next action(s)** | **WS2 in flight** — Google `calendar.events.owned` write, B1 Google-side timezone via `resolveScheduledSessionWallClock`, B2 idempotent insert, B3 `gcw` logs, fail-soft. Then composer verifier. Then WS3–WS4. Andrew asleep — proceed until a tripwire. Do **not** merge to `master`. |
 | **Open Andrew-confirms** | **None blocking this wave.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md). |
-| **In-flight subagents** | **WS1 verifier** (Sonnet `generalPurpose`, non-author) — tests-to-spec / B4 security / no-duplication of [`7ac024f5`](https://github.com/Arangarx/tutoring-notes/commit/7ac024f5). |
-| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`** @ [`7ac024f5`](https://github.com/Arangarx/tutoring-notes/commit/7ac024f5) (+ STATE docs commit if present). `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
+| **In-flight subagents** | **WS2 author** (composer-2.5 `generalPurpose`) — Google Calendar write on `feat/calendar-wave`. |
+| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`**. `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
