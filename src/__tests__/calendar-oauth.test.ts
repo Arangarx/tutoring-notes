@@ -158,10 +158,12 @@ describe("GET /api/auth/calendar/callback", () => {
         refreshToken: "refresh-abc",
         email: "calendar@example.com",
         adminUserId: "admin-1",
+        reconnectRequiredAt: null,
       },
       update: {
         refreshToken: "refresh-abc",
         email: "calendar@example.com",
+        reconnectRequiredAt: null,
       },
     });
     expect(mockCreate).not.toHaveBeenCalled();

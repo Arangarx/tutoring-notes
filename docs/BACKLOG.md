@@ -1966,6 +1966,8 @@ Google watch / Apple CalDAV + conflict policy — unresolved.
 **PLAYWRIGHT-GAP — live ICS subscribe (calendar wave WS1 surrogate)**  
 Hermetic stand-in: jest `src/__tests__/calendar/ics-feed-stability.test.ts`, `ics-summary-privacy.test.ts`, `ics-google-timezone.test.ts` (third-party `node-ical` parser oracle). **Human-only:** one-time Andrew smoke when calendar wave is DONE — subscribe feed URL in Apple Calendar + Google Calendar “From URL” and confirm events appear with expected titles/times.
 
+**Calendar wave follow-up nits (non-blocking):** Outlook/desktop clients may need explicit `VTIMEZONE` blocks for some recurring-edge cases (jest oracle covers primary paths; hardware spot-check). Google Calendar URL-subscribe can lag on **event list identity** (`UID`/`iCalUID` stability) even when individual `VEVENT` bytes are correct — track if tutors report duplicate or stale rows after reschedule.
+
 **[P3][OPS] Google OAuth calendar scopes (legacy row — see calendar wave)**  
 Old connect+stub (`da93ab78`) being replaced in calendar wave; resubmit verification only after real write demo on crawlable URL.
 

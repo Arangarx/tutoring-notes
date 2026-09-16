@@ -12,6 +12,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Product-specific COPPA cross-reference updated 2026-07-09 (SEC-POLICY-TRUTH interim).
  * Google Calendar connect section added 2026-08-14 (honest stub — no sync claim).
  * Twilio (SMS 2FA) added to third-party services list 2026-09-11.
+ * Calendar ICS feed + Google write honesty (product-specific) 2026-09-16.
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
  * the CANONICAL legal source for eligibility / acceptable use /
@@ -40,7 +41,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalDocumentShell title="Terms of Use" lastUpdated="September 11, 2026">
+    <LegalDocumentShell title="Terms of Use" lastUpdated="September 16, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           These terms govern your use of <strong>Tutoring Notes</strong>, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
@@ -114,11 +115,25 @@ export default function TermsPage() {
           <div>
             <h2 className="heading m-0 text-lg font-normal">Google Calendar integration</h2>
             <p style={{ margin: "8px 0 0" }}>
-              If you connect Google Calendar, the app stores your OAuth connection for upcoming
-              scheduling features. <strong>Calendar sync is not live yet</strong> — we do not
-              currently create, update, delete, or watch calendar events on your behalf. You can
-              disconnect at any time from Settings → Calendar integrations. Your use of Google
+              If you connect Google Calendar, the app may create, update, and delete events on your
+              primary Google Calendar that correspond to scheduled sessions you manage in the app,
+              using the <code>calendar.events.owned</code> permission. This is one-way sync from the
+              app to Google — not push notifications, not two-way sync, and not CalDAV. In-app
+              scheduling still works if Google sync fails. Disconnecting from Settings → Calendar
+              integrations removes our stored token and stops future sync; it does{" "}
+              <strong>not</strong> delete events already in your Google Calendar. Your use of Google
               Calendar is also subject to Google&apos;s own terms of service.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="heading m-0 text-lg font-normal">Calendar subscription feed</h2>
+            <p style={{ margin: "8px 0 0" }}>
+              You may subscribe to a read-only ICS/webcal feed of your scheduled sessions. Your
+              calendar application polls the feed URL on its own schedule; updates are not
+              instantaneous. Session titles default to first names unless you opt in per student to
+              show full names. Keep the subscription URL confidential; revoke it from Settings if it
+              may have been exposed.
             </p>
           </div>
 
@@ -130,9 +145,8 @@ export default function TermsPage() {
               note generation, email delivery, and Twilio for optional SMS two-factor
               authentication code delivery). Your use of those features is also
               subject to the third party&apos;s terms and policies. We are not responsible
-              for outages or changes caused solely by third-party platforms. Google
-              Calendar connect stores a token before event sync is live; see Google
-              Calendar integration above. The current list of
+              for outages or changes caused solely by third-party platforms. See Google
+              Calendar integration and Calendar subscription feed above. The current list of
               subprocessors is in the{" "}
               <Link href="/privacy">privacy policy</Link>.
             </p>
