@@ -16,11 +16,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar **WS0 landed** on `feat/calendar-wave` [`3a9b620d`](https://github.com/Arangarx/tutoring-notes/commit/3a9b620d) (pushed): additive `Student.icsShowFullName`, `CalendarFeedToken` + `generateShareToken()` mint, unique `(provider, adminUserId)` + callback upsert, `calendarCount` **code** removed (Neon column kept). Jest 20/20 on WS0 suites. Playwright `calendar-oauth-connect.spec.ts` updated, **not run** by author. |
-| **Next action(s)** | **WS0 independent verifier in flight**, then WS1 ICS feed if APPROVE (B4/B5/B6). Serial WS2→WS4 after each verifier. Andrew asleep — proceed until a tripwire. Do **not** merge to `master`. Do **not** apply migration to production Neon. |
-| **Open Andrew-confirms** | **None blocking this wave.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) (Google Console **Clients first**, platform SMTP, Twilio, Sarah/Tyson allowlist). |
-| **In-flight subagents** | **WS0 verifier** (composer-2.5 `generalPurpose`, non-author) — tests-to-spec / soundness / no-duplication of [`3a9b620d`](https://github.com/Arangarx/tutoring-notes/commit/3a9b620d). |
-| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`** @ [`3a9b620d`](https://github.com/Arangarx/tutoring-notes/commit/3a9b620d), tracking `origin/feat/calendar-wave`. `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
+| **Last action completed** | Calendar **WS0 independently verified APPROVE WITH NITS** ([3a9b620d](https://github.com/Arangarx/tutoring-notes/commit/3a9b620d)). Jest 20/20; Playwright `calendar-oauth-connect.spec.ts` **3/3**. Nits (not blocking WS1): demonstrate red-before before wave merge; NULL-`adminUserId` OAuth path still deleteMany+create. |
+| **Next action(s)** | **WS1 in flight** — ICS subscription feed (`/api/…`), B1 ICS-side timezone via `resolveTutorTimezone`, B4a–d, B5 UID/DTSTAMP, B6 SUMMARY. Then Sonnet-tier verifier (security boundary). Then WS2→WS4. Andrew asleep — proceed until a tripwire. Do **not** merge to `master` or apply Neon prod migration. |
+| **Open Andrew-confirms** | **None blocking this wave.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md). |
+| **In-flight subagents** | **WS1 author** (composer-2.5 `generalPurpose`) — ICS feed on `feat/calendar-wave`. |
+| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`** tracking `origin/feat/calendar-wave`. `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
