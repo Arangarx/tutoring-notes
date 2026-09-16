@@ -15,4 +15,13 @@ describe("apiRateBucketForPath", () => {
     expect(b.prefix).toBe("api");
     expect(b.max).toBe(30);
   });
+
+  test("ICS subscription feed uses default 30/min bucket", () => {
+    const b = apiRateBucketForPath(
+      "/api/calendar/ics/feed-token-abcdef1234567890"
+    );
+    expect(b.prefix).toBe("api");
+    expect(b.max).toBe(30);
+    expect(b.windowMs).toBe(60_000);
+  });
 });

@@ -33,5 +33,7 @@ const WB_POLL_PATH_RE =
 
 export function apiRateBucketForPath(pathname: string): ApiRateBucket {
   if (WB_POLL_PATH_RE.test(pathname)) return WHITEBOARD_SESSION_POLL;
+  // ICS subscription feeds (/api/calendar/ics/*) intentionally stay on API_DEFAULT
+  // (30 req/min/IP): clients poll every 8–24h; no dedicated bucket needed.
   return API_DEFAULT;
 }

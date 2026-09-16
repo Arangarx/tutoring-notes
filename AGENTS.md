@@ -161,8 +161,9 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   `[sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed`,
   `[sal] sal=<token:8> action=ownership_denied principal=<type> ...`),
   `tap` (tutor approval + email allowlist — `src/lib/tutor-approval-scope.ts`;
-  writes `[tap] tap=<adminUserId|operatorId> action=approved|rejected|revoked|allowlist_add|allowlist_signup_approved|assert_rejected ...`).
-  See
+  writes   `[tap] tap=<adminUserId|operatorId> action=approved|rejected|revoked|allowlist_add|allowlist_signup_approved|assert_rejected ...`).
+  `ics` (ICS subscription feed — `src/app/api/calendar/ics/[token]/route.ts` + `src/lib/calendar/ics-access-log.ts`; every fetch/denial/error writes `[ics] ics=<token:8> action=feed_served|denied|error adminUserId=<id>` when known).
+ See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.- **Migrations are additive.** Production runs on Neon; never drop or
   rename a column without a multi-step migration.

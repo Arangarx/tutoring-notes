@@ -1963,6 +1963,9 @@ Google watch / Apple CalDAV + conflict policy — unresolved.
 **[P1][OPS] Calendar integration wave (ICS feed + Google `calendar.events.owned` write)**  
 **OPEN** — plan [`docs/handoff/CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md). Supersedes bundled-stub verification strategy (Google rejection 2026-09-11). Auth merge complete [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca).
 
+**PLAYWRIGHT-GAP — live ICS subscribe (calendar wave WS1 surrogate)**  
+Hermetic stand-in: jest `src/__tests__/calendar/ics-feed-stability.test.ts`, `ics-summary-privacy.test.ts`, `ics-google-timezone.test.ts` (third-party `node-ical` parser oracle). **Human-only:** one-time Andrew smoke when calendar wave is DONE — subscribe feed URL in Apple Calendar + Google Calendar “From URL” and confirm events appear with expected titles/times.
+
 **[P3][OPS] Google OAuth calendar scopes (legacy row — see calendar wave)**  
 Old connect+stub (`da93ab78`) being replaced in calendar wave; resubmit verification only after real write demo on crawlable URL.
 
