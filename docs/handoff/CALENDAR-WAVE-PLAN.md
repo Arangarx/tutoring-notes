@@ -17,7 +17,9 @@
 
 **Google rejection (context):** Verification team rejected the prior submission (2026-09-11) — demo "does not sufficiently demonstrate why the following scope(s) are necessary or why narrower permissions cannot be used" for `calendar.readonly` and `calendar.events`. The old bundled-stub strategy is invalid: you cannot verify a scope for functionality that does not exist. Real write must ship before resubmit.
 
-**Decided (Andrew 2026-09-11):** Build both paths in **one wave**, serial branch after auth merge. ICS event title defaults to **first name** (`Tutoring — Maya`); full student name is tutor opt-in. **Pre-empt** the "why not narrower?" review risk by documenting ICS polling latency and filming API-write **immediacy** in the demo (see [Pre-empting the narrower-alternative review risk](#pre-empting-the-narrower-alternative-review-risk)).
+**Decided (Andrew 2026-09-11):** Build both paths in **one wave**, serial branch after auth merge. ICS event title defaults to **first name** (`Tutoring — Maya`); full student name is **per-student opt-in** (see [Ratified decisions (Andrew 2026-09-15 — LOCKED)](#ratified-decisions-andrew-2026-09-15--locked)). **Pre-empt** the "why not narrower?" review risk by documenting ICS polling latency and filming API-write **immediacy** in the demo (see [Pre-empting the narrower-alternative review risk](#pre-empting-the-narrower-alternative-review-risk)).
+
+**Executor status (2026-09-15):** 5-axis adversarial reliability review **COMPLETE** — **APPROVE WITH BLOCKERS**. Eight blockers are folded into [Phase-1 acceptance](#phase-1-acceptance-blockers-folded-in) (not follow-ups). Follow [Workstreams](#workstreams) → [Merge gate](#merge-gate) → [Definition of done](#definition-of-done).
 
 **Blocked on Andrew:** Google Cloud Console checks — Verification Center status, audience/publishing + unverified quota, branding URLs, OAuth client blast radius. See [Open dependency — Andrew Console checks](#open-dependency--andrew-console-checks). Scope availability is **closed**: `calendar.events.owned` confirmed in picker (2026-09-11).
 
@@ -112,6 +114,19 @@ An ICS/webcal subscription feed is **polled by the client**, never pushed by us.
 7. **No collision/conflict detection in phase 1.** Andrew: "I imagine at some point they're going to want collision detection, but I don't think that's necessary in phase 1 till people ask for it." When asked for, the likely ask is **`calendar.events.owned.readonly`** ("see the events on Google calendars you own") — confirmed present in the picker 2026-09-11, and narrower than `calendar.events.freebusy` since it is limited to calendars the tutor owns rather than all calendars they can access. Either way it is a small, separate review. **Do not pre-request** a read scope in phase 1.
 
 8. **Production gating of Connect button — deferred.** Andrew chose to **leave the Connect button reachable** for now (current users: Andrew, Sarah, Tyson — unverified-quota exposure negligible). **Revisit before unsupervised pilots** (release track explicitly targets unsupervised pilots). Mirror the existing Gmail pattern: `src/lib/gmail-connect-allowed.ts` (`GMAIL_CONNECT_ALLOWLIST` — when unset, any signed-in admin may connect; when set, comma-separated email allowlist). No new primitive needed. `docs/PLATFORM-ASSUMPTIONS.md` line 306 currently states Calendar connect has "no allowlist (any signed-in admin may connect)."
+
+### Ratified decisions (Andrew 2026-09-15 — LOCKED)
+
+Do **not** reopen without explicit Andrew approval.
+
+| Decision | Detail |
+|----------|--------|
+| **Wave shape** | **ONE branch**, **BOTH** paths (ICS feed + Google write). |
+| **Google scope** | `calendar.events.owned`; write to tutor's **primary** calendar only. |
+| **ICS `SUMMARY` default** | **First name** — `Tutoring — Maya`. |
+| **Full-name in ICS** | **Per-student opt-in:** `Student.icsShowFullName Boolean @default(false)`. Matches the existing per-student "include audio in parent share link" toggle. A **per-tutor global** switch was **REJECTED** — one flip must not expose every family at once. |
+| **Disconnect** | **`disconnectGoogleCalendar` makes ZERO Google API calls.** Already-written Google events stay in Google. Disclose plainly in privacy + terms: disconnect stops **future** sync; does **not** retroactively delete. Bulk-delete-on-disconnect was **REJECTED** (partial-failure + Vercel function timeout ceiling per `docs/PLATFORM-ASSUMPTIONS.md`). |
+| **Ordering vs release #6** | Calendar wave **precedes** release #6 security MUST because Google verification is an **external clock** — submitting now lets #6 run **during** review instead of after. |
 
 ---
 
@@ -222,9 +237,9 @@ Related stale lines in same files (also update on the doc pass): BACKLOG line 47
 
 ---
 
-## Implementation shape (sketch for executor)
+## Implementation shape (orientation — executable detail in Workstreams)
 
-Full plan gets written when the wave starts. This section orients a cold executor.
+> **Canonical execution:** [Workstreams](#workstreams), [Phase-1 acceptance](#phase-1-acceptance-blockers-folded-in), [Test mapping](#test-mapping). This section retains field-mapping and code pointers.
 
 ### ICS subscription feed (greenfield, small)
 
@@ -234,19 +249,21 @@ Full plan gets written when the wave starts. This section orients a cold executo
 
 | Field | ICS use |
 |-------|---------|
-| `date` (`DateTime @db.Date`) + `startTime` / `endTime` (`HH:MM` strings) | `DTSTART` / `DTEND` — combine date + local times; executor must define timezone policy (tutor profile or app default) and emit correct UTC or `TZID` |
+| `date` (`DateTime @db.Date`) + `startTime` / `endTime` (`HH:MM` strings) | `DTSTART` / `DTEND` — combine date + wall times; **single timezone policy** via existing `resolveTutorTimezone(sessionTz, adminTz)` + `AdminUser.tutorTimezone` (see B1 — **no** new field/migration/UI) |
 | `plannedDurationMinutes` | Cross-check against start/end; authoritative window is start/end |
 | `subject` | Optional `CATEGORIES` or description prefix |
 | `notes`, `location` | `DESCRIPTION`, `LOCATION` |
-| `studentId` → `Student.name` | Event `SUMMARY` — default first name (`Tutoring — {first}`); full name only when tutor opt-in flag set |
+| `studentId` → `Student.name` + `Student.icsShowFullName` | `SUMMARY` — default first name (`Tutoring — {first}`); full `Student.name` only when **`icsShowFullName === true`** for that student |
+| `ScheduledSession.id` | Stable `UID` — e.g. `${id}@usemynk.com` (not per-render random UUID) |
+| `updatedAt` | `DTSTAMP` — from row, **not** render-time `now()` |
 | `adminUserId` | Feed scope — only this tutor's sessions |
 
 **Token + revocation — reuse share-link pattern, do not invent a parallel scheme:**
 
 - Follow `src/lib/share-access-scope.ts`: opaque token in URL, `revokedAt` null-check → 404 on revoked/missing, structured access logging on every fetch.
 - Token minting: `generateShareToken()` from `src/lib/security.ts` (same as `ShareLink` in `src/app/admin/students/[id]/actions.ts` — `regenerateShareLink`).
-- `ShareLink` is per-student for notes; the calendar feed needs a **per-tutor** token model (new table or `AdminUser` field) but the **pattern** is identical — not a second token philosophy.
-- Log prefix: repo convention (`AGENTS.md` § Conventions) requires a 3-letter prefix for new capture/sync features. Propose **`ics`** (e.g. `[ics] ics=<token:8> action=feed_fetched|feed_denied adminUserId=<id>`). Must be registered in `AGENTS.md` when implemented.
+- `ShareLink` is per-student for notes; the calendar feed needs a **per-tutor** token table (see [Duplication verdict](#duplication-verdict-record)) but the **pattern** is identical — not a second token philosophy. Minting **must** call `generateShareToken()` from `src/lib/security.ts`.
+- Log prefix **`ics`** for feed fetches; **`gcw`** for Google Calendar write lifecycle (B3). Register both in `AGENTS.md` § Conventions when implemented.
 
 **Serving:**
 
@@ -300,26 +317,9 @@ Google outage, revoked token, or API error must **never** break native schedulin
 
 After write ships, update copy and mapper so connected + successful write → `synced`; connected + write failure → consider `pending` or remain `not-connected` with honest messaging.
 
-### Disconnect behavior (decide during implementation)
+### Disconnect behavior (LOCKED 2026-09-15)
 
-When tutor disconnects Google Calendar (`OAuthCalendarConnection` deleted): what happens to events already written to Google? Options to evaluate: leave events in Google (orphaned), attempt delete-all on disconnect, or document "events remain until manually removed." Pick one and document in privacy/terms.
-
-### Testing
-
-Per `.cursor/rules/exhaustive-testing-mandate.mdc`:
-
-**ICS feed (deterministic output):**
-
-- Assert generated ICS against spec: valid `VCALENDAR`/`VEVENT`, correct UTC/timezone handling.
-- Revoked token → 401/404.
-- First-name default vs tutor opt-in full-name title behavior.
-
-**Google write:**
-
-- Injectable Google Calendar client — CI must never call Google.
-- Red-before / green-after for insert/patch/delete wiring.
-- Playwright for UI sync badge states (connected + synced, connected + failed, disconnected).
-- Jest for mapper + action fail-soft paths.
+`disconnectGoogleCalendar` in `src/app/admin/settings/integrations/actions.ts` deletes the local `OAuthCalendarConnection` row only — **zero** Google API calls. Events already in Google remain until the tutor removes them manually. Privacy + terms must state this plainly (B7, B8).
 
 ### Legal + platform docs (same commit as scope change)
 
@@ -364,22 +364,321 @@ Google's rejection email is the authority. Minimum bar for resubmission:
 ## Sequencing summary
 
 ```
-feat/auth-ship-ready merge
-        ↓
-Doc correction pass (BACKLOG, ORCHESTRATOR-STATE incl. Apple/ICS correction, ANDREW-FOLLOW-UPS)
+origin/master (auth merged)
         ↓
 Andrew Console checks (blast radius, Verification Center — scope availability closed)
         ↓
-feat/calendar-integration (or equivalent) — ONE serial branch:
-  • ICS subscription feed (no verification)
-  • Google Calendar API write (calendar.events.owned)
+feat/calendar-integration — ONE serial branch, WS0→WS4 (see Dispatch table)
         ↓
-Gates: jest (ICS output + injectable Google client) + Playwright + legal sync + PLATFORM-ASSUMPTIONS + AGENTS.md ics= prefix
+Inner loop: test:wb-affected:run per workstream; independent verifier each WS
+        ↓
+Merge gate: test:regression + next build (+ wb-sync: pre-existing reds only)
         ↓
 Crawlable preview → demo video (immediacy + Source Account Impact) → reply to rejection email
         ↓
 Verification approved → revisit Connect allowlist before unsupervised pilots
 ```
+
+---
+
+## 5-axis adversarial reliability review
+
+**Date:** 2026-09-15  
+**Axes:** [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc) — (1) data durability, (2) clock + ordering correctness, (3) races on user input, (4) cross-platform parity, (5) observability.
+
+**Verdict:** **APPROVE WITH BLOCKERS** — ship the wave, but all eight blockers below are **phase-1 acceptance** (not deferrals).
+
+| Axis | Headline finding |
+|------|------------------|
+| 1 Durability | Non-atomic `googleEventId` persist after `events.insert` can duplicate Google events on retry. |
+| 2 Clock | `HH:MM` session times need one pinned IANA policy before ICS/Google emit (existing `tutorTimezone` + `resolveTutorTimezone` — **reuse**, no new schema). |
+| 3 Races | Double-submit on session CRUD + OAuth callback `deleteMany`/`create` without unique constraint. |
+| 4 Parity | ICS polling latency vs Google write immediacy — documented; UID/DTSTAMP stability required for Google feed subscribers. |
+| 5 Observability | No `gcw` prefix on Google write path; ICS route must not leak PII in logs. |
+
+---
+
+## Phase-1 acceptance (blockers folded in)
+
+Each item is **merge-blocking** for the calendar branch.
+
+### B1 — Single timezone policy for ICS and Google (Axis 2)
+
+| | |
+|---|---|
+| **Prevents** | Same session showing different wall-clock times in ICS vs Google; DST bugs from two independent guesses. |
+| **Surface** | ICS `DTSTART`/`DTEND`; Google `event.start.timeZone` / `event.end.timeZone`; session CRUD → both sinks. |
+| **Policy** | **Reuse** `AdminUser.tutorTimezone`, tutor settings picker in `BillingDefaultsForm.tsx` / `BILLING_TIMEZONE_OPTIONS`, and `resolveTutorTimezone(sessionTz, adminTz)` in `src/lib/billing/defaults.ts`. **No** new timezone field, migration, or UI. |
+| **Test (jest)** | Fixture session in a **US DST-transition week**; assert identical wall-clock hour via (a) independent third-party ICS parser on generated feed bytes, and (b) mocked Google client insert payload — one resolved timezone, not two code paths. |
+
+### B2 — Idempotent Google insert (Axis 1)
+
+| | |
+|---|---|
+| **Prevents** | Duplicate Google events when insert succeeds but local `googleEventId` write fails (crash/Neon blip). |
+| **Surface** | `src/app/admin/schedule/actions.ts` — create/update paths. |
+| **Criterion** | Injectable Google client: simulate `events.insert` success then local persist throws; retry same action → mocked `events.insert` called **at most once** (idempotency key persisted **before** Google call, or pre-insert existence check). |
+| **Test (jest)** | Named in [Test mapping](#test-mapping). |
+
+### B3 — Google write observability (Axis 5)
+
+| | |
+|---|---|
+| **Prevents** | "It didn't show up in Google" with no log trail. |
+| **Surface** | All Google write attempts in schedule actions + shared calendar client helper. |
+| **Criterion** | Register prefix **`gcw`** in `AGENTS.md` § Conventions. Every attempt logs `adminUserId`, local `sessionId`, `googleEventId` (when known), outcome, at start/success/error: `[gcw] ...`. |
+| **Test (jest)** | Assert log on success path **and** on injected Google failure path. |
+
+### B4 — Public ICS route as security boundary (Axis 5 + auth class)
+
+Four **separate** tests:
+
+| Sub | Prevents | Criterion |
+|-----|----------|-----------|
+| **B4a** | CDN/proxy serving revoked feed | Every response (including denials) sets `Cache-Control: private, no-store`. |
+| **B4b** | Ownership bypass | `adminUserId` derived **only** from resolved token row — never from request param/header. |
+| **B4c** | Token enumeration | Missing vs revoked token → **byte-identical** response body (mirror `notFound()` unification in `src/lib/share-access-scope.ts`). |
+| **B4d** | PII in logs | `sal`-style logging: token truncated to 8 chars, opaque ids; **grep-guard** — no log call in ICS route receives VEVENT body or `student.name` (including error paths that serialize caught exceptions embedding `SUMMARY:Tutoring — …`). |
+
+### B5 — ICS `UID` / `DTSTAMP` stability (Axis 4)
+
+| | |
+|---|---|
+| **Prevents** | Google Calendar treating every poll as mass delete/recreate when `UID` changes per render. |
+| **Surface** | ICS generator. |
+| **Criterion** | `UID` deterministic from `ScheduledSession.id` (e.g. `${id}@usemynk.com`); `DTSTAMP` from `row.updatedAt`, not `now()`. |
+| **Test (jest)** | Render feed twice with no DB change; parse **both** with independent ICS library; assert identical `UID` and `DTSTAMP` sets. |
+
+### B6 — Per-student full-name opt-in (product lock)
+
+| | |
+|---|---|
+| **Prevents** | Global toggle exposing all families; default must stay first-name-only. |
+| **Surface** | `Student.icsShowFullName @default(false)`; student detail toggle UI (mirror audio share-link pattern); ICS `SUMMARY` builder. |
+| **Test (jest)** | Default `false` → first name only; flip flag for one student → only that student's events use full name in parsed `SUMMARY`. |
+
+### B7 — Disconnect makes zero Google calls (product lock)
+
+| | |
+|---|---|
+| **Prevents** | Slow/failing bulk delete on disconnect; accidental API side effects. |
+| **Surface** | `disconnectGoogleCalendar` — `src/app/admin/settings/integrations/actions.ts`. |
+| **Test (jest)** | With mocked Google client, disconnect → **zero** `events.*` / calendar API invocations; local row removed. |
+
+### B8 — Legal honesty merge gate (hard rule)
+
+| | |
+|---|---|
+| **Prevents** | False "Calendar sync is not live yet" on `master` after write ships (`AGENTS.md` honesty rule). |
+| **Surface** | `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`. |
+| **Criterion (checklist)** | Before merge to `master`: neither page contains the "not live yet — we do not currently create, update, delete, or watch calendar events" claim; `/privacy` names ICS feed as **continuous third-party polling** by whichever calendar client the tutor authorizes (**Google, Apple, Outlook** — not Google-only); scope copy matches `calendar.events.owned`; disconnect behavior disclosed. Follow `docs/LEGAL-SYNC.md` (classification, sync date, in-UI "Last updated", classification tables). |
+
+---
+
+## Workstreams
+
+**Branch:** one serial branch from `origin/master` (e.g. `feat/calendar-integration`). **Commit per workstream.** Shared working tree — **no parallel code dispatches.**
+
+| WS | Why this cut |
+|----|----------------|
+| **WS0** | Schema + token infra must exist before any route or write path; `icsShowFullName` and feed token table are prerequisites for WS1 and B6. |
+| **WS1** | ICS is independent of Google OAuth — delivers Sarah (Apple-first) without verification; implements B4, B5, B6 on feed surface. |
+| **WS2** | Google scope narrowing + CRUD hooks + B1/B2/B3 durability/idempotency/observability. |
+| **WS3** | UI truth: sync badges, disconnect, dialog copy, per-student toggle; Playwright lives here. |
+| **WS4** | Legal, `PLATFORM-ASSUMPTIONS.md`, `AGENTS.md` prefixes, verification write-up — must land **same commit** as behavior that makes copy true (B8). |
+
+### WS0 — Schema + feed token infrastructure
+
+**Scope:**
+
+- Add `Student.icsShowFullName Boolean @default(false)` (migration additive).
+- New per-tutor feed token table (opaque token, `adminUserId`, `revokedAt`; mint via `generateShareToken()` only).
+- `@@unique([provider, adminUserId])` on `OAuthCalendarConnection` + upsert callback path (**should-fix elevated** — include in WS0 if touching callback anyway).
+- Remove `calendarCount` (schema, `src/lib/calendar-oauth.ts`, callback route, panel) per ratified scope cleanup.
+
+**Acceptance:**
+
+- Migration applies cleanly; token mint uses `generateShareToken()`.
+- Prisma types available for WS1/WS2.
+
+**Tests:** jest migration smoke / model field presence; unique constraint test if added.
+
+### WS1 — ICS subscription feed
+
+**Scope:**
+
+- Public route under `/api/` (confirm `robots.ts` `disallow: ["/api/"]` covers it).
+- Render tutor `ScheduledSession` rows as `VCALENDAR`/`VEVENT` per field table (B1, B5, B6).
+- Token resolve + revoke + `ics` logging (B4).
+- **Explicit** rate-limit bucket decision for ICS path (`apiRateBucketForPath` — document chosen bucket in `PLATFORM-ASSUMPTIONS` or code comment; default `API_DEFAULT` is acceptable if recorded).
+
+**Acceptance:** B1 (ICS side), B4a–d, B5, B6.
+
+**Tests:** jest with third-party ICS parser as oracle (see [Test mapping](#test-mapping)).
+
+### WS2 — Google Calendar write (narrow scope + event lifecycle)
+
+**Scope:**
+
+- `src/app/api/auth/calendar/connect/route.ts` — scopes `calendar.events.owned` + `userinfo.email` only; drop `calendar.readonly` / `calendar.events`.
+- Remove `calendarList.list` stub from callback.
+- Hook `events.insert` / `events.patch` / `events.delete` in `src/app/admin/schedule/actions.ts` when connection active; target `primary`; fail-soft (Postgres always wins).
+- Populate/clear `googleEventId` with **atomic/idempotent** pattern (B2); use `withDbRetry` on backfill write.
+- Extend `src/lib/calendar-oauth.ts` token refresh (mirror `gmail-transport.ts` pattern).
+- Register and emit **`gcw`** logs (B3).
+
+**Acceptance:** B1 (Google side), B2, B3.
+
+**Tests:** injectable Google client jest suite; red-before/green-after on insert/patch/delete wiring.
+
+### WS3 — UI sync states + disconnect + per-student toggle
+
+**Scope:**
+
+- Update `resolveSyncPresentation` / `SessionSyncBadge` / `CreateSessionDialog` copy for post-write reality.
+- Per-student `icsShowFullName` control on student detail (compose existing toggle primitive).
+- `disconnectGoogleCalendar` — local delete only (B7).
+- **Should-fix (highest value):** distinguish `needs-reconnect` when refresh token revoked (`invalid_grant`) — badge + log; do not fail silently forever.
+
+**Acceptance:** B7; Playwright sync-badge oracles; honest copy when connected+synced vs failed.
+
+**Tests:** Playwright (`@wb-chrome` or schedule-specific tag per `tests/test-tags.ts`); jest for disconnect.
+
+### WS4 — Legal + platform docs + verification artifacts
+
+**Scope:**
+
+- B8 privacy/terms updates via `docs/LEGAL-SYNC.md`.
+- `docs/PLATFORM-ASSUMPTIONS.md` — new scope, ICS polling dependency, optional allowlist note.
+- `AGENTS.md` — register `ics` + `gcw`.
+- Written verification justification citing **Google's own documented external-feed refresh cadence** (public URL in submission packet) plus demo script cross-ref [Demo video requirements](#demo-video-requirements-get-it-right-the-first-time).
+
+**Acceptance:** B8 checklist green; grep tests for stale "not live yet" strings.
+
+**Tests:** existing legal copy jest (`src/__tests__/legal/`); extend for calendar honesty.
+
+---
+
+## Should-fix
+
+Resolve in branch when low-risk; **not** merge-blocking unless noted.
+
+| Item | Action |
+|------|--------|
+| ICS rate limit | Explicit bucket in `apiRateBucketForPath` / document `API_DEFAULT` (30 req/min/IP) as intentional for 8–24h poll cadence. |
+| `OAuthCalendarConnection` unique | `@@unique([provider, adminUserId])` + transactional upsert on callback (double-click / stale tab). |
+| **Needs-reconnect state** | **Highest-value should-fix:** extend `resolveSyncPresentation` beyond `synced`/`not-connected` when Google returns `invalid_grant`; visible badge + `gcw` log — silent permanent failure violates north star. |
+| `withDbRetry` on `googleEventId` write | Match other Prisma calls in `actions.ts`. |
+| `CreateSessionDialog` submit lock | Client-side guard against double-submit during Google round-trip. |
+| Verification doc | Cite Google documentation on external calendar refresh intervals. |
+| `/api/` + robots | Confirm ICS route path under `/api/` for `robots.ts` disallow. |
+| `calendarCount` removal | Three touch points — do in WS0. |
+
+---
+
+## Corrections not to re-litigate
+
+| Topic | Fact |
+|-------|------|
+| `src/lib/public-url.ts` | **Not** a public-route allowlist — Host-header guard for auth email links. ICS access = `src/middleware.ts` path-prefix rules. **Do not** add ICS to `ALLOWLISTED_HOST_PATTERNS`. |
+| `reliability-bar.mdc` path | `../../agenticPipeline/.cursor/rules/reliability-bar.mdc` **resolves** from this repo — do not "fix" AGENTS.md link. |
+| RRULE / recurring | **N/A** — `ScheduledSession` is one row = one occurrence; not deferred. |
+| Connect allowlist | Correctly deferred; `isApprovalExemptAdminPath` already blocks WAITLISTED/REJECTED from `/admin/settings/integrations`. |
+
+---
+
+## Duplication verdict (record)
+
+A **new table** for the per-tutor ICS feed token is **correct** — not a `composition-no-duplication` violation.
+
+- `ShareLink` requires non-null `studentId` FK; `share-access-scope.ts` assumes one student per token.
+- **Reuse the pattern:** opaque token, `revokedAt`, structured logging — **not** the `ShareLink` table.
+- **Guardrail:** token minting **must** import `generateShareToken()` from `src/lib/security.ts` — never inline `crypto.randomBytes`.
+
+---
+
+## Test mapping
+
+| Acceptance | Layer | Spec file (proposed) | Test title (proposed) |
+|------------|-------|----------------------|------------------------|
+| B1 timezone parity | jest | `src/__tests__/calendar/ics-google-timezone.test.ts` | DST week: ICS parser and Google insert share wall-clock policy |
+| B2 idempotent insert | jest | `src/__tests__/calendar/google-write-idempotency.test.ts` | insert success + local persist throws → retry calls insert at most once |
+| B3 `gcw` logs | jest | `src/__tests__/calendar/google-write-observability.test.ts` | logs on success and injected failure |
+| B4a cache headers | jest | `src/__tests__/calendar/ics-feed-security.test.ts` | all responses include private no-store |
+| B4b ownership | jest | same | adminUserId from token row only |
+| B4c uniform denial | jest | same | missing vs revoked byte-identical |
+| B4d no PII logs | jest + grep | same | grep guard + no name in log calls |
+| B5 UID/DTSTAMP | jest | `src/__tests__/calendar/ics-feed-stability.test.ts` | double render → identical UID/DTSTAMP via parser |
+| B6 per-student name | jest | `src/__tests__/calendar/ics-summary-privacy.test.ts` | default first name; flag toggles one student |
+| B7 disconnect | jest | `src/__tests__/calendar/disconnect-google.test.ts` | zero Google API calls |
+| B8 legal | jest | `src/__tests__/legal/privacy-policy-copy.dom.test.tsx` (+ terms) | no "not live yet"; ICS polling disclosed |
+| UI sync badges | Playwright | `tests/integration/calendar-sync-badge.spec.ts` | connected+synced / failure copy (`@wb-chrome` or new schedule tag) |
+| **PLAYWRIGHT-GAP** | human smoke | Surrogate: `ics-feed-stability` + `ics-summary-privacy` jest | Live subscribe `.ics` in Apple Calendar + Google "From URL" — **one-time** Andrew smoke when DONE; **`docs/BACKLOG.md` entry required** |
+| Google demo video | N/A (Google artifact) | Surrogate: jest CRUD wiring | insert/patch/delete synchronous in server action |
+
+**Layers:** jest sufficient for ICS strings + injectable Google client **with third-party ICS parser oracle** (`.cursor/rules/playwright-on-fix.mdc` — no jsdom geometry class here). Playwright required for sync-badge / chrome copy.
+
+**Verification:** separate **composer-2.5** verifier agent per workstream ([`.cursor/rules/agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)) — author does not self-certify.
+
+---
+
+## Merge gate
+
+| When | Command / criterion |
+|------|---------------------|
+| Inner loop (per commit / WS) | `npm run test:wb-affected:run -- --base origin/master` (or dry-run `npm run test:wb-affected`) |
+| Calendar-touched jest | `npx jest` on `src/__tests__/calendar/**` + legal + schedule unit tests |
+| UI / chrome touched | Playwright tag run for new spec |
+| **Merge to `master`** | `npm run test:regression` + `npx next build` (exit 0) |
+| `test:wb-sync` | **Expected red** on pre-existing July cluster only (**AUTH-SHIP-READY-2026-09-15** waiver) — **any NEW red is a regression** on this branch. Full `test:wb-sync` still required before master per project convention; document delta vs known list in handoff. |
+| Platform | `docs/PLATFORM-ASSUMPTIONS.md` updated **same commit** as new Google scope + ICS dependency |
+| Legal | B8 checklist complete |
+| Agentic | Independent verifier green per WS |
+
+---
+
+## Dispatch table
+
+Sequential execution — one branch, shared tree.
+
+| Workstream | `subagent_type` | `model` | Verifier |
+|------------|-----------------|---------|----------|
+| WS0 schema + token | `generalPurpose` | `composer-2.5` | separate `generalPurpose` `composer-2.5` |
+| WS1 ICS feed | `generalPurpose` | `composer-2.5` | separate `generalPurpose` `composer-2.5` |
+| WS2 Google write | `generalPurpose` | `composer-2.5` | separate `generalPurpose` `composer-2.5` |
+| WS3 UI + disconnect | `generalPurpose` | `composer-2.5` | separate `generalPurpose` `composer-2.5` |
+| WS4 legal + docs | `generalPurpose` | `composer-2.5` | separate `generalPurpose` `composer-2.5` |
+
+**Git safety:** if checkout blocked by uncommitted changes, STOP and report — never `restore` / `reset --hard`.
+
+**Worktree:** prefer `tutoring-notes-master-ops` or a dedicated feature worktree; do not collide with unrelated branches on main checkout.
+
+---
+
+## Definition of done
+
+Wave is **DONE** when all are true:
+
+1. **B1–B8** — every phase-1 acceptance item has a **named test** that was red-before / green-after (or legal grep), enrolled in appropriate jest/Playwright projects.
+2. **Both paths live** — ICS URL works with revoke; Google connect writes create/update/delete to primary calendar with fail-soft native scheduling.
+3. **Disconnect** — zero Google API calls; copy honest in UI + legal.
+4. **Per-student** `icsShowFullName` default false; UI toggle on student detail.
+5. **Merge gate** — `test:regression` + `next build` green; `PLATFORM-ASSUMPTIONS.md` + `AGENTS.md` prefixes updated; B8 legal checklist signed off in commit series.
+6. **Independent verification** — each WS reviewed by non-author agent (tests-to-spec, soundness, no duplication).
+7. **Smokebook** — when above pass, author smokebook per [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for human-only PLAYWRIGHT-GAP + demo filming; Andrew smokes **once** when DONE ([`smoke-when-done.mdc`](../../.cursor/rules/smoke-when-done.mdc)).
+8. **Preview** — Vercel branch alias fetched via MCP for smokebook header (never guessed).
+
+---
+
+## Andrew leftovers
+
+Not agent-executable — track in [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md).
+
+1. **Google Cloud Console — Clients first:** OAuth client blast radius (Sign-In, Gmail, Calendar share one client?); then Verification Center, Audience, Branding.
+2. **Demo video** — film Source Account Impact + immediacy vs ICS polling after crawlable preview ships.
+3. **Resend / platform SMTP** — unrelated to calendar branch but still human for auth mail live smoke.
+4. **Twilio env** — unrelated to calendar branch.
+5. **Reply to Google rejection email thread** — do not open parallel submission channel unless Google instructs.
 
 ---
 
@@ -403,6 +702,10 @@ Verification approved → revisit Connect allowlist before unsupervised pilots
 | `docs/LEGAL-SYNC.md` | Privacy/terms sync protocol |
 | `docs/PLATFORM-ASSUMPTIONS.md` | §4.3 Google OAuth + ICS polling assumptions |
 | `docs/handoff/ORCHESTRATOR-STATE.md` | Stale "Apple Calendar = CalDAV/defer" — correct on doc pass |
-| `AGENTS.md` | Register `ics=` log prefix on implementation |
+| `AGENTS.md` | Register `ics=` + `gcw=` log prefixes on implementation |
+| `src/lib/billing/defaults.ts` | `resolveTutorTimezone`, `DEFAULT_TUTOR_TIMEZONE` |
+| `src/app/admin/settings/billing/BillingDefaultsForm.tsx` | Existing tutor timezone picker |
+| `src/middleware.ts` | Public `/api/` ICS route access (not `public-url.ts`) |
+| `src/lib/security/api-rate-buckets.ts` | ICS route rate-limit bucket |
 
 External: [Google OAuth verification](https://support.google.com/cloud/answer/9110914), [Calendar API scopes](https://developers.google.com/calendar/api/auth)
