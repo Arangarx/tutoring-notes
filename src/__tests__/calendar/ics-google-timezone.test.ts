@@ -2,17 +2,26 @@
  * @jest-environment node
  *
  * B1 (ICS side): wall-clock hour in resolved IANA zone via independent parser.
- * TODO(WS2): assert the same policy on mocked Google Calendar insert payloads.
+ * B1: ICS parser and Google insert payload share wall-clock policy (DST week).
  */
 import { Temporal } from "@js-temporal/polyfill";
 import ical from "node-ical";
 
 import { buildIcsCalendarBody } from "@/lib/calendar/ics-feed";
+import { buildScheduledSessionGoogleEventResource } from "@/lib/calendar/google-calendar-event-payload";
 import {
   formatInstantWallClockInZone,
   resolveScheduledSessionWallClock,
 } from "@/lib/calendar/scheduled-session-datetime";
 import { parseDateOnlyInput } from "@/lib/date-only";
+
+function parseGoogleDateTimeWallClock(
+  dateTime: string,
+  timeZone: string
+): { hour: number; minute: number } {
+  const instant = Temporal.ZonedDateTime.from(`${dateTime}[${timeZone}]`).toInstant();
+  return formatInstantWallClockInZone(instant, timeZone);
+}
 
 function parsedStartWallClock(
   icsBody: string,
@@ -74,6 +83,27 @@ describe("B1 — ICS timezone wall-clock (DST transition week)", () => {
       timeZone
     );
     expect(directWall).toEqual(wall);
+
+    const googleResource = buildScheduledSessionGoogleEventResource(
+      {
+        id: "dst-spring",
+        date,
+        startTime,
+        endTime: "11:00",
+        subject: "Calc",
+        notes: "",
+        location: "",
+        student: { name: "Jordan Smith", icsShowFullName: false },
+      },
+      timeZone
+    );
+    expect(googleResource.start?.timeZone).toBe(timeZone);
+    expect(googleResource.end?.timeZone).toBe(timeZone);
+    const googleStartWall = parseGoogleDateTimeWallClock(
+      googleResource.start!.dateTime!,
+      googleResource.start!.timeZone!
+    );
+    expect(googleStartWall).toEqual(wall);
   });
 
   it("fall-back week session matches HH:MM in tutor zone (2026-11-01)", () => {

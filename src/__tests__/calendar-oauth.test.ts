@@ -102,15 +102,15 @@ describe("GET /api/auth/calendar/connect", () => {
     expect(res.headers.get("location")).toBe("http://localhost:3000/login");
   });
 
-  it("302 includes both calendar scopes on the Google authorize URL", async () => {
+  it("302 includes owned calendar scope on the Google authorize URL", async () => {
     const { GET } = await import("@/app/api/auth/calendar/connect/route");
     const res = await GET();
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("accounts.google.com");
-    expect(location).toContain("calendar.events");
-    expect(location).toContain("calendar.readonly");
+    expect(location).toContain("calendar.events.owned");
+    expect(location).not.toContain("calendar.readonly");
     expect(location).toContain("userinfo.email");
     expect(location).toContain("access_type=offline");
     expect(location).toContain("prompt=consent");

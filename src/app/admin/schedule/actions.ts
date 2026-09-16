@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { parseDateOnlyInput } from "@/lib/date-only";
+import { getGoogleCalendarConnectionForTutor } from "@/lib/calendar-oauth";
+import {
+  afterScheduledSessionCreated,
+  afterScheduledSessionUpdated,
+  beforeScheduledSessionDeleted,
+} from "@/lib/calendar/google-calendar-write";
 import { db, withDbRetry } from "@/lib/db";
 import { toScheduledSessionView } from "@/lib/schedule/scheduled-session-mapper";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
@@ -54,13 +60,18 @@ async function assertOwnsScheduledSession(sessionId: string) {
     () =>
       db.scheduledSession.findUnique({
         where: { id: sessionId },
-        select: { adminUserId: true, studentId: true },
+        select: { adminUserId: true, studentId: true, googleEventId: true },
       }),
     { label: "assertOwnsScheduledSession" }
   );
   if (!session || session.adminUserId !== scope.adminId) notFound();
   await assertOwnsStudent(session.studentId);
   return session;
+}
+
+async function calendarRefreshTokenForAdmin(adminUserId: string): Promise<string | null> {
+  const conn = await getGoogleCalendarConnectionForTutor(adminUserId);
+  return conn?.refreshToken ?? null;
 }
 
 /** Lists sessions for the authenticated tutor only (`adminUserId` = scope.adminId). */
@@ -114,6 +125,10 @@ export async function createScheduledSession(
   );
 
   revalidatePath("/admin/schedule");
+
+  const refreshToken = await calendarRefreshTokenForAdmin(scope.adminId);
+  await afterScheduledSessionCreated(scope.adminId, row.id, refreshToken);
+
   return { id: row.id };
 }
 
@@ -121,7 +136,7 @@ export async function updateScheduledSession(
   sessionId: string,
   input: ScheduledSessionInput
 ): Promise<void> {
-  await assertOwnsScheduledSession(sessionId);
+  const owned = await assertOwnsScheduledSession(sessionId);
   await assertOwnsStudent(input.studentId);
   const parsed = parseScheduledSessionInput(input);
   if (!parsed) notFound();
@@ -139,10 +154,20 @@ export async function updateScheduledSession(
   );
 
   revalidatePath("/admin/schedule");
+
+  const refreshToken = await calendarRefreshTokenForAdmin(owned.adminUserId);
+  await afterScheduledSessionUpdated(owned.adminUserId, sessionId, refreshToken);
 }
 
 export async function deleteScheduledSession(sessionId: string): Promise<void> {
-  await assertOwnsScheduledSession(sessionId);
+  const owned = await assertOwnsScheduledSession(sessionId);
+  const refreshToken = await calendarRefreshTokenForAdmin(owned.adminUserId);
+  await beforeScheduledSessionDeleted(
+    owned.adminUserId,
+    sessionId,
+    owned.googleEventId,
+    refreshToken
+  );
   await withDbRetry(
     () => db.scheduledSession.delete({ where: { id: sessionId } }),
     { label: "deleteScheduledSession" }

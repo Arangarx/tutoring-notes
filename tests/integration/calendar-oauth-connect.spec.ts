@@ -35,8 +35,8 @@ test.describe("Calendar OAuth connect stub", () => {
 
     const location = response.headers()["location"] ?? "";
     expect(location).toContain("accounts.google.com");
-    expect(location).toContain("calendar.events");
-    expect(location).toContain("calendar.readonly");
+    expect(location).toContain("calendar.events.owned");
+    expect(location).not.toContain("calendar.readonly");
   });
 
   test("connected state shows honest stub copy when connection is seeded", async ({ page }) => {

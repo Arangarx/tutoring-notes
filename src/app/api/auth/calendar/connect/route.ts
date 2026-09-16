@@ -4,8 +4,7 @@ import { authOptions } from "@/auth-options";
 import { env } from "@/lib/env";
 
 const CALENDAR_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events.owned",
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
 

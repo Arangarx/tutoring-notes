@@ -62,6 +62,14 @@ function buildSummary(student: IcsFeedSessionInput["student"]): string {
   return `Tutoring — ${first}`;
 }
 
+/** Shared ICS + Google Calendar event title (B6 / WS2). */
+export function buildIcsEventSummary(student: {
+  name: string;
+  icsShowFullName: boolean;
+}): string {
+  return buildSummary(student);
+}
+
 function buildDescription(session: IcsFeedSessionInput): string {
   const parts: string[] = [];
   const subject = session.subject.trim();
