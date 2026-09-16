@@ -16,11 +16,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar **WS2 landed** [`b7180d72`](https://github.com/Arangarx/tutoring-notes/commit/b7180d72): `calendar.events.owned` + `userinfo.email`; injectable primary-calendar write; iCalUID pre-insert list; `gcw` logs; PLATFORM-ASSUMPTIONS §4.3 updated. Jest calendar 27 passed; Playwright connect 3/3. Author risk: iCalUID list visibility race. |
-| **Next action(s)** | **WS2 independent verifier in flight**, then WS3 UI/disconnect/toggle if APPROVE, then WS4 legal. Andrew asleep — proceed until a tripwire. Do **not** merge to `master`. |
+| **Last action completed** | Calendar **WS2 independently verified APPROVE WITH NITS** ([b7180d72](https://github.com/Arangarx/tutoring-notes/commit/b7180d72)). Jest 11 suites / 40 tests. B2 persist-throw insert-at-most-once holds; iCalUID list-empty-after-insert race is a **nit** (not REJECT). |
+| **Next action(s)** | **WS3 in flight** — honest sync badges, `needs-reconnect` on `invalid_grant`, disconnect B7, per-student `icsShowFullName` toggle, ICS URL on integrations. Then verifier. Then WS4 legal. Andrew asleep — proceed until a tripwire. Do **not** merge to `master`. |
 | **Open Andrew-confirms** | **None blocking this wave.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md). |
-| **In-flight subagents** | **WS2 verifier** (composer-2.5 `generalPurpose`, non-author) — B1/B2/B3 of [`b7180d72`](https://github.com/Arangarx/tutoring-notes/commit/b7180d72). |
-| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`** @ [`b7180d72`](https://github.com/Arangarx/tutoring-notes/commit/b7180d72). `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
+| **In-flight subagents** | **WS3 author** (composer-2.5 `generalPurpose`) — UI + disconnect on `feat/calendar-wave`. |
+| **Uncommitted / unmerged** | Main checkout **`feat/calendar-wave`**. `master` stays in `tutoring-notes-master-ops`. Use `npm exec -- jest`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
