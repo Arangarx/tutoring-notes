@@ -1,21 +1,22 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { TEST_ADMIN } from "../visual/helpers";
+import { TAG } from "../test-tags";
+import { seedTestAdmin } from "../visual/helpers";
 
-test.describe("Calendar OAuth connect stub", () => {
+test.describe("Calendar OAuth connect stub @wb-chrome", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("Connect starts Google OAuth with calendar scopes", async ({ page }) => {
+  test(`${TAG.WB_CHROME} Connect starts Google OAuth with calendar scopes`, async ({ page }) => {
+    const adminUserId = await seedTestAdmin();
     const prisma = new PrismaClient();
     try {
-      const admin = await prisma.adminUser.findUnique({
-        where: { email: TEST_ADMIN.email },
+      await prisma.oAuthCalendarConnection.deleteMany({
+        where: { adminUserId, provider: "google" },
       });
-      if (admin) {
-        await prisma.oAuthCalendarConnection.deleteMany({
-          where: { adminUserId: admin.id, provider: "google" },
-        });
-      }
+      const oauthCount = await prisma.oAuthCalendarConnection.count({
+        where: { adminUserId, provider: "google" },
+      });
+      expect(oauthCount).toBe(0);
     } finally {
       await prisma.$disconnect();
     }
@@ -41,22 +42,21 @@ test.describe("Calendar OAuth connect stub", () => {
     expect(location).not.toContain("calendar.readonly");
   });
 
-  test("connected state shows live sync copy when connection is seeded", async ({ page }) => {
+  test(`${TAG.WB_CHROME} connected state shows live sync copy when connection is seeded`, async ({
+    page,
+  }) => {
+    const adminUserId = await seedTestAdmin();
     const prisma = new PrismaClient();
     try {
-      const admin = await prisma.adminUser.findUnique({
-        where: { email: TEST_ADMIN.email },
-      });
-      expect(admin).not.toBeNull();
       await prisma.oAuthCalendarConnection.deleteMany({
-        where: { adminUserId: admin!.id, provider: "google" },
+        where: { adminUserId, provider: "google" },
       });
       await prisma.oAuthCalendarConnection.create({
         data: {
           provider: "google",
           refreshToken: "playwright-seed-refresh",
           email: "seeded-calendar@example.com",
-          adminUserId: admin!.id,
+          adminUserId,
         },
       });
     } finally {

@@ -125,6 +125,8 @@ export default defineConfig({
         "**/integration/identity/**/*.spec.ts",
         "**/integration/whiteboard-live-sync-regression.spec.ts",
         "**/integration/wb-phantom-stroke-regression.spec.ts",
+        "**/integration/calendar-sync-badge.spec.ts",
+        "**/integration/calendar-oauth-connect.spec.ts",
       ],
     },
     {
@@ -186,6 +188,8 @@ export default defineConfig({
         "**/integration/wb-share-replay-viewport-phone.spec.ts",
         "**/integration/wb-board-tab-overflow.spec.ts",
         "**/integration/ux-sarah-wave1-bundle.spec.ts",
+        "**/integration/calendar-sync-badge.spec.ts",
+        "**/integration/calendar-oauth-connect.spec.ts",
         "**/integration/recording-resilience.spec.ts",
         "**/integration/recording-end-to-end.spec.ts",
         "**/integration/wb-end-winddown.spec.ts",

@@ -2,7 +2,7 @@
  * Calendar sync badge copy — connected / synced / pending / needs-reconnect.
  *
  * Run:
- *   npx playwright test tests/integration/calendar-sync-badge.spec.ts --project=integration
+ *   npx playwright test tests/integration/calendar-sync-badge.spec.ts --project=wb-regression
  */
 
 import { expect, test } from "@playwright/test";
@@ -87,6 +87,10 @@ test.describe("Calendar sync badges @wb-chrome", () => {
         reconnectRow.locator('[data-slot="badge"]').filter({ hasText: "Reconnect Google" })
       ).toBeVisible();
     } finally {
+      await prisma.scheduledSession.deleteMany({ where: { adminUserId } });
+      await prisma.oAuthCalendarConnection.deleteMany({
+        where: { adminUserId, provider: "google" },
+      });
       await prisma.$disconnect();
     }
   });
