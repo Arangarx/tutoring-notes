@@ -4,7 +4,6 @@ import type { CalendarConnectionView } from "@/lib/schedule/types";
 export type GoogleCalendarConnection = {
   refreshToken: string;
   email: string;
-  calendarCount: number | null;
 };
 
 function hasOAuthCalendarConnectionModel(): boolean {
@@ -25,7 +24,6 @@ export async function getGoogleCalendarConnectionForTutor(
       ? {
           refreshToken: row.refreshToken,
           email: row.email,
-          calendarCount: row.calendarCount,
         }
       : null;
   } catch {

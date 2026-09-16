@@ -26,13 +26,17 @@ jest.mock("@/lib/env", () => ({
 
 const mockDeleteMany = jest.fn();
 const mockCreate = jest.fn();
+const mockUpsert = jest.fn();
+const mockTransaction = jest.fn();
 jest.mock("@/lib/db", () => ({
   db: {
     oAuthCalendarConnection: {
       findFirst: jest.fn(),
       deleteMany: (...args: unknown[]) => mockDeleteMany(...args),
       create: (...args: unknown[]) => mockCreate(...args),
+      upsert: (...args: unknown[]) => mockUpsert(...args),
     },
+    $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
 }));
 
@@ -46,6 +50,17 @@ beforeEach(() => {
   mockGetAdminByEmail.mockResolvedValue({ id: "admin-1" });
   mockDeleteMany.mockResolvedValue({ count: 0 });
   mockCreate.mockResolvedValue({ id: "conn-1" });
+  mockUpsert.mockResolvedValue({ id: "conn-1" });
+  mockTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+    const tx = {
+      oAuthCalendarConnection: {
+        deleteMany: mockDeleteMany,
+        create: mockCreate,
+        upsert: mockUpsert,
+      },
+    };
+    return fn(tx);
+  });
 });
 
 describe("NextAuth Google provider scopes", () => {
@@ -118,10 +133,6 @@ describe("GET /api/auth/calendar/callback", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ email: "calendar@example.com" }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ items: [{ id: "primary" }, { id: "work" }] }),
       });
 
     const { GET } = await import("@/app/api/auth/calendar/callback/route");
@@ -132,18 +143,58 @@ describe("GET /api/auth/calendar/callback", () => {
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     expect(res.headers.get("location")).toContain("connected=google_calendar");
-    expect(mockDeleteMany).toHaveBeenCalledWith({
-      where: { provider: "google", adminUserId: "admin-1" },
-    });
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    for (const call of mockFetch.mock.calls) {
+      const url = String(call[0]);
+      expect(url).not.toContain("calendarList");
+      expect(url).not.toContain("calendar/v3");
+    }
+    expect(mockUpsert).toHaveBeenCalledWith({
+      where: {
+        provider_adminUserId: { provider: "google", adminUserId: "admin-1" },
+      },
+      create: {
         provider: "google",
         refreshToken: "refresh-abc",
         email: "calendar@example.com",
-        calendarCount: 2,
         adminUserId: "admin-1",
       },
+      update: {
+        refreshToken: "refresh-abc",
+        email: "calendar@example.com",
+      },
     });
+    expect(mockCreate).not.toHaveBeenCalled();
+    const upsertPayload = JSON.stringify(mockUpsert.mock.calls[0]?.[0] ?? {});
+    expect(upsertPayload).not.toContain("calendarCount");
+  });
+
+  it("double callback uses upsert twice (no duplicate create path)", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return {
+          ok: true,
+          json: async () => ({
+            refresh_token: "refresh-abc",
+            access_token: "access-abc",
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ email: "calendar@example.com" }),
+      };
+    });
+
+    const { GET } = await import("@/app/api/auth/calendar/callback/route");
+    const req = new NextRequest(
+      "http://localhost:3000/api/auth/calendar/callback?code=oauth-code-123"
+    );
+    await GET(req);
+    await GET(req);
+    expect(mockUpsert).toHaveBeenCalledTimes(2);
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockDeleteMany).not.toHaveBeenCalled();
   });
 
   it("redirects with db_not_ready when OAuthCalendarConnection model is missing", async () => {

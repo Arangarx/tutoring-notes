@@ -243,14 +243,12 @@ export function SchedulePageClient({
   studentOptions,
   calendarConnections,
   googleOAuthAvailable,
-  googleCalendarCount = null,
   googleConnected,
 }: {
   sessions: ScheduledSessionView[];
   studentOptions: ScheduleStudentOption[];
   calendarConnections: CalendarConnectionView[];
   googleOAuthAvailable: boolean;
-  googleCalendarCount?: number | null;
   googleConnected: boolean;
 }) {
   const router = useRouter();
@@ -387,7 +385,6 @@ export function SchedulePageClient({
       <CalendarIntegrationsPanel
         connections={calendarConnections}
         googleOAuthAvailable={googleOAuthAvailable}
-        googleCalendarCount={googleCalendarCount}
         compact
         showSettingsLink
         settingsHref={SCHEDULE_INTEGRATIONS_SETTINGS_HREF}

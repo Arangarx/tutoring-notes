@@ -69,21 +69,6 @@ export async function GET(request: NextRequest) {
   const userInfo = userInfoRes.ok ? await userInfoRes.json() : null;
   const email = userInfo?.email ?? session.user?.email ?? "unknown@gmail.com";
 
-  let calendarCount: number | null = null;
-  try {
-    const calListRes = await fetch(
-      "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250",
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (calListRes.ok) {
-      const calList = await calListRes.json();
-      calendarCount =
-        typeof calList?.items?.length === "number" ? calList.items.length : null;
-    }
-  } catch {
-    // optional screencast helper — ignore failures
-  }
-
   if (
     typeof (db as { oAuthCalendarConnection?: { create: unknown } }).oAuthCalendarConnection?.create !==
     "function"
@@ -91,17 +76,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(`${returnTo}?error=db_not_ready`, baseUrl));
   }
   try {
-    await db.oAuthCalendarConnection.deleteMany({
-      where: { provider: "google", adminUserId },
-    });
-    await db.oAuthCalendarConnection.create({
-      data: {
-        provider: "google",
-        refreshToken,
-        email,
-        calendarCount,
-        adminUserId,
-      },
+    await db.$transaction(async (tx) => {
+      if (adminUserId) {
+        await tx.oAuthCalendarConnection.upsert({
+          where: {
+            provider_adminUserId: { provider: "google", adminUserId },
+          },
+          create: {
+            provider: "google",
+            refreshToken,
+            email,
+            adminUserId,
+          },
+          update: {
+            refreshToken,
+            email,
+          },
+        });
+      } else {
+        await tx.oAuthCalendarConnection.deleteMany({
+          where: { provider: "google", adminUserId: null },
+        });
+        await tx.oAuthCalendarConnection.create({
+          data: {
+            provider: "google",
+            refreshToken,
+            email,
+            adminUserId: null,
+          },
+        });
+      }
     });
   } catch {
     return NextResponse.redirect(new URL(`${returnTo}?error=db_not_ready`, baseUrl));

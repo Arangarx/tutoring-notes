@@ -48,7 +48,6 @@ export default async function SchedulePage() {
         studentOptions={studentOptions}
         calendarConnections={calendarConnections}
         googleOAuthAvailable={googleOAuthAvailable}
-        googleCalendarCount={googleConnection?.calendarCount ?? null}
         googleConnected={googleConnected}
       />
     </PageShell>

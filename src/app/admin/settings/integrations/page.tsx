@@ -49,7 +49,6 @@ export default async function IntegrationsSettingsPage({
       <CalendarIntegrationsPanel
         connections={connections}
         googleOAuthAvailable={googleOAuthAvailable}
-        googleCalendarCount={googleConnection?.calendarCount ?? null}
         connectError={error}
         connectSuccess={connected}
         compact={false}

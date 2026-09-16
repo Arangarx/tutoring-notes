@@ -12,7 +12,6 @@ import { CalendarIcon, CheckIcon, PlusIcon } from "lucide-react";
 type CalendarIntegrationsPanelProps = {
   connections: CalendarConnectionView[];
   googleOAuthAvailable: boolean;
-  googleCalendarCount?: number | null;
   connectError?: string;
   connectSuccess?: string;
   /** When true, show compact summary suitable for schedule page sidebar. */
@@ -56,7 +55,6 @@ function ProviderIcon({ provider }: { provider: CalendarConnectionView["provider
 export function CalendarIntegrationsPanel({
   connections,
   googleOAuthAvailable,
-  googleCalendarCount = null,
   connectError,
   connectSuccess,
   compact = false,
@@ -86,15 +84,6 @@ export function CalendarIntegrationsPanel({
         {!compact && googleConnected ? (
           <p className="rounded-[10px] border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" role="status">
             Calendar sync is not live yet — connection saved for upcoming scheduling.
-            {typeof googleCalendarCount === "number" ? (
-              <>
-                {" "}
-                <span className="text-foreground">
-                  {googleCalendarCount} calendar{googleCalendarCount === 1 ? "" : "s"} found on this
-                  Google account.
-                </span>
-              </>
-            ) : null}
           </p>
         ) : null}
 

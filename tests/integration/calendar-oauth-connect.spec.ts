@@ -54,7 +54,6 @@ test.describe("Calendar OAuth connect stub", () => {
           provider: "google",
           refreshToken: "playwright-seed-refresh",
           email: "seeded-calendar@example.com",
-          calendarCount: 3,
           adminUserId: admin!.id,
         },
       });
@@ -69,6 +68,5 @@ test.describe("Calendar OAuth connect stub", () => {
       page.getByText(/Calendar sync is not live yet/i).first()
     ).toBeVisible();
     await expect(page.getByText("seeded-calendar@example.com")).toBeVisible();
-    await expect(page.getByText(/3 calendars found/i)).toBeVisible();
   });
 });
