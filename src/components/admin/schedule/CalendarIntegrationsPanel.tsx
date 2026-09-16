@@ -6,14 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SectionCard } from "@/components/SectionCard";
 import { disconnectGoogleCalendar } from "@/app/admin/settings/integrations/actions";
+import { ShareLinkRow } from "@/app/admin/students/[id]/ShareLinkRow";
 import type { CalendarConnectionView } from "@/lib/schedule/types";
 import { CalendarIcon, CheckIcon, PlusIcon } from "lucide-react";
+import { RegenerateCalendarFeedForm } from "@/components/admin/schedule/CalendarFeedControls";
 
 type CalendarIntegrationsPanelProps = {
   connections: CalendarConnectionView[];
   googleOAuthAvailable: boolean;
   connectError?: string;
   connectSuccess?: string;
+  googleReconnectRequired?: boolean;
+  icsFeedHttpsUrl?: string | null;
+  icsFeedWebcalUrl?: string | null;
+  regenerateCalendarFeedAction?: () => void;
   /** When true, show compact summary suitable for schedule page sidebar. */
   compact?: boolean;
   showSettingsLink?: boolean;
@@ -57,6 +63,10 @@ export function CalendarIntegrationsPanel({
   googleOAuthAvailable,
   connectError,
   connectSuccess,
+  googleReconnectRequired = false,
+  icsFeedHttpsUrl,
+  icsFeedWebcalUrl,
+  regenerateCalendarFeedAction,
   compact = false,
   showSettingsLink = true,
   settingsHref = "/admin/settings/integrations",
@@ -69,8 +79,8 @@ export function CalendarIntegrationsPanel({
       title={compact ? "Connected calendars" : "Calendar integrations"}
       description={
         compact
-          ? "Connect Google Calendar so we can mirror sessions when scheduling ships."
-          : "Connect Google Calendar to prepare for upcoming scheduling. Calendar sync is not live yet — connecting saves your account for the next release."
+          ? "Google Calendar sync and ICS subscription for Apple and other calendar apps."
+          : "Connect Google Calendar to sync scheduled sessions, or subscribe to the ICS feed for Apple Calendar and other apps."
       }
       actions={
         showSettingsLink && compact ? (
@@ -81,9 +91,20 @@ export function CalendarIntegrationsPanel({
       }
     >
       <div className="space-y-4">
-        {!compact && googleConnected ? (
+        {!compact && googleConnected && googleReconnectRequired ? (
+          <p
+            className="rounded-[10px] border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            role="alert"
+          >
+            Google Calendar needs to be reconnected — sync stopped after access was revoked. Disconnect
+            and connect again below.
+          </p>
+        ) : null}
+
+        {!compact && googleConnected && !googleReconnectRequired ? (
           <p className="rounded-[10px] border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" role="status">
-            Calendar sync is not live yet — connection saved for upcoming scheduling.
+            New and updated sessions sync to your Google Calendar. Disconnecting stops future sync only
+            — events already in Google are not removed.
           </p>
         ) : null}
 
@@ -111,10 +132,16 @@ export function CalendarIntegrationsPanel({
                   <>
                     <Badge
                       variant="outline"
-                      className="gap-1 border-success/30 bg-success/10 font-normal text-success"
+                      className={
+                        googleReconnectRequired && connection.provider === "google"
+                          ? "gap-1 border-destructive/30 bg-destructive/10 font-normal text-destructive"
+                          : "gap-1 border-success/30 bg-success/10 font-normal text-success"
+                      }
                     >
                       <CheckIcon className="size-3" aria-hidden />
-                      Connected
+                      {googleReconnectRequired && connection.provider === "google"
+                        ? "Reconnect needed"
+                        : "Connected"}
                     </Badge>
                     {!compact && connection.provider === "google" ? (
                       <form action={disconnectGoogleCalendar}>
@@ -152,7 +179,7 @@ export function CalendarIntegrationsPanel({
                   )
                 ) : (
                   <Button type="button" variant="outline" size="sm" className="min-h-9" disabled>
-                    Coming soon
+                    Use ICS feed below
                   </Button>
                 )}
               </div>
@@ -160,17 +187,46 @@ export function CalendarIntegrationsPanel({
           ))}
         </ul>
 
+        {!compact && icsFeedHttpsUrl && icsFeedWebcalUrl ? (
+          <div className="space-y-3 rounded-[10px] border border-border bg-muted/30 px-3 py-3" data-testid="calendar-ics-feed-section">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">ICS subscription feed</p>
+              <p className="text-xs text-muted-foreground">
+                Subscribe in Apple Calendar or another app. Treat these URLs like passwords — anyone with
+                the link can see your schedule. Calendar apps poll the feed; updates are not instant on
+                every client.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">HTTPS (Google Calendar, Outlook, …)</p>
+              <ShareLinkRow url={icsFeedHttpsUrl} ariaLabel="ICS feed HTTPS URL" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">webcal (Apple Calendar)</p>
+              <ShareLinkRow
+                url={icsFeedWebcalUrl}
+                showOpen={false}
+                ariaLabel="ICS feed webcal URL"
+              />
+            </div>
+            {regenerateCalendarFeedAction ? (
+              <div className="flex flex-wrap gap-2">
+                <RegenerateCalendarFeedForm action={regenerateCalendarFeedAction} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {!compact ? (
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">
               {connectedCount === 0
-                ? "No calendars connected yet — scheduling in Mynk works without an external calendar."
-                : `${connectedCount} calendar${connectedCount === 1 ? "" : "s"} connected. Sync is not live yet.`}
+                ? "No Google connection yet — scheduling in Mynk works without an external calendar."
+                : `${connectedCount} calendar${connectedCount === 1 ? "" : "s"} connected.`}
             </p>
             {connectSuccess === "google_calendar" ? (
               <p className="text-sm text-success" role="status">
-                Google Calendar connected. Sync is not live yet — your connection is saved for upcoming
-                scheduling.
+                Google Calendar connected. New sessions will sync to your primary Google Calendar.
               </p>
             ) : null}
             {connectError === "google_oauth_not_configured" ? (

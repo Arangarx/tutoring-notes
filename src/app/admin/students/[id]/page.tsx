@@ -8,6 +8,7 @@ import {
 import SendUpdateForm from "./SendUpdateForm";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
 import { ShareLinkRow } from "./ShareLinkRow";
+import { IcsShowFullNameToggle } from "./IcsShowFullNameToggle";
 import {
   CreateShareLinkForm,
   RegenerateShareLinkForm,
@@ -242,6 +243,12 @@ export default async function StudentDetailPage({
   const shareSection = (
     <>
       <SectionHeading
+        title="Calendar event titles"
+        description="By default, calendar feeds and Google events use the student's first name only (for example, Tutoring — Maya). Turn this on only if you want the full name on external calendars for this student."
+      />
+      <IcsShowFullNameToggle studentId={student.id} checked={student.icsShowFullName} />
+      <div className="mt-6 border-t border-border pt-6">
+      <SectionHeading
         title="Share link (for parents/students)"
         description="This link does not require login. You can revoke or regenerate it anytime."
       />
@@ -266,6 +273,7 @@ export default async function StudentDetailPage({
           <CreateShareLinkForm action={regenerateShareLink.bind(null, student.id)} />
         </div>
       )}
+      </div>
     </>
   );
 

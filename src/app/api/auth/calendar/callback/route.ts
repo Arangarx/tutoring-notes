@@ -87,10 +87,12 @@ export async function GET(request: NextRequest) {
             refreshToken,
             email,
             adminUserId,
+            reconnectRequiredAt: null,
           },
           update: {
             refreshToken,
             email,
+            reconnectRequiredAt: null,
           },
         });
       } else {

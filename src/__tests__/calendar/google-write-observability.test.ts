@@ -4,11 +4,17 @@
  * B3: gcw structured logs on success and failure (including invalid_grant).
  */
 import { parseDateOnlyInput } from "@/lib/date-only";
+import { markGoogleCalendarReconnectRequired } from "@/lib/calendar/google-calendar-reconnect";
 import {
   setGoogleCalendarSyncDepsForTests,
   syncScheduledSessionInsertToGoogle,
   type GoogleCalendarWriteClient,
 } from "@/lib/calendar/google-calendar-write";
+
+jest.mock("@/lib/calendar/google-calendar-reconnect", () => ({
+  markGoogleCalendarReconnectRequired: jest.fn().mockResolvedValue(undefined),
+  clearGoogleCalendarReconnectRequired: jest.fn().mockResolvedValue(undefined),
+}));
 
 const sessionRow = {
   id: "sess-gcw-obs",
@@ -29,6 +35,7 @@ describe("B3 — gcw observability", () => {
   afterEach(() => {
     setGoogleCalendarSyncDepsForTests(null);
     logSpy.mockClear();
+    jest.mocked(markGoogleCalendarReconnectRequired).mockClear();
   });
 
   afterAll(() => {
@@ -108,5 +115,6 @@ describe("B3 — gcw observability", () => {
 
     const lines = gcwLines();
     expect(lines.some((l) => l.includes("action=invalid_grant"))).toBe(true);
+    expect(markGoogleCalendarReconnectRequired).toHaveBeenCalledWith("admin-gcw");
   });
 });

@@ -27,6 +27,17 @@ export async function mintCalendarFeedToken(
   });
 }
 
+/** Active (non-revoked) feed token for a tutor, if any. */
+export async function findActiveCalendarFeedTokenForAdmin(
+  adminUserId: string
+): Promise<CalendarFeedTokenRow | null> {
+  const row = await db.calendarFeedToken.findFirst({
+    where: { adminUserId, revokedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+  return row ?? null;
+}
+
 /** Resolve a raw bearer token to a row, or null if missing / revoked. */
 export async function findCalendarFeedTokenByRawToken(
   rawToken: string

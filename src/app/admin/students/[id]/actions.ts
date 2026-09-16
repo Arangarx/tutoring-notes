@@ -86,6 +86,20 @@ export async function revokeShareLink(studentId: string) {
   revalidatePath(`/admin/students/${studentId}`);
 }
 
+/** Per-student opt-in: full name in ICS SUMMARY and Google event titles (default off). */
+export async function setStudentIcsShowFullName(studentId: string, icsShowFullName: boolean) {
+  await assertOwnsStudent(studentId);
+  await withDbRetry(
+    () =>
+      db.student.update({
+        where: { id: studentId },
+        data: { icsShowFullName },
+      }),
+    { label: "setStudentIcsShowFullName" }
+  );
+  revalidatePath(`/admin/students/${studentId}`);
+}
+
 export async function createNote(
   studentId: string,
   formData: FormData

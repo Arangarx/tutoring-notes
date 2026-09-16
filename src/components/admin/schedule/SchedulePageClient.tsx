@@ -244,12 +244,14 @@ export function SchedulePageClient({
   calendarConnections,
   googleOAuthAvailable,
   googleConnected,
+  googleReconnectRequired = false,
 }: {
   sessions: ScheduledSessionView[];
   studentOptions: ScheduleStudentOption[];
   calendarConnections: CalendarConnectionView[];
   googleOAuthAvailable: boolean;
   googleConnected: boolean;
+  googleReconnectRequired?: boolean;
 }) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(todayLocalDate());
@@ -287,8 +289,8 @@ export function SchedulePageClient({
     <div className="space-y-6" data-testid="schedule-page">
       <div className="flex flex-col gap-3 rounded-[10px] border border-border bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Sessions are saved in Mynk. Connect Google Calendar in settings when you want external
-          sync — calendar write is not live yet.
+          Sessions are saved in Mynk. Connect Google Calendar or subscribe to the ICS feed in settings
+          when you want events on an external calendar.
         </p>
         <Button asChild variant="outline" size="sm" className="min-h-9 shrink-0">
           <Link href={SCHEDULE_INTEGRATIONS_SETTINGS_HREF}>
@@ -385,6 +387,7 @@ export function SchedulePageClient({
       <CalendarIntegrationsPanel
         connections={calendarConnections}
         googleOAuthAvailable={googleOAuthAvailable}
+        googleReconnectRequired={googleReconnectRequired}
         compact
         showSettingsLink
         settingsHref={SCHEDULE_INTEGRATIONS_SETTINGS_HREF}

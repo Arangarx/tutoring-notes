@@ -85,7 +85,10 @@ describe("scheduled session actions", () => {
 
     expect(assertOwnsStudentMock).toHaveBeenCalledWith(student.id);
 
-    const listed = await listScheduledSessionsForTutor(false);
+    const listed = await listScheduledSessionsForTutor({
+      connected: false,
+      reconnectRequired: false,
+    });
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({
       id,
@@ -108,7 +111,10 @@ describe("scheduled session actions", () => {
       notes: "Practice set B",
     });
 
-    const updated = await listScheduledSessionsForTutor(false);
+    const updated = await listScheduledSessionsForTutor({
+      connected: false,
+      reconnectRequired: false,
+    });
     expect(updated[0]).toMatchObject({
       id,
       subject: "SAT Math",
@@ -116,7 +122,10 @@ describe("scheduled session actions", () => {
     });
 
     await deleteScheduledSession(id);
-    const afterDelete = await listScheduledSessionsForTutor(false);
+    const afterDelete = await listScheduledSessionsForTutor({
+      connected: false,
+      reconnectRequired: false,
+    });
     expect(afterDelete).toHaveLength(0);
   });
 
@@ -189,7 +198,10 @@ describe("scheduled session actions", () => {
       adminId: tutor1.id,
       email: tutor1.email,
     });
-    const stillThere = await listScheduledSessionsForTutor(false);
+    const stillThere = await listScheduledSessionsForTutor({
+      connected: false,
+      reconnectRequired: false,
+    });
     expect(stillThere).toHaveLength(1);
     expect(stillThere[0].subject).toBe("Physics");
 
@@ -253,11 +265,17 @@ describe("scheduled session actions", () => {
       subject: "Reading",
     });
 
-    const withoutGoogle = await listScheduledSessionsForTutor(false);
+    const withoutGoogle = await listScheduledSessionsForTutor({
+      connected: false,
+      reconnectRequired: false,
+    });
     expect(withoutGoogle[0].showSyncBadge).toBe(false);
 
-    const withGoogle = await listScheduledSessionsForTutor(true);
+    const withGoogle = await listScheduledSessionsForTutor({
+      connected: true,
+      reconnectRequired: false,
+    });
     expect(withGoogle[0].showSyncBadge).toBe(true);
-    expect(withGoogle[0].syncState).toBe("not-connected");
+    expect(withGoogle[0].syncState).toBe("pending");
   });
 });

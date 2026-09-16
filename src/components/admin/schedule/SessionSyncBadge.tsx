@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { CalendarSyncState } from "@/lib/schedule/types";
-import { CheckIcon, CloudOffIcon, Loader2Icon } from "lucide-react";
+import { AlertCircleIcon, CheckIcon, CloudOffIcon, Loader2Icon } from "lucide-react";
 
 const syncConfig: Record<
   CalendarSyncState,
@@ -14,9 +14,14 @@ const syncConfig: Record<
     icon: <CheckIcon aria-hidden />,
   },
   pending: {
-    label: "Sync pending",
+    label: "Not synced yet",
     className: "border-warning/30 bg-warning/10 text-warning",
-    icon: <Loader2Icon className="animate-spin" aria-hidden />,
+    icon: <Loader2Icon aria-hidden />,
+  },
+  "needs-reconnect": {
+    label: "Reconnect Google",
+    className: "border-destructive/30 bg-destructive/10 text-destructive",
+    icon: <AlertCircleIcon aria-hidden />,
   },
   "not-connected": {
     label: "Not synced",

@@ -3,6 +3,8 @@ import { PrismaClient } from "@prisma/client";
 import { TEST_ADMIN } from "../visual/helpers";
 
 test.describe("Calendar OAuth connect stub", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("Connect starts Google OAuth with calendar scopes", async ({ page }) => {
     const prisma = new PrismaClient();
     try {
@@ -39,7 +41,7 @@ test.describe("Calendar OAuth connect stub", () => {
     expect(location).not.toContain("calendar.readonly");
   });
 
-  test("connected state shows honest stub copy when connection is seeded", async ({ page }) => {
+  test("connected state shows live sync copy when connection is seeded", async ({ page }) => {
     const prisma = new PrismaClient();
     try {
       const admin = await prisma.adminUser.findUnique({
@@ -65,8 +67,10 @@ test.describe("Calendar OAuth connect stub", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(
-      page.getByText(/Calendar sync is not live yet/i).first()
+      page.getByText(/sync to your Google Calendar/i).first()
     ).toBeVisible();
     await expect(page.getByText("seeded-calendar@example.com")).toBeVisible();
+    await expect(page.getByTestId("calendar-ics-feed-section")).toBeVisible();
+    await expect(page.getByText(/webcal/i).first()).toBeVisible();
   });
 });

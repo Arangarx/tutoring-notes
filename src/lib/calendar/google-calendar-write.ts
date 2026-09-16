@@ -10,6 +10,10 @@ import {
   buildScheduledSessionGoogleEventResource,
   scheduledSessionIcalUid,
 } from "@/lib/calendar/google-calendar-event-payload";
+import {
+  clearGoogleCalendarReconnectRequired,
+  markGoogleCalendarReconnectRequired,
+} from "@/lib/calendar/google-calendar-reconnect";
 import { logGcw } from "@/lib/calendar/google-calendar-write-log";
 import { db, withDbRetry } from "@/lib/db";
 import { getGoogleAccessToken } from "@/lib/google-oauth-access";
@@ -143,6 +147,20 @@ function resolveDeps(): GoogleCalendarSyncDeps {
   return { ...defaultDeps, ...depsOverride };
 }
 
+async function logInvalidGrantAndMarkReconnect(args: {
+  adminUserId: string;
+  sessionId: string;
+  googleEventId?: string | null;
+}): Promise<void> {
+  logGcw({
+    adminUserId: args.adminUserId,
+    sessionId: args.sessionId,
+    action: "invalid_grant",
+    googleEventId: args.googleEventId ?? undefined,
+  });
+  await markGoogleCalendarReconnectRequired(args.adminUserId);
+}
+
 function isInvalidGrantError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const code = (err as { code?: string }).code;
@@ -188,10 +206,9 @@ export async function syncScheduledSessionInsertToGoogle(args: {
   const clientResult = await resolveClient(refreshToken);
   if (!clientResult.ok) {
     if (clientResult.invalidGrant) {
-      logGcw({
+      await logInvalidGrantAndMarkReconnect({
         adminUserId: session.adminUserId,
         sessionId: session.id,
-        action: "invalid_grant",
       });
     } else {
       logGcw({
@@ -203,6 +220,8 @@ export async function syncScheduledSessionInsertToGoogle(args: {
     }
     return;
   }
+
+  await clearGoogleCalendarReconnectRequired(session.adminUserId);
 
   const { client } = clientResult;
 
@@ -243,10 +262,9 @@ export async function syncScheduledSessionInsertToGoogle(args: {
     });
   } catch (err) {
     if (isInvalidGrantError(err)) {
-      logGcw({
+      await logInvalidGrantAndMarkReconnect({
         adminUserId: session.adminUserId,
         sessionId: session.id,
-        action: "invalid_grant",
       });
       return;
     }
@@ -281,10 +299,9 @@ export async function syncScheduledSessionUpdateToGoogle(args: {
   const clientResult = await resolveClient(refreshToken);
   if (!clientResult.ok) {
     if (clientResult.invalidGrant) {
-      logGcw({
+      await logInvalidGrantAndMarkReconnect({
         adminUserId: session.adminUserId,
         sessionId: session.id,
-        action: "invalid_grant",
         googleEventId: session.googleEventId,
       });
     } else {
@@ -299,6 +316,8 @@ export async function syncScheduledSessionUpdateToGoogle(args: {
     return;
   }
 
+  await clearGoogleCalendarReconnectRequired(session.adminUserId);
+
   const resource = buildScheduledSessionGoogleEventResource(session, adminTimezone);
   try {
     await clientResult.client.patchEvent(session.googleEventId, resource);
@@ -310,10 +329,9 @@ export async function syncScheduledSessionUpdateToGoogle(args: {
     });
   } catch (err) {
     if (isInvalidGrantError(err)) {
-      logGcw({
+      await logInvalidGrantAndMarkReconnect({
         adminUserId: session.adminUserId,
         sessionId: session.id,
-        action: "invalid_grant",
         googleEventId: session.googleEventId,
       });
       return;
@@ -346,10 +364,9 @@ export async function syncScheduledSessionDeleteFromGoogle(args: {
   const clientResult = await resolveClient(refreshToken);
   if (!clientResult.ok) {
     if (clientResult.invalidGrant) {
-      logGcw({
+      await logInvalidGrantAndMarkReconnect({
         adminUserId,
         sessionId,
-        action: "invalid_grant",
         googleEventId,
       });
     } else {
@@ -364,6 +381,8 @@ export async function syncScheduledSessionDeleteFromGoogle(args: {
     return;
   }
 
+  await clearGoogleCalendarReconnectRequired(adminUserId);
+
   try {
     await clientResult.client.deleteEvent(googleEventId);
     logGcw({
@@ -374,10 +393,9 @@ export async function syncScheduledSessionDeleteFromGoogle(args: {
     });
   } catch (err) {
     if (isInvalidGrantError(err)) {
-      logGcw({
+      await logInvalidGrantAndMarkReconnect({
         adminUserId,
         sessionId,
-        action: "invalid_grant",
         googleEventId,
       });
       return;

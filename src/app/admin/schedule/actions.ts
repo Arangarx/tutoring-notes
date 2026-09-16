@@ -10,6 +10,7 @@ import {
   beforeScheduledSessionDeleted,
 } from "@/lib/calendar/google-calendar-write";
 import { db, withDbRetry } from "@/lib/db";
+import type { GoogleCalendarUiState } from "@/lib/schedule/google-calendar-ui-state";
 import { toScheduledSessionView } from "@/lib/schedule/scheduled-session-mapper";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
 import {
@@ -76,7 +77,7 @@ async function calendarRefreshTokenForAdmin(adminUserId: string): Promise<string
 
 /** Lists sessions for the authenticated tutor only (`adminUserId` = scope.adminId). */
 export async function listScheduledSessionsForTutor(
-  googleConnected: boolean
+  googleState: GoogleCalendarUiState
 ): Promise<ScheduledSessionView[]> {
   const scope = await requireAdminScope();
   const rows = await withDbRetry(
@@ -88,7 +89,7 @@ export async function listScheduledSessionsForTutor(
       }),
     { label: "listScheduledSessionsForTutor" }
   );
-  return rows.map((row) => toScheduledSessionView(row, googleConnected));
+  return rows.map((row) => toScheduledSessionView(row, googleState));
 }
 
 export async function listScheduleStudentOptions(): Promise<ScheduleStudentOption[]> {

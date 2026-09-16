@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { mintCalendarFeedToken } from "@/lib/calendar-feed-token";
 import { db } from "@/lib/db";
 import { requireStudentScope } from "@/lib/student-scope";
 
@@ -25,6 +26,18 @@ export async function disconnectGoogleCalendar() {
   } catch {
     // table may not exist yet
   }
+  revalidatePath("/admin/settings/integrations");
+  revalidatePath("/admin/schedule");
+  redirect("/admin/settings/integrations");
+}
+
+export async function regenerateCalendarFeedToken() {
+  const scope = await requireStudentScope();
+  if (scope.kind !== "admin") {
+    redirect("/login");
+    return;
+  }
+  await mintCalendarFeedToken(scope.adminId);
   revalidatePath("/admin/settings/integrations");
   revalidatePath("/admin/schedule");
   redirect("/admin/settings/integrations");

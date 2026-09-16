@@ -26,16 +26,20 @@ export default async function SchedulePage() {
   );
   const googleOAuthAvailable = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
   const googleConnected = !!googleConnection;
+  const googleCalendarState = {
+    connected: googleConnected,
+    reconnectRequired: googleConnection?.reconnectRequired ?? false,
+  };
 
   const [sessions, studentOptions] = await Promise.all([
-    adminUserId ? listScheduledSessionsForTutor(googleConnected) : Promise.resolve([]),
+    adminUserId ? listScheduledSessionsForTutor(googleCalendarState) : Promise.resolve([]),
     listScheduleStudentOptions(),
   ]);
 
   return (
     <PageShell realm="admin"
       title="Schedule"
-      description="Plan tutoring sessions in Mynk. Connect Google Calendar to prepare for upcoming scheduling — scheduling works fully in-app today."
+      description="Plan tutoring sessions in Mynk. Connect Google Calendar to sync events, or subscribe to the ICS feed for Apple Calendar and other apps."
       actions={
         <CreateSessionDialog
           studentOptions={studentOptions}
@@ -49,6 +53,7 @@ export default async function SchedulePage() {
         calendarConnections={calendarConnections}
         googleOAuthAvailable={googleOAuthAvailable}
         googleConnected={googleConnected}
+        googleReconnectRequired={googleCalendarState.reconnectRequired}
       />
     </PageShell>
   );

@@ -82,6 +82,7 @@ export function CreateSessionDialog({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
     setError(null);
     const formData = new FormData(event.currentTarget);
     const input: ScheduledSessionInput = {
@@ -154,8 +155,8 @@ export function CreateSessionDialog({
           <DialogDescription>
             Session length is soft planning metadata; recording ends when you end the session.
             {googleConnected
-              ? " Google Calendar is connected — events will show as not synced until calendar write ships."
-              : " Sessions are saved in Mynk only until you connect Google Calendar."}
+              ? " Google Calendar is connected — saving creates or updates the event on your primary Google Calendar."
+              : " Sessions are saved in Mynk. Connect Google Calendar in Settings for Google sync, or subscribe to the ICS feed for Apple Calendar and other apps."}
           </DialogDescription>
         </DialogHeader>
 
