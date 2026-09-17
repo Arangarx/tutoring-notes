@@ -9,6 +9,28 @@
 
 ---
 
+## Verify production env — new tutors may be unable to finish 2FA (Andrew-only — under one minute)
+
+**Why urgent:** 2FA is mandatory with exactly three methods, and each needs its own configuration — **Email code** needs SMTP (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`), **Text message** needs Twilio (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`), **Authenticator app** needs `TOTP_ENCRYPTION_KEY`. If **none** of the three are configured in production, a newly-approved tutor cannot complete 2FA and can never reach the product. Already-enrolled users (Sarah) are unaffected — this only bites **new** signups, which is exactly what external tester Tyson will be.
+
+**Where to check:** Vercel → project → Settings → Environment Variables (**Production** scope). There is deliberately no in-app way to see this.
+
+**Why code cannot answer it:** no health/status endpoint exposes mail or SMS configuration; the only public signal is whether the Google sign-in button renders (that reflects `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` only). Password reset is enumeration-safe and always returns *"If an account exists for that email, we sent reset instructions."* whether or not mail actually sent — so it **masks** a broken mailer rather than revealing it.
+
+**Paste status here when done** (agents fold into BACKLOG/STATE):
+
+```
+SMTP_HOST / SMTP_USER / SMTP_PASS set?:
+TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER set?:
+TOTP_ENCRYPTION_KEY set?:
+```
+
+Those three answers are also exactly what fills in the three checkboxes at the top of the Tyson test packet — Google Doc **Tutor auth (accounts, email, 2FA, SMS) — Tyson test packet — Sep 2026** in the Drive **test plans** folder — and they gate **5 of 12** items in that packet.
+
+Operator-visible warning / startup check so this cannot fail silently: BACKLOG **BL-2FA-EMAIL-AVAIL** in [`docs/BACKLOG.md`](../BACKLOG.md).
+
+---
+
 ## Do these when you have 15–30 minutes (Google Cloud Console)
 
 **Andrew-only.** Check in this order (blast radius first):
@@ -43,6 +65,8 @@ Notes:
 ## Tutor email allowlist — add pilot emails in operator UI (Andrew-only)
 
 Pre-approved signup allowlist is on **`master`**. **Do not seed Sarah/Tyson emails from the repo** — add their real addresses on [`/admin/tutor-approvals`](/admin/tutor-approvals) under **Pre-approved emails**. They still confirm email (unless Google) and still set up 2FA; allowlist only skips the waitlist.
+
+**Tyson:** pre-approve his test address(es) **before** he starts the external test packet — he stalls at the approval gate on item 1 otherwise. Have him **text you each address in advance** so you can add them on `/admin/tutor-approvals`. Accounts cannot be self-deleted; he should use **plus-addresses** (e.g. `you+tyson1@…`) for repeat runs.
 
 | # | Action | Why | Blocks code? |
 |---|--------|-----|--------------|
