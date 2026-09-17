@@ -1,4 +1,8 @@
-import { rewriteUpcomingSessionInstants } from "@/lib/calendar/google-calendar-connect-backfill";
+import { getGoogleCalendarConnectionForTutor } from "@/lib/calendar-oauth";
+import {
+  rewriteUpcomingSessionInstants,
+  syncUpcomingUnsyncedScheduledSessions,
+} from "@/lib/calendar/google-calendar-connect-backfill";
 import { db, withDbRetry } from "@/lib/db";
 import { snapSystemIanaToBillingTimezone } from "@/lib/time/system-timezone";
 
@@ -34,7 +38,13 @@ export async function seedTutorTimezoneIfUnset(
 
   if (updated.count > 0) {
     try {
-      await rewriteUpcomingSessionInstants(adminUserId, snapped, { unsyncedOnly: true });
+      const conn = await getGoogleCalendarConnectionForTutor(adminUserId);
+      if (conn?.refreshToken && !conn.reconnectRequired) {
+        // Patch existing Google events in place — no Disconnect/Connect required.
+        await syncUpcomingUnsyncedScheduledSessions(adminUserId, conn.refreshToken);
+      } else {
+        await rewriteUpcomingSessionInstants(adminUserId, snapped);
+      }
     } catch {
       // fail-soft — timezone seed already persisted
     }

@@ -3,6 +3,7 @@
  */
 import { db } from "@/lib/db";
 import { uniq } from "../helpers/unique-test-token";
+import { seedTutorTimezoneIfUnset } from "@/lib/billing/seed-tutor-timezone";
 import { syncUpcomingUnsyncedScheduledSessions } from "@/lib/calendar/google-calendar-connect-backfill";
 import {
   setGoogleCalendarSyncDepsForTests,
@@ -79,6 +80,66 @@ describe("syncUpcomingUnsyncedScheduledSessions", () => {
 
     const reloaded = await db.scheduledSession.findUnique({ where: { id: upcoming.id } });
     expect(reloaded?.googleEventId).toBe("google-ev-upcoming");
+    expect(reloaded?.startAt).not.toBeNull();
+  });
+
+  it("patches already-synced upcoming events when device timezone is first seeded", async () => {
+    const tutor = await db.adminUser.create({
+      data: {
+        email: `${uniq("seed-patch-tutor")}@example.com`,
+        role: "TUTOR",
+        approvalStatus: "APPROVED",
+        tutorTimezone: null,
+      },
+    });
+    const student = await db.student.create({
+      data: {
+        name: "Seed Patch Student",
+        adminUserId: tutor.id,
+        parentEmail: `${uniq("parent")}@example.com`,
+      },
+    });
+    const upcoming = await db.scheduledSession.create({
+      data: {
+        adminUserId: tutor.id,
+        studentId: student.id,
+        date: new Date("2026-12-20T00:00:00.000Z"),
+        startTime: "16:00",
+        endTime: "17:00",
+        plannedDurationMinutes: 60,
+        subject: "Already on Google",
+        googleEventId: "google-ev-existing",
+      },
+    });
+    await db.oAuthCalendarConnection.create({
+      data: {
+        provider: "google",
+        refreshToken: "refresh-seed-patch",
+        email: "seed-patch@example.com",
+        adminUserId: tutor.id,
+      },
+    });
+
+    const patchMock = jest.fn().mockResolvedValue(undefined);
+    const client: GoogleCalendarWriteClient = {
+      listEventsByICalUid: jest.fn(),
+      insertEvent: jest.fn(),
+      patchEvent: patchMock,
+      deleteEvent: jest.fn(),
+    };
+    setGoogleCalendarSyncDepsForTests({
+      getClient: async () => ({ ok: true, client }),
+      persistEventId: jest.fn(),
+    });
+
+    const seeded = await seedTutorTimezoneIfUnset(tutor.id, "America/Los_Angeles");
+    expect(seeded).toEqual({ seeded: true, timeZone: "America/Los_Angeles" });
+    expect(patchMock).toHaveBeenCalledTimes(1);
+    expect(patchMock.mock.calls[0]?.[0]).toBe("google-ev-existing");
+    const resource = patchMock.mock.calls[0]?.[1] as { start?: { dateTime?: string } };
+    expect(resource.start?.dateTime).toMatch(/Z$/);
+
+    const reloaded = await db.scheduledSession.findUnique({ where: { id: upcoming.id } });
     expect(reloaded?.startAt).not.toBeNull();
   });
 });
