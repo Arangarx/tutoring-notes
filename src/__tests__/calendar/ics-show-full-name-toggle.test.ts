@@ -21,6 +21,12 @@ jest.mock("next/cache", () => ({
   revalidatePath: jest.fn(),
 }));
 
+const mockRetitle = jest.fn().mockResolvedValue(undefined);
+jest.mock("@/lib/calendar/google-calendar-connect-backfill", () => ({
+  afterStudentCalendarTitlePolicyChanged: (...args: unknown[]) =>
+    mockRetitle(...args),
+}));
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockAssertOwnsStudent.mockResolvedValue(undefined);
@@ -38,6 +44,7 @@ describe("setStudentIcsShowFullName", () => {
       where: { id: "student-1" },
       data: { icsShowFullName: true },
     });
+    expect(mockRetitle).toHaveBeenCalledWith("student-1");
   });
 
   it("defaults off when set to false", async () => {

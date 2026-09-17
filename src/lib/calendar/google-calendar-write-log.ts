@@ -10,7 +10,8 @@ export type GcwAction =
   | "delete_success"
   | "delete_error"
   | "invalid_grant"
-  | "persist_error";
+  | "persist_error"
+  | "connect_backfill";
 
 /** Structured Google Calendar write log — no student names or event bodies. */
 export function logGcw(args: {

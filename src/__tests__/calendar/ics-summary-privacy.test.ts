@@ -90,7 +90,7 @@ describe("B6 — per-student SUMMARY privacy", () => {
     expect(before).toEqual(["Tutoring — Alex", "Tutoring — Maya"]);
     expect(after).toHaveLength(2);
     expect(after).toContain("Tutoring — Alex");
-    expect(after).toContain("Maya Rodriguez");
+    expect(after).toContain("Tutoring — Maya Rodriguez");
     expect(after).not.toContain("Tutoring — Maya");
   });
 });

@@ -2,7 +2,7 @@ import { Temporal } from "@js-temporal/polyfill";
 
 import {
   instantToIcsUtcStamp,
-  resolveScheduledSessionWallClock,
+  instantsForScheduledSession,
 } from "@/lib/calendar/scheduled-session-datetime";
 
 export type IcsFeedSessionInput = {
@@ -10,6 +10,8 @@ export type IcsFeedSessionInput = {
   date: Date;
   startTime: string;
   endTime: string;
+  startAt?: Date | null;
+  endAt?: Date | null;
   subject: string;
   notes: string;
   location: string;
@@ -54,12 +56,16 @@ function foldIcsLine(line: string): string {
   return chunks.join("\r\n ");
 }
 
+function tutoringEventTitle(displayName: string): string {
+  return `Tutoring — ${displayName.trim()}`;
+}
+
 function buildSummary(student: IcsFeedSessionInput["student"]): string {
   if (student.icsShowFullName) {
-    return student.name.trim();
+    return tutoringEventTitle(student.name);
   }
   const first = student.name.trim().split(/\s+/)[0] ?? student.name.trim();
-  return `Tutoring — ${first}`;
+  return tutoringEventTitle(first);
 }
 
 /** Shared ICS + Google Calendar event title (B6 / WS2). */
@@ -87,13 +93,7 @@ function buildVevent(
   session: IcsFeedSessionInput,
   adminTimezone: string | null | undefined
 ): string[] {
-  const wall = resolveScheduledSessionWallClock(
-    session.date,
-    session.startTime,
-    session.endTime,
-    null,
-    adminTimezone
-  );
+  const instants = instantsForScheduledSession(session, adminTimezone);
   const uid = `${session.id}@${ICS_DOMAIN}`;
   const dtstamp = instantToIcsUtcStamp(
     Temporal.Instant.from(session.updatedAt.toISOString())
@@ -103,8 +103,8 @@ function buildVevent(
     "BEGIN:VEVENT",
     `UID:${uid}`,
     `DTSTAMP:${dtstamp}`,
-    `DTSTART;TZID=${wall.timeZone}:${wall.startIcsLocal}`,
-    `DTEND;TZID=${wall.timeZone}:${wall.endIcsLocal}`,
+    `DTSTART:${instantToIcsUtcStamp(instants.startInstant)}`,
+    `DTEND:${instantToIcsUtcStamp(instants.endInstant)}`,
     `SUMMARY:${escapeIcsText(buildSummary(session.student))}`,
   ];
 

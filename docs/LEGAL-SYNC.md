@@ -243,6 +243,8 @@ repo lands a verification-team-driven change before the deploy):
 
 ## History
 
+- **2026-09-17** — Calendar event titles: per-student full-name opt-in keeps the `Tutoring —` prefix (`Tutoring — Maya Rodriguez`). Privacy product-specific ICS section only; umbrella SYNCED FROM date unchanged 2026-09-10. Privacy in-UI Last updated: September 17, 2026. Terms unchanged (September 16, 2026).
+
 - **2026-09-16** — Calendar wave honesty (product facades only; umbrella SYNCED FROM date unchanged 2026-09-10). Replaced false "Calendar sync is not live yet" stub with live `calendar.events.owned` primary-calendar write, ICS subscription feed disclosure (continuous polling by Google/Apple/Outlook calendar clients), first-name default / per-student full-name opt-in, and disconnect-does-not-delete-Google-events. Privacy + Terms in-UI Last updated: September 16, 2026.
 
 - **2026-09-11** — SMS 2FA (Twilio) — added product-specific Security bullet to Privacy (third-party SMS processor disclosure) and Terms (Twilio added to third-party services list); no umbrella-derived section touched; date bumped to September 11, 2026.

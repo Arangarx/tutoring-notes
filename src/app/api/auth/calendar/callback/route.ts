@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { getRequestBaseUrlSafe } from "@/lib/public-url";
+import { syncUpcomingUnsyncedScheduledSessions } from "@/lib/calendar/google-calendar-connect-backfill";
+import { safeCalendarOAuthReturnTo } from "@/lib/calendar/calendar-oauth-return";
 
 export async function GET(request: NextRequest) {
   const baseUrl = getRequestBaseUrlSafe(request);
@@ -16,8 +18,8 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const error = searchParams.get("error");
   const state = searchParams.get("state");
-  const returnTo =
-    (state
+  const returnTo = safeCalendarOAuthReturnTo(
+    state
       ? (() => {
           try {
             const s = JSON.parse(Buffer.from(state, "base64url").toString());
@@ -26,7 +28,8 @@ export async function GET(request: NextRequest) {
             return null;
           }
         })()
-      : null) ?? "/admin/settings/integrations";
+      : null
+  );
 
   if (error) {
     return NextResponse.redirect(new URL(`${returnTo}?error=calendar_denied`, baseUrl));
@@ -112,6 +115,14 @@ export async function GET(request: NextRequest) {
     });
   } catch {
     return NextResponse.redirect(new URL(`${returnTo}?error=db_not_ready`, baseUrl));
+  }
+
+  if (adminUserId) {
+    try {
+      await syncUpcomingUnsyncedScheduledSessions(adminUserId, refreshToken);
+    } catch (err) {
+      console.error("[gcw] connect_backfill failed:", err);
+    }
   }
 
   return NextResponse.redirect(new URL(`${returnTo}?connected=google_calendar`, baseUrl));

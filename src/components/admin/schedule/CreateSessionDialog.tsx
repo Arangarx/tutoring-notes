@@ -29,6 +29,7 @@ import {
   type ScheduledSessionInput,
 } from "@/app/admin/schedule/actions";
 import { localDateToInputValue } from "@/lib/schedule/mock-data";
+import { readBrowserTimeZone } from "@/lib/time/system-timezone";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
 import { CalendarPlusIcon } from "lucide-react";
 
@@ -93,6 +94,7 @@ export function CreateSessionDialog({
       startTime: String(formData.get("startTime") ?? ""),
       endTime: String(formData.get("endTime") ?? ""),
       notes: String(formData.get("notes") ?? ""),
+      clientTimeZone: readBrowserTimeZone(),
     };
 
     startTransition(async () => {

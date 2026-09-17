@@ -75,6 +75,81 @@ export function instantToIcsUtcStamp(instant: Temporal.Instant): string {
   return `${plainDateTimeToIcsLocal(pdt)}Z`;
 }
 
+export function instantToRfc3339Utc(instant: Temporal.Instant): string {
+  return instant.toString().replace(/\.\d+Z$/, "Z");
+}
+
+export function jsDateFromInstant(instant: Temporal.Instant): Date {
+  return new Date(instant.epochMilliseconds);
+}
+
+export function utcBoundsFromWallClock(
+  calendarDate: Date,
+  startTime: string,
+  endTime: string,
+  sessionTimezone: string | null | undefined,
+  adminTimezone: string | null | undefined
+): { startAt: Date; endAt: Date; timeZone: string } {
+  const wall = resolveScheduledSessionWallClock(
+    calendarDate,
+    startTime,
+    endTime,
+    sessionTimezone,
+    adminTimezone
+  );
+  return {
+    startAt: jsDateFromInstant(wall.startInstant),
+    endAt: jsDateFromInstant(wall.endInstant),
+    timeZone: wall.timeZone,
+  };
+}
+
+export type SessionInstantFields = {
+  date: Date;
+  startTime: string;
+  endTime: string;
+  startAt?: Date | null;
+  endAt?: Date | null;
+};
+
+/**
+ * Prefer stored UTC instants when present so a later timezone seed cannot
+ * reinterpret historical DATE+HH:MM in a different zone.
+ */
+export function instantsForScheduledSession(
+  session: SessionInstantFields,
+  adminTimezone: string | null | undefined
+): ResolvedSessionWallClock {
+  const wall = resolveScheduledSessionWallClock(
+    session.date,
+    session.startTime,
+    session.endTime,
+    null,
+    adminTimezone
+  );
+  if (session.startAt && session.endAt) {
+    return {
+      ...wall,
+      startInstant: Temporal.Instant.from(session.startAt.toISOString()),
+      endInstant: Temporal.Instant.from(session.endAt.toISOString()),
+    };
+  }
+  return wall;
+}
+
+/** Wall-clock fields in a display IANA zone for schedule UI / edit forms. */
+export function formatInstantWallClockFields(
+  instant: Date,
+  timeZone: string
+): { date: string; hhmm: string } {
+  const zdt = Temporal.Instant.from(instant.toISOString()).toZonedDateTimeISO(timeZone);
+  const hour = String(zdt.hour).padStart(2, "0");
+  const minute = String(zdt.minute).padStart(2, "0");
+  const hhmm = `${hour}:${minute}`;
+  const date = `${String(zdt.year).padStart(4, "0")}-${String(zdt.month).padStart(2, "0")}-${String(zdt.day).padStart(2, "0")}`;
+  return { date, hhmm };
+}
+
 /** Oracle helper: wall-clock hour/minute in a zone for a UTC instant. */
 export function formatInstantWallClockInZone(
   instant: Temporal.Instant,

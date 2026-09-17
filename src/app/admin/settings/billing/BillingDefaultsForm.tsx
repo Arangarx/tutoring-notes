@@ -66,14 +66,19 @@ export default function BillingDefaultsForm({
           name="tutorTimezone"
           defaultValue={defaults.tutorTimezone}
         >
+          <option value="">Same as this device</option>
           {BILLING_TIMEZONE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
+          {defaults.tutorTimezone &&
+          !BILLING_TIMEZONE_OPTIONS.some((o) => o.value === defaults.tutorTimezone) ? (
+            <option value={defaults.tutorTimezone}>{defaults.tutorTimezone}</option>
+          ) : null}
         </NativeSelect>
         <p className="text-sm text-muted-foreground">
-          Applies to new sessions; past sessions stay frozen.
+          Defaults to this computer&apos;s timezone. Pick a zone here only if you want an override.
         </p>
       </div>
 

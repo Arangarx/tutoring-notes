@@ -24,6 +24,12 @@ jest.mock("@/lib/env", () => ({
   env: mockEnv,
 }));
 
+const mockSyncUpcoming = jest.fn().mockResolvedValue({ attempted: 0 });
+jest.mock("@/lib/calendar/google-calendar-connect-backfill", () => ({
+  syncUpcomingUnsyncedScheduledSessions: (...args: unknown[]) =>
+    mockSyncUpcoming(...args),
+}));
+
 const mockDeleteMany = jest.fn();
 const mockCreate = jest.fn();
 const mockUpsert = jest.fn();
@@ -51,9 +57,10 @@ function calendarConnectRequest(
   headers: Record<string, string> = {
     host: "localhost:3000",
     "x-forwarded-proto": "http",
-  }
+  },
+  search = ""
 ) {
-  return new NextRequest("http://localhost:3000/api/auth/calendar/connect", {
+  return new NextRequest(`http://localhost:3000/api/auth/calendar/connect${search}`, {
     headers,
   });
 }
@@ -184,6 +191,32 @@ describe("GET /api/auth/calendar/connect", () => {
       encodeURIComponent("http://localhost:3000/api/auth/calendar/callback")
     );
   });
+
+  it("encodes schedule returnTo in OAuth state", async () => {
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest(undefined, "?returnTo=/admin/schedule")
+    );
+    const location = res.headers.get("location") ?? "";
+    const state = new URL(location).searchParams.get("state") ?? "";
+    const parsed = JSON.parse(Buffer.from(state, "base64url").toString()) as {
+      returnTo?: string;
+    };
+    expect(parsed.returnTo).toBe("/admin/schedule");
+  });
+
+  it("rejects open-redirect returnTo in OAuth state", async () => {
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest(undefined, "?returnTo=https://evil.com")
+    );
+    const location = res.headers.get("location") ?? "";
+    const state = new URL(location).searchParams.get("state") ?? "";
+    const parsed = JSON.parse(Buffer.from(state, "base64url").toString()) as {
+      returnTo?: string;
+    };
+    expect(parsed.returnTo).toBe("/admin/settings/integrations");
+  });
 });
 
 describe("GET /api/auth/calendar/callback", () => {
@@ -239,6 +272,36 @@ describe("GET /api/auth/calendar/callback", () => {
     expect(mockCreate).not.toHaveBeenCalled();
     const upsertPayload = JSON.stringify(mockUpsert.mock.calls[0]?.[0] ?? {});
     expect(upsertPayload).not.toContain("calendarCount");
+    expect(mockSyncUpcoming).toHaveBeenCalledWith("admin-1", "refresh-abc");
+    expect(res.headers.get("location")).toContain("/admin/settings/integrations");
+  });
+
+  it("returns to the schedule page when OAuth state returnTo is /admin/schedule", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          refresh_token: "refresh-abc",
+          access_token: "access-abc",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ email: "calendar@example.com" }),
+      });
+
+    const state = Buffer.from(
+      JSON.stringify({ returnTo: "/admin/schedule" })
+    ).toString("base64url");
+    const { GET } = await import("@/app/api/auth/calendar/callback/route");
+    const req = new NextRequest(
+      `http://localhost:3000/api/auth/calendar/callback?code=oauth-code-123&state=${state}`
+    );
+    const res = await GET(req);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/admin/schedule?");
+    expect(location).toContain("connected=google_calendar");
+    expect(location).not.toContain("/admin/settings/integrations");
   });
 
   it("double callback uses upsert twice (no duplicate create path)", async () => {

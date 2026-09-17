@@ -13,6 +13,8 @@ export async function loadIcsFeedSessionsForAdmin(
       date: true,
       startTime: true,
       endTime: true,
+      startAt: true,
+      endAt: true,
       subject: true,
       notes: true,
       location: true,

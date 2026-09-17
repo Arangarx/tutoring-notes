@@ -19,7 +19,7 @@ function parseGoogleDateTimeWallClock(
   dateTime: string,
   timeZone: string
 ): { hour: number; minute: number } {
-  const instant = Temporal.ZonedDateTime.from(`${dateTime}[${timeZone}]`).toInstant();
+  const instant = Temporal.Instant.from(dateTime);
   return formatInstantWallClockInZone(instant, timeZone);
 }
 
@@ -97,11 +97,12 @@ describe("B1 — ICS timezone wall-clock (DST transition week)", () => {
       },
       timeZone
     );
-    expect(googleResource.start?.timeZone).toBe(timeZone);
-    expect(googleResource.end?.timeZone).toBe(timeZone);
+    expect(googleResource.start?.dateTime).toMatch(/Z$/);
+    expect(googleResource.start?.timeZone).toBeUndefined();
+    expect(googleResource.end?.timeZone).toBeUndefined();
     const googleStartWall = parseGoogleDateTimeWallClock(
       googleResource.start!.dateTime!,
-      googleResource.start!.timeZone!
+      timeZone
     );
     expect(googleStartWall).toEqual(wall);
   });

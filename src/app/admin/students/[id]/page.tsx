@@ -244,7 +244,7 @@ export default async function StudentDetailPage({
     <>
       <SectionHeading
         title="Calendar event titles"
-        description="By default, calendar feeds and Google events use the student's first name only (for example, Tutoring — Maya). Turn this on only if you want the full name on external calendars for this student."
+        description="By default, calendar feeds and Google events use the student's first name only (for example, Tutoring — Maya). Turn this on only if you want the full name after that same prefix (for example, Tutoring — Maya Rodriguez)."
       />
       <IcsShowFullNameToggle studentId={student.id} checked={student.icsShowFullName} />
       <div className="mt-6 border-t border-border pt-6">

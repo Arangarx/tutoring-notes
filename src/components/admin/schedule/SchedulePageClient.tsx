@@ -391,6 +391,7 @@ export function SchedulePageClient({
         compact
         showSettingsLink
         settingsHref={SCHEDULE_INTEGRATIONS_SETTINGS_HREF}
+        connectReturnTo="/admin/schedule"
       />
     </div>
   );

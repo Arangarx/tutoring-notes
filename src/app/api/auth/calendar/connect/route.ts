@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/auth-options";
 import { env } from "@/lib/env";
 import { getRequestBaseUrlSafe } from "@/lib/public-url";
+import { safeCalendarOAuthReturnTo } from "@/lib/calendar/calendar-oauth-return";
 
 const CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events.owned",
@@ -23,9 +24,10 @@ export async function GET(request: NextRequest) {
     );
   }
   const redirectUri = `${baseUrl}/api/auth/calendar/callback`;
-  const state = Buffer.from(
-    JSON.stringify({ returnTo: "/admin/settings/integrations" })
-  ).toString("base64url");
+  const returnTo = safeCalendarOAuthReturnTo(
+    request.nextUrl.searchParams.get("returnTo")
+  );
+  const state = Buffer.from(JSON.stringify({ returnTo })).toString("base64url");
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);

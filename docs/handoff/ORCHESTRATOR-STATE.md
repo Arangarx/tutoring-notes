@@ -16,9 +16,9 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar/Gmail Connect `redirect_uri` uses allowlisted request host (`preview.usemynk.com`); `NEXTAUTH_URL` unchanged. Console has preview + vercel + prod + localhost callbacks (Andrew 2026-09-17). |
-| **Next action(s)** | Wait for Vercel preview deploy. Tyson retries item 7 on **https://preview.usemynk.com** (hard refresh). **Do not merge to `master`.** |
-| **Open Andrew-confirms** | Authorized JavaScript origin `https://preview.usemynk.com` if not added. Then Tyson item 7 + [`CALENDAR-WAVE-SMOKE.md`](CALENDAR-WAVE-SMOKE.md). |
+| **Last action completed** | Calendar UTC instants + device TZ default + Connect upcoming backfill + `Tutoring —` full-name titles + Connect returnTo source page (in progress on `feat/calendar-wave`). |
+| **Next action(s)** | Finish gates + push `feat/calendar-wave`. Tyson: set timezone / reconnect on **https://preview.usemynk.com** after deploy. **Do not merge to `master`.** |
+| **Open Andrew-confirms** | None. Tyson Google/Android smoke PASS (2026-09-17). Apple skipped (no device). |
 | **In-flight subagents** | None. |
 | **Uncommitted / unmerged** | **`feat/calendar-wave`** unmerged — **do not merge overnight.** `master` stays in `tutoring-notes-master-ops`. |
 

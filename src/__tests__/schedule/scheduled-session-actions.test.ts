@@ -278,4 +278,44 @@ describe("scheduled session actions", () => {
     expect(withGoogle[0].showSyncBadge).toBe(true);
     expect(withGoogle[0].syncState).toBe("pending");
   });
+
+  it("stores UTC instants from wall clock in the seeded device timezone", async () => {
+    const tutor = await createTutor();
+    const student = await createStudentForTutor(tutor.id);
+    requireStudentScopeMock.mockResolvedValue({
+      kind: "admin",
+      adminId: tutor.id,
+      email: tutor.email,
+    });
+
+    const { id } = await createScheduledSession({
+      studentId: student.id,
+      date: "2026-08-20",
+      startTime: "16:00",
+      endTime: "17:00",
+      plannedDurationMinutes: 60,
+      subject: "Algebra II",
+      clientTimeZone: "America/Los_Angeles",
+    });
+
+    const row = await db.scheduledSession.findUnique({ where: { id } });
+    const { utcBoundsFromWallClock } = await import(
+      "@/lib/calendar/scheduled-session-datetime"
+    );
+    const expected = utcBoundsFromWallClock(
+      row!.date,
+      "16:00",
+      "17:00",
+      null,
+      "America/Los_Angeles"
+    );
+    expect(row?.startAt?.toISOString()).toBe(expected.startAt.toISOString());
+    expect(row?.endAt?.toISOString()).toBe(expected.endAt.toISOString());
+
+    const admin = await db.adminUser.findUnique({
+      where: { id: tutor.id },
+      select: { tutorTimezone: true },
+    });
+    expect(admin?.tutorTimezone).toBe("America/Los_Angeles");
+  });
 });

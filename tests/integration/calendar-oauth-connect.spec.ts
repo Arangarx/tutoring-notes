@@ -24,11 +24,12 @@ test.describe("Calendar OAuth connect stub @wb-chrome", () => {
     await page.goto("/admin/settings/integrations");
     await page.waitForLoadState("networkidle");
 
-    const connectLink = page.locator('a[href="/api/auth/calendar/connect"]');
+    const connectLink = page.locator('a[href*="/api/auth/calendar/connect"]');
     await expect(connectLink).toBeVisible();
 
     const href = await connectLink.getAttribute("href");
-    expect(href).toBe("/api/auth/calendar/connect");
+    expect(href).toContain("/api/auth/calendar/connect");
+    expect(href).toContain(encodeURIComponent("/admin/settings/integrations"));
 
     const response = await page.request.get("/api/auth/calendar/connect", {
       maxRedirects: 0,
@@ -44,6 +45,16 @@ test.describe("Calendar OAuth connect stub @wb-chrome", () => {
     expect(location).toContain(
       encodeURIComponent(`${origin}/api/auth/calendar/callback`)
     );
+  });
+
+  test(`${TAG.WB_CHROME} schedule Connect href returns to /admin/schedule`, async ({ page }) => {
+    await page.goto("/admin/schedule");
+    await page.waitForLoadState("networkidle");
+    const connectLink = page.locator('a[href*="/api/auth/calendar/connect"]');
+    await expect(connectLink).toBeVisible();
+    const href = await connectLink.getAttribute("href");
+    expect(href).toContain(encodeURIComponent("/admin/schedule"));
+    expect(href).not.toContain(encodeURIComponent("/admin/settings/integrations"));
   });
 
   test(`${TAG.WB_CHROME} connected state shows live sync copy when connection is seeded`, async ({

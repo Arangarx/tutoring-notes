@@ -1,4 +1,5 @@
 import type { ScheduledSession, Student } from "@prisma/client";
+import { formatInstantWallClockFields } from "@/lib/calendar/scheduled-session-datetime";
 import { formatDateOnlyInput } from "@/lib/date-only";
 import type { GoogleCalendarUiState } from "@/lib/schedule/google-calendar-ui-state";
 import type { CalendarSyncState, ScheduledSessionView } from "@/lib/schedule/types";
@@ -26,19 +27,26 @@ export function resolveSyncPresentation(
 
 export function toScheduledSessionView(
   row: ScheduledSessionRow,
-  googleState: GoogleCalendarUiState
+  googleState: GoogleCalendarUiState,
+  displayTimeZone: string
 ): ScheduledSessionView {
   const sync = resolveSyncPresentation(googleState, row.googleEventId);
+  const startFields = row.startAt
+    ? formatInstantWallClockFields(row.startAt, displayTimeZone)
+    : { date: formatDateOnlyInput(row.date), hhmm: row.startTime };
+  const endFields = row.endAt
+    ? formatInstantWallClockFields(row.endAt, displayTimeZone)
+    : { date: formatDateOnlyInput(row.date), hhmm: row.endTime };
   return {
     id: row.id,
     studentId: row.studentId,
     studentName: row.student.name,
     subject: row.subject,
-    date: formatDateOnlyInput(row.date),
-    startTime: formatTimeDisplay(row.startTime),
-    endTime: formatTimeDisplay(row.endTime),
-    startTimeInput: row.startTime,
-    endTimeInput: row.endTime,
+    date: startFields.date,
+    startTime: formatTimeDisplay(startFields.hhmm),
+    endTime: formatTimeDisplay(endFields.hhmm),
+    startTimeInput: startFields.hhmm,
+    endTimeInput: endFields.hhmm,
     plannedDurationMinutes: row.plannedDurationMinutes,
     durationLabel: durationLabelForMinutes(row.plannedDurationMinutes),
     showSyncBadge: sync.showSyncBadge,

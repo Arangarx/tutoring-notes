@@ -14,6 +14,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Umbrella Calendar + Limited Use sync 2026-09-10 (OAuth review).
  * SMS 2FA (Twilio) product-specific disclosure 2026-09-11.
  * Calendar ICS feed + Google write honesty (product-specific) 2026-09-16.
+ * Calendar title prefix with full-name opt-in (product-specific) 2026-09-17.
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -43,7 +44,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 16, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 17, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -209,8 +210,9 @@ export default function PrivacyPage() {
               feed of your upcoming scheduled sessions. We do not push updates to your device; the
               feed is read-only from the calendar app&apos;s perspective. Session titles in the feed
               default to the student&apos;s <strong>first name</strong> (for example,
-              &ldquo;Tutoring — Maya&rdquo;). You can opt in per student to include the student&apos;s
-              full name in feed titles instead.
+              &ldquo;Tutoring — Maya&rdquo;). You can opt in per student to keep that same
+              &ldquo;Tutoring —&rdquo; prefix and include the student&apos;s full name (for example,
+              &ldquo;Tutoring — Maya Rodriguez&rdquo;).
             </p>
             <p style={{ margin: "8px 0 0" }}>
               The subscription URL acts like a bearer secret — anyone with the link can fetch your

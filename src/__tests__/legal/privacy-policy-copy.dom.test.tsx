@@ -32,7 +32,7 @@ describe("privacy policy copy (SEC-POLICY-TRUTH interim)", () => {
   it("shows updated date and truthful retention/audio wording", () => {
     render(<PrivacyPage />);
 
-    expect(screen.getByText(/Last updated: September 16, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last updated: September 17, 2026/i)).toBeInTheDocument();
     expect(screen.queryByText(/24 months after the account is closed/i)).toBeNull();
     expect(screen.queryByText(/grade level/i)).toBeNull();
     expect(

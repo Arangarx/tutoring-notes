@@ -1,7 +1,10 @@
 import type { calendar_v3 } from "googleapis";
 
 import { buildIcsEventSummary } from "@/lib/calendar/ics-feed";
-import { resolveScheduledSessionWallClock } from "@/lib/calendar/scheduled-session-datetime";
+import {
+  instantToRfc3339Utc,
+  instantsForScheduledSession,
+} from "@/lib/calendar/scheduled-session-datetime";
 
 export const SCHEDULED_SESSION_ICS_DOMAIN = "usemynk.com";
 
@@ -14,6 +17,8 @@ export type GoogleEventSessionInput = {
   date: Date;
   startTime: string;
   endTime: string;
+  startAt?: Date | null;
+  endAt?: Date | null;
   subject: string;
   notes: string;
   location: string;
@@ -23,26 +28,12 @@ export type GoogleEventSessionInput = {
   };
 };
 
-function icsLocalToGoogleDateTime(icsLocal: string): string {
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/.exec(icsLocal);
-  if (!m) {
-    throw new Error(`Invalid ICS local datetime: ${icsLocal}`);
-  }
-  return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`;
-}
-
-/** Pure builder — shared oracle for ICS + Google wall-clock tests (B1). */
+/** Pure builder — UTC `dateTime` so Google converts to the viewer's calendar TZ. */
 export function buildScheduledSessionGoogleEventResource(
   session: GoogleEventSessionInput,
   adminTimezone: string | null | undefined
 ): calendar_v3.Schema$Event {
-  const wall = resolveScheduledSessionWallClock(
-    session.date,
-    session.startTime,
-    session.endTime,
-    null,
-    adminTimezone
-  );
+  const wall = instantsForScheduledSession(session, adminTimezone);
   const summary = buildIcsEventSummary(session.student);
   const descriptionParts: string[] = [];
   const subject = session.subject.trim();
@@ -59,12 +50,10 @@ export function buildScheduledSessionGoogleEventResource(
     summary,
     iCalUID: scheduledSessionIcalUid(session.id),
     start: {
-      dateTime: icsLocalToGoogleDateTime(wall.startIcsLocal),
-      timeZone: wall.timeZone,
+      dateTime: instantToRfc3339Utc(wall.startInstant),
     },
     end: {
-      dateTime: icsLocalToGoogleDateTime(wall.endIcsLocal),
-      timeZone: wall.timeZone,
+      dateTime: instantToRfc3339Utc(wall.endInstant),
     },
   };
   const location = session.location.trim();

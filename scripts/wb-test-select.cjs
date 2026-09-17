@@ -58,7 +58,7 @@ const PATH_RULES = [
     tags: [TAG.WB_CHROME],
   },
   {
-    re: /calendar-sync-badge|calendar-oauth-connect|CalendarIntegrationsPanel/i,
+    re: /calendar-sync-badge|calendar-oauth-connect|CalendarIntegrationsPanel|calendar-oauth-return|scheduled-session-utc/i,
     tags: [TAG.WB_CHROME],
   },
   {

@@ -94,4 +94,40 @@ test.describe("Calendar sync badges @wb-chrome", () => {
       await prisma.$disconnect();
     }
   });
+
+  test(`${TAG.WB_CHROME} agenda times follow startAt in the tutor timezone`, async ({ page }) => {
+    const adminUserId = await seedTestAdmin();
+    const { studentId } = await seedTestStudent(adminUserId);
+    const prisma = new PrismaClient();
+    const subject = `PW-TZ-${Date.now()}`;
+    try {
+      await prisma.adminUser.update({
+        where: { id: adminUserId },
+        data: { tutorTimezone: "America/Los_Angeles" },
+      });
+      await prisma.scheduledSession.create({
+        data: {
+          adminUserId,
+          studentId,
+          date: new Date("2026-12-15T12:00:00.000Z"),
+          startTime: "16:00",
+          endTime: "17:00",
+          startAt: new Date("2026-12-15T18:00:00.000Z"),
+          endAt: new Date("2026-12-15T19:00:00.000Z"),
+          plannedDurationMinutes: 60,
+          subject,
+          notes: "",
+        },
+      });
+      await page.goto("/admin/schedule");
+      await page.waitForLoadState("networkidle");
+      await page.getByTestId("schedule-agenda-tab").click();
+      const row = page.getByTestId("schedule-agenda-row").filter({ hasText: subject });
+      await expect(row).toContainText("10:00 AM");
+      await expect(row).not.toContainText("4:00 PM");
+    } finally {
+      await prisma.scheduledSession.deleteMany({ where: { adminUserId } });
+      await prisma.$disconnect();
+    }
+  });
 });

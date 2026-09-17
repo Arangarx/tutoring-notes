@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { afterStudentCalendarTitlePolicyChanged } from "@/lib/calendar/google-calendar-connect-backfill";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { db, withDbRetry, isTransientDbConnectionError } from "@/lib/db";
@@ -98,6 +99,7 @@ export async function setStudentIcsShowFullName(studentId: string, icsShowFullNa
     { label: "setStudentIcsShowFullName" }
   );
   revalidatePath(`/admin/students/${studentId}`);
+  await afterStudentCalendarTitlePolicyChanged(studentId);
 }
 
 export async function createNote(

@@ -31,6 +31,8 @@ export type ScheduledSessionGoogleSyncInput = {
   date: Date;
   startTime: string;
   endTime: string;
+  startAt: Date | null;
+  endAt: Date | null;
   subject: string;
   notes: string;
   location: string;
@@ -416,6 +418,8 @@ const googleSyncSelect = {
   date: true,
   startTime: true,
   endTime: true,
+  startAt: true,
+  endAt: true,
   subject: true,
   notes: true,
   location: true,
@@ -444,6 +448,8 @@ export async function loadScheduledSessionForGoogleSync(
     date: row.date,
     startTime: row.startTime,
     endTime: row.endTime,
+    startAt: row.startAt,
+    endAt: row.endAt,
     subject: row.subject,
     notes: row.notes,
     location: row.location,

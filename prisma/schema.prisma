@@ -1008,11 +1008,14 @@ model ScheduledSession {
   adminUser              AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   studentId              String
   student                Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  /// Calendar day (Postgres DATE). Use date-only.ts at IO boundaries.
+  /// Calendar day (Postgres DATE). Denormalized wall-clock day at write; prefer startAt for display.
   date                   DateTime  @db.Date
-  /// Local planning times as 24h HH:MM (no timezone policy in chunk 1).
+  /// Local planning times as 24h HH:MM at write. Prefer startAt/endAt (UTC) as source of truth.
   startTime              String
   endTime                String
+  /// UTC instants — timezone-agnostic source of truth for Google/ICS/display.
+  startAt                DateTime? @db.Timestamptz(3)
+  endAt                  DateTime? @db.Timestamptz(3)
   /// Soft planning duration in minutes (45, 60, 90).
   plannedDurationMinutes Int
   subject                String
@@ -1024,6 +1027,7 @@ model ScheduledSession {
   updatedAt              DateTime  @updatedAt
 
   @@index([adminUserId, date])
+  @@index([adminUserId, startAt])
   @@index([studentId])
 }
 

@@ -8,6 +8,7 @@ import { SectionCard } from "@/components/SectionCard";
 import { disconnectGoogleCalendar } from "@/app/admin/settings/integrations/actions";
 import { ShareLinkRow } from "@/app/admin/students/[id]/ShareLinkRow";
 import type { CalendarConnectionView } from "@/lib/schedule/types";
+import { calendarConnectHref } from "@/lib/calendar/calendar-oauth-return";
 import { CalendarIcon, CheckIcon, PlusIcon } from "lucide-react";
 import { RegenerateCalendarFeedForm } from "@/components/admin/schedule/CalendarFeedControls";
 
@@ -25,6 +26,8 @@ type CalendarIntegrationsPanelProps = {
   showSettingsLink?: boolean;
   /** Override Manage link target (e.g. include `?from=schedule` for back-nav). */
   settingsHref?: string;
+  /** Post-OAuth landing path (schedule vs settings). */
+  connectReturnTo?: string;
 };
 
 function ProviderIcon({ provider }: { provider: CalendarConnectionView["provider"] }) {
@@ -70,6 +73,7 @@ export function CalendarIntegrationsPanel({
   compact = false,
   showSettingsLink = true,
   settingsHref = "/admin/settings/integrations",
+  connectReturnTo = "/admin/settings/integrations",
 }: CalendarIntegrationsPanelProps) {
   const connectedCount = connections.filter((c) => c.connected).length;
   const googleConnected = connections.some((c) => c.provider === "google" && c.connected);
@@ -166,7 +170,7 @@ export function CalendarIntegrationsPanel({
                       ) : null}
                       <Button variant="default" size="sm" className="min-h-9" asChild>
                         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-                        <a href="/api/auth/calendar/connect">
+                        <a href={calendarConnectHref(connectReturnTo)}>
                           <CalendarIcon aria-hidden />
                           Connect
                         </a>

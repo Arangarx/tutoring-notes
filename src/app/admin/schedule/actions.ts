@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { parseDateOnlyInput } from "@/lib/date-only";
+import { seedTutorTimezoneIfUnset } from "@/lib/billing/seed-tutor-timezone";
+import { DEFAULT_TUTOR_TIMEZONE } from "@/lib/billing/defaults";
 import { getGoogleCalendarConnectionForTutor } from "@/lib/calendar-oauth";
+import { utcBoundsFromWallClock } from "@/lib/calendar/scheduled-session-datetime";
 import {
   afterScheduledSessionCreated,
   afterScheduledSessionUpdated,
@@ -27,6 +30,8 @@ export type ScheduledSessionInput = {
   plannedDurationMinutes: number;
   subject: string;
   notes?: string;
+  /** Browser IANA zone — seeds AdminUser.tutorTimezone when still unset. */
+  clientTimeZone?: string | null;
 };
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -75,21 +80,48 @@ async function calendarRefreshTokenForAdmin(adminUserId: string): Promise<string
   return conn?.refreshToken ?? null;
 }
 
+async function utcFieldsForWrite(
+  adminUserId: string,
+  parsed: { date: Date; startTime: string; endTime: string },
+  clientTimeZone?: string | null
+) {
+  const seeded = await seedTutorTimezoneIfUnset(adminUserId, clientTimeZone);
+  const bounds = utcBoundsFromWallClock(
+    parsed.date,
+    parsed.startTime,
+    parsed.endTime,
+    null,
+    seeded.timeZone
+  );
+  return { startAt: bounds.startAt, endAt: bounds.endAt };
+}
+
 /** Lists sessions for the authenticated tutor only (`adminUserId` = scope.adminId). */
 export async function listScheduledSessionsForTutor(
   googleState: GoogleCalendarUiState
 ): Promise<ScheduledSessionView[]> {
   const scope = await requireAdminScope();
-  const rows = await withDbRetry(
-    () =>
-      db.scheduledSession.findMany({
-        where: { adminUserId: scope.adminId },
-        include: { student: { select: { name: true } } },
-        orderBy: [{ date: "asc" }, { startTime: "asc" }],
-      }),
-    { label: "listScheduledSessionsForTutor" }
-  );
-  return rows.map((row) => toScheduledSessionView(row, googleState));
+  const [rows, admin] = await Promise.all([
+    withDbRetry(
+      () =>
+        db.scheduledSession.findMany({
+          where: { adminUserId: scope.adminId },
+          include: { student: { select: { name: true } } },
+          orderBy: [{ date: "asc" }, { startTime: "asc" }],
+        }),
+      { label: "listScheduledSessionsForTutor" }
+    ),
+    withDbRetry(
+      () =>
+        db.adminUser.findUnique({
+          where: { id: scope.adminId },
+          select: { tutorTimezone: true },
+        }),
+      { label: "listScheduledSessionsForTutor.tz" }
+    ),
+  ]);
+  const displayTimeZone = admin?.tutorTimezone ?? DEFAULT_TUTOR_TIMEZONE;
+  return rows.map((row) => toScheduledSessionView(row, googleState, displayTimeZone));
 }
 
 export async function listScheduleStudentOptions(): Promise<ScheduleStudentOption[]> {
@@ -112,6 +144,7 @@ export async function createScheduledSession(
   await assertOwnsStudent(input.studentId);
   const parsed = parseScheduledSessionInput(input);
   if (!parsed) notFound();
+  const utc = await utcFieldsForWrite(scope.adminId, parsed, input.clientTimeZone);
 
   const row = await withDbRetry(
     () =>
@@ -120,6 +153,7 @@ export async function createScheduledSession(
           adminUserId: scope.adminId,
           studentId: input.studentId,
           ...parsed,
+          ...utc,
         },
       }),
     { label: "createScheduledSession" }
@@ -141,6 +175,7 @@ export async function updateScheduledSession(
   await assertOwnsStudent(input.studentId);
   const parsed = parseScheduledSessionInput(input);
   if (!parsed) notFound();
+  const utc = await utcFieldsForWrite(owned.adminUserId, parsed, input.clientTimeZone);
 
   await withDbRetry(
     () =>
@@ -149,6 +184,7 @@ export async function updateScheduledSession(
         data: {
           studentId: input.studentId,
           ...parsed,
+          ...utc,
         },
       }),
     { label: "updateScheduledSession" }

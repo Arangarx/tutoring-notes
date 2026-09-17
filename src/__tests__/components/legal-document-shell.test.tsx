@@ -81,7 +81,7 @@ describe("Privacy page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Privacy Policy"
     );
-    expect(screen.getByText("Last updated: September 16, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: September 17, 2026")).toBeInTheDocument();
 
     // Verbatim body locks (distinctive product / umbrella sentences)
     expect(
