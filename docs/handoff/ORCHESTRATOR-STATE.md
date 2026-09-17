@@ -16,9 +16,9 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar wave **DONE for Andrew smoke**. Isolation independently **APPROVE WITH NITS** ([Verifier](bb718253-7ef4-4766-a50b-ee966d3b80c0)). Branch `feat/calendar-wave` @ [`adafd3d8`](https://github.com/Arangarx/tutoring-notes/commit/adafd3d8) (docs wrap); last harness [`d90a337d`](https://github.com/Arangarx/tutoring-notes/commit/d90a337d); WS4 code [`0b3b0fa1`](https://github.com/Arangarx/tutoring-notes/commit/0b3b0fa1). WS0–WS4 independently APPROVE. Gates: calendar+legal jest 40, `test:regression` 149, `next build` 0, calendar Playwright 4 passed. Smokebook: [`CALENDAR-WAVE-SMOKE.md`](CALENDAR-WAVE-SMOKE.md). Preview: [feat/calendar-wave](https://tutoring-notes-git-feat-calendar-wave-arangarx-5209s-projects.vercel.app). |
-| **Next action(s)** | **Andrew smokes once** ([`CALENDAR-WAVE-SMOKE.md`](CALENDAR-WAVE-SMOKE.md)). **Do not merge to `master`.** Before merge: full `test:wb-sync` (expected red = July cluster only) + confirm Neon preview migrated. Isolation nits are non-blocking (oauth-connect test 2 leftover seed; unused `TEST_ADMIN` import; `schedule-native-crud` can still race the same Google row if someone runs all Playwright projects concurrently). |
-| **Open Andrew-confirms** | Smoke. Leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) Console Clients-first, demo film per [`CALENDAR-VERIFICATION-JUSTIFICATION.md`](CALENDAR-VERIFICATION-JUSTIFICATION.md), privacy/terms eyeball. |
+| **Last action completed** | Calendar/Gmail Connect `redirect_uri` uses allowlisted request host (`preview.usemynk.com`); `NEXTAUTH_URL` unchanged. Console has preview + vercel + prod + localhost callbacks (Andrew 2026-09-17). |
+| **Next action(s)** | Wait for Vercel preview deploy. Tyson retries item 7 on **https://preview.usemynk.com** (hard refresh). **Do not merge to `master`.** |
+| **Open Andrew-confirms** | Authorized JavaScript origin `https://preview.usemynk.com` if not added. Then Tyson item 7 + [`CALENDAR-WAVE-SMOKE.md`](CALENDAR-WAVE-SMOKE.md). |
 | **In-flight subagents** | None. |
 | **Uncommitted / unmerged** | **`feat/calendar-wave`** unmerged — **do not merge overnight.** `master` stays in `tutoring-notes-master-ops`. |
 

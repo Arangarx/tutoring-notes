@@ -427,6 +427,7 @@
   - `tutoring-notes.vercel.app` — project legacy default Vercel domain (production HTTP requests 308 to `https://usemynk.com`; host stays allowlisted for email-link reflection)
   - `tutoring-notes-*-arangarx-5209s-projects.vercel.app` — per-deployment and branch-alias preview URLs for this project+team; team slug scopes it to the `arangarx-5209s-projects` Vercel team only
   - `usemynk.com`, `www.usemynk.com` — production canonical hosts (`www` 308s to apex in production)
+  - `preview.usemynk.com` — stable Preview custom domain (exact host only; Tyson 2026-09-17 calendar Connect)
 - **Injection guard**: a host NOT in the allowlist is NEVER reflected; `getPublicBaseUrl()` is used instead. Tests in `src/__tests__/public-url-allowlist.test.ts` enforce this contract.
 - **Where baked in**: `src/lib/public-url.ts:getRequestBaseUrlSafe`, `src/lib/public-url.ts:isHostAllowlisted`; used in `src/app/api/auth/account-holder/signup/route.ts` for the verify-email link.
 - **What breaks if violated**: loosening the allowlist (e.g. accepting `*.vercel.app` without team-slug scoping) opens a host-header injection vector — an attacker with a different `tutoring-notes-*` Vercel project could redirect a parent's verify-email link to an attacker-controlled domain, stealing the handoff token.

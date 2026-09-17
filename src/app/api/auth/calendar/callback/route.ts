@@ -4,9 +4,10 @@ import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getAdminByEmail } from "@/lib/auth-db";
+import { getRequestBaseUrlSafe } from "@/lib/public-url";
 
 export async function GET(request: NextRequest) {
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  const baseUrl = getRequestBaseUrlSafe(request);
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.redirect(new URL("/login", baseUrl));

@@ -2,7 +2,7 @@
 
 > **For you when you're back after a gap.** Agents keep this current. Code work continues without waiting on these unless a row says "blocks code."
 
-**Last refreshed:** 2026-09-15 (post auth merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca))  
+**Last refreshed:** 2026-09-17 (Tyson Connect: Console URIs added; Connect uses tab host — `NEXTAUTH_URL` unchanged)  
 **Canonical priorities:** [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities (option B)  
 **Living orchestrator state:** [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md)  
 **Calendar wave plan:** [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md)
@@ -20,10 +20,12 @@
 | **3 — Audience** | Publishing status (expect In production), user cap, unverified-user quota consumed | |
 | **4 — Branding** | Registered app name, homepage, privacy, terms URLs (mortensenapps.com umbrella) | |
 | **5 — Data access / scopes** | Confirm **selected** sensitive scopes (not just picker availability). Target for resubmit: **`calendar.events.owned`** + `userinfo.email` — drop `calendar.events` / `calendar.readonly` in the implementation wave | Picker confirmed `calendar.events.owned` 2026-09-11; Calendar API **enabled** (picker banner: "Only scopes for enabled APIs are listed below") |
-| **6 — Redirect URIs** | Prod + localhost: `/api/auth/callback/google`, `/api/auth/gmail/callback`, `/api/auth/calendar/callback` | Live connect smoke |
+| **6 — Redirect URIs** | **Done for Tyson retry** (2026-09-17 screenshot): prod + `tutoring-notes.vercel.app` + localhost + `preview.usemynk.com` for Sign-In / Gmail / Calendar. Leave `NEXTAUTH_URL`. Connect now uses allowlisted request host. | Tyson item 7 |
 | **7 — Search Console** | [`usemynk.com`](https://search.google.com/search-console) verified; re-submit branding if pending ([`LEGAL-SYNC.md`](../LEGAL-SYNC.md)) | Before verification resubmit |
 
 **Submit Google Calendar verification only after** real event write (create/edit/delete) is on a crawlable URL with Source Account Impact in the tutor's Google Calendar UI — **not** the old connect+stub demo. See [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md) demo requirements.
+
+**Tyson Connect (2026-09-17):** Console redirect URIs include `preview.usemynk.com`. **Do not change `NEXTAUTH_URL`.** After the tab-host Connect deploy, he retries on https://preview.usemynk.com. Also add Authorized JavaScript origin `https://preview.usemynk.com` if missing.
 
 **Paste status here when done** (agents fold into BACKLOG/STATE):
 

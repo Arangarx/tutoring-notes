@@ -43,6 +43,21 @@ jest.mock("@/lib/db", () => ({
 const mockFetch = jest.fn();
 global.fetch = mockFetch as typeof fetch;
 
+/** Tyson 2026-09-17: Connect was sending NEXTAUTH_URL (legacy vercel.app), not this tab. */
+const CALENDAR_WAVE_PREVIEW_HOST =
+  "tutoring-notes-git-feat-calendar-wave-arangarx-5209s-projects.vercel.app";
+
+function calendarConnectRequest(
+  headers: Record<string, string> = {
+    host: "localhost:3000",
+    "x-forwarded-proto": "http",
+  }
+) {
+  return new NextRequest("http://localhost:3000/api/auth/calendar/connect", {
+    headers,
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   process.env.NEXTAUTH_URL = "http://localhost:3000";
@@ -96,7 +111,7 @@ describe("GET /api/auth/calendar/connect", () => {
   it("redirects unauthenticated users to login", async () => {
     mockGetServerSession.mockResolvedValueOnce(null);
     const { GET } = await import("@/app/api/auth/calendar/connect/route");
-    const res = await GET();
+    const res = await GET(calendarConnectRequest());
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     expect(res.headers.get("location")).toBe("http://localhost:3000/login");
@@ -104,7 +119,7 @@ describe("GET /api/auth/calendar/connect", () => {
 
   it("302 includes owned calendar scope on the Google authorize URL", async () => {
     const { GET } = await import("@/app/api/auth/calendar/connect/route");
-    const res = await GET();
+    const res = await GET(calendarConnectRequest());
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     const location = res.headers.get("location") ?? "";
@@ -114,6 +129,57 @@ describe("GET /api/auth/calendar/connect", () => {
     expect(location).toContain("userinfo.email");
     expect(location).toContain("access_type=offline");
     expect(location).toContain("prompt=consent");
+    expect(location).toContain(
+      encodeURIComponent("http://localhost:3000/api/auth/calendar/callback")
+    );
+  });
+
+  it("redirect_uri follows the allowlisted preview host, not NEXTAUTH_URL", async () => {
+    process.env.NEXTAUTH_URL = "https://tutoring-notes.vercel.app";
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest({
+        "x-forwarded-host": CALENDAR_WAVE_PREVIEW_HOST,
+        "x-forwarded-proto": "https",
+      })
+    );
+    const location = res.headers.get("location") ?? "";
+    const previewCallback = `https://${CALENDAR_WAVE_PREVIEW_HOST}/api/auth/calendar/callback`;
+    expect(location).toContain(encodeURIComponent(previewCallback));
+    expect(location).not.toContain(
+      encodeURIComponent("https://tutoring-notes.vercel.app/api/auth/calendar/callback")
+    );
+  });
+
+  it("redirect_uri follows preview.usemynk.com, not NEXTAUTH_URL", async () => {
+    process.env.NEXTAUTH_URL = "https://tutoring-notes.vercel.app";
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest({
+        "x-forwarded-host": "preview.usemynk.com",
+        "x-forwarded-proto": "https",
+      })
+    );
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain(
+      encodeURIComponent("https://preview.usemynk.com/api/auth/calendar/callback")
+    );
+    expect(location).not.toContain(
+      encodeURIComponent("https://tutoring-notes.vercel.app/api/auth/calendar/callback")
+    );
+  });
+
+  it("forged Host is not reflected into redirect_uri", async () => {
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest({
+        host: "evil.com",
+        "x-forwarded-proto": "https",
+      })
+    );
+    const location = res.headers.get("location") ?? "";
+    expect(location).not.toContain("evil.com");
     expect(location).toContain(
       encodeURIComponent("http://localhost:3000/api/auth/calendar/callback")
     );
@@ -143,6 +209,10 @@ describe("GET /api/auth/calendar/callback", () => {
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     expect(res.headers.get("location")).toContain("connected=google_calendar");
+    const tokenBody = String(mockFetch.mock.calls[0]?.[1]?.body ?? "");
+    expect(tokenBody).toContain(
+      encodeURIComponent("http://localhost:3000/api/auth/calendar/callback")
+    );
     expect(mockFetch).toHaveBeenCalledTimes(2);
     for (const call of mockFetch.mock.calls) {
       const url = String(call[0]);
@@ -222,6 +292,37 @@ describe("GET /api/auth/calendar/callback", () => {
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     expect(res.headers.get("location")).toContain("error=db_not_ready");
+  });
+
+  it("token exchange redirect_uri follows the allowlisted preview host, not NEXTAUTH_URL", async () => {
+    process.env.NEXTAUTH_URL = "https://tutoring-notes.vercel.app";
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          refresh_token: "refresh-abc",
+          access_token: "access-abc",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ email: "calendar@example.com" }),
+      });
+
+    const { GET } = await import("@/app/api/auth/calendar/callback/route");
+    const previewCallback = `https://${CALENDAR_WAVE_PREVIEW_HOST}/api/auth/calendar/callback`;
+    const req = new NextRequest(`${previewCallback}?code=oauth-code-123`, {
+      headers: {
+        "x-forwarded-host": CALENDAR_WAVE_PREVIEW_HOST,
+        "x-forwarded-proto": "https",
+      },
+    });
+    await GET(req);
+    const tokenBody = String(mockFetch.mock.calls[0]?.[1]?.body ?? "");
+    expect(tokenBody).toContain(encodeURIComponent(previewCallback));
+    expect(tokenBody).not.toContain(
+      encodeURIComponent("https://tutoring-notes.vercel.app/api/auth/calendar/callback")
+    );
   });
 });
 

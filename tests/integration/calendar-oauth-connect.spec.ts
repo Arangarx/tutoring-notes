@@ -40,6 +40,10 @@ test.describe("Calendar OAuth connect stub @wb-chrome", () => {
     expect(location).toContain("accounts.google.com");
     expect(location).toContain("calendar.events.owned");
     expect(location).not.toContain("calendar.readonly");
+    const origin = new URL(page.url()).origin;
+    expect(location).toContain(
+      encodeURIComponent(`${origin}/api/auth/calendar/callback`)
+    );
   });
 
   test(`${TAG.WB_CHROME} connected state shows live sync copy when connection is seeded`, async ({

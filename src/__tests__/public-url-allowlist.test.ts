@@ -87,6 +87,10 @@ describe("isHostAllowlisted — allowlisted hosts are accepted", () => {
   it("accepts www.usemynk.com (production www)", () => {
     expect(isHostAllowlisted("www.usemynk.com")).toBe(true);
   });
+
+  it("accepts preview.usemynk.com (stable preview domain)", () => {
+    expect(isHostAllowlisted("preview.usemynk.com")).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -149,6 +153,14 @@ describe("getRequestBaseUrlSafe — host reflection + injection guard", () => {
   it("reflects an allowlisted host (usemynk.com)", () => {
     const req = makeReq({ host: "usemynk.com", "x-forwarded-proto": "https" });
     expect(getRequestBaseUrlSafe(req)).toBe("https://usemynk.com");
+  });
+
+  it("reflects preview.usemynk.com", () => {
+    const req = makeReq({
+      host: "preview.usemynk.com",
+      "x-forwarded-proto": "https",
+    });
+    expect(getRequestBaseUrlSafe(req)).toBe("https://preview.usemynk.com");
   });
 
   it("reflects localhost:3000 (local dev)", () => {
