@@ -4,7 +4,10 @@
 import { db } from "@/lib/db";
 import { uniq } from "../helpers/unique-test-token";
 import { seedTutorTimezoneIfUnset } from "@/lib/billing/seed-tutor-timezone";
-import { syncUpcomingUnsyncedScheduledSessions } from "@/lib/calendar/google-calendar-connect-backfill";
+import {
+  afterStudentCalendarTitlePolicyChanged,
+  syncUpcomingUnsyncedScheduledSessions,
+} from "@/lib/calendar/google-calendar-connect-backfill";
 import {
   setGoogleCalendarSyncDepsForTests,
   type GoogleCalendarWriteClient,
@@ -141,5 +144,95 @@ describe("syncUpcomingUnsyncedScheduledSessions", () => {
 
     const reloaded = await db.scheduledSession.findUnique({ where: { id: upcoming.id } });
     expect(reloaded?.startAt).not.toBeNull();
+  });
+});
+
+describe("afterStudentCalendarTitlePolicyChanged", () => {
+  afterEach(() => {
+    setGoogleCalendarSyncDepsForTests(null);
+  });
+
+  it("does not Google-patch when the student has no owning tutor", async () => {
+    const student = await db.student.create({
+      data: {
+        name: "Unowned Student",
+        adminUserId: null,
+        parentEmail: `${uniq("parent")}@example.com`,
+      },
+    });
+
+    const patchMock = jest.fn();
+    setGoogleCalendarSyncDepsForTests({
+      getClient: async () => ({
+        ok: true,
+        client: {
+          listEventsByICalUid: jest.fn(),
+          insertEvent: jest.fn(),
+          patchEvent: patchMock,
+          deleteEvent: jest.fn(),
+        },
+      }),
+      persistEventId: jest.fn(),
+    });
+
+    await afterStudentCalendarTitlePolicyChanged(student.id);
+    expect(patchMock).not.toHaveBeenCalled();
+  });
+
+  it("patches upcoming Google events after a title-policy change", async () => {
+    const tutor = await db.adminUser.create({
+      data: {
+        email: `${uniq("title-tutor")}@example.com`,
+        role: "TUTOR",
+        approvalStatus: "APPROVED",
+        tutorTimezone: "America/Los_Angeles",
+      },
+    });
+    const student = await db.student.create({
+      data: {
+        name: "Title Student",
+        adminUserId: tutor.id,
+        parentEmail: `${uniq("parent")}@example.com`,
+        icsShowFullName: true,
+      },
+    });
+    await db.scheduledSession.create({
+      data: {
+        adminUserId: tutor.id,
+        studentId: student.id,
+        date: new Date("2026-12-20T00:00:00.000Z"),
+        startTime: "16:00",
+        endTime: "17:00",
+        plannedDurationMinutes: 60,
+        subject: "Retitle me",
+        googleEventId: "google-ev-retitle",
+      },
+    });
+    await db.oAuthCalendarConnection.create({
+      data: {
+        provider: "google",
+        refreshToken: "refresh-retitle",
+        email: "retitle@example.com",
+        adminUserId: tutor.id,
+      },
+    });
+
+    const patchMock = jest.fn().mockResolvedValue(undefined);
+    setGoogleCalendarSyncDepsForTests({
+      getClient: async () => ({
+        ok: true,
+        client: {
+          listEventsByICalUid: jest.fn(),
+          insertEvent: jest.fn(),
+          patchEvent: patchMock,
+          deleteEvent: jest.fn(),
+        },
+      }),
+      persistEventId: jest.fn(),
+    });
+
+    await afterStudentCalendarTitlePolicyChanged(student.id);
+    expect(patchMock).toHaveBeenCalledTimes(1);
+    expect(patchMock.mock.calls[0]?.[0]).toBe("google-ev-retitle");
   });
 });

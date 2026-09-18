@@ -128,12 +128,13 @@ export async function afterStudentCalendarTitlePolicyChanged(
         }),
       { label: "afterStudentCalendarTitlePolicyChanged.student" }
     );
-    if (!student) return;
+    if (!student?.adminUserId) return;
 
+    const adminUserId = student.adminUserId;
     const conn = await withDbRetry(
       () =>
         db.oAuthCalendarConnection.findFirst({
-          where: { provider: "google", adminUserId: student.adminUserId },
+          where: { provider: "google", adminUserId },
           select: { refreshToken: true, reconnectRequiredAt: true },
         }),
       { label: "afterStudentCalendarTitlePolicyChanged.conn" }
@@ -156,7 +157,7 @@ export async function afterStudentCalendarTitlePolicyChanged(
     );
 
     for (const row of rows) {
-      await afterScheduledSessionUpdated(student.adminUserId, row.id, conn.refreshToken);
+      await afterScheduledSessionUpdated(adminUserId, row.id, conn.refreshToken);
     }
   } catch {
     // fail-soft — toggle already persisted

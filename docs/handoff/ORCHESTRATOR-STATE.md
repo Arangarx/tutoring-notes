@@ -16,8 +16,8 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Calendar UTC instants + device TZ default + Connect upcoming backfill + `Tutoring —` full-name titles + Connect returnTo source page (in progress on `feat/calendar-wave`). |
-| **Next action(s)** | Finish gates + push `feat/calendar-wave`. Tyson: set timezone / reconnect on **https://preview.usemynk.com** after deploy. **Do not merge to `master`.** |
+| **Last action completed** | Diagnosed Vercel preview ERROR on `feat/calendar-wave` (`8ca1f2ef` / `dpl_EPSHLaEsEDpeFx9JhVjzto9H7JSb`): Next typecheck — `Student.adminUserId` is `string \| null` but `afterScheduledSessionUpdated` requires `string`. Guard + tests in `afterStudentCalendarTitlePolicyChanged`. |
+| **Next action(s)** | Wait for Vercel preview READY on `feat/calendar-wave`. Tyson: hard-refresh **https://preview.usemynk.com**, open Schedule once. **Do not merge to `master`.** |
 | **Open Andrew-confirms** | None. Tyson Google/Android smoke PASS (2026-09-17). Apple skipped (no device). |
 | **In-flight subagents** | None. |
 | **Uncommitted / unmerged** | **`feat/calendar-wave`** unmerged — **do not merge overnight.** `master` stays in `tutoring-notes-master-ops`. |
