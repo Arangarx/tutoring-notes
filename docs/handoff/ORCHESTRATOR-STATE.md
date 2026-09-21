@@ -16,9 +16,9 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Diagnosed Vercel preview ERROR on `feat/calendar-wave` (`8ca1f2ef` / `dpl_EPSHLaEsEDpeFx9JhVjzto9H7JSb`): Next typecheck — `Student.adminUserId` is `string \| null` but `afterScheduledSessionUpdated` requires `string`. Guard + tests in `afterStudentCalendarTitlePolicyChanged`. |
-| **Next action(s)** | Wait for Vercel preview READY on `feat/calendar-wave`. Tyson: hard-refresh **https://preview.usemynk.com**, open Schedule once. **Do not merge to `master`.** |
-| **Open Andrew-confirms** | None. Tyson Google/Android smoke PASS (2026-09-17). Apple skipped (no device). |
+| **Last action completed** | Calendar-wave preview READY on tip [`496e085d`](https://github.com/Arangarx/tutoring-notes/commit/496e085d) ([inspector](https://vercel.com/arangarx-5209s-projects/tutoring-notes/5HyRhHUvJzaRJE5JSvWt6CEFhKdm)). Discord 2026-09-21: Jarek asked if calendars pass for now (at least Android); Tyson (Raellion): **"with what i needed to test before, yeah."** Scoped Android/Google pass — not a full smokebook sign-off. |
+| **Next action(s)** | Andrew call: merge `feat/calendar-wave` now on Android-scoped pass, or hold for Apple ICS (Sarah-primary, still no device). **Do not merge until Andrew says so.** |
+| **Open Andrew-confirms** | **Merge vs hold for Apple.** Tyson Android/Google: PASS 2026-09-17 + reconfirm 2026-09-21 (scoped to prior test items). Apple ICS: SKIP (no device). |
 | **In-flight subagents** | None. |
 | **Uncommitted / unmerged** | **`feat/calendar-wave`** unmerged — **do not merge overnight.** `master` stays in `tutoring-notes-master-ops`. |
 
