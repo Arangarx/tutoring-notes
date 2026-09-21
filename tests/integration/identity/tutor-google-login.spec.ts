@@ -15,11 +15,11 @@ test.describe("P1-ID-GOOGLE — tutor login Google sign-in UI", () => {
       page.getByText(/Sign-in is securely handled by Mortensen Apps/i)
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Sign in with Google" })
+      page.getByRole("button", { name: "Sign in with Google" })
     ).toBeVisible();
   });
 
-  test("Sign in with Google navigates to NextAuth Google provider", async ({
+  test("Sign in with Google posts to NextAuth and receives the account chooser URL", async ({
     page,
   }) => {
     await page.route("**/accounts.google.com/**", (route) => route.abort());
@@ -27,19 +27,22 @@ test.describe("P1-ID-GOOGLE — tutor login Google sign-in UI", () => {
     await page.goto("/login?callbackUrl=%2Fadmin%2Fstudents");
     await page.waitForLoadState("networkidle");
 
-    const googleLink = page.getByRole("link", { name: "Sign in with Google" });
-    await expect(googleLink).toBeVisible();
+    const googleButton = page.getByRole("button", { name: "Sign in with Google" });
+    await expect(googleButton).toBeVisible();
 
-    const href = await googleLink.getAttribute("href");
-    expect(href).toContain("/api/auth/signin/google");
-    expect(decodeURIComponent(href ?? "")).toContain("/admin/students");
-
-    const signInRequest = page.waitForRequest((req) =>
-      req.url().includes("/api/auth/signin/google")
+    const signInResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes("/api/auth/signin/google") &&
+        res.request().method() === "POST"
     );
-    await googleLink.click();
-    const request = await signInRequest;
-    expect(request.url()).toContain("/api/auth/signin/google");
+    await googleButton.click();
+    const response = await signInResponse;
+    const body = (await response.json()) as { url?: string };
+    expect(body.url).toContain("accounts.google.com");
+    expect(body.url).toContain("prompt=select_account");
+    expect(decodeURIComponent(response.headers()["set-cookie"] ?? "")).toContain(
+      "/admin/students"
+    );
   });
 
   test("existing ?error= banners still render", async ({ page }) => {

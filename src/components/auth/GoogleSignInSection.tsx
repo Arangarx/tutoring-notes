@@ -1,8 +1,16 @@
+"use client";
+
+import { useState } from "react";
+
 import {
   AuthMortensenNotice,
   type AuthMortensenNoticeVariant,
 } from "@/components/auth/AuthMortensenNotice";
 import { Button } from "@/components/ui/button";
+import {
+  followBrowserRedirect,
+  startGoogleOAuth,
+} from "@/lib/auth/google-oauth-start";
 
 export function GoogleSignInSection({
   callbackUrl,
@@ -13,20 +21,33 @@ export function GoogleSignInSection({
   noticeVariant?: AuthMortensenNoticeVariant;
   buttonLabel?: string;
 }) {
-  const signInHref = `/api/auth/signin/google?${new URLSearchParams({
-    callbackUrl,
-  }).toString()}`;
+  const [pending, setPending] = useState(false);
   const label =
     buttonLabel ??
     (noticeVariant === "sign-up" ? "Sign up with Google" : "Sign in with Google");
 
+  async function onClick() {
+    setPending(true);
+    try {
+      followBrowserRedirect(await startGoogleOAuth(callbackUrl));
+    } catch {
+      followBrowserRedirect("/login?error=OAuthSignin");
+    }
+  }
+
   return (
     <div className="space-y-3">
       <AuthMortensenNotice variant={noticeVariant} />
-      {/* Full-page navigation so the server redirect to Google is followed;
-          Link would client-navigate and can flash an error on 302 */}
-      <Button variant="outline" asChild className="min-h-11 w-full text-base">
-        <a href={signInHref}>{label}</a>
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-11 w-full text-base"
+        disabled={pending}
+        onClick={() => {
+          void onClick();
+        }}
+      >
+        {pending ? "Continuing to Google…" : label}
       </Button>
     </div>
   );
