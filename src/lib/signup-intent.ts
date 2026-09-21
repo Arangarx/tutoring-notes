@@ -150,8 +150,44 @@ export async function setSignupIntentCookie(secret: string): Promise<void> {
   );
 }
 
+/** Parse a single cookie value from a raw `Cookie` request header. */
+export function parseCookieHeaderValue(
+  cookieHeader: string | null | undefined,
+  name: string
+): string | undefined {
+  if (!cookieHeader) return undefined;
+  for (const part of cookieHeader.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq < 1) continue;
+    const cookieName = trimmed.slice(0, eq);
+    if (cookieName === name) {
+      return trimmed.slice(eq + 1);
+    }
+  }
+  return undefined;
+}
+
+/** Read signup-intent from the incoming request `Cookie` header (NextAuth-safe). */
+export async function readSignupIntentFromRequestHeaders(): Promise<string | undefined> {
+  try {
+    const { headers } = await import("next/headers");
+    const headerStore = await headers();
+    return parseCookieHeaderValue(headerStore.get("cookie"), SIGNUP_INTENT_COOKIE);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Clear signup intent after successful provision (or on failed attempt cleanup). */
 export async function clearSignupIntentCookie(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete(SIGNUP_INTENT_COOKIE);
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete(SIGNUP_INTENT_COOKIE);
+  } catch (e) {
+    console.log(
+      `[auth] signup_intent_clear_failed message=${e instanceof Error ? e.message : String(e)}`
+    );
+  }
 }

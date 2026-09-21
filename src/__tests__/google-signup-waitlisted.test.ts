@@ -225,7 +225,7 @@ describe("Google signIn — signup intent dual path", () => {
   const mockFindEmailRealmPresence = jest.fn();
   const mockNotify = jest.fn();
   const mockClearIntent = jest.fn();
-  const mockCookiesGet = jest.fn();
+  const mockHeadersGet = jest.fn();
   const mockLogProductEvent = jest.fn();
 
   beforeEach(() => {
@@ -235,7 +235,7 @@ describe("Google signIn — signup intent dual path", () => {
     mockFindEmailRealmPresence.mockReset();
     mockNotify.mockReset();
     mockClearIntent.mockReset();
-    mockCookiesGet.mockReset();
+    mockHeadersGet.mockReset();
     mockLogProductEvent.mockReset();
 
     mockFindEmailRealmPresence.mockImplementation(async (email: string) => ({
@@ -263,9 +263,9 @@ describe("Google signIn — signup intent dual path", () => {
     }));
 
     jest.doMock("next/headers", () => ({
-      cookies: jest.fn().mockResolvedValue({
-        get: mockCookiesGet,
-        delete: jest.fn(),
+      cookies: jest.fn().mockRejectedValue(new Error("Dynamic server usage: cookies")),
+      headers: jest.fn().mockResolvedValue({
+        get: mockHeadersGet,
       }),
     }));
 
@@ -309,7 +309,7 @@ describe("Google signIn — signup intent dual path", () => {
 
   it("rejects unknown email without signup intent (login path — no row created)", async () => {
     mockGetAdminByEmail.mockResolvedValue(null);
-    mockCookiesGet.mockReturnValue(undefined);
+    mockHeadersGet.mockReturnValue(null);
 
     const signIn = await getSignInCallback();
     const result = await signIn({
@@ -331,7 +331,10 @@ describe("Google signIn — signup intent dual path", () => {
     const intent = await mintSignupIntentToken("test-secret-32-chars-minimum-pad");
 
     mockGetAdminByEmail.mockResolvedValueOnce(null);
-    mockCookiesGet.mockReturnValue({ name: SIGNUP_INTENT_COOKIE, value: intent });
+    mockHeadersGet.mockImplementation((name: string) => {
+      if (name === "cookie") return `${SIGNUP_INTENT_COOKIE}=${intent}`;
+      return null;
+    });
     mockCreateAdminFromGoogle.mockResolvedValue(
       makeAdminRow({
         id: "new-google",
@@ -378,6 +381,62 @@ describe("Google signIn — signup intent dual path", () => {
 
     expect(result).not.toBe(true);
     expect(result).toContain("not_authorized");
+  });
+
+  it("provisions when cookies() throws but valid intent is on the Cookie header", async () => {
+    const { mintSignupIntentToken, SIGNUP_INTENT_COOKIE } = await import(
+      "@/lib/signup-intent"
+    );
+    const intent = await mintSignupIntentToken("test-secret-32-chars-minimum-pad");
+
+    mockGetAdminByEmail.mockResolvedValueOnce(null);
+    mockHeadersGet.mockImplementation((name: string) => {
+      if (name === "cookie") return `${SIGNUP_INTENT_COOKIE}=${intent}`;
+      return null;
+    });
+    mockCreateAdminFromGoogle.mockResolvedValue(
+      makeAdminRow({
+        id: "header-cookie-google",
+        email: "header@gmail.com",
+        approvalStatus: "WAITLISTED",
+      })
+    );
+
+    const signIn = await getSignInCallback();
+    const result = await signIn({
+      user: { id: "x", email: "header@gmail.com", name: "Header User" },
+      account: { provider: "google", type: "oauth" } as any,
+      profile: {} as any,
+    });
+
+    expect(result).toBe(true);
+    expect(mockCreateAdminFromGoogle).toHaveBeenCalledWith(
+      "header@gmail.com",
+      "Header User"
+    );
+  });
+
+  it("returns stable server_error redirect when Google signup throws", async () => {
+    const { mintSignupIntentToken, SIGNUP_INTENT_COOKIE } = await import(
+      "@/lib/signup-intent"
+    );
+    const intent = await mintSignupIntentToken("test-secret-32-chars-minimum-pad");
+
+    mockGetAdminByEmail.mockResolvedValue(null);
+    mockHeadersGet.mockImplementation((name: string) => {
+      if (name === "cookie") return `${SIGNUP_INTENT_COOKIE}=${intent}`;
+      return null;
+    });
+    mockCreateAdminFromGoogle.mockRejectedValue(new Error("db exploded"));
+
+    const signIn = await getSignInCallback();
+    const result = await signIn({
+      user: { id: "x", email: "throws@gmail.com" },
+      account: { provider: "google", type: "oauth" } as any,
+      profile: {} as any,
+    });
+
+    expect(result).toBe("/login?error=server_error");
   });
 
   it("allows existing non-test admin (login path)", async () => {

@@ -189,6 +189,8 @@ describe("otp-challenge DB behaviour", () => {
     expect(mockSender).toHaveBeenCalledTimes(1);
     const call = mockSender.mock.calls[0][0] as { toE164: string; body: string };
     expect(call.toE164).toBe(testPhone);
+    expect(call.body).toMatch(/Mynk/);
+    expect(call.body).toMatch(/Reply STOP to opt out\./);
     const otpMatch = call.body.match(/(\d{6})/);
     expect(otpMatch).not.toBeNull();
     const otp = otpMatch![1];

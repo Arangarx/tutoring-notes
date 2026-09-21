@@ -240,8 +240,8 @@ export async function sendSmsOtpChallenge(params: {
 
   const body =
     params.purpose === "ENROLL"
-      ? `Mynk: your two-factor setup code is ${plaintext}. Expires in 10 minutes.`
-      : `Mynk: your sign-in code is ${plaintext}. Expires in 10 minutes.`;
+      ? `Mynk: your two-factor setup code is ${plaintext}. Expires in 10 minutes. Reply STOP to opt out.`
+      : `Mynk: your sign-in code is ${plaintext}. Expires in 10 minutes. Reply STOP to opt out.`;
 
   const result = await sendSms({ toE164: params.toE164, body });
 

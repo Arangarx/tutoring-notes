@@ -187,7 +187,7 @@ describe("change-method atomic-swap invariants (WS3 punch list item 1)", () => {
     const stepUp = await startMethodChangeStepUp("111111");
     expect(stepUp.ok).toBe(true);
 
-    const changeResult = await startSmsOtpMethodChange(TEST_PHONE_INPUT);
+    const changeResult = await startSmsOtpMethodChange(TEST_PHONE_INPUT, true);
     expect(changeResult.ok).toBe(false);
 
     const { db } = await import("@/lib/db");
@@ -226,7 +226,7 @@ describe("change-method atomic-swap invariants (WS3 punch list item 1)", () => {
     const stepUp = await startMethodChangeStepUp("111111");
     expect(stepUp.ok).toBe(true);
 
-    const changeResult = await startSmsOtpMethodChange(TEST_PHONE_INPUT);
+    const changeResult = await startSmsOtpMethodChange(TEST_PHONE_INPUT, true);
     expect(changeResult.ok).toBe(true); // send succeeded — pending state written
 
     // Never confirmed. Old method must still be the live, enrolled one.
@@ -278,7 +278,7 @@ describe("change-method atomic-swap invariants (WS3 punch list item 1)", () => {
     } = await import("@/app/admin/settings/2fa/actions");
 
     expect((await startMethodChangeStepUp("111111")).ok).toBe(true);
-    expect((await startSmsOtpMethodChange(TEST_PHONE_INPUT)).ok).toBe(true);
+    expect((await startSmsOtpMethodChange(TEST_PHONE_INPUT, true)).ok).toBe(true);
     expect(capturedCode).toMatch(/^\d{6}$/);
 
     const confirmResult = await confirmSmsOtpMethodChange(capturedCode);
@@ -317,7 +317,7 @@ describe("startSmsOtpEnrollment guard — must not blow away a confirmed enrollm
     const twoFaId = await seedConfirmedEmailOtp();
 
     const { startSmsOtpEnrollment } = await import("@/app/admin/settings/2fa/actions");
-    const result = await startSmsOtpEnrollment(TEST_PHONE_INPUT);
+    const result = await startSmsOtpEnrollment(TEST_PHONE_INPUT, true);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -337,7 +337,7 @@ describe("startSmsOtpEnrollment guard — must not blow away a confirmed enrollm
     const twoFaId = await seedConfirmedTotpWithBackupCodes();
 
     const { startSmsOtpEnrollment } = await import("@/app/admin/settings/2fa/actions");
-    const result = await startSmsOtpEnrollment(TEST_PHONE_INPUT);
+    const result = await startSmsOtpEnrollment(TEST_PHONE_INPUT, true);
 
     expect(result.ok).toBe(false);
 
@@ -371,7 +371,7 @@ describe("startSmsOtpEnrollment guard — must not blow away a confirmed enrollm
     setSmsSenderForTests(jest.fn().mockResolvedValue({ sent: true }));
 
     const { startSmsOtpEnrollment } = await import("@/app/admin/settings/2fa/actions");
-    const result = await startSmsOtpEnrollment(TEST_PHONE_INPUT);
+    const result = await startSmsOtpEnrollment(TEST_PHONE_INPUT, true);
     expect(result.ok).toBe(true);
 
     const row = await db.adminUser2FA.findUnique({ where: { adminUserId: ADMIN_ID } });

@@ -32,7 +32,7 @@ describe("privacy policy copy (SEC-POLICY-TRUTH interim)", () => {
   it("shows updated date and truthful retention/audio wording", () => {
     render(<PrivacyPage />);
 
-    expect(screen.getByText(/Last updated: September 17, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last updated: September 21, 2026/i)).toBeInTheDocument();
     expect(screen.queryByText(/24 months after the account is closed/i)).toBeNull();
     expect(screen.queryByText(/grade level/i)).toBeNull();
     expect(
@@ -47,6 +47,9 @@ describe("privacy policy copy (SEC-POLICY-TRUTH interim)", () => {
     expect(tfaBullet).toHaveTextContent(/When SMS two-factor is enabled/);
     expect(tfaBullet).toHaveTextContent(/Twilio/);
     expect(tfaBullet).toHaveTextContent(/does not receive student session data/);
+    expect(tfaBullet).toHaveTextContent(
+      /do not sell or share SMS opt-in data or personal information with third parties for marketing purposes/i
+    );
   });
 
   it("discloses live calendar sync and ICS polling honestly (B8)", () => {

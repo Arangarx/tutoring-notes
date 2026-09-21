@@ -15,6 +15,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * SMS 2FA (Twilio) product-specific disclosure 2026-09-11.
  * Calendar ICS feed + Google write honesty (product-specific) 2026-09-16.
  * Calendar title prefix with full-name opt-in (product-specific) 2026-09-17.
+ * Mynk SMS 2FA opt-in / no marketing share (product-specific) 2026-09-21.
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -44,7 +45,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 17, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 21, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -321,7 +322,7 @@ export default function PrivacyPage() {
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
               <li><strong>Encryption in transit.</strong> All connections to the application use HTTPS (TLS).</li>
               <li><strong>Password storage.</strong> Tutor account passwords are hashed with bcrypt before storage; raw passwords are never written to logs or the database.</li>
-              <li><strong>Two-factor authentication.</strong> Tutors and admins may use email one-time codes or an authenticator app for two-factor authentication. <strong>When SMS two-factor is enabled</strong>, we send codes via <strong>Twilio</strong> (a third-party SMS provider) to the US phone number the tutor confirmed. Twilio does not receive student session data.</li>
+              <li><strong>Two-factor authentication.</strong> Tutors and admins may use email one-time codes or an authenticator app for two-factor authentication. <strong>When SMS two-factor is enabled</strong> (the <strong>Mynk</strong> SMS two-factor authentication program), we send one-time codes via <strong>Twilio</strong> (a third-party SMS provider) to the US phone number the tutor confirmed at opt-in. Twilio does not receive student session data. We do not sell or share SMS opt-in data or personal information with third parties for marketing purposes.</li>
               <li><strong>Hosting and data stores.</strong> We rely on Vercel and Neon&apos;s protections for servers, databases, and object storage (access controls, network isolation, and encryption at rest where the vendor provides it by default for the tiers we use).</li>
               <li><strong>Authentication and access.</strong> Every tutor request requires sign-in; application logic enforces ownership boundaries so a tutor only sees their own students and sessions.</li>
               <li><strong>Secrets and OAuth tokens.</strong> API keys, client secrets, and OAuth refresh tokens are kept in server-side configuration or secure storage — not embedded in web pages or public repositories.</li>

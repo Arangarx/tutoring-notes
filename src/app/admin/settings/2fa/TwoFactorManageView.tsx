@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SmsTwoFactorConsentField } from "@/components/identity/SmsTwoFactorConsentField";
 import { TwoFactorMethodChooserCards } from "./TwoFactorMethodChooserCards";
 import {
   rotateTotpStart,
@@ -125,6 +126,7 @@ export function TwoFactorManageView({
   const [changeStepUpCode, setChangeStepUpCode] = useState("");
   const [changeMethod, setChangeMethod] = useState<"email" | "sms" | "totp" | null>(null);
   const [changePhoneInput, setChangePhoneInput] = useState("");
+  const [changeSmsConsentChecked, setChangeSmsConsentChecked] = useState(false);
   const [changeMaskedEmail, setChangeMaskedEmail] = useState("");
   const [changeMaskedPhone, setChangeMaskedPhone] = useState(initialMaskedPhone ?? "");
   const [changeToken, setChangeToken] = useState("");
@@ -417,14 +419,15 @@ export function TwoFactorManageView({
     setError("");
     setChangeMethod("sms");
     setChangePhoneInput("");
+    setChangeSmsConsentChecked(false);
     setView("change-sms-phone");
   }
 
   function handleChangeSendSms() {
-    if (!changePhoneInput.trim()) return;
+    if (!changePhoneInput.trim() || !changeSmsConsentChecked) return;
     setError("");
     startTransition(async () => {
-      const result = await startSmsOtpMethodChange(changePhoneInput.trim());
+      const result = await startSmsOtpMethodChange(changePhoneInput.trim(), true);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -975,23 +978,34 @@ export function TwoFactorManageView({
         {error && <p className="text-sm text-destructive">{error}</p>}
         <form
           onSubmit={(e) => { e.preventDefault(); handleChangeSendSms(); }}
-          className="flex gap-2 items-center flex-wrap"
+          className="space-y-4"
         >
-          <Label htmlFor="change-sms-phone" className="sr-only">
-            Phone number
-          </Label>
-          <Input
-            id="change-sms-phone"
-            type="tel"
-            placeholder="(555) 555-1234"
-            value={changePhoneInput}
-            onChange={(e) => setChangePhoneInput(e.target.value)}
-            className="w-48"
-            autoFocus
+          <div className="flex gap-2 items-center flex-wrap">
+            <Label htmlFor="change-sms-phone" className="sr-only">
+              Phone number
+            </Label>
+            <Input
+              id="change-sms-phone"
+              type="tel"
+              placeholder="(555) 555-1234"
+              value={changePhoneInput}
+              onChange={(e) => setChangePhoneInput(e.target.value)}
+              className="w-48"
+              autoFocus
+            />
+            <Button
+              type="submit"
+              disabled={isPending || !changePhoneInput.trim() || !changeSmsConsentChecked}
+            >
+              {isPending ? "Sending…" : "Send code"}
+            </Button>
+          </div>
+          <SmsTwoFactorConsentField
+            id="change-sms-a2p-consent"
+            checked={changeSmsConsentChecked}
+            onCheckedChange={setChangeSmsConsentChecked}
+            disabled={isPending}
           />
-          <Button type="submit" disabled={isPending || !changePhoneInput.trim()}>
-            {isPending ? "Sending…" : "Send code"}
-          </Button>
         </form>
         <button
           type="button"

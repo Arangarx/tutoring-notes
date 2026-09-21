@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SmsTwoFactorConsentField } from "@/components/identity/SmsTwoFactorConsentField";
 import { TwoFactorMethodChooserCards } from "../TwoFactorMethodChooserCards";
 import {
   startTotpEnrollment,
@@ -59,6 +60,7 @@ export function TwoFactorSetupForm({
   const [maskedEmail, setMaskedEmail] = useState(pendingMaskedEmail ?? "");
   const [maskedPhone, setMaskedPhone] = useState(pendingMaskedPhone ?? "");
   const [phoneInput, setPhoneInput] = useState("");
+  const [smsConsentChecked, setSmsConsentChecked] = useState(false);
   const [qrDataUri, setQrDataUri] = useState<string>("");
   const [secret, setSecret] = useState<string>("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
@@ -161,13 +163,14 @@ export function TwoFactorSetupForm({
     setStep("sms-phone");
     setError("");
     setPhoneInput("");
+    setSmsConsentChecked(false);
   }
 
   function handleSendSms() {
-    if (!phoneInput.trim()) return;
+    if (!phoneInput.trim() || !smsConsentChecked) return;
     setError("");
     startTransition(async () => {
-      const result = await startSmsOtpEnrollment(phoneInput.trim());
+      const result = await startSmsOtpEnrollment(phoneInput.trim(), true);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -267,25 +270,36 @@ export function TwoFactorSetupForm({
             e.preventDefault();
             handleSendSms();
           }}
-          className="flex flex-wrap gap-2 items-end"
+          className="space-y-4"
         >
-          <div className="grid gap-1.5">
-            <Label htmlFor="tfa-sms-phone">Mobile number</Label>
-            <Input
-              id="tfa-sms-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="(555) 123-4567"
-              value={phoneInput}
-              onChange={(e) => setPhoneInput(e.target.value)}
-              className="w-48"
-              autoFocus
-            />
+          <div className="flex flex-wrap gap-2 items-end">
+            <div className="grid gap-1.5">
+              <Label htmlFor="tfa-sms-phone">Mobile number</Label>
+              <Input
+                id="tfa-sms-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="(555) 123-4567"
+                value={phoneInput}
+                onChange={(e) => setPhoneInput(e.target.value)}
+                className="w-48"
+                autoFocus
+              />
+            </div>
+            <Button
+              type="submit"
+              disabled={isPending || !phoneInput.trim() || !smsConsentChecked}
+            >
+              {isPending ? "Sending…" : "Send code"}
+            </Button>
           </div>
-          <Button type="submit" disabled={isPending || !phoneInput.trim()}>
-            {isPending ? "Sending…" : "Send code"}
-          </Button>
+          <SmsTwoFactorConsentField
+            id="tfa-sms-a2p-consent"
+            checked={smsConsentChecked}
+            onCheckedChange={setSmsConsentChecked}
+            disabled={isPending}
+          />
         </form>
         <button type="button" onClick={switchToEmail} disabled={isPending} className="text-sm underline text-muted-foreground">
           Back to email code

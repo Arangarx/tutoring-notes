@@ -170,7 +170,7 @@ describe("Google signIn — cross-realm block", () => {
   const mockFindEmailRealmPresence = jest.fn();
   const mockNotify = jest.fn();
   const mockClearIntent = jest.fn();
-  const mockCookiesGet = jest.fn();
+  const mockHeadersGet = jest.fn();
 
   beforeEach(() => {
     jest.resetModules();
@@ -179,7 +179,7 @@ describe("Google signIn — cross-realm block", () => {
     mockFindEmailRealmPresence.mockReset();
     mockNotify.mockReset();
     mockClearIntent.mockReset();
-    mockCookiesGet.mockReset();
+    mockHeadersGet.mockReset();
 
     process.env.NEXTAUTH_SECRET = "test-secret-32-chars-minimum-pad";
     process.env.GOOGLE_CLIENT_ID = "test-client-id";
@@ -196,9 +196,9 @@ describe("Google signIn — cross-realm block", () => {
     }));
 
     jest.doMock("next/headers", () => ({
-      cookies: jest.fn().mockResolvedValue({
-        get: mockCookiesGet,
-        delete: jest.fn(),
+      cookies: jest.fn().mockRejectedValue(new Error("Dynamic server usage: cookies")),
+      headers: jest.fn().mockResolvedValue({
+        get: mockHeadersGet,
       }),
     }));
 
@@ -243,7 +243,10 @@ describe("Google signIn — cross-realm block", () => {
     const intent = await mintSignupIntentToken("test-secret-32-chars-minimum-pad");
 
     mockGetAdminByEmail.mockResolvedValueOnce(null);
-    mockCookiesGet.mockReturnValue({ name: SIGNUP_INTENT_COOKIE, value: intent });
+    mockHeadersGet.mockImplementation((name: string) => {
+      if (name === "cookie") return `${SIGNUP_INTENT_COOKIE}=${intent}`;
+      return null;
+    });
     mockFindEmailRealmPresence.mockResolvedValue({
       normalizedEmail: "parent@gmail.com",
       inAdmin: false,
@@ -261,6 +264,39 @@ describe("Google signIn — cross-realm block", () => {
     expect(String(result)).toContain("not_authorized");
     expect(mockCreateAdminFromGoogle).not.toHaveBeenCalled();
     expect(mockNotify).not.toHaveBeenCalled();
+  });
+
+  it("provisions Google tutor when cookies() throws but Cookie header has valid signup intent", async () => {
+    const { mintSignupIntentToken, SIGNUP_INTENT_COOKIE } = await import(
+      "@/lib/signup-intent"
+    );
+    const intent = await mintSignupIntentToken("test-secret-32-chars-minimum-pad");
+
+    mockGetAdminByEmail.mockResolvedValueOnce(null);
+    mockHeadersGet.mockImplementation((name: string) => {
+      if (name === "cookie") return `${SIGNUP_INTENT_COOKIE}=${intent}`;
+      return null;
+    });
+    mockFindEmailRealmPresence.mockResolvedValue({
+      normalizedEmail: "newtutor@gmail.com",
+      inAdmin: false,
+      inAccountHolder: false,
+    });
+    mockCreateAdminFromGoogle.mockResolvedValue({
+      id: "new-google-tutor",
+      email: "newtutor@gmail.com",
+      isTestAccount: false,
+    });
+
+    const signIn = await getSignInCallback();
+    const result = await signIn({
+      user: { id: "x", email: "newtutor@gmail.com", name: "New Tutor" },
+      account: { provider: "google", type: "oauth" } as any,
+      profile: {} as any,
+    });
+
+    expect(result).toBe(true);
+    expect(mockCreateAdminFromGoogle).toHaveBeenCalledWith("newtutor@gmail.com", "New Tutor");
   });
 });
 
