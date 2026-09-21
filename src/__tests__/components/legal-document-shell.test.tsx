@@ -81,7 +81,7 @@ describe("Privacy page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Privacy Policy"
     );
-    expect(screen.getByText("Last updated: July 9, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: September 17, 2026")).toBeInTheDocument();
 
     // Verbatim body locks (distinctive product / umbrella sentences)
     expect(
@@ -150,7 +150,7 @@ describe("Terms page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Terms of Use"
     );
-    expect(screen.getByText("Last updated: July 9, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: September 16, 2026")).toBeInTheDocument();
 
     expect(
       screen.getByText(/These terms govern your use of/, { exact: false })
@@ -171,6 +171,12 @@ describe("Terms page — shell + verbatim legal copy", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Gmail integration" })
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Google Calendar integration" })
+    ).toBeInTheDocument();
+    const termsBody = document.body.textContent ?? "";
+    expect(termsBody).not.toMatch(/not live yet/i);
+    expect(termsBody).toMatch(/calendar\.events\.owned/);
     expect(
       screen.getByText(
         /If you connect your Gmail account, the app sends emails on your behalf/

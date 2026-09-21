@@ -9,7 +9,11 @@ export type CalendarConnectionView = {
 };
 
 /** Honest sync badge states for scheduled sessions. */
-export type CalendarSyncState = "synced" | "pending" | "not-connected";
+export type CalendarSyncState =
+  | "synced"
+  | "pending"
+  | "needs-reconnect"
+  | "not-connected";
 
 export type ScheduleStudentOption = {
   id: string;
@@ -27,7 +31,7 @@ export type ScheduledSessionView = {
   startTime: string;
   endTime: string;
   durationLabel: string;
-  /** When false, SessionSyncBadge is not rendered (no Google write yet). */
+  /** When false, SessionSyncBadge is not rendered (Google not connected). */
   showSyncBadge: boolean;
   syncState: CalendarSyncState;
   location?: string;

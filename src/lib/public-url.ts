@@ -79,6 +79,8 @@ export async function getRequestBaseUrl(): Promise<string> {
  *     The team slug in the pattern means an attacker would need to own the
  *     arangarx-5209s-projects Vercel team to craft a matching hostname.
  *   usemynk.com, www.usemynk.com — production canonical hosts
+ *   preview.usemynk.com — stable Preview custom domain (exact host only;
+ *     other *.usemynk.com subdomains stay rejected)
  *
  * Platform assumption: see docs/PLATFORM-ASSUMPTIONS.md §5.8.
  */
@@ -91,6 +93,7 @@ const ALLOWLISTED_HOST_PATTERNS: ReadonlyArray<RegExp | string> = [
   /^tutoring-notes-[a-z0-9-]+-arangarx-5209s-projects\.vercel\.app$/,
   "usemynk.com",
   "www.usemynk.com",
+  "preview.usemynk.com",
 ];
 
 /**
@@ -130,10 +133,15 @@ function allowlistedOriginFromHost(
  * before being reflected; an unrecognised host falls back to
  * getPublicBaseUrl() (env-derived, injection-safe).
  *
- * Use this instead of getPublicBaseUrl() for verify-email and resend-
- * verification links. Do NOT use for password-reset or "already have an
- * account" emails — those don't require host alignment and getPublicBaseUrl()
- * is the correct choice.
+ * Use this instead of getPublicBaseUrl() for:
+ *   - verify-email / resend-verification links
+ *   - Google OAuth **connect + callback** `redirect_uri` (Calendar and Gmail).
+ *     Preview `NEXTAUTH_URL` is still the legacy `https://tutoring-notes.vercel.app`
+ *     alias (Tyson 2026-09-17: Google `redirect_uri_mismatch` with that host while
+ *     the tab was the feat/calendar-wave branch alias). Connect and callback MUST
+ *     use the same allowlisted request origin so the token exchange matches.
+ * Do NOT use for password-reset or "already have an account" emails — those
+ * don't require host alignment and getPublicBaseUrl() is the correct choice.
  *
  * @param req The incoming NextRequest from the route handler.
  */

@@ -303,10 +303,11 @@
 - **Assumption**: `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` configured at the deployer level; OAuth callback URLs must match Google Cloud Console allowed redirect URIs.
 - **Flows** (same client credentials, **different** redirect URIs and scopes):
   - **Gmail send** — `/api/auth/gmail/callback`; scopes `gmail.send` + `userinfo.email`; optional `GMAIL_CONNECT_ALLOWLIST` per-admin gating.
-  - **Google Calendar connect (stub)** — `/api/auth/calendar/callback`; scopes `calendar.events` + `calendar.readonly` + `userinfo.email`; **no allowlist** (any signed-in admin may connect; first chunk).
+  - **Google Calendar connect + write** — `/api/auth/calendar/callback`; scopes **`calendar.events.owned`** + `userinfo.email` only (no `calendar.readonly` / `calendar.events`). Connected tutors sync native scheduled sessions to the tutor's **primary** Google calendar via `events.insert` / `events.patch` / `events.delete` in `src/lib/calendar/google-calendar-write.ts`. **Fail-soft:** Google API errors (including revoked refresh tokens / `invalid_grant`) never fail Postgres schedule CRUD; errors log as `[gcw]` for WS3 UI. **ICS subscription feed** remains the zero-OAuth calendar sink (clients poll every 8–24h on Google Calendar; see calendar wave plan).
   - **NextAuth sign-in** — `/api/auth/callback/google`; scopes `openid email profile` only (separate from both connect flows).
+- **Runtime dependency (wall-clock / DST):** `@js-temporal/polyfill` resolves session DATE + HH:MM into UTC instants (`ScheduledSession.startAt`/`endAt`) at write time. ICS `DTSTART`/`DTEND` and Google `start.dateTime` are UTC (`…Z`) so clients convert to the viewer’s timezone (`src/lib/calendar/scheduled-session-datetime.ts`). Tutor timezone default is the device IANA zone; Settings → billing is an override.
 - **Where baked in**: `src/lib/env.ts` (optional env vars); `GMAIL_CONNECT_ALLOWLIST` for Gmail only.
-- **What breaks if violated**: Gmail send fails; Calendar connect fails; degrades gracefully (no crash).
+- **What breaks if violated**: Gmail send fails; Calendar connect or write fails; degrades gracefully (no crash; native schedule still works).
 - **Migration check**: changing `NEXTAUTH_URL` (e.g. moving to a new domain) requires re-adding **both** callback URLs in Google Cloud Console.
 - **Production cutover (2026-05-30)**: canonical app host is `https://usemynk.com`; Production `NEXTAUTH_URL` matches. Preview/Dev remain on `*.vercel.app` unless explicitly re-pointed.
 
@@ -426,6 +427,7 @@
   - `tutoring-notes.vercel.app` — project legacy default Vercel domain (production HTTP requests 308 to `https://usemynk.com`; host stays allowlisted for email-link reflection)
   - `tutoring-notes-*-arangarx-5209s-projects.vercel.app` — per-deployment and branch-alias preview URLs for this project+team; team slug scopes it to the `arangarx-5209s-projects` Vercel team only
   - `usemynk.com`, `www.usemynk.com` — production canonical hosts (`www` 308s to apex in production)
+  - `preview.usemynk.com` — stable Preview custom domain (exact host only; Tyson 2026-09-17 calendar Connect)
 - **Injection guard**: a host NOT in the allowlist is NEVER reflected; `getPublicBaseUrl()` is used instead. Tests in `src/__tests__/public-url-allowlist.test.ts` enforce this contract.
 - **Where baked in**: `src/lib/public-url.ts:getRequestBaseUrlSafe`, `src/lib/public-url.ts:isHostAllowlisted`; used in `src/app/api/auth/account-holder/signup/route.ts` for the verify-email link.
 - **What breaks if violated**: loosening the allowlist (e.g. accepting `*.vercel.app` without team-slug scoping) opens a host-header injection vector — an attacker with a different `tutoring-notes-*` Vercel project could redirect a parent's verify-email link to an attacker-controlled domain, stealing the handoff token.

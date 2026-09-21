@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { afterStudentCalendarTitlePolicyChanged } from "@/lib/calendar/google-calendar-connect-backfill";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { db, withDbRetry, isTransientDbConnectionError } from "@/lib/db";
@@ -84,6 +85,21 @@ export async function revokeShareLink(studentId: string) {
   });
 
   revalidatePath(`/admin/students/${studentId}`);
+}
+
+/** Per-student opt-in: full name in ICS SUMMARY and Google event titles (default off). */
+export async function setStudentIcsShowFullName(studentId: string, icsShowFullName: boolean) {
+  await assertOwnsStudent(studentId);
+  await withDbRetry(
+    () =>
+      db.student.update({
+        where: { id: studentId },
+        data: { icsShowFullName },
+      }),
+    { label: "setStudentIcsShowFullName" }
+  );
+  revalidatePath(`/admin/students/${studentId}`);
+  await afterStudentCalendarTitlePolicyChanged(studentId);
 }
 
 export async function createNote(

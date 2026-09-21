@@ -4,9 +4,12 @@ import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getAdminByEmail } from "@/lib/auth-db";
+import { getRequestBaseUrlSafe } from "@/lib/public-url";
+import { syncUpcomingUnsyncedScheduledSessions } from "@/lib/calendar/google-calendar-connect-backfill";
+import { safeCalendarOAuthReturnTo } from "@/lib/calendar/calendar-oauth-return";
 
 export async function GET(request: NextRequest) {
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  const baseUrl = getRequestBaseUrlSafe(request);
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.redirect(new URL("/login", baseUrl));
@@ -15,8 +18,8 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const error = searchParams.get("error");
   const state = searchParams.get("state");
-  const returnTo =
-    (state
+  const returnTo = safeCalendarOAuthReturnTo(
+    state
       ? (() => {
           try {
             const s = JSON.parse(Buffer.from(state, "base64url").toString());
@@ -25,7 +28,8 @@ export async function GET(request: NextRequest) {
             return null;
           }
         })()
-      : null) ?? "/admin/settings/integrations";
+      : null
+  );
 
   if (error) {
     return NextResponse.redirect(new URL(`${returnTo}?error=calendar_denied`, baseUrl));
@@ -69,21 +73,6 @@ export async function GET(request: NextRequest) {
   const userInfo = userInfoRes.ok ? await userInfoRes.json() : null;
   const email = userInfo?.email ?? session.user?.email ?? "unknown@gmail.com";
 
-  let calendarCount: number | null = null;
-  try {
-    const calListRes = await fetch(
-      "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250",
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (calListRes.ok) {
-      const calList = await calListRes.json();
-      calendarCount =
-        typeof calList?.items?.length === "number" ? calList.items.length : null;
-    }
-  } catch {
-    // optional screencast helper — ignore failures
-  }
-
   if (
     typeof (db as { oAuthCalendarConnection?: { create: unknown } }).oAuthCalendarConnection?.create !==
     "function"
@@ -91,20 +80,49 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(`${returnTo}?error=db_not_ready`, baseUrl));
   }
   try {
-    await db.oAuthCalendarConnection.deleteMany({
-      where: { provider: "google", adminUserId },
-    });
-    await db.oAuthCalendarConnection.create({
-      data: {
-        provider: "google",
-        refreshToken,
-        email,
-        calendarCount,
-        adminUserId,
-      },
+    await db.$transaction(async (tx) => {
+      if (adminUserId) {
+        await tx.oAuthCalendarConnection.upsert({
+          where: {
+            provider_adminUserId: { provider: "google", adminUserId },
+          },
+          create: {
+            provider: "google",
+            refreshToken,
+            email,
+            adminUserId,
+            reconnectRequiredAt: null,
+          },
+          update: {
+            refreshToken,
+            email,
+            reconnectRequiredAt: null,
+          },
+        });
+      } else {
+        await tx.oAuthCalendarConnection.deleteMany({
+          where: { provider: "google", adminUserId: null },
+        });
+        await tx.oAuthCalendarConnection.create({
+          data: {
+            provider: "google",
+            refreshToken,
+            email,
+            adminUserId: null,
+          },
+        });
+      }
     });
   } catch {
     return NextResponse.redirect(new URL(`${returnTo}?error=db_not_ready`, baseUrl));
+  }
+
+  if (adminUserId) {
+    try {
+      await syncUpcomingUnsyncedScheduledSessions(adminUserId, refreshToken);
+    } catch (err) {
+      console.error("[gcw] connect_backfill failed:", err);
+    }
   }
 
   return NextResponse.redirect(new URL(`${returnTo}?connected=google_calendar`, baseUrl));

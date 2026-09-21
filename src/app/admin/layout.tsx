@@ -7,6 +7,7 @@ import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { getAdminSessionMode } from "@/lib/admin-routing";
 import { isDevToolsEnabled } from "@/lib/dev-fixtures";
 import { getAdminByEmail } from "@/lib/auth-db";
+import { SeedTutorTimezoneFromSystem } from "@/components/admin/SeedTutorTimezoneFromSystem";
 
 export default async function AdminLayout({
   children,
@@ -53,6 +54,7 @@ export default async function AdminLayout({
         </aside>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-y-auto">
           <AdminNav {...navProps} layout="mobile" />
+          <SeedTutorTimezoneFromSystem />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-6 md:py-8 xl:max-w-7xl">
             {children}
           </main>

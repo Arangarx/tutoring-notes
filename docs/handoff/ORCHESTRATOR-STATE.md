@@ -8,7 +8,7 @@
 
 ## HEAD
 
-**🚦 RELEASE TRACK (Andrew 2026-07-30 option B).** Canonical ordered list: [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities. **On `master` after [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca):** agent slices **#2, #3, #4 shipped**; **#5 native schedule CRUD shipped**; **#7 instrumentation chunk 1 shipped**; **#1 remains open on Calendar only** (Sign-In UI cleared; Calendar write + verification per [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md)); **#6 security MUST** still queued for unsupervised pilots.
+**🚦 RELEASE TRACK (Andrew 2026-07-30 option B).** Canonical ordered list: [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities. **On `master` after calendar-wave merge:** agent slices **#2, #3, #4 shipped**; **#5 native schedule CRUD + calendar ICS/`calendar.events.owned` write shipped**; **#7 instrumentation chunk 1 shipped**; **#1 remainder** = Google Calendar **verification resubmit** (Andrew Console — write is live); **#6 security MUST** still queued for unsupervised pilots.
 
 **⛔ NON-NEGOTIABLE STANDARDS (2026-07-10)** — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize: (1) zero unjustified duplication ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)).
 
@@ -16,11 +16,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **2026-09-21:** Andrew mid-Twilio A2P Brand (personal, Andrew Mortensen). Campaign **blocked** on missing SMS consent UI. Queued [`SMS-A2P-CONSENT-PLAN.md`](SMS-A2P-CONSENT-PLAN.md) + BACKLOG **BL-SMS-A2P-CONSENT** — execute immediately after calendar merge. **Prior:** calendar wave cut `feat/calendar-wave` from [`03058c5a`](https://github.com/Arangarx/tutoring-notes/commit/03058c5a); Tyson auth packet 2026-09-17; BL-2FA-EMAIL-AVAIL / BL-SIGNUP-SMTP-LEAK [`0adaa933`](https://github.com/Arangarx/tutoring-notes/commit/0adaa933). |
-| **Next action(s)** | **Calendar wave** (`feat/calendar-wave`) is in the **other session** — tip ~`bd09e37e`, WS0–WS4 landed, isolation APPROVE, smokebook written; **do not merge from this chat**. **Immediately after that `--no-ff` to `master`:** cut `feat/sms-a2p-consent` and execute [`SMS-A2P-CONSENT-PLAN.md`](SMS-A2P-CONSENT-PLAN.md) (Andrew 2026-09-21 — do not defer). Then Tyson can test SMS only after Twilio campaign + env. |
-| **Open Andrew-confirms** | **None blocking this wave.** Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — **production env verification (SMTP / Twilio / `TOTP_ENCRYPTION_KEY`, human-only, potentially blocking any NEW tutor from completing 2FA)**; Google Console **Clients first**; platform SMTP; Twilio; Sarah/Tyson allowlist (Tyson addresses before external packet). Do **not** apply this wave’s migration to production Neon via MCP overnight. |
-| **In-flight subagents** | **None in this chat.** Calendar execution lives in the other session on `feat/calendar-wave`. |
-| **Uncommitted / unmerged** | Main checkout on **`feat/calendar-wave`** (cut from `origin/master` [`03058c5a`](https://github.com/Arangarx/tutoring-notes/commit/03058c5a)). `master` in **`tutoring-notes-master-ops`** clean and synced with `origin/master` (run `git log -1 master` for the live tip — deliberately not pinned here, it goes stale on every docs commit). `node_modules` in main checkout is a junction to master-ops — use `npm exec -- jest`, not bare `npx jest`. |
+| **Last action completed** | **2026-09-21:** Andrew chose **merge now** on Tyson’s scoped Android/Google pass (Discord: “with what i needed to test before, yeah”). `merge --no-ff feat/calendar-wave` into `master` — ICS feed + `calendar.events.owned` write. Apple ICS subscribe remains **follow-up** (`PLAYWRIGHT-GAP`, no device). Gates: `test:regression` 149/149; `npx next build` exit 0. **Do not touch production `NEXTAUTH_URL`.** |
+| **Next action(s)** | Cut `feat/sms-a2p-consent` and execute [`SMS-A2P-CONSENT-PLAN.md`](SMS-A2P-CONSENT-PLAN.md) (Andrew 2026-09-21 — do not defer). Calendar leftovers: Google **verification resubmit** (Andrew Console) + Apple ICS hardware when a device exists. |
+| **Open Andrew-confirms** | None blocking SMS-A2P. Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — production env (SMTP / Twilio / `TOTP_ENCRYPTION_KEY`); Google Calendar verification resubmit after prod write is crawlable; Sarah/Tyson allowlist. |
+| **In-flight subagents** | None. |
+| **Uncommitted / unmerged** | Calendar wave is on `master` after this merge. `master` lives in **`tutoring-notes-master-ops`**. Main checkout may still be on `feat/calendar-wave` until switched. `node_modules` in main checkout is a junction to master-ops — use `npm exec -- jest`, not bare `npx jest`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
@@ -47,8 +47,8 @@
 
 **Durable decisions (calendar + OAuth — current):**
 
-- **Calendar verification (supersedes 2026-08-14 bundled-stub strategy):** Google rejected the prior submission 2026-09-11 — demo did not justify `calendar.readonly` / `calendar.events`. **Real functionality must ship before resubmit.** Scope narrows to **`calendar.events.owned`** (primary calendar write). Same wave ships a platform-agnostic **ICS subscription feed** (no OAuth/scopes/verification). Re-verification philosophy (Andrew): never verify twice for the **same** capability; verifying again for a genuinely **new** capability is normal. Full plan: [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md).
-- **Apple Calendar:** CalDAV two-way remains **deferred** (hard). **ICS one-way subscription feed is in scope** for the calendar wave (pilot Sarah: Apple-first, Gmail second — Discord 2026-09-11).
+- **Calendar write + ICS shipped on `master` (2026-09-21).** Google rejected the prior stub demo 2026-09-11. Live path is **`calendar.events.owned`** write + platform-agnostic **ICS feed**. **Andrew leftover:** verification resubmit on a crawlable prod URL. Re-verification philosophy: never verify twice for the **same** capability; verifying again for a genuinely **new** capability is normal. Plan: [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md).
+- **Apple Calendar:** CalDAV two-way remains **deferred**. ICS subscribe is shipped in product; **live Apple hardware smoke is still owed** (no device at merge; Andrew 2026-09-21 option 1).
 - Sign-In/Sign-Up Google stay `openid email profile` only (never calendar scopes on NextAuth). Skip Facebook. Microsoft optional.
 
 **Neon cost pass (2026-08-28, still in effect):** scale-to-zero enabled (`suspend_timeout_seconds=300`); transcribe-sweep cron `*/15 * * * *` (layer 1 + end-session still cover live work). Backlogged **TXC-SWEEP-METRICS** + **NEON-SCALE-TO-ZERO-REVISIT**.

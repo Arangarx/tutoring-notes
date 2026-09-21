@@ -13,6 +13,8 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Google Calendar connect section added 2026-08-14 (honest stub — no sync claim).
  * Umbrella Calendar + Limited Use sync 2026-09-10 (OAuth review).
  * SMS 2FA (Twilio) product-specific disclosure 2026-09-11.
+ * Calendar ICS feed + Google write honesty (product-specific) 2026-09-16.
+ * Calendar title prefix with full-name opt-in (product-specific) 2026-09-17.
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -42,7 +44,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 11, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 17, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -80,6 +82,7 @@ export default function PrivacyPage() {
               <li><strong>Waitlist entries</strong> (email and optional name) submitted through interest forms or contact, retained for outreach.</li>
               <li><strong>Gmail OAuth tokens</strong> if you use &ldquo;Connect Gmail&rdquo; (see Google account and Gmail below).</li>
               <li><strong>Google Calendar OAuth tokens</strong> if you use &ldquo;Connect Google Calendar&rdquo; (see Google Calendar below).</li>
+              <li><strong>Calendar subscription feed token</strong> — an opaque secret URL we generate if you use the ICS/webcal subscription feed (see Calendar subscription feed below).</li>
               <li><strong>Standard technical logs</strong> (IP address, user agent, timestamps) collected by our hosting provider for security and reliability.</li>
               <li><strong>LearnerProfile information:</strong> a student&rsquo;s name entered when creating a student profile. For students under 13, this is personal information subject to COPPA protections.</li>
               <li><strong>Session transcripts</strong> automatically generated from session audio by the OpenAI transcription service (see below). Transcripts are derived from and linked to the session audio recording.</li>
@@ -175,22 +178,50 @@ export default function PrivacyPage() {
             <p style={{ margin: "8px 0 0" }}>
               When you click &ldquo;Connect Google Calendar,&rdquo; the app requests permission to
               access your Google Calendar using the <strong>Google Calendar API</strong>{" "}
-              (<code>calendar.events</code> and <code>calendar.readonly</code> scopes) and to read your
-              email address (<code>userinfo.email</code> scope). These permissions are used to store
-              a connection for upcoming scheduling features. <strong>Calendar sync is not live yet</strong>
-              — we do not currently create, update, delete, or watch calendar events on your behalf.
-              At connect time we may perform a one-time read of your calendar list to show how many
-              calendars are on the account (for your confirmation). Google user data we receive
-              through Calendar APIs is used only to provide the connection feature you asked for,
-              consistent with Google&apos;s applicable API and Limited Use requirements.
+              (<code>calendar.events.owned</code> scope) and to read your email address (
+              <code>userinfo.email</code> scope) only. When a connection is active, we create,
+              update, and delete events on your <strong>primary</strong> Google Calendar that
+              correspond to scheduled tutoring sessions you manage in the app. We do{" "}
+              <strong>not</strong> use push notifications, webhooks, two-way sync, or CalDAV for
+              Google Calendar, and we do not modify calendars you do not own. If Google Calendar
+              write fails, your in-app schedule still saves — calendar sync is best-effort. Google
+              user data we receive through Calendar APIs is used only to provide the scheduling
+              features you asked for, consistent with Google&apos;s applicable API and Limited Use
+              requirements.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              We store a refresh token so the app can use your connection when scheduling ships,
-              without asking you to sign in each time. OAuth tokens and related credentials are kept
-              in server-side configuration or secure database storage, never embedded in web pages or
-              public repositories. You can disconnect Google Calendar at any time from Settings →
-              Calendar integrations, which deletes the stored token; you can also revoke access
-              directly from your Google Account security settings.
+              We store a refresh token so the app can sync without asking you to sign in each time.
+              OAuth tokens and related credentials are kept in server-side configuration or secure
+              database storage, never embedded in web pages or public repositories. You can disconnect
+              Google Calendar at any time from Settings → Calendar integrations. Disconnect{" "}
+              <strong>deletes the stored token on our servers and makes no further Google Calendar API
+              calls</strong>; it does <strong>not</strong> remove events that were already written to
+              your Google Calendar — you can delete those in Google Calendar if you choose. You can
+              also revoke access directly from your Google Account security settings.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="heading m-0 text-lg font-normal">Calendar subscription feed (ICS / webcal)</h2>
+            <p style={{ margin: "8px 0 0" }}>
+              If you copy the calendar subscription URL from Settings → Calendar integrations, your
+              calendar app (for example Apple Calendar, Google Calendar via &ldquo;From URL,&rdquo; or
+              Outlook) will <strong>poll</strong> that URL on its own schedule to download an ICS
+              feed of your upcoming scheduled sessions. We do not push updates to your device; the
+              feed is read-only from the calendar app&apos;s perspective. Session titles in the feed
+              default to the student&apos;s <strong>first name</strong> (for example,
+              &ldquo;Tutoring — Maya&rdquo;). You can opt in per student to keep that same
+              &ldquo;Tutoring —&rdquo; prefix and include the student&apos;s full name (for example,
+              &ldquo;Tutoring — Maya Rodriguez&rdquo;).
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              The subscription URL acts like a bearer secret — anyone with the link can fetch your
+              schedule until you revoke or rotate the feed token. Because calendar clients poll
+              continuously, <strong>Google&apos;s, Apple&apos;s, and Microsoft&apos;s calendar
+              services may fetch this feed on a recurring basis</strong> after you subscribe; refresh
+              timing is controlled by each client (Google Calendar typically refreshes external URL
+              subscriptions on the order of many hours, not immediately). Treat the URL like a
+              password and revoke it if it may have leaked.
             </p>
           </div>
 

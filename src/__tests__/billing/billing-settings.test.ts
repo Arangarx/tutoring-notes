@@ -74,4 +74,22 @@ describe("saveBillingDefaults", () => {
     expect(result.error).toMatch(/increment/i);
     expect(adminUpdateMock).not.toHaveBeenCalled();
   });
+
+  it("clears tutorTimezone when Same as this device is chosen", async () => {
+    const formData = new FormData();
+    formData.set("roundingIncrementMin", "5");
+    formData.set("roundingMode", "nearest");
+    formData.set("tutorTimezone", "");
+
+    const result = await saveBillingDefaults(null, formData);
+    expect(result.ok).toBe(true);
+    expect(adminUpdateMock).toHaveBeenCalledWith({
+      where: { id: "admin_1" },
+      data: {
+        defaultRoundingIncrementMin: 5,
+        defaultRoundingMode: "nearest",
+        tutorTimezone: null,
+      },
+    });
+  });
 });

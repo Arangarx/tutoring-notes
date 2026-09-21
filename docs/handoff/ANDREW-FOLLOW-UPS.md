@@ -2,7 +2,7 @@
 
 > **For you when you're back after a gap.** Agents keep this current. Code work continues without waiting on these unless a row says "blocks code."
 
-**Last refreshed:** 2026-09-15 (post auth merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca))  
+**Last refreshed:** 2026-09-17 (Tyson Connect: Console URIs added; Connect uses tab host — `NEXTAUTH_URL` unchanged)  
 **Canonical priorities:** [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities (option B)  
 **Living orchestrator state:** [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md)  
 **Calendar wave plan:** [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md)
@@ -20,9 +20,9 @@
 **Paste status here when done** (agents fold into BACKLOG/STATE):
 
 ```
-SMTP_HOST / SMTP_USER / SMTP_PASS set?:
+SMTP_HOST / SMTP_USER / SMTP_PASS set?: YES (Andrew 2026-09-21 — Resend done; live after Production redeploy)
 TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER set?:
-TOTP_ENCRYPTION_KEY set?:
+TOTP_ENCRYPTION_KEY set?: YES (authenticator has been live for a while)
 ```
 
 Those three answers are also exactly what fills in the three checkboxes at the top of the Tyson test packet — Google Doc **Tutor auth (accounts, email, 2FA, SMS) — Tyson test packet — Sep 2026** in the Drive **test plans** folder — and they gate **5 of 12** items in that packet.
@@ -42,10 +42,12 @@ Operator-visible warning / startup check so this cannot fail silently: BACKLOG *
 | **3 — Audience** | Publishing status (expect In production), user cap, unverified-user quota consumed | |
 | **4 — Branding** | Registered app name, homepage, privacy, terms URLs (mortensenapps.com umbrella) | |
 | **5 — Data access / scopes** | Confirm **selected** sensitive scopes (not just picker availability). Target for resubmit: **`calendar.events.owned`** + `userinfo.email` — drop `calendar.events` / `calendar.readonly` in the implementation wave | Picker confirmed `calendar.events.owned` 2026-09-11; Calendar API **enabled** (picker banner: "Only scopes for enabled APIs are listed below") |
-| **6 — Redirect URIs** | Prod + localhost: `/api/auth/callback/google`, `/api/auth/gmail/callback`, `/api/auth/calendar/callback` | Live connect smoke |
+| **6 — Redirect URIs** | **Done for Tyson retry** (2026-09-17 screenshot): prod + `tutoring-notes.vercel.app` + localhost + `preview.usemynk.com` for Sign-In / Gmail / Calendar. Leave `NEXTAUTH_URL`. Connect now uses allowlisted request host. | Tyson item 7 |
 | **7 — Search Console** | [`usemynk.com`](https://search.google.com/search-console) verified; re-submit branding if pending ([`LEGAL-SYNC.md`](../LEGAL-SYNC.md)) | Before verification resubmit |
 
 **Submit Google Calendar verification only after** real event write (create/edit/delete) is on a crawlable URL with Source Account Impact in the tutor's Google Calendar UI — **not** the old connect+stub demo. See [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md) demo requirements.
+
+**Tyson Connect (2026-09-17):** Console redirect URIs include `preview.usemynk.com`. **Do not change `NEXTAUTH_URL`.** After the tab-host Connect deploy, he retries on https://preview.usemynk.com. Also add Authorized JavaScript origin `https://preview.usemynk.com` if missing.
 
 **Paste status here when done** (agents fold into BACKLOG/STATE):
 
@@ -89,12 +91,14 @@ SMS OTP is **on `master`** (fail-closed until Twilio is provisioned).
 
 ## Platform SMTP (Resend) — auth/system mail (Andrew-only)
 
-Confirm-link, password reset, 2FA email OTP, parent/claim mail use **`sendPlatformMail`** only (env SMTP; fail-closed; never tutor Gmail). Until configured, live auth mail fails closed with an honest error.
+Confirm-link, password reset, 2FA email OTP, parent/claim mail use **`sendPlatformMail`** only (env SMTP; fail-closed; never tutor Gmail).
+
+**Andrew 2026-09-21:** Resend setup **done**. Takes effect after a **Production redeploy**. Then tick **Email sending is ON** on the Tyson auth packet.
 
 | # | Action | Why | Blocks code? |
 |---|--------|-----|--------------|
-| 1 | Resend + verify `usemynk.com` DNS (SPF/DKIM) | Sending domain allowlist | No |
-| 2 | Vercel: `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=resend`, `SMTP_PASS=<key>`, `SMTP_FROM=noreply@usemynk.com` | Live confirm/reset/2FA-email/claim | No for merge; **yes for live auth-mail smoke** |
+| 1 | Resend + verify `usemynk.com` DNS (SPF/DKIM) | Sending domain allowlist | **Done 2026-09-21** |
+| 2 | Vercel SMTP_* + Production redeploy | Live confirm/reset/2FA-email/claim | Env set; **redeploy still owed** |
 
 See [`docs/DEPLOY.md`](../DEPLOY.md).
 
@@ -121,7 +125,7 @@ After auth merge: read the **2FA + SMS** paragraphs on [`/privacy`](../src/app/p
 | Priority | Work | Status |
 |----------|------|--------|
 | **#1** | Sign in with Google | **DONE** [`122bf761`](https://github.com/Arangarx/tutoring-notes/commit/122bf761) |
-| **#1 remainder** | Calendar ICS + `calendar.events.owned` write | **OPEN** — [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md) |
+| **#1 remainder** | Calendar ICS + `calendar.events.owned` write | **SHIPPED** 2026-09-21 (`feat/calendar-wave` → `master`). **Your leftover:** Google verification **resubmit** once prod write is crawlable; Apple ICS subscribe when a device exists. |
 | **#2** | Student-detail Start / consent / claim | **DONE** [`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5) |
 | **#3** | Tutor signup / auth ship-ready | **DONE** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) |
 | **#4** | Email OTP + 2FA chooser + SMS code + allowlist | **DONE** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) — your leftover: SMTP + Twilio + allowlist UI |

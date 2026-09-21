@@ -178,6 +178,9 @@ model Student {
   claimInvites     StudentClaimInvite[]
   /// Set during erasure db_scrubbing; route guards check this (M-4).
   erasedAt         DateTime?
+  /// Per-student ICS VEVENT SUMMARY opt-in: when true, use full `name` in feed titles;
+  /// default false = first name only (`Tutoring — Maya`). Matches per-student share-link sensitivity posture.
+  icsShowFullName  Boolean             @default(false)
 
   /// IAC-2: per-tutor uniqueness — a tutor cannot link the same learner profile twice;
   /// a second tutor can link the same profile under their own adminUserId.
@@ -783,6 +786,7 @@ model AdminUser {
   /// IANA timezone for billing local-time display (e.g. America/Denver).
   tutorTimezone               String?
   tutorEmailAllowlistCreated  TutorEmailAllowlist[] @relation("TutorEmailAllowlistCreatedBy")
+  calendarFeedTokens          CalendarFeedToken[]
 }
 
 /// Pre-approved tutor signup emails — normalized at write time.
@@ -972,11 +976,26 @@ model OAuthCalendarConnection {
   provider      String
   refreshToken  String
   email         String
-  /// One-shot calendarList.list count at connect time (screencast / status only).
+  /// Dead — no longer written; was a one-shot calendarList.list screencast helper. Physical drop deferred.
   calendarCount Int?
+  /// Set when Google returns invalid_grant on refresh/write; cleared on reconnect or successful API use.
+  reconnectRequiredAt DateTime?
   updatedAt     DateTime   @updatedAt
   adminUserId   String?
   adminUser     AdminUser? @relation("AdminOAuthCalendarConnections", fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, adminUserId])
+  @@index([adminUserId])
+}
+
+/// Opaque bearer token for a tutor's ICS subscription feed (per-tutor, not per-student).
+model CalendarFeedToken {
+  id          String    @id @default(uuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
 
   @@index([adminUserId])
 }
@@ -989,11 +1008,14 @@ model ScheduledSession {
   adminUser              AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   studentId              String
   student                Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  /// Calendar day (Postgres DATE). Use date-only.ts at IO boundaries.
+  /// Calendar day (Postgres DATE). Denormalized wall-clock day at write; prefer startAt for display.
   date                   DateTime  @db.Date
-  /// Local planning times as 24h HH:MM (no timezone policy in chunk 1).
+  /// Local planning times as 24h HH:MM at write. Prefer startAt/endAt (UTC) as source of truth.
   startTime              String
   endTime                String
+  /// UTC instants — timezone-agnostic source of truth for Google/ICS/display.
+  startAt                DateTime? @db.Timestamptz(3)
+  endAt                  DateTime? @db.Timestamptz(3)
   /// Soft planning duration in minutes (45, 60, 90).
   plannedDurationMinutes Int
   subject                String
@@ -1005,6 +1027,7 @@ model ScheduledSession {
   updatedAt              DateTime  @updatedAt
 
   @@index([adminUserId, date])
+  @@index([adminUserId, startAt])
   @@index([studentId])
 }
 

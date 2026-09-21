@@ -24,20 +24,46 @@ jest.mock("@/lib/env", () => ({
   env: mockEnv,
 }));
 
+const mockSyncUpcoming = jest.fn().mockResolvedValue({ attempted: 0 });
+jest.mock("@/lib/calendar/google-calendar-connect-backfill", () => ({
+  syncUpcomingUnsyncedScheduledSessions: (...args: unknown[]) =>
+    mockSyncUpcoming(...args),
+}));
+
 const mockDeleteMany = jest.fn();
 const mockCreate = jest.fn();
+const mockUpsert = jest.fn();
+const mockTransaction = jest.fn();
 jest.mock("@/lib/db", () => ({
   db: {
     oAuthCalendarConnection: {
       findFirst: jest.fn(),
       deleteMany: (...args: unknown[]) => mockDeleteMany(...args),
       create: (...args: unknown[]) => mockCreate(...args),
+      upsert: (...args: unknown[]) => mockUpsert(...args),
     },
+    $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
 }));
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch as typeof fetch;
+
+/** Tyson 2026-09-17: Connect was sending NEXTAUTH_URL (legacy vercel.app), not this tab. */
+const CALENDAR_WAVE_PREVIEW_HOST =
+  "tutoring-notes-git-feat-calendar-wave-arangarx-5209s-projects.vercel.app";
+
+function calendarConnectRequest(
+  headers: Record<string, string> = {
+    host: "localhost:3000",
+    "x-forwarded-proto": "http",
+  },
+  search = ""
+) {
+  return new NextRequest(`http://localhost:3000/api/auth/calendar/connect${search}`, {
+    headers,
+  });
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -46,6 +72,17 @@ beforeEach(() => {
   mockGetAdminByEmail.mockResolvedValue({ id: "admin-1" });
   mockDeleteMany.mockResolvedValue({ count: 0 });
   mockCreate.mockResolvedValue({ id: "conn-1" });
+  mockUpsert.mockResolvedValue({ id: "conn-1" });
+  mockTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+    const tx = {
+      oAuthCalendarConnection: {
+        deleteMany: mockDeleteMany,
+        create: mockCreate,
+        upsert: mockUpsert,
+      },
+    };
+    return fn(tx);
+  });
 });
 
 describe("NextAuth Google provider scopes", () => {
@@ -81,27 +118,104 @@ describe("GET /api/auth/calendar/connect", () => {
   it("redirects unauthenticated users to login", async () => {
     mockGetServerSession.mockResolvedValueOnce(null);
     const { GET } = await import("@/app/api/auth/calendar/connect/route");
-    const res = await GET();
+    const res = await GET(calendarConnectRequest());
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     expect(res.headers.get("location")).toBe("http://localhost:3000/login");
   });
 
-  it("302 includes both calendar scopes on the Google authorize URL", async () => {
+  it("302 includes owned calendar scope on the Google authorize URL", async () => {
     const { GET } = await import("@/app/api/auth/calendar/connect/route");
-    const res = await GET();
+    const res = await GET(calendarConnectRequest());
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("accounts.google.com");
-    expect(location).toContain("calendar.events");
-    expect(location).toContain("calendar.readonly");
+    expect(location).toContain("calendar.events.owned");
+    expect(location).not.toContain("calendar.readonly");
     expect(location).toContain("userinfo.email");
     expect(location).toContain("access_type=offline");
     expect(location).toContain("prompt=consent");
     expect(location).toContain(
       encodeURIComponent("http://localhost:3000/api/auth/calendar/callback")
     );
+  });
+
+  it("redirect_uri follows the allowlisted preview host, not NEXTAUTH_URL", async () => {
+    process.env.NEXTAUTH_URL = "https://tutoring-notes.vercel.app";
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest({
+        "x-forwarded-host": CALENDAR_WAVE_PREVIEW_HOST,
+        "x-forwarded-proto": "https",
+      })
+    );
+    const location = res.headers.get("location") ?? "";
+    const previewCallback = `https://${CALENDAR_WAVE_PREVIEW_HOST}/api/auth/calendar/callback`;
+    expect(location).toContain(encodeURIComponent(previewCallback));
+    expect(location).not.toContain(
+      encodeURIComponent("https://tutoring-notes.vercel.app/api/auth/calendar/callback")
+    );
+  });
+
+  it("redirect_uri follows preview.usemynk.com, not NEXTAUTH_URL", async () => {
+    process.env.NEXTAUTH_URL = "https://tutoring-notes.vercel.app";
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest({
+        "x-forwarded-host": "preview.usemynk.com",
+        "x-forwarded-proto": "https",
+      })
+    );
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain(
+      encodeURIComponent("https://preview.usemynk.com/api/auth/calendar/callback")
+    );
+    expect(location).not.toContain(
+      encodeURIComponent("https://tutoring-notes.vercel.app/api/auth/calendar/callback")
+    );
+  });
+
+  it("forged Host is not reflected into redirect_uri", async () => {
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest({
+        host: "evil.com",
+        "x-forwarded-proto": "https",
+      })
+    );
+    const location = res.headers.get("location") ?? "";
+    expect(location).not.toContain("evil.com");
+    expect(location).toContain(
+      encodeURIComponent("http://localhost:3000/api/auth/calendar/callback")
+    );
+  });
+
+  it("encodes schedule returnTo in OAuth state", async () => {
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest(undefined, "?returnTo=/admin/schedule")
+    );
+    const location = res.headers.get("location") ?? "";
+    const state = new URL(location).searchParams.get("state") ?? "";
+    const parsed = JSON.parse(Buffer.from(state, "base64url").toString()) as {
+      returnTo?: string;
+    };
+    expect(parsed.returnTo).toBe("/admin/schedule");
+  });
+
+  it("rejects open-redirect returnTo in OAuth state", async () => {
+    const { GET } = await import("@/app/api/auth/calendar/connect/route");
+    const res = await GET(
+      calendarConnectRequest(undefined, "?returnTo=https://evil.com")
+    );
+    const location = res.headers.get("location") ?? "";
+    const state = new URL(location).searchParams.get("state") ?? "";
+    const parsed = JSON.parse(Buffer.from(state, "base64url").toString()) as {
+      returnTo?: string;
+    };
+    expect(parsed.returnTo).toBe("/admin/settings/integrations");
   });
 });
 
@@ -118,10 +232,6 @@ describe("GET /api/auth/calendar/callback", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ email: "calendar@example.com" }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ items: [{ id: "primary" }, { id: "work" }] }),
       });
 
     const { GET } = await import("@/app/api/auth/calendar/callback/route");
@@ -132,18 +242,94 @@ describe("GET /api/auth/calendar/callback", () => {
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     expect(res.headers.get("location")).toContain("connected=google_calendar");
-    expect(mockDeleteMany).toHaveBeenCalledWith({
-      where: { provider: "google", adminUserId: "admin-1" },
-    });
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
+    const tokenBody = String(mockFetch.mock.calls[0]?.[1]?.body ?? "");
+    expect(tokenBody).toContain(
+      encodeURIComponent("http://localhost:3000/api/auth/calendar/callback")
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    for (const call of mockFetch.mock.calls) {
+      const url = String(call[0]);
+      expect(url).not.toContain("calendarList");
+      expect(url).not.toContain("calendar/v3");
+    }
+    expect(mockUpsert).toHaveBeenCalledWith({
+      where: {
+        provider_adminUserId: { provider: "google", adminUserId: "admin-1" },
+      },
+      create: {
         provider: "google",
         refreshToken: "refresh-abc",
         email: "calendar@example.com",
-        calendarCount: 2,
         adminUserId: "admin-1",
+        reconnectRequiredAt: null,
+      },
+      update: {
+        refreshToken: "refresh-abc",
+        email: "calendar@example.com",
+        reconnectRequiredAt: null,
       },
     });
+    expect(mockCreate).not.toHaveBeenCalled();
+    const upsertPayload = JSON.stringify(mockUpsert.mock.calls[0]?.[0] ?? {});
+    expect(upsertPayload).not.toContain("calendarCount");
+    expect(mockSyncUpcoming).toHaveBeenCalledWith("admin-1", "refresh-abc");
+    expect(res.headers.get("location")).toContain("/admin/settings/integrations");
+  });
+
+  it("returns to the schedule page when OAuth state returnTo is /admin/schedule", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          refresh_token: "refresh-abc",
+          access_token: "access-abc",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ email: "calendar@example.com" }),
+      });
+
+    const state = Buffer.from(
+      JSON.stringify({ returnTo: "/admin/schedule" })
+    ).toString("base64url");
+    const { GET } = await import("@/app/api/auth/calendar/callback/route");
+    const req = new NextRequest(
+      `http://localhost:3000/api/auth/calendar/callback?code=oauth-code-123&state=${state}`
+    );
+    const res = await GET(req);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/admin/schedule?");
+    expect(location).toContain("connected=google_calendar");
+    expect(location).not.toContain("/admin/settings/integrations");
+  });
+
+  it("double callback uses upsert twice (no duplicate create path)", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return {
+          ok: true,
+          json: async () => ({
+            refresh_token: "refresh-abc",
+            access_token: "access-abc",
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ email: "calendar@example.com" }),
+      };
+    });
+
+    const { GET } = await import("@/app/api/auth/calendar/callback/route");
+    const req = new NextRequest(
+      "http://localhost:3000/api/auth/calendar/callback?code=oauth-code-123"
+    );
+    await GET(req);
+    await GET(req);
+    expect(mockUpsert).toHaveBeenCalledTimes(2);
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockDeleteMany).not.toHaveBeenCalled();
   });
 
   it("redirects with db_not_ready when OAuthCalendarConnection model is missing", async () => {
@@ -169,6 +355,37 @@ describe("GET /api/auth/calendar/callback", () => {
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
     expect(res.headers.get("location")).toContain("error=db_not_ready");
+  });
+
+  it("token exchange redirect_uri follows the allowlisted preview host, not NEXTAUTH_URL", async () => {
+    process.env.NEXTAUTH_URL = "https://tutoring-notes.vercel.app";
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          refresh_token: "refresh-abc",
+          access_token: "access-abc",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ email: "calendar@example.com" }),
+      });
+
+    const { GET } = await import("@/app/api/auth/calendar/callback/route");
+    const previewCallback = `https://${CALENDAR_WAVE_PREVIEW_HOST}/api/auth/calendar/callback`;
+    const req = new NextRequest(`${previewCallback}?code=oauth-code-123`, {
+      headers: {
+        "x-forwarded-host": CALENDAR_WAVE_PREVIEW_HOST,
+        "x-forwarded-proto": "https",
+      },
+    });
+    await GET(req);
+    const tokenBody = String(mockFetch.mock.calls[0]?.[1]?.body ?? "");
+    expect(tokenBody).toContain(encodeURIComponent(previewCallback));
+    expect(tokenBody).not.toContain(
+      encodeURIComponent("https://tutoring-notes.vercel.app/api/auth/calendar/callback")
+    );
   });
 });
 

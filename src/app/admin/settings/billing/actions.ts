@@ -8,9 +8,11 @@ import { db, withDbRetry } from "@/lib/db";
 import { requireAdminSession } from "@/lib/require-admin";
 import type { RoundingMode } from "@/lib/billing/rounding";
 import { VALID_BILLING_TIMEZONES } from "./billing-options";
+import { seedTutorTimezoneIfUnset } from "@/lib/billing/seed-tutor-timezone";
 
 const VALID_INCREMENTS = new Set([1, 5, 15, 30]);
 const VALID_MODES: ReadonlySet<string> = new Set(["nearest", "up", "down"]);
+const DEVICE_TIMEZONE_VALUE = "";
 
 export async function saveBillingDefaults(
   _prev: { error?: string; ok?: boolean } | null,
@@ -42,7 +44,9 @@ export async function saveBillingDefaults(
   if (!VALID_MODES.has(mode)) {
     return { error: "Choose a valid rounding direction." };
   }
-  if (!VALID_BILLING_TIMEZONES.has(timeZone)) {
+  const persistTimezone =
+    timeZone === DEVICE_TIMEZONE_VALUE ? null : timeZone;
+  if (persistTimezone !== null && !VALID_BILLING_TIMEZONES.has(persistTimezone)) {
     return { error: "Choose a valid timezone." };
   }
 
@@ -53,7 +57,7 @@ export async function saveBillingDefaults(
         data: {
           defaultRoundingIncrementMin: incrementRaw,
           defaultRoundingMode: mode,
-          tutorTimezone: timeZone,
+          tutorTimezone: persistTimezone,
         },
       }),
     { label: "saveBillingDefaults" }
@@ -94,7 +98,6 @@ export async function loadBillingDefaultsForForm(): Promise<BillingDefaultsFormV
   const {
     DEFAULT_ROUNDING_INCREMENT_MIN,
     DEFAULT_ROUNDING_MODE,
-    DEFAULT_TUTOR_TIMEZONE,
   } = await import("@/lib/billing/defaults");
 
   return {
@@ -102,6 +105,16 @@ export async function loadBillingDefaultsForForm(): Promise<BillingDefaultsFormV
       row?.defaultRoundingIncrementMin ?? DEFAULT_ROUNDING_INCREMENT_MIN,
     roundingMode:
       (row?.defaultRoundingMode as RoundingMode | null) ?? DEFAULT_ROUNDING_MODE,
-    tutorTimezone: row?.tutorTimezone ?? DEFAULT_TUTOR_TIMEZONE,
+    tutorTimezone: row?.tutorTimezone ?? "",
   };
+}
+
+/** Seeds AdminUser.tutorTimezone from the browser zone when the override is unset. */
+export async function ensureTutorTimezoneFromSystem(iana: string): Promise<void> {
+  const session = await getServerSession(authOptions);
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) return;
+  const admin = await getAdminByEmail(email);
+  if (!admin) return;
+  await seedTutorTimezoneIfUnset(admin.id, iana);
 }
