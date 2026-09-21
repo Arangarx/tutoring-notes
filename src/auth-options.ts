@@ -44,7 +44,12 @@ const googleProviders =
             // Strictly openid + email + profile — NOT gmail.send.
             // The existing Gmail-send OAuth is a separate custom flow
             // (OAuthEmailConnection) and is unrelated to this provider.
-            params: { scope: "openid email profile" },
+            params: {
+              scope: "openid email profile",
+              // Without this, Google skips the account list when the browser
+              // already has a session and returns that account immediately.
+              prompt: "select_account",
+            },
           },
         }),
       ]
