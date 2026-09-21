@@ -78,6 +78,8 @@ Pre-approved signup allowlist is on **`master`**. **Do not seed Sarah/Tyson emai
 
 SMS OTP is **on `master`** (fail-closed until Twilio is provisioned).
 
+**A2P campaign (2026-09-21):** Brand submitted as **Andrew Mortensen** (personal). **Do not file the Campaign yet.** Opt-in on the live site is not reviewable (no consent checkbox / required disclosures). After `feat/calendar-wave` merges, agents ship [`SMS-A2P-CONSENT-PLAN.md`](SMS-A2P-CONSENT-PLAN.md). Then you: screenshot the live consent form (public Drive link) + finish Campaign paste. Leave Tyson **Text-message sending** unticked until that campaign is approved.
+
 | # | Action | Why | Blocks code? |
 |---|--------|-----|--------------|
 | 1 | Twilio account + Programmable SMS-capable US number | Outbound OTP source | No — SMS card stays disabled until done |
