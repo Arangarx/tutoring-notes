@@ -246,7 +246,7 @@ export async function loginTutorWithPassword(
     await page.locator("#email").waitFor({ state: "visible", timeout: 30_000 });
     await page.locator("#email").fill(creds.email);
     await page.locator("#password").fill(creds.password);
-    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.getByRole("button", { name: /^(sign in|log in)$/i }).click();
     try {
       await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
         timeout: 20_000,

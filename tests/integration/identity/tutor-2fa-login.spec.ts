@@ -67,7 +67,7 @@ test.describe("P1-ID-2 — tutor 2FA login→land + QR local-gen", () => {
       { timeout: 30_000 }
     );
 
-    await page.getByRole("button", { name: "Use authenticator app instead" }).click();
+    await page.getByTestId("tfa-choose-totp").getByRole("button", { name: /authenticator/i }).click();
 
     const qrImg = page.getByRole("img", { name: "TOTP QR code" });
     await expect(qrImg).toBeVisible({ timeout: 30_000 });
@@ -109,7 +109,7 @@ test.describe("TOTP enroll — email OTP login alternative (chunk 2)", () => {
   test("happy path: TOTP tutor switches to email alt → seeded code lands authed", async ({
     page,
   }) => {
-    const { loginCode } = await seedTotpTutorWithEmailLoginChallenge();
+    await seedTotpTutorWithEmailLoginChallenge();
 
     await loginTutorWithPassword(page, TEST_2FA_TUTOR);
     await waitFor2faVerifyChallenge(page);
@@ -117,8 +117,10 @@ test.describe("TOTP enroll — email OTP login alternative (chunk 2)", () => {
     await expect(page.getByRole("button", { name: "Email me a code instead" })).toBeVisible();
     await page.getByRole("button", { name: "Email me a code instead" }).click();
 
-    // Seeded challenge — skip send to avoid invalidating hash.
-    await submitEmailOtpOnVerifyPage(page, loginCode);
+    // That click sends a new code and retires the seed. Harness mail uses a fixed code.
+    const { PLAYWRIGHT_HARNESS_EMAIL_OTP } = await import("@/lib/otp-challenge");
+    await expect(page.getByRole("button", { name: "Resend code" })).toBeVisible();
+    await submitEmailOtpOnVerifyPage(page, PLAYWRIGHT_HARNESS_EMAIL_OTP);
     await expectTutorAuthedLanding(page);
   });
 

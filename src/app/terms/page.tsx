@@ -13,6 +13,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Google Calendar connect section added 2026-08-14 (honest stub — no sync claim).
  * Twilio (SMS 2FA) added to third-party services list 2026-09-11.
  * Calendar ICS feed + Google write honesty (product-specific) 2026-09-16.
+ * Mynk SMS two-factor texts program (product-specific) 2026-09-21.
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
  * the CANONICAL legal source for eligibility / acceptable use /
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalDocumentShell title="Terms of Use" lastUpdated="September 16, 2026">
+    <LegalDocumentShell title="Terms of Use" lastUpdated="September 21, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           These terms govern your use of <strong>Tutoring Notes</strong>, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
@@ -134,6 +135,22 @@ export default function TermsPage() {
               instantaneous. Session titles default to first names unless you opt in per student to
               show full names. Keep the subscription URL confidential; revoke it from Settings if it
               may have been exposed.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="heading m-0 text-lg font-normal">Mynk two-factor texts (SMS)</h2>
+            <p style={{ margin: "8px 0 0" }}>
+              If you enable text-message two-factor authentication, you agree to receive{" "}
+              <strong>Mynk two-factor texts</strong>: one-time passcodes only for signing in,
+              completing SMS two-factor setup, or changing your SMS two-factor method—not
+              marketing or promotional messages. <strong>Message and data rates may apply.</strong>{" "}
+              Message frequency varies; we send texts only when you set up SMS two-factor
+              authentication, sign in with SMS, or change your SMS two-factor method. For help,
+              contact us using the support information on this page. Text <strong>HELP</strong> for
+              help or <strong>STOP</strong> to opt out. See our{" "}
+              <Link href="/privacy">privacy policy</Link> for how we handle your information.
+              Carriers are not liable for delayed or undelivered messages.
             </p>
           </div>
 

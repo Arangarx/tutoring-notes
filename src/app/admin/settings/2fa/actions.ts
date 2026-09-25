@@ -654,8 +654,16 @@ export type StartSmsOtpEnrollmentResult =
  * code. No silent enroll on send failure — the row is deleted if send fails.
  */
 export async function startSmsOtpEnrollment(
-  phoneInput: string
+  phoneInput: string,
+  smsConsent: boolean
 ): Promise<StartSmsOtpEnrollmentResult> {
+  if (smsConsent !== true) {
+    return {
+      ok: false,
+      error: "You must agree to receive SMS codes before we can send a verification text.",
+    };
+  }
+
   if (!isSms2faEnrollmentAvailable()) {
     return { ok: false, error: "SMS 2FA is not available right now." };
   }
@@ -1474,8 +1482,16 @@ export type StartSmsOtpMethodChangeResult =
   | { ok: false; error: string };
 
 export async function startSmsOtpMethodChange(
-  phoneInput: string
+  phoneInput: string,
+  smsConsent: boolean
 ): Promise<StartSmsOtpMethodChangeResult> {
+  if (smsConsent !== true) {
+    return {
+      ok: false,
+      error: "You must agree to receive SMS codes before we can send a verification text.",
+    };
+  }
+
   if (!isSms2faEnrollmentAvailable()) {
     return { ok: false, error: "SMS 2FA is not available right now." };
   }

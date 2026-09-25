@@ -56,7 +56,7 @@ test.describe("SMS OTP 2FA — login + fallback (WS3)", () => {
   });
 
   test("SMS-enrolled tutor can still request an email code as fallback", async ({ page }) => {
-    const { emailFallbackCode } = await seedSmsOtpEnrolledTutorWithEmailFallback();
+    await seedSmsOtpEnrolledTutorWithEmailFallback();
 
     await loginTutorWithPassword(page, TEST_SMS_2FA_TUTOR);
     await waitFor2faVerifyChallenge(page);
@@ -64,8 +64,10 @@ test.describe("SMS OTP 2FA — login + fallback (WS3)", () => {
     await expect(page.getByRole("button", { name: "Email me a code instead" })).toBeVisible();
     await page.getByRole("button", { name: "Email me a code instead" }).click();
 
-    // Seeded EMAIL-channel challenge — skip send to avoid invalidating hash.
-    await submitEmailOtpOnVerifyPage(page, emailFallbackCode);
+    // That click sends a new code and retires the seed. Harness mail uses a fixed code.
+    const { PLAYWRIGHT_HARNESS_EMAIL_OTP } = await import("@/lib/otp-challenge");
+    await expect(page.getByRole("button", { name: "Resend code" })).toBeVisible();
+    await submitEmailOtpOnVerifyPage(page, PLAYWRIGHT_HARNESS_EMAIL_OTP);
     await expectTutorAuthedLanding(page);
   });
 

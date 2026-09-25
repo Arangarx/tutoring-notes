@@ -33,7 +33,7 @@ setup("authenticate tutor storageState + seed learner credentials", async ({
   await page.goto("/login");
   await page.getByLabel(/email/i).fill(TEST_ADMIN.email);
   await page.getByLabel(/password/i).fill(TEST_ADMIN.password);
-  await page.getByRole("button", { name: /sign in|log in/i }).click();
+  await page.getByRole("button", { name: /^(sign in|log in)$/i }).click();
   await page.waitForURL(
     (url) =>
       url.pathname.startsWith("/admin") &&

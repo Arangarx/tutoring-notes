@@ -82,7 +82,7 @@ test.describe("P1-ID-SIGNUP — tutor signup WAITLISTED gate", () => {
       page.getByText(/Sign-up is securely handled by Mortensen Apps/i)
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Sign up with Google" })
+      page.getByRole("button", { name: "Sign up with Google" })
     ).toBeVisible();
   });
 

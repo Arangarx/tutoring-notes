@@ -512,6 +512,7 @@ describe("BUG-FIX 2026-06-01: rotate and regen backup-code display requires expl
   it("EMAIL_OTP manage step-up offers sendLoginEmailOtp (not authenticator-only copy)", () => {
     expect(content).toContain("sendLoginEmailOtp");
     expect(content).toContain('method === "EMAIL_OTP"');
+    expect(content).toContain("Resend code");
     expect(content).toContain("Send verification code");
   });
 

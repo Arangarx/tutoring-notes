@@ -135,7 +135,7 @@ export async function loginHarnessAdmin(page: Page): Promise<void> {
   await page.locator("#email").waitFor({ state: "visible", timeout: 30_000 });
   await page.locator("#email").fill(ROLE_REFRESH_ADMIN.email);
   await page.locator("#password").fill(ROLE_REFRESH_ADMIN.password);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: /^(sign in|log in)$/i }).click();
   await page.waitForURL(
     (url) =>
       url.pathname.startsWith("/admin") &&

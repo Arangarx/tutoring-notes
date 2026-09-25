@@ -12,11 +12,12 @@
  *   - Admin reset: ADMIN-only — reset own or another admin's 2FA
  */
 
-import { useState, useTransition, useCallback, useEffect } from "react";
+import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SmsTwoFactorConsentField } from "@/components/identity/SmsTwoFactorConsentField";
 import { TwoFactorMethodChooserCards } from "./TwoFactorMethodChooserCards";
 import {
   rotateTotpStart,
@@ -113,6 +114,27 @@ export function TwoFactorManageView({
   >(null);
   const [stepUpOtpMsg, setStepUpOtpMsg] = useState<string | null>(null);
   const [stepUpOtpPending, setStepUpOtpPending] = useState(false);
+  const stepUpEmailIssued = useRef(false);
+
+  useEffect(() => {
+    if (view !== "step-up" || !isEmailOtp) {
+      if (view !== "step-up") stepUpEmailIssued.current = false;
+      return;
+    }
+    if (stepUpEmailIssued.current) return;
+    stepUpEmailIssued.current = true;
+    setStepUpOtpPending(true);
+    startTransition(async () => {
+      const result = await sendLoginEmailOtp();
+      setStepUpOtpPending(false);
+      if (result.ok) {
+        setStepUpOtpMsg(`Code sent to ${result.maskedEmail}.`);
+      } else {
+        stepUpEmailIssued.current = false;
+        setStepUpOtpMsg(result.error ?? "Could not send code.");
+      }
+    });
+  }, [view, isEmailOtp]);
 
   // Regen state
   const [regenCodes, setRegenCodes] = useState<string[]>([]);
@@ -125,6 +147,7 @@ export function TwoFactorManageView({
   const [changeStepUpCode, setChangeStepUpCode] = useState("");
   const [changeMethod, setChangeMethod] = useState<"email" | "sms" | "totp" | null>(null);
   const [changePhoneInput, setChangePhoneInput] = useState("");
+  const [changeSmsConsentChecked, setChangeSmsConsentChecked] = useState(false);
   const [changeMaskedEmail, setChangeMaskedEmail] = useState("");
   const [changeMaskedPhone, setChangeMaskedPhone] = useState(initialMaskedPhone ?? "");
   const [changeToken, setChangeToken] = useState("");
@@ -417,14 +440,15 @@ export function TwoFactorManageView({
     setError("");
     setChangeMethod("sms");
     setChangePhoneInput("");
+    setChangeSmsConsentChecked(false);
     setView("change-sms-phone");
   }
 
   function handleChangeSendSms() {
-    if (!changePhoneInput.trim()) return;
+    if (!changePhoneInput.trim() || !changeSmsConsentChecked) return;
     setError("");
     startTransition(async () => {
-      const result = await startSmsOtpMethodChange(changePhoneInput.trim());
+      const result = await startSmsOtpMethodChange(changePhoneInput.trim(), true);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -576,7 +600,11 @@ export function TwoFactorManageView({
       <div className="space-y-4">
         <div className="rounded-md border border-border p-4">
           <h2 className="text-base font-semibold mb-1">Confirm your identity</h2>
-          {isOtpMethod ? (
+          {isEmailOtp ? (
+            <p className="text-sm text-muted-foreground mb-3">
+              We emailed a verification code. Enter it below to {label}.
+            </p>
+          ) : isSmsOtp ? (
             <p className="text-sm text-muted-foreground mb-3">
               Request a verification code, then enter it below to {label}.
             </p>
@@ -599,7 +627,7 @@ export function TwoFactorManageView({
                 disabled={stepUpOtpPending || isPending}
                 onClick={handleSendStepUpOtp}
               >
-                {stepUpOtpPending ? "Sending…" : "Send verification code"}
+                {stepUpOtpPending ? "Sending…" : isEmailOtp ? "Resend code" : "Send verification code"}
               </Button>
             </div>
           )}
@@ -975,23 +1003,34 @@ export function TwoFactorManageView({
         {error && <p className="text-sm text-destructive">{error}</p>}
         <form
           onSubmit={(e) => { e.preventDefault(); handleChangeSendSms(); }}
-          className="flex gap-2 items-center flex-wrap"
+          className="space-y-4"
         >
-          <Label htmlFor="change-sms-phone" className="sr-only">
-            Phone number
-          </Label>
-          <Input
-            id="change-sms-phone"
-            type="tel"
-            placeholder="(555) 555-1234"
-            value={changePhoneInput}
-            onChange={(e) => setChangePhoneInput(e.target.value)}
-            className="w-48"
-            autoFocus
+          <div className="flex gap-2 items-center flex-wrap">
+            <Label htmlFor="change-sms-phone" className="sr-only">
+              Phone number
+            </Label>
+            <Input
+              id="change-sms-phone"
+              type="tel"
+              placeholder="(555) 555-1234"
+              value={changePhoneInput}
+              onChange={(e) => setChangePhoneInput(e.target.value)}
+              className="w-48"
+              autoFocus
+            />
+            <Button
+              type="submit"
+              disabled={isPending || !changePhoneInput.trim() || !changeSmsConsentChecked}
+            >
+              {isPending ? "Sending…" : "Send code"}
+            </Button>
+          </div>
+          <SmsTwoFactorConsentField
+            id="change-sms-a2p-consent"
+            checked={changeSmsConsentChecked}
+            onCheckedChange={setChangeSmsConsentChecked}
+            disabled={isPending}
           />
-          <Button type="submit" disabled={isPending || !changePhoneInput.trim()}>
-            {isPending ? "Sending…" : "Send code"}
-          </Button>
         </form>
         <button
           type="button"

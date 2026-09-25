@@ -27,7 +27,9 @@ test.describe("Email OTP 2FA — enroll + login (chunk 1)", () => {
     await loginTutorWithPassword(page, TEST_EMAIL_2FA_TUTOR);
     await waitFor2faVerifyChallenge(page);
 
-    // Seeded challenge — no mail catcher; skip send to avoid invalidating hash.
+    // The page issues the code. The control is a resend, not a first send.
+    await expect(page.getByRole("button", { name: "Resend code" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send verification code" })).toHaveCount(0);
     await submitEmailOtpOnVerifyPage(page, loginCode);
     await expectTutorAuthedLanding(page);
   });

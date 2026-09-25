@@ -81,7 +81,7 @@ describe("Privacy page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Privacy Policy"
     );
-    expect(screen.getByText("Last updated: September 17, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: September 21, 2026")).toBeInTheDocument();
 
     // Verbatim body locks (distinctive product / umbrella sentences)
     expect(
@@ -138,6 +138,11 @@ describe("Privacy page — shell + verbatim legal copy", () => {
       "href",
       "https://www.mortensenapps.com/privacy"
     );
+
+    const privacyBody = document.body.textContent ?? "";
+    expect(privacyBody).toMatch(
+      /do not sell or share SMS opt-in data or personal information with third parties for marketing purposes/i
+    );
   });
 });
 
@@ -150,7 +155,7 @@ describe("Terms page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Terms of Use"
     );
-    expect(screen.getByText("Last updated: September 16, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: September 21, 2026")).toBeInTheDocument();
 
     expect(
       screen.getByText(/These terms govern your use of/, { exact: false })
@@ -210,5 +215,12 @@ describe("Terms page — shell + verbatim legal copy", () => {
       "href",
       "https://www.mortensenapps.com/terms"
     );
+
+    expect(termsBody).toMatch(/Message and data rates may apply/i);
+    expect(termsBody).toMatch(/\bSTOP\b/);
+    expect(termsBody).toMatch(/\bHELP\b/);
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Mynk two-factor texts (SMS)" })
+    ).toBeInTheDocument();
   });
 });

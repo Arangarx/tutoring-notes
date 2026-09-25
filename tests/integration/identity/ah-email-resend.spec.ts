@@ -32,7 +32,7 @@ test.describe("P1-ID-AHX — account-holder resend confirmation", () => {
       await page.goto("/account/login");
       await page.getByLabel(/email/i).fill(email);
       await page.getByLabel(/password/i).fill(password);
-      await page.getByRole("button", { name: /sign in/i }).click();
+      await page.getByRole("button", { name: /^(sign in|log in)$/i }).click();
 
       await expect(page.getByText(/please verify your email first/i)).toBeVisible({
         timeout: 15_000,

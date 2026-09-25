@@ -40,6 +40,14 @@ function smsCardButton() {
   return within(screen.getByTestId("tfa-choose-sms")).getByRole("button");
 }
 
+beforeAll(() => {
+  global.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as typeof ResizeObserver;
+});
+
 describe("TwoFactorSetupForm — SMS chooser enable state", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -68,7 +76,7 @@ describe("TwoFactorSetupForm — SMS chooser enable state", () => {
     await user.click(button);
 
     expect(screen.getByPlaceholderText("(555) 123-4567")).toBeInTheDocument();
-    expect(screen.getByLabelText(/mobile number/i)).toBeInTheDocument();
+    expect(screen.getByTestId("sms-a2p-consent")).toBeInTheDocument();
   });
 
   test("phone collect step calls startSmsOtpEnrollment and shows code-entry with masked phone", async () => {
@@ -77,10 +85,16 @@ describe("TwoFactorSetupForm — SMS chooser enable state", () => {
 
     await user.click(smsCardButton());
     await user.type(screen.getByPlaceholderText("(555) 123-4567"), "5551234567");
-    await user.click(screen.getByRole("button", { name: "Send code" }));
+    const sendButton = screen.getByRole("button", { name: "Send code" });
+    expect(sendButton).toBeDisabled();
+
+    await user.click(screen.getByTestId("sms-a2p-consent"));
+    expect(sendButton).toBeEnabled();
+
+    await user.click(sendButton);
 
     await waitFor(() => {
-      expect(mockStartSmsOtpEnrollment).toHaveBeenCalledWith("5551234567");
+      expect(mockStartSmsOtpEnrollment).toHaveBeenCalledWith("5551234567", true);
     });
 
     await waitFor(() => {

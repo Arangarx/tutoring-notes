@@ -2,7 +2,6 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import type { AdminRole, TutorApprovalStatus } from "@prisma/client";
-import { cookies } from "next/headers";
 import { env } from "@/lib/env";
 import {
   createAdminFromGoogle,
@@ -22,9 +21,9 @@ import {
   isPlaywrightHarnessAdminEmail,
 } from "@/lib/playwright-harness";
 import {
-  SIGNUP_INTENT_COOKIE,
   clearSignupIntentCookie,
   isValidSignupIntentToken,
+  readSignupIntentFromRequestHeaders,
 } from "@/lib/signup-intent";
 
 // Re-check role + isTestAccount from DB at most once per this interval per active session.
@@ -45,7 +44,12 @@ const googleProviders =
             // Strictly openid + email + profile — NOT gmail.send.
             // The existing Gmail-send OAuth is a separate custom flow
             // (OAuthEmailConnection) and is unrelated to this provider.
-            params: { scope: "openid email profile" },
+            params: {
+              scope: "openid email profile",
+              // Without this, Google skips the account list when the browser
+              // already has a session and returns that account immediately.
+              prompt: "select_account",
+            },
           },
         }),
       ]
@@ -121,40 +125,46 @@ export const authOptions: NextAuthOptions = {
       // Google sign-in: existing DB rows may log in from /login or /signup.
       // Unknown emails auto-provision ONLY with a valid /signup intent cookie.
       if (account?.provider === "google") {
-        if (!user.email) return false;
-        const email = normalizeEmail(user.email);
-        let admin = await getAdminByEmail(email);
-        if (!admin) {
-          const presence = await findEmailRealmPresence(email);
-          if (isEmailTakenInOtherRealm(presence, "admin")) {
-            return "/login?error=not_authorized";
+        try {
+          if (!user.email) return false;
+          const email = normalizeEmail(user.email);
+          let admin = await getAdminByEmail(email);
+          if (!admin) {
+            const presence = await findEmailRealmPresence(email);
+            if (isEmailTakenInOtherRealm(presence, "admin")) {
+              return "/login?error=not_authorized";
+            }
+
+            const intentValue = await readSignupIntentFromRequestHeaders();
+            const hasSignupIntent = await isValidSignupIntentToken(
+              intentValue,
+              env.NEXTAUTH_SECRET
+            );
+            if (!hasSignupIntent) return "/login?error=not_authorized";
+
+            admin = await createAdminFromGoogle(email, user.name ?? null);
+            const { logProductEvent } = await import("@/lib/observability/product-events");
+            await logProductEvent({
+              kind: "TUTOR_SIGNUP",
+              adminUserId: admin.id,
+              metadata: { method: "google" },
+            });
+            await notifyOperatorsOfNewSignup({
+              email: admin.email,
+              displayName: admin.displayName,
+              method: "google",
+            });
+            await clearSignupIntentCookie();
           }
-
-          const cookieStore = await cookies();
-          const intentValue = cookieStore.get(SIGNUP_INTENT_COOKIE)?.value;
-          const hasSignupIntent = await isValidSignupIntentToken(
-            intentValue,
-            env.NEXTAUTH_SECRET
+          // Test accounts cannot authenticate via Google OAuth.
+          if (admin.isTestAccount) return "/login?error=not_authorized";
+          return true;
+        } catch (e) {
+          console.log(
+            `[auth] google_signin_failed message=${e instanceof Error ? e.message : String(e)}`
           );
-          if (!hasSignupIntent) return "/login?error=not_authorized";
-
-          admin = await createAdminFromGoogle(email, user.name ?? null);
-          const { logProductEvent } = await import("@/lib/observability/product-events");
-          await logProductEvent({
-            kind: "TUTOR_SIGNUP",
-            adminUserId: admin.id,
-            metadata: { method: "google" },
-          });
-          await notifyOperatorsOfNewSignup({
-            email: admin.email,
-            displayName: admin.displayName,
-            method: "google",
-          });
-          await clearSignupIntentCookie();
+          return "/login?error=server_error";
         }
-        // Test accounts cannot authenticate via Google OAuth.
-        if (admin.isTestAccount) return "/login?error=not_authorized";
-        return true;
       }
       // CredentialsProvider: handled in authorize() above.
       return true;

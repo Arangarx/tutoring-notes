@@ -112,6 +112,16 @@ describe("NextAuth Google provider scopes", () => {
     expect(scope).toBe("openid email profile");
     expect(scope.toLowerCase()).not.toContain("calendar");
   });
+
+  it("asks Google to show the account chooser (prompt=select_account)", async () => {
+    const { authOptions } = await import("@/auth-options");
+    const googleProvider = authOptions.providers?.find(
+      (p) => (p as { id?: string }).id === "google"
+    ) as { options?: { authorization?: { params?: { prompt?: string } } } } | undefined;
+    // Google skips the account list when the browser already has a session
+    // unless the authorize URL includes prompt=select_account.
+    expect(googleProvider?.options?.authorization?.params?.prompt).toBe("select_account");
+  });
 });
 
 describe("GET /api/auth/calendar/connect", () => {
