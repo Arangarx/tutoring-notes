@@ -12,7 +12,7 @@
  *   - Admin reset: ADMIN-only — reset own or another admin's 2FA
  */
 
-import { useState, useTransition, useCallback, useEffect } from "react";
+import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,6 +114,27 @@ export function TwoFactorManageView({
   >(null);
   const [stepUpOtpMsg, setStepUpOtpMsg] = useState<string | null>(null);
   const [stepUpOtpPending, setStepUpOtpPending] = useState(false);
+  const stepUpEmailIssued = useRef(false);
+
+  useEffect(() => {
+    if (view !== "step-up" || !isEmailOtp) {
+      if (view !== "step-up") stepUpEmailIssued.current = false;
+      return;
+    }
+    if (stepUpEmailIssued.current) return;
+    stepUpEmailIssued.current = true;
+    setStepUpOtpPending(true);
+    startTransition(async () => {
+      const result = await sendLoginEmailOtp();
+      setStepUpOtpPending(false);
+      if (result.ok) {
+        setStepUpOtpMsg(`Code sent to ${result.maskedEmail}.`);
+      } else {
+        stepUpEmailIssued.current = false;
+        setStepUpOtpMsg(result.error ?? "Could not send code.");
+      }
+    });
+  }, [view, isEmailOtp]);
 
   // Regen state
   const [regenCodes, setRegenCodes] = useState<string[]>([]);
@@ -579,7 +600,11 @@ export function TwoFactorManageView({
       <div className="space-y-4">
         <div className="rounded-md border border-border p-4">
           <h2 className="text-base font-semibold mb-1">Confirm your identity</h2>
-          {isOtpMethod ? (
+          {isEmailOtp ? (
+            <p className="text-sm text-muted-foreground mb-3">
+              We emailed a verification code. Enter it below to {label}.
+            </p>
+          ) : isSmsOtp ? (
             <p className="text-sm text-muted-foreground mb-3">
               Request a verification code, then enter it below to {label}.
             </p>
@@ -602,7 +627,7 @@ export function TwoFactorManageView({
                 disabled={stepUpOtpPending || isPending}
                 onClick={handleSendStepUpOtp}
               >
-                {stepUpOtpPending ? "Sending…" : "Send verification code"}
+                {stepUpOtpPending ? "Sending…" : isEmailOtp ? "Resend code" : "Send verification code"}
               </Button>
             </div>
           )}

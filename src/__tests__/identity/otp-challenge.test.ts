@@ -289,4 +289,26 @@ describe("otp-challenge DB behaviour", () => {
       expect(wrongChannel.error).toMatch(/Invalid or expired code/i);
     }
   });
+
+  it("ensureLoginEmailCode sends when no unused login email code is waiting, and does not replace one", async () => {
+    const { ensureLoginEmailCode, createOtpChallenge } = await import("@/lib/otp-challenge");
+    const send = jest.fn(async () => ({ ok: true as const, maskedEmail: "a***@x.com" }));
+
+    const missing = await ensureLoginEmailCode({ adminUserId, send });
+    expect(missing.ready).toBe(true);
+    expect(missing.maskedEmail).toBe("a***@x.com");
+    expect(send).toHaveBeenCalledTimes(1);
+
+    await createOtpChallenge({
+      adminUserId,
+      twoFaId,
+      purpose: "LOGIN",
+      channel: "EMAIL",
+      plaintextCode: "121212",
+    });
+    send.mockClear();
+    const waiting = await ensureLoginEmailCode({ adminUserId, send });
+    expect(waiting.ready).toBe(true);
+    expect(send).not.toHaveBeenCalled();
+  });
 });

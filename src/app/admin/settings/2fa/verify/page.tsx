@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
+import { ensureLoginEmailCode } from "@/lib/otp-challenge";
+import { sendLoginEmailOtp } from "../actions";
 import { TwoFactorVerifyForm } from "./TwoFactorVerifyForm";
 import { ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
 import { maskE164 } from "@/lib/sms";
@@ -83,11 +85,34 @@ export default async function TwoFactorVerifyPage({ searchParams }: Props) {
     TOTP: "Enter the code from your authenticator app to continue.",
   };
 
+  // Email codes go out when this page is the email step. The button is a resend.
+  // An unused challenge (including a Playwright seed) is left in place.
+  let initialEmailCodeSent = false;
+  let initialMaskedEmail: string | undefined;
+  if (verifyMethod === "EMAIL_OTP" && session.user.id) {
+    const issued = await ensureLoginEmailCode({
+      adminUserId: session.user.id,
+      send: async () => {
+        const sent = await sendLoginEmailOtp();
+        if (!sent.ok) return { ok: false as const };
+        return { ok: true as const, maskedEmail: sent.maskedEmail };
+      },
+    });
+    initialEmailCodeSent = issued.ready;
+    initialMaskedEmail = issued.maskedEmail;
+  }
+
   return (
     <div className="card" style={{ maxWidth: 480 }}>
       <h1 style={{ marginTop: 0 }}>Two-Factor Verification</h1>
       <p className="muted" style={{ marginBottom: 20 }}>{copyByMethod[verifyMethod]}</p>
-      <TwoFactorVerifyForm callbackUrl={safe} method={verifyMethod} maskedPhone={maskedPhone} />
+      <TwoFactorVerifyForm
+        callbackUrl={safe}
+        method={verifyMethod}
+        maskedPhone={maskedPhone}
+        initialEmailCodeSent={initialEmailCodeSent}
+        initialMaskedEmail={initialMaskedEmail}
+      />
     </div>
   );
 }

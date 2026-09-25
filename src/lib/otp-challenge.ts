@@ -40,6 +40,49 @@ export function generateOtpCode(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
+/**
+ * When the identity harness sends mail, the plaintext is this value so a test
+ * can submit the code the send just stored. Production always uses generateOtpCode.
+ */
+export const PLAYWRIGHT_HARNESS_EMAIL_OTP = "847291";
+
+export async function hasUnusedOtpChallenge(params: {
+  adminUserId: string;
+  purpose: AdminUser2FAEmailChallengePurpose;
+  channel: OtpChannel;
+}): Promise<boolean> {
+  const row = await db.adminUser2FAEmailChallenge.findFirst({
+    where: {
+      adminUserId: params.adminUserId,
+      purpose: params.purpose,
+      channel: params.channel,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    select: { id: true },
+  });
+  return row != null;
+}
+
+/**
+ * Login email codes are sent when the verify step is reached.
+ * A still-valid unused code is not replaced (so a seeded harness code stays valid).
+ */
+export async function ensureLoginEmailCode(params: {
+  adminUserId: string;
+  send: () => Promise<{ ok: true; maskedEmail?: string } | { ok: false }>;
+}): Promise<{ ready: boolean; maskedEmail?: string }> {
+  const pending = await hasUnusedOtpChallenge({
+    adminUserId: params.adminUserId,
+    purpose: "LOGIN",
+    channel: "EMAIL",
+  });
+  if (pending) return { ready: true };
+  const sent = await params.send();
+  if (!sent.ok) return { ready: false };
+  return { ready: true, maskedEmail: sent.maskedEmail };
+}
+
 export function isValidOtpFormat(code: string): boolean {
   return /^\d{6}$/.test(code.replace(/\s/g, ""));
 }
@@ -161,7 +204,8 @@ export async function sendEmailOtpChallenge(params: {
     };
   }
 
-  const plaintext = generateOtpCode();
+  const plaintext =
+    process.env.PLAYWRIGHT_TEST === "1" ? PLAYWRIGHT_HARNESS_EMAIL_OTP : generateOtpCode();
   await invalidateUnusedOtpChallenges(params.adminUserId, params.purpose, "EMAIL");
   await createOtpChallenge({
     adminUserId: params.adminUserId,

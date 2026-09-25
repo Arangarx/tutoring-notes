@@ -22,11 +22,16 @@ export function TwoFactorVerifyForm({
   callbackUrl,
   method,
   maskedPhone,
+  initialEmailCodeSent = false,
+  initialMaskedEmail,
 }: {
   callbackUrl: string;
   method: "EMAIL_OTP" | "SMS_OTP" | "TOTP";
   /** Pre-masked phone (e.g. "+1•••••1234") when method is SMS_OTP. */
   maskedPhone?: string;
+  /** A login email code is already waiting (just sent, or still unused). */
+  initialEmailCodeSent?: boolean;
+  initialMaskedEmail?: string;
 }) {
   const primaryChannel: ActiveChannel =
     method === "TOTP" ? "TOTP" : method === "SMS_OTP" ? "SMS" : "EMAIL";
@@ -35,8 +40,8 @@ export function TwoFactorVerifyForm({
   const [rememberDevice, setRememberDevice] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
-  const [maskedEmail, setMaskedEmail] = useState("");
-  const [codeSent, setCodeSent] = useState(false);
+  const [maskedEmail, setMaskedEmail] = useState(initialMaskedEmail ?? "");
+  const [codeSent, setCodeSent] = useState(initialEmailCodeSent);
   const [activeChannel, setActiveChannel] = useState<ActiveChannel>(primaryChannel);
   const [isPending, startTransition] = useTransition();
 
@@ -93,9 +98,24 @@ export function TwoFactorVerifyForm({
   function switchChannel(next: ActiveChannel) {
     setActiveChannel(next);
     setCodeInput("");
-    setCodeSent(false);
     setError("");
     setInfo("");
+    if (next !== "EMAIL") {
+      setCodeSent(false);
+      return;
+    }
+    // Choosing email is the request. The control on that step is Resend.
+    setCodeSent(true);
+    startTransition(async () => {
+      const result = await sendLoginEmailOtp();
+      if (!result.ok) {
+        setCodeSent(false);
+        setError(result.error ?? "Could not send code.");
+        return;
+      }
+      setMaskedEmail(result.maskedEmail);
+      setInfo("We sent a verification code to your email.");
+    });
   }
 
   const normalized = codeInput.replace(/\s/g, "");
