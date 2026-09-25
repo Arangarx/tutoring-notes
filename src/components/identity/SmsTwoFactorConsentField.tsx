@@ -30,10 +30,10 @@ export function SmsTwoFactorConsentField({
       checked={checked}
       onCheckedChange={(value) => onCheckedChange(value === true)}
       disabled={disabled}
-      className="items-start"
-      labelClassName="!h-auto !items-start leading-snug"
+      className="flex w-full items-start"
+      labelClassName="block h-auto min-w-0 flex-1 whitespace-normal leading-snug font-normal"
       label={
-        <>
+        <span className="block whitespace-normal">
           I agree to receive one-time sign-in and setup codes from{" "}
           <strong>Mynk</strong> (Andrew Mortensen, operating as Mynk) at the mobile number I
           provide. Messages are sent only when I set up SMS two-factor authentication, sign in
@@ -47,7 +47,7 @@ export function SmsTwoFactorConsentField({
             Terms of Use
           </Link>
           .
-        </>
+        </span>
       }
     />
   );
