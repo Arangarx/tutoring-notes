@@ -25,6 +25,18 @@ test.describe("SMS A2P consent — setup phone collect @identity", () => {
     await page.waitForURL(/\/admin\/settings\/2fa\/setup/, { timeout: 30_000 });
     await page.getByTestId("tfa-choose-sms").getByRole("button", { name: /text message/i }).click();
 
+    const privacy = page.getByRole("link", { name: "Privacy Policy" });
+    const terms = page.getByRole("link", { name: "Terms of Use" });
+    const privacyBox = await privacy.boundingBox();
+    const termsBox = await terms.boundingBox();
+    // Each legal link is one line of the paragraph, not a narrow side column.
+    expect(privacyBox).toBeTruthy();
+    expect(termsBox).toBeTruthy();
+    expect(privacyBox!.height).toBeLessThan(28);
+    expect(privacyBox!.width).toBeGreaterThan(privacyBox!.height);
+    expect(termsBox!.height).toBeLessThan(28);
+    expect(termsBox!.width).toBeGreaterThan(termsBox!.height);
+
     const sendButton = page.getByRole("button", { name: "Send code" });
     await expect(sendButton).toBeDisabled();
     await expect(page.getByTestId("sms-a2p-consent")).not.toBeChecked();
