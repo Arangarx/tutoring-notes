@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +20,7 @@ type CalendarIntegrationsPanelProps = {
   icsFeedHttpsUrl?: string | null;
   icsFeedWebcalUrl?: string | null;
   regenerateCalendarFeedAction?: () => void;
-  /** When true, show compact summary suitable for schedule page sidebar. */
-  compact?: boolean;
-  showSettingsLink?: boolean;
-  /** Override Manage link target (e.g. include `?from=schedule` for back-nav). */
-  settingsHref?: string;
-  /** Post-OAuth landing path (schedule vs settings). */
+  /** Post-OAuth landing path. */
   connectReturnTo?: string;
 };
 
@@ -70,9 +64,6 @@ export function CalendarIntegrationsPanel({
   icsFeedHttpsUrl,
   icsFeedWebcalUrl,
   regenerateCalendarFeedAction,
-  compact = false,
-  showSettingsLink = true,
-  settingsHref = "/admin/settings/integrations",
   connectReturnTo = "/admin/settings/integrations",
 }: CalendarIntegrationsPanelProps) {
   const connectedCount = connections.filter((c) => c.connected).length;
@@ -80,22 +71,11 @@ export function CalendarIntegrationsPanel({
 
   return (
     <SectionCard realm="admin"
-      title={compact ? "Connected calendars" : "Calendar integrations"}
-      description={
-        compact
-          ? "Google Calendar sync and ICS subscription for Apple and other calendar apps."
-          : "Connect Google Calendar to sync scheduled sessions, or subscribe to the ICS feed for Apple Calendar and other apps."
-      }
-      actions={
-        showSettingsLink && compact ? (
-          <Button asChild variant="ghost" size="sm" className="min-h-9">
-            <Link href={settingsHref}>Manage</Link>
-          </Button>
-        ) : undefined
-      }
+      title="Calendar integrations"
+      description="Connect Google Calendar to sync scheduled sessions, or subscribe to the ICS feed for Apple Calendar and other apps."
     >
       <div className="space-y-4">
-        {!compact && googleConnected && googleReconnectRequired ? (
+        {googleConnected && googleReconnectRequired ? (
           <p
             className="rounded-[10px] border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
             role="alert"
@@ -105,7 +85,7 @@ export function CalendarIntegrationsPanel({
           </p>
         ) : null}
 
-        {!compact && googleConnected && !googleReconnectRequired ? (
+        {googleConnected && !googleReconnectRequired ? (
           <p className="rounded-[10px] border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" role="status">
             New and updated sessions sync to your Google Calendar. Disconnecting stops future sync only
             — events already in Google are not removed.
@@ -147,7 +127,7 @@ export function CalendarIntegrationsPanel({
                         ? "Reconnect needed"
                         : "Connected"}
                     </Badge>
-                    {!compact && connection.provider === "google" ? (
+                    {connection.provider === "google" ? (
                       <form action={disconnectGoogleCalendar}>
                         <Button type="submit" variant="ghost" size="sm" className="min-h-9">
                           Disconnect
@@ -162,12 +142,10 @@ export function CalendarIntegrationsPanel({
                 ) : connection.provider === "google" ? (
                   googleOAuthAvailable ? (
                     <div className="flex flex-col items-end gap-2">
-                      {!compact ? (
-                        <AuthMortensenNotice
+                      <AuthMortensenNotice
                           variant="connect"
                           className="max-w-xs text-xs text-muted-foreground leading-relaxed"
                         />
-                      ) : null}
                       <Button variant="default" size="sm" className="min-h-9" asChild>
                         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
                         <a href={calendarConnectHref(connectReturnTo)}>
@@ -191,7 +169,7 @@ export function CalendarIntegrationsPanel({
           ))}
         </ul>
 
-        {!compact && icsFeedHttpsUrl && icsFeedWebcalUrl ? (
+        {icsFeedHttpsUrl && icsFeedWebcalUrl ? (
           <div className="space-y-3 rounded-[10px] border border-border bg-muted/30 px-3 py-3" data-testid="calendar-ics-feed-section">
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">ICS subscription feed</p>
@@ -221,8 +199,7 @@ export function CalendarIntegrationsPanel({
           </div>
         ) : null}
 
-        {!compact ? (
-          <div className="space-y-2">
+        <div className="space-y-2">
             <p className="text-xs text-muted-foreground">
               {connectedCount === 0
                 ? "No Google connection yet — scheduling in Mynk works without an external calendar."
@@ -259,7 +236,6 @@ export function CalendarIntegrationsPanel({
               </p>
             ) : null}
           </div>
-        ) : null}
       </div>
     </SectionCard>
   );

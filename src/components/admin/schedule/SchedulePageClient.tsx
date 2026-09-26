@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionCard } from "@/components/SectionCard";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
-import { CalendarIntegrationsPanel } from "@/components/admin/schedule/CalendarIntegrationsPanel";
 import { CreateSessionDialog } from "@/components/admin/schedule/CreateSessionDialog";
 import { SessionSyncBadge } from "@/components/admin/schedule/SessionSyncBadge";
 import {
@@ -17,7 +16,6 @@ import {
   parseSessionDate,
   sessionsOnDate,
   todayLocalDate,
-  type CalendarConnectionView,
   type ScheduledSessionView,
   type ScheduleStudentOption,
 } from "@/lib/schedule/mock-data";
@@ -241,17 +239,11 @@ function DaySessionsPanel({
 export function SchedulePageClient({
   sessions,
   studentOptions,
-  calendarConnections,
-  googleOAuthAvailable,
   googleConnected,
-  googleReconnectRequired = false,
 }: {
   sessions: ScheduledSessionView[];
   studentOptions: ScheduleStudentOption[];
-  calendarConnections: CalendarConnectionView[];
-  googleOAuthAvailable: boolean;
   googleConnected: boolean;
-  googleReconnectRequired?: boolean;
 }) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(todayLocalDate());
@@ -383,16 +375,6 @@ export function SchedulePageClient({
           </SectionCard>
         </TabsContent>
       </Tabs>
-
-      <CalendarIntegrationsPanel
-        connections={calendarConnections}
-        googleOAuthAvailable={googleOAuthAvailable}
-        googleReconnectRequired={googleReconnectRequired}
-        compact
-        showSettingsLink
-        settingsHref={SCHEDULE_INTEGRATIONS_SETTINGS_HREF}
-        connectReturnTo="/admin/schedule"
-      />
     </div>
   );
 }

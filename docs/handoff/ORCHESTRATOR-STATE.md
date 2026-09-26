@@ -12,15 +12,15 @@
 
 **⛔ NON-NEGOTIABLE STANDARDS (2026-07-10)** — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize: (1) zero unjustified duplication ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)).
 
-**Tip:** `master` @ [`c0413752`](https://github.com/Arangarx/tutoring-notes/commit/c0413752) (docs); code tip auth merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) (`merge --no-ff feat/auth-ship-ready`, branch tip [`8bf44e16`](https://github.com/Arangarx/tutoring-notes/commit/8bf44e16)).
+**Tip:** `origin/master` @ [`e1cfc55a`](https://github.com/Arangarx/tutoring-notes/commit/e1cfc55a) (`merge: SMS consent sentence reads as one paragraph`). `feat/sms-a2p-consent` is already in that merge. `master` stays in `tutoring-notes-master-ops`. Main checkout is `feat/schedule-end-follows-length`, cut from `origin/master`.
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **2026-09-21:** Andrew chose **merge now** on Tyson’s scoped Android/Google pass (Discord: “with what i needed to test before, yeah”). `merge --no-ff feat/calendar-wave` into `master` — ICS feed + `calendar.events.owned` write. Apple ICS subscribe remains **follow-up** (`PLAYWRIGHT-GAP`, no device). Gates: `test:regression` 149/149; `npx next build` exit 0. **Do not touch production `NEXTAUTH_URL`.** |
-| **Next action(s)** | Cut `feat/sms-a2p-consent` and execute [`SMS-A2P-CONSENT-PLAN.md`](SMS-A2P-CONSENT-PLAN.md) (Andrew 2026-09-21 — do not defer). Calendar leftovers: Google **verification resubmit** (Andrew Console) + Apple ICS hardware when a device exists. |
-| **Open Andrew-confirms** | None blocking SMS-A2P. Human leftovers: [`ANDREW-FOLLOW-UPS.md`](ANDREW-FOLLOW-UPS.md) — production env (SMTP / Twilio / `TOTP_ENCRYPTION_KEY`); Google Calendar verification resubmit after prod write is crawlable; Sarah/Tyson allowlist. |
+| **Last action completed** | Andrew 2026-09-26 directed merge of `feat/schedule-end-follows-length`: schedule page no longer shows the ICS-feed line; end time follows planned length until edited directly. Playwright was red then green. Separate review PASS. Google verification resubmit is sent and not approved. Twilio campaign was at additional-review submit on 2026-09-25. |
+| **Next action(s)** | Later pass on end-time logic (BACKLOG: midnight wrap stays on the same date). Wait on Google’s verification email and Twilio approval. |
+| **Open Andrew-confirms** | Google verification result (email). Twilio campaign approval. |
 | **In-flight subagents** | None. |
-| **Uncommitted / unmerged** | Calendar wave is on `master` after this merge. `master` lives in **`tutoring-notes-master-ops`**. Main checkout may still be on `feat/calendar-wave` until switched. `node_modules` in main checkout is a junction to master-ops — use `npm exec -- jest`, not bare `npx jest`. |
+| **Uncommitted / unmerged** | None after this commit. `master` stays in `tutoring-notes-master-ops`. `node_modules` in the main checkout is a junction to master-ops — use `npm exec -- jest`, not bare `npx jest`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 

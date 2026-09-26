@@ -75,8 +75,6 @@ export default async function IntegrationsSettingsPage({
         icsFeedHttpsUrl={icsFeedHttpsUrl}
         icsFeedWebcalUrl={icsFeedWebcalUrl}
         regenerateCalendarFeedAction={regenerateCalendarFeedToken}
-        compact={false}
-        showSettingsLink={false}
       />
     </PageShell>
   );
