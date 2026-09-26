@@ -29,6 +29,10 @@ import {
   type ScheduledSessionInput,
 } from "@/app/admin/schedule/actions";
 import { localDateToInputValue } from "@/lib/schedule/mock-data";
+import {
+  endMatchesPlannedLength,
+  endTimeForPlannedLength,
+} from "@/lib/schedule/planned-end-time";
 import { readBrowserTimeZone } from "@/lib/time/system-timezone";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
 import { CalendarPlusIcon } from "lucide-react";
@@ -73,13 +77,29 @@ export function CreateSessionDialog({
 
   const [studentId, setStudentId] = useState(initialStudentId);
   const [plannedDurationMinutes, setPlannedDurationMinutes] = useState(initialDuration);
+  const [startTime, setStartTime] = useState(initialStart);
+  const [endTime, setEndTime] = useState(initialEnd);
+  const [endEditedDirectly, setEndEditedDirectly] = useState(() =>
+    !endMatchesPlannedLength(initialStart, initialEnd, Number(initialDuration))
+  );
 
   useEffect(() => {
     if (!open) return;
     setStudentId(initialStudentId);
     setPlannedDurationMinutes(initialDuration);
+    setStartTime(initialStart);
+    setEndTime(initialEnd);
+    setEndEditedDirectly(
+      !endMatchesPlannedLength(initialStart, initialEnd, Number(initialDuration))
+    );
     setError(null);
-  }, [open, initialStudentId, initialDuration]);
+  }, [open, initialStudentId, initialDuration, initialStart, initialEnd]);
+
+  function syncEndToPlannedLength(nextStart: string, nextMinutes: string, edited: boolean) {
+    if (edited) return;
+    const nextEnd = endTimeForPlannedLength(nextStart, Number(nextMinutes));
+    if (nextEnd) setEndTime(nextEnd);
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,8 +111,8 @@ export function CreateSessionDialog({
       subject: String(formData.get("subject") ?? ""),
       date: String(formData.get("date") ?? ""),
       plannedDurationMinutes: Number(plannedDurationMinutes),
-      startTime: String(formData.get("startTime") ?? ""),
-      endTime: String(formData.get("endTime") ?? ""),
+      startTime,
+      endTime,
       notes: String(formData.get("notes") ?? ""),
       clientTimeZone: readBrowserTimeZone(),
     };
@@ -211,7 +231,10 @@ export function CreateSessionDialog({
               <Label htmlFor="schedule-duration">Planned length</Label>
               <Select
                 value={plannedDurationMinutes}
-                onValueChange={setPlannedDurationMinutes}
+                onValueChange={(value) => {
+                  setPlannedDurationMinutes(value);
+                  syncEndToPlannedLength(startTime, value, endEditedDirectly);
+                }}
               >
                 <SelectTrigger id="schedule-duration" className="min-h-11 w-full">
                   <SelectValue />
@@ -232,7 +255,12 @@ export function CreateSessionDialog({
                 id="schedule-start"
                 name="startTime"
                 type="time"
-                defaultValue={initialStart}
+                value={startTime}
+                onChange={(event) => {
+                  const nextStart = event.target.value;
+                  setStartTime(nextStart);
+                  syncEndToPlannedLength(nextStart, plannedDurationMinutes, endEditedDirectly);
+                }}
                 className="min-h-11"
                 required
               />
@@ -243,7 +271,11 @@ export function CreateSessionDialog({
                 id="schedule-end"
                 name="endTime"
                 type="time"
-                defaultValue={initialEnd}
+                value={endTime}
+                onChange={(event) => {
+                  setEndTime(event.target.value);
+                  setEndEditedDirectly(true);
+                }}
                 className="min-h-11"
                 required
               />

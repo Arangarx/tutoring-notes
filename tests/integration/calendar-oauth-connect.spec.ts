@@ -47,14 +47,21 @@ test.describe("Calendar OAuth connect stub @wb-chrome", () => {
     );
   });
 
-  test(`${TAG.WB_CHROME} schedule Connect href returns to /admin/schedule`, async ({ page }) => {
+  test(`${TAG.WB_CHROME} schedule page sends calendar setup to settings, where the ICS feed is`, async ({
+    page,
+  }) => {
     await page.goto("/admin/schedule");
     await page.waitForLoadState("networkidle");
-    const connectLink = page.locator('a[href*="/api/auth/calendar/connect"]');
-    await expect(connectLink).toBeVisible();
-    const href = await connectLink.getAttribute("href");
-    expect(href).toContain(encodeURIComponent("/admin/schedule"));
-    expect(href).not.toContain(encodeURIComponent("/admin/settings/integrations"));
+    await expect(page.getByText("Use ICS feed below")).toHaveCount(0);
+    await expect(page.locator('a[href*="/api/auth/calendar/connect"]')).toHaveCount(0);
+    const settingsLink = page.getByRole("link", { name: "Calendar settings" });
+    await expect(settingsLink).toHaveAttribute(
+      "href",
+      "/admin/settings/integrations?from=schedule"
+    );
+    await settingsLink.click();
+    await expect(page.getByTestId("calendar-ics-feed-section")).toBeVisible();
+    await expect(page.getByText("Use ICS feed below")).toBeVisible();
   });
 
   test(`${TAG.WB_CHROME} connected state shows live sync copy when connection is seeded`, async ({

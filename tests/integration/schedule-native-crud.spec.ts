@@ -85,6 +85,60 @@ test.describe("Native schedule CRUD", () => {
     await expect(page.getByTestId("schedule-agenda-row")).toHaveCount(0);
   });
 
+  test("changing start keeps end at the planned length until end is edited", async ({
+    page,
+  }) => {
+    const adminUserId = await seedTestAdmin();
+    await seedTestStudent(adminUserId);
+
+    await page.goto("/admin/schedule");
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("schedule-new-session").first().click();
+    await expect(page.getByTestId("schedule-create-form")).toBeVisible();
+
+    const start = page.locator("#schedule-start");
+    const end = page.locator("#schedule-end");
+    await expect(start).toHaveValue("16:00");
+    await expect(end).toHaveValue("17:00");
+
+    await start.fill("15:00");
+    await expect(end).toHaveValue("16:00");
+
+    await page.locator("#schedule-duration").click();
+    await page.getByRole("option", { name: "~90 min (soft)" }).click();
+    await expect(end).toHaveValue("16:30");
+
+    await end.fill("17:00");
+    await start.fill("14:00");
+    await expect(end).toHaveValue("17:00");
+  });
+
+  test("a saved custom end stays put when start changes on edit", async ({ page }) => {
+    const adminUserId = await seedTestAdmin();
+    await seedTestStudent(adminUserId);
+    const subject = `PW Custom End ${Date.now()}`;
+
+    await page.goto("/admin/schedule");
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("schedule-new-session").first().click();
+    await page.locator("#schedule-student").click();
+    await page.getByRole("option", { name: "Playwright Student" }).click();
+    await page.locator("#schedule-subject").fill(subject);
+    await page.locator("#schedule-start").fill("15:00");
+    await page.locator("#schedule-end").fill("17:00");
+    await page.getByTestId("schedule-save-session").click();
+    await expect(page.getByTestId("schedule-create-form")).toHaveCount(0);
+
+    await page.getByTestId("schedule-agenda-tab").click();
+    const row = page.getByTestId("schedule-agenda-row").filter({ hasText: subject });
+    await row.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByTestId("schedule-edit-form")).toBeVisible();
+    await expect(page.locator("#schedule-start")).toHaveValue("15:00");
+    await expect(page.locator("#schedule-end")).toHaveValue("17:00");
+    await page.locator("#schedule-start").fill("14:00");
+    await expect(page.locator("#schedule-end")).toHaveValue("17:00");
+  });
+
   test("works with no Google calendar connected", async ({ page }) => {
     const prisma = new PrismaClient();
     try {

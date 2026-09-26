@@ -40,7 +40,7 @@ Each specimen: light/dark, canonical path, confidence badge (`isolated` | `compo
 
 Sign-In UI + self-serve auth slices **shipped on `master`**. **Remaining #1 work = Calendar:** real write + verification resubmit + ICS feed — canonical plan [`docs/handoff/CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md).
 
-**Supersedes 2026-08-14 bundled-stub strategy:** Google rejected prior submission 2026-09-11 (`calendar.readonly` / `calendar.events` — demo did not justify scopes). **Ship real `calendar.events.owned` write + ICS subscription feed before resubmit.** Drop stub `calendarList.list` / old scopes in the implementation wave. Apple-primary tutors: **ICS feed** (in wave); CalDAV two-way stays deferred.
+**Supersedes 2026-08-14 bundled-stub strategy:** Google rejected prior submission 2026-09-11 (`calendar.readonly` / `calendar.events` — demo did not justify scopes). Real `calendar.events.owned` write + ICS feed shipped. **Resubmit sent 2026-09-26 (Andrew):** consent-screen scopes are `gmail.send`, `userinfo.email`, and `calendar.events.owned`; demo video updated on the console; reply sent on the existing rejection thread. **Waiting on Google. Not approved.** Apple-primary tutors: **ICS feed**; CalDAV two-way stays deferred.
 
 **Andrew (Google Cloud Console — no code):** [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md) — check **OAuth Clients first** (Sign-In vs Gmail vs Calendar blast radius; `gmail.send` verified 2026-05-30), then Verification Center, Audience, Branding. Calendar API **enabled** (confirmed 2026-09-11). `calendar.events.owned` available in scope picker.
 
@@ -1974,6 +1974,12 @@ Google watch / Apple CalDAV + conflict policy — unresolved.
 
 **PLAYWRIGHT-GAP — live ICS subscribe (calendar wave WS1 surrogate)**  
 Hermetic stand-in: jest `src/__tests__/calendar/ics-feed-stability.test.ts`, `ics-summary-privacy.test.ts`, `ics-google-timezone.test.ts` (third-party `node-ical` parser oracle). **Still owed:** subscribe feed URL in **Apple Calendar** (Sarah-primary; no device on 2026-09-21 merge) + Google Calendar “From URL” poll lag. Not a merge blocker.
+
+**[P2][UX] Schedule page calendar block points at an ICS feed that is not on that page (Andrew 2026-09-26)**  
+Removed the compact calendar block from the schedule page. That page already links to Settings → Calendar integrations, which is where the ICS feed is. Planned length now moves the end time when start (or the length) changes, until the end time is edited directly.
+
+**[P3][UX] Double-check schedule end-time logic (Andrew 2026-09-26)**  
+Andrew asked for a later pass after the planned-length behavior landed. Playwright covers a new session (start and length move the end until the end is edited) and one saved session whose end is not start + length. Still open: a start near midnight wraps the clock (23:30 + 90 min shows 01:00) but the session date does not move to the next day, so the stored end can fall earlier on the same date. Confirm that on a real form before relying on late-night sessions.
 
 **Calendar wave follow-up nits (non-blocking):** Outlook/desktop clients may need explicit `VTIMEZONE` blocks for some recurring-edge cases (jest oracle covers primary paths; hardware spot-check). Google Calendar URL-subscribe can lag on **event list identity** (`UID`/`iCalUID` stability) even when individual `VEVENT` bytes are correct — track if tutors report duplicate or stale rows after reschedule. Playwright: calendar specs live on `wb-regression` (`workers: 1`); `schedule-native-crud.spec.ts` still mutates the same `TEST_ADMIN` Google row on the parallel `integration` project — a concurrent full multi-project `playwright test` could race (normal `test:integration` vs `test:wb-playwright` split does not).
 

@@ -6,11 +6,7 @@ import {
   listScheduleStudentOptions,
   listScheduledSessionsForTutor,
 } from "@/app/admin/schedule/actions";
-import {
-  buildCalendarPanelConnections,
-  getGoogleCalendarConnectionForTutor,
-} from "@/lib/calendar-oauth";
-import { env } from "@/lib/env";
+import { getGoogleCalendarConnectionForTutor } from "@/lib/calendar-oauth";
 import { getStudentScope } from "@/lib/student-scope";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +17,6 @@ export default async function SchedulePage() {
 
   const adminUserId = scope.kind === "admin" ? scope.adminId : null;
   const googleConnection = await getGoogleCalendarConnectionForTutor(adminUserId);
-  const calendarConnections = buildCalendarPanelConnections(
-    googleConnection ? { email: googleConnection.email } : null
-  );
-  const googleOAuthAvailable = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
   const googleConnected = !!googleConnection;
   const googleCalendarState = {
     connected: googleConnected,
@@ -50,10 +42,7 @@ export default async function SchedulePage() {
       <SchedulePageClient
         sessions={sessions}
         studentOptions={studentOptions}
-        calendarConnections={calendarConnections}
-        googleOAuthAvailable={googleOAuthAvailable}
         googleConnected={googleConnected}
-        googleReconnectRequired={googleCalendarState.reconnectRequired}
       />
     </PageShell>
   );
