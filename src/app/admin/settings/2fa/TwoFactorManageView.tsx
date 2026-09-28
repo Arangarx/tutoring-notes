@@ -12,11 +12,12 @@
  *   - Admin reset: ADMIN-only — reset own or another admin's 2FA
  */
 
-import { useState, useTransition, useCallback, useEffect, useRef } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BackupCodesPanel } from "@/components/identity/BackupCodesPanel";
 import { SmsTwoFactorConsentField } from "@/components/identity/SmsTwoFactorConsentField";
 import { TwoFactorMethodChooserCards } from "./TwoFactorMethodChooserCards";
 import {
@@ -105,7 +106,6 @@ export function TwoFactorManageView({
   const [rotateSecret, setRotateSecret] = useState("");
   const [rotateToken, setRotateToken] = useState("");
   const [newBackupCodes, setNewBackupCodes] = useState<string[]>([]);
-  const [codeCopied, setCodeCopied] = useState(false);
 
   // Step-up state (shared across rotate/regen/reset/change-method actions)
   const [stepUpCode, setStepUpCode] = useState("");
@@ -138,7 +138,6 @@ export function TwoFactorManageView({
 
   // Regen state
   const [regenCodes, setRegenCodes] = useState<string[]>([]);
-  const [regenCopied, setRegenCopied] = useState(false);
 
   // Admin reset state
   const [resetTargetId, setResetTargetId] = useState("");
@@ -154,7 +153,6 @@ export function TwoFactorManageView({
   const [changeQr, setChangeQr] = useState("");
   const [changeSecret, setChangeSecret] = useState("");
   const [changeBackupCodes, setChangeBackupCodes] = useState<string[]>([]);
-  const [changeCodeCopied, setChangeCodeCopied] = useState(false);
 
   // Trusted devices state
   const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[]>([]);
@@ -265,23 +263,6 @@ export function TwoFactorManageView({
     setView("idle");
   }
 
-  const handleCopyNewCodes = useCallback(async () => {
-    await navigator.clipboard.writeText(newBackupCodes.join("\n"));
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2000);
-  }, [newBackupCodes]);
-
-  const handleDownloadNewCodes = useCallback(() => {
-    const header = "Mynk 2FA Backup Codes (post-rotation) — store these in a safe place.\n\n";
-    const blob = new Blob([header + newBackupCodes.join("\n") + "\n"], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "mynk-2fa-backup-codes.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [newBackupCodes]);
-
   // ---------------------------------------------------------------------------
   // Regenerate backup codes
   // ---------------------------------------------------------------------------
@@ -307,23 +288,6 @@ export function TwoFactorManageView({
       setView("regen-done");
     });
   }
-
-  const handleCopyRegenCodes = useCallback(async () => {
-    await navigator.clipboard.writeText(regenCodes.join("\n"));
-    setRegenCopied(true);
-    setTimeout(() => setRegenCopied(false), 2000);
-  }, [regenCodes]);
-
-  const handleDownloadRegenCodes = useCallback(() => {
-    const header = "Mynk 2FA Backup Codes — store these in a safe place.\n\n";
-    const blob = new Blob([header + regenCodes.join("\n") + "\n"], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "mynk-2fa-backup-codes.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [regenCodes]);
 
   // ---------------------------------------------------------------------------
   // Admin reset
@@ -528,30 +492,6 @@ export function TwoFactorManageView({
     setView("idle");
   }
 
-  const handleCopyChangeBackupCodes = useCallback(async () => {
-    await navigator.clipboard.writeText(changeBackupCodes.join("\n"));
-    setChangeCodeCopied(true);
-    setTimeout(() => setChangeCodeCopied(false), 2000);
-  }, [changeBackupCodes]);
-
-  // ---------------------------------------------------------------------------
-  // Render helpers
-  // ---------------------------------------------------------------------------
-  function BackupCodeGrid({ codes }: { codes: string[] }) {
-    return (
-      <div className="grid grid-cols-2 gap-1">
-        {codes.map((c) => (
-          <code
-            key={c}
-            className="text-xs bg-white dark:bg-black/30 border rounded px-2 py-1 font-mono select-all"
-          >
-            {c}
-          </code>
-        ))}
-      </div>
-    );
-  }
-
   // ---------------------------------------------------------------------------
   // Step-up TOTP prompt (shared for rotate/regen/reset-self/reset-other)
   // ---------------------------------------------------------------------------
@@ -606,7 +546,11 @@ export function TwoFactorManageView({
             </p>
           ) : isSmsOtp ? (
             <p className="text-sm text-muted-foreground mb-3">
-              Request a verification code, then enter it below to {label}.
+              We&apos;ll text a verification code to{" "}
+              <strong className="font-medium text-foreground">
+                {initialMaskedPhone || "your phone"}
+              </strong>
+              . Enter it below to {label}.
             </p>
           ) : (
             <p className="text-sm text-muted-foreground mb-3">
@@ -750,31 +694,12 @@ export function TwoFactorManageView({
         <p className="text-sm font-medium text-green-700 dark:text-green-400">
           Authenticator rotated successfully.
         </p>
-        <div className="rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 p-4">
-          <h2 className="text-base font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
-            New backup codes — shown once only
-          </h2>
-          <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-            Your previous backup codes are no longer valid. Save these new ones in a safe place.
-          </p>
-          <BackupCodeGrid codes={newBackupCodes} />
-          <div className="flex gap-2 mt-3">
-            <button
-              type="button"
-              onClick={handleCopyNewCodes}
-              className="text-xs border rounded-md px-3 py-1.5 hover:bg-muted transition-colors"
-            >
-              {codeCopied ? "Copied!" : "Copy codes"}
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadNewCodes}
-              className="text-xs border rounded-md px-3 py-1.5 hover:bg-muted transition-colors"
-            >
-              Download .txt
-            </button>
-          </div>
-        </div>
+        <BackupCodesPanel
+          codes={newBackupCodes}
+          title="New backup codes — shown once only"
+          description="Your previous backup codes are no longer valid. Save these new ones in a safe place."
+          fileHeader={"Mynk 2FA Backup Codes (post-rotation) — store these in a safe place.\n\n"}
+        />
         <button
           type="button"
           onClick={() => { router.refresh(); setView("idle"); }}
@@ -799,31 +724,11 @@ export function TwoFactorManageView({
         <p className="text-sm font-medium text-green-700 dark:text-green-400">
           Backup codes regenerated successfully.
         </p>
-        <div className="rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 p-4">
-          <h2 className="text-base font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
-            New backup codes — shown once only
-          </h2>
-          <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-            Your previous backup codes are no longer valid. Store these in a safe place.
-          </p>
-          <BackupCodeGrid codes={regenCodes} />
-          <div className="flex gap-2 mt-3">
-            <button
-              type="button"
-              onClick={handleCopyRegenCodes}
-              className="text-xs border rounded-md px-3 py-1.5 hover:bg-muted transition-colors"
-            >
-              {regenCopied ? "Copied!" : "Copy codes"}
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadRegenCodes}
-              className="text-xs border rounded-md px-3 py-1.5 hover:bg-muted transition-colors"
-            >
-              Download .txt
-            </button>
-          </div>
-        </div>
+        <BackupCodesPanel
+          codes={regenCodes}
+          title="New backup codes — shown once only"
+          description="Your previous backup codes are no longer valid. Store these in a safe place."
+        />
         <button
           type="button"
           onClick={() => { router.refresh(); setView("idle"); }}
@@ -1158,22 +1063,11 @@ export function TwoFactorManageView({
           2FA method changed successfully.
         </p>
         {changeBackupCodes.length > 0 && (
-          <div className="rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 p-4">
-            <h2 className="text-base font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
-              Backup codes — shown once only
-            </h2>
-            <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-              Save these in a safe place.
-            </p>
-            <BackupCodeGrid codes={changeBackupCodes} />
-            <button
-              type="button"
-              onClick={handleCopyChangeBackupCodes}
-              className="text-xs border rounded-md px-3 py-1.5 mt-3 hover:bg-muted transition-colors"
-            >
-              {changeCodeCopied ? "Copied!" : "Copy codes"}
-            </button>
-          </div>
+          <BackupCodesPanel
+            codes={changeBackupCodes}
+            title="Backup codes — shown once only"
+            description="Save these in a safe place."
+          />
         )}
         <button
           type="button"
