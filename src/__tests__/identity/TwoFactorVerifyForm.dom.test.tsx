@@ -9,7 +9,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TwoFactorVerifyForm } from "@/app/admin/settings/2fa/verify/TwoFactorVerifyForm";
-import { sendLoginEmailOtp } from "@/app/admin/settings/2fa/actions";
+import { sendLoginEmailOtp, sendLoginSmsOtp } from "@/app/admin/settings/2fa/actions";
 
 jest.mock("@/app/admin/settings/2fa/actions", () => ({
   sendLoginEmailOtp: jest.fn(),
@@ -51,5 +51,22 @@ describe("TwoFactorVerifyForm email code", () => {
 
     expect(sendLoginEmailOtp).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole("button", { name: "Resend code" })).toBeTruthy();
+  });
+
+  it("shows Resend when a login text is already waiting, without sending another", () => {
+    render(
+      <TwoFactorVerifyForm
+        callbackUrl="/admin"
+        method="SMS_OTP"
+        maskedPhone="+1•••••1728"
+        initialSmsCodeSent
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Resend code" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send verification code" })).toBeNull();
+    expect(screen.getByText(/texted to/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Email me a code instead" })).toBeTruthy();
+    expect(sendLoginSmsOtp).not.toHaveBeenCalled();
   });
 });

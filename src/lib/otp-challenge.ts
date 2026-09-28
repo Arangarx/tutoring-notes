@@ -65,22 +65,53 @@ export async function hasUnusedOtpChallenge(params: {
 }
 
 /**
- * Login email codes are sent when the verify step is reached.
- * A still-valid unused code is not replaced (so a seeded harness code stays valid).
+ * A login code goes out when the verify step is reached.
+ * A still-valid unused code for that same channel is not replaced, so a
+ * refresh does not send another text or email and a seeded harness code stays valid.
+ * An unused code on the other channel does not count.
  */
-export async function ensureLoginEmailCode(params: {
+async function ensureLoginChannelCode(params: {
   adminUserId: string;
-  send: () => Promise<{ ok: true; maskedEmail?: string } | { ok: false }>;
-}): Promise<{ ready: boolean; maskedEmail?: string }> {
+  channel: OtpChannel;
+  send: () => Promise<{ ok: true; masked?: string } | { ok: false }>;
+}): Promise<{ ready: boolean; masked?: string }> {
   const pending = await hasUnusedOtpChallenge({
     adminUserId: params.adminUserId,
     purpose: "LOGIN",
-    channel: "EMAIL",
+    channel: params.channel,
   });
   if (pending) return { ready: true };
   const sent = await params.send();
   if (!sent.ok) return { ready: false };
-  return { ready: true, maskedEmail: sent.maskedEmail };
+  return { ready: true, masked: sent.masked };
+}
+
+export async function ensureLoginEmailCode(params: {
+  adminUserId: string;
+  send: () => Promise<{ ok: true; maskedEmail?: string } | { ok: false }>;
+}): Promise<{ ready: boolean; maskedEmail?: string }> {
+  const issued = await ensureLoginChannelCode({
+    adminUserId: params.adminUserId,
+    channel: "EMAIL",
+    send: async () => {
+      const sent = await params.send();
+      if (!sent.ok) return { ok: false as const };
+      return { ok: true as const, masked: sent.maskedEmail };
+    },
+  });
+  return { ready: issued.ready, maskedEmail: issued.masked };
+}
+
+export async function ensureLoginSmsCode(params: {
+  adminUserId: string;
+  send: () => Promise<{ ok: true } | { ok: false }>;
+}): Promise<{ ready: boolean }> {
+  const issued = await ensureLoginChannelCode({
+    adminUserId: params.adminUserId,
+    channel: "SMS",
+    send: params.send,
+  });
+  return { ready: issued.ready };
 }
 
 export function isValidOtpFormat(code: string): boolean {

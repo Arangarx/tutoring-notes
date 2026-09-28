@@ -24,6 +24,7 @@ export function TwoFactorVerifyForm({
   maskedPhone,
   initialEmailCodeSent = false,
   initialMaskedEmail,
+  initialSmsCodeSent = false,
 }: {
   callbackUrl: string;
   method: "EMAIL_OTP" | "SMS_OTP" | "TOTP";
@@ -32,6 +33,8 @@ export function TwoFactorVerifyForm({
   /** A login email code is already waiting (just sent, or still unused). */
   initialEmailCodeSent?: boolean;
   initialMaskedEmail?: string;
+  /** A login text is already waiting (just sent, or still unused). */
+  initialSmsCodeSent?: boolean;
 }) {
   const primaryChannel: ActiveChannel =
     method === "TOTP" ? "TOTP" : method === "SMS_OTP" ? "SMS" : "EMAIL";
@@ -41,7 +44,10 @@ export function TwoFactorVerifyForm({
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [maskedEmail, setMaskedEmail] = useState(initialMaskedEmail ?? "");
-  const [codeSent, setCodeSent] = useState(initialEmailCodeSent);
+  const [smsCodeReady, setSmsCodeReady] = useState(initialSmsCodeSent);
+  const [codeSent, setCodeSent] = useState(
+    primaryChannel === "SMS" ? initialSmsCodeSent : initialEmailCodeSent
+  );
   const [activeChannel, setActiveChannel] = useState<ActiveChannel>(primaryChannel);
   const [isPending, startTransition] = useTransition();
 
@@ -66,6 +72,7 @@ export function TwoFactorVerifyForm({
         }
         setMaskedEmail(result.maskedEmail);
       }
+      if (activeChannel === "SMS") setSmsCodeReady(true);
       setInfo(
         codeSent
           ? `We sent a new verification code to your ${channelNoun}.`
@@ -100,6 +107,10 @@ export function TwoFactorVerifyForm({
     setCodeInput("");
     setError("");
     setInfo("");
+    if (next === "SMS") {
+      setCodeSent(smsCodeReady);
+      return;
+    }
     if (next !== "EMAIL") {
       setCodeSent(false);
       return;
@@ -179,34 +190,36 @@ export function TwoFactorVerifyForm({
             {isPending ? "Verifying…" : "Verify"}
           </button>
         </div>
-        <button
-          type="button"
-          onClick={handleSendCode}
-          disabled={isPending}
-          className="text-sm underline"
-        >
-          {codeSent ? "Resend code" : "Send verification code"}
-        </button>
-        {activeChannel !== "EMAIL" && (
+        <div className="flex flex-col items-start gap-2">
           <button
             type="button"
-            onClick={() => switchChannel("EMAIL")}
+            onClick={handleSendCode}
             disabled={isPending}
-            className="text-sm underline text-muted-foreground"
+            className="text-sm underline"
           >
-            Email me a code instead
+            {codeSent ? "Resend code" : "Send verification code"}
           </button>
-        )}
-        {activeChannel === "EMAIL" && primaryChannel !== "EMAIL" && (
-          <button
-            type="button"
-            onClick={() => switchChannel(primaryChannel)}
-            disabled={isPending}
-            className="text-sm underline text-muted-foreground"
-          >
-            {primaryChannel === "SMS" ? "Use text message instead" : "Use authenticator app instead"}
-          </button>
-        )}
+          {activeChannel !== "EMAIL" && (
+            <button
+              type="button"
+              onClick={() => switchChannel("EMAIL")}
+              disabled={isPending}
+              className="text-sm underline text-muted-foreground"
+            >
+              Email me a code instead
+            </button>
+          )}
+          {activeChannel === "EMAIL" && primaryChannel !== "EMAIL" && (
+            <button
+              type="button"
+              onClick={() => switchChannel(primaryChannel)}
+              disabled={isPending}
+              className="text-sm underline text-muted-foreground"
+            >
+              {primaryChannel === "SMS" ? "Use text message instead" : "Use authenticator app instead"}
+            </button>
+          )}
+        </div>
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"

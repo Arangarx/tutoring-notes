@@ -311,4 +311,36 @@ describe("otp-challenge DB behaviour", () => {
     expect(waiting.ready).toBe(true);
     expect(send).not.toHaveBeenCalled();
   });
+
+  it("ensureLoginSmsCode sends a sign-in text only when no unused login text is waiting", async () => {
+    const { ensureLoginSmsCode, createOtpChallenge } = await import("@/lib/otp-challenge");
+    const send = jest.fn(async () => ({ ok: true as const }));
+
+    const missing = await ensureLoginSmsCode({ adminUserId, send });
+    expect(missing.ready).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    await createOtpChallenge({
+      adminUserId,
+      twoFaId,
+      purpose: "LOGIN",
+      channel: "EMAIL",
+      plaintextCode: "343434",
+    });
+    const emailWaitingDoesNotCount = await ensureLoginSmsCode({ adminUserId, send });
+    expect(emailWaitingDoesNotCount.ready).toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+
+    await createOtpChallenge({
+      adminUserId,
+      twoFaId,
+      purpose: "LOGIN",
+      channel: "SMS",
+      plaintextCode: "565656",
+    });
+    send.mockClear();
+    const waiting = await ensureLoginSmsCode({ adminUserId, send });
+    expect(waiting.ready).toBe(true);
+    expect(send).not.toHaveBeenCalled();
+  });
 });
