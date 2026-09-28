@@ -516,6 +516,34 @@ describe("BUG-FIX 2026-06-01: rotate and regen backup-code display requires expl
     expect(content).toContain("Send verification code");
   });
 
+  it("rotate, regen, and method-change all reveal codes through BackupCodesPanel", () => {
+    const panelUses = content.split("<BackupCodesPanel").length - 1;
+    expect(panelUses).toBe(3);
+    expect(content).not.toContain("BackupCodeGrid");
+    expect(content).not.toContain("Download .txt");
+    for (const marker of ['view === "rotating-done"', 'view === "regen-done"', 'view === "change-done"']) {
+      const start = content.indexOf(marker);
+      expect(start).toBeGreaterThan(-1);
+      const next = content.indexOf("if (view ===", start + marker.length);
+      const section = content.slice(start, next === -1 ? content.length : next);
+      expect(section).toContain("<BackupCodesPanel");
+    }
+    const setupForm = fs.readFileSync(
+      path.resolve(__dirname, "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx"),
+      "utf-8"
+    );
+    expect(setupForm).toContain("<BackupCodesPanel");
+    expect(setupForm).not.toContain("Download .txt");
+  });
+
+  it("SMS manage step-up names the phone the code is texted to", () => {
+    expect(content).toContain("text a verification code to");
+    expect(content).toContain("initialMaskedPhone");
+    expect(content).not.toContain(
+      "Request a verification code, then enter it below to {label}."
+    );
+  });
+
   it("rotating-done view has an explicit Done button that is the sole navigation trigger", () => {
     const rotatingDoneIdx = content.indexOf('view === "rotating-done"');
     const regenLoadingIdx = content.indexOf('view === "regen-loading"');

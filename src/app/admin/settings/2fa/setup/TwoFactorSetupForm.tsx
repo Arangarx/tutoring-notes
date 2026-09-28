@@ -5,11 +5,12 @@
  * Only one method may be enrolled at a time (see two-factor-enrollment.ts).
  */
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BackupCodesPanel } from "@/components/identity/BackupCodesPanel";
 import { SmsTwoFactorConsentField } from "@/components/identity/SmsTwoFactorConsentField";
 import { TwoFactorMethodChooserCards } from "../TwoFactorMethodChooserCards";
 import {
@@ -67,25 +68,6 @@ export function TwoFactorSetupForm({
   const [tokenInput, setTokenInput] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isPending, startTransition] = useTransition();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(backupCodes.join("\n"));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [backupCodes]);
-
-  const handleDownload = useCallback(() => {
-    const header = "Mynk 2FA Backup Codes — store these in a safe place.\n\n";
-    const blob = new Blob([header + backupCodes.join("\n") + "\n"], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "mynk-2fa-backup-codes.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [backupCodes]);
-
   function handleStartEmail() {
     setMethod("email");
     setStep("loading-start");
@@ -475,38 +457,11 @@ export function TwoFactorSetupForm({
   if (step === "show-backup") {
     return (
       <div className="space-y-4">
-        <div className="rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 p-4">
-          <h2 className="text-base font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
-            Save your backup codes — shown once only
-          </h2>
-          <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-            Store these in a safe place. Each code can only be used once to recover access
-            if you lose your authenticator.
-          </p>
-          <div className="grid grid-cols-2 gap-1">
-            {backupCodes.map((c) => (
-              <code key={c} className="text-xs bg-white dark:bg-black/30 border rounded px-2 py-1 font-mono select-all">
-                {c}
-              </code>
-            ))}
-          </div>
-          <div className="flex gap-2 mt-3">
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="text-xs border rounded-md px-3 py-1.5 hover:bg-muted transition-colors"
-            >
-              {copied ? "Copied!" : "Copy codes"}
-            </button>
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="text-xs border rounded-md px-3 py-1.5 hover:bg-muted transition-colors"
-            >
-              Download .txt
-            </button>
-          </div>
-        </div>
+        <BackupCodesPanel
+          codes={backupCodes}
+          title="Save your backup codes — shown once only"
+          description="Store these in a safe place. Each code can only be used once to recover access if you lose your authenticator."
+        />
         <p className="text-sm text-muted-foreground">
           ✓ 2FA is now active. You will be asked to verify on each new login.
         </p>
