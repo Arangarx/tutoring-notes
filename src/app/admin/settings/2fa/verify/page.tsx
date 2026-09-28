@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
-import { ensureLoginEmailCode } from "@/lib/otp-challenge";
-import { sendLoginEmailOtp } from "../actions";
+import { ensureLoginEmailCode, ensureLoginSmsCode } from "@/lib/otp-challenge";
+import { sendLoginEmailOtp, sendLoginSmsOtp } from "../actions";
 import { TwoFactorVerifyForm } from "./TwoFactorVerifyForm";
 import { ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
 import { maskE164 } from "@/lib/sms";
@@ -79,16 +79,13 @@ export default async function TwoFactorVerifyPage({ searchParams }: Props) {
     }
   }
 
-  const copyByMethod: Record<"EMAIL_OTP" | "SMS_OTP" | "TOTP", string> = {
-    EMAIL_OTP: "Enter the verification code we email to your account.",
-    SMS_OTP: "Enter the verification code we text to your phone.",
-    TOTP: "Enter the code from your authenticator app to continue.",
-  };
-
-  // Email codes go out when this page is the email step. The button is a resend.
-  // An unused challenge (including a Playwright seed) is left in place.
+  // Email and text codes go out when this page is that step. The button is a resend.
+  // An unused challenge (including a Playwright seed) is left in place, so a
+  // refresh does not send another message. The 30-day device skip above never
+  // reaches this send.
   let initialEmailCodeSent = false;
   let initialMaskedEmail: string | undefined;
+  let initialSmsCodeSent = false;
   if (verifyMethod === "EMAIL_OTP" && session.user.id) {
     const issued = await ensureLoginEmailCode({
       adminUserId: session.user.id,
@@ -101,6 +98,25 @@ export default async function TwoFactorVerifyPage({ searchParams }: Props) {
     initialEmailCodeSent = issued.ready;
     initialMaskedEmail = issued.maskedEmail;
   }
+  if (verifyMethod === "SMS_OTP" && session.user.id) {
+    const issued = await ensureLoginSmsCode({
+      adminUserId: session.user.id,
+      send: async () => {
+        const sent = await sendLoginSmsOtp();
+        if (!sent.ok) return { ok: false as const };
+        return { ok: true as const };
+      },
+    });
+    initialSmsCodeSent = issued.ready;
+  }
+
+  const copyByMethod: Record<"EMAIL_OTP" | "SMS_OTP" | "TOTP", string> = {
+    EMAIL_OTP: "Enter the verification code we email to your account.",
+    SMS_OTP: initialSmsCodeSent
+      ? "Enter the verification code we text to your phone."
+      : "Send a verification code to your phone, then enter it below.",
+    TOTP: "Enter the code from your authenticator app to continue.",
+  };
 
   return (
     <div className="card" style={{ maxWidth: 480 }}>
@@ -112,6 +128,7 @@ export default async function TwoFactorVerifyPage({ searchParams }: Props) {
         maskedPhone={maskedPhone}
         initialEmailCodeSent={initialEmailCodeSent}
         initialMaskedEmail={initialMaskedEmail}
+        initialSmsCodeSent={initialSmsCodeSent}
       />
     </div>
   );

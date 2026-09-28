@@ -26,7 +26,19 @@ test.describe("SMS OTP 2FA — login + fallback (WS3)", () => {
     await loginTutorWithPassword(page, TEST_SMS_2FA_TUTOR);
     await waitFor2faVerifyChallenge(page);
 
-    // Seeded challenge — no SMS sender; skip send to avoid invalidating hash.
+    // A waiting sign-in text is kept, so the seeded code is still the one to enter.
+    const resend = page.getByRole("button", { name: "Resend code" });
+    const emailInstead = page.getByRole("button", { name: "Email me a code instead" });
+    await expect(resend).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send verification code" })).toHaveCount(0);
+    await expect(page.getByText(/enter the verification code we text to your phone/i)).toBeVisible();
+    const resendBox = await resend.boundingBox();
+    const emailBox = await emailInstead.boundingBox();
+    expect(resendBox).not.toBeNull();
+    expect(emailBox).not.toBeNull();
+    // Fallback link sits on the next line, not beside Resend.
+    expect(emailBox!.y).toBeGreaterThanOrEqual(resendBox!.y + resendBox!.height - 2);
+
     await submitSmsOtpOnVerifyPage(page, loginCode);
     await expectTutorAuthedLanding(page);
   });
