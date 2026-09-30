@@ -8,7 +8,7 @@
 
 ## HEAD
 
-**🚦 RELEASE TRACK (Andrew 2026-07-30 option B).** Canonical ordered list: [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities. **On `master` after calendar-wave merge:** agent slices **#2, #3, #4 shipped**; **#5 native schedule CRUD + calendar ICS/`calendar.events.owned` write shipped**; **#7 instrumentation chunk 1 shipped**; **#1 remainder** = Google Calendar **verification resubmit** (Andrew Console — write is live); **#6 security MUST** still queued for unsupervised pilots.
+**🚦 RELEASE TRACK (Andrew 2026-07-30 option B).** Canonical ordered list: [`docs/BACKLOG.md`](../BACKLOG.md) § Release priorities. **On `master` after calendar-wave merge:** agent slices **#2, #3, #4 shipped**; **#5 native schedule CRUD + calendar ICS/`calendar.events.owned` write shipped**; **#7 instrumentation chunk 1 shipped**; **#1 remainder** = `calendar.events.owned` OAuth verification **approved 2026-09-29** (that scope only); Apple ICS hardware follow-up still open; **#6 security MUST** still queued for unsupervised pilots.
 
 **⛔ NON-NEGOTIABLE STANDARDS (2026-07-10)** — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize: (1) zero unjustified duplication ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)).
 
@@ -16,9 +16,9 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Andrew 2026-09-26 directed merge of `feat/schedule-end-follows-length`: schedule page no longer shows the ICS-feed line; end time follows planned length until edited directly. Playwright was red then green. Separate review PASS. Google verification resubmit is sent and not approved. Twilio campaign was at additional-review submit on 2026-09-25. |
-| **Next action(s)** | Later pass on end-time logic (BACKLOG: midnight wrap stays on the same date). Wait on Google’s verification email and Twilio approval. |
-| **Open Andrew-confirms** | Google verification result (email). Twilio campaign approval. |
+| **Last action completed** | Andrew 2026-09-29: Google approved OAuth verification for `calendar.events.owned` only (project `208762156520` / `my-apps-490005`). Prior: 2026-09-26 merge of `feat/schedule-end-follows-length`. Twilio campaign was at additional-review submit on 2026-09-25. |
+| **Next action(s)** | **Go over soon:** Sarah meeting raw notes + student detail declutter (BACKLOG top, Andrew 2026-09-28) — review and refine before any build. Later pass on end-time logic (BACKLOG: midnight wrap stays on the same date). Apple ICS hardware follow-up. Wait on Twilio approval. |
+| **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. |
 | **In-flight subagents** | None. |
 | **Uncommitted / unmerged** | None after this commit. `master` stays in `tutoring-notes-master-ops`. `node_modules` in the main checkout is a junction to master-ops — use `npm exec -- jest`, not bare `npx jest`. |
 
@@ -47,7 +47,7 @@
 
 **Durable decisions (calendar + OAuth — current):**
 
-- **Calendar write + ICS shipped on `master` (2026-09-21).** Google rejected the prior stub demo 2026-09-11. Live path is **`calendar.events.owned`** write + platform-agnostic **ICS feed**. **Andrew leftover:** verification resubmit on a crawlable prod URL. Re-verification philosophy: never verify twice for the **same** capability; verifying again for a genuinely **new** capability is normal. Plan: [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md).
+- **Calendar write + ICS shipped on `master` (2026-09-21).** Google rejected the prior stub demo 2026-09-11. Live path is **`calendar.events.owned`** write + platform-agnostic **ICS feed**. **Verification approved 2026-09-29** for `calendar.events.owned` only. Re-verification philosophy: never verify twice for the **same** capability; verifying again for a genuinely **new** capability is normal. Plan: [`CALENDAR-WAVE-PLAN.md`](CALENDAR-WAVE-PLAN.md).
 - **Apple Calendar:** CalDAV two-way remains **deferred**. ICS subscribe is shipped in product; **live Apple hardware smoke is still owed** (no device at merge; Andrew 2026-09-21 option 1).
 - Sign-In/Sign-Up Google stay `openid email profile` only (never calendar scopes on NextAuth). Skip Facebook. Microsoft optional.
 

@@ -125,7 +125,7 @@ After auth merge: read the **2FA + SMS** paragraphs on [`/privacy`](../src/app/p
 | Priority | Work | Status |
 |----------|------|--------|
 | **#1** | Sign in with Google | **DONE** [`122bf761`](https://github.com/Arangarx/tutoring-notes/commit/122bf761) |
-| **#1 remainder** | Calendar ICS + `calendar.events.owned` write | **SHIPPED** 2026-09-21 (`feat/calendar-wave` → `master`). **Your leftover:** Google verification **resubmit** once prod write is crawlable; Apple ICS subscribe when a device exists. |
+| **#1 remainder** | Calendar ICS + `calendar.events.owned` write | **SHIPPED** 2026-09-21 (`feat/calendar-wave` → `master`). **`calendar.events.owned` verification APPROVED 2026-09-29** (that scope only). **Your leftover:** Apple ICS subscribe when a device exists. |
 | **#2** | Student-detail Start / consent / claim | **DONE** [`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5) |
 | **#3** | Tutor signup / auth ship-ready | **DONE** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) |
 | **#4** | Email OTP + 2FA chooser + SMS code + allowlist | **DONE** [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca) — your leftover: SMTP + Twilio + allowlist UI |
