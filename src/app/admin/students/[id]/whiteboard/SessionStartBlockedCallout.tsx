@@ -25,10 +25,10 @@ export function SessionStartBlockedCallout({
   return (
     <Alert
       data-testid="start-wb-consent-callout"
-      className="min-w-0 break-words border-border border-l-[3px] border-l-warning bg-warning/5"
+      className="min-w-0 break-words border-warning/40 border-l-[3px] border-l-warning bg-secondary text-secondary-foreground"
       role="alert"
     >
-      <AlertTitle className="text-foreground">
+      <AlertTitle>
         Start whiteboard session unavailable
       </AlertTitle>
       <AlertDescription className="text-muted-foreground">

@@ -2,11 +2,87 @@
 
 Living document for open work, pilot feedback, reliability gaps, and deferred product decisions.
 
+## Go over soon (Andrew 2026-09-28)
+
+**Raw — Sarah meeting notes (Andrew 2026-09-28). Review and refine later. Not decisions.** Captured in Andrew’s wording. Do not treat any line as a locked requirement until he clarifies.
+
+- Signing up for SMS: needs to be more clear the box has to be checked. Flow needs to be cleaner.
+- At the time the tutor is adding the student, let them put in the student’s email. Add student might open another form possibly. Shortcut the claim process so the tutor only has one step. The main point: there isn’t a separate claims process from the initial adding of the student.
+- Sarah doesn’t think it needs a setting for whether to show just first name or show last name. She thinks it should just be first and last initial and be done with it. Andrew is not sure the setting should go away altogether, but it should definitely move.
+- Upcoming sessions for specifically that student should be on the student’s home page.
+- Still need to change “parent” to either adult or self learner or something more neutral.
+- For connecting an account, the password field is not offering to create one on the claim page. Test email: `arangarx+sarahstudent@gmail.com`.
+- Self learners are going to be confused by parent vs student. Self learners and parent accounts are the same level.
+- She’s affirming that the student having links to their sessions is good and that we want to make sure they have it.
+- In the waiting room, maybe better copy. Sarah asked what “Live (remote)” means. She’s like should it just be online and in person.
+- She doesn’t like buttons having capital then lowercase; she thinks capital/capital. Andrew is not sure which is better for usage.
+- She thinks the name on the tutor block in a whiteboard session shouldn’t be “Tutor”; it should be like “Sarah P.” Just like a student.
+- She thinks the tutor should only put email when adding someone and let the student themselves define how the tutor sees them. Probably first and last initial by default.
+- “so so so so so so vital”: a moving cursor always shows up. With Wyzant it disappears if it’s inactive for 5 seconds or something, but shows up if it moves.
+- Needs to be able to change the size of her text. She wants to set both the text box size and the text size.
+- “nice to have” locked squares.
+- “MUST HAVE” perfect circles.
+- “would like” triangles. Right triangles is what she would like for now. It’s what she’d use most for trig.
+- Still need ghost of other view.
+- Whiteboard needs some sort of help to tell things like “spacebar to go into grab/pan mode” etc.
+- Whiteboard chat room, maybe hidden/collapsed most of the time.
+- With the graph, she will want to be able to draw over the graph itself, not just graphing. She will want to teach them plotting too.
+- She’s wondering if on the graph it should be the full equation or maybe a simpler example. She feels like it’s incomplete without `y=`. So a `y=` in front of the box, otherwise it feels incomplete/confusing to her. Also a simpler example like just `2x+1`.
+- She was zoomed out so far on `(3x+1)/(x^2+2)` it looked wrong, but she just wasn’t zoomed in enough.
+- Nice to have: board renaming in the whiteboard.
+- Insert math equation: when opening its keyboard, she can’t actually use it, because it clicks away instead of using the keyboard.
+- Need to bring back the ability to insert images, not just PDFs. When inserting an image, do the same behavior as a PDF with making a new board.
+- “Finish Session” on the notes screen is kinda hard to see.
+- Billable presentation might need worked on or other options.
+- Organization stuff: they’ll want to be able to see tutor sessions etc.
+
+**Status:** `OPEN` — review and refine. Andrew will clarify.
+
+**[P1][WB] Student graph keeps flashing “Click to interact.”** Andrew 2026-09-28, live session with Sarah, Andrew as the student. The graph shows Excalidraw’s `buttons.embeddableInteractionButton` (“Click to interact”) over the middle of the embed. Clicking it does not clear it; it keeps coming back.
+
+Cause: Excalidraw only shows that hint while `activeEmbeddable.state === "hover"`, and hover is the center third of the embed (`node_modules/@excalidraw/excalidraw` `isIframeLikeElementCenter`). A click sets `state: "active"` on that element object. The match is object identity (`activeEmbeddable.element === el`), not element id. Live sync replaces the scene element, so the click no longer matches, pointer-events on `.excalidraw__embeddable-container__inner` go back to disabled, and the next pointer move over the center shows the hint again. Our graph is `renderEmbeddable` → `GraphEmbeddable` with `readOnly={false}` for both roles (`WhiteboardWorkspaceClient`). The hint is Excalidraw chrome, not our graph UI.
+
+**Status:** `OPEN` — go over soon. Do not patch mid-session.
+
+**[P1][AUTH] Self-learner claim still asks for a child username and PIN.** Andrew 2026-09-28, after connecting Andrew M as an adult self-learner. Privacy card correctly says parental preferences do not apply. The card under it still says “Create a username and PIN so your child can sign in on their device.” Same item as **WB-ADULT-JOIN-ENABLEMENT B3** (child-only claim PIN). `src/app/claim/[token]/setup/page.tsx` gates privacy on `profile.isSelfLearner` and leaves the credential card on for every profile that has no PIN yet. A self-learner already signs in with the email and password from account creation. **Set up later** skips this card. Server `action: "credentials"` also does not reject a self-learner profile.
+
+**Status:** `OPEN` — go over soon. Fold into B3; do not track a second copy.
+
+**[P1][AUTH] Claim verify-email lands on “create account or sign in.”** Andrew 2026-09-28, Sarah’s claim link for student Andrew M, email `arangarx+sarahStudent@gmail.com`. After “Create parent account,” the confirmation email opened the same claim card at the logged-out chooser (“Create parent account” / “I already have an account”) instead of the signed-in claim step.
+
+Cause: signup does not sign the browser in. `/verify-email` → `/auth/verify-done` sets `mynk_ah_session` with `SameSite=Strict` and immediately redirects to `/claim/<token>` (`src/app/auth/verify-done/route.ts`, `buildAhSessionCookie`). A click that starts in Gmail is a cross-site navigation, so that Strict cookie is not sent on the claim request. The claim page shows `ClaimAuthGate` whenever `getAccountHolderSessionFromHeaders()` is empty (`src/app/claim/[token]/page.tsx`). The on-screen copy (“come back to this claim link”) describes a second visit; the email link itself is the return. Workaround this run: “I already have an account” with the password just created, or reload the claim URL once already on the site.
+
+**Status:** `OPEN` — go over soon.
+
+**[P1][UX] Student detail declutter — workshop, then rebuild.** Sarah (2026-09-28, while setting Andrew up as a test student): the student detail page is way too cluttered. A lot of what is on it belongs behind another tab or in settings. The page must be clean and easy to use. **Workshop before any build.**
+
+What is on the page today (`src/app/admin/students/[id]/page.tsx` + `StudentDetailShell`):
+
+- Desktop labels (Whiteboard, Share link, Notes & email, Parent account) are scroll anchors. All four cards stack on one page. The phone already hides inactive panels.
+- The Share card leads with **Calendar event titles** (`icsShowFullName`): a paragraph plus a checkbox. That is a once-in-a-while privacy preference.
+- The Notes card is a full compose form, plus send-update email, plus a link to the notes page.
+- The header pins a site-wide **Outbox** link on every student.
+- The Parent card is claim / connected parent, or the line “Parent account linking is not enabled” when `NEXT_PUBLIC_CLAIM_INVITES_ENABLED` is not `true`. Production env on this machine does not set that flag. Turning the flag on is a separate decision from this declutter.
+
+Direction from the 2026-09-28 chat (workshop still open):
+
+- Front page job is “work with this student”: name, one primary action (start, or the single blocker), open sessions and ended sessions that still need a note (only when some exist), one line for the latest note linking to the notes page.
+- Sharing is one place: share link, send-update email, and parent claim or connected parent.
+- Student settings holds the calendar full-name checkbox, with a short label. The explanatory paragraph stays there.
+- Outbox stays in the main nav.
+- Desktop panels switch, the way the phone already does.
+
+**Open before design lock:** Does Sarah write notes on this page often enough that compose stays up front, or is “latest note → notes page” enough?
+
+Related: `ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER` / `MOBILE-ICONS` (merged, verify); “Unclaimed student claim link buried.”
+
+**Status:** `OPEN` — go over soon.
+
 ## 🎯 Release priorities (Andrew 2026-07-30, option B) — do these first, in order
 
 We are on the **release track**: expand beyond Sarah to unsupervised new pilots. **Re-ranked after Sarah 2026-07-29 meeting** (Andrew chose **B**: Google external before student-detail UX). Ordered priorities:
 
-1. **External Google validation** — Sign-In UI **DONE on `master`**; ICS feed + `calendar.events.owned` write **DONE on `master`** (calendar-wave merge 2026-09-21, Tyson Android/Google scoped pass). **Remainder** = Google Calendar **verification resubmit** (Andrew Console) + Apple ICS hardware follow-up ([`CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md), [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)).
+1. **External Google validation** — Sign-In UI **DONE on `master`**; ICS feed + `calendar.events.owned` write **DONE on `master`** (calendar-wave merge 2026-09-21, Tyson Android/Google scoped pass). **`calendar.events.owned` OAuth verification APPROVED** 2026-09-29 (Google email, project `208762156520` / `my-apps-490005`; that scope only). **Remainder** = Apple ICS hardware follow-up ([`CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md), [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)). A new scope still needs its own verification.
 2. **Student-detail Start / consent / claim findability (P0)** — **DONE on `master`** 2026-08-14 ([`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5)). Optional leftover: flag-off Playwright, mobile viewport, desktop double mint button.
 3. **Tutor signup / self-serve auth** — **DONE on `master`** ([`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111) + auth ship-ready merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca): email confirm, allowlist, platform mail). Pagination **deferred**. Invite links **deferred** (needs Andrew: operator-invite vs open `/signup`).
 4. **2FA pilots will finish** — **DONE on `master`** (email OTP, 2FA chooser, SMS OTP code — merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)). SMS **not live in production** until Twilio env (`TWILIO_*`) — fail-closed; see [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md). TOTP stays as upgrade. **Sarah 2026-09-10 (Discord):** prefers SMS when available.
@@ -40,7 +116,7 @@ Each specimen: light/dark, canonical path, confidence badge (`isolated` | `compo
 
 Sign-In UI + self-serve auth slices **shipped on `master`**. **Remaining #1 work = Calendar:** real write + verification resubmit + ICS feed — canonical plan [`docs/handoff/CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md).
 
-**Supersedes 2026-08-14 bundled-stub strategy:** Google rejected prior submission 2026-09-11 (`calendar.readonly` / `calendar.events` — demo did not justify scopes). Real `calendar.events.owned` write + ICS feed shipped. **Resubmit sent 2026-09-26 (Andrew):** consent-screen scopes are `gmail.send`, `userinfo.email`, and `calendar.events.owned`; demo video updated on the console; reply sent on the existing rejection thread. **Waiting on Google. Not approved.** Apple-primary tutors: **ICS feed**; CalDAV two-way stays deferred.
+**Supersedes 2026-08-14 bundled-stub strategy:** Google rejected prior submission 2026-09-11 (`calendar.readonly` / `calendar.events` — demo did not justify scopes). Real `calendar.events.owned` write + ICS feed shipped. **Resubmit sent 2026-09-26 (Andrew):** consent-screen scopes are `gmail.send`, `userinfo.email`, and `calendar.events.owned`; demo video updated on the console; reply sent on the existing rejection thread. **Approved 2026-09-29** for `.../auth/calendar.events.owned` only (project `208762156520`, Project ID `my-apps-490005`). Google’s email: a new scope or a consent-screen change needs a new verification; this approval does not cover other sensitive or restricted scopes. Apple-primary tutors: **ICS feed**; CalDAV two-way stays deferred.
 
 **Andrew (Google Cloud Console — no code):** [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md) — check **OAuth Clients first** (Sign-In vs Gmail vs Calendar blast radius; `gmail.send` verified 2026-05-30), then Verification Center, Audience, Branding. Calendar API **enabled** (confirmed 2026-09-11). `calendar.events.owned` available in scope picker.
 
