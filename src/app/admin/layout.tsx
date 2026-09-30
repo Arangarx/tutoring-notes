@@ -8,6 +8,8 @@ import { getAdminSessionMode } from "@/lib/admin-routing";
 import { isDevToolsEnabled } from "@/lib/dev-fixtures";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { SeedTutorTimezoneFromSystem } from "@/components/admin/SeedTutorTimezoneFromSystem";
+import { SiteFooter } from "@/components/SiteFooter";
+import { getBuildIdentity } from "@/lib/build-identity";
 
 export default async function AdminLayout({
   children,
@@ -45,19 +47,25 @@ export default async function AdminLayout({
     userDisplayName: admin?.displayName ?? session?.user?.name ?? null,
   };
 
+  const { shortSha: buildShortSha } = getBuildIdentity();
+
   return (
-    <div className="flex min-h-dvh flex-col bg-background md:h-dvh md:overflow-hidden">
+    <div className="flex min-h-dvh flex-col bg-background md:fixed md:inset-0 md:z-30 md:overflow-hidden">
       {isImpersonating ? <ImpersonationBanner email={impersonatedEmail} /> : null}
       <div className="flex min-h-0 min-w-0 flex-1 md:overflow-hidden">
         <aside className="hidden h-full shrink-0 md:block">
           <AdminSidebarNav {...navProps} />
         </aside>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-y-auto">
+        <div
+          data-admin-scroll-region
+          className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-y-auto"
+        >
           <AdminNav {...navProps} layout="mobile" />
           <SeedTutorTimezoneFromSystem />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-6 md:py-8 xl:max-w-7xl">
             {children}
           </main>
+          <SiteFooter buildShortSha={buildShortSha} />
         </div>
       </div>
     </div>

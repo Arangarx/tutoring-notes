@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { PreviewBranchBadge } from "@/components/PreviewBranchBadge";
 import { Providers } from "@/components/Providers";
-import { SiteFooter } from "@/components/SiteFooter";
+import { DocumentSiteFooter } from "@/components/DocumentSiteFooter";
 import { getBuildIdentity } from "@/lib/build-identity";
 import { getPreviewBranchBadgeData } from "@/lib/preview-branch-badge";
 import { PRODUCTION_CANONICAL_ORIGIN } from "@/lib/seo/canonical-host";
@@ -35,7 +35,7 @@ export default function RootLayout({
       <body style={{ minHeight: "100%", display: "flex", flexDirection: "column", margin: 0 }}>
         <Providers>
           <div style={{ flex: 1 }}>{children}</div>
-          <SiteFooter buildShortSha={buildShortSha} />
+          <DocumentSiteFooter buildShortSha={buildShortSha} />
           {previewBranchBadge ? (
             <PreviewBranchBadge
               branch={previewBranchBadge.branch}

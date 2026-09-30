@@ -92,7 +92,8 @@ export function AdminSidebarNav({
         </div>
         <div className="flex items-center gap-3 rounded-[10px] border border-border bg-background p-3">
           <div
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-[13px] font-semibold text-[color:var(--surface)]"
+            data-testid="admin-sidebar-user-mark"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-[13px] font-semibold text-[color:var(--brand-on)]"
             aria-hidden
           >
             {initials}

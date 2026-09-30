@@ -127,4 +127,104 @@ test.describe("Admin student detail — Ready to teach banner", () => {
       expect(Math.abs(copyMidY - calloutMidY)).toBeLessThanOrEqual(24);
     }
   );
+
+  test(
+    "banner copy, blocked callout, and sidebar initials stay readable in light and dark",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      await page.setViewportSize(WIDE_VIEWPORT);
+      const adminUserId = await seedTestAdmin();
+      const studentId = await seedUnclaimedStudent(adminUserId);
+
+      for (const theme of ["light", "dark"] as const) {
+        await page.addInitScript((next) => {
+          localStorage.setItem("mynk-theme", next);
+        }, theme);
+        await page.goto(`/admin/students/${studentId}?theme=${theme}`, {
+          waitUntil: "networkidle",
+        });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await expect(
+          page.getByTestId("student-ready-to-teach-banner").getByTestId("start-wb-consent-callout")
+        ).toBeVisible();
+
+        const ratios = await page.evaluate(() => {
+          function parseRgb(value: string) {
+            const match = value.match(/rgba?\(([^)]+)\)/);
+            if (!match) return null;
+            const parts = match[1].split(/[\s,/]+/).map(Number);
+            return { r: parts[0], g: parts[1], b: parts[2], a: parts[3] ?? 1 };
+          }
+          function composite(
+            front: { r: number; g: number; b: number; a: number },
+            back: { r: number; g: number; b: number; a: number }
+          ) {
+            const a = front.a;
+            return {
+              r: front.r * a + back.r * (1 - a),
+              g: front.g * a + back.g * (1 - a),
+              b: front.b * a + back.b * (1 - a),
+              a: 1,
+            };
+          }
+          function paintedBackground(el: Element) {
+            const chain: Element[] = [];
+            let node: Element | null = el;
+            while (node) {
+              chain.push(node);
+              node = node.parentElement;
+            }
+            let bg = { r: 255, g: 255, b: 255, a: 1 };
+            for (const ancestor of chain.reverse()) {
+              const color = parseRgb(getComputedStyle(ancestor).backgroundColor);
+              if (color && color.a > 0) bg = composite(color, bg);
+            }
+            return bg;
+          }
+          function contrast(el: Element) {
+            const fg = parseRgb(getComputedStyle(el).color);
+            if (!fg) return 0;
+            const bg = paintedBackground(el);
+            const paint = fg.a < 1 ? composite(fg, bg) : fg;
+            const lin = (channel: number) => {
+              const c = channel / 255;
+              return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+            };
+            const lum = (color: { r: number; g: number; b: number }) =>
+              0.2126 * lin(color.r) + 0.7152 * lin(color.g) + 0.0722 * lin(color.b);
+            const hi = Math.max(lum(paint), lum(bg));
+            const lo = Math.min(lum(paint), lum(bg));
+            return (hi + 0.05) / (lo + 0.05);
+          }
+          const callout = document
+            .querySelector("[data-testid='student-ready-to-teach-banner']")
+            ?.querySelector("[data-testid='start-wb-consent-callout']");
+          const copy = document.querySelector("[data-testid='student-ready-to-teach-copy']");
+          const mark = document.querySelector("[data-testid='admin-sidebar-user-mark']");
+          const title = callout?.querySelector("[data-slot='alert-title']");
+          const description = callout?.querySelector("[data-slot='alert-description']");
+          const link = callout?.querySelector("a");
+          const eyebrow = copy?.querySelector("p");
+          const body = copy?.querySelectorAll("p")[1];
+          if (!title || !description || !link || !eyebrow || !body || !mark) {
+            return null;
+          }
+          return {
+            title: contrast(title),
+            description: contrast(description),
+            link: contrast(link),
+            eyebrow: contrast(eyebrow),
+            body: contrast(body),
+            initials: contrast(mark),
+          };
+        });
+
+        expect(ratios, theme).not.toBeNull();
+        // WCAG AA for normal text. Independent of the token values.
+        for (const [name, ratio] of Object.entries(ratios!)) {
+          expect(ratio, `${theme} ${name}`).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  );
 });
