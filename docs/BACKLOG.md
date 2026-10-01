@@ -530,7 +530,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **F-1 outbox register retry cap** —  (§9)
 - **installControllableUploadStub duplication** —  (§9)
 - **iOS matrix S1–S14** — real hardware unfilled (§1)
-- **JEST-ISOLATION-CLASS-2** —  (§9)
+- **JEST-ISOLATION-CLASS-2** — shared test Postgres; truncate-after-each design kept, branch deleted (§9)
 - **phase0-stop** — break CSS deploy-abort verify (§9)
 - **PIPELINE-1** — agentic pipeline before release (§9)
 - **Recorder test refactor Phases 4–6** —  (§9)
@@ -1873,7 +1873,21 @@ jsdom cannot prove student absent from mixdown while heard live.
 ~20min serial marathon; shard runner exists (`fb3c039` merge fix).
 
 **[P2][TEST] JEST-ISOLATION-CLASS-2**  
-`--workers=1` gate; eliminate fire-and-forget DB stragglers.
+Jest shares one local Postgres (`tutoring_notes_test`). Parallel workers race each other's rows, so the suite stays on `--workers=1` until per-test cleanup is proven on its own.
+
+A global `TRUNCATE ... CASCADE` in `afterEach` was tried 2026-07-06 and failed three `--workers=1` runs (about 40 suites each): `40P01` deadlocks and "Engine is not yet connected." Truncate takes `AccessExclusiveLock` while fire-and-forget DB work from the test is still running. Andrew deferred it (2026-07-06, and again 2026-09-10: do not wire this during another wave).
+
+A second harness lived on `chore/jest-db-cleanup-wip` (`43acd75c`) and was **deleted 2026-09-30** without ever being added to `jest.config.ts`. Do not revive that branch. The next attempt starts from these notes and has to be proven on the suite as it is then:
+
+- `pg_advisory_xact_lock` so only one worker truncates at a time
+- `pg_terminate_backend` on idle-in-transaction backends (the stragglers)
+- drain the event loop before truncating
+- retry on `40P01` / `55P03` / `57014`
+- `beforeEach` waits until any in-flight truncate finishes
+- skip suites that never touch Postgres
+- fail closed unless the URL is `tutoring_notes_test` on localhost port 5432 (reject Neon, Vercel, Supabase, AWS)
+
+Prove a full Jest run with one worker first, then with several. A drive-by wire-up is how the July deadlock shipped into the suite.
 
 **[P2][TEST] Site-wide coverage P1 gaps**  
 Blob token in PW gate, recording E2E, replay scrub gate, billing activeMs E2E, etc. (~15 items self-skip without `BLOB_READ_WRITE_TOKEN`). [`site-wide-coverage-audit.md`](handoff/site-wide-coverage-audit.md).

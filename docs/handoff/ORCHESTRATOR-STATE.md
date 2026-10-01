@@ -12,15 +12,15 @@
 
 **⛔ NON-NEGOTIABLE STANDARDS (2026-07-10)** — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize: (1) zero unjustified duplication ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)).
 
-**Tip:** `origin/master` @ [`e1cfc55a`](https://github.com/Arangarx/tutoring-notes/commit/e1cfc55a) (`merge: SMS consent sentence reads as one paragraph`). `feat/sms-a2p-consent` is already in that merge. `master` stays in `tutoring-notes-master-ops`. Main checkout is `feat/schedule-end-follows-length`, cut from `origin/master`.
+**Tip:** `origin/master` @ [`97c42ae8`](https://github.com/Arangarx/tutoring-notes/commit/97c42ae8) (`merge: feat/admin-nav-pinned`). Main checkout is this repo on `master`. The `tutoring-notes-master-ops` worktree is gone.
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Andrew 2026-09-29: Google approved OAuth verification for `calendar.events.owned` only (project `208762156520` / `my-apps-490005`). Prior: 2026-09-26 merge of `feat/schedule-end-follows-length`. Twilio campaign was at additional-review submit on 2026-09-25. |
+| **Last action completed** | 2026-09-30: deleted `chore/jest-db-cleanup-wip` (local + origin). Its unproven truncate-after-each design is on BACKLOG **JEST-ISOLATION-CLASS-2**. Prior: `origin/master` @ `97c42ae8`. |
 | **Next action(s)** | **Go over soon:** Sarah meeting raw notes + student detail declutter (BACKLOG top, Andrew 2026-09-28) — review and refine before any build. Later pass on end-time logic (BACKLOG: midnight wrap stays on the same date). Apple ICS hardware follow-up. Wait on Twilio approval. |
 | **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. |
 | **In-flight subagents** | None. |
-| **Uncommitted / unmerged** | None after this commit. `master` stays in `tutoring-notes-master-ops`. `node_modules` in the main checkout is a junction to master-ops — use `npm exec -- jest`, not bare `npx jest`. |
+| **Uncommitted / unmerged** | Main checkout is `master`. `node_modules` here is a junction — use `npm exec -- jest`, not bare `npx jest`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
@@ -42,7 +42,7 @@
 - Exactly **one** 2FA method enrolled at a time; change-method = step-up + atomic swap.
 - Allowlist skips the waitlist **only** — allowlisted tutors still email-confirm (unless Google) and still 2FA.
 - **Do NOT** seed Sarah's or Tyson's email addresses in the repo.
-- **Do NOT** wire `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c).
+- **Do NOT** wire a truncate-after-every-test Jest hook as a drive-by. Design and the July deadlock are on BACKLOG **JEST-ISOLATION-CLASS-2**. Branch `chore/jest-db-cleanup-wip` was deleted 2026-09-30.
 - **Do NOT** touch recorder FSM / live-A/V / whiteboard apply-path as auth follow-up.
 
 **Durable decisions (calendar + OAuth — current):**
@@ -55,7 +55,7 @@
 
 **Process — Neon CLI (Andrew 2026-08-28):** `neon`/`neonctl` auth pops a **browser window**. Warn Andrew in chat *before* running it so he has eyes on the screen. Prefer Neon MCP when it can do the write.
 
-**Preserved (do not wire):** `chore/jest-db-cleanup-wip` @ [`43acd75c`](https://github.com/Arangarx/tutoring-notes/commit/43acd75c) holds the unwired jest per-test Postgres cleanup harness. Andrew 2026-09-10: **do NOT wire it up** — prior global-TRUNCATE attempt deadlocked (`40P01`). New auth jest suites use per-suite cleanup like their neighbours.
+**Jest isolation:** `chore/jest-db-cleanup-wip` was deleted 2026-09-30. The unproven per-test truncate design lives on BACKLOG **JEST-ISOLATION-CLASS-2**. New auth jest suites keep per-suite cleanup like their neighbours.
 
 **Waive record:**
 - BACKLOG **MASTER-CUT-2026-07-09** — Andrew waived red `test:wb-sync` for Sarah delivery. Green: `next build` + `test:regression`. Red accepted: 9 REAL-FAIL / 2 ENV-FLAKE.
