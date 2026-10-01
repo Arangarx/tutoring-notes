@@ -241,6 +241,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Erasure parent/account-holder self-serve UI + CRITICAL_ACTION** —  (§6)
 - **Essentials-vs-optional tier ratification** —  (§6)
 - **LIVE-SESSION-CONSENT-COPY** —  (§6)
+- **LIVE-SESSION-START-AFFORDANCE** — hide Start when live sessions are off (§6)
 - **Non-technical tombstone/grace copy** —  (§6)
 - **Parent self-service erasure (non-admin)** —  (§6)
 - **Sarah test-student audit + TEST purge** —  (§6)
@@ -1372,6 +1373,9 @@ Pre-CC-1 sessions; verify end-path fail-closed.
 
 **[P2][CONSENT] LIVE-SESSION-CONSENT-COPY**  
 Honest `allowLiveSession` copy — shipped in `consent-toggle-copy.ts`; verify.
+
+**[P2][CONSENT] LIVE-SESSION-START-AFFORDANCE**  
+From the June 18 waiting-room plan (`docs/phase3-consent-model`, branch deleted 2026-09-30). If `allowLiveSession` is false, do not render the create/start control. The server already rejects the click ("Live sessions are not permitted under the parent's current privacy preferences."). The button still shows, and the tutor only learns that after clicking. The waiting room does not edit consent. Recording is a separate shipped policy: declined audio on a live session is `tutor_only`, not a hidden tutor control.
 
 **[P2][CONSENT] WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME**  
 `allowNoteSending` not email privacy gate; manual tutor email ungated interim.
