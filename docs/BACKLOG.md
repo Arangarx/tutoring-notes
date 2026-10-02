@@ -219,7 +219,6 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **wb-replay-scrub-seek ×3** —  (§1)
 - **WS-T-8** — roster End shows replay CTA when recording-count===0 (§4)
 - **WS-T-9** — gate-only End IDB crash (§4)
-- **WS-X** — PDF board stroke leak via v3 broadcast tombstone (§1)
 
 #### Live A/V & devices
 
@@ -630,9 +629,6 @@ Locked decision. `userWantsRecording` + `StudentRecordingDefaultToggle` still in
 
 **[P1][REC] WS-N5 — resume FSM `armed` window drops stroke capture after reopen**  
 On reopen FSM re-enters `armed` → `wbCaptureActive` false. Related to solo/in-person stroke gap; distinct from audio-only fix.
-
-**[P1][WB] WS-X — PDF board stroke leak via v3 broadcast tombstone**  
-PARKED `wb-wave5-ws-x-wip`. `applyRemoteToCanvas` tombstone + v3 broadcast does not filter `isDeleted`. Distinct from E2/E4/E5 fixes.
 
 **[P1][NOTES] SMOKE-NOTES-3 — notes fabricate on non-teaching talk**  
 Map/reduce accuracy + abstain path. Prompt @ `cefc5cd` PASS for teaching; refinement flagged. Cross-ref **MAP-ACC** (#1 post-master).
@@ -2284,7 +2280,7 @@ Process cleanup.
 **[P3][DOCS] Usersmoke quicklists**  
 [`docs/handoff/usersmoke-2026-07-08-problem-quicklist.md`](handoff/usersmoke-2026-07-08-problem-quicklist.md), [`usersmoke-2026-07-09-recheck-quicklist.md`](handoff/usersmoke-2026-07-09-recheck-quicklist.md) — living triage until master cut complete.
 
-**Resolved / do not re-open (reference):** CONSENT_ENFORCEMENT flag removed · anonymous `/w` join retired to redirect · phantom stroke bug · Slice-3 B4 save model · Auth role-refresh · Parent-create-learner path · Weak PIN validators · Gate B1 core waitlist · SEC-1 impersonation pillar · Tier A security quick wins · Note save vs transcribe race (#6) · B5 gapless rollover · Client-direct blob upload B1 · Multi-recording schema · Share seen-tracking baseline · Billable WS-J · Housekeeping CLIs · Cost admin dashboard · Waiting room overlay · Per-speaker C transcription · In-person audio without peer · 2FA remember device · IAC-13 tutor disconnect parent · Session wrong-identity RC-A · Erasure Option A tombstone + cancel-restore · CF-1–CF-4 consent-honesty blockers · PRESARAH-1 partial (toggle removal not done) · SMOKE-BLOCK-2/3/4 · SMOKE-BUG-1/6 · SMOKE-UX-2/4 · Many wave5 polish items per known-issues DRAFT appendix.
+**Resolved / do not re-open (reference):** CONSENT_ENFORCEMENT flag removed · anonymous `/w` join retired to redirect · phantom stroke bug · Slice-3 B4 save model · Auth role-refresh · Parent-create-learner path · Weak PIN validators · Gate B1 core waitlist · SEC-1 impersonation pillar · Tier A security quick wins · Note save vs transcribe race (#6) · B5 gapless rollover · Client-direct blob upload B1 · Multi-recording schema · Share seen-tracking baseline · Billable WS-J · Housekeeping CLIs · Cost admin dashboard · Waiting room overlay · Per-speaker C transcription · In-person audio without peer · 2FA remember device · IAC-13 tutor disconnect parent · Session wrong-identity RC-A · Erasure Option A tombstone + cancel-restore · CF-1–CF-4 consent-honesty blockers · PRESARAH-1 partial (toggle removal not done) · SMOKE-BLOCK-2/3/4 · SMOKE-BUG-1/6 · SMOKE-UX-2/4 · **WS-X** PDF board stroke leak (`34f650a4`, `ef5fb1a0`; parked branch `wb-wave5-ws-x-wip` deleted 2026-10-01) · Many wave5 polish items per known-issues DRAFT appendix.
 
 ---
 

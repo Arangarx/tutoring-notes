@@ -12,11 +12,11 @@
 
 **⛔ NON-NEGOTIABLE STANDARDS (2026-07-10)** — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize: (1) zero unjustified duplication ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)).
 
-**Tip:** `origin/master` @ [`2f84fb19`](https://github.com/Arangarx/tutoring-notes/commit/2f84fb19). Main checkout is this repo on `master`. The `tutoring-notes-master-ops` worktree is gone.
+**Tip:** `origin/master` @ [`9bcc1b2d`](https://github.com/Arangarx/tutoring-notes/commit/9bcc1b2d). Main checkout is this repo on `master`. The `tutoring-notes-master-ops` worktree is gone.
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-01: deleted `wb-av-reachability-detection-fix` (local + origin). Start-dead bug stays BACKLOG **SMOKE-BLOCK-1**. July 3 smoke: that branch made reconnect A/V worse. |
+| **Last action completed** | 2026-10-01: deleted `wb-wave5-ws-x-wip` (local + origin). PDF stroke leak **WS-X** marked resolved (`34f650a4`, `ef5fb1a0`). |
 | **Next action(s)** | **Go over soon:** Sarah meeting raw notes + student detail declutter (BACKLOG top, Andrew 2026-09-28) — review and refine before any build. Later pass on end-time logic (BACKLOG: midnight wrap stays on the same date). Apple ICS hardware follow-up. Wait on Twilio approval. |
 | **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. |
 | **In-flight subagents** | None. |
