@@ -12,11 +12,11 @@
 
 **⛔ NON-NEGOTIABLE STANDARDS (2026-07-10)** — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize: (1) zero unjustified duplication ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)).
 
-**Tip:** `origin/master` @ [`9bcc1b2d`](https://github.com/Arangarx/tutoring-notes/commit/9bcc1b2d). Main checkout is this repo on `master`. The `tutoring-notes-master-ops` worktree is gone.
+**Tip:** `origin/master` @ [`d563bad8`](https://github.com/Arangarx/tutoring-notes/commit/d563bad8). Main checkout is this repo on `master`. The `tutoring-notes-master-ops` worktree is gone.
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-01: deleted `wb-wave5-ws-x-wip` (local + origin). PDF stroke leak **WS-X** marked resolved (`34f650a4`, `ef5fb1a0`). |
+| **Last action completed** | 2026-10-01: deleted local `feature/sarah-forward-migration-q6`. Q6 cutover closed — not run, not needed. June 16 Madison lesson stays on Sarah's student. |
 | **Next action(s)** | **Go over soon:** Sarah meeting raw notes + student detail declutter (BACKLOG top, Andrew 2026-09-28) — review and refine before any build. Later pass on end-time logic (BACKLOG: midnight wrap stays on the same date). Apple ICS hardware follow-up. Wait on Twilio approval. |
 | **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. |
 | **In-flight subagents** | None. |

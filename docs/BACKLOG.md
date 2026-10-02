@@ -292,7 +292,6 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Recording auto-pause on student disconnect** —  (§13)
 - **Recovery banner stacking** — audio + WB + disconnect (1c) (§3)
 - **rid= / lifecycle log coverage (reliability #13, #14)** —  (§3)
-- **Sarah forward-migration at re-arch cutover** —  (§3)
 - **Session timer drift on iOS (reliability #4)** —  (§3)
 - **SMOKE-PERF-1** — Finalizing fixed overhead (~5–10s) (§3)
 - **timelineStartMs / unified wall-clock session timeline** —  (§3)
@@ -818,9 +817,6 @@ Segments land; playback mixing post-v1.
 
 **[P2][REC] Custom SessionAudioPlayer (D10) + stitch-path retirement**  
 `replay-audio-timeline.ts` still used.
-
-**[P2][REC] Sarah forward-migration at re-arch cutover**  
-No migration tooling.
 
 **[P2][REC] Live transcription (LTX) spike**  
 Not on master; timeline assembly gap.
@@ -2280,7 +2276,7 @@ Process cleanup.
 **[P3][DOCS] Usersmoke quicklists**  
 [`docs/handoff/usersmoke-2026-07-08-problem-quicklist.md`](handoff/usersmoke-2026-07-08-problem-quicklist.md), [`usersmoke-2026-07-09-recheck-quicklist.md`](handoff/usersmoke-2026-07-09-recheck-quicklist.md) — living triage until master cut complete.
 
-**Resolved / do not re-open (reference):** CONSENT_ENFORCEMENT flag removed · anonymous `/w` join retired to redirect · phantom stroke bug · Slice-3 B4 save model · Auth role-refresh · Parent-create-learner path · Weak PIN validators · Gate B1 core waitlist · SEC-1 impersonation pillar · Tier A security quick wins · Note save vs transcribe race (#6) · B5 gapless rollover · Client-direct blob upload B1 · Multi-recording schema · Share seen-tracking baseline · Billable WS-J · Housekeeping CLIs · Cost admin dashboard · Waiting room overlay · Per-speaker C transcription · In-person audio without peer · 2FA remember device · IAC-13 tutor disconnect parent · Session wrong-identity RC-A · Erasure Option A tombstone + cancel-restore · CF-1–CF-4 consent-honesty blockers · PRESARAH-1 partial (toggle removal not done) · SMOKE-BLOCK-2/3/4 · SMOKE-BUG-1/6 · SMOKE-UX-2/4 · **WS-X** PDF board stroke leak (`34f650a4`, `ef5fb1a0`; parked branch `wb-wave5-ws-x-wip` deleted 2026-10-01) · Many wave5 polish items per known-issues DRAFT appendix.
+**Resolved / do not re-open (reference):** CONSENT_ENFORCEMENT flag removed · anonymous `/w` join retired to redirect · phantom stroke bug · Slice-3 B4 save model · Auth role-refresh · Parent-create-learner path · Weak PIN validators · Gate B1 core waitlist · SEC-1 impersonation pillar · Tier A security quick wins · Note save vs transcribe race (#6) · B5 gapless rollover · Client-direct blob upload B1 · Multi-recording schema · Share seen-tracking baseline · Billable WS-J · Housekeeping CLIs · Cost admin dashboard · Waiting room overlay · Per-speaker C transcription · In-person audio without peer · 2FA remember device · IAC-13 tutor disconnect parent · Session wrong-identity RC-A · Erasure Option A tombstone + cancel-restore · CF-1–CF-4 consent-honesty blockers · PRESARAH-1 partial (toggle removal not done) · SMOKE-BLOCK-2/3/4 · SMOKE-BUG-1/6 · SMOKE-UX-2/4 · **WS-X** PDF board stroke leak (`34f650a4`, `ef5fb1a0`; parked branch `wb-wave5-ws-x-wip` deleted 2026-10-01) · **Sarah Q6 forward-migration** not run and not needed (one June 16 lesson already on her student; branch `feature/sarah-forward-migration-q6` deleted 2026-10-01) · Many wave5 polish items per known-issues DRAFT appendix.
 
 ---
 
