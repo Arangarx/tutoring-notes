@@ -297,6 +297,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Session timer drift on iOS (reliability #4)** —  (§3)
 - **SMOKE-PERF-1** — Finalizing fixed overhead (~5–10s) (§3)
 - **timelineStartMs / unified wall-clock session timeline** —  (§3)
+- **IOS-BACKGROUND-CLOCK** — defer until a real iPhone (§3)
 - **TURN (A4 Slice-C)** —  (§3)
 - **useRecordingCoordinator extraction** —  (§3)
 - **WebM/MP4 duration unreliable for scrubbing (reliability #5)** —  (§3)
@@ -754,6 +755,9 @@ W1 Ship C design; not in `src/`.
 
 **[P2][REC] timelineStartMs / unified wall-clock session timeline**  
 `getAudioMs` freeze-on-pause; no `timelineStartMs` on outbox. Re-arch D3/D4.
+
+**[P2][REC] IOS-BACKGROUND-CLOCK**  
+Deferred until Andrew has an iPhone (2026-10-01). `createSessionMsClock` reads `performance.now()` while recording and freezes while paused. Strokes, the recorder, and transcription share that clock. A background iOS tab can slow the page timer, and locking the screen may also suspend the microphone graph. A frame-counting AudioWorklet was tried on `phase1/wb-reliability-floor` (June 13) against the recorder from before this pause-freeze clock. That branch was deleted 2026-10-01. Do not revive it, and do not swap the live clock before a real device shows what lock-screen does to `performance.now()` and to the audio graph. Desktop tests can prove frame-counter math only. Acceptance is a recorded session with the screen locked, then a replay where strokes still match the audio.
 
 **[P2][REC] audioStartedAtMs ordering bug**  
 Written at enqueue from `Date.now()` vs segment start.
