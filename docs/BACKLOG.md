@@ -225,7 +225,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 
 - **BUG-8** — reconnect media transport not rebuilt after peer leave/rejoin (§1)
 - **Phone student A/V** — bidirectional broken (§4)
-- **SMOKE-BLOCK-1** — reachability under-reports connected peer (Start dead) (§1)
+- **SMOKE-BLOCK-1** — Start stays dead when a connected peer is under-counted; July branch deleted (§1)
 - **WS-I-PRESTART-MUTE** — tutor mute before audio graph arms (§3)
 
 #### Consent, COPPA & erasure
@@ -612,7 +612,9 @@ Master-cut #11: post-resume segment only in transcribed notes. WS-N landed parti
 Andrew decided 2026-07-09; merged `e58e0826` / `69eacbf6`. **VERIFY** on hardware: `wb-end-winddown.spec.ts` `@wb-presence` `@wb-recording`. PERF-1 snapshot de-await deferred.
 
 **[P1][AV] SMOKE-BLOCK-1 — reachability under-reports connected peer (Start dead)**  
-Fix on branch `wb-av-reachability-detection-fix` @ `a962171` **PARKED** unmerged. A/V-required Start gate is correct by design; bug is false `reachableParticipants===0`. Cross-ref **BUG-8** on reconnect.
+Still open on `master`. Start enables only when `reachableParticipants` is at least 1, and a peer counts only when both `peerConnectionState === "connected"` and ICE is `connected` or `completed`. Safari can leave the overall connection on `connecting` while ICE is already up, so the count stays 0 and Start stays disabled. The A/V-required gate is correct. The bug is a false zero. Cross-ref **BUG-8** on reconnect.
+
+`wb-av-reachability-detection-fix` @ `a962171` was deleted 2026-10-01. Do not revive it. Andrew's July 3 Android smoke did not reproduce the dead Start button. Reconnect got worse: board and laser recovered, audio and video did not, and the timer stayed paused. Notes: [`presarah-batch-resmoke-smokebook-2026-07-03.md`](archive/handoff/presarah-batch-resmoke-smokebook-2026-07-03.md) item B1.
 
 **[P1][AV] BUG-8 — reconnect media transport not rebuilt after peer leave/rejoin**  
 FRAGILE — `peer-mesh.ts` / `useLiveAV.ts`. Pre-existing; surfaced 2026-07-03 re-smoke. Plan + hardware validation before merge.
