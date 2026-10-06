@@ -4,6 +4,7 @@ import {
   instantToIcsUtcStamp,
   instantsForScheduledSession,
 } from "@/lib/calendar/scheduled-session-datetime";
+import { firstNameLastInitial } from "@/lib/display-name-prefill";
 
 export type IcsFeedSessionInput = {
   id: string;
@@ -18,7 +19,8 @@ export type IcsFeedSessionInput = {
   updatedAt: Date;
   student: {
     name: string;
-    icsShowFullName: boolean;
+    /** Legacy column — read path ignores; titles always use first + last initial. */
+    icsShowFullName?: boolean;
   };
 };
 
@@ -61,18 +63,12 @@ function tutoringEventTitle(displayName: string): string {
 }
 
 function buildSummary(student: IcsFeedSessionInput["student"]): string {
-  if (student.icsShowFullName) {
-    return tutoringEventTitle(student.name);
-  }
-  const first = student.name.trim().split(/\s+/)[0] ?? student.name.trim();
-  return tutoringEventTitle(first);
+  const display = firstNameLastInitial(student.name) || student.name.trim();
+  return tutoringEventTitle(display);
 }
 
 /** Shared ICS + Google Calendar event title (B6 / WS2). */
-export function buildIcsEventSummary(student: {
-  name: string;
-  icsShowFullName: boolean;
-}): string {
+export function buildIcsEventSummary(student: { name: string }): string {
   return buildSummary(student);
 }
 
