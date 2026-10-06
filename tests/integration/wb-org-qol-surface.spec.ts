@@ -37,13 +37,17 @@ test.describe("whiteboard QoL surfaces", () => {
   test("tutor can rename the current board", { tag: [TAG.WB_CHROME] }, async ({ page }) => {
     test.setTimeout(120_000);
     await openTutorBoard(page);
-    const wrap = page.locator(".mynk-wb-board-tab-wrap").filter({ hasText: "Page 1" }).first();
-    await wrap.hover();
-    await wrap.getByRole("button", { name: "Rename Page 1" }).click();
-    await wrap.getByRole("textbox", { name: "Name for Page 1" }).fill("Homework");
-    await wrap.getByRole("textbox", { name: "Name for Page 1" }).press("Enter");
-    await expect(page.getByRole("button", { name: "Homework", exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Page 1", exact: true })).toHaveCount(0);
+    await page.locator("nextjs-portal").evaluateAll((nodes) => {
+      for (const node of nodes) (node as HTMLElement).style.pointerEvents = "none";
+    });
+    const boards = page.getByRole("tablist", { name: "Boards" });
+    await boards.getByRole("tab", { name: "Board 1" }).hover();
+    await boards.getByRole("button", { name: "Rename Board 1" }).click();
+    const nameField = boards.getByRole("textbox", { name: "Name for Board 1" });
+    await nameField.fill("Homework");
+    await nameField.press("Enter");
+    await expect(boards.getByRole("tab", { name: "Homework" })).toBeVisible();
+    await expect(boards.getByRole("tab", { name: "Board 1" })).toHaveCount(0);
   });
 
   test("an image file becomes its own board", { tag: [TAG.WB_ASSETS, TAG.WB_CHROME] }, async ({
@@ -60,7 +64,8 @@ test.describe("whiteboard QoL surfaces", () => {
     await expect(page.getByText("Inserted the image as a new board.")).toBeVisible({
       timeout: 60_000,
     });
-    await expect(page.getByRole("button", { name: "diagram", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("tab", { name: "diagram" })).toBeVisible();
+    await expect(page.getByTestId("wb-board-tab-image-icon")).toBeVisible();
   });
 
   test(
@@ -183,13 +188,15 @@ test.describe("whiteboard QoL surfaces", () => {
           .getByTestId("wb-session-chat-panel")
           .getByRole("button", { name: "Send" })
           .click();
-        await expect(
-          peers.tutorPage.getByTestId("wb-session-chat-panel").getByText(line, { exact: true })
-        ).toHaveCount(1);
+        const tutorLines = peers.tutorPage
+          .locator(".mynk-wb-session-chat__msg")
+          .filter({ hasText: line });
+        await expect(tutorLines).toHaveCount(1);
         await peers.studentPage.getByTestId("wb-session-chat-toggle").click();
-        await expect(
-          peers.studentPage.getByTestId("wb-session-chat-panel").getByText(line, { exact: true })
-        ).toHaveCount(1, { timeout: 20_000 });
+        const studentLines = peers.studentPage
+          .locator(".mynk-wb-session-chat__msg")
+          .filter({ hasText: line });
+        await expect(studentLines).toHaveCount(1, { timeout: 20_000 });
       } finally {
         await peers.close();
       }
