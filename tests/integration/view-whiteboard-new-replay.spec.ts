@@ -202,14 +202,15 @@ test.describe(
 
       await page.goto(`/s/${shareToken}`, { waitUntil: "domcontentloaded" });
       await expect(page).not.toHaveURL(/\/account\/login/);
-      await expect(page.getByTestId("share-wb-replay-links")).toBeVisible({
-        timeout: 30_000,
-      });
+      // Each note card has its own replay-links group. Scope to the link for
+      // this ended session so a page of other notes does not trip strict mode.
+      const replayLink = page.locator(
+        `[data-testid="share-wb-replay-links"] a[href$="/whiteboard/${whiteboardSessionId}"]`
+      );
+      await expect(replayLink).toBeVisible({ timeout: 30_000 });
+      await expect(replayLink).toHaveText("View whiteboard");
 
-      await page
-        .getByTestId("share-wb-replay-links")
-        .locator(`a[href$="/whiteboard/${whiteboardSessionId}"]`)
-        .click();
+      await replayLink.click();
 
       await expect(page).toHaveURL(
         new RegExp(`/s/${shareToken}/whiteboard/${whiteboardSessionId}`)
