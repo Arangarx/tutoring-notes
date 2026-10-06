@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   createStudent,
   retryStudentClaimInvite,
@@ -41,31 +43,37 @@ export function AddStudentForm({ idPrefix = "" }: { idPrefix?: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium text-foreground">Learner type</legend>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="radio"
-            name={`${idPrefix}learnerKindChoice`}
-            checked={learnerKind === "self_learner"}
-            onChange={() => setLearnerKind("self_learner")}
-            className="size-4 accent-brand"
-          />
-          {SITE_ROLE_SELF_LEARNER_PARENT}
-        </label>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="radio"
-            name={`${idPrefix}learnerKindChoice`}
-            checked={learnerKind === "child_learner"}
-            onChange={() => setLearnerKind("child_learner")}
-            className="size-4 accent-brand"
-          />
-          {SITE_ROLE_CHILD_LEARNER}
-        </label>
-      </fieldset>
-
       <form action={createAction} className="flex flex-col gap-4">
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-foreground">Learner type</legend>
+          <RadioGroup
+            value={learnerKind}
+            onValueChange={(value) =>
+              setLearnerKind(value === "self_learner" ? "self_learner" : "child_learner")
+            }
+            className="gap-2"
+          >
+            <div className="flex items-center gap-2">
+              <RadioGroupItem
+                value="self_learner"
+                id={`${idPrefix}learner-kind-self`}
+              />
+              <Label htmlFor={`${idPrefix}learner-kind-self`} className="font-normal">
+                {SITE_ROLE_SELF_LEARNER_PARENT}
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <RadioGroupItem
+                value="child_learner"
+                id={`${idPrefix}learner-kind-child`}
+              />
+              <Label htmlFor={`${idPrefix}learner-kind-child`} className="font-normal">
+                {SITE_ROLE_CHILD_LEARNER}
+              </Label>
+            </div>
+          </RadioGroup>
+        </fieldset>
+
         <input type="hidden" name="learnerKind" value={learnerKind} />
 
         <div className="space-y-2">
@@ -111,36 +119,17 @@ export function AddStudentForm({ idPrefix = "" }: { idPrefix?: string }) {
         ) : null}
 
         {createState?.status === "error" ? (
-          <p className="text-sm text-destructive" role="alert">
-            {createState.message}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{createState.message}</AlertDescription>
+          </Alert>
         ) : null}
 
         {createState?.status === "success" ? (
-          <p className="text-sm text-green-700 dark:text-green-400" role="status">
-            Invitation sent. They can approve the connection from their email.
-          </p>
-        ) : null}
-
-        {inviteFailed ? (
-          <div
-            className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm"
-            role="alert"
-          >
-            <p>{inviteFailed.message}</p>
-            <form action={retryAction} className="mt-3">
-              <input type="hidden" name="studentId" value={inviteFailed.studentId} />
-              <Button type="submit" variant="outline" size="sm" disabled={retryPending}>
-                {retryPending ? "Retrying…" : "Retry invitation email"}
-              </Button>
-            </form>
-            {retryState?.status === "success" ? (
-              <p className="mt-2 text-green-700 dark:text-green-400">Invitation sent.</p>
-            ) : null}
-            {retryState?.status === "invite_send_failed" || retryState?.status === "error" ? (
-              <p className="mt-2 text-destructive">{retryState.message}</p>
-            ) : null}
-          </div>
+          <Alert role="status">
+            <AlertDescription>
+              Invitation sent. They can approve the connection from their email.
+            </AlertDescription>
+          </Alert>
         ) : null}
 
         <FormSubmitButton
@@ -151,6 +140,28 @@ export function AddStudentForm({ idPrefix = "" }: { idPrefix?: string }) {
           disabled={createPending}
         />
       </form>
+
+      {inviteFailed ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            <p>{inviteFailed.message}</p>
+            <form action={retryAction} className="mt-3">
+              <input type="hidden" name="studentId" value={inviteFailed.studentId} />
+              <Button type="submit" variant="outline" size="sm" disabled={retryPending}>
+                {retryPending ? "Retrying…" : "Retry invitation email"}
+              </Button>
+            </form>
+            {retryState?.status === "success" ? (
+              <p className="mt-2 text-sm text-success" role="status">
+                Invitation sent.
+              </p>
+            ) : null}
+            {retryState?.status === "invite_send_failed" || retryState?.status === "error" ? (
+              <p className="mt-2 text-sm text-destructive">{retryState.message}</p>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }
