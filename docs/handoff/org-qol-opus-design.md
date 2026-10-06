@@ -155,9 +155,39 @@ model OrganizationBillingEntry {
 - **Manual org bill:** operator-only writes (`AdminRole.ADMIN`); org owner reads history. Not family billable time, not tutor pay.
 - **2FA:** org owner/admin screens require the existing tutor 2FA step-up (`verifyTotpStepUp` in `src/lib/two-factor-step-up.ts`); no new factor.
 
-### 5-axis review — required before Wave C code
+### Andrew's answers (2026-10-06) — Wave C is ON HOLD for a design session
 
-Dispatch a Sonnet review of this section (auth boundary). BLOCKERs fold into Wave C acceptance. The executor does not start Wave C until the orchestrator records the review outcome.
+- **Decided:**
+  - Families get Privacy copy plus an "arranged via <org>" label. No separate consent.
+  - A removed tutor's future org appointments stay with the org and are flagged for the scheduler to reassign. Join is off until they are reassigned.
+  - Org owners/admins can read prompt answers, never the note text.
+  - Member caps are negotiated per org: `maxMembers` is nullable and operator-set, with no default.
+  - Suspension never revokes approvals automatically. The operator gets a manual "revoke approvals this org granted" action.
+- **Reopened (blocks Wave C code):**
+  - **Learner ownership.** Org work can be a one-off, like a marketplace. The learner should be an org-assigned, temporary assignment to the tutor, with limited learner info for the tutor. It should not be a permanent tutor-owned `Student`. This changes the "tutor's own Student row" premise of placement, reassignment and consent above, and it touches the `assertOwnsStudent` boundary.
+  - **Learners with no account.** Org learners may have no account at all. Org-provided temporary logins ("just get on and get tutored") need designing.
+  - **Reassign:** show the family "waiting on your approval" with Join off. This depends on the account question above.
+  - These need a dedicated planning pass with Andrew before any org code. The 5-axis items below still apply to whatever design comes out of it.
+
+### 5-axis review outcome (Sonnet, 2026-10-06) — these override the bullets above where they conflict
+
+Wave C acceptance includes every item below. Items marked **(Andrew)** wait on his answer; do not guess.
+
+1. **Who creates orgs.** Only operator code creates an org and its first owner, and only operator code writes `status` (DB default `pending`). No tutor-facing create route in this slice. Test: non-operator caller refused.
+2. **Operator gate is `requireOperator` (email set), not `AdminRole.ADMIN`.** Extend it to return `{ adminId | null, email }` and store that in `createdByOperatorId` (email when no admin id). Applies to status, billing, org create.
+3. **Approval via org never overrides an operator.** Extend `approveTutor` with a conditional `updateMany where { id, approvalStatus: "WAITLISTED" }` (count 0 = no-op), log `approvedVia org=<id> inv=<id:8>`, `approvedByAdminId = invite.invitedByAdminUserId`. Org `status === "active"` is checked in the same transaction. Tests: REJECTED stays REJECTED; revoked-to-WAITLISTED by operator is not re-approved by an org; suspended org mid-accept does not approve.
+4. **Caps (Andrew).** `Organization.maxMembers` + daily invite cap, operator-set; `OrganizationMember.approvedViaOrg`. Suspension does not auto-revoke; operator gets a "revoke org-granted approvals" action.
+5. **Invite accept.** Session email = `invite.email`, `emailVerifiedAt` set, not a test account, token unexpired/unrevoked/unaccepted; consume with a conditional `updateMany` and create (or reactivate) the membership in the same transaction. Accept route lives outside the waitlist redirect (e.g. `/org-invite/[token]`, added to the exempt paths). Force a JWT role refresh after approval. Reuse the claim-invite token helpers. Logs carry `inv=<id:8>`, never the token. Responses never reveal whether an email has an account.
+6. **Role matrix.** Only an owner grants/revokes `owner`; admin manages scheduler + tutor only; no self-escalation; at least one owner always (transactional check); re-add reactivates the existing row; empty roles forbidden. Rename role `tutor` → `instructor`.
+7. **Cross-org IDOR.** Every sub-resource lookup is `where: { id, organizationId }` after the role check. Placement requires: tutor is an active member holding `instructor`, tutor approved, `Student.adminUserId === tutor`, student not erased. One test per resource type.
+8. **Learner picker (Andrew).** Default pending his answer: the picker lists only the chosen tutor's `Student` rows linked to a `learnerProfileId`, shown as first name + last initial; refusal copy is neutral.
+9. **Reassign vs create race.** Lock the schedule row (`SELECT … FOR UPDATE`) in both the reassign transaction and the core's create transaction; reassign is a conditional `updateMany where { id, adminUserId: old, startAt > now, whiteboardSession: { is: null } }` requiring count 1. Integration test with the two in parallel.
+10. **Removal vs create race.** Membership re-checked inside the core's create transaction for org-placed appointments (not only before the core). Test: removal during the create returns `not_available` and leaves no session row.
+11. **Removed tutor's future appointments (Andrew).** One `isScheduleJoinable` predicate shared by the family Join button and the bridge, so the button never lies.
+12. **Erasure.** Erasure and delete-session-and-data delete `SessionNoteOrgAnswer` rows for affected notes. Test.
+13. **Required prompts gate only READY.** One `assertRequiredOrgAnswers(noteId)` called at every transition to READY; DRAFT writes are never refused; the form keeps its state on refusal; prompts created after the session or archived are not required. Test per READY site.
+
+Also folded in (SHOULD): overlap warning reveals only "overlaps" + window, uses half-open instants; scheduler input interpreted in `Organization.timezone` (IANA-validated, DST test) and `sessionTimezone` set explicitly; billing entries `Restrict` from org and append-only with reversal rows; prompts archive-only, answers store `labelSnapshot`; `tutorAcceptedAt` set at placement when the flag is off (bridge gate = org-placed and not accepted), decline path, reset on reassign, only the owning tutor accepts; tutor edits to org-placed rows are logged `[org]`; reassign moves the Google event (delete on old, insert on new, clear `googleEventId`); `assertOrgRole` denies env scope and impersonating sessions, checks approval from the DB, extracts `requireAdminScope` into `student-scope.ts`; step-up only on owner-level mutations; a single `parentShareOrgAnswersArgs` used by every parent surface with a grep-guard; one canonical billable-minutes function; durable `ProductEvent` rows for org mutations plus the full `[org]` action list from the review; reject test accounts as members; tests target change points (not already-green operator denials) plus a grep-guard that `org-scope` is never imported by student/share/join scope or the create core.
 
 ### Org Playwright (minimum)
 
