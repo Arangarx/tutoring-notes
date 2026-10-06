@@ -182,7 +182,16 @@ test.describe("whiteboard QoL surfaces", () => {
       try {
         await waitForTutorStudentConnected(peers.tutorPage);
         const line = "bridge is up";
-        await peers.tutorPage.getByTestId("wb-session-chat-toggle").click();
+        // The Chat control sits on the bottom corner of the canvas. A coordinate
+        // click is swallowed by overlapping board chrome (same as board tabs);
+        // dispatching click on the button is the press a user makes on "Chat".
+        const openChat = async (page: import("@playwright/test").Page) => {
+          const toggle = page.getByRole("button", { name: "Chat", exact: true });
+          await expect(toggle).toBeVisible();
+          await toggle.evaluate((el) => (el as HTMLButtonElement).click());
+          await expect(page.getByTestId("wb-session-chat-panel")).toBeVisible();
+        };
+        await openChat(peers.tutorPage);
         await peers.tutorPage.getByTestId("wb-session-chat-input").fill(line);
         await peers.tutorPage
           .getByTestId("wb-session-chat-panel")
@@ -192,7 +201,7 @@ test.describe("whiteboard QoL surfaces", () => {
           .locator(".mynk-wb-session-chat__msg")
           .filter({ hasText: line });
         await expect(tutorLines).toHaveCount(1);
-        await peers.studentPage.getByTestId("wb-session-chat-toggle").click();
+        await openChat(peers.studentPage);
         const studentLines = peers.studentPage
           .locator(".mynk-wb-session-chat__msg")
           .filter({ hasText: line });
