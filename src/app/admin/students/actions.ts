@@ -5,8 +5,17 @@ import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { requireStudentScope, studentsWhereForScope } from "@/lib/student-scope";
 import { parseChildRosterHandle } from "@/lib/parse-child-roster-handle";
-import { mintStudentClaimInvite, reinviteTargetKind } from "@/lib/claim-invite-service";
+import {
+  countPendingClaimInvites,
+  MAX_PENDING_CLAIM_INVITES,
+  mintStudentClaimInvite,
+  reinviteTargetKind,
+} from "@/lib/claim-invite-service";
 import { isSelfLearnerPendingInvite } from "@/lib/roster-invite-target";
+import {
+  assertTutorApproved,
+  TutorNotApprovedError,
+} from "@/lib/tutor-approval-scope";
 
 export type CreateStudentResult =
   | { status: "success" }
@@ -68,6 +77,24 @@ export async function createStudent(
   formData: FormData
 ): Promise<CreateStudentResult> {
   const scope = await requireStudentScope();
+  if (scope.kind !== "admin") {
+    return {
+      status: "error",
+      message: "A registered tutor account is required to add a learner.",
+    };
+  }
+  try {
+    await assertTutorApproved(scope.adminId, { surface: "create_student" });
+  } catch (err) {
+    if (err instanceof TutorNotApprovedError) {
+      return {
+        status: "error",
+        message: "Your account is not approved to add learners yet.",
+      };
+    }
+    throw err;
+  }
+
   const learnerKind = String(formData.get("learnerKind") ?? "").trim();
   const inviteEmail = normalizeEmail(String(formData.get("inviteEmail") ?? ""));
   const childIdentifier = String(formData.get("childIdentifier") ?? "").trim();
@@ -104,6 +131,15 @@ export async function createStudent(
     },
   });
 
+  const pendingBeforeMint = await countPendingClaimInvites(student.id);
+  if (pendingBeforeMint >= MAX_PENDING_CLAIM_INVITES) {
+    await db.student.delete({ where: { id: student.id } });
+    return {
+      status: "error",
+      message: "Too many pending invites for this learner. Retry later from the learner profile.",
+    };
+  }
+
   const emailRecipient = parentEmail;
   const inviteLabel = isSelfLearnerPendingInvite({
     name: student.name,
@@ -139,6 +175,7 @@ export async function createStudent(
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
     if (message === "too_many_pending_invites") {
+      await db.student.delete({ where: { id: student.id } }).catch(() => undefined);
       return {
         status: "error",
         message: "Too many pending invites for this learner. Retry later from the learner profile.",

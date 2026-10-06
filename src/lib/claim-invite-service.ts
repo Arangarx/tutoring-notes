@@ -20,6 +20,23 @@ export type MintClaimInviteResult = {
   emailError?: string;
 };
 
+/** Per-student cap on unclaimed, unexpired invites. Shared by mint and createStudent. */
+export const MAX_PENDING_CLAIM_INVITES = 3;
+
+export async function countPendingClaimInvites(
+  studentId: string,
+  now: Date = new Date()
+): Promise<number> {
+  return db.studentClaimInvite.count({
+    where: {
+      studentId,
+      claimedAt: null,
+      revokedAt: null,
+      expiresAt: { gt: now },
+    },
+  });
+}
+
 /**
  * Target kind for a re-sent invite: the kind stored on the student's most
  * recent invite, else the legacy roster heuristic (pre-migration students).
@@ -56,16 +73,9 @@ export async function mintStudentClaimInvite(params: {
 }): Promise<MintClaimInviteResult> {
   const now = new Date();
 
-  const pendingCount = await db.studentClaimInvite.count({
-    where: {
-      studentId: params.studentId,
-      claimedAt: null,
-      revokedAt: null,
-      expiresAt: { gt: now },
-    },
-  });
+  const pendingCount = await countPendingClaimInvites(params.studentId, now);
 
-  if (pendingCount >= 3) {
+  if (pendingCount >= MAX_PENDING_CLAIM_INVITES) {
     throw new Error("too_many_pending_invites");
   }
 
