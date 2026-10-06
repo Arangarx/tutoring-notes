@@ -178,4 +178,37 @@ describe("CC-2 consent API — happy path", () => {
     expect(record!.allowNoteSending).toBe(false);
     expect(record!.setByAccountHolderId).toBe(fx.ah.id);
   });
+
+  it("stores a display name capped at 80 characters", async () => {
+    const fx = await createClaimedInviteFixture();
+    const raw = "A".repeat(100);
+    const res = await postSetup(fx.rawToken, fx.ahSessionToken, {
+      action: "display_name",
+      displayName: raw,
+    });
+    expect(res.status).toBe(200);
+    const profile = await db.learnerProfile.findUniqueOrThrow({
+      where: { id: fx.learnerProfileId },
+    });
+    const student = await db.student.findUniqueOrThrow({ where: { id: fx.student.id } });
+    expect(profile.displayName).toBe("A".repeat(80));
+    expect(student.name).toBe("A".repeat(80));
+    expect(profile.displayName.length).toBe(80);
+  });
+
+  it("stores a display name without control characters or markup brackets", async () => {
+    const fx = await createClaimedInviteFixture();
+    const res = await postSetup(fx.rawToken, fx.ahSessionToken, {
+      action: "display_name",
+      displayName: "Ann\u0000\u0007  Smith<script>",
+    });
+    expect(res.status).toBe(200);
+    const profile = await db.learnerProfile.findUniqueOrThrow({
+      where: { id: fx.learnerProfileId },
+    });
+    expect(profile.displayName).toBe("Ann Smithscript");
+    expect(profile.displayName).not.toMatch(/[\u0000-\u001F<>]/);
+    const student = await db.student.findUniqueOrThrow({ where: { id: fx.student.id } });
+    expect(student.name).toBe(profile.displayName);
+  });
 });

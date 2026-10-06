@@ -21,6 +21,7 @@ import {
   validateLearnerUsername,
 } from "@/lib/learner-credential-validation";
 import { ensureFamilyId, formatLearnerLoginHandle } from "@/lib/family-id";
+import { sanitizeClaimDisplayName } from "@/lib/claim-display-name";
 import {
   ALL_OFF_CONSENT_FLAGS,
   ConsentAlreadySavedError,
@@ -167,7 +168,9 @@ export async function POST(
   }
 
   if (action === "display_name") {
-    const displayName = String((bodyObj as { displayName?: string }).displayName ?? "").trim();
+    const displayName = sanitizeClaimDisplayName(
+      String((bodyObj as { displayName?: string }).displayName ?? "")
+    );
     if (!displayName) {
       return NextResponse.json({ error: "missing_display_name" }, { status: 400 });
     }
