@@ -1,12 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
 import {
   joinScheduledSessionFromForm,
   type JoinScheduledSessionError,
 } from "@/app/join/scheduled-actions";
 import { Button } from "@/components/ui/button";
+import { FormSubmitButton } from "@/components/ui/form-submit-button";
 
 const JOIN_REFUSAL_COPY: Record<JoinScheduledSessionError["error"], string> = {
   not_signed_in: "Sign in to join this session.",
@@ -14,27 +14,7 @@ const JOIN_REFUSAL_COPY: Record<JoinScheduledSessionError["error"], string> = {
   not_available: "This session is not available to join right now.",
 };
 
-function JoinSubmit({
-  scheduledSessionId,
-  joinWindowOpen,
-}: {
-  scheduledSessionId: string;
-  joinWindowOpen: boolean;
-}) {
-  const { pending } = useFormStatus();
-  return (
-    <Button
-      type="submit"
-      variant="accent"
-      size="sm"
-      className="min-h-10 rounded-full whitespace-nowrap"
-      disabled={!joinWindowOpen || pending}
-      data-testid={`join-scheduled-session-${scheduledSessionId}`}
-    >
-      {pending ? "Joining…" : "Join"}
-    </Button>
-  );
-}
+const JOIN_BUTTON_CLASS = "min-h-10 rounded-full whitespace-nowrap";
 
 export function JoinScheduledSessionButton({
   scheduledSessionId,
@@ -51,7 +31,7 @@ export function JoinScheduledSessionButton({
         type="button"
         variant="outline"
         size="sm"
-        className="min-h-10 rounded-full whitespace-nowrap"
+        className={JOIN_BUTTON_CLASS}
         disabled
         data-testid={`join-scheduled-session-${scheduledSessionId}`}
       >
@@ -65,9 +45,13 @@ export function JoinScheduledSessionButton({
   return (
     <form action={formAction} className="flex flex-col items-end gap-1">
       <input type="hidden" name="scheduledSessionId" value={scheduledSessionId} />
-      <JoinSubmit
-        scheduledSessionId={scheduledSessionId}
-        joinWindowOpen={joinWindowOpen}
+      <FormSubmitButton
+        label="Join"
+        pendingLabel="Joining…"
+        variant="accent"
+        size="sm"
+        className={JOIN_BUTTON_CLASS}
+        data-testid={`join-scheduled-session-${scheduledSessionId}`}
       />
       {refusal ? (
         <p

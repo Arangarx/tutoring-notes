@@ -42,4 +42,28 @@ describe("FormSubmitButton", () => {
     render(<FormSubmitButton label="Send" />);
     expect(screen.getByRole("button", { name: "Send…" })).toHaveTextContent("Send…");
   });
+
+  it("forwards size, variant, and data-testid onto the submit button", () => {
+    mockUseFormStatus.mockReturnValue({ pending: false, data: null, method: null, action: null });
+    render(
+      <FormSubmitButton
+        label="Join"
+        variant="accent"
+        size="sm"
+        data-testid="join-scheduled-session-abc"
+      />
+    );
+    const button = screen.getByTestId("join-scheduled-session-abc");
+    expect(button).toHaveAttribute("type", "submit");
+    expect(button).toHaveAttribute("data-variant", "accent");
+    expect(button).toHaveAttribute("data-size", "sm");
+    expect(button).toHaveTextContent("Join");
+    expect(button).toBeEnabled();
+  });
+
+  it("stays disabled when the caller disables it, even while idle", () => {
+    mockUseFormStatus.mockReturnValue({ pending: false, data: null, method: null, action: null });
+    render(<FormSubmitButton label="Join" disabled data-testid="join-closed" />);
+    expect(screen.getByTestId("join-closed")).toBeDisabled();
+  });
 });
