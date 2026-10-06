@@ -117,9 +117,13 @@ test.describe("TOTP enroll — email OTP login alternative (chunk 2)", () => {
     await expect(page.getByRole("button", { name: "Email me a code instead" })).toBeVisible();
     await page.getByRole("button", { name: "Email me a code instead" }).click();
 
-    // That click sends a new code and retires the seed. Harness mail uses a fixed code.
+    // "Resend code" flips on as soon as the channel switches, before the send
+    // finishes. Wait for the post-send copy so the harness code is the row
+    // verify will read.
+    await expect(page.getByText("We sent a verification code to your email.")).toBeVisible({
+      timeout: 15_000,
+    });
     const { PLAYWRIGHT_HARNESS_EMAIL_OTP } = await import("@/lib/otp-challenge");
-    await expect(page.getByRole("button", { name: "Resend code" })).toBeVisible();
     await submitEmailOtpOnVerifyPage(page, PLAYWRIGHT_HARNESS_EMAIL_OTP);
     await expectTutorAuthedLanding(page);
   });

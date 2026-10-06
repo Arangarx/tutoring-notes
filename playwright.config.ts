@@ -5,6 +5,23 @@ const {
   WB_REGRESSION_TOTP_ENCRYPTION_KEY,
 } = require("./scripts/wb-regression-local-db.cjs");
 
+// Dummy Twilio credentials so the SMS consent UI renders in Playwright.
+// The consent specs never submit Send code. A real send with these values
+// 401s at Twilio and does not deliver a message. Always set on the webServer
+// command below so a developer .env cannot point the test server at live Twilio.
+const PW_TWILIO_ACCOUNT_SID = "ACplaywright00000000000000000000";
+const PW_TWILIO_AUTH_TOKEN = "playwright-dummy-not-a-real-token";
+const PW_TWILIO_FROM_NUMBER = "+15555550100";
+if (!process.env.TWILIO_ACCOUNT_SID?.trim()) {
+  process.env.TWILIO_ACCOUNT_SID = PW_TWILIO_ACCOUNT_SID;
+}
+if (!process.env.TWILIO_AUTH_TOKEN?.trim()) {
+  process.env.TWILIO_AUTH_TOKEN = PW_TWILIO_AUTH_TOKEN;
+}
+if (!process.env.TWILIO_FROM_NUMBER?.trim()) {
+  process.env.TWILIO_FROM_NUMBER = PW_TWILIO_FROM_NUMBER;
+}
+
 /**
  * Playwright config — visual regression, a11y, smoke, e2e, and integration tests.
  *
@@ -48,7 +65,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set TOTP_ENCRYPTION_KEY=${WB_REGRESSION_TOTP_ENCRYPTION_KEY}&& set OPERATOR_EMAILS=playwright@test.local,playwright-erasure-admin@test.local&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set WB_E2E_HARNESS=1&& set PLAYWRIGHT_TEST=1&& set PLAYWRIGHT_TEST_SECRET=playwright-test-secret&& set BLOB_HARNESS_LOCAL=1&& set BLOB_READ_WRITE_TOKEN=playwright-harness&& set NEXT_PUBLIC_PLAYWRIGHT_TEST=1&& set NEXT_PUBLIC_BLOB_HARNESS_LOCAL=1&& set NEXT_PUBLIC_CLAIM_INVITES_ENABLED=true&& set NEXTAUTH_URL=http://localhost:3100&& set GOOGLE_CLIENT_ID=playwright-harness-google-client-id&& set GOOGLE_CLIENT_SECRET=playwright-harness-google-client-secret&& set LEARNER_SESSION_HMAC_SECRET=pw-wb-test-hmac-secret-regression-2026&& set AH_SESSION_HMAC_SECRET=pw-wb-test-ah-hmac-secret-regression-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& npm run dev -- --port 3100"`,
+        `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set TOTP_ENCRYPTION_KEY=${WB_REGRESSION_TOTP_ENCRYPTION_KEY}&& set TWILIO_ACCOUNT_SID=${PW_TWILIO_ACCOUNT_SID}&& set TWILIO_AUTH_TOKEN=${PW_TWILIO_AUTH_TOKEN}&& set TWILIO_FROM_NUMBER=${PW_TWILIO_FROM_NUMBER}&& set OPERATOR_EMAILS=playwright@test.local,playwright-erasure-admin@test.local&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set WB_E2E_HARNESS=1&& set PLAYWRIGHT_TEST=1&& set PLAYWRIGHT_TEST_SECRET=playwright-test-secret&& set BLOB_HARNESS_LOCAL=1&& set BLOB_READ_WRITE_TOKEN=playwright-harness&& set NEXT_PUBLIC_PLAYWRIGHT_TEST=1&& set NEXT_PUBLIC_BLOB_HARNESS_LOCAL=1&& set NEXT_PUBLIC_CLAIM_INVITES_ENABLED=true&& set NEXTAUTH_URL=http://localhost:3100&& set GOOGLE_CLIENT_ID=playwright-harness-google-client-id&& set GOOGLE_CLIENT_SECRET=playwright-harness-google-client-secret&& set LEARNER_SESSION_HMAC_SECRET=pw-wb-test-hmac-secret-regression-2026&& set AH_SESSION_HMAC_SECRET=pw-wb-test-ah-hmac-secret-regression-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& npm run dev -- --port 3100"`,
       url: "http://localhost:3100",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
@@ -66,7 +83,7 @@ export default defineConfig({
       : [
           {
             command:
-              `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set TOTP_ENCRYPTION_KEY=${WB_REGRESSION_TOTP_ENCRYPTION_KEY}&& set OPERATOR_EMAILS=playwright@test.local,playwright-erasure-admin@test.local&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set WB_E2E_HARNESS=1&& set PLAYWRIGHT_TEST=1&& set PLAYWRIGHT_TEST_SECRET=playwright-test-secret&& set BLOB_HARNESS_LOCAL=1&& set BLOB_READ_WRITE_TOKEN=playwright-harness&& set NEXT_PUBLIC_PLAYWRIGHT_TEST=1&& set NEXT_PUBLIC_BLOB_HARNESS_LOCAL=1&& set NEXTAUTH_URL=http://localhost:3101&& set LEARNER_SESSION_HMAC_SECRET=pw-wb-test-hmac-secret-regression-2026&& set AH_SESSION_HMAC_SECRET=pw-wb-test-ah-hmac-secret-regression-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& npm run dev -- --port 3101"`,
+              `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set TOTP_ENCRYPTION_KEY=${WB_REGRESSION_TOTP_ENCRYPTION_KEY}&& set TWILIO_ACCOUNT_SID=${PW_TWILIO_ACCOUNT_SID}&& set TWILIO_AUTH_TOKEN=${PW_TWILIO_AUTH_TOKEN}&& set TWILIO_FROM_NUMBER=${PW_TWILIO_FROM_NUMBER}&& set OPERATOR_EMAILS=playwright@test.local,playwright-erasure-admin@test.local&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set WB_E2E_HARNESS=1&& set PLAYWRIGHT_TEST=1&& set PLAYWRIGHT_TEST_SECRET=playwright-test-secret&& set BLOB_HARNESS_LOCAL=1&& set BLOB_READ_WRITE_TOKEN=playwright-harness&& set NEXT_PUBLIC_PLAYWRIGHT_TEST=1&& set NEXT_PUBLIC_BLOB_HARNESS_LOCAL=1&& set NEXTAUTH_URL=http://localhost:3101&& set LEARNER_SESSION_HMAC_SECRET=pw-wb-test-hmac-secret-regression-2026&& set AH_SESSION_HMAC_SECRET=pw-wb-test-ah-hmac-secret-regression-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& npm run dev -- --port 3101"`,
             url: "http://localhost:3101",
             reuseExistingServer: !process.env.CI,
             timeout: 120_000,
@@ -190,6 +207,7 @@ export default defineConfig({
         "**/integration/wb-org-qol-presence.spec.ts",
         "**/integration/wb-org-qol-bridge.spec.ts",
         "**/integration/wb-org-qol-surface.spec.ts",
+        "**/integration/wb-hydration-peer-id.spec.ts",
         "**/integration/wb-replay-active-board-tab.spec.ts",
         "**/integration/wb-replay-scrub-seek.spec.ts",
         "**/integration/view-whiteboard-new-replay.spec.ts",

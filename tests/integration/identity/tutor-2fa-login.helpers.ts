@@ -7,8 +7,6 @@ import path from "node:path";
 import { encryptTotpSecret } from "@/lib/crypto/totp-secret";
 import { generateBackupCodes, storeBackupCodes } from "@/lib/two-factor-db";
 import { hashEmailOtpCode } from "@/lib/email-otp-challenge";
-import { readLocalEnv } from "../../utils/read-dotenv";
-
 const { assertLocalDatabaseUrlForHarness } = require("../../../scripts/wb-regression-local-db.cjs");
 
 /** Real (non-harness) tutor with confirmed 2FA enrollment — login→TOTP→land. */
@@ -48,15 +46,36 @@ export type NetworkCapture = {
 };
 
 function ensureTotpEncryptionKey(): void {
-  if (process.env.TOTP_ENCRYPTION_KEY) return;
-  const env = readLocalEnv();
-  if (env.TOTP_ENCRYPTION_KEY) {
-    process.env.TOTP_ENCRYPTION_KEY = env.TOTP_ENCRYPTION_KEY;
-    return;
+  // The Playwright webServer forces this key (see wb-regression-local-db.cjs).
+  // Reading .env here encrypts fixtures the dev server cannot decrypt
+  // ("Unsupported state or unable to authenticate data").
+  const { WB_REGRESSION_TOTP_ENCRYPTION_KEY } = require("../../../scripts/wb-regression-local-db.cjs");
+  process.env.TOTP_ENCRYPTION_KEY = WB_REGRESSION_TOTP_ENCRYPTION_KEY;
+}
+
+/**
+ * Drop a tutor's 2FA rows before re-seed. Backup codes and email/SMS
+ * challenges reference AdminUser2FA. Delete the children first so a
+ * database whose FK is not ON DELETE CASCADE cannot fail the seed with
+ * AdminUser2FABackupCode_twoFaId_fkey.
+ */
+async function deleteTutor2faRows(
+  prisma: PrismaClient,
+  adminUserId: string
+): Promise<void> {
+  const rows = await prisma.adminUser2FA.findMany({
+    where: { adminUserId },
+    select: { id: true },
+  });
+  const ids = rows.map((row) => row.id);
+  if (ids.length > 0) {
+    await prisma.adminUser2FABackupCode.deleteMany({ where: { twoFaId: { in: ids } } });
+    await prisma.adminUser2FAEmailChallenge.deleteMany({
+      where: { twoFaId: { in: ids } },
+    });
   }
-  throw new Error(
-    "TOTP_ENCRYPTION_KEY is required to seed 2FA fixtures (set in .env for local harness)."
-  );
+  await prisma.adminUser2FAEmailChallenge.deleteMany({ where: { adminUserId } });
+  await prisma.adminUser2FA.deleteMany({ where: { adminUserId } });
 }
 
 /** RFC 6238 code — same `otpauth` lib + params as product verify path. */
@@ -105,7 +124,7 @@ export async function seedEnrolled2faTutor(): Promise<{
       select: { id: true },
     });
 
-    await prisma.adminUser2FA.deleteMany({ where: { adminUserId: user.id } });
+    await deleteTutor2faRows(prisma, user.id);
 
     const totpSecretEnc = encryptTotpSecret(totpSecret);
     const twoFa = await prisma.adminUser2FA.create({
@@ -166,8 +185,14 @@ export async function seedTotpTutorWithEmailLoginChallenge(): Promise<{
       select: { id: true },
     });
 
-    await prisma.adminUser2FAEmailChallenge.deleteMany({ where: { adminUserId: user.id } });
-    await prisma.adminUser2FA.deleteMany({ where: { adminUserId: user.id } });
+    await deleteTutor2faRows(prisma, user.id);
+    await prisma.authThrottle.deleteMany({
+      where: {
+        scopeKey: {
+          in: [`2fa-otp-send:EMAIL:${user.id}`, `2fa-otp-send:SMS:${user.id}`],
+        },
+      },
+    });
 
     const totpSecretEnc = encryptTotpSecret(totpSecret);
     const twoFa = await prisma.adminUser2FA.create({
@@ -230,7 +255,7 @@ export async function seedUnenrolled2faTutor(): Promise<string> {
       select: { id: true },
     });
 
-    await prisma.adminUser2FA.deleteMany({ where: { adminUserId: user.id } });
+    await deleteTutor2faRows(prisma, user.id);
     return user.id;
   } finally {
     await prisma.$disconnect();

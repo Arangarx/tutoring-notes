@@ -61,6 +61,17 @@ import {
 import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
 import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
 
+/** Same on the server and the first client render. The real peer id is sessionStorage-backed and must not be in the hydrated HTML. */
+const PEER_ID_UNTIL_HYDRATED = "pending";
+
+function useHydratedDomPeerId(peerId: string): string {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setReady(true);
+  }, []);
+  return ready ? peerId : PEER_ID_UNTIL_HYDRATED;
+}
+
 /**
  * Subset of `AvParticipant` the tile actually reads. The host passes
  * a remote participant verbatim, or a synthetic descriptor for the
@@ -153,6 +164,7 @@ export function AVTile({
    * audio" interstitial.
    */
   const [audioBlocked, setAudioBlocked] = useState(false);
+  const domPeerId = useHydratedDomPeerId(participant.peerId);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -367,8 +379,8 @@ export function AVTile({
     [labelText, participant.role]
   );
   const placeholderColor = useMemo(
-    () => getDeterministicColorFromPeerId(participant.peerId),
-    [participant.peerId]
+    () => getDeterministicColorFromPeerId(domPeerId),
+    [domPeerId]
   );
 
   const pillHidden = shouldHidePill(pill);
@@ -391,8 +403,8 @@ export function AVTile({
 
   return (
     <div
-      data-testid={testId ?? `av-tile-${participant.peerId}`}
-      data-peer-id={participant.peerId}
+      data-testid={testId ?? `av-tile-${domPeerId}`}
+      data-peer-id={domPeerId}
       data-role={participant.role}
       data-is-local={isLocalTile ? "true" : "false"}
       data-state-kind={pill.kind}
@@ -423,7 +435,7 @@ export function AVTile({
           autoPlay
           muted
           playsInline
-          data-testid={`av-tile-video-${participant.peerId}`}
+          data-testid={`av-tile-video-${domPeerId}`}
           style={{
             position: "absolute",
             inset: 0,
@@ -437,7 +449,7 @@ export function AVTile({
         {showCamPlaceholder &&
           (remoteAwaitingVideo ? (
             <div
-              data-testid={`av-tile-cam-placeholder-${participant.peerId}`}
+              data-testid={`av-tile-cam-placeholder-${domPeerId}`}
               data-placeholder-kind="awaiting-video"
               style={{
                 position: "absolute",
@@ -455,7 +467,7 @@ export function AVTile({
             </div>
           ) : (
             <div
-              data-testid={`av-tile-cam-placeholder-${participant.peerId}`}
+              data-testid={`av-tile-cam-placeholder-${domPeerId}`}
               data-placeholder-kind="initials"
               style={{
                 position: "absolute",
@@ -467,7 +479,7 @@ export function AVTile({
               }}
             >
               <span
-                data-testid={`av-tile-initials-${participant.peerId}`}
+                data-testid={`av-tile-initials-${domPeerId}`}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -492,14 +504,14 @@ export function AVTile({
           <audio
             ref={audioRef}
             autoPlay
-            data-testid={`av-tile-audio-${participant.peerId}`}
+            data-testid={`av-tile-audio-${domPeerId}`}
             style={{ display: "none" }}
           />
         )}
         {!isLocalTile && audioBlocked && (
           <button
             type="button"
-            data-testid={`av-tile-audio-unblock-${participant.peerId}`}
+            data-testid={`av-tile-audio-unblock-${domPeerId}`}
             onClick={handleTapToHear}
             style={{
               position: "absolute",
@@ -583,7 +595,7 @@ export function AVTile({
         }}
       >
         <span
-          data-testid={`av-tile-label-${participant.peerId}`}
+          data-testid={`av-tile-label-${domPeerId}`}
           style={{
             fontSize: 12,
             fontWeight: 600,
@@ -596,7 +608,7 @@ export function AVTile({
         </span>
         {!pillHidden && (
           <span
-            data-testid={`av-tile-state-${participant.peerId}`}
+            data-testid={`av-tile-state-${domPeerId}`}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -624,7 +636,7 @@ export function AVTile({
               <button
                 type="button"
                 onClick={onReconnect}
-                data-testid={`av-tile-retry-${participant.peerId}`}
+                data-testid={`av-tile-retry-${domPeerId}`}
                 style={{
                   marginLeft: 4,
                   padding: "0 6px",

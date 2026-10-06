@@ -655,6 +655,8 @@ Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
 
 **[WATCH] WB-AV-STUDENT-INITIALS-ONLY** — camOn acquire gate merged `e5e71900`.
 
+**[P1][WB] AV-CAMON-NO-STREAM (2026-10-06, pre-existing on master):** presence omits camOn when no local video stream exists and permission is not denied, so a student whose camera never starts sends no explicit camera-off. Tutor tile relies on the legacy fallback. Fix must not reintroduce the mid-GUM false latch (b68efd9c). Opus-owned (useLiveAV).
+
 **[P2][WB] WB-REPLAY-PDF-PLACEHOLDER** — parent share PDF boards show placeholders. Asset hydrate / share proxy.
 
 **[P2][WB] WB-REPLAY-REOPEN-START-AT-0** — pause/hide then Replay starts at 0. Non-blocking for Sarah; REAL-FAIL waived.

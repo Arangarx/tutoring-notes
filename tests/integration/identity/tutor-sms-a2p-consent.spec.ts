@@ -49,7 +49,7 @@ test.describe("SMS A2P consent — setup phone collect @identity", () => {
     const sendButton = page.getByRole("button", { name: "Send code" });
     await expect(sendButton).toBeDisabled();
     const consent = page.getByTestId("sms-a2p-consent");
-    const phone = page.getByLabel("Mobile number");
+    const phone = page.getByLabel("Mobile number", { exact: true });
     await expect(consent).not.toBeChecked();
     const consentBox = await consent.boundingBox();
     const phoneBox = await phone.boundingBox();
