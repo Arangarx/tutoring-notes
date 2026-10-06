@@ -6,7 +6,7 @@
  */
 
 import { Profiler } from "react";
-import { act, render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { WbGhostViewportOverlay } from "@/components/whiteboard/chrome/WbGhostViewportOverlay";
 
 let frames: FrameRequestCallback[] = [];
@@ -28,7 +28,7 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-it("a still view commits once for the box, then stays quiet; a pan commits again", () => {
+it("a still view stays quiet across frames once the box is shown; a pan commits again", () => {
   const appState = { scrollX: 0, scrollY: 0, zoom: { value: 1 }, offsetLeft: 0, offsetTop: 0 };
   const api = { getAppState: () => appState } as never;
   let commits = 0;
@@ -42,15 +42,19 @@ it("a still view commits once for the box, then stays quiet; a pan commits again
       />
     </Profiler>
   );
-  const afterMount = commits;
   runFrames(1);
-  const afterFirstBox = commits;
-  expect(afterFirstBox).toBe(afterMount + 1);
+  expect(screen.getByTestId("wb-ghost-viewport-rect")).toBeTruthy();
+  // React may render once more before bailing out of a same-state update.
+  runFrames(2);
+  const settled = commits;
 
   runFrames(30);
-  expect(commits).toBe(afterFirstBox);
+  expect(commits).toBe(settled);
 
   appState.scrollX = 50;
   runFrames(1);
-  expect(commits).toBe(afterFirstBox + 1);
+  expect(commits).toBeGreaterThan(settled);
+  const afterPan = commits;
+  runFrames(30);
+  expect(commits).toBeLessThanOrEqual(afterPan + 1);
 });
