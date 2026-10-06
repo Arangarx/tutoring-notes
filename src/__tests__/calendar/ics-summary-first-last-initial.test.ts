@@ -6,6 +6,7 @@
 import ical from "node-ical";
 
 import { buildIcsCalendarBody, buildIcsEventSummary } from "@/lib/calendar/ics-feed";
+import { buildScheduledSessionGoogleEventResource } from "@/lib/calendar/google-calendar-event-payload";
 
 function summariesFromIcs(icsBody: string): string[] {
   const parsed = ical.parseICS(icsBody);
@@ -17,7 +18,7 @@ function summariesFromIcs(icsBody: string): string[] {
       "type" in entry &&
       entry.type === "VEVENT"
     ) {
-      const ev = entry as ical.VEvent;
+      const ev = entry as { summary?: unknown };
       const raw = ev.summary as unknown;
       if (raw == null) continue;
       const text =
@@ -71,5 +72,58 @@ describe("ICS SUMMARY — first name + last initial", () => {
 
   it("single-name students use the one name", () => {
     expect(buildIcsEventSummary({ name: "Cher" })).toBe("Tutoring — Cher");
+  });
+
+  it("does not put an unclaimed self-learner's email in the title", () => {
+    const email = "ada.learner@example.com";
+    expect(buildIcsEventSummary({ name: email })).toBe("Tutoring — Learner");
+    const body = buildIcsCalendarBody(
+      [
+        {
+          ...base,
+          id: "s-email",
+          student: { name: email, icsShowFullName: true },
+        },
+      ],
+      "America/Denver"
+    );
+    const summaries = summariesFromIcs(body);
+    expect(summaries).toEqual(["Tutoring — Learner"]);
+    for (const summary of summaries) {
+      expect(summary).not.toContain("@");
+      expect(summary.toLowerCase()).not.toContain("ada.learner");
+    }
+
+    const google = buildScheduledSessionGoogleEventResource(
+      {
+        id: "g-email",
+        date: base.date,
+        startTime: base.startTime,
+        endTime: base.endTime,
+        subject: base.subject,
+        notes: "",
+        location: "",
+        student: { name: email, icsShowFullName: true },
+      },
+      "America/Denver"
+    );
+    expect(google.summary).toBe("Tutoring — Learner");
+    expect(google.summary).not.toContain("@");
+
+    const named = buildScheduledSessionGoogleEventResource(
+      {
+        id: "g-named",
+        date: base.date,
+        startTime: base.startTime,
+        endTime: base.endTime,
+        subject: base.subject,
+        notes: "",
+        location: "",
+        student: { name: "Maya Rodriguez", icsShowFullName: true },
+      },
+      "America/Denver"
+    );
+    expect(named.summary).toBe("Tutoring — Maya R.");
+    expect(named.summary).not.toContain("Rodriguez");
   });
 });

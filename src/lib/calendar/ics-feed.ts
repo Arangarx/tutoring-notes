@@ -5,6 +5,7 @@ import {
   instantsForScheduledSession,
 } from "@/lib/calendar/scheduled-session-datetime";
 import { firstNameLastInitial } from "@/lib/display-name-prefill";
+import { SITE_ROLE_ROSTER_LEARNER } from "@/lib/site-role-labels";
 
 export type IcsFeedSessionInput = {
   id: string;
@@ -62,9 +63,18 @@ function tutoringEventTitle(displayName: string): string {
   return `Tutoring — ${displayName.trim()}`;
 }
 
+function nameIsEmailAddress(name: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name.trim());
+}
+
+function calendarDisplayName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || nameIsEmailAddress(trimmed)) return SITE_ROLE_ROSTER_LEARNER;
+  return firstNameLastInitial(trimmed) || SITE_ROLE_ROSTER_LEARNER;
+}
+
 function buildSummary(student: IcsFeedSessionInput["student"]): string {
-  const display = firstNameLastInitial(student.name) || student.name.trim();
-  return tutoringEventTitle(display);
+  return tutoringEventTitle(calendarDisplayName(student.name));
 }
 
 /** Shared ICS + Google Calendar event title (B6 / WS2). */
