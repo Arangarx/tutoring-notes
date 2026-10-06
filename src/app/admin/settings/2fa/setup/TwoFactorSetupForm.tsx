@@ -8,10 +8,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { BackupCodesPanel } from "@/components/identity/BackupCodesPanel";
-import { SmsTwoFactorConsentField } from "@/components/identity/SmsTwoFactorConsentField";
+import { SmsPhoneConsentForm } from "@/components/identity/SmsPhoneConsentForm";
 import { TwoFactorMethodChooserCards } from "../TwoFactorMethodChooserCards";
 import {
   startTotpEnrollment,
@@ -247,42 +245,17 @@ export function TwoFactorSetupForm({
           Enter your US mobile number. We&apos;ll text you a 6-digit code to confirm it.
         </p>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSendSms();
-          }}
-          className="space-y-4"
-        >
-          <SmsTwoFactorConsentField
-            id="tfa-sms-a2p-consent"
-            checked={smsConsentChecked}
-            onCheckedChange={setSmsConsentChecked}
-            disabled={isPending}
-          />
-          <div className="flex flex-wrap gap-2 items-end">
-            <div className="grid gap-1.5">
-              <Label htmlFor="tfa-sms-phone">Mobile number</Label>
-              <Input
-                id="tfa-sms-phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="(555) 123-4567"
-                value={phoneInput}
-                onChange={(e) => setPhoneInput(e.target.value)}
-                className="w-48"
-                autoFocus
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={isPending || !phoneInput.trim() || !smsConsentChecked}
-            >
-              {isPending ? "Sending…" : "Send code"}
-            </Button>
-          </div>
-        </form>
+        <SmsPhoneConsentForm
+          consentId="tfa-sms-a2p-consent"
+          phoneId="tfa-sms-phone"
+          phoneValue={phoneInput}
+          onPhoneChange={setPhoneInput}
+          consentChecked={smsConsentChecked}
+          onConsentChange={setSmsConsentChecked}
+          onSubmit={handleSendSms}
+          pending={isPending}
+          placeholder="(555) 123-4567"
+        />
         <button type="button" onClick={switchToEmail} disabled={isPending} className="text-sm underline text-muted-foreground">
           Back to email code
         </button>

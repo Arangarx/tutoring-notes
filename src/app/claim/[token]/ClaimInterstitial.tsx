@@ -80,6 +80,8 @@ export function ClaimInterstitial({
           setError("email_not_verified");
         } else if (data.error === "invite_email_mismatch") {
           setError("invite_email_mismatch");
+        } else if (data.error === "invite_target_mismatch") {
+          setError("invite_target_mismatch");
         } else {
           setError("server");
         }
@@ -218,6 +220,12 @@ export function ClaimInterstitial({
         <AuthFieldError
           id="claim-interstitial-error"
           message="This invitation was sent to a different email address. Switch accounts to continue."
+        />
+      ) : null}
+      {error === "invite_target_mismatch" ? (
+        <AuthFieldError
+          id="claim-interstitial-error"
+          message="This invitation is for a child's account. Ask the tutor for a self-learner invite if you will be taking the lessons yourself."
         />
       ) : null}
       {error === "server" || error === "network" ? (

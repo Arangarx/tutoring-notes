@@ -37,6 +37,8 @@ import {
   drawTestStrokeOnRole,
   e2eTwoPagePdfBoardTitle,
   openTutorAndStudent,
+  readActiveWhiteboardPageId,
+  readPageDataBucketIds,
   readSceneElementIds,
   seedWbLiveSyncSession,
   waitForElementOnPeer,
@@ -77,25 +79,6 @@ async function readSceneElementsFull(
     if (!bridge?.getElements) return [];
     return bridge.getElements().map((e) => ({ id: e.id, type: e.type }));
   }, role);
-}
-
-async function readPageDataBucketIds(
-  page: import("@playwright/test").Page,
-  pageId: string
-): Promise<string[]> {
-  return page.evaluate((id) => {
-    const win = window as WbE4TestWindow;
-    return win.__WBX_GET_PAGE_DATA_IDS__?.(id) ?? [];
-  }, pageId);
-}
-
-async function getActivePageId(
-  page: import("@playwright/test").Page
-): Promise<string> {
-  return page.evaluate(() => {
-    const win = window as WbE4TestWindow;
-    return win.__WBX_GET_ACTIVE_PAGE_ID__?.() ?? "";
-  });
 }
 
 async function waitForPdfFingerprintCycle(
@@ -184,7 +167,7 @@ test.describe("E4 PDF board switch — stale-onChange must not bleed into PDF bo
           timeout: 15_000,
         });
 
-        const board4PageId = await getActivePageId(peers.tutorPage);
+        const board4PageId = await readActiveWhiteboardPageId(peers.tutorPage);
         expect(board4PageId).not.toBe("");
 
         await waitForPdfFingerprintCycle(peers.tutorPage, board4PageId);

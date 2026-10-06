@@ -30,6 +30,8 @@ import {
   drawTestStrokeOnRole,
   e2eTwoPagePdfBoardTitle,
   openTutorAndStudent,
+  readActiveWhiteboardPageId,
+  readPageDataBucketIds,
   readSceneElementIds,
   seedWbLiveSyncSession,
   waitForElementOnPeer,
@@ -140,6 +142,35 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
         expect(pdfBoardSummary.length).toBeGreaterThan(0);
         expect(pdfBoardSummary.every((e) => e.type === "image")).toBe(true);
         expect(pdfBoardSummary.map((e) => e.id)).not.toContain(board3StrokeId);
+
+        const pdfPageId = await readActiveWhiteboardPageId(peers.tutorPage);
+        expect(pdfPageId).not.toBe("");
+        const pdfBucketIds = await readPageDataBucketIds(
+          peers.tutorPage,
+          pdfPageId
+        );
+        expect(
+          pdfBucketIds,
+          "PDF page stored bucket must not contain the board-3 stroke"
+        ).not.toContain(board3StrokeId);
+
+        await clickBoardPageTab(peers.tutorPage, "tutor", "Board 3");
+        await clickBoardPageTab(
+          peers.tutorPage,
+          "tutor",
+          e2eTwoPagePdfBoardTitle(1)
+        );
+        await expect(pdfTab).toHaveAttribute("aria-selected", "true", {
+          timeout: 10_000,
+        });
+        const pdfLiveAfterRoundTrip = await readSceneElementIds(
+          peers.tutorPage,
+          "tutor"
+        );
+        expect(
+          pdfLiveAfterRoundTrip,
+          "PDF board live scene after leaving and returning must not contain the board-3 stroke"
+        ).not.toContain(board3StrokeId);
 
         await clickBoardPageTab(peers.tutorPage, "tutor", "Board 3");
         const board3Ids = await readSceneElementIds(peers.tutorPage, "tutor");

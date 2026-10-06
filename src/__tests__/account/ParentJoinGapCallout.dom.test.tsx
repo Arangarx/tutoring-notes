@@ -11,8 +11,14 @@ describe("ParentJoinGapCallout", () => {
     render(<ParentJoinGapCallout />);
     expect(screen.getByTestId("parent-join-gap-callout")).toBeInTheDocument();
     expect(
-      screen.getByText(/Live sessions need the child's own login/)
+      screen.getByText(/You can join live sessions for your child/)
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/You do not need their PIN/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Live sessions need the child's own login/)
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /student login page/i })).toHaveAttribute(
       "href",
       "/students/login"

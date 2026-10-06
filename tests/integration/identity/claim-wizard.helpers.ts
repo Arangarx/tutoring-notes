@@ -44,6 +44,7 @@ function uniqSuffix(): string {
 export async function seedUnclaimedClaimInvite(opts?: {
   studentName?: string;
   adminUserId?: string;
+  inviteTargetKind?: "self_learner" | "child_learner";
 }): Promise<UnclaimedClaimInviteFixture> {
   assertLocalDatabaseUrlForHarness();
   const prisma = new PrismaClient();
@@ -82,6 +83,9 @@ export async function seedUnclaimedClaimInvite(opts?: {
         adminUserId,
         tokenHash,
         expiresAt: new Date(Date.now() + CLAIM_INVITE_TTL_MS),
+        ...(opts?.inviteTargetKind
+          ? { inviteTargetKind: opts.inviteTargetKind }
+          : {}),
       },
       select: { id: true },
     });

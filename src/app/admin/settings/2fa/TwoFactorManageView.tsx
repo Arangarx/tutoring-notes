@@ -15,10 +15,8 @@
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { BackupCodesPanel } from "@/components/identity/BackupCodesPanel";
-import { SmsTwoFactorConsentField } from "@/components/identity/SmsTwoFactorConsentField";
+import { SmsPhoneConsentForm } from "@/components/identity/SmsPhoneConsentForm";
 import { TwoFactorMethodChooserCards } from "./TwoFactorMethodChooserCards";
 import {
   rotateTotpStart,
@@ -906,37 +904,19 @@ export function TwoFactorManageView({
           US numbers only. We&apos;ll text you a 6-digit code to confirm.
         </p>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <form
-          onSubmit={(e) => { e.preventDefault(); handleChangeSendSms(); }}
-          className="space-y-4"
-        >
-          <div className="flex gap-2 items-center flex-wrap">
-            <Label htmlFor="change-sms-phone" className="sr-only">
-              Phone number
-            </Label>
-            <Input
-              id="change-sms-phone"
-              type="tel"
-              placeholder="(555) 555-1234"
-              value={changePhoneInput}
-              onChange={(e) => setChangePhoneInput(e.target.value)}
-              className="w-48"
-              autoFocus
-            />
-            <Button
-              type="submit"
-              disabled={isPending || !changePhoneInput.trim() || !changeSmsConsentChecked}
-            >
-              {isPending ? "Sending…" : "Send code"}
-            </Button>
-          </div>
-          <SmsTwoFactorConsentField
-            id="change-sms-a2p-consent"
-            checked={changeSmsConsentChecked}
-            onCheckedChange={setChangeSmsConsentChecked}
-            disabled={isPending}
-          />
-        </form>
+        <SmsPhoneConsentForm
+          consentId="change-sms-a2p-consent"
+          phoneId="change-sms-phone"
+          phoneValue={changePhoneInput}
+          onPhoneChange={setChangePhoneInput}
+          consentChecked={changeSmsConsentChecked}
+          onConsentChange={setChangeSmsConsentChecked}
+          onSubmit={handleChangeSendSms}
+          pending={isPending}
+          placeholder="(555) 555-1234"
+          phoneLabel="Phone number"
+          hidePhoneLabel
+        />
         <button
           type="button"
           onClick={handleChangeCancel}

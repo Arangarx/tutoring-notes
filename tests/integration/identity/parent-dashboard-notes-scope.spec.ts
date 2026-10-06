@@ -33,6 +33,16 @@ test.describe("P2-ID-2 — parent dashboard + child-notes scoping", () => {
       timeout: 15_000,
     });
 
+    const joinCallout = page.getByTestId("parent-join-gap-callout");
+    await expect(joinCallout).toBeVisible();
+    await expect(joinCallout).toContainText(
+      "You can join live sessions for your child"
+    );
+    await expect(joinCallout).toContainText("You do not need their PIN");
+    await expect(joinCallout).not.toContainText(
+      "Live sessions need the child's own login"
+    );
+
     const childRow = page.getByRole("listitem").filter({ hasText: owned.childName });
     await expect(childRow).toBeVisible();
     await childRow.getByRole("link", { name: "Manage" }).click();

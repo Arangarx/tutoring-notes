@@ -1,6 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-import { seedUnenrolled2faTutor, loginTutorWithPassword } from "./tutor-2fa-login.helpers";
+import {
+  generateTotpCode,
+  loginTutorWithPassword,
+  seedEnrolled2faTutor,
+  seedUnenrolled2faTutor,
+  submitTotpOnVerifyPage,
+  TEST_2FA_TUTOR,
+  waitFor2faVerifyChallenge,
+  expectTutorAuthedLanding,
+} from "./tutor-2fa-login.helpers";
 
 const EMPTY_STATE = { cookies: [] as [], origins: [] as [] };
 
@@ -39,11 +48,53 @@ test.describe("SMS A2P consent — setup phone collect @identity", () => {
 
     const sendButton = page.getByRole("button", { name: "Send code" });
     await expect(sendButton).toBeDisabled();
-    await expect(page.getByTestId("sms-a2p-consent")).not.toBeChecked();
+    const consent = page.getByTestId("sms-a2p-consent");
+    const phone = page.getByLabel("Mobile number");
+    await expect(consent).not.toBeChecked();
+    const consentBox = await consent.boundingBox();
+    const phoneBox = await phone.boundingBox();
+    expect(consentBox).toBeTruthy();
+    expect(phoneBox).toBeTruthy();
+    // Consent checkbox sits above the phone field.
+    expect(consentBox!.y + consentBox!.height).toBeLessThanOrEqual(phoneBox!.y + 4);
 
     await page.getByTestId("sms-a2p-consent").click();
     await expect(page.getByTestId("sms-a2p-consent")).toBeChecked();
     await page.getByPlaceholder("(555) 123-4567").fill("5551234567");
     await expect(sendButton).toBeEnabled();
+  });
+
+  test("change-method phone screen puts the consent checkbox above the phone field", async ({
+    page,
+  }) => {
+    const { totpSecret } = await seedEnrolled2faTutor();
+    await loginTutorWithPassword(page, TEST_2FA_TUTOR);
+    await waitFor2faVerifyChallenge(page);
+    await submitTotpOnVerifyPage(page, generateTotpCode(totpSecret));
+    await expectTutorAuthedLanding(page);
+
+    await page.goto("/admin/settings/2fa");
+    await page.getByRole("button", { name: "Change method" }).click();
+    await page.getByPlaceholder("000000").fill(generateTotpCode(totpSecret));
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    const smsButton = page
+      .getByTestId("tfa-choose-sms")
+      .getByRole("button");
+    await expect(smsButton).toBeVisible({ timeout: 15_000 });
+    test.skip(
+      (await smsButton.textContent()) === "SMS not available",
+      "SMS sender is not configured on this server"
+    );
+    await smsButton.click();
+
+    const consent = page.getByTestId("sms-a2p-consent");
+    const phone = page.getByLabel("Phone number");
+    await expect(consent).toBeVisible();
+    const consentBox = await consent.boundingBox();
+    const phoneBox = await phone.boundingBox();
+    expect(consentBox).toBeTruthy();
+    expect(phoneBox).toBeTruthy();
+    expect(consentBox!.y + consentBox!.height).toBeLessThanOrEqual(phoneBox!.y + 4);
   });
 });

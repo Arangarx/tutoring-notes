@@ -214,6 +214,29 @@ export async function readSceneElementIds(page: Page, role: "tutor" | "student")
   }, role);
 }
 
+/** Element ids stored in the tutor pageDataRef bucket (E2E bridge). */
+export async function readPageDataBucketIds(
+  page: Page,
+  pageId: string
+): Promise<string[]> {
+  return page.evaluate((id) => {
+    const win = window as Window & {
+      __WBX_GET_PAGE_DATA_IDS__?: (pageId: string) => string[];
+    };
+    return win.__WBX_GET_PAGE_DATA_IDS__?.(id) ?? [];
+  }, pageId);
+}
+
+/** Active whiteboard page id from the tutor E2E bridge. */
+export async function readActiveWhiteboardPageId(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const win = window as Window & {
+      __WBX_GET_ACTIVE_PAGE_ID__?: () => string;
+    };
+    return win.__WBX_GET_ACTIVE_PAGE_ID__?.() ?? "";
+  });
+}
+
 export async function drawTestStrokeOnRole(
   page: Page,
   role: "tutor" | "student",

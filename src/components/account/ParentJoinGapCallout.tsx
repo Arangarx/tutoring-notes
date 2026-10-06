@@ -3,9 +3,10 @@ import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /**
- * Interim honesty: parent AH session cannot join /join as a non-self-learner
- * child (parent_session_select / learner picker is fast-follow, not built).
- * Shown on parent dashboard + child detail when a child has no own login.
+ * Shown when a child has no username and PIN yet.
+ * A parent can already join that child's live session from this account
+ * inside the appointment window. The child's own login is only for the
+ * child signing in on their device.
  */
 export function ParentJoinGapCallout({
   setupLoginHref,
@@ -19,26 +20,25 @@ export function ParentJoinGapCallout({
       className="border-border border-l-[3px] border-l-accent bg-accent-soft/40"
     >
       <AlertTitle className="text-foreground">
-        Live sessions need the child&apos;s own login (for now)
+        You can join live sessions for your child
       </AlertTitle>
       <AlertDescription className="text-muted-foreground">
         <p>
-          Learners without their own username + PIN can&apos;t join a live
-          whiteboard session yet — and signing in as the parent doesn&apos;t
-          open the session as that child. A &quot;pick which learner&quot; step
-          is coming soon.
+          From Upcoming sessions, Join opens the whiteboard for your child
+          when the appointment window is open. You do not need their PIN for
+          that.
         </p>
         <p className="mt-2">
           {setupLoginHref ? (
             <>
-              Until then,{" "}
+              If they will join on their own device,{" "}
               <Link
                 href={setupLoginHref}
                 className="font-medium text-accent-text underline-offset-2 hover:underline"
               >
                 set up this child&apos;s login
               </Link>{" "}
-              so they can sign in on the{" "}
+              and have them sign in on the{" "}
               <Link
                 href="/students/login"
                 className="font-medium text-accent-text underline-offset-2 hover:underline"
@@ -49,8 +49,9 @@ export function ParentJoinGapCallout({
             </>
           ) : (
             <>
-              Until then, open <strong>Manage</strong> on a learner and set up
-              their own login, then have them sign in on the{" "}
+              If they will join on their own device, open <strong>Manage</strong>{" "}
+              on a learner and set up their username and PIN, then have them
+              sign in on the{" "}
               <Link
                 href="/students/login"
                 className="font-medium text-accent-text underline-offset-2 hover:underline"
