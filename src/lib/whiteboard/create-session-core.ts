@@ -29,7 +29,9 @@ import {
   harnessRequestOrigin,
   harnessServerPut,
   isBlobHarnessActive,
+  isHarnessBlobUrl,
 } from "@/lib/blob-harness";
+import { deleteBlob } from "@/lib/blob";
 import { db, withDbRetry } from "@/lib/db";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import {
@@ -212,6 +214,14 @@ export async function createWhiteboardSessionCore({
         console.info(
           `[slc] wbsid=${winner.id} action=session_reused reason=unique_collision${schedSuffix}`
         );
+        // The losing arrival's empty events blob has no row; drop it.
+        if (!isHarnessBlobUrl(eventsBlobUrl)) {
+          deleteBlob(eventsBlobUrl).catch((delErr) => {
+            console.warn(
+              `[slc] wbsid=${winner.id} action=orphan_blob_delete_failed err=${delErr instanceof Error ? delErr.name : "unknown"}${schedSuffix}`
+            );
+          });
+        }
         return { ...winner, created: false };
       }
     }

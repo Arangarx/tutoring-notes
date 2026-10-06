@@ -28,12 +28,12 @@ const TAG_LENGTH = 16;
 function loadRootKeyBytes(): Buffer {
   const raw = process.env.TOTP_ENCRYPTION_KEY;
   if (!raw) {
-    throw new Error("[tfa] TOTP_ENCRYPTION_KEY is not set. Boot aborted.");
+    throw new Error("[at-rest] TOTP_ENCRYPTION_KEY is not set. Boot aborted.");
   }
   const keyBytes = Buffer.from(raw, "base64url");
   if (keyBytes.length !== 32) {
     throw new Error(
-      `[tfa] TOTP_ENCRYPTION_KEY must decode to exactly 32 bytes; got ${keyBytes.length}.`
+      `[at-rest] TOTP_ENCRYPTION_KEY must decode to exactly 32 bytes; got ${keyBytes.length}.`
     );
   }
   return keyBytes;
@@ -62,15 +62,15 @@ export function decryptAtRest(purpose: AtRestPurpose, stored: string): string {
   const key = loadKey(purpose);
   const dotIndex = stored.indexOf(".");
   if (dotIndex === -1) {
-    throw new Error("[tfa] Invalid stored format: missing IV separator");
+    throw new Error("[at-rest] Invalid stored format: missing IV separator");
   }
   const iv = Buffer.from(stored.slice(0, dotIndex), "base64url");
   const ciphertextAndTag = Buffer.from(stored.slice(dotIndex + 1), "base64url");
   if (iv.length !== IV_LENGTH) {
-    throw new Error(`[tfa] Invalid IV length: ${iv.length}`);
+    throw new Error(`[at-rest] Invalid IV length: ${iv.length}`);
   }
   if (ciphertextAndTag.length < TAG_LENGTH) {
-    throw new Error("[tfa] Stored blob too short to contain auth tag");
+    throw new Error("[at-rest] Stored blob too short to contain auth tag");
   }
   const authTag = ciphertextAndTag.subarray(ciphertextAndTag.length - TAG_LENGTH);
   const ciphertext = ciphertextAndTag.subarray(0, ciphertextAndTag.length - TAG_LENGTH);

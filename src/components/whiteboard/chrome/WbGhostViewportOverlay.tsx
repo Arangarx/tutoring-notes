@@ -66,7 +66,17 @@ export function WbGhostViewportOverlay({
         offsetLeft: typeof st.offsetLeft === "number" ? st.offsetLeft : 0,
         offsetTop: typeof st.offsetTop === "number" ? st.offsetTop : 0,
       });
-      setBox(next);
+      // Re-render only when the box moves; the loop itself runs every frame.
+      setBox((prev) =>
+        prev &&
+        next &&
+        prev.left === next.left &&
+        prev.top === next.top &&
+        prev.width === next.width &&
+        prev.height === next.height
+          ? prev
+          : next
+      );
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);

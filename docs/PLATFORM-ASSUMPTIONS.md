@@ -648,6 +648,11 @@
   - Missing key: 2FA setup/verify server actions return error; enrolled users cannot access `/admin`.
   - Wrong key: decryption fails with auth-tag mismatch (GCM integrity check) — same user-facing error.
   - Leaked key: attacker with DB access can decrypt TOTP secrets and clone authenticators.
+- **Also roots the whiteboard live key (2026-10-06, `feat/org-qol`)**:
+  - `src/lib/crypto/at-rest.ts` derives an HKDF-SHA256 subkey (info `mynk-at-rest:wb-live-key`) from this key to encrypt `WhiteboardSession.liveKeyEnc`, the server-held relay key that lets a learner or parent join without the `#k=` link (`src/lib/whiteboard/live-key.ts`). TOTP secrets still use the root key directly, in the unchanged ciphertext format.
+  - **Rotation:** every not-yet-ended session's `liveKeyEnc` becomes undecryptable. `readServerLiveKey` returns null and logs `[slc] wbsid=<id> action=live_key_decrypt_failed`. The tutor browser falls back to its localStorage/minted key; a learner without the link gets no key. Rotate only when no live sessions are open, or end them first. Ended sessions are unaffected (the key is never served after end).
+  - **Key absent:** `mintServerLiveKey` returns null and logs `[slc] action=live_key_unavailable`. New sessions fall back to the browser-minted link key (legacy behaviour), so a learner must use the link.
+  - **Leaked key + DB access:** live relay keys of open sessions decrypt. The relay itself still holds only ciphertext.
 - **Migration check**: MUST add `TOTP_ENCRYPTION_KEY` to all envs (Vercel env vars for prod/preview; local `.env`). Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
 
 ---

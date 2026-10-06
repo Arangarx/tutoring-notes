@@ -150,15 +150,21 @@ export function readPersistedEncryptionKey(
 export function persistEncryptionKey(
   sessionId: string,
   key: string,
-  win: Window
+  win: Window,
+  { storage = true }: { storage?: boolean } = {}
 ): void {
   // localStorage first — if hash writing throws (e.g. due to a
   // CSP-blocked replaceState in some embed context), we still want
   // the key in storage so the next mount can recover.
-  try {
-    win.localStorage.setItem(lsKeyForSession(sessionId), key);
-  } catch {
-    /* not fatal — hash still serves as the primary handoff */
+  // `storage: false` writes the hash only (learner devices: only the
+  // tutor End path clears the shelf, so a learner shelf would outlive
+  // the session).
+  if (storage) {
+    try {
+      win.localStorage.setItem(lsKeyForSession(sessionId), key);
+    } catch {
+      /* not fatal — hash still serves as the primary handoff */
+    }
   }
   try {
     const params = new URLSearchParams(
