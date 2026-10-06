@@ -648,7 +648,7 @@ export type WhiteboardSyncClient = {
   onRemoteCursor: (
     cb: (fromPeerId: string, msg: WhiteboardWireCursorMsg) => void
   ) => () => void;
-  broadcastChat: (args: { text: string }) => void;
+  broadcastChat: (args: { text: string }) => WhiteboardWireChatMsg | null;
   onRemoteChat: (
     cb: (fromPeerId: string, msg: WhiteboardWireChatMsg) => void
   ) => () => void;
@@ -2468,11 +2468,11 @@ export function createWhiteboardSyncClient(
     void encryptAndEmitImmediate(msg);
   }
 
-  function broadcastChat(args: { text: string }): void {
-    if (disposed) return;
-    if (aesKeyError) return;
+  function broadcastChat(args: { text: string }): WhiteboardWireChatMsg | null {
+    if (disposed) return null;
+    if (aesKeyError) return null;
     const trimmed = args.text.trim();
-    if (trimmed.length === 0 || trimmed.length > MAX_CHAT_TEXT_LEN) return;
+    if (trimmed.length === 0 || trimmed.length > MAX_CHAT_TEXT_LEN) return null;
     const msg: WhiteboardWireChatMsg = {
       v: 1,
       kind: "chat",
@@ -2483,6 +2483,7 @@ export function createWhiteboardSyncClient(
     };
     log.log(`kind=chat send len=${trimmed.length}`);
     void encryptAndEmitImmediate(msg);
+    return msg;
   }
 
   function broadcastSessionLifecycle(args: { type: "session_ending" }): void {
