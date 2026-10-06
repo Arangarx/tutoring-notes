@@ -1609,6 +1609,8 @@ export function WhiteboardWorkspaceClient({
   const [sessionStartError, setSessionStartError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  // Owned here so a WaitingRoomOverlay remount cannot drop the confirm step.
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const sync = syncReady ? syncClientRef.current : null;
 
@@ -7589,6 +7591,9 @@ export function WhiteboardWorkspaceClient({
         onLeave={role === "student" ? handleStudentExit : undefined}
         cancelError={cancelError}
         isCancelling={isCancelling}
+        actionsEnabled={clientMounted}
+        showCancelConfirm={showCancelConfirm}
+        onShowCancelConfirmChange={setShowCancelConfirm}
       />
     )}
     </WbRoleProvider>

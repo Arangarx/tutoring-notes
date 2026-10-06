@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   formatConsentActionError,
@@ -59,6 +59,11 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
   const { studentId } = props;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // SSR HTML is clickable before hydration; that click never runs handleStart.
+  const [actionsEnabled, setActionsEnabled] = useState(false);
+  useEffect(() => {
+    setActionsEnabled(true);
+  }, []);
 
   if (!canStartSession(props)) {
     if (props.accessSuspended) {
@@ -141,7 +146,7 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
         variant="accent"
         className="min-h-11 whitespace-nowrap"
         onClick={handleStart}
-        disabled={pending}
+        disabled={!actionsEnabled || pending}
         data-testid="start-whiteboard-session-btn"
       >
         {pending ? "Starting\u2026" : "Start whiteboard session"}

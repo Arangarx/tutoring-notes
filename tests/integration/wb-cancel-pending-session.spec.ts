@@ -23,7 +23,7 @@
  * Tags: @wb-presence (adjacency: @wb-sync, @wb-av)
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   seedWbPendingLiveSyncSession,
   openTutorAndStudent,
@@ -40,6 +40,21 @@ const LEARNER_AUTH_FILE = path.join(
   "tests/integration/.auth/learner.json"
 );
 
+/** Roster URL after cancel — not the workspace path under the same student. */
+function studentRosterUrl(studentId: string) {
+  return (url: URL) => url.pathname === `/admin/students/${studentId}`;
+}
+
+/** Two-step cancel: one click on Cancel session, then Confirm cancel. */
+async function confirmCancelSession(page: Page) {
+  const cancelBtn = page.getByTestId("wb-waiting-cancel");
+  await expect(cancelBtn).toBeEnabled({ timeout: 15_000 });
+  await cancelBtn.click();
+  const confirmBtn = page.getByTestId("wb-waiting-cancel-confirm");
+  await expect(confirmBtn).toBeEnabled({ timeout: 10_000 });
+  await confirmBtn.click();
+}
+
 // ---------------------------------------------------------------------------
 // Bug A: cancel-strand — student exits waiting room with cancel copy
 // ---------------------------------------------------------------------------
@@ -51,7 +66,7 @@ test.describe(
     test(
       "tutor cancel → student sees 'Session was canceled' (not stuck in waiting room)",
       async ({ browser }) => {
-        test.setTimeout(90_000);
+        test.setTimeout(150_000);
 
         const session = await seedWbPendingLiveSyncSession();
 
@@ -80,10 +95,10 @@ test.describe(
           await confirmBtn.click();
 
           // Tutor should navigate to the student roster (location.replace).
-          await tutorPage.waitForURL(
-            `**/admin/students/${session.studentId}`,
-            { timeout: 20_000 }
-          );
+          await tutorPage.waitForURL(studentRosterUrl(session.studentId), {
+            timeout: 45_000,
+            waitUntil: "commit",
+          });
 
           // ── Student exits waiting room with cancel copy ───────────────────────
           // Pre-fix: student stayed in the overlay forever (link_invalid showed no
@@ -121,7 +136,7 @@ test.describe(
     test(
       "after cancel, tutor URL is the student roster, not the deleted workspace",
       async ({ browser }) => {
-        test.setTimeout(60_000);
+        test.setTimeout(120_000);
 
         const session = await seedWbPendingLiveSyncSession();
 
@@ -137,23 +152,24 @@ test.describe(
             { waitUntil: "domcontentloaded" }
           );
 
-          // Wait for the PENDING overlay to mount.
+          // Wait for the PENDING overlay to mount, then for the workspace
+          // client so the two-step cancel handler is attached.
           await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
             timeout: 30_000,
           });
+          await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
 
           // Cancel flow (two-step confirm).
-          await tutorPage.getByTestId("wb-waiting-cancel").click();
-          await expect(
-            tutorPage.getByTestId("wb-waiting-cancel-confirm")
-          ).toBeEnabled({ timeout: 10_000 });
-          await tutorPage.getByTestId("wb-waiting-cancel-confirm").click();
+          await confirmCancelSession(tutorPage);
 
-          // Tutor must end up on the student roster URL.
-          await tutorPage.waitForURL(
-            `**/admin/students/${session.studentId}`,
-            { timeout: 20_000 }
-          );
+          // Tutor must end up on the student roster URL. `commit` — the
+          // student page can paint before the load event (open-session list).
+          await tutorPage.waitForURL(studentRosterUrl(session.studentId), {
+            timeout: 45_000,
+            waitUntil: "commit",
+          });
           expect(tutorPage.url()).toContain(`/admin/students/${session.studentId}`);
 
           // The deleted session ID must NOT appear in the URL.
@@ -176,7 +192,7 @@ test.describe(
     test(
       "cancel session A → start session B → copy link is /join/{B} not /join/{A}",
       async ({ browser }) => {
-        test.setTimeout(90_000);
+        test.setTimeout(150_000);
 
         const session = await seedWbPendingLiveSyncSession();
         const { studentId, adminUserId, whiteboardSessionId: sessionAId } = session;
@@ -197,40 +213,36 @@ test.describe(
           await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
             timeout: 30_000,
           });
+          await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
 
           // Cancel Session A.
-          await tutorPage.getByTestId("wb-waiting-cancel").click();
-          await expect(
-            tutorPage.getByTestId("wb-waiting-cancel-confirm")
-          ).toBeEnabled({ timeout: 10_000 });
-          await tutorPage.getByTestId("wb-waiting-cancel-confirm").click();
+          await confirmCancelSession(tutorPage);
 
-          // Wait for roster.
-          await tutorPage.waitForURL(
-            `**/admin/students/${studentId}`,
-            { timeout: 20_000 }
+          // Wait for roster. `commit` — the student page can paint before load.
+          await tutorPage.waitForURL(studentRosterUrl(studentId), {
+            timeout: 45_000,
+            waitUntil: "commit",
+          });
+
+          // Desktop CTA lives in the ready-to-teach banner. The same control
+          // is also mounted in the mobile bar (md:hidden) — one visible button.
+          const visibleStarts = tutorPage.locator(
+            '[data-testid="start-whiteboard-session-btn"]:visible'
           );
+          await expect(visibleStarts).toHaveCount(1);
+          const newSessionBtn = tutorPage
+            .getByTestId("student-ready-to-teach-banner")
+            .getByTestId("start-whiteboard-session-btn");
+          await expect(newSessionBtn).toBeVisible();
+          await expect(newSessionBtn).toHaveText("Start whiteboard session");
+          await expect(newSessionBtn).toBeEnabled();
+          await newSessionBtn.click();
 
-          // Start a new session from the roster by navigating to
-          // createWhiteboardSession (StartWhiteboardSession UI). We find the
-          // "New session" / "Start session" button on the student detail page.
-          const newSessionBtn = tutorPage.getByTestId("wb-start-new-session-btn");
-          if (await newSessionBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-            await newSessionBtn.click();
-          } else {
-            // Fallback: the StartWhiteboardSession component may have a form with
-            // a submit; find any button that looks like "New session" or "Start".
-            const fallbackBtn = tutorPage
-              .getByRole("button", { name: /new session|start session/i })
-              .first();
-            await expect(fallbackBtn).toBeVisible({ timeout: 10_000 });
-            await fallbackBtn.click();
-          }
-
-          // createWhiteboardSession calls redirect() → navigates to new workspace.
           await tutorPage.waitForURL(
-            `**/whiteboard/**/workspace`,
-            { timeout: 30_000 }
+            (url) => /\/whiteboard\/[^/]+\/workspace$/.test(url.pathname),
+            { timeout: 30_000, waitUntil: "commit" }
           );
 
           const newUrl = tutorPage.url();

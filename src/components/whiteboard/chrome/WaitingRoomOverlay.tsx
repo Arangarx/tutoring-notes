@@ -107,6 +107,19 @@ export type WaitingRoomOverlayProps = {
   cancelError?: string | null;
   /** True while deleteWhiteboardSessionAndDataAction is in-flight. */
   isCancelling?: boolean;
+  /**
+   * False until the workspace has hydrated and attached click handlers.
+   * The cancel control is in the SSR HTML; a click before hydration is
+   * discarded and the confirm step never appears. Default true so callers
+   * that render the overlay only on the client stay unchanged.
+   */
+  actionsEnabled?: boolean;
+  /**
+   * When set, the two-step confirm lives in the parent so an overlay
+   * remount (hydration recovery) cannot drop it.
+   */
+  showCancelConfirm?: boolean;
+  onShowCancelConfirmChange?: (show: boolean) => void;
 };
 
 /**
@@ -140,10 +153,18 @@ export function WaitingRoomOverlay({
   onLeave,
   cancelError,
   isCancelling = false,
+  actionsEnabled = true,
+  showCancelConfirm: showCancelConfirmProp,
+  onShowCancelConfirmChange,
 }: WaitingRoomOverlayProps) {
   const isTutor = role === "tutor";
   const inPerson = sessionMode === "IN_PERSON";
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [uncontrolledCancelConfirm, setUncontrolledCancelConfirm] = useState(false);
+  const showCancelConfirm = showCancelConfirmProp ?? uncontrolledCancelConfirm;
+  const setShowCancelConfirm = (show: boolean) => {
+    onShowCancelConfirmChange?.(show);
+    if (showCancelConfirmProp === undefined) setUncontrolledCancelConfirm(show);
+  };
 
   const copyLinkLabel =
     copyStudentLinkState === "copying"
@@ -314,7 +335,7 @@ export function WaitingRoomOverlay({
                     type="button"
                     className="mynk-wtr-cancel-btn"
                     onClick={() => setShowCancelConfirm(true)}
-                    disabled={isCancelling || isStarting}
+                    disabled={!actionsEnabled || isCancelling || isStarting}
                     data-testid="wb-waiting-cancel"
                   >
                     Cancel session
