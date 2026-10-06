@@ -32,8 +32,10 @@ import {
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
 import {
+  boardTab,
   clickBoardPageTab,
   drawTestStrokeOnRole,
+  e2eTwoPagePdfBoardTitle,
   openTutorAndStudent,
   readSceneElementIds,
   seedWbLiveSyncSession,
@@ -172,8 +174,11 @@ test.describe("E4 PDF board switch — stale-onChange must not bleed into PDF bo
           peers.tutorPage.getByTestId("wb-insert-progress")
         ).toBeHidden({ timeout: 120_000 });
 
-        const strip = peers.tutorPage.getByTestId("wb-tutor-page-strip");
-        const pdfTab = strip.getByRole("tab", { name: "Board 4" });
+        const pdfTab = boardTab(
+          peers.tutorPage,
+          "tutor",
+          e2eTwoPagePdfBoardTitle(1)
+        );
         await expect(pdfTab).toBeVisible({ timeout: 60_000 });
         await expect(pdfTab).toHaveAttribute("aria-selected", "true", {
           timeout: 15_000,
@@ -234,7 +239,11 @@ test.describe("E4 PDF board switch — stale-onChange must not bleed into PDF bo
         // (authoritative; selectTutorPage hydrates live scene from pageDataRef).
         await clickBoardPageTab(peers.tutorPage, "tutor", "Board 3");
         await peers.tutorPage.waitForTimeout(200);
-        await clickBoardPageTab(peers.tutorPage, "tutor", "Board 4");
+        await clickBoardPageTab(
+          peers.tutorPage,
+          "tutor",
+          e2eTwoPagePdfBoardTitle(1)
+        );
         await expect(pdfTab).toHaveAttribute("aria-selected", "true", {
           timeout: 10_000,
         });

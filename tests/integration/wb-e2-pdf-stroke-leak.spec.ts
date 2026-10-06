@@ -25,8 +25,10 @@ import {
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
 import {
+  boardTab,
   clickBoardPageTab,
   drawTestStrokeOnRole,
+  e2eTwoPagePdfBoardTitle,
   openTutorAndStudent,
   readSceneElementIds,
   seedWbLiveSyncSession,
@@ -121,9 +123,11 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
           peers.tutorPage.getByTestId("wb-insert-progress")
         ).toBeHidden({ timeout: 120_000 });
 
-        const pdfTab = peers.tutorPage
-          .getByTestId("wb-tutor-page-strip")
-          .getByRole("tab", { name: "Board 4" });
+        const pdfTab = boardTab(
+          peers.tutorPage,
+          "tutor",
+          e2eTwoPagePdfBoardTitle(1)
+        );
         await expect(pdfTab).toBeVisible({ timeout: 60_000 });
         await expect(pdfTab).toHaveAttribute("aria-selected", "true", {
           timeout: 15_000,

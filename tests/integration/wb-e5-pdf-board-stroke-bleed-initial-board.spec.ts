@@ -46,7 +46,9 @@ import {
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
 import {
+  boardTab,
   drawTestStrokeOnRole,
+  e2eTwoPagePdfBoardTitle,
   openTutorAndStudent,
   readSceneElementIds,
   seedWbLiveSyncSession,
@@ -184,7 +186,11 @@ test.describe(
 
           // Board 2 tab must be selected (auto-navigation).
           const strip = peers.tutorPage.getByTestId("wb-tutor-page-strip");
-          const pdfTab = strip.getByRole("tab", { name: "Board 2" });
+          const pdfTab = boardTab(
+            peers.tutorPage,
+            "tutor",
+            e2eTwoPagePdfBoardTitle(1)
+          );
           await expect(pdfTab).toBeVisible({ timeout: 60_000 });
           await expect(pdfTab).toHaveAttribute("aria-selected", "true", {
             timeout: 15_000,

@@ -671,21 +671,41 @@ export async function markerCenterOffsetFromViewportCenter(
   );
 }
 
+/**
+ * Visible tab label for `tests/fixtures/e2e-two-pages.pdf`.
+ * Page numbers are the PDF's own 1-based pages (`e2e-two-pages p.1`).
+ */
+export function e2eTwoPagePdfBoardTitle(pdfPageNumber: number): string {
+  return `e2e-two-pages p.${pdfPageNumber}`;
+}
+
+/** Board tab in the tutor or student strip, by its accessible name or 0-based position. */
+export function boardTab(
+  page: Page,
+  side: "tutor" | "student",
+  target: string | number
+) {
+  const strip = page.getByTestId(
+    side === "tutor" ? "wb-tutor-page-strip" : "wb-student-page-strip"
+  );
+  if (typeof target === "number") {
+    return strip.getByRole("tab").nth(target);
+  }
+  return strip.getByRole("tab", { name: target, exact: true });
+}
+
 export async function clickBoardPageTab(
   page: Page,
   side: "tutor" | "student",
   pageTitle: string
 ): Promise<void> {
-  const strip = page.getByTestId(
-    side === "tutor" ? "wb-tutor-page-strip" : "wb-student-page-strip"
-  );
   // Use evaluate(el.click()) rather than Playwright's coordinate-based .click()
   // because the Next.js dev-tools "N" button sits at bottom-left in dev mode
   // and physically overlaps the "Board 1" tab. Coordinate-based clicks (even
   // with force:true) hit the overlay; el.click() dispatches directly on the
   // target element, bypassing the overlay. The React onClick handler on the
   // page tab fires correctly and the full page-switch + sync pipeline is exercised.
-  const tab = strip.getByRole("tab", { name: pageTitle, exact: true });
+  const tab = boardTab(page, side, pageTitle);
   await tab.evaluate((el) => (el as HTMLButtonElement).click());
 }
 
