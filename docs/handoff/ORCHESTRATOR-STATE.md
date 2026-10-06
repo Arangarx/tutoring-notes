@@ -16,11 +16,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-06: **People-and-claim wave (no migration)** on `feat/org-qol` — site role labels; WB-ADULT-JOIN B3 self-learner PIN gate; post-claim display-name step; add-learner + invite-on-add + retry; email match on claim complete via `Student.parentEmail` (interim). Jest: claim/setup/create-student suites green. **Migration HARD STOP** documented below (`StudentClaimInvite.intendedEmail` + `inviteTargetKind`). |
-| **Next action(s)** | Andrew greenlight Neon migration for `StudentClaimInvite` invite columns → wire strict invite-oracle + backfill; then continue org-qol backlog. **Still STOP:** click-to-interact sync rebind + graph point/free-draw (deferred). |
-| **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. Billable wording waits on Sarah. |
-| **In-flight subagents** | None. |
-| **Uncommitted / unmerged** | Branch `feat/org-qol`, not merged. `node_modules` junction — `npm exec -- jest`. |
+| **Last action completed** | 2026-10-06 (Opus): [`edfdefd1`](https://github.com/Arangarx/tutoring-notes/commit/edfdefd1) — shared whiteboard create core, schedule bridge (`openScheduledWhiteboardSession` / `joinScheduledSession`, 15-min join window), server-held live key (encrypted at rest under `TOTP_ENCRYPTION_KEY` HKDF subkey), parent joins as child (`decideAhJoin`), strict claim invite (stored `intendedEmail` + `inviteTargetKind`), midnight-crossing end time, graph click-to-interact rebind. Also fixed build-breaking type errors left by earlier Composer waves. Additive migration `20261006120000_claim_target_schedule_bridge_live_key` verified on a scratch local DB only. Design for the rest: [`docs/handoff/org-qol-opus-design.md`](org-qol-opus-design.md) (`8d3cebaf`). Full jest: 21 failing tests, the identical 21 fail on baseline `0585fa67` (pre-existing). |
+| **Next action(s)** | (1) Review Wave B executor report, then independent verification. (2) Fold the Sonnet org review BLOCKERs into Wave C in the design doc, then dispatch Wave C (org slice). (3) Wave D graph points/free draw. (4) PLATFORM-ASSUMPTIONS: `TOTP_ENCRYPTION_KEY` now also roots live keys (rotation breaks open sessions' keys). (5) Full gates, smokebook, Andrew smokes once, merge. **Prod Neon migration needs Andrew's explicit go** (both migrations). |
+| **Open Andrew-confirms** | Prod migration greenlight. Twilio campaign approval. Apple ICS subscribe on a real device. Billable wording waits on Sarah. |
+| **In-flight subagents** | Wave B bridge UI + Playwright (Composer 2.5, background, edits `feat/org-qol`). Org slice 5-axis auth review (Sonnet, read-only). |
+| **Uncommitted / unmerged** | Branch `feat/org-qol` pushed @ `8d3cebaf`, not merged. Baseline worktree `../tn-baseline` (node_modules junction — remove junction first, never the real node_modules) and stray `../tn-red.json` still to clean up. |
 
 ### HARD STOP — people-and-claim migration (Andrew greenlight required)
 
