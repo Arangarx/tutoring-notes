@@ -3251,3 +3251,8 @@
 .mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name {
   display: none;
 }
+
+/* Hide Excalidraw's "Click to interact" words. The click that hands the pointer to the graph stays. */
+.mynk-wb-chrome .excalidraw__embeddable-hint {
+  display: none;
+}

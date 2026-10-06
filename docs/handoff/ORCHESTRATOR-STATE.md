@@ -16,8 +16,8 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-06: Wave 0 of `feat/org-qol`. Backlog cleanup docs and the `org` log prefix are on this branch. Product work has not started. |
-| **Next action(s)** | Track 1 small wave on `feat/org-qol`: waiting-room labels, tutor tile name, Finish review placement, SMS checkbox order, graph example, board rename, image boards, math keyboard, hide click-to-interact words. |
+| **Last action completed** | 2026-10-06: Track 1 small wave is implemented on `feat/org-qol` (labels, tutor tile name, Finish review placement, SMS consent order, graph y=, board rename, image-as-board, math keyboard dismiss, hidden click-to-interact words). Playwright assertion added on the waiting-room mode toggle. Full `test:wb-sync` has not been run yet. |
+| **Next action(s)** | Track 1 tools that do not touch the sync rebind: modifier hints, Shift square/circle proof, live cursor, ghost rectangle, collapsed chat. Stop before the click-to-interact sync rebind. |
 | **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. Billable wording waits on Sarah. |
 | **In-flight subagents** | None. |
 | **Uncommitted / unmerged** | Branch `feat/org-qol`, not merged. `node_modules` here is a junction — use `npm exec -- jest`, not bare `npx jest`. |

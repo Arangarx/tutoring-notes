@@ -90,16 +90,6 @@ export function ReviewWbTopBar({
             ✓ Notes saved
           </span>
         ) : null}
-        {studentId ? (
-          <Link
-            href={`/admin/students/${studentId}`}
-            className="btn primary"
-            style={{ fontSize: 12, padding: "4px 12px" }}
-            data-testid="wb-finish-review"
-          >
-            Finish review
-          </Link>
-        ) : null}
         <WbThemeToggle />
       </div>
     </header>

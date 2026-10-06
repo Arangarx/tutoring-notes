@@ -10,6 +10,8 @@ export type PageStripRow = {
   section?: string;
   /** True when this board tab was created by PDF import (pdf-* section). */
   isPdf?: boolean;
+  /** True when this board tab was created by an image insert (img-* section). */
+  isImage?: boolean;
   /** Tutor-authoritative; ignored by strip UI. */
   viewState?: PageViewState;
 };

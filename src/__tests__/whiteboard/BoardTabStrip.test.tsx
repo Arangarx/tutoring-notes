@@ -6,7 +6,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 
 const pages = [
@@ -44,5 +44,25 @@ describe("BoardTabStrip", () => {
 
     expect(screen.getByRole("tab", { name: "Board 2" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Add board" })).toBeInTheDocument();
+  });
+
+  it("shows a custom title and keeps the page id when renamed", () => {
+    const onRenamePage = jest.fn();
+    render(
+      <BoardTabStrip
+        pageList={[{ id: "p1", title: "Quadratics", section: "img-1", isImage: true }]}
+        activePageId="p1"
+        onRenamePage={onRenamePage}
+        onSelectPage={jest.fn()}
+      />
+    );
+    expect(screen.getByRole("tab", { name: "Quadratics" })).toBeInTheDocument();
+    expect(screen.getByTestId("wb-board-tab-image-icon")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Rename Quadratics" }));
+    fireEvent.change(screen.getByTestId("wb-board-rename-input-0"), {
+      target: { value: "Homework" },
+    });
+    fireEvent.keyDown(screen.getByTestId("wb-board-rename-input-0"), { key: "Enter" });
+    expect(onRenamePage).toHaveBeenCalledWith("p1", "Homework");
   });
 });

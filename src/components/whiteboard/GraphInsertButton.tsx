@@ -182,6 +182,10 @@ export function GraphInsertButton({
                   <label htmlFor="wb-graph-expr" style={{ fontSize: 13, fontWeight: 600 }}>
                     Expression
                   </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span aria-hidden="true" data-testid="wb-graph-expr-y-prefix" style={{ fontSize: 13, fontWeight: 600 }}>
+                      y=
+                    </span>
                   <input
                     ref={inputRef}
                     id="wb-graph-expr"
@@ -196,7 +200,7 @@ export function GraphInsertButton({
                         handleInsertWithExpression();
                       }
                     }}
-                    placeholder="e.g. x^2, sin(x)"
+                    placeholder="2x+1"
                     style={{
                       padding: "8px 10px",
                       border: "1px solid var(--border-default)",
@@ -205,6 +209,7 @@ export function GraphInsertButton({
                     }}
                     data-testid="wb-graph-expr-input"
                   />
+                  </div>
                   <p className="muted" style={{ margin: 0, fontSize: 12 }}>
                     Uses standard function notation (x as the variable).
                   </p>

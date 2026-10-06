@@ -136,6 +136,7 @@ export function SessionReviewMode({
       onFieldsChange={setNotesFields}
       onSaved={handleNoteSaved}
       variant={isReplay ? "docked" : "default"}
+      showFinishReview
     />
   ) : (
     <div className="muted" style={{ fontSize: 13, padding: 8 }}>

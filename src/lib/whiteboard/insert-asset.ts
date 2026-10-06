@@ -112,7 +112,7 @@ export type PdfBoardBatchRow = {
   elements: ReadonlyArray<unknown>;
   file: {
     id: string;
-    mimeType: "image/png";
+    mimeType: string;
     dataURL: string;
     created: number;
   };
@@ -939,6 +939,107 @@ export async function insertPdfPagesAsBoardPages(
     sectionId,
     firstPageId,
   };
+}
+
+/**
+ * Insert one image as its own board, using the same commit path as a PDF page.
+ * The page id is new. The current board's id is unchanged.
+ */
+export async function insertImageAsBoardPage(
+  args: InsertAssetCommonArgs & {
+    file: File;
+    integrate: InsertPdfBoardPagesIntegrate;
+  }
+): Promise<InsertPdfBoardPagesResult> {
+  const { excalidrawAPI, whiteboardSessionId, studentId, file, integrate } = args;
+  if (file.size > MAX_IMAGE_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    return {
+      ok: false,
+      reason: "upload-failed",
+      message: `Image is ${mb} MB — the upload limit is ${MAX_IMAGE_BYTES / (1024 * 1024)} MB.`,
+    };
+  }
+  const mime = normalizeMime(file.type);
+  if (!mime || !IMAGE_MIME_WHITELIST.includes(file.type)) {
+    return {
+      ok: false,
+      reason: "upload-failed",
+      message: `Unsupported image type: ${file.type || "unknown"}. Use PNG, JPG, GIF, WebP, or SVG.`,
+    };
+  }
+  let dims: { width: number; height: number };
+  try {
+    dims = await imageDimensionsFromBlob(file);
+  } catch (err) {
+    return { ok: false, reason: "upload-failed", message: (err as Error).message };
+  }
+  const upload = await uploadWhiteboardAsset({
+    whiteboardSessionId,
+    studentId,
+    blob: file,
+    filename: file.name || "image",
+    contentType: mime,
+    assetTag: "image",
+  });
+  if (!upload.ok) {
+    return { ok: false, reason: "upload-failed", message: upload.error };
+  }
+  let dataURL: string;
+  try {
+    dataURL = await blobToDataUrl(file);
+  } catch (err) {
+    return { ok: false, reason: "upload-failed", message: (err as Error).message };
+  }
+  const fileId = makeRandomFileId();
+  const aspect = dims.height / Math.max(dims.width, 1);
+  const width = SINGLE_IMAGE_DEFAULT_WIDTH;
+  const height = width * aspect;
+  const vp = viewportSize(excalidrawAPI);
+  const initialViewState = vp
+    ? computeFitCameraForRect({
+        centerSceneX: width / 2,
+        centerSceneY: height / 2,
+        contentWidth: width,
+        contentHeight: height,
+        viewportWidth: vp.width,
+        viewportHeight: vp.height,
+      })
+    : null;
+  const pageId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : makeRandomElementId();
+  const sectionId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? `img-${crypto.randomUUID()}`
+      : `img-${makeRandomElementId()}`;
+  const title = (file.name || "Image").replace(/\.[^.]+$/, "").slice(0, 24) || "Image";
+  const el = buildImageElement({
+    fileId,
+    x: 0,
+    y: 0,
+    width,
+    height,
+    assetUrl: upload.blobUrl,
+    altText: title,
+  });
+  integrate.commitPdfBatch({
+    sectionId,
+    sectionLabel: title,
+    anchorActivePageId: integrate.getActivePageId(),
+    firstPageId: pageId,
+    rows: [
+      {
+        pageId,
+        title,
+        elements: [el],
+        file: { id: fileId, mimeType: mime, dataURL, created: Date.now() },
+        ...(initialViewState ? { viewState: initialViewState } : {}),
+      },
+    ],
+  });
+  return { ok: true, pagesInserted: 1, sectionId, firstPageId: pageId };
 }
 
 // ---------------------------------------------------------------------------

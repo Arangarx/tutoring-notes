@@ -3628,6 +3628,17 @@ export function WhiteboardWorkspaceClient({
     [flushDocumentBroadcastNow, flushThrottledFrameNow, flushViewportPersistNow, whiteboardSessionId]
   );
 
+  const renameTutorPage = useCallback((id: string, title: string) => {
+    const nextTitle = title.trim();
+    if (!nextTitle) return;
+    const nextList = pageListRef.current.map((page) =>
+      page.id === id ? { ...page, title: nextTitle } : page
+    );
+    pageListRef.current = nextList;
+    setPageList(nextList);
+    flushDocumentBroadcastNow();
+  }, [flushDocumentBroadcastNow]);
+
   const addTutorPage = useCallback(() => {
     // Bump the switch token: any in-flight selectTutorPage will abandon
     // when its hydrate finishes (otherwise that late select would
@@ -3849,7 +3860,8 @@ export function WhiteboardWorkspaceClient({
               id: r.pageId,
               title: r.title,
               section: sectionId,
-              isPdf: true,
+              isPdf: sectionId.startsWith("pdf-") || sectionId.startsWith("pdf_"),
+              isImage: sectionId.startsWith("img-"),
               ...(r.viewState ? { viewState: r.viewState } : {}),
             })
           ),
@@ -6433,6 +6445,7 @@ export function WhiteboardWorkspaceClient({
       resolveLabel={(participant) =>
         resolveParticipantLabel(participant, {
           studentName,
+          tutorName,
           totalRemotePeers: liveAv.participants.length,
         })
       }
@@ -7344,6 +7357,7 @@ export function WhiteboardWorkspaceClient({
             resolveLabel={(participant) =>
               resolveParticipantLabel(participant, {
                 studentName,
+                tutorName,
                 totalRemotePeers: liveAv.participants.length,
               })
             }
@@ -7436,6 +7450,7 @@ export function WhiteboardWorkspaceClient({
           onSelectPage={role === "student" ? undefined : (id) => void selectTutorPage(id)}
           onAddPage={role === "student" ? undefined : addTutorPage}
           onDeletePage={role === "student" ? undefined : removeTutorPage}
+          onRenamePage={role === "student" ? undefined : renameTutorPage}
           testId={role === "student" ? "wb-student-page-strip" : undefined}
         />
       </footer>

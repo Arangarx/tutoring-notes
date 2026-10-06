@@ -28,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   getTutorNoteStatusAction,
@@ -77,6 +78,8 @@ type Props = {
   pollSyncAllowed?: boolean;
   /** Layout variant for hero vs docked replay panel. */
   variant?: "default" | "drawer" | "docked";
+  /** When true, Finish review sits with Save and Cancel, not in the top bar. */
+  showFinishReview?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -142,6 +145,7 @@ export default function TutorNotesSection({
   onFieldsChange,
   pollSyncAllowed = true,
   variant = "default",
+  showFinishReview = false,
 }: Props) {
   const router = useRouter();
   const isControlled =
@@ -539,37 +543,51 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          {/* Save/Delete buttons — done only */}
-          {isDone && (
+          {(isDone || showFinishReview) && (
             <div
+              data-testid="wb-review-leave-actions"
               style={{
                 display: "flex",
-                gap: 8,
-                marginTop: 12,
+                gap: 16,
+                marginTop: 16,
                 flexWrap: "wrap",
+                alignItems: "center",
               }}
             >
-              <button
-                type="button"
-                className="btn primary"
-                onClick={handleSave}
-                disabled={
-                  saving || deleting || regenerating || noteFieldsAreEmpty(fields)
-                }
-                data-testid="wb-save-note"
-              >
-                {saving ? "Saving…" : "Save to notes"}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                style={{ color: "var(--sign-out)", borderColor: "var(--error-border)" }}
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={saving || deleting || regenerating}
-                data-testid="wb-delete-session"
-              >
-                {deleting ? "Deleting…" : "Cancel and delete session data"}
-              </button>
+              {isDone ? (
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={handleSave}
+                  disabled={
+                    saving || deleting || regenerating || noteFieldsAreEmpty(fields)
+                  }
+                  data-testid="wb-save-note"
+                >
+                  {saving ? "Saving…" : "Save to notes"}
+                </button>
+              ) : null}
+              {isDone ? (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ color: "var(--sign-out)", borderColor: "var(--error-border)" }}
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={saving || deleting || regenerating}
+                  data-testid="wb-delete-session"
+                >
+                  {deleting ? "Deleting…" : "Cancel and delete session data"}
+                </button>
+              ) : null}
+              {showFinishReview ? (
+                <Link
+                  href={`/admin/students/${studentId}`}
+                  className="btn"
+                  data-testid="wb-finish-review"
+                >
+                  Finish review
+                </Link>
+              ) : null}
             </div>
           )}
 

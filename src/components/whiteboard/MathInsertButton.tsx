@@ -374,7 +374,16 @@ export function MathInsertButton({
             justifyContent: "center",
             zIndex: 1000,
           }}
-          onClick={(e) => {
+          onMouseDown={(e) => {
+            const path = e.nativeEvent.composedPath();
+            const hitKeyboard = path.some(
+              (node) =>
+                node instanceof HTMLElement &&
+                (node.classList.contains("ML__keyboard") ||
+                  node.classList.contains("MLK__plate") ||
+                  node.tagName === "MATH-VIRTUAL-KEYBOARD")
+            );
+            if (hitKeyboard) return;
             if (e.target === e.currentTarget) close();
           }}
         >

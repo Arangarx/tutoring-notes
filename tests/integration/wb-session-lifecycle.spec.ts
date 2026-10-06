@@ -562,8 +562,10 @@ test.describe("Waiting-room overlay + Start gating", { tag: [TAG.WB_CHROME, TAG.
       await expect(startBtn).toBeVisible();
       await expect(startBtn).toBeDisabled({ timeout: 5_000 });
 
-      // Mode toggle must be visible.
+      // Mode toggle must be visible, labeled Online and In person.
       await expect(tutorPage.getByTestId("wb-session-mode-toggle")).toBeVisible();
+      await expect(tutorPage.getByTestId("wb-session-mode-live")).toHaveText("Online");
+      await expect(tutorPage.getByTestId("wb-session-mode-in-person")).toHaveText("In person");
     } finally {
       await tutorCtx.close();
     }

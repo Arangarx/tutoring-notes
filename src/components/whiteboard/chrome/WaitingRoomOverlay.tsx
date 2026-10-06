@@ -232,7 +232,7 @@ export function WaitingRoomOverlay({
                   aria-pressed={sessionMode === "LIVE"}
                   data-testid="wb-session-mode-live"
                 >
-                  Live (remote)
+                  Online
                 </button>
                 <button
                   type="button"
@@ -241,12 +241,12 @@ export function WaitingRoomOverlay({
                   aria-pressed={sessionMode === "IN_PERSON"}
                   data-testid="wb-session-mode-in-person"
                 >
-                  In-person
+                  In person
                 </button>
               </div>
               {inPerson && (
                 <p className="mynk-wtr-mode-note">
-                  In-person: student is beside you — no remote connection required.
+                  In person: the student is beside you. No remote connection is required.
                   {/* Plan #2: consent-snapshot projection onto tutor capture hooks in here. */}
                 </p>
               )}

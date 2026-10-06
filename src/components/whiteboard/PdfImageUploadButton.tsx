@@ -9,6 +9,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { ModalPortal } from "@/components/ModalPortal";
 import {
   ExcalidrawApiLike,
+  insertImageAsBoardPage,
   insertPdfPagesAsBoardPages,
   type InsertPdfBoardPagesIntegrate,
 } from "@/lib/whiteboard/insert-asset";
@@ -242,11 +243,33 @@ export function PdfImageUploadButton({
 
       const isPdf =
         file.type === PDF_MIME || file.name.toLowerCase().endsWith(".pdf");
+      const isImage = /^image\//.test(file.type);
+      if (!isPdf && isImage) {
+        setState({ kind: "uploading", uploaded: 0, total: 1 });
+        const inserted = await insertImageAsBoardPage({
+          excalidrawAPI,
+          whiteboardSessionId,
+          studentId,
+          file,
+          integrate,
+        });
+        if (!inserted.ok) {
+          setState({ kind: "error", message: inserted.message });
+          return;
+        }
+        setState({ kind: "success", message: "Inserted the image as a new board." });
+        setTimeout(() => {
+          setState((current) =>
+            current.kind === "success" ? { kind: "closed" } : current
+          );
+        }, 1800);
+        return;
+      }
       if (!isPdf) {
         setState({
           kind: "error",
           message:
-            "This chooser is for PDF worksheets only. Use Excalidraw’s image tool in the left toolbar to add a PNG, JPEG, or SVG — it uses the same sync path once uploaded.",
+            "Choose a PDF worksheet or an image (PNG, JPEG, GIF, WebP, or SVG).",
         });
         return;
       }

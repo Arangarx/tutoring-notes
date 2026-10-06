@@ -45,6 +45,15 @@ describe("resolveParticipantLabel — Phase 4d single-student name fallback", ()
     }
   });
 
+  test("tutor-role peer with tutorName → shows the tutor's name", () => {
+    expect(
+      resolveParticipantLabel(
+        { role: "tutor" },
+        { studentName: "Liam", tutorName: "Sarah Chen", totalRemotePeers: 1 }
+      )
+    ).toBe("Sarah Chen");
+  });
+
   test("tutor-role peer → returns undefined by default (we only re-label students)", () => {
     expect(
       resolveParticipantLabel(

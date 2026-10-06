@@ -254,6 +254,12 @@ export function TwoFactorSetupForm({
           }}
           className="space-y-4"
         >
+          <SmsTwoFactorConsentField
+            id="tfa-sms-a2p-consent"
+            checked={smsConsentChecked}
+            onCheckedChange={setSmsConsentChecked}
+            disabled={isPending}
+          />
           <div className="flex flex-wrap gap-2 items-end">
             <div className="grid gap-1.5">
               <Label htmlFor="tfa-sms-phone">Mobile number</Label>
@@ -276,12 +282,6 @@ export function TwoFactorSetupForm({
               {isPending ? "Sending…" : "Send code"}
             </Button>
           </div>
-          <SmsTwoFactorConsentField
-            id="tfa-sms-a2p-consent"
-            checked={smsConsentChecked}
-            onCheckedChange={setSmsConsentChecked}
-            disabled={isPending}
-          />
         </form>
         <button type="button" onClick={switchToEmail} disabled={isPending} className="text-sm underline text-muted-foreground">
           Back to email code

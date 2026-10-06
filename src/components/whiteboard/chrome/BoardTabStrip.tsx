@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, ImageIcon } from "lucide-react";
 import type { PageStripRow } from "@/components/whiteboard/PageStrip";
-import { isPdfBoardSection } from "@/lib/whiteboard/page-strip-pdf";
+import { isImageBoardSection, isPdfBoardSection } from "@/lib/whiteboard/page-strip-pdf";
 import { WbIconPdf } from "@/components/whiteboard/chrome/wb-icons";
 import { Button } from "@/components/ui/button";
 
@@ -17,8 +17,18 @@ export type BoardTabStripProps = {
   onSelectPage?: (id: string) => void | Promise<void>;
   onAddPage?: () => void;
   onDeletePage?: (id: string) => void;
+  /** Updates the visible title only. The page id stays the same. */
+  onRenamePage?: (id: string, title: string) => void;
   testId?: string;
 };
+
+function visibleBoardLabel(title: string, index: number): string {
+  const trimmed = title.trim();
+  if (trimmed && !/^Board \d+$/.test(trimmed) && !/^Page \d+$/.test(trimmed)) {
+    return trimmed;
+  }
+  return `Board ${index + 1}`;
+}
 
 type ScrollState = {
   hasOverflow: boolean;
@@ -48,9 +58,12 @@ export function BoardTabStrip({
   onSelectPage,
   onAddPage,
   onDeletePage,
+  onRenamePage,
   testId = "wb-tutor-page-strip",
 }: BoardTabStripProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollState, setScrollState] = useState<ScrollState>({
     hasOverflow: false,
@@ -127,8 +140,9 @@ export function BoardTabStrip({
         aria-label="Boards"
       >
         {pageList.map((page, index) => {
-          const boardLabel = `Board ${index + 1}`;
+          const boardLabel = visibleBoardLabel(page.title, index);
           const isPdf = page.isPdf ?? isPdfBoardSection(page.section);
+          const isImage = page.isImage ?? isImageBoardSection(page.section);
           const active = page.id === activePageId;
           const confirming = confirmDeleteId === page.id;
           const tabClassName = `mynk-wb-board-tab${active ? " mynk-wb-board-tab--active" : ""}${readOnly && !active ? " mynk-wb-board-tab--read-only-inactive" : ""}${readOnly && active ? " mynk-wb-board-tab--read-only-active" : ""}`;
@@ -152,6 +166,11 @@ export function BoardTabStrip({
                       <WbIconPdf size={12} />
                     </span>
                   )}
+                  {isImage && (
+                    <span className="mynk-wb-board-tab__pdf-icon" aria-hidden data-testid="wb-board-tab-image-icon">
+                      <ImageIcon size={12} />
+                    </span>
+                  )}
                   {boardLabel}
                 </span>
               ) : (
@@ -173,9 +192,52 @@ export function BoardTabStrip({
                       <WbIconPdf size={12} />
                     </span>
                   )}
+                  {isImage && (
+                    <span className="mynk-wb-board-tab__pdf-icon" aria-hidden data-testid="wb-board-tab-image-icon">
+                      <ImageIcon size={12} />
+                    </span>
+                  )}
                   {boardLabel}
                 </button>
               )}
+              {!readOnly && onRenamePage && active && renamingId !== page.id ? (
+                <button
+                  type="button"
+                  className="mynk-wb-board-tab-del"
+                  aria-label={`Rename ${boardLabel}`}
+                  data-testid={`wb-board-rename-${index}`}
+                  disabled={disabled}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRenamingId(page.id);
+                    setRenameDraft(boardLabel);
+                  }}
+                >
+                  Rename
+                </button>
+              ) : null}
+              {renamingId === page.id && onRenamePage ? (
+                <input
+                  aria-label={`Name for ${boardLabel}`}
+                  data-testid={`wb-board-rename-input-${index}`}
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const next = renameDraft.trim();
+                      if (next) onRenamePage(page.id, next);
+                      setRenamingId(null);
+                    }
+                    if (e.key === "Escape") setRenamingId(null);
+                  }}
+                  onBlur={() => {
+                    const next = renameDraft.trim();
+                    if (next) onRenamePage(page.id, next);
+                    setRenamingId(null);
+                  }}
+                />
+              ) : null}
               {canDelete &&
                 (confirming ? (
                   <>

@@ -55,6 +55,11 @@ export type ResolveLabelContext = {
    * helper future-proof.
    */
   applyToTutors?: boolean;
+  /**
+   * The tutor's display name. When the remote peer is the tutor and this
+   * is set, the tile shows it. Missing name falls through to the "Tutor" label.
+   */
+  tutorName?: string;
 };
 
 /**
@@ -70,13 +75,15 @@ export function resolveParticipantLabel(
   participant: Pick<AvParticipant, "role">,
   ctx: ResolveLabelContext
 ): string | undefined {
+  if (participant.role === "tutor") {
+    const tutorName = ctx.tutorName?.trim();
+    if (tutorName && ctx.totalRemotePeers === 1) return tutorName;
+    if (!ctx.applyToTutors) return undefined;
+  }
   if (!ctx.studentName || ctx.studentName.trim().length === 0) {
     return undefined;
   }
   if (ctx.totalRemotePeers !== 1) {
-    return undefined;
-  }
-  if (participant.role === "tutor" && !ctx.applyToTutors) {
     return undefined;
   }
   return ctx.studentName.trim();
