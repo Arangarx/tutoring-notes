@@ -18,6 +18,7 @@ import {
   insertGraphOnRole,
   addGraphExpressionViaUI,
   readGraphElementState,
+  waitForElementOnPeer,
   waitForGraphExpressions,
   waitForTutorStudentConnected,
   waitForWbE2eBridge,
@@ -402,28 +403,44 @@ test.describe("org QoL schedule bridge", () => {
         const { tutorPage, studentPage } = peers;
 
         const graphId = await insertGraphOnRole(tutorPage, "tutor", session, []);
-        await tutorPage.getByTestId("wb-graph-embed-host").first().click({ position: { x: 80, y: 80 } });
+        await waitForElementOnPeer(studentPage, "student", graphId, 30_000);
+
+        // Oracle: what the browser would deliver a click at (x, y) to — the graph or the canvas over it.
+        const pointerReachesGraph = (x: number, y: number) =>
+          tutorPage.evaluate(
+            ([px, py]) =>
+              !!document
+                .elementFromPoint(px, py)
+                ?.closest('[data-testid="wb-graph-embed-host"]'),
+            [x, y] as const
+          );
+
+        const host = tutorPage.getByTestId("wb-graph-embed-host").first();
+        await expect(host).toBeVisible({ timeout: 30_000 });
+        const hostBox = await host.boundingBox();
+        const mountBox = await tutorPage.getByTestId("tutor-whiteboard-canvas-mount").boundingBox();
+        expect(hostBox, "graph host bounding box").not.toBeNull();
+        expect(mountBox, "canvas mount bounding box").not.toBeNull();
+        await tutorPage.mouse.click(mountBox!.x + 80, mountBox!.y + 80);
+        // Inside the center third, clear of the axes (graph lines take the pointer).
+        const cx = hostBox!.x + hostBox!.width / 2 + hostBox!.width * 0.08;
+        const cy = hostBox!.y + hostBox!.height / 2 - hostBox!.height * 0.08;
+        // Idle: the canvas holds the pointer so a drag moves the box.
+        expect(await pointerReachesGraph(cx, cy)).toBe(false);
+
+        // One click in the center hands the pointer to the graph.
+        await tutorPage.mouse.move(cx - 4, cy);
+        await tutorPage.mouse.move(cx, cy);
+        await tutorPage.mouse.click(cx, cy);
+        await expect.poll(() => pointerReachesGraph(cx, cy), { timeout: 10_000 }).toBe(true);
 
         await addGraphExpressionViaUI(studentPage, "sin(x)");
-        await waitForGraphExpressions(studentPage, "student", graphId, ["sin(x)"]);
+        await waitForGraphExpressions(tutorPage, "tutor", graphId, ["sin(x)"]);
 
-        const activeAfterPeerEdit = await tutorPage.evaluate(() => {
-          const bridge = (
-            window as Window & {
-              __TN_WB_E2E__?: Record<string, { getAppState?: () => Record<string, unknown> }>;
-            }
-          ).__TN_WB_E2E__?.tutor;
-          const ae = bridge?.getAppState?.().activeEmbeddable as
-            | { state?: string }
-            | undefined;
-          return ae?.state === "active";
-        });
-        expect(activeAfterPeerEdit).toBe(true);
-
-        const before = await readGraphElementState(tutorPage, "tutor", graphId);
-        await tutorPage.getByTestId("wb-graph-pan-up").click();
-        const after = await readGraphElementState(tutorPage, "tutor", graphId);
-        expect(after?.graphStateJson).not.toBe(before?.graphStateJson);
+        // The peer's edit replaced the element; the graph still holds the pointer.
+        await tutorPage.waitForTimeout(1_000);
+        expect(await pointerReachesGraph(cx, cy)).toBe(true);
+        await expect(tutorPage.getByText("Click to interact")).toHaveCount(0);
       } finally {
         await peers.close();
       }
