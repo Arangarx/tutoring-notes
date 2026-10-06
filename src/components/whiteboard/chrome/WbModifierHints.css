@@ -1,0 +1,26 @@
+.mynk-wb-modifier-hints {
+  position: fixed;
+  right: 16px;
+  bottom: 72px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+  font-size: 11px;
+  color: var(--text-muted, var(--muted-foreground));
+}
+
+.mynk-wb-modifier-hints__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mynk-wb-modifier-hints__keys {
+  border: 1px solid var(--border-default, var(--border));
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: var(--surface-raised, var(--card));
+  font-family: inherit;
+  font-size: 11px;
+}

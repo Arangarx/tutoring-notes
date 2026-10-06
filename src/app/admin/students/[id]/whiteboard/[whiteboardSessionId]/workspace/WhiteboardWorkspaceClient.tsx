@@ -154,6 +154,7 @@ import {
 } from "@/components/whiteboard/GraphEmbeddable";
 import { GraphInsertButton } from "@/components/whiteboard/GraphInsertButton";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
+import { WbModifierHints } from "@/components/whiteboard/chrome/WbModifierHints";
 import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
 import {
   WbActionSheet,
@@ -7441,6 +7442,7 @@ export function WhiteboardWorkspaceClient({
         className="mynk-wb-pagestrip bg-card border-t border-border"
         aria-label="Boards"
       >
+        <WbModifierHints />
         <BoardTabStrip
           pageList={chromePageList}
           activePageId={role === "student" ? (studentActivePageIdRef.current ?? activePageId) : activePageId}
