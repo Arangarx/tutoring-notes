@@ -145,6 +145,15 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `StudentsRoster` | `src/components/admin/StudentsRoster.tsx` | Student list with search + add student (B2 reskin) | `students`, `adminUserId` | `/admin/students` | **canonical** |
 | `StudentAvatar` | `src/components/admin/StudentAvatar.tsx` | Deterministic initials avatar: FNV-1a hash of normalized display name (`trim` + lowercase) → one of eight curated `--avatar-1`…`--avatar-8` fills (`student-initials.ts`); 1–2 letter initials (`studentInitials`); white semibold text; `ring-2 ring-background`. Sizes: `sm` (36px), `md` (44px), `lg` (56px). Same name → same color on every surface. | `name`, `size`, `className` | Student list, student detail, scheduler, account dashboard, learner waiting room | **canonical** |
 
+### Scheduling (upcoming appointments bridge)
+
+| Component | File | Purpose | Key Props | Surfaces | Dedup Status |
+|---|---|---|---|---|---|
+| `UpcomingSessionRow` | `src/components/scheduling/UpcomingSessionRow.tsx` | Single upcoming appointment row (subject, start time, optional learner label, action slot) | `subject`, `startAtIso`, `learnerLabel?`, `action`, `joinMessage?` | Tutor student detail, account dashboard, `/join` learner home | **canonical** |
+| `UpcomingSessionsCard` | `src/components/scheduling/UpcomingSessionsCard.tsx` | Card list of upcoming sessions; `mode="tutor"` (Open room) or `mode="family"` (Join) | `sessions`, `mode`, `realm?`, `title?`, `description?` | `/admin/students/[id]`, `/account/dashboard`, `/join` | **canonical** |
+| `OpenScheduledRoomButton` | `src/components/scheduling/OpenScheduledRoomButton.tsx` | Calls `openScheduledWhiteboardSession` | `scheduledSessionId` | Tutor upcoming list | **canonical** |
+| `JoinScheduledSessionButton` | `src/components/scheduling/JoinScheduledSessionButton.tsx` | Calls `joinScheduledSession`; disabled when outside join window; surfaces `not_yet` / `not_available` copy | `scheduledSessionId`, `joinWindowOpen` | Family upcoming lists | **canonical** |
+
 ### Recording / Session Capture (Slice 3 collision zone — DO NOT EDIT from UI chunks)
 
 | Component | File | Purpose | Dedup Status |

@@ -157,7 +157,8 @@ first, then re-submit. The consent screen will continue to display
 | Sharing, disclosure, and recipients | **Umbrella** — full bulleted enumeration (Google / Infrastructure / People you direct / Legal / Business transfers). Product-specific subprocessors (Vercel, Neon, Vercel Blob, OpenAI) listed under Infrastructure. |
 | Google account and Gmail | **Hybrid** — umbrella's Limited Use / scope / token-storage / disconnect language + product-specific scope details (`gmail.send`, `userinfo.email`) and Settings → Email instruction. Umbrella heading is now &ldquo;Google account, Gmail, and Calendar&rdquo; (2026-09-10). |
 | Google Calendar (Connect Google Calendar) | **Hybrid** — umbrella Limited Use / token-storage / disconnect framing + product-specific scope (`calendar.events.owned`, `userinfo.email` only), primary-calendar create/update/delete when connected, fail-soft scheduling, disconnect deletes local token only (no Google API calls; does not delete existing Google events), Settings → Calendar integrations |
-| Calendar subscription feed (ICS / webcal) | **Product** — bearer subscription URL, read-only polled feed, continuous third-party polling by whichever calendar client the tutor authorizes (Google, Apple, Outlook), first-name default titles, per-student opt-in full name (`icsShowFullName`), revoke/rotate token |
+| Calendar subscription feed (ICS / webcal) | **Product** — bearer subscription URL, read-only polled feed, continuous third-party polling by whichever calendar client the tutor authorizes (Google, Apple, Outlook), first name + last initial titles, revoke/rotate token |
+| Live whiteboard session encryption key | **Product** — server-held key for sessions created after 2026-10-06 release, encrypted at rest, disclosed only to signed-in tutor and authorized learner/parent for that session |
 | AI note generation (OpenAI) | Product |
 | Session audio recordings (Vercel Blob) | Product |
 | Where data is stored | Product |
@@ -178,7 +179,8 @@ first, then re-submit. The consent screen will continue to display
 | Your content | Product |
 | Gmail integration | Product |
 | Google Calendar integration | **Product** — `calendar.events.owned` write to primary calendar; disconnect stops future sync, does not remove existing Google events |
-| Calendar subscription feed | **Product** — ICS/webcal URL, client polling, first-name default / per-student full-name opt-in |
+| Calendar subscription feed | **Product** — ICS/webcal URL, client polling, first name + last initial titles |
+| Live whiteboard session encryption key | **Product** — see `/privacy` product-specific section (2026-10-06) |
 | Third-party services | **Hybrid** — umbrella's framing, product-specific subprocessor list (incl. Twilio for optional SMS 2FA, 2026-09-11) with link to privacy policy |
 | Children and parental consent | **Hybrid** — umbrella now has this section (added 2026-05-31 on `coppa-312-10-disclosure` branch); product facade adds Tutoring-Notes-specific COPPA language (COPPA applicability, representation-of-consent, cross-reference to privacy policy COPPA section). |
 | Availability and changes | Product (combines umbrella's posture with product-specific notification language) |

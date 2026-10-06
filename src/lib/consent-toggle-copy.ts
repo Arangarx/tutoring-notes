@@ -6,7 +6,7 @@
 export const LIVE_SESSION_CONSENT_COPY = {
   label: "Allow live tutoring sessions",
   description:
-    "Your child can join real-time video and audio with this tutor, and everything drawn on the shared whiteboard during the session is saved for later review.",
+    "Your child can join real-time video and audio with this tutor, and everything drawn on the shared whiteboard during the session is saved for later review. You can also join a live session as your child from your parent account when they need help signing in.",
 } as const;
 
 export const AUDIO_RECORDING_CONSENT_COPY = {

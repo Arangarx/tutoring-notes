@@ -14,7 +14,8 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Umbrella Calendar + Limited Use sync 2026-09-10 (OAuth review).
  * SMS 2FA (Twilio) product-specific disclosure 2026-09-11.
  * Calendar ICS feed + Google write honesty (product-specific) 2026-09-16.
- * Calendar title prefix with full-name opt-in (product-specific) 2026-09-17.
+ * Calendar title first + last initial (product-specific) 2026-10-06.
+ * Live session server-held encryption key (product-specific) 2026-10-06.
  * Mynk SMS 2FA opt-in / no marketing share (product-specific) 2026-09-21.
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
@@ -45,7 +46,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="September 21, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="October 6, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -210,10 +211,8 @@ export default function PrivacyPage() {
               Outlook) will <strong>poll</strong> that URL on its own schedule to download an ICS
               feed of your upcoming scheduled sessions. We do not push updates to your device; the
               feed is read-only from the calendar app&apos;s perspective. Session titles in the feed
-              default to the student&apos;s <strong>first name</strong> (for example,
-              &ldquo;Tutoring — Maya&rdquo;). You can opt in per student to keep that same
-              &ldquo;Tutoring —&rdquo; prefix and include the student&apos;s full name (for example,
-              &ldquo;Tutoring — Maya Rodriguez&rdquo;).
+              and in Google Calendar events we create use the student&apos;s <strong>first name and
+              last initial</strong> (for example, &ldquo;Tutoring — Maya R.&rdquo;).
             </p>
             <p style={{ margin: "8px 0 0" }}>
               The subscription URL acts like a bearer secret — anyone with the link can fetch your
@@ -223,6 +222,20 @@ export default function PrivacyPage() {
               timing is controlled by each client (Google Calendar typically refreshes external URL
               subscriptions on the order of many hours, not immediately). Treat the URL like a
               password and revoke it if it may have leaked.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="heading m-0 text-lg font-normal">Live whiteboard session encryption key</h2>
+            <p style={{ margin: "8px 0 0" }}>
+              For live whiteboard sessions created after this release, our servers generate and store
+              an encryption key used to protect real-time whiteboard sync. The key is{" "}
+              <strong>encrypted at rest</strong> in our database. We provide it only to the{" "}
+              <strong>signed-in tutor</strong> for that session and to the{" "}
+              <strong>signed-in learner or parent</strong> authorized for that session (a parent may
+              join as their child when their account owns the learner profile). We do not publish the
+              key in email or share links. Older sessions created before this release continue to rely
+              on the key in the link the tutor shared.
             </p>
           </div>
 
