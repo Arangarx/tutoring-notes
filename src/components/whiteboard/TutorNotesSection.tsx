@@ -201,6 +201,10 @@ export default function TutorNotesSection({
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
+  // The editable form (and the Finish review control nested in it) is only
+  // mounted while generation is in flight or a note with content is ready.
+  const notesFormOpen =
+    (isActive || (isDone && Boolean(note.found && note.content))) && !timedOut;
 
   useEffect(() => {
     if (isFailed && note.found && note.error) {
@@ -689,6 +693,19 @@ export default function TutorNotesSection({
           session recording.
         </div>
       )}
+
+      {/* Failed, timed out, and empty notes hide the form — Finish review still leaves. */}
+      {showFinishReview && !notesFormOpen ? (
+        <div data-testid="wb-review-leave-actions">
+          <Link
+            href={`/admin/students/${studentId}`}
+            className="btn"
+            data-testid="wb-finish-review"
+          >
+            Finish review
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

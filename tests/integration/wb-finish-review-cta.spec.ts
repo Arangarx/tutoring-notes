@@ -12,6 +12,7 @@ import {
 } from "../helpers/blob-gate";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+import { PrismaClient } from "@prisma/client";
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
@@ -109,3 +110,91 @@ test.describe(
     });
   }
 );
+
+async function seedEndedNote(note: {
+  status: string;
+  content: string | null;
+  error?: string | null;
+}) {
+  const session = await seedWbLiveSyncSession();
+  const prisma = new PrismaClient();
+  try {
+    await prisma.whiteboardSession.update({
+      where: { id: session.whiteboardSessionId },
+      data: { endedAt: new Date() },
+    });
+    await prisma.tutorNote.create({
+      data: {
+        sessionId: session.whiteboardSessionId,
+        status: note.status,
+        content: note.content,
+        error: note.error ?? null,
+      },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+  return session;
+}
+
+async function expectFinishReviewLeaves(
+  page: import("@playwright/test").Page,
+  studentId: string
+) {
+  const finish = page.getByTestId("wb-finish-review");
+  await expect(finish).toBeVisible();
+  await expect(finish).toHaveText("Finish review");
+  await finish.click();
+  await page.waitForURL(`**/admin/students/${studentId}`, { timeout: 15_000 });
+  expect(page.url()).not.toContain("/whiteboard/");
+}
+
+test.describe("Finish review when notes did not generate", { tag: [TAG.WB_CHROME] }, () => {
+  test("failed generation still offers Finish review", async ({ page }) => {
+    test.setTimeout(120_000);
+    const { studentId, whiteboardSessionId } = await seedEndedNote({
+      status: "failed",
+      content: null,
+      error: "upstream",
+    });
+    await page.goto(
+      `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
+      { waitUntil: "domcontentloaded" }
+    );
+    await expect(page.getByTestId("tutor-notes-error")).toBeVisible({ timeout: 30_000 });
+    await expectFinishReviewLeaves(page, studentId);
+  });
+
+  test("empty generated notes still offer Finish review", async ({ page }) => {
+    test.setTimeout(120_000);
+    const { studentId, whiteboardSessionId } = await seedEndedNote({
+      status: "done",
+      content: null,
+    });
+    await page.goto(
+      `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
+      { waitUntil: "domcontentloaded" }
+    );
+    await expect(page.getByText(/content is empty/i)).toBeVisible({ timeout: 30_000 });
+    await expectFinishReviewLeaves(page, studentId);
+  });
+
+  test("timed-out generation still offers Finish review", async ({ page }) => {
+    test.setTimeout(120_000);
+    const { studentId, whiteboardSessionId } = await seedEndedNote({
+      status: "pending",
+      content: null,
+    });
+    await page.clock.install({ time: new Date("2026-10-06T15:00:00Z") });
+    await page.goto(
+      `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
+      { waitUntil: "domcontentloaded" }
+    );
+    await expect(page.getByTestId("tutor-notes-section")).toBeVisible({ timeout: 30_000 });
+    await page.clock.fastForward(5 * 60_000 + 5_000);
+    await expect(page.getByText(/taking longer than expected/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectFinishReviewLeaves(page, studentId);
+  });
+});
