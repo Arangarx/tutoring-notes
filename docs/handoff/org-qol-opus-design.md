@@ -169,6 +169,22 @@ model OrganizationBillingEntry {
   - **Reassign:** show the family "waiting on your approval" with Join off. This depends on the account question above.
   - These need a dedicated planning pass with Andrew before any org code. The 5-axis items below still apply to whatever design comes out of it.
 
+### Learner model decisions (Andrew, 2026-10-06, second pass) — supersede the reopened items above
+
+- **Branch:** org leaves `feat/org-qol` and gets its own branch, with a new design written from these decisions. This branch ships the bridge, QoL work and graph.
+- **Who owns the learner:** the org owns its learner record. A tutor gets an **assignment** that grants access only while it is active.
+- **One login per learner, walls on the data:**
+  - Org learners and a tutor's personal students link to the same `LearnerProfile`, so a learner never needs a second login. Their dashboard shows all their sessions.
+  - For the tutor, the personal student and the org learner are two separate records. Org-arranged sessions are reachable only through an active assignment, never through the tutor's personal record.
+- **What an assigned tutor sees:** first name + last initial, a short brief the org writes (grade, subject, goals), and notes from their own sessions with this learner. Not shown: other tutors' notes, contact details, full name.
+- **After the assignment ends:** read-only access to their own session notes. Nothing else.
+- **Learners with no account:** a per-session guest link plus a short code. The learner types a first name; there is no account and no dashboard, and the tutor admits them from the waiting room. The link works only for that session and expires at its end. They can upgrade to an account later. Org-issued logins are deferred until a recurring program needs them, and even then only under a consenting parent.
+- **Consent:** the parent consents in-app through an emailed link before the first session. With no parent contact there is no recording.
+- **Notes:**
+  - The family gets them through the share link, when we have contact.
+  - Org owner/admin always see prompt answers.
+  - Full note text goes to the org only through a **per-org setting the operator turns on** when agreed. The parent's consent names the org. No redaction is promised.
+
 ### 5-axis review outcome (Sonnet, 2026-10-06) — these override the bullets above where they conflict
 
 Wave C acceptance includes every item below. Items marked **(Andrew)** wait on his answer; do not guess.
