@@ -2863,6 +2863,80 @@ describe("sync-client pointer envelope (B9 laser sync)", () => {
   });
 });
 
+describe("sync-client cursor envelope (live cursor)", () => {
+  test("encrypt → decrypt round-trip for cursor msg", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg = {
+      v: 1 as const,
+      kind: "cursor" as const,
+      peerId: "student-c1",
+      role: "student" as const,
+      pageId: "p1",
+      x: 1,
+      y: 2,
+      button: "down" as const,
+      color: "#0891b2",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    const out = await _testing.decryptMessage(aes, data, iv);
+    expect(out).toEqual(msg);
+  });
+
+  test("onRemoteCursor receives decrypted student cursor", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const recv = jest.fn();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-cursor",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-self",
+      _ioFactory: factory,
+    });
+    client.onRemoteCursor(recv);
+    await realTick(10);
+    await flushMicrotasks(20);
+    const payload = {
+      v: 1 as const,
+      kind: "cursor" as const,
+      peerId: "student-remote",
+      role: "student" as const,
+      pageId: "p1",
+      x: 9,
+      y: 8,
+      button: "up" as const,
+      color: "#0891b2",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, payload);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(20);
+    await flushMicrotasks(20);
+    expect(recv).toHaveBeenCalledWith("student-remote", payload);
+    client.disconnect();
+  });
+});
+
+describe("sync-client chat envelope (SMOKE-POST-2)", () => {
+  test("encrypt → decrypt round-trip for chat msg", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg = {
+      v: 1 as const,
+      kind: "chat" as const,
+      peerId: "tutor-c1",
+      role: "tutor" as const,
+      text: "hello from tutor",
+      sentAt: 1_700_000_000_000,
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    const out = await _testing.decryptMessage(aes, data, iv);
+    expect(out).toEqual(msg);
+  });
+});
+
 // -----------------------------------------------------------------
 // Dual-device takeover bug — Fix 1/2/3 unit coverage
 // Bug: device A disconnects → tutor marks ALL peers pendingPrune →

@@ -17,6 +17,8 @@ export type WbE2eRole = "tutor" | "student";
 export type WbE2eSceneBridge = {
   getElements: () => ReadonlyArray<ExcalidrawLikeElement>;
   getAppState: () => Record<string, unknown>;
+  /** Peer ids with an active Excalidraw collaborator overlay entry. */
+  collaboratorPeerIds: () => string[];
   /** Add a unique rectangle at the current viewport scene center (triggers onChange). */
   placeMarkerAtViewportCenter: (markerId: string) => void;
   /** Freedraw-style line segment (triggers onChange + sync). */
@@ -445,6 +447,14 @@ export function registerWbE2eSceneBridge(
         bbox: parsed.bbox ?? null,
         link: typeof el.link === "string" ? el.link : null,
       };
+    },
+    collaboratorPeerIds() {
+      const st = api.getAppState() as { collaborators?: unknown };
+      const c = st.collaborators;
+      if (c instanceof Map) {
+        return Array.from(c.keys()).filter((k) => typeof k === "string");
+      }
+      return [];
     },
     historyUndo() {
       // ExcalidrawImperativeAPI 0.18 only exposes history.clear(), not .undo().

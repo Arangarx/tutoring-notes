@@ -181,6 +181,8 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `ImpersonationBanner` | `src/components/ImpersonationBanner.tsx` | Operator impersonation indicator bar | **canonical** |
 | `SubmitButton` | `src/components/SubmitButton.tsx` | Simple form submit button (pre-B1 era, some pages still use) | **candidate-for-consolidation** — new code should use `<Button>` from `ui/button.tsx`; migrate opportunistically |
 | `ThemeToggle` | `src/components/ThemeToggle.tsx` | Discoverable light/dark/system control (dropdown menu via `useThemeDropdown`); persists user choice through `ThemeProvider` / `THEME_STORAGE_KEY`; first visit defaults to system preference; sets resolved `data-theme` on `<html>`. Wired in app chrome surfaces: `AdminNav`, `AppHeader`, `MarketingHeader`, `PageShell` (student join), `AdminSidebarNav`. Optional `className` prop. Whiteboard live chrome uses `WbThemeToggle` (Wave C dedupe target per [`DEDUPE-PLAN.md`](DEDUPE-PLAN.md)). | **canonical** |
+| `WbGhostViewportOverlay` | `src/components/whiteboard/chrome/WbGhostViewportOverlay.tsx` | VP-01 peer viewport ghost rectangle + role label on the live whiteboard canvas (overlay, not scene data). | **canonical** |
+| `WbSessionChat` | `src/components/whiteboard/chrome/WbSessionChat.tsx` | SMOKE-POST-2 collapsed in-session text chat (ephemeral relay wire only). | **canonical** |
 | `Providers` | `src/components/Providers.tsx` | Root client providers (session, theme, etc.) | **canonical** |
 | `LocalDateTimeText` | `src/components/LocalDateTimeText.tsx` | Client-rendered local datetime from UTC | **canonical** |
 | `ModalPortal` | `src/components/ModalPortal.tsx` | Portal for modals | **canonical** |

@@ -82,7 +82,12 @@ import {
   type SessionMsClock,
 } from "@/lib/recording/session-clock";
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
-import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
+import { useCollaboratorLiveCursors } from "@/hooks/useCollaboratorLiveCursors";
+import { usePeerPageViewState } from "@/hooks/usePeerPageViewState";
+import { useViewportWireBroadcast } from "@/hooks/useViewportWireBroadcast";
+import { useSessionChat } from "@/hooks/useSessionChat";
+import { WbGhostViewportOverlay } from "@/components/whiteboard/chrome/WbGhostViewportOverlay";
+import { WbSessionChat } from "@/components/whiteboard/chrome/WbSessionChat";
 import { useLiveAV, type AvParticipant } from "@/hooks/useLiveAV";
 import { useLiveAvCoordinator } from "@/hooks/useLiveAvCoordinator";
 import AudioControls from "@/components/av/AudioControls";
@@ -243,7 +248,10 @@ import {
   registerWbE2eSceneMutationHook,
 } from "@/lib/whiteboard/wb-e2e-scene-bridge";
 import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
-import { followWireFromTutorAppState } from "@/lib/whiteboard/viewport-align";
+import {
+  followWireFromTutorAppState,
+  readViewportSizeFromAppState,
+} from "@/lib/whiteboard/viewport-align";
 import {
   createWbFollowDebugTelemetry,
   inferBroadcastTrigger,
@@ -1761,12 +1769,30 @@ export function WhiteboardWorkspaceClient({
     }
   }, [role, tutorStreamReady, markLoadingCleared]);
 
-  // Gate laser pointer origin by role (tutor uses tutor refs; student uses student refs)
-  useCollaboratorPointers(
-    role === "student" ? studentSyncClient : sync,
+  const effectivePointerSync =
+    role === "student" ? studentSyncClient : sync;
+  const syncConnectedForExtras =
+    role === "student" ? studentConnected : tutorSyncConnected;
+
+  // Laser + live cursor overlays (separate wire kinds; shared collaborators map)
+  useCollaboratorLiveCursors(
+    effectivePointerSync,
     excalidrawAPI,
     role === "student" ? studentApplyingRemoteRef : applyingRemoteToCanvasRef,
     role === "student" ? studentActivePageIdRef : activePageIdRef
+  );
+
+  const peerPageView = usePeerPageViewState(effectivePointerSync, role);
+  useViewportWireBroadcast({
+    enabled: role === "student" && Boolean(pathJoinToken && studentSyncClient),
+    sync: studentSyncClient,
+    excalidrawAPI,
+    activePageIdRef: studentActivePageIdRef,
+    canvasMountRef: wbCanvasRef,
+  });
+  const sessionChat = useSessionChat(
+    effectivePointerSync,
+    syncConnectedForExtras
   );
   //
   //   bothPartiesInRoomSync  — sync-socket presence only (peerCount ≥ 1).
@@ -3084,11 +3110,18 @@ export function WhiteboardWorkspaceClient({
         );
       }
       if (sync && syncUrl) {
+        const vpSize = readViewportSizeFromAppState(st);
         sync.broadcastPageViewState({
           pageId: pid,
           panX: vs.panX,
           panY: vs.panY,
           zoom: vs.zoom,
+          ...(vpSize
+            ? {
+                viewportWidth: vpSize.viewportWidth,
+                viewportHeight: vpSize.viewportHeight,
+              }
+            : {}),
         });
         if (role !== "student") {
           console.info(
@@ -4796,8 +4829,14 @@ export function WhiteboardWorkspaceClient({
       const effectiveSync = role === "student" ? studentSyncClient : sync;
       if (!effectiveSync) return;
       if (role === "tutor" && !syncUrl) return;
-      if (activeToolTypeRef.current !== "laser") return;
-      if (payload.pointer.tool !== "laser") return;
+      const isLaserTool = activeToolTypeRef.current === "laser";
+      if (isLaserTool && payload.pointer.tool !== "laser") return;
+      if (
+        !isLaserTool &&
+        typeof effectiveSync.broadcastCursor !== "function"
+      ) {
+        return;
+      }
 
       const now = Date.now();
       const elapsed = now - lastPointerEmitRef.current;
@@ -4805,17 +4844,29 @@ export function WhiteboardWorkspaceClient({
 
       const emit = () => {
         lastPointerEmitRef.current = Date.now();
-        effectiveSync.broadcastPointer({
-          pageId:
-            role === "student"
-              ? studentActivePageIdRef.current
-              : activePageIdRef.current,
-          x: payload.pointer.x,
-          y: payload.pointer.y,
-          tool: "laser",
-          button: payload.button,
-          color: laserColorForRole(role),
-        });
+        const pageId =
+          role === "student"
+            ? studentActivePageIdRef.current
+            : activePageIdRef.current;
+        const color = laserColorForRole(role);
+        if (isLaserTool) {
+          effectiveSync.broadcastPointer({
+            pageId,
+            x: payload.pointer.x,
+            y: payload.pointer.y,
+            tool: "laser",
+            button: payload.button,
+            color,
+          });
+        } else {
+          effectiveSync.broadcastCursor({
+            pageId,
+            x: payload.pointer.x,
+            y: payload.pointer.y,
+            button: payload.button,
+            color,
+          });
+        }
       };
 
       if (elapsed >= MIN_INTERVAL_MS) {
@@ -7324,15 +7375,21 @@ export function WhiteboardWorkspaceClient({
             telemetry={followDebugTelemetry}
           />
 
-          {role === "tutor" && (
-          <div
-            className="mynk-wb-ghost-label"
-            data-testid="wb-ghost-viewport-label"
-            aria-hidden
-          >
-            Student view
-          </div>
-          )}
+          <WbGhostViewportOverlay
+            excalidrawAPI={excalidrawAPI}
+            activePageId={
+              role === "student" ? studentActivePageId : activePageId
+            }
+            peerView={peerPageView}
+            label={role === "tutor" ? "Student view" : "Tutor view"}
+          />
+
+          <WbSessionChat
+            chatAvailable={sessionChat.chatAvailable}
+            messages={sessionChat.messages}
+            onSend={sessionChat.send}
+            viewerRole={role}
+          />
 
           {/* SR-04 — AV cluster */}
           <WbAVCluster

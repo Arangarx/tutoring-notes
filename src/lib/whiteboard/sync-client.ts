@@ -187,6 +187,8 @@ export type AnyWhiteboardWireMessage =
   | WhiteboardWirePresence
   | WhiteboardWirePageViewStateMsg
   | WhiteboardWirePointerMsg
+  | WhiteboardWireCursorMsg
+  | WhiteboardWireChatMsg
   | WhiteboardWireSessionLifecycle;
 
 /** Extras attached to each `broadcastScene` (throttled on the tutor). */
@@ -350,6 +352,9 @@ export type WhiteboardWirePageViewStateMsg = {
   panX: number;
   panY: number;
   zoom: number;
+  /** Optional — VP-01 ghost bounds; omitted by legacy senders. */
+  viewportWidth?: number;
+  viewportHeight?: number;
 };
 
 /**
@@ -379,6 +384,32 @@ export type WhiteboardWirePointerMsg = {
   button: "up" | "down";
   /** Hex color for Excalidraw Collaborator.color.stroke (e.g. "#e27d60"). */
   color: string;
+};
+
+/**
+ * Ephemeral live cursor (non-laser). Same immediate path as pointer; never
+ * persisted. Separate from laser so local 5s idle hide does not affect laser.
+ */
+export type WhiteboardWireCursorMsg = {
+  v: 1;
+  kind: "cursor";
+  peerId: string;
+  role: "tutor" | "student";
+  pageId: string;
+  x: number;
+  y: number;
+  button: "up" | "down";
+  color: string;
+};
+
+/** Ephemeral in-session text chat (SMOKE-POST-2). Not stored on board or note. */
+export type WhiteboardWireChatMsg = {
+  v: 1;
+  kind: "chat";
+  peerId: string;
+  role: "tutor" | "student";
+  text: string;
+  sentAt: number;
 };
 
 /**
@@ -570,6 +601,8 @@ export type WhiteboardSyncClient = {
     panX: number;
     panY: number;
     zoom: number;
+    viewportWidth?: number;
+    viewportHeight?: number;
   }) => void;
   /**
    * Phase 4a — subscribe to inbound signals. Fires for EVERY non-self
@@ -604,6 +637,20 @@ export type WhiteboardSyncClient = {
   /** Subscribe to inbound laser/pointer positions from peers. */
   onRemotePointer: (
     cb: (fromPeerId: string, msg: WhiteboardWirePointerMsg) => void
+  ) => () => void;
+  broadcastCursor: (args: {
+    pageId: string;
+    x: number;
+    y: number;
+    button: "up" | "down";
+    color: string;
+  }) => void;
+  onRemoteCursor: (
+    cb: (fromPeerId: string, msg: WhiteboardWireCursorMsg) => void
+  ) => () => void;
+  broadcastChat: (args: { text: string }) => void;
+  onRemoteChat: (
+    cb: (fromPeerId: string, msg: WhiteboardWireChatMsg) => void
   ) => () => void;
   /**
    * Phase 4b — subscribe to changes in the room's participant set.
@@ -914,6 +961,20 @@ function validateWirePageViewState(parsed: unknown): WhiteboardWirePageViewState
   ) {
     throw new Error("[sync-client] pageViewState envelope: bad pan/zoom");
   }
+  let viewportWidth: number | undefined;
+  let viewportHeight: number | undefined;
+  if (p.viewportWidth !== undefined) {
+    if (typeof p.viewportWidth !== "number" || !Number.isFinite(p.viewportWidth) || p.viewportWidth <= 0) {
+      throw new Error("[sync-client] pageViewState envelope: bad viewportWidth");
+    }
+    viewportWidth = p.viewportWidth;
+  }
+  if (p.viewportHeight !== undefined) {
+    if (typeof p.viewportHeight !== "number" || !Number.isFinite(p.viewportHeight) || p.viewportHeight <= 0) {
+      throw new Error("[sync-client] pageViewState envelope: bad viewportHeight");
+    }
+    viewportHeight = p.viewportHeight;
+  }
   return {
     v: 1,
     kind: "pageViewState",
@@ -923,6 +984,8 @@ function validateWirePageViewState(parsed: unknown): WhiteboardWirePageViewState
     panX: p.panX,
     panY: p.panY,
     zoom: p.zoom,
+    ...(viewportWidth !== undefined ? { viewportWidth } : {}),
+    ...(viewportHeight !== undefined ? { viewportHeight } : {}),
   };
 }
 
@@ -974,6 +1037,77 @@ function validateWirePointer(parsed: unknown): WhiteboardWirePointerMsg {
   };
 }
 
+function validateWireCursor(parsed: unknown): WhiteboardWireCursorMsg {
+  const p = parsed as Partial<WhiteboardWireCursorMsg>;
+  if (p.v !== 1) {
+    throw new Error("[sync-client] cursor envelope: bad v");
+  }
+  if (p.kind !== "cursor") {
+    throw new Error("[sync-client] cursor envelope: bad kind");
+  }
+  if (typeof p.peerId !== "string" || p.peerId.length === 0) {
+    throw new Error("[sync-client] cursor envelope: bad peerId");
+  }
+  if (p.role !== "tutor" && p.role !== "student") {
+    throw new Error("[sync-client] cursor envelope: bad role");
+  }
+  if (typeof p.pageId !== "string" || p.pageId.length === 0) {
+    throw new Error("[sync-client] cursor envelope: bad pageId");
+  }
+  if (typeof p.x !== "number" || !Number.isFinite(p.x) || typeof p.y !== "number" || !Number.isFinite(p.y)) {
+    throw new Error("[sync-client] cursor envelope: bad x/y");
+  }
+  if (p.button !== "up" && p.button !== "down") {
+    throw new Error("[sync-client] cursor envelope: bad button");
+  }
+  if (typeof p.color !== "string" || p.color.length === 0) {
+    throw new Error("[sync-client] cursor envelope: bad color");
+  }
+  return {
+    v: 1,
+    kind: "cursor",
+    peerId: p.peerId,
+    role: p.role,
+    pageId: p.pageId,
+    x: p.x,
+    y: p.y,
+    button: p.button,
+    color: p.color,
+  };
+}
+
+const MAX_CHAT_TEXT_LEN = 2000;
+
+function validateWireChat(parsed: unknown): WhiteboardWireChatMsg {
+  const p = parsed as Partial<WhiteboardWireChatMsg>;
+  if (p.v !== 1) {
+    throw new Error("[sync-client] chat envelope: bad v");
+  }
+  if (p.kind !== "chat") {
+    throw new Error("[sync-client] chat envelope: bad kind");
+  }
+  if (typeof p.peerId !== "string" || p.peerId.length === 0) {
+    throw new Error("[sync-client] chat envelope: bad peerId");
+  }
+  if (p.role !== "tutor" && p.role !== "student") {
+    throw new Error("[sync-client] chat envelope: bad role");
+  }
+  if (typeof p.text !== "string" || p.text.length === 0 || p.text.length > MAX_CHAT_TEXT_LEN) {
+    throw new Error("[sync-client] chat envelope: bad text");
+  }
+  if (typeof p.sentAt !== "number" || !Number.isFinite(p.sentAt)) {
+    throw new Error("[sync-client] chat envelope: bad sentAt");
+  }
+  return {
+    v: 1,
+    kind: "chat",
+    peerId: p.peerId,
+    role: p.role,
+    text: p.text,
+    sentAt: p.sentAt,
+  };
+}
+
 function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   if (!parsed || typeof parsed !== "object") {
     throw new Error("[sync-client] decoded payload: not an object");
@@ -996,6 +1130,12 @@ function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   }
   if (kind === "pointer") {
     return validateWirePointer(parsed);
+  }
+  if (kind === "cursor") {
+    return validateWireCursor(parsed);
+  }
+  if (kind === "chat") {
+    return validateWireChat(parsed);
   }
   if (kind === "session-lifecycle") {
     const p = parsed as Partial<WhiteboardWireSessionLifecycle>;
@@ -1177,12 +1317,22 @@ export function createWhiteboardSyncClient(
     fromPeerId: string,
     msg: WhiteboardWirePointerMsg
   ) => void;
+  type RemoteCursorCb = (
+    fromPeerId: string,
+    msg: WhiteboardWireCursorMsg
+  ) => void;
+  type RemoteChatCb = (
+    fromPeerId: string,
+    msg: WhiteboardWireChatMsg
+  ) => void;
   type RoomPeersCb = (peers: ReadonlyArray<RoomPeer>) => void;
   type RemoteSessionLifecycleCb = (fromPeerId: string, type: "session_ending") => void;
   const remoteSceneSubs = new Set<RemoteSceneCb>();
   const remoteSignalSubs = new Set<RemoteSignalCb>();
   const remotePageViewStateSubs = new Set<RemotePageViewStateCb>();
   const remotePointerSubs = new Set<RemotePointerCb>();
+  const remoteCursorSubs = new Set<RemoteCursorCb>();
+  const remoteChatSubs = new Set<RemoteChatCb>();
   const remoteSessionLifecycleSubs = new Set<RemoteSessionLifecycleCb>();
   const connectSubs = new Set<() => void>();
   const disconnectSubs = new Set<() => void>();
@@ -1676,6 +1826,38 @@ export function createWhiteboardSyncClient(
         } catch (err) {
           log.warn(
             "onRemotePointer subscriber threw:",
+            (err as Error)?.message ?? String(err)
+          );
+        }
+      }
+      return;
+    }
+    if ((msg as Partial<WhiteboardWireCursorMsg>).kind === "cursor") {
+      const m = msg as WhiteboardWireCursorMsg;
+      log.log(
+        `kind=cursor recv from=${m.peerId} pageId=${m.pageId} x=${m.x} y=${m.y} button=${m.button}`
+      );
+      for (const cb of remoteCursorSubs) {
+        try {
+          cb(m.peerId, m);
+        } catch (err) {
+          log.warn(
+            "onRemoteCursor subscriber threw:",
+            (err as Error)?.message ?? String(err)
+          );
+        }
+      }
+      return;
+    }
+    if ((msg as Partial<WhiteboardWireChatMsg>).kind === "chat") {
+      const m = msg as WhiteboardWireChatMsg;
+      log.log(`kind=chat recv from=${m.peerId} role=${m.role} len=${m.text.length}`);
+      for (const cb of remoteChatSubs) {
+        try {
+          cb(m.peerId, m);
+        } catch (err) {
+          log.warn(
+            "onRemoteChat subscriber threw:",
             (err as Error)?.message ?? String(err)
           );
         }
@@ -2203,6 +2385,8 @@ export function createWhiteboardSyncClient(
     panX: number;
     panY: number;
     zoom: number;
+    viewportWidth?: number;
+    viewportHeight?: number;
   }): void {
     if (disposed) return;
     if (aesKeyError) return;
@@ -2215,6 +2399,12 @@ export function createWhiteboardSyncClient(
       panX: patch.panX,
       panY: patch.panY,
       zoom: patch.zoom,
+      ...(patch.viewportWidth !== undefined && patch.viewportWidth > 0
+        ? { viewportWidth: patch.viewportWidth }
+        : {}),
+      ...(patch.viewportHeight !== undefined && patch.viewportHeight > 0
+        ? { viewportHeight: patch.viewportHeight }
+        : {}),
     };
     log.log(
       `kind=pageViewState send pageId=${patch.pageId} panX=${patch.panX} panY=${patch.panY} zoom=${patch.zoom}`
@@ -2247,6 +2437,49 @@ export function createWhiteboardSyncClient(
     log.log(
       `kind=pointer send pageId=${args.pageId} x=${args.x} y=${args.y} tool=${args.tool} button=${args.button}`
     );
+    void encryptAndEmitImmediate(msg);
+  }
+
+  function broadcastCursor(args: {
+    pageId: string;
+    x: number;
+    y: number;
+    button: "up" | "down";
+    color: string;
+  }): void {
+    if (disposed) return;
+    if (aesKeyError) return;
+    const msg: WhiteboardWireCursorMsg = {
+      v: 1,
+      kind: "cursor",
+      peerId,
+      role,
+      pageId: args.pageId,
+      x: args.x,
+      y: args.y,
+      button: args.button,
+      color: args.color,
+    };
+    log.log(
+      `kind=cursor send pageId=${args.pageId} x=${args.x} y=${args.y} button=${args.button}`
+    );
+    void encryptAndEmitImmediate(msg);
+  }
+
+  function broadcastChat(args: { text: string }): void {
+    if (disposed) return;
+    if (aesKeyError) return;
+    const trimmed = args.text.trim();
+    if (trimmed.length === 0 || trimmed.length > MAX_CHAT_TEXT_LEN) return;
+    const msg: WhiteboardWireChatMsg = {
+      v: 1,
+      kind: "chat",
+      peerId,
+      role,
+      text: trimmed,
+      sentAt: Date.now(),
+    };
+    log.log(`kind=chat send len=${trimmed.length}`);
     void encryptAndEmitImmediate(msg);
   }
 
@@ -2313,11 +2546,25 @@ export function createWhiteboardSyncClient(
     broadcastSignal,
     broadcastPageViewState,
     broadcastPointer,
+    broadcastCursor,
+    broadcastChat,
     broadcastSessionLifecycle,
     onRemotePointer: (cb) => {
       remotePointerSubs.add(cb);
       return () => {
         remotePointerSubs.delete(cb);
+      };
+    },
+    onRemoteCursor: (cb) => {
+      remoteCursorSubs.add(cb);
+      return () => {
+        remoteCursorSubs.delete(cb);
+      };
+    },
+    onRemoteChat: (cb) => {
+      remoteChatSubs.add(cb);
+      return () => {
+        remoteChatSubs.delete(cb);
       };
     },
     onRemoteSessionLifecycle: (cb) => {
@@ -2424,6 +2671,9 @@ export function createWhiteboardSyncClient(
       remoteSignalSubs.clear();
       remotePageViewStateSubs.clear();
       remotePointerSubs.clear();
+      remoteCursorSubs.clear();
+      remoteChatSubs.clear();
+      remoteSessionLifecycleSubs.clear();
       connectSubs.clear();
       disconnectSubs.clear();
       peerCountSubs.clear();

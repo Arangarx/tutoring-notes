@@ -26,3 +26,25 @@ export function buildCollaboratorLaserEntry(args: {
     color: { background: strokeColor, stroke: strokeColor },
   };
 }
+
+/** Collaborator overlay for inbound live cursor (non-laser). */
+export function buildCollaboratorCursorEntry(args: {
+  role: "tutor" | "student";
+  x: number;
+  y: number;
+  button: "up" | "down";
+}) {
+  const strokeColor = laserColorForRole(args.role);
+  return {
+    pointer: {
+      x: args.x,
+      y: args.y,
+      tool: "pointer" as const,
+      renderCursor: true,
+      laserColor: strokeColor,
+    },
+    button: args.button,
+    username: args.role === "tutor" ? "Tutor" : "Student",
+    color: { background: strokeColor, stroke: strokeColor },
+  };
+}

@@ -16,11 +16,29 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-06: Track 1 small wave is implemented on `feat/org-qol` (labels, tutor tile name, Finish review placement, SMS consent order, graph y=, board rename, image-as-board, math keyboard dismiss, hidden click-to-interact words). Playwright assertion added on the waiting-room mode toggle. Full `test:wb-sync` has not been run yet. |
-| **Next action(s)** | Track 1 tools that do not touch the sync rebind: modifier hints, Shift square/circle proof, live cursor, ghost rectangle, collapsed chat. Stop before the click-to-interact sync rebind. |
+| **Last action completed** | 2026-10-06: Track 1 presence wave on `feat/org-qol` — Shift square/circle (native Excalidraw + Playwright), live cursor wire + 5s stale hide, VP-01 ghost viewport rect, SMOKE-POST-2 collapsed chat. Jest on sync envelopes + viewport math; Playwright `wb-shift-constrain-shapes.spec.ts`, `wb-org-qol-presence.spec.ts` (wb-regression). Full `test:wb-sync` not run this turn. |
+| **Next action(s)** | **STOP (Andrew scope):** do **not** implement click-to-interact sync rebind or graph point/free-draw persistence yet. Next executor wave = those two items only, after review. |
 | **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. Billable wording waits on Sarah. |
 | **In-flight subagents** | None. |
-| **Uncommitted / unmerged** | Branch `feat/org-qol`, not merged. `node_modules` here is a junction — use `npm exec -- jest`, not bare `npx jest`. |
+| **Uncommitted / unmerged** | Branch `feat/org-qol`, not merged. `node_modules` junction — `npm exec -- jest`. |
+
+### Deferred — click-to-interact sync rebind (NOT started)
+
+| Field | Plan |
+|---|---|
+| **Intent** | Rebind embeddable graph “click to interact” so the student can manipulate JSXGraph without breaking tutor sync / follow semantics. |
+| **Files (expected)** | `GraphEmbeddable.tsx`, `WhiteboardWorkspaceClient.tsx` (additive handlers only), possible `src/lib/whiteboard/graph-interaction-guard.ts`, Playwright in `tests/integration/wb-graph-interact-sync.spec.ts` (`@wb-graph`, `@wb-sync`). |
+| **Red-first test** | Tutor+student harness: tutor draws graph, student clicks inside embeddable → local graph state changes, tutor scene receives `graphStateJson` update without duplicate elements or follow snap-back. |
+| **Risk** | **High** — touches embeddable apply path + multi-peer ordering; must not modify `handleExcalidrawChange` / `applyRemoteToCanvas` core; regression class = graph hydration + follow (fragile). Opus/Sonnet review before merge. |
+
+### Deferred — graph point / free-draw persistence (NOT started)
+
+| Field | Plan |
+|---|---|
+| **Intent** | Persist JSXGraph plotted points and free-draw/sketch inside graph embeddable across reload/rejoin (today placeholder / non-durable). |
+| **Files (expected)** | `GraphEmbeddable.tsx`, `graph-state.ts`, scene `customData.graphStateJson` schema extension, migration-free additive JSON. |
+| **Red-first test** | Playwright: tutor plots point + free segment, student sees both; reload student tab → both still present via wire/oracle on `graphElementState`. |
+| **Risk** | **Medium–high** — schema drift vs Excalidraw embed lifecycle; must stay out of recorder FSM and pageDataRef guards. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 
