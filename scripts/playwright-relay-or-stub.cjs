@@ -48,7 +48,12 @@ function startStub() {
 
 async function main() {
   if (await portInUse(PORT)) {
-    console.log(`[playwright-relay-or-stub] :${PORT} already in use — exiting`);
+    console.log(
+      `[playwright-relay-or-stub] :${PORT} already in use — holding webServer slot (reuse relay)`
+    );
+    // Playwright webServer (CI reuseExistingServer=false) needs this process to
+    // stay alive while an existing relay/stub already owns :3002.
+    await new Promise(() => {});
     return;
   }
 

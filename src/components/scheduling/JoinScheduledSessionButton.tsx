@@ -1,17 +1,30 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import {
-  joinScheduledSession,
-  type JoinScheduledSessionError,
-} from "@/app/join/scheduled-actions";
+import { useFormStatus } from "react-dom";
+import { joinScheduledSession } from "@/app/join/scheduled-actions";
 import { Button } from "@/components/ui/button";
 
-const ERROR_COPY: Record<JoinScheduledSessionError["error"], string> = {
-  not_signed_in: "Sign in to join this session.",
-  not_yet: "Join opens shortly before the scheduled start.",
-  not_available: "This session is not available to join right now.",
-};
+function JoinSubmit({
+  scheduledSessionId,
+  joinWindowOpen,
+}: {
+  scheduledSessionId: string;
+  joinWindowOpen: boolean;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <Button
+      type="submit"
+      variant="accent"
+      size="sm"
+      className="min-h-10 rounded-full whitespace-nowrap"
+      disabled={!joinWindowOpen || pending}
+      data-testid={`join-scheduled-session-${scheduledSessionId}`}
+    >
+      {pending ? "Joining…" : "Join"}
+    </Button>
+  );
+}
 
 export function JoinScheduledSessionButton({
   scheduledSessionId,
@@ -20,9 +33,6 @@ export function JoinScheduledSessionButton({
   scheduledSessionId: string;
   joinWindowOpen: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
-
   if (!joinWindowOpen) {
     return (
       <Button
@@ -38,32 +48,14 @@ export function JoinScheduledSessionButton({
     );
   }
 
+  const joinAction = joinScheduledSession.bind(null, scheduledSessionId);
+
   return (
-    <div className="flex flex-col items-stretch gap-1 sm:items-end">
-      <Button
-        type="button"
-        variant="accent"
-        size="sm"
-        className="min-h-10 rounded-full whitespace-nowrap"
-        disabled={pending}
-        data-testid={`join-scheduled-session-${scheduledSessionId}`}
-        onClick={() => {
-          setMessage(null);
-          startTransition(async () => {
-            const result = await joinScheduledSession(scheduledSessionId);
-            if (result?.error) {
-              setMessage(ERROR_COPY[result.error]);
-            }
-          });
-        }}
-      >
-        {pending ? "Joining…" : "Join"}
-      </Button>
-      {message ? (
-        <p className="text-xs text-muted-foreground" role="status">
-          {message}
-        </p>
-      ) : null}
-    </div>
+    <form action={joinAction}>
+      <JoinSubmit
+        scheduledSessionId={scheduledSessionId}
+        joinWindowOpen={joinWindowOpen}
+      />
+    </form>
   );
 }

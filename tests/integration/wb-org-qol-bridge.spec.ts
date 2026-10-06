@@ -29,6 +29,17 @@ import { seedTestAdmin, seedTestLearner, seedTestStudent } from "../visual/helpe
 const PARENT_STATE = "tests/integration/.auth/parent.json";
 const LEARNER_STATE = "tests/integration/.auth/learner.json";
 
+/** Desktop student detail renders duplicate mobile+desktop panels — target the visible tabpanel. */
+async function clickOpenScheduledRoom(
+  tutorPage: import("@playwright/test").Page,
+  scheduledSessionId: string
+) {
+  await tutorPage
+    .getByRole("tabpanel", { name: "Whiteboard" })
+    .getByTestId(`open-scheduled-room-${scheduledSessionId}`)
+    .click();
+}
+
 /** LIVE waiting-room Start requires fake media (matches wb-regression project). */
 const WB_LIVE_BROWSER = {
   permissions: ["microphone", "camera"] as const,
@@ -155,10 +166,7 @@ test.describe("org QoL schedule bridge", () => {
         await tutorPage.goto(`/admin/students/${studentId}`, {
           waitUntil: "domcontentloaded",
         });
-        await tutorPage
-          .getByTestId("student-detail-panel-session")
-          .getByTestId(`open-scheduled-room-${sched.scheduledSessionId}`)
-          .click();
+        await clickOpenScheduledRoom(tutorPage, sched.scheduledSessionId);
         await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
           timeout: 90_000,
         });
@@ -236,10 +244,7 @@ test.describe("org QoL schedule bridge", () => {
         await tutorPage.goto(`/admin/students/${fx.studentId}`, {
           waitUntil: "domcontentloaded",
         });
-        await tutorPage
-          .getByTestId("student-detail-panel-session")
-          .getByTestId(`open-scheduled-room-${sched.scheduledSessionId}`)
-          .click();
+        await clickOpenScheduledRoom(tutorPage, sched.scheduledSessionId);
         await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
           timeout: 90_000,
         });
@@ -316,7 +321,8 @@ test.describe("org QoL schedule bridge", () => {
       try {
         await parentPage.goto("/account/dashboard", { waitUntil: "domcontentloaded" });
         await parentPage.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`).click();
-        await expect(parentPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+        await parentPage.waitForURL(/\/join\/[^/]+$/, { timeout: 90_000 });
+        await expect(parentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
           timeout: 90_000,
         });
         const parentWbs = new URL(parentPage.url()).pathname.split("/").pop()!;
@@ -324,10 +330,7 @@ test.describe("org QoL schedule bridge", () => {
         await tutorPage.goto(`/admin/students/${fx.studentId}`, {
           waitUntil: "domcontentloaded",
         });
-        await tutorPage
-          .getByTestId("student-detail-panel-session")
-          .getByTestId(`open-scheduled-room-${sched.scheduledSessionId}`)
-          .click();
+        await clickOpenScheduledRoom(tutorPage, sched.scheduledSessionId);
         await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
           timeout: 90_000,
         });
@@ -438,18 +441,27 @@ test.describe("org QoL schedule bridge", () => {
       await page.getByTestId("schedule-new-session").first().click();
       await page.locator("#schedule-student").click();
       await page.getByRole("option", { name: "Playwright Student" }).click();
-      await page.locator("#schedule-start").fill("23:30");
       await page.locator("#schedule-duration").click();
       await page.getByRole("option", { name: /90 min/ }).click();
+      await page.locator("#schedule-start").fill("23:30");
       await expect(page.locator("#schedule-end")).toHaveValue("01:00");
-      await page.locator("#schedule-subject").fill(`Midnight PW ${Date.now()}`);
+      const subject = `Midnight PW ${Date.now()}`;
+      await page.locator("#schedule-subject").fill(subject);
       await page.getByTestId("schedule-save-session").click();
+      await expect(page.getByRole("dialog")).toBeHidden({ timeout: 30_000 });
 
       const prisma = new PrismaClient();
-      const row = await prisma.scheduledSession.findFirst({
-        where: { adminUserId, studentId },
-        orderBy: { createdAt: "desc" },
-      });
+      let row = null as Awaited<
+        ReturnType<PrismaClient["scheduledSession"]["findFirst"]>
+      >;
+      await expect
+        .poll(async () => {
+          row = await prisma.scheduledSession.findFirst({
+            where: { adminUserId, studentId, subject },
+          });
+          return row?.id ?? null;
+        })
+        .not.toBeNull();
       await prisma.$disconnect();
       expect(row?.startAt && row.endAt).toBeTruthy();
       expect(row!.endAt!.getTime() - row!.startAt!.getTime()).toBe(90 * 60_000);

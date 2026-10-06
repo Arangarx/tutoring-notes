@@ -60,7 +60,13 @@ describe("ICS SUMMARY — first name + last initial", () => {
       ],
       "America/Denver"
     );
-    expect(summariesFromIcs(body)).toEqual(["Tutoring — Maya R."]);
+    const summaries = summariesFromIcs(body);
+    expect(summaries).toEqual(["Tutoring — Maya R."]);
+    // Privacy oracle: full last name must never appear in any SUMMARY, even when icsShowFullName is true.
+    for (const summary of summaries) {
+      expect(summary).not.toMatch(/Rodriguez/);
+      expect(summary).not.toContain("Rodriguez");
+    }
   });
 
   it("single-name students use the one name", () => {

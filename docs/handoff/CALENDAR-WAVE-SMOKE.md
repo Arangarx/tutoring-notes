@@ -37,7 +37,7 @@ Run order: top to bottom unless noted. Re-run **Cross-branch / post-merge** afte
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `PLAYWRIGHT-GAP` — no hermetic Apple Calendar subscribe. `[human-only: live Apple Calendar From URL / subscribe has no hermetic stand-in]`. Surrogate unit oracles: `[automated: src/__tests__/calendar/ics-feed-stability.test.ts › double render with unchanged rows yields identical UID and DTSTAMP sets (parser oracle)]`; `[automated: src/__tests__/calendar/ics-summary-privacy.test.ts › default icsShowFullName false uses first name only]`; `[automated: src/__tests__/calendar/ics-summary-privacy.test.ts › flipping one student's flag changes only that student's parsed SUMMARY]`.
+**Coverage:** `PLAYWRIGHT-GAP` — no hermetic Apple Calendar subscribe. `[human-only: live Apple Calendar From URL / subscribe has no hermetic stand-in]`. Surrogate unit oracles: `[automated: src/__tests__/calendar/ics-feed-stability.test.ts › double render with unchanged rows yields identical UID and DTSTAMP sets (parser oracle)]`; `[automated: src/__tests__/calendar/ics-summary-first-last-initial.test.ts › uses first + last initial in SUMMARY]`; `[automated: src/__tests__/calendar/ics-summary-first-last-initial.test.ts › single-name students use the one name]`.
 
 **Notes:**
 
@@ -109,7 +109,7 @@ Run order: top to bottom unless noted. Re-run **Cross-branch / post-merge** afte
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: src/__tests__/calendar/ics-show-full-name-toggle.test.ts › persists icsShowFullName after assertOwnsStudent]`; `[automated: src/__tests__/calendar/ics-summary-privacy.test.ts › flipping one student's flag changes only that student's parsed SUMMARY]` — mark N/A for persistence unless exercising UI; `[human-only: subjective feel/copy on student detail + ICS SUMMARY after subscribe in real calendar client]`.
+**Coverage:** `[automated: src/__tests__/calendar/ics-summary-first-last-initial.test.ts › uses first + last initial in SUMMARY]` (icsShowFullName true in DB still yields first + last initial only — full last name never in SUMMARY); mark N/A for student-detail toggle UI unless exercising it; `[human-only: subjective feel/copy on student detail + ICS SUMMARY after subscribe in real calendar client]`.
 
 **Notes:**
 

@@ -56,7 +56,8 @@ export default defineConfig({
     {
       command: "node scripts/playwright-relay-or-stub.cjs",
       url: "http://localhost:3002/",
-      reuseExistingServer: !process.env.CI,
+      // :3002 is the persistent Docker relay — never kill it; always reuse when healthy.
+      reuseExistingServer: true,
       timeout: 60_000,
     },
   ].concat(
