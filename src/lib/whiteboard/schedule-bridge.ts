@@ -16,6 +16,7 @@
  * SERVER-ONLY.
  */
 
+import { assertConsentFromLiveRecord, ConsentError } from "@/lib/consent-scope";
 import { db, withDbRetry } from "@/lib/db";
 import { decideAhJoin } from "@/lib/join-scope";
 import { isWithinJoinWindow } from "@/lib/scheduling/join-window";
@@ -92,6 +93,14 @@ export async function getOrCreateWhiteboardForSchedule(
       if (!decision.ok) return deny("not_found", decision.reason);
     }
     if (!isWithinJoinWindow(sched, now)) return deny("not_yet", "outside_window");
+    // Before creating anything: a learner the parent has not allowed into live
+    // sessions must not leave a session row + blob behind.
+    try {
+      await assertConsentFromLiveRecord(sched.studentId, sched.adminUserId, "allowLiveSession");
+    } catch (err) {
+      if (err instanceof ConsentError) return deny("not_available", "consent_live_session");
+      throw err;
+    }
   }
 
   try {

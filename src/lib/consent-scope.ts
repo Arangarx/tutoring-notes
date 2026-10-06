@@ -433,6 +433,17 @@ export async function assertConsentRecordExists(
 // assertConsentFromLiveRecord (session-less path — for sendUpdateEmail)
 // ---------------------------------------------------------------------------
 
+const LIVE_RECORD_DENIAL_COPY = {
+  allowNoteSending: {
+    noRecord: "Parental consent is required before sending notes updates.",
+    notGranted: "Parental consent for notes updates has not been granted.",
+  },
+  allowLiveSession: {
+    noRecord: "Parental consent is required before joining live sessions.",
+    notGranted: "Parental consent for live sessions has not been granted.",
+  },
+} as const;
+
 /**
  * Assert that the given student has current consent for the given permission.
  * Used for the session-less notes-email send path.
@@ -447,11 +458,14 @@ export async function assertConsentRecordExists(
  * Throw path:
  *   - Claimed + no record → ConsentError (explicit consent required)
  *   - Record exists + permission false → ConsentError
+ *
+ * `allowLiveSession` is checked here by the schedule bridge, before the
+ * session (and its snapshot) exists.
  */
 export async function assertConsentFromLiveRecord(
   studentId: string,
   adminUserId: string,
-  permission: Extract<ConsentPermission, "allowNoteSending">
+  permission: Extract<ConsentPermission, "allowNoteSending" | "allowLiveSession">
 ): Promise<void> {
   const student = await withDbRetry(
     () =>
@@ -499,10 +513,7 @@ export async function assertConsentFromLiveRecord(
     console.log(
       `[cns] studentId=${studentId} action=live_record_check permission=${permission} result=denied reason=no_record`
     );
-    throw new ConsentError(
-      permission,
-      "Parental consent is required before sending notes updates."
-    );
+    throw new ConsentError(permission, LIVE_RECORD_DENIAL_COPY[permission].noRecord);
   }
 
   const granted = latestRecord[permission];
@@ -510,10 +521,7 @@ export async function assertConsentFromLiveRecord(
     console.log(
       `[cns] studentId=${studentId} action=live_record_check permission=${permission} result=denied`
     );
-    throw new ConsentError(
-      permission,
-      "Parental consent for notes updates has not been granted."
-    );
+    throw new ConsentError(permission, LIVE_RECORD_DENIAL_COPY[permission].notGranted);
   }
 
   console.log(

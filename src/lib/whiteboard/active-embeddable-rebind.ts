@@ -38,7 +38,7 @@ type RebindApi = {
       appState: { activeEmbeddable?: ActiveEmbeddable }
     ) => void
   ) => () => void;
-  updateScene: (data: { appState?: Record<string, unknown> }) => void;
+  updateScene: (data: { appState?: Record<string, unknown>; captureUpdate?: "NEVER" }) => void;
 };
 
 export function useActiveEmbeddableRebind(api: unknown): void {
@@ -50,6 +50,7 @@ export function useActiveEmbeddableRebind(api: unknown): void {
       if (!next) return;
       rebindApi.updateScene({
         appState: { activeEmbeddable: { element: next, state: "active" } },
+        captureUpdate: "NEVER",
       });
     });
   }, [api]);

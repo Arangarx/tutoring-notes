@@ -59,6 +59,20 @@ describe("encryptAtRest / decryptAtRest", () => {
     expect(decryptTotpSecret(legacy)).toBe("LEGACY");
   });
 
+  it("decrypts a literal secret stored by the pre-branch totp-secret.ts (9182f3f8)", () => {
+    // Key = 32 bytes of 0x07, IV = 12 bytes of 0x03, plaintext JBSWY3DPEHPK3PXP,
+    // produced with the 9182f3f8 encryptTotpSecret algorithm.
+    const prev = process.env.TOTP_ENCRYPTION_KEY;
+    process.env.TOTP_ENCRYPTION_KEY = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc";
+    try {
+      const stored = "AwMDAwMDAwMDAwMD.b7zwVAMbGhI_CBMX2AenXCJQypKgoE984na17nC1r24";
+      expect(decryptTotpSecret(stored)).toBe("JBSWY3DPEHPK3PXP");
+      expect(decryptAtRest("totp", stored)).toBe("JBSWY3DPEHPK3PXP");
+    } finally {
+      process.env.TOTP_ENCRYPTION_KEY = prev;
+    }
+  });
+
   it("wb-live-key uses an HKDF-SHA256 subkey of the root", () => {
     const sub = Buffer.from(hkdfSync("sha256", ROOT, Buffer.alloc(0), "mynk-at-rest:wb-live-key", 32));
     expect(openWith(sub, encryptAtRest("wb-live-key", "abc"))).toBe("abc");

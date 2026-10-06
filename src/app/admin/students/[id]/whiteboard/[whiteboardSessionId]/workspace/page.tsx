@@ -130,7 +130,7 @@ export default async function WhiteboardWorkspacePage({
     : readServerLiveKey(detail.id, detail.liveKeyEnc);
 
   return (
-    <ServerLiveKeySeeder sessionId={detail.id} liveKey={liveKey}>
+    <ServerLiveKeySeeder sessionId={detail.id} liveKey={liveKey} role="tutor">
     <WhiteboardSessionShell
       role="tutor"
       whiteboardSessionId={detail.id}

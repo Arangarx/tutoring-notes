@@ -19,8 +19,14 @@ jest.mock("@vercel/blob", () => ({
     url: `https://blob.vercel-storage.com/${path}-${Math.random().toString(36).slice(2)}`,
   })),
 }));
+jest.mock("@/lib/blob", () => ({
+  __esModule: true,
+  deleteBlob: jest.fn(async () => {}),
+}));
 
 import { randomBytes } from "crypto";
+import { put } from "@vercel/blob";
+import { deleteBlob } from "@/lib/blob";
 import { db } from "@/lib/db";
 import { getOrCreateWhiteboardForSchedule } from "@/lib/whiteboard/schedule-bridge";
 import { readServerLiveKey } from "@/lib/whiteboard/live-key";
@@ -45,7 +51,11 @@ const START = new Date("2026-10-06T18:00:00.000Z");
 const END = new Date("2026-10-06T19:00:00.000Z");
 const DURING = new Date("2026-10-06T18:05:00.000Z");
 
-async function seed(opts: { isSelfLearner: boolean; withConsent?: boolean }) {
+async function seed(opts: {
+  isSelfLearner: boolean;
+  withConsent?: boolean;
+  allowLiveSession?: boolean;
+}) {
   const tutor = await db.adminUser.create({
     data: { email: `${uniq("tutor")}@example.com`, role: "TUTOR", approvalStatus: "APPROVED" },
   });
@@ -64,7 +74,7 @@ async function seed(opts: { isSelfLearner: boolean; withConsent?: boolean }) {
         learnerProfileId: profile.id,
         adminUserId: tutor.id,
         version: 1,
-        allowLiveSession: true,
+        allowLiveSession: opts.allowLiveSession ?? true,
         allowAudioRecording: true,
         allowWhiteboardRecording: true,
         allowNoteSending: true,
@@ -193,6 +203,67 @@ describe("getOrCreateWhiteboardForSchedule", () => {
     );
     expect(r).toEqual({ ok: false, reason: "not_available" });
     expect(await db.whiteboardSession.count({ where: { scheduledSessionId: sched.id } })).toBe(0);
+  });
+
+  it.each([
+    ["parent", (s: Awaited<ReturnType<typeof seed>>) => ({ kind: "account_holder" as const, accountHolderId: s.ah.id })],
+    ["learner", (s: Awaited<ReturnType<typeof seed>>) => ({ kind: "learner" as const, learnerProfileId: s.profile.id })],
+  ])(
+    "live sessions not allowed by the parent: %s gets a neutral refusal and no room or storage is created",
+    async (_label, principalFor) => {
+      const s = await seed({ isSelfLearner: false, allowLiveSession: false });
+      (put as jest.Mock).mockClear();
+      const r = await getOrCreateWhiteboardForSchedule(s.sched.id, principalFor(s), "r", DURING);
+      expect(r).toEqual({ ok: false, reason: "not_available" });
+      expect(await db.whiteboardSession.count({ where: { scheduledSessionId: s.sched.id } })).toBe(0);
+      expect(put).not.toHaveBeenCalled();
+    }
+  );
+
+  it("a self learner is not held back by the live-session flag", async () => {
+    const s = await seed({ isSelfLearner: true, allowLiveSession: false });
+    const r = await getOrCreateWhiteboardForSchedule(
+      s.sched.id,
+      { kind: "learner", learnerProfileId: s.profile.id },
+      "r",
+      DURING
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("losing a create race returns the winner and drops the loser's empty storage", async () => {
+    const { tutor, sched } = await seed({ isSelfLearner: true });
+    const winner = await getOrCreateWhiteboardForSchedule(
+      sched.id,
+      { kind: "tutor", adminUserId: tutor.id },
+      "r-winner"
+    );
+    if (!winner.ok) throw new Error("winner should open");
+    // Force the loser past the reuse lookup so its insert collides on the
+    // unique scheduledSessionId (the window two simultaneous arrivals hit).
+    const realFindUnique = db.whiteboardSession.findUnique.bind(db.whiteboardSession);
+    jest
+      .spyOn(db.whiteboardSession, "findUnique")
+      .mockImplementationOnce((async () => null) as never)
+      .mockImplementation(realFindUnique as never);
+    (put as jest.Mock).mockClear();
+    (deleteBlob as jest.Mock).mockClear();
+
+    const loser = await getOrCreateWhiteboardForSchedule(
+      sched.id,
+      { kind: "tutor", adminUserId: tutor.id },
+      "r-loser"
+    );
+
+    expect(loser).toEqual({
+      ok: true,
+      whiteboardSessionId: winner.whiteboardSessionId,
+      studentId: winner.studentId,
+      created: false,
+    });
+    expect(await db.whiteboardSession.count({ where: { scheduledSessionId: sched.id } })).toBe(1);
+    const loserBlobUrl = (await (put as jest.Mock).mock.results[0].value).url;
+    expect(deleteBlob).toHaveBeenCalledWith(loserBlobUrl);
   });
 
   it("no consent record: the tutor sees the consent error", async () => {

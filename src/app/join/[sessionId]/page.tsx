@@ -297,7 +297,7 @@ export default async function JoinSessionPage({
   // in place when the shell's key-read effect fires.
   return (
     <JoinHashRestorer sessionId={sessionId}>
-      <ServerLiveKeySeeder sessionId={session.id} liveKey={liveKey}>
+      <ServerLiveKeySeeder sessionId={session.id} liveKey={liveKey} role="learner">
       <WhiteboardSessionShell
         role="student"
         whiteboardSessionId={session.id}
