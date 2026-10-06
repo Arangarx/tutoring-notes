@@ -115,6 +115,8 @@ No standalone security doc. Open security items and the 2026-05-18 recon + Tier 
 
 ## Smoke + manual runbooks
 
+**External tester packets (Tyson).** Test packets for Tyson (`tysonrdewitt@gmail.com`, external tester) go to Google Drive **My Drive → Projects → Mynk → test plans** — [folder](https://drive.google.com/drive/folders/19yMgrIdMvcwAAo8gKHfHud0X2AEw5lBy), id `19yMgrIdMvcwAAo8gKHfHud0X2AEw5lBy`. Tyson has **writer** on that folder only; a Google Doc created inside it inherits his access, so no separate share is needed. Draft the packet in the repo first (`docs/handoff/<SCOPE>-TYSON-TEST-PACKET.md`, smokebook template), then create the Google Doc in that folder (Drive MCP `create_file` with HTML content, `parentId` = folder id) — a Drive write, so Andrew says go first. **Write for a cold user** (Andrew 2026-08-26): assume no knowledge of the app — what it is, how to sign in, which account/device does each step. Prior packets in that folder (Aug–Sep 2026: Google integrations, tutor auth, calendar sync walkthrough) show the expected style.
+
 | Doc | What's in it | When to read |
 |---|---|---|
 | [docs/handoff/SMOKEBOOK-TEMPLATE.md](handoff/SMOKEBOOK-TEMPLATE.md) | Canonical smokebook/runbook template — per-item Action/Expect/Ignore/PASS/FAIL/Notes; header with branch, tip commit, verified preview URL | Before authoring any smokebook or smoke-runbook |
