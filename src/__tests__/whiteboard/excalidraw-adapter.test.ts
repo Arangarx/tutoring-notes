@@ -755,3 +755,13 @@ describe("excalidraw-adapter -- canonicalizeScene", () => {
     expect(out[0].type).toBe("freehand");
   });
 });
+
+describe("laser strokes are not part of the persisted scene", () => {
+  test("a laser element is dropped by the canonical adapter", () => {
+    const laser = freedraw({ id: "laser-1", type: "laser" });
+    expect(toCanonical(laser)).toBeNull();
+    expect(canonicalizeScene([laser, freedraw({ id: "kept" })])).toEqual([
+      expect.objectContaining({ id: "kept", type: "freehand" }),
+    ]);
+  });
+});
