@@ -5,10 +5,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
 import {
+  harnessRequestOrigin,
   harnessServerPut,
   isAllowedBlobUrl,
   isBlobHarnessActive,
 } from "@/lib/blob-harness";
+import { createWhiteboardSessionCore } from "@/lib/whiteboard/create-session-core";
+import { getOrCreateWhiteboardForSchedule } from "@/lib/whiteboard/schedule-bridge";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
@@ -30,7 +33,6 @@ import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import {
   assertEffectiveConsent,
   assertConsentRecordExists,
-  createSessionConsentSnapshot,
   ConsentError,
   resolveModeAwareAudioRecordingConsent,
 } from "@/lib/consent-scope";
@@ -58,9 +60,9 @@ import { logProductEvent } from "@/lib/observability/product-events";
 /**
  * Whiteboard session lifecycle server actions.
  *
- * `createWhiteboardSession` is the ONLY way a `WhiteboardSession` row
- * gets minted in production. It enforces three rules that a client
- * cannot bypass by hand-rolling a fetch:
+ * `createWhiteboardSession` (tutor) and the schedule bridge both mint rows
+ * only through `createWhiteboardSessionCore`. Together they enforce rules a
+ * client cannot bypass by hand-rolling a fetch:
  *
  *   1. **Tutor owns this student.** `assertOwnsStudent` is the same
  *      multi-tenant gate used by every other student-scoped action.
@@ -86,37 +88,16 @@ import { logProductEvent } from "@/lib/observability/product-events";
  *      `/api/upload/blob` route).
  */
 
-const PHASE1_SCHEMA_VERSION = 1;
-
-function emptyEventsJson(startedAtIso: string): string {
-  return JSON.stringify({
-    schemaVersion: PHASE1_SCHEMA_VERSION,
-    startedAt: startedAtIso,
-    durationMs: 0,
-    events: [],
-  });
-}
-
 export async function createWhiteboardSession(
   studentId: string
 ): Promise<void> {
   const rid = createActionCorrelationId();
 
-  // Order:
-  //   1. ownership (cheap DB call)
-  //   2. tutor approval check
-  //   3. CC-1 consent record existence
-  //   4. expensive Blob write
-  //   5. row insert
-  // If step 4 succeeds but step 5 fails, we leave behind one orphaned
-  // empty events.json — non-fatal cost, kept this way for code
-  // simplicity (a try/catch + Blob.delete would still race).
   const scope = await requireStudentScope();
   if (scope.kind !== "admin") {
     // The whiteboard requires a real (DB-backed) admin row because
     // the session needs an FK to AdminUser. The legacy env-only login
-    // (`scope.kind === "env"`) doesn't have one. Surface a clear copy
-    // so an admin in that legacy state knows what to do.
+    // (`scope.kind === "env"`) doesn't have one.
     console.warn(
       `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: env-only admin (no AdminUser row)`
     );
@@ -126,159 +107,10 @@ export async function createWhiteboardSession(
   }
   await assertOwnsStudent(studentId);
 
-  const erasureBlock = await isWhiteboardSessionBlockedByErasure(studentId);
-  if (erasureBlock.blocked) {
-    const jobSuffix = erasureBlock.activeJobId
-      ? ` ers=${erasureBlock.activeJobId}`
-      : "";
-    console.warn(
-      `[ers] action=session_create_denied studentId=${studentId} rid=${rid}${jobSuffix}`
-    );
-    throw new ErasureAccessSuspendedError();
-  }
-
-  // B1 cost gate: WAITLISTED tutors cannot start whiteboard sessions.
-  // Runs BEFORE B2 consent check and BEFORE Blob write — no cost incurred
-  // until the tutor is confirmed approved to operate.
-  await assertTutorApproved(scope.adminId);
-
-  // CC-1: consent record must exist before Blob write (fail fast, no orphan Blob).
-  const studentForConsent = await withDbRetry(
-    () =>
-      db.student.findUnique({
-        where: { id: studentId },
-        select: { learnerProfileId: true },
-      }),
-    { label: "createWhiteboardSession.studentForConsent" }
-  );
-  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
-
-  try {
-    await assertConsentRecordExists(learnerProfileId, scope.adminId, {
-      studentId,
-    });
-  } catch (err) {
-    if (err instanceof ConsentError && err.permission === "consentRecord") {
-      console.warn(
-        `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: no_consent_record`
-      );
-    }
-    throw err;
-  }
-
-  const startedAtIso = new Date().toISOString();
-  let eventsBlobUrl: string;
-  try {
-    // The pathname is intentionally unguessable + scoped under the
-    // tutor + student so a future cleanup sweep can list-and-delete
-    // by prefix. Random suffix to avoid collisions if a tutor starts
-    // two sessions in the same millisecond (impossible in practice
-    // but cheap insurance).
-    const eventsPath = `whiteboard-sessions/${scope.adminId}/${studentId}/${Date.now()}-events.json`;
-    const result = isBlobHarnessActive()
-      ? await harnessServerPut(
-          eventsPath,
-          emptyEventsJson(startedAtIso),
-          {
-            contentType: "application/json",
-            addRandomSuffix: true,
-          },
-          harnessRequestOrigin()
-        )
-      : await put(
-      eventsPath,
-      emptyEventsJson(startedAtIso),
-      {
-        // The Vercel Blob store backing this project is configured for
-        // PRIVATE access. Passing "public" returns:
-        //   "Vercel Blob: Cannot use public access on a private store."
-        // Replay reads this URL through /api/whiteboard/[id]/events
-        // (and the share-token sibling /public-events), which proxy
-        // the bytes server-side using BLOB_READ_WRITE_TOKEN — so
-        // private works end-to-end. See lib/blob.ts header for the
-        // full posture and __tests__/regressions/upload-access-private.test.ts
-        // for the regression that pins all whiteboard upload paths.
-        access: "private",
-        contentType: "application/json",
-        addRandomSuffix: true,
-      }
-    );
-    eventsBlobUrl = result.url;
-  } catch (err) {
-    console.error(
-      `[createWhiteboardSession] rid=${rid} studentId=${studentId} Blob put failed:`,
-      err
-    );
-    throw new Error(
-      "Could not create the whiteboard session storage. Please try again in a moment."
-    );
-  }
-
-  let session;
-  try {
-    // B2: session row + consent snapshot in the same transaction (atomic).
-    // The snapshot freeze is NOT flag-gated — we always record what consent
-    // was authorized at session start, even when enforcement is off.
-    session = await withDbRetry(
-      () =>
-        db.$transaction(async (tx) => {
-          const row = await tx.whiteboardSession.create({
-            data: {
-              adminUserId: scope.adminId,
-              studentId,
-              consentAcknowledged: true,
-              eventsBlobUrl,
-              eventsSchemaVersion: PHASE1_SCHEMA_VERSION,
-              // startedAt + createdAt default to now() in the schema.
-            },
-            select: { id: true, studentId: true },
-          });
-          // createSessionConsentSnapshot is a no-op for unclaimed/no-record
-          // sessions; it never throws.
-          await createSessionConsentSnapshot(
-            tx,
-            row.id,
-            learnerProfileId,
-            scope.adminId
-          );
-          if (learnerProfileId) {
-            await tx.sessionParticipant.createMany({
-              data: [
-                {
-                  whiteboardSessionId: row.id,
-                  learnerProfileId,
-                },
-              ],
-              skipDuplicates: true,
-            });
-          }
-          return row;
-        }),
-      { label: "createWhiteboardSession" }
-    );
-  } catch (err) {
-    console.error(
-      `[createWhiteboardSession] rid=${rid} studentId=${studentId} db.transaction failed:`,
-      err
-    );
-    throw new Error(
-      "Could not create the whiteboard session. Please try again."
-    );
-  }
-
-  console.info(
-    `[slc] wbsid=${session.id} action=session_created phase=pending claimed=${learnerProfileId ? "yes" : "no"}`
-  );
-  console.log(
-    `[createWhiteboardSession] rid=${rid} wbsid=${session.id} studentId=${studentId} adminUserId=${scope.adminId} created`
-  );
-
-  await logProductEvent({
-    kind: "SESSION_CREATED",
+  const session = await createWhiteboardSessionCore({
     adminUserId: scope.adminId,
     studentId,
-    whiteboardSessionId: session.id,
-    metadata: { claimed: Boolean(learnerProfileId) },
+    rid,
   });
 
   // redirect() throws a NEXT_REDIRECT internally; the calling form
@@ -286,6 +118,43 @@ export async function createWhiteboardSession(
   // last so the row is durable before navigation.
   redirect(
     `/admin/students/${studentId}/whiteboard/${session.id}/workspace`
+  );
+}
+
+/**
+ * Tutor opens the live room for a scheduled appointment (get-or-create, one
+ * whiteboard session per appointment). Same create core as
+ * `createWhiteboardSession`; lands in the waiting room (PENDING).
+ */
+export async function openScheduledWhiteboardSession(
+  scheduledSessionId: string
+): Promise<void> {
+  const rid = createActionCorrelationId();
+  const scope = await requireStudentScope();
+  if (scope.kind !== "admin") {
+    throw new Error(
+      "Whiteboard sessions require a registered admin account. Please complete account setup first."
+    );
+  }
+  const owned = await withDbRetry(
+    () =>
+      db.scheduledSession.findFirst({
+        where: { id: scheduledSessionId, adminUserId: scope.adminId },
+        select: { studentId: true },
+      }),
+    { label: "openScheduledWhiteboardSession.owned" }
+  );
+  if (!owned) throw new Error("Scheduled session not found.");
+  await assertOwnsStudent(owned.studentId);
+
+  const result = await getOrCreateWhiteboardForSchedule(
+    scheduledSessionId,
+    { kind: "tutor", adminUserId: scope.adminId },
+    rid
+  );
+  if (!result.ok) throw new Error("Scheduled session not found.");
+  redirect(
+    `/admin/students/${result.studentId}/whiteboard/${result.whiteboardSessionId}/workspace`
   );
 }
 
@@ -670,10 +539,6 @@ export type EndSessionSegment = {
  */
 function blobUrlAllowedForEndSession(blobUrl: string): boolean {
   return isAllowedBlobUrl(blobUrl);
-}
-
-function harnessRequestOrigin(): string {
-  return process.env.NEXTAUTH_URL ?? "http://localhost:3100";
 }
 
 function validateEndSessionSegments(

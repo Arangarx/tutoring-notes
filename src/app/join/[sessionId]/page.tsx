@@ -4,17 +4,19 @@
  * AUTH BOUNDARY (BLOCKERs):
  *   - Two valid principals:
  *     1. Learner session (mynk_learner_session) — standard child + account-holder-session learners.
- *     2. Account-holder session (mynk_ah_session) — ONLY when LearnerProfile.isSelfLearner===true
- *        and the AccountHolder owns that profile. [WB-JOIN-ADULT-LEARNER]
+ *     2. Account-holder session (mynk_ah_session) — when the AccountHolder owns the
+ *        session's LearnerProfile: the self learner, or the parent joining as the
+ *        child (`decideAhJoin`). [WB-JOIN-ADULT-LEARNER, WB-PARENT-JOIN-AS-CHILD]
  *   - Participant gate: learnerProfileId must have an active SessionParticipant row for
  *     this session. Learner A cannot reach learner B's session → 404.
- *   - A CHILD (non-self) learner's session is NEVER joinable via an AH session.
+ *   - Another family's account holder is redirected to the neutral not-my-session page.
  *   - Fragment preservation: a server redirect cannot carry #k=, so the
  *     unauthenticated path renders a client component (JoinAuthGate) that
  *     saves the fragment then redirects to the correct login for the learner type.
  *
- * The E2E whiteboard encryption key stays CLIENT-ONLY in the URL fragment
- * #k=<key>. The server NEVER sees it.
+ * Live key: sessions with `liveKeyEnc` hand the decrypted key to the
+ * authorized participant's page only (seeded into #k=). Legacy sessions keep
+ * the tutor-minted key in the link fragment, which the server never sees.
  */
 
 import type { Metadata } from "next";
@@ -26,7 +28,13 @@ import {
   getLearnerSessionFromHeaders,
   getAccountHolderSessionFromHeaders,
 } from "@/lib/server-session";
-import { redirectJoinWrongPrincipal } from "@/lib/join-scope";
+import {
+  decideAhJoin,
+  logAhJoinDecision,
+  redirectJoinWrongPrincipal,
+} from "@/lib/join-scope";
+import { readServerLiveKey } from "@/lib/whiteboard/live-key";
+import { ServerLiveKeySeeder } from "@/components/whiteboard/ServerLiveKeySeeder";
 import {
   assertIsSessionParticipant,
   verifyIsSessionParticipant,
@@ -69,6 +77,7 @@ export default async function JoinSessionPage({
       sessionPhase: true,
       activeMs: true,
       lastActiveAt: true,
+      liveKeyEnc: true,
       adminUser: {
         select: { displayName: true, email: true },
       },
@@ -131,48 +140,20 @@ export default async function JoinSessionPage({
     }
   }
 
-  // Path B: account-holder session (mynk_ah_session) — self-learner ONLY.
-  // [WB-JOIN-ADULT-LEARNER] A CHILD (isSelfLearner=false) session is NEVER
-  // joinable via an AH session, even if the AH is the child's parent.
+  // Path B: account-holder session (mynk_ah_session) — the AH that owns the
+  // session's learner profile: the self learner, or the parent joining as
+  // their child. Rule lives in decideAhJoin (shared with the API routes).
   if (!effectiveLearnerProfileId) {
     const ahSession = await getAccountHolderSessionFromHeaders();
     if (ahSession) {
-      const shortId = sessionId.slice(0, 8);
-
-      if (!lpId || !lp || !isSelfLearner) {
-        // No self-learner profile — deny AH access (child session or unclaimed student).
-        console.error(
-          `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_join_denied` +
-            ` reason=${!lpId ? "no_profile" : "not_self_learner"}` +
-            ` accountHolderId=${ahSession.accountHolderId}`
-        );
-        redirectJoinWrongPrincipal();
-      }
-
-      if (
-        lp.tombstonedAt !== null ||
-        lp.accountHolderId !== ahSession.accountHolderId
-      ) {
-        // Ownership failure — authenticated wrong account-holder.
-        console.error(
-          `[lpr] lpr=${lpId} action=assert_owns_denied accountHolderId=${ahSession.accountHolderId}`
-        );
-        console.error(
-          `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_join_denied` +
-            ` reason=not_owner accountHolderId=${ahSession.accountHolderId} lpr=${lpId}`
-        );
-        redirectJoinWrongPrincipal();
-      }
+      const decision = decideAhJoin(lp, ahSession.accountHolderId);
+      logAhJoinDecision(sessionId, ahSession.accountHolderId, decision, lpId);
+      if (!decision.ok) redirectJoinWrongPrincipal();
 
       // Ownership confirmed — participant gate (same check as learner path).
       // assertIsSessionParticipant calls notFound() when no active participant row.
-      await assertIsSessionParticipant(lpId, sessionId);
-
-      console.info(
-        `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_join_granted` +
-          ` accountHolderId=${ahSession.accountHolderId} lpr=${lpId}`
-      );
-      effectiveLearnerProfileId = lpId;
+      await assertIsSessionParticipant(decision.learnerProfileId, sessionId);
+      effectiveLearnerProfileId = decision.learnerProfileId;
     }
   }
 
@@ -307,10 +288,16 @@ export default async function JoinSessionPage({
     );
   }
 
+  // Server-held key (sessions created after the live-key migration): seeded
+  // into #k= during first client render, so no join link is needed. Legacy
+  // sessions return null and keep the link-fragment path.
+  const liveKey = readServerLiveKey(session.id, session.liveKeyEnc);
+
   // JoinHashRestorer runs before the student shell so the #k= fragment is
   // in place when the shell's key-read effect fires.
   return (
     <JoinHashRestorer sessionId={sessionId}>
+      <ServerLiveKeySeeder sessionId={session.id} liveKey={liveKey}>
       <WhiteboardSessionShell
         role="student"
         whiteboardSessionId={session.id}
@@ -325,6 +312,7 @@ export default async function JoinSessionPage({
         identityKey={identityKey}
         learnerProfileId={effectiveLearnerProfileId}
       />
+      </ServerLiveKeySeeder>
     </JoinHashRestorer>
   );
 }

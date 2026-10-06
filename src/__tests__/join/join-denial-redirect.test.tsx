@@ -51,14 +51,32 @@ jest.mock("@/app/join/[sessionId]/JoinHashRestorer", () => ({
 jest.mock(
   "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell",
   () => ({
-    WhiteboardSessionShell: () => (
-      <div data-testid="whiteboard-session-shell">WhiteboardSessionShell</div>
+    WhiteboardSessionShell: ({ learnerProfileId }: { learnerProfileId?: string }) => (
+      <div data-testid="whiteboard-session-shell" data-learner={learnerProfileId}>
+        WhiteboardSessionShell
+      </div>
     ),
   })
 );
 
+jest.mock("@/components/whiteboard/ServerLiveKeySeeder", () => ({
+  ServerLiveKeySeeder: ({
+    liveKey,
+    children,
+  }: {
+    liveKey: string | null;
+    children: React.ReactNode;
+  }) => (
+    <div data-testid="live-key-seeder" data-live-key={liveKey ?? ""}>
+      {children}
+    </div>
+  ),
+}));
+
+import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { NOT_MY_SESSION_PATH } from "@/lib/join-scope";
+import { mintServerLiveKey } from "@/lib/whiteboard/live-key";
 import JoinSessionPage from "@/app/join/[sessionId]/page";
 import { uniq } from "../helpers/unique-test-token";
 
@@ -135,6 +153,19 @@ async function createJoinSession(
   }
 
   return session;
+}
+
+/** Child sessions need a consent snapshot allowing live sessions to render. */
+async function createAllowingSnapshot(whiteboardSessionId: string) {
+  return db.sessionConsentSnapshot.create({
+    data: {
+      whiteboardSessionId,
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+    },
+  });
 }
 
 async function callJoinPage(sessionId: string) {
@@ -227,6 +258,101 @@ describe("JoinSessionPage — denial redirect matrix", () => {
 
     expect(screen.getByTestId("join-auth-gate")).toBeInTheDocument();
     expect(redirectMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the parent who owns the child's profile join as that child", async () => {
+    const tutor = await createTutor();
+    const parentAh = await createAccountHolder();
+    const childProfile = await createLearnerProfile(parentAh.id, {
+      isSelfLearner: false,
+    });
+    const student = await createStudent(tutor.id, childProfile.id);
+    const session = await createJoinSession(tutor.id, student.id, childProfile.id);
+    await createAllowingSnapshot(session.id);
+
+    getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+    getAccountHolderSessionFromHeadersMock.mockResolvedValue({
+      accountHolderId: parentAh.id,
+    });
+
+    render(await callJoinPage(session.id));
+    expect(screen.getByTestId("whiteboard-session-shell")).toHaveAttribute(
+      "data-learner",
+      childProfile.id
+    );
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
+
+  it("parent of one child cannot reach another family's child", async () => {
+    const tutor = await createTutor();
+    const otherParent = await createAccountHolder();
+    const otherChild = await createLearnerProfile(otherParent.id, { isSelfLearner: false });
+    const student = await createStudent(tutor.id, otherChild.id);
+    const session = await createJoinSession(tutor.id, student.id, otherChild.id);
+
+    const parentAh = await createAccountHolder();
+    await createLearnerProfile(parentAh.id, { isSelfLearner: false });
+    getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+    getAccountHolderSessionFromHeadersMock.mockResolvedValue({ accountHolderId: parentAh.id });
+
+    await expect(callJoinPage(session.id)).rejects.toThrow(
+      new RegExp(`NEXT_REDIRECT:${NOT_MY_SESSION_PATH}`)
+    );
+  });
+
+  it("an account holder cannot join an unclaimed student's session", async () => {
+    const tutor = await createTutor();
+    const student = await createStudent(tutor.id, null);
+    const session = await createJoinSession(tutor.id, student.id);
+    const ah = await createAccountHolder();
+    getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+    getAccountHolderSessionFromHeadersMock.mockResolvedValue({ accountHolderId: ah.id });
+
+    await expect(callJoinPage(session.id)).rejects.toThrow(
+      new RegExp(`NEXT_REDIRECT:${NOT_MY_SESSION_PATH}`)
+    );
+  });
+
+  it("hands the server-held key to the authorized participant's page", async () => {
+    const prev = process.env.TOTP_ENCRYPTION_KEY;
+    process.env.TOTP_ENCRYPTION_KEY = randomBytes(32).toString("base64url");
+    try {
+      const tutor = await createTutor();
+      const ah = await createAccountHolder();
+      const self = await createLearnerProfile(ah.id, { isSelfLearner: true });
+      const student = await createStudent(tutor.id, self.id);
+      const session = await createJoinSession(tutor.id, student.id, self.id);
+      const minted = mintServerLiveKey("test")!;
+      await db.whiteboardSession.update({
+        where: { id: session.id },
+        data: { liveKeyEnc: minted.liveKeyEnc },
+      });
+
+      getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+      getAccountHolderSessionFromHeadersMock.mockResolvedValue({ accountHolderId: ah.id });
+
+      render(await callJoinPage(session.id));
+      expect(screen.getByTestId("live-key-seeder")).toHaveAttribute(
+        "data-live-key",
+        minted.liveKey
+      );
+    } finally {
+      if (prev === undefined) delete process.env.TOTP_ENCRYPTION_KEY;
+      else process.env.TOTP_ENCRYPTION_KEY = prev;
+    }
+  });
+
+  it("legacy sessions pass no server key (link-fragment path unchanged)", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const self = await createLearnerProfile(ah.id, { isSelfLearner: true });
+    const student = await createStudent(tutor.id, self.id);
+    const session = await createJoinSession(tutor.id, student.id, self.id);
+    getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+    getAccountHolderSessionFromHeadersMock.mockResolvedValue({ accountHolderId: ah.id });
+
+    render(await callJoinPage(session.id));
+    expect(screen.getByTestId("live-key-seeder")).toHaveAttribute("data-live-key", "");
   });
 
   it("fail-closed 404 when child session has non-participant learner cookie (G6 boundary)", async () => {

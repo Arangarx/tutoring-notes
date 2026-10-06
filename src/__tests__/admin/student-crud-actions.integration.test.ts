@@ -112,6 +112,35 @@ describe("createStudent — roster create contract (P1-J3)", () => {
     expect(rows[0]?.name).toBe(email);
   });
 
+  it("the invite sent on add records who may claim it and as what", async () => {
+    const tutor = await seedTutor();
+    mockSessionAsTutor(tutor);
+    const email = `${uniq("Learner")}@Example.com`;
+
+    expect((await createStudent(null, formSelfLearner(email))).status).toBe("success");
+    const student = await db.student.findFirstOrThrow({ where: { adminUserId: tutor.id } });
+    const invites = await db.studentClaimInvite.findMany({ where: { studentId: student.id } });
+    expect(invites).toHaveLength(1);
+    expect(invites[0]?.intendedEmail).toBe(email.toLowerCase());
+    expect(invites[0]?.inviteTargetKind).toBe("self_learner");
+  });
+
+  it("a child invite records the parent's email and the child kind", async () => {
+    const tutor = await seedTutor();
+    mockSessionAsTutor(tutor);
+    const parent = `${uniq("parent")}@example.com`;
+    const fd = new FormData();
+    fd.set("learnerKind", "child_learner");
+    fd.set("inviteEmail", parent);
+    fd.set("childIdentifier", "maya");
+
+    expect((await createStudent(null, fd)).status).toBe("success");
+    const student = await db.student.findFirstOrThrow({ where: { adminUserId: tutor.id } });
+    const invite = await db.studentClaimInvite.findFirstOrThrow({ where: { studentId: student.id } });
+    expect(invite.intendedEmail).toBe(parent);
+    expect(invite.inviteTargetKind).toBe("child_learner");
+  });
+
   it("rejects missing email (no row created)", async () => {
     const tutor = await seedTutor();
     mockSessionAsTutor(tutor);

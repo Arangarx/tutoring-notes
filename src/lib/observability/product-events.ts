@@ -20,6 +20,8 @@ export type TutorWaitlistBlockedMetadata = {
 
 export type SessionCreatedMetadata = {
   claimed: boolean;
+  /** Opened from a ScheduledSession (schedule bridge). */
+  scheduled?: boolean;
 };
 
 export type SessionStartedMetadata = {

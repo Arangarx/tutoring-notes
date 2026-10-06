@@ -66,7 +66,7 @@ export type ExcalidrawApiLike = {
   addFiles: (
     files: Array<{
       id: string;
-      mimeType: "image/png" | "image/jpeg" | "image/svg+xml" | "image/webp" | "image/gif";
+      mimeType: BoardImageMime;
       dataURL: string;
       created: number;
     }>
@@ -86,6 +86,14 @@ export type ExcalidrawApiLike = {
     opts?: { fitToContent?: boolean; animate?: boolean }
   ) => void;
 };
+
+/** Image MIME types Excalidraw's `addFiles` accepts. */
+export type BoardImageMime =
+  | "image/png"
+  | "image/jpeg"
+  | "image/svg+xml"
+  | "image/webp"
+  | "image/gif";
 
 export type InsertAssetCommonArgs = {
   excalidrawAPI: ExcalidrawApiLike;
@@ -112,7 +120,7 @@ export type PdfBoardBatchRow = {
   elements: ReadonlyArray<unknown>;
   file: {
     id: string;
-    mimeType: string;
+    mimeType: BoardImageMime;
     dataURL: string;
     created: number;
   };
@@ -339,7 +347,7 @@ const IMAGE_MIME_WHITELIST: ReadonlyArray<string> = [
 
 function normalizeMime(
   mime: string
-): "image/png" | "image/jpeg" | "image/svg+xml" | "image/webp" | "image/gif" | null {
+): BoardImageMime | null {
   switch (mime) {
     case "image/png":
       return "image/png";

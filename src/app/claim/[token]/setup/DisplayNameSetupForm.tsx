@@ -70,7 +70,12 @@ export function DisplayNameSetupForm({
           autoComplete="name"
         />
       </div>
-      {error ? <AuthFieldError message="Could not save display name. Try again." /> : null}
+      {error ? (
+        <AuthFieldError
+          id="claim-display-name-error"
+          message="Could not save display name. Try again."
+        />
+      ) : null}
       <Button type="submit" disabled={busy || !displayName.trim()} aria-busy={busy}>
         {busy ? "Saving…" : "Save display name"}
       </Button>

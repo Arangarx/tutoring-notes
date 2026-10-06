@@ -22,6 +22,7 @@ import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { normalizeEmail } from "@/lib/normalize-email";
+import { inviteIntendedEmail } from "@/lib/roster-invite-target";
 
 type ClaimAction = "create_child" | "attach_existing" | "connect_self";
 
@@ -81,15 +82,25 @@ export async function POST(
 
   if (!invite) return NextResponse.json({ error: "invalid_link" }, { status: 404 });
 
-  const intendedEmail = invite.student.parentEmail?.trim();
-  if (intendedEmail) {
+  const intended = inviteIntendedEmail(invite, invite.student);
+  if (intended) {
     const signedIn = normalizeEmail(accountHolder.email);
-    const intended = normalizeEmail(intendedEmail);
     if (signedIn !== intended) {
       console.log(
         `[clm] clm=${invite.id} action=email_mismatch accountHolderId=${ahSession.accountHolderId}`
       );
       return NextResponse.json({ error: "invite_email_mismatch" }, { status: 403 });
+    }
+  }
+  // Stored target (post-migration invites): a self-learner invite connects the
+  // signed-in adult only; a child invite never links the adult's own profile.
+  if (invite.inviteTargetKind) {
+    const wantsSelf = action === "connect_self";
+    if ((invite.inviteTargetKind === "self_learner") !== wantsSelf) {
+      console.log(
+        `[clm] clm=${invite.id} action=target_mismatch target=${invite.inviteTargetKind} requested=${action} accountHolderId=${ahSession.accountHolderId}`
+      );
+      return NextResponse.json({ error: "invite_target_mismatch" }, { status: 403 });
     }
   }
   if (invite.claimedAt) return NextResponse.json({ error: "student_already_claimed" }, { status: 409 });

@@ -10,7 +10,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
-import { mintStudentClaimInvite } from "@/lib/claim-invite-service";
+import { mintStudentClaimInvite, reinviteTargetKind } from "@/lib/claim-invite-service";
 import { rosterPendingDisplayLabel } from "@/lib/roster-invite-target";
 
 export async function POST(
@@ -61,6 +61,7 @@ export async function POST(
       studentId,
       adminUserId,
       recipientEmail: student.parentEmail,
+      targetKind: await reinviteTargetKind(student),
       studentDisplayName: inviteLabel,
       sendEmail: true,
     });

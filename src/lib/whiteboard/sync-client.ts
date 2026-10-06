@@ -2339,6 +2339,8 @@ export function createWhiteboardSyncClient(
       | WhiteboardWirePresence
       | WhiteboardWirePageViewStateMsg
       | WhiteboardWirePointerMsg
+      | WhiteboardWireCursorMsg
+      | WhiteboardWireChatMsg
       | WhiteboardWireSessionLifecycle
   ): Promise<void> {
     const job = (async () => {

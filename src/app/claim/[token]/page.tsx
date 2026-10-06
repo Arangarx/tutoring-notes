@@ -6,8 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ClaimAuthGate } from "./ClaimAuthGate";
 import { ClaimInterstitial } from "./ClaimInterstitial";
 import { normalizeEmail } from "@/lib/normalize-email";
-import { isSelfLearnerPendingInvite } from "@/lib/roster-invite-target";
-import type { RosterInviteTargetKind } from "@/lib/roster-invite-target";
+import {
+  inviteIntendedEmail,
+  inviteTargetKind,
+  type RosterInviteTargetKind,
+} from "@/lib/roster-invite-target";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +23,8 @@ interface InviteData {
   tutorAdminUserId: string;
   expiresAt: Date;
   state: ClaimState;
-  parentEmail: string | null;
+  /** Normalized email allowed to claim; null only on legacy invites. */
+  intendedEmail: string | null;
   learnerProfileId: string | null;
   inviteTarget: RosterInviteTargetKind;
 }
@@ -54,12 +58,6 @@ async function resolveInvite(rawToken: string): Promise<InviteData | null> {
     state = "PENDING";
   }
 
-  const inviteTarget: RosterInviteTargetKind = isSelfLearnerPendingInvite(
-    invite.student
-  )
-    ? "self_learner"
-    : "child_learner";
-
   return {
     id: invite.id,
     studentName: invite.student.name,
@@ -67,9 +65,9 @@ async function resolveInvite(rawToken: string): Promise<InviteData | null> {
     tutorAdminUserId: invite.adminUserId,
     expiresAt: invite.expiresAt,
     state,
-    parentEmail: invite.student.parentEmail,
+    intendedEmail: inviteIntendedEmail(invite, invite.student),
     learnerProfileId: invite.student.learnerProfileId,
-    inviteTarget,
+    inviteTarget: inviteTargetKind(invite, invite.student),
   };
 }
 
@@ -195,7 +193,7 @@ export default async function ClaimPage({
   let ownedProfiles: Array<{ id: string; displayName: string; isSelfLearner: boolean }> = [];
 
   if (ahSession) {
-    const intendedEmail = invite.parentEmail?.trim();
+    const intendedEmail = invite.intendedEmail;
     const ah = await db.accountHolder.findUnique({
       where: { id: ahSession.accountHolderId },
       select: {
@@ -222,7 +220,7 @@ export default async function ClaimPage({
       signedInEmail = ah.email;
       if (
         intendedEmail &&
-        normalizeEmail(ah.email) !== normalizeEmail(intendedEmail)
+        normalizeEmail(ah.email) !== intendedEmail
       ) {
         return (
           <ClaimShell>

@@ -55,7 +55,13 @@ export function resolveScheduledSessionWallClock(
   const plainDate = Temporal.PlainDate.from(ymd);
 
   const startPdt = plainDate.toPlainDateTime(hhmmToPlainTime(startTime));
-  const endPdt = plainDate.toPlainDateTime(hhmmToPlainTime(endTime));
+  const sameDayEnd = plainDate.toPlainDateTime(hhmmToPlainTime(endTime));
+  // An end clock before the start clock means the session crosses midnight
+  // (23:30 → 01:00); the end belongs to the next calendar day.
+  const endPdt =
+    Temporal.PlainDateTime.compare(sameDayEnd, startPdt) < 0
+      ? sameDayEnd.add({ days: 1 })
+      : sameDayEnd;
 
   const startZ = startPdt.toZonedDateTime(timeZone);
   const endZ = endPdt.toZonedDateTime(timeZone);

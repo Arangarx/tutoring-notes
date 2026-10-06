@@ -123,6 +123,11 @@ enum SessionMode {
   IN_PERSON
 }
 
+enum ClaimInviteTargetKind {
+  self_learner
+  child_learner
+}
+
 /// Erasure job scope — learner profile or full account-holder family.
 enum ErasureScopeKind {
   learner_profile
@@ -491,6 +496,17 @@ model WhiteboardSession {
   lastPersistedToIndex  Int @default(-1)
 
   whiteboardEventBatches WhiteboardEventBatch[]
+
+  /// Scheduled appointment this live session was opened from. Unique so one
+  /// appointment maps to at most one whiteboard session (get-or-create).
+  scheduledSessionId String?           @unique
+  scheduledSession   ScheduledSession? @relation(fields: [scheduledSessionId], references: [id], onDelete: SetNull)
+
+  /// Server-held relay key (AES-GCM, base64url) encrypted at rest with
+  /// `src/lib/crypto/at-rest.ts`. Null on legacy sessions, which keep the
+  /// browser-minted key in the URL fragment. Never logged, never in a URL
+  /// the server sends anywhere but the authenticated participant's page.
+  liveKeyEnc String?
 
   createdAt  DateTime    @default(now())
   costEvents CostEvent[]
@@ -1025,6 +1041,7 @@ model ScheduledSession {
   googleEventId          String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
+  whiteboardSession      WhiteboardSession?
 
   @@index([adminUserId, date])
   @@index([adminUserId, startAt])
@@ -1270,6 +1287,12 @@ model StudentClaimInvite {
   revokedAt                DateTime?
   /// AccountHolder who completed the claim (set alongside claimedAt in same transaction).
   claimedByAccountHolderId String?
+  /// Email the invite was sent to. Only an account with this email may claim.
+  /// Null on invites minted before this column existed (fall back to Student.parentEmail).
+  intendedEmail            String?
+  /// Whether the invite is for an adult self-learner or a parent claiming a child.
+  /// Null on legacy invites (claim flow infers it).
+  inviteTargetKind         ClaimInviteTargetKind?
   createdAt                DateTime  @default(now())
 
   @@index([studentId])

@@ -2,7 +2,8 @@
  * feat/org-qol — live cursor, ghost viewport, in-app chat (SMOKE-POST-1/2 family).
  */
 
-import { test, expect, type Browser } from "./fixtures";
+import type { Browser } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import fs from "node:fs";
 import path from "node:path";
 import {

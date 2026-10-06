@@ -2,16 +2,14 @@
  * Authorization helpers for the authenticated /join/[sessionId] path.
  *
  * The /join path accepts two principals:
- *   1. Learner session (mynk_learner_session)  — all learner types.
- *   2. Account-holder session (mynk_ah_session) — ONLY when LearnerProfile.isSelfLearner===true
- *      and the AccountHolder owns that profile. [WB-JOIN-ADULT-LEARNER]
+ *   1. Learner session (mynk_learner_session) — all learner types.
+ *   2. Account-holder session (mynk_ah_session) — when the AccountHolder owns the
+ *      session's LearnerProfile: the adult self learner, or the parent of a child
+ *      profile joining as that child (Andrew 2026-10-06, WB-PARENT-JOIN-AS-CHILD).
  *
- * For page route handlers use assertIsSessionParticipant (from session-participant-scope.ts)
- * + the inline ownership check in the page itself (which has the session data already).
- *
- * For API route handlers use `resolveAhJoinLearnerProfileId` which does the DB lookup
- * + ownership + isSelfLearner check and returns the learnerProfileId on success (or null
- * on any denial). Callers then run verifyIsSessionParticipant with the returned id.
+ * One rule (`decideAhJoin`) serves the page and every API route.
+ * Page handlers pair it with assertIsSessionParticipant; API routes use
+ * `resolveAhJoinLearnerProfileId` then verifyIsSessionParticipant.
  *
  * Log prefixes:
  *   wjg= (whiteboard join gate)
@@ -31,19 +29,70 @@ export function redirectJoinWrongPrincipal(): never {
   redirect(NOT_MY_SESSION_PATH);
 }
 
+/** Principal an account holder joins as. */
+export type AhJoinPrincipal = "self_learner" | "parent_for_child";
+
+export type AhJoinDecision =
+  | { ok: true; learnerProfileId: string; principal: AhJoinPrincipal }
+  | { ok: false; reason: "no_profile" | "not_owner" };
+
+export type AhJoinProfile = {
+  id: string;
+  isSelfLearner: boolean;
+  accountHolderId: string;
+  tombstonedAt: Date | null;
+};
+
 /**
- * Resolve the learnerProfileId for an account-holder join attempt.
- *
- * For use in **API route handlers** (which cannot use notFound() / redirect()).
- *
- * Returns `{ learnerProfileId }` when:
- *   - The WhiteboardSession has an associated Student with a linked LearnerProfile
- *   - LearnerProfile.isSelfLearner === true
- *   - LearnerProfile.accountHolderId === accountHolderId (caller owns the profile)
- *   - LearnerProfile.tombstonedAt === null (not COPPA-deleted)
- *
- * Returns null on any denial (missing profile, not self-learner, wrong owner, tombstoned).
- * Emits wjg= and lpr= log lines on both grant and denial.
+ * The account holder must own the session's learner profile. Another
+ * family's profile, a tombstoned profile, or an unclaimed student is denied.
+ */
+export function decideAhJoin(
+  profile: AhJoinProfile | null,
+  accountHolderId: string
+): AhJoinDecision {
+  if (!profile) return { ok: false, reason: "no_profile" };
+  if (profile.tombstonedAt !== null || profile.accountHolderId !== accountHolderId) {
+    return { ok: false, reason: "not_owner" };
+  }
+  return {
+    ok: true,
+    learnerProfileId: profile.id,
+    principal: profile.isSelfLearner ? "self_learner" : "parent_for_child",
+  };
+}
+
+/** Emits the canonical wjg=/lpr= lines for an AH join decision. */
+export function logAhJoinDecision(
+  sessionId: string,
+  accountHolderId: string,
+  decision: AhJoinDecision,
+  profileId: string | null
+): void {
+  const shortId = sessionId.slice(0, 8);
+  if (decision.ok) {
+    console.info(
+      `[lpr] lpr=${decision.learnerProfileId} action=session_join_granted principal=${decision.principal} sessionId=${sessionId}`
+    );
+    console.info(
+      `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_join_granted principal=${decision.principal} accountHolderId=${accountHolderId} lpr=${decision.learnerProfileId}`
+    );
+    return;
+  }
+  if (decision.reason === "not_owner") {
+    console.error(
+      `[lpr] lpr=${profileId} action=assert_owns_denied accountHolderId=${accountHolderId}`
+    );
+  }
+  console.error(
+    `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_join_denied reason=${decision.reason} accountHolderId=${accountHolderId}${profileId ? ` lpr=${profileId}` : ""}`
+  );
+}
+
+/**
+ * Resolve the learnerProfileId for an account-holder join attempt, for **API
+ * route handlers** (which cannot use notFound() / redirect()). Returns null on
+ * any denial.
  *
  * Does NOT check SessionParticipant — callers must run verifyIsSessionParticipant
  * after receiving a non-null result.
@@ -52,8 +101,6 @@ export async function resolveAhJoinLearnerProfileId(
   sessionId: string,
   accountHolderId: string
 ): Promise<{ learnerProfileId: string } | null> {
-  const shortId = sessionId.slice(0, 8);
-
   const sessionRow = await withDbRetry(
     () =>
       db.whiteboardSession.findUnique({
@@ -61,7 +108,6 @@ export async function resolveAhJoinLearnerProfileId(
         select: {
           student: {
             select: {
-              learnerProfileId: true,
               learnerProfile: {
                 select: {
                   id: true,
@@ -77,35 +123,8 @@ export async function resolveAhJoinLearnerProfileId(
     { label: "resolveAhJoinLearnerProfileId.session" }
   );
 
-  const learnerProfileId = sessionRow?.student?.learnerProfileId ?? null;
   const lp = sessionRow?.student?.learnerProfile ?? null;
-
-  if (!learnerProfileId || !lp) {
-    console.error(
-      `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_join_denied reason=no_profile accountHolderId=${accountHolderId}`
-    );
-    return null;
-  }
-
-  if (!lp.isSelfLearner) {
-    console.error(
-      `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_join_denied reason=not_self_learner accountHolderId=${accountHolderId} lpr=${learnerProfileId}`
-    );
-    return null;
-  }
-
-  if (lp.tombstonedAt !== null || lp.accountHolderId !== accountHolderId) {
-    console.error(
-      `[lpr] lpr=${learnerProfileId} action=assert_owns_denied accountHolderId=${accountHolderId}`
-    );
-    console.error(
-      `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_join_denied reason=not_owner accountHolderId=${accountHolderId} lpr=${learnerProfileId}`
-    );
-    return null;
-  }
-
-  console.info(
-    `[wjg] wjg=${shortId} wbsid=${sessionId} action=ah_ownership_granted accountHolderId=${accountHolderId} lpr=${learnerProfileId}`
-  );
-  return { learnerProfileId };
+  const decision = decideAhJoin(lp, accountHolderId);
+  logAhJoinDecision(sessionId, accountHolderId, decision, lp?.id ?? null);
+  return decision.ok ? { learnerProfileId: decision.learnerProfileId } : null;
 }

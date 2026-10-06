@@ -6,6 +6,8 @@ import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
 import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persisted-state";
 import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
+import { readServerLiveKey } from "@/lib/whiteboard/live-key";
+import { ServerLiveKeySeeder } from "@/components/whiteboard/ServerLiveKeySeeder";
 
 /**
  * Tutor-side live whiteboard workspace.
@@ -93,6 +95,7 @@ export default async function WhiteboardWorkspacePage({
           sessionPhase: true,
           sessionMode: true,
           activatedAt: true,
+          liveKeyEnc: true,
           student: {
             select: { id: true, name: true, learnerProfileId: true },
           },
@@ -122,7 +125,12 @@ export default async function WhiteboardWorkspacePage({
         )
       : null;
 
+  const liveKey = detail.endedAt
+    ? null
+    : readServerLiveKey(detail.id, detail.liveKeyEnc);
+
   return (
+    <ServerLiveKeySeeder sessionId={detail.id} liveKey={liveKey}>
     <WhiteboardSessionShell
       role="tutor"
       whiteboardSessionId={detail.id}
@@ -147,5 +155,6 @@ export default async function WhiteboardWorkspacePage({
       initialReviewSurface={initialReviewSurface}
       initialPersistedState={initialPersistedState}
     />
+    </ServerLiveKeySeeder>
   );
 }

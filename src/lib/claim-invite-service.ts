@@ -6,6 +6,11 @@ import {
 } from "@/lib/crypto/session-tokens";
 import { sendClaimInviteEmail } from "@/lib/account-holder-email";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import { normalizeEmail } from "@/lib/normalize-email";
+import {
+  inviteTargetKind,
+  type RosterInviteTargetKind,
+} from "@/lib/roster-invite-target";
 
 export type MintClaimInviteResult = {
   inviteId: string;
@@ -16,13 +21,36 @@ export type MintClaimInviteResult = {
 };
 
 /**
+ * Target kind for a re-sent invite: the kind stored on the student's most
+ * recent invite, else the legacy roster heuristic (pre-migration students).
+ */
+export async function reinviteTargetKind(student: {
+  id: string;
+  name: string;
+  parentEmail: string | null;
+  learnerProfileId: string | null;
+}): Promise<RosterInviteTargetKind> {
+  const prior = await db.studentClaimInvite.findFirst({
+    where: { studentId: student.id, inviteTargetKind: { not: null } },
+    orderBy: { createdAt: "desc" },
+    select: { inviteTargetKind: true },
+  });
+  return inviteTargetKind(
+    { intendedEmail: null, inviteTargetKind: prior?.inviteTargetKind ?? null },
+    student
+  );
+}
+
+/**
  * Mint a claim invite and optionally email the recipient.
  * Caller must verify student ownership and unclaimed state.
  */
 export async function mintStudentClaimInvite(params: {
   studentId: string;
   adminUserId: string;
+  /** Becomes the only email allowed to complete the claim. */
   recipientEmail: string;
+  targetKind: RosterInviteTargetKind;
   studentDisplayName: string;
   sendEmail: boolean;
 }): Promise<MintClaimInviteResult> {
@@ -51,6 +79,8 @@ export async function mintStudentClaimInvite(params: {
       adminUserId: params.adminUserId,
       tokenHash,
       expiresAt,
+      intendedEmail: normalizeEmail(params.recipientEmail),
+      inviteTargetKind: params.targetKind,
     },
   });
 

@@ -83,6 +83,7 @@ import {
 } from "@/lib/recording/session-clock";
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorLiveCursors } from "@/hooks/useCollaboratorLiveCursors";
+import { useActiveEmbeddableRebind } from "@/lib/whiteboard/active-embeddable-rebind";
 import { usePeerPageViewState } from "@/hooks/usePeerPageViewState";
 import { useViewportWireBroadcast } from "@/hooks/useViewportWireBroadcast";
 import { useSessionChat } from "@/hooks/useSessionChat";
@@ -1781,6 +1782,8 @@ export function WhiteboardWorkspaceClient({
     role === "student" ? studentApplyingRemoteRef : applyingRemoteToCanvasRef,
     role === "student" ? studentActivePageIdRef : activePageIdRef
   );
+
+  useActiveEmbeddableRebind(excalidrawAPI);
 
   const peerPageView = usePeerPageViewState(effectivePointerSync, role);
   useViewportWireBroadcast({

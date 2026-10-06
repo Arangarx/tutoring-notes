@@ -77,6 +77,11 @@ export function isBlobHarnessActive(): boolean {
   );
 }
 
+/** Origin a server-side harness put should address (server actions have no request). */
+export function harnessRequestOrigin(): string {
+  return process.env.NEXTAUTH_URL ?? "http://localhost:3100";
+}
+
 /** Allowed origins for harness blob URLs (same-origin + local dev). */
 function isHarnessBlobOrigin(origin: string): boolean {
   if (origin === "null") return false;

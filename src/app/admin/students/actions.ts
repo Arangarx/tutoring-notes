@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { requireStudentScope, studentsWhereForScope } from "@/lib/student-scope";
 import { parseChildRosterHandle } from "@/lib/parse-child-roster-handle";
-import { mintStudentClaimInvite } from "@/lib/claim-invite-service";
+import { mintStudentClaimInvite, reinviteTargetKind } from "@/lib/claim-invite-service";
 import { isSelfLearnerPendingInvite } from "@/lib/roster-invite-target";
 
 export type CreateStudentResult =
@@ -118,6 +118,7 @@ export async function createStudent(
       studentId: student.id,
       adminUserId: where.adminUserId!,
       recipientEmail: emailRecipient,
+      targetKind: learnerKind,
       studentDisplayName: inviteLabel,
       sendEmail: true,
     });
@@ -188,6 +189,7 @@ export async function retryStudentClaimInvite(
       studentId: student.id,
       adminUserId: student.adminUserId!,
       recipientEmail: student.parentEmail,
+      targetKind: await reinviteTargetKind(student),
       studentDisplayName: inviteLabel,
       sendEmail: true,
     });
