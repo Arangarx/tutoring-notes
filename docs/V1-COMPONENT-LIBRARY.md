@@ -143,6 +143,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
 | `StudentsRoster` | `src/components/admin/StudentsRoster.tsx` | Student list with search + add student (B2 reskin) | `students`, `adminUserId` | `/admin/students` | **canonical** |
+| `AddStudentForm` | `src/components/admin/AddStudentForm.tsx` | Add a learner and send a claim invite. Learner kind is the shared `RadioGroup`; errors and the invite-retry notice are `Alert`. The retry `<form>` sits outside the create `<form>`. | `idPrefix?` | `/admin/students` | **canonical** |
 | `StudentAvatar` | `src/components/admin/StudentAvatar.tsx` | Deterministic initials avatar: FNV-1a hash of normalized display name (`trim` + lowercase) → one of eight curated `--avatar-1`…`--avatar-8` fills (`student-initials.ts`); 1–2 letter initials (`studentInitials`); white semibold text; `ring-2 ring-background`. Sizes: `sm` (36px), `md` (44px), `lg` (56px). Same name → same color on every surface. | `name`, `size`, `className` | Student list, student detail, scheduler, account dashboard, learner waiting room | **canonical** |
 
 ### Scheduling (upcoming appointments bridge)
@@ -175,6 +176,11 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `TutorNotesSection` | `src/components/whiteboard/TutorNotesSection.tsx` | **owned by recording slice 3 — do not edit** |
 | `ExcalidrawDynamic` | `src/components/whiteboard/ExcalidrawDynamic.tsx` | **live session — do not edit from UI chunks** |
 | `PageStrip` | `src/components/whiteboard/PageStrip.tsx` | **live session — do not edit from UI chunks** |
+| `BoardTabStrip` | `src/components/whiteboard/chrome/BoardTabStrip.tsx` — `onRenamePage(id, title)` renames the active board; omit the prop for a read-only strip | **canonical chrome** |
+| `WbModifierHints` | `src/components/whiteboard/chrome/WbModifierHints.tsx` — Shift / Space hints, no props | **canonical chrome** |
+| `ServerLiveKeySeeder` | `src/components/whiteboard/ServerLiveKeySeeder.tsx` — props `sessionId`, `liveKey`, `role` (`tutor` \| `learner`), `children`; writes the server-held live key into the URL hash | **canonical** |
+| `JoinAuthGate` | `src/app/join/[sessionId]/JoinAuthGate.tsx` — props `sessionId`, `isSelfLearner`. Self-learner: one account sign-in. Child session: child and parent sign-in | **canonical** |
+| `DisplayNameSetupForm` | `src/app/claim/[token]/setup/DisplayNameSetupForm.tsx` — props `rawToken`, `prompt`, `initialDisplayName`. Stored name capped at 80 characters; control characters and markup brackets stripped | **canonical** |
 | Others in `whiteboard/` | various | **do not edit from UI chunks** |
 
 ### A/V
@@ -209,7 +215,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | **`RecapEditor`** (planned) | per [`v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) §5.5 | B4 session-detail recap panel: `.ai-prose`, editable inline, Regenerate. May compose `FormattedNotesBody` + edit chrome. **REQ-S3-4** — editor field model must align with canonical schema; cross-ref **REQ-S3-2** Save/Cancel. | **canonical target — Chunk 3** |
 | `NewNoteForm` | `src/app/admin/students/[id]/NewNoteForm.tsx` | Structured note create/edit; **"Save note"** submit (pre-slice-3 manual WB flow). **REQ-S3-4** — baseline canonical field set (topics / assessment / plan / links; homework optionally folded into Plan per Sarah pilot feedback). | **canonical** for structured `SessionNote` fields — reference for Save affordance and schema baseline |
 | `WhiteboardNotesPanel` | `src/components/whiteboard/WhiteboardNotesPanel.tsx` | Pre-slice-3 manual generate → review → Save/Cancel flow | **superseded by auto-notes** — B4 replaces with post-session controls per **REQ-S3-2** (see also §4 lock list) |
-| `TutorNotesSection` | `src/components/whiteboard/TutorNotesSection.tsx` | Slice 3 auto-notes polling UI (raw MD bug; slice-3 markdown schema diverges from canonical fields per **REQ-S3-4**) | **owned by recording slice 3 — redesign absorbs into Chunk 3, do not patch ad hoc** (see also §4 lock list) |
+| `TutorNotesSection` | `src/components/whiteboard/TutorNotesSection.tsx` | Slice 3 auto-notes polling UI. `showFinishReview` keeps the Finish review link on the student detail page when generation failed, timed out, or returned no content (the editable form is hidden in those states). | **owned by recording slice 3 — redesign absorbs into Chunk 3, do not patch ad hoc** (see also §4 lock list) |
 
 ---
 
