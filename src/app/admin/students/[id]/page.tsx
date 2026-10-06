@@ -8,7 +8,8 @@ import {
 import SendUpdateForm from "./SendUpdateForm";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
 import { ShareLinkRow } from "./ShareLinkRow";
-import { IcsShowFullNameToggle } from "./IcsShowFullNameToggle";
+import { UpcomingSessionsCard } from "@/components/scheduling/UpcomingSessionsCard";
+import { listUpcomingForStudent } from "@/lib/scheduling/upcoming-sessions";
 import {
   CreateShareLinkForm,
   RegenerateShareLinkForm,
@@ -174,6 +175,11 @@ export default async function StudentDetailPage({
         }))
       : false;
 
+  const upcomingScheduledSessions =
+    scopedAdminUserId !== null
+      ? await listUpcomingForStudent(scopedAdminUserId, id)
+      : [];
+
   const sessionCanStart =
     !accessSuspended &&
     (isSelfLearner || (student.learnerProfileId && consentRecordExists));
@@ -237,17 +243,20 @@ export default async function StudentDetailPage({
         )}
         totalCount={endedUnsavedTotalCount}
       />
+      {upcomingScheduledSessions.length > 0 ? (
+        <div className="mt-6">
+          <UpcomingSessionsCard
+            mode="tutor"
+            sessions={upcomingScheduledSessions}
+            description="Open the live room when it is time for the appointment."
+          />
+        </div>
+      ) : null}
     </>
   );
 
   const shareSection = (
     <>
-      <SectionHeading
-        title="Calendar event titles"
-        description="By default, calendar feeds and Google events use the student's first name only (for example, Tutoring — Maya). Turn this on only if you want the full name after that same prefix (for example, Tutoring — Maya Rodriguez)."
-      />
-      <IcsShowFullNameToggle studentId={student.id} checked={student.icsShowFullName} />
-      <div className="mt-6 border-t border-border pt-6">
       <SectionHeading
         title="Share link (for parents/students)"
         description="This link does not require login. You can revoke or regenerate it anytime."
@@ -273,7 +282,6 @@ export default async function StudentDetailPage({
           <CreateShareLinkForm action={regenerateShareLink.bind(null, student.id)} />
         </div>
       )}
-      </div>
     </>
   );
 

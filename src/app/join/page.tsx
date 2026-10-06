@@ -20,7 +20,9 @@ import {
   getLearnerSessionFromHeaders,
   getAccountHolderSessionFromHeaders,
 } from "@/lib/server-session";
+import { UpcomingSessionsCard } from "@/components/scheduling/UpcomingSessionsCard";
 import { db } from "@/lib/db";
+import { listUpcomingForLearnerProfiles } from "@/lib/scheduling/upcoming-sessions";
 
 export default async function JoinPage() {
   // Path A: standard learner session.
@@ -30,10 +32,14 @@ export default async function JoinPage() {
       where: { id: learnerSession.learnerProfileId },
       select: { displayName: true },
     });
+    const upcomingSessions = await listUpcomingForLearnerProfiles([
+      learnerSession.learnerProfileId,
+    ]);
     return (
       <JoinNoSessionCard
         displayName={profile?.displayName ?? "Student"}
         actions={<LearnerSignOutButton />}
+        upcomingSessions={upcomingSessions}
       />
     );
   }
@@ -51,7 +57,20 @@ export default async function JoinPage() {
       ahProfile?.displayName?.trim() ||
       ahProfile?.email?.split("@")[0] ||
       "Learner";
-    return <JoinNoSessionCard displayName={displayName} />;
+    const selfProfiles = await db.learnerProfile.findMany({
+      where: {
+        accountHolderId: ahSession.accountHolderId,
+        isSelfLearner: true,
+        tombstonedAt: null,
+      },
+      select: { id: true },
+    });
+    const upcomingSessions = await listUpcomingForLearnerProfiles(
+      selfProfiles.map((p) => p.id)
+    );
+    return (
+      <JoinNoSessionCard displayName={displayName} upcomingSessions={upcomingSessions} />
+    );
   }
 
   // No session — redirect to child PIN login (default for unauthenticated visitors).
@@ -61,15 +80,17 @@ export default async function JoinPage() {
 function JoinNoSessionCard({
   displayName,
   actions,
+  upcomingSessions = [],
 }: {
   displayName: string;
   actions?: ReactNode;
+  upcomingSessions?: Awaited<ReturnType<typeof listUpcomingForLearnerProfiles>>;
 }) {
   return (
     <PageShell realm="student" actions={actions}>
-      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col items-center justify-center gap-4 px-4 py-8">
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-4 px-4 py-8">
         <Card className="w-full rounded-[10px] border-border">
-          <CardContent className="px-6 py-6 text-center space-y-2">
+          <CardContent className="space-y-2 px-6 py-6 text-center">
             <p className="text-base font-medium text-foreground">
               Hi, {displayName}
             </p>
@@ -77,10 +98,19 @@ function JoinNoSessionCard({
               className="text-sm text-muted-foreground"
               data-testid="join-no-session-message"
             >
-              No active session. Open the link your tutor shared to join.
+              No active session. Open the link your tutor shared to join, or use
+              Join below when your appointment window opens.
             </p>
           </CardContent>
         </Card>
+        {upcomingSessions.length > 0 ? (
+          <UpcomingSessionsCard
+            mode="family"
+            realm="student"
+            sessions={upcomingSessions}
+            description="Join opens shortly before each scheduled start."
+          />
+        ) : null}
       </div>
     </PageShell>
   );

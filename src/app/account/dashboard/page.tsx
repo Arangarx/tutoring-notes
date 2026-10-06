@@ -12,6 +12,9 @@ import { db } from "@/lib/db";
 import { formatLearnerLoginHandle } from "@/lib/family-id";
 import { requireAccountHolderSession } from "@/lib/server-session";
 
+import { UpcomingSessionsCard } from "@/components/scheduling/UpcomingSessionsCard";
+import { listUpcomingForLearnerProfiles } from "@/lib/scheduling/upcoming-sessions";
+
 import { AddLearnerForm } from "./AddLearnerForm";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +57,10 @@ export default async function AccountDashboardPage() {
   /** Children who can't join via PIN — parent also can't join as them yet. */
   const childrenWithoutOwnLogin = childProfiles.filter((p) => !p.credential);
 
+  const upcomingSessions = await listUpcomingForLearnerProfiles(
+    learnerProfiles.map((p) => p.id)
+  );
+
   const sectionTitle = hasChildren
     ? "Your learners"
     : isSelfLearner
@@ -80,6 +87,15 @@ export default async function AccountDashboardPage() {
     >
       {childrenWithoutOwnLogin.length > 0 ? (
         <ParentJoinGapCallout />
+      ) : null}
+
+      {upcomingSessions.length > 0 ? (
+        <UpcomingSessionsCard
+          mode="family"
+          realm="account"
+          sessions={upcomingSessions}
+          description="Join opens shortly before each scheduled start."
+        />
       ) : null}
 
       <SectionCard realm="account"
