@@ -103,20 +103,22 @@ test.describe("Learner root routing", () => {
 test.describe("JoinAuthGate persona redirect", () => {
   test.use({ storageState: EMPTY_STATE });
 
-  test("child session redirects unauthenticated visitor to /students/login", async ({
+  test("child session shows JoinAuthGate with child and parent sign-in", async ({
     page,
   }) => {
     const session = await seedWbLiveSyncSession();
     const returnTo = `/join/${session.whiteboardSessionId}`;
 
     await page.goto(returnTo);
-    await page.waitForURL(
-      (url) =>
-        url.pathname === "/students/login" &&
-        url.searchParams.get("returnTo") === returnTo,
-      { timeout: 15_000 }
+    await expect(page.getByTestId("join-auth-gate")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("join-auth-gate-child-sign-in")).toHaveAttribute(
+      "href",
+      `/students/login?returnTo=${encodeURIComponent(returnTo)}`
     );
-    await expect(page.getByText("Student sign in", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("join-auth-gate-parent-sign-in")).toHaveAttribute(
+      "href",
+      `/account/login?returnTo=${encodeURIComponent(returnTo)}`
+    );
   });
 
   test("self-learner session redirects unauthenticated visitor to /account/login", async ({

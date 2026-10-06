@@ -90,6 +90,10 @@ const PATH_RULES = [
     tags: [TAG.WB_PRESENCE, TAG.WB_SYNC, TAG.WB_CHROME, TAG.WB_AV],
   },
   {
+    re: /wb-org-qol-bridge|schedule-bridge|upcoming-sessions|JoinScheduledSession|openScheduledWhiteboardSession/i,
+    tags: [TAG.WB_SYNC, TAG.WB_PRESENCE, TAG.WB_CHROME],
+  },
+  {
     // Session lifecycle: /join/, waiting-room overlay, SessionParticipant, phase gate
     re: /WaitingRoomOverlay|sessionPhase|startWhiteboardSession|JoinAuthGate|SessionParticipant|join-timer|WbSessionPhase/i,
     tags: [TAG.WB_PRESENCE, TAG.WB_SYNC],
