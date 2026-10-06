@@ -311,11 +311,11 @@ export default async function StudentDetailPage({
   const parentSection = claimInvitesEnabled ? (
     <>
       <SectionHeading
-        title="Parent account"
+        title="Self learner / Parent account"
         description={
           student.learnerProfileId
-            ? "A parent account is connected to this student."
-            : "Invite a parent to create a Mynk account and connect this student."
+            ? "A Self learner / Parent account is connected to this learner."
+            : "Resend the invitation email if the family has not connected yet."
         }
       />
       {student.learnerProfile?.accountHolder ? (
@@ -368,8 +368,8 @@ export default async function StudentDetailPage({
     },
     {
       id: "parent",
-      label: "Parent account",
-      mobileLabel: "Parent",
+      label: "Family account",
+      mobileLabel: "Family",
       icon: <Users className="size-5" aria-hidden />,
       content: parentSection,
     },

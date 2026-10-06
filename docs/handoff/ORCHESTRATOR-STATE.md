@@ -16,11 +16,26 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-06: Track 1 presence wave on `feat/org-qol` — Shift square/circle (native Excalidraw + Playwright), live cursor wire + 5s stale hide, VP-01 ghost viewport rect, SMOKE-POST-2 collapsed chat. Jest on sync envelopes + viewport math; Playwright `wb-shift-constrain-shapes.spec.ts`, `wb-org-qol-presence.spec.ts` (wb-regression). Full `test:wb-sync` not run this turn. |
-| **Next action(s)** | **STOP (Andrew scope):** do **not** implement click-to-interact sync rebind or graph point/free-draw persistence yet. Next executor wave = those two items only, after review. |
+| **Last action completed** | 2026-10-06: **People-and-claim wave (no migration)** on `feat/org-qol` — site role labels; WB-ADULT-JOIN B3 self-learner PIN gate; post-claim display-name step; add-learner + invite-on-add + retry; email match on claim complete via `Student.parentEmail` (interim). Jest: claim/setup/create-student suites green. **Migration HARD STOP** documented below (`StudentClaimInvite.intendedEmail` + `inviteTargetKind`). |
+| **Next action(s)** | Andrew greenlight Neon migration for `StudentClaimInvite` invite columns → wire strict invite-oracle + backfill; then continue org-qol backlog. **Still STOP:** click-to-interact sync rebind + graph point/free-draw (deferred). |
 | **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. Billable wording waits on Sarah. |
 | **In-flight subagents** | None. |
 | **Uncommitted / unmerged** | Branch `feat/org-qol`, not merged. `node_modules` junction — `npm exec -- jest`. |
+
+### HARD STOP — people-and-claim migration (Andrew greenlight required)
+
+Production Neon needs an **additive** migration before the invite oracle is spec-complete:
+
+| Column | Model | Purpose |
+|---|---|---|
+| `intendedEmail` | `StudentClaimInvite` | Normalized invitee email at mint time (spec: invite stores intended email; interim uses `Student.parentEmail`) |
+| `inviteTargetKind` | `StudentClaimInvite` | `self_learner` \| `child_learner` (interim: `Student.name === parentEmail` heuristic for self) |
+
+**Files to touch after migration:** `prisma/schema.prisma` + migration; `src/lib/claim-invite-service.ts` (persist on mint); `src/app/api/claim/[token]/complete/route.ts` + `src/app/claim/[token]/page.tsx` (read from invite, not student); `src/app/admin/students/actions.ts` (set on create).
+
+**Red-first tests (write before migration apply):** extend `src/__tests__/identity/claim-complete-email-mismatch.test.ts` to assert invite row carries `intendedEmail`; add mint oracle in `src/__tests__/admin/create-student-invite.integration.test.ts` for `inviteTargetKind`.
+
+**Do not run migration** until Andrew explicitly greenlights Neon write.
 
 ### Deferred — click-to-interact sync rebind (NOT started)
 

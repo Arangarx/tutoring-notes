@@ -247,7 +247,26 @@ describe("Claim setup page — T7 self-learner exemption (L-2)", () => {
     expect(
       screen.getByText(/parental privacy preferences do not apply/i)
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /go to dashboard/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /go to dashboard/i })
+    ).toBeInTheDocument();
+  });
+
+  it("does not show child PIN credential card for self-learner without credential", async () => {
+    const fx = await createClaimedSetupFixture({
+      isSelfLearner: true,
+      withCredential: false,
+      withConsent: false,
+    });
+
+    await renderSetupPage(fx.rawToken, fx.ah.id);
+
+    expect(
+      screen.queryByText(/create a username and pin so your child/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/sign in with email and password/i)
+    ).toBeInTheDocument();
   });
 });
 

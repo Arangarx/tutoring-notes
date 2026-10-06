@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
+import { SITE_ROLE_FAMILY_ACCOUNT } from "@/lib/site-role-labels";
 
 type Mode = "choose" | "signup" | "login";
 
@@ -51,15 +52,15 @@ export function ClaimAuthGate({
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         {tutorName
-          ? `To connect ${studentName}'s tutoring, create a free parent account or sign in.`
-          : `To connect ${studentName}'s tutoring account, create a free parent account or sign in.`}
+          ? `To connect ${studentName}'s tutoring, create a free ${SITE_ROLE_FAMILY_ACCOUNT.toLowerCase()} or sign in.`
+          : `To connect ${studentName}'s tutoring account, create a free ${SITE_ROLE_FAMILY_ACCOUNT.toLowerCase()} or sign in.`}
       </p>
       <div className="flex flex-col gap-2">
         <Button
           className="min-h-11 w-full text-base"
           onClick={() => setMode("signup")}
         >
-          Create parent account
+          {`Create ${SITE_ROLE_FAMILY_ACCOUNT.toLowerCase()}`}
         </Button>
         <Button
           variant="outline"

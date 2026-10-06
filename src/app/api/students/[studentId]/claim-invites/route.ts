@@ -3,24 +3,15 @@
  *
  * Tutor mints a claim invite for a student. Requires AdminUser (NextAuth) session.
  * Stores SHA-256 hash of the raw token (§6.4 hash-only storage).
- *
- * Guards:
- *   - AdminUser session required (NextAuth, Operator realm)
- *   - 404 if student not owned by this tutor
- *   - 409 if student already has a LearnerProfile (already claimed)
- *   - 429 if ≥ 3 pending (non-expired, non-revoked) invites exist
- *
- * P2a: email send is stubbed (logs invite link to console).
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
-import { generateRawToken, hashToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
-import { sendClaimInviteEmail } from "@/lib/account-holder-email";
-import { getPublicBaseUrl } from "@/lib/public-url";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
+import { mintStudentClaimInvite } from "@/lib/claim-invite-service";
+import { rosterPendingDisplayLabel } from "@/lib/roster-invite-target";
 
 export async function POST(
   req: NextRequest,
@@ -34,10 +25,15 @@ export async function POST(
   const adminUserId = session.user.id;
   const { studentId } = await params;
 
-  // Verify tutor owns this student
   const student = await db.student.findUnique({
     where: { id: studentId },
-    select: { id: true, adminUserId: true, learnerProfileId: true, parentEmail: true, name: true },
+    select: {
+      id: true,
+      adminUserId: true,
+      learnerProfileId: true,
+      parentEmail: true,
+      name: true,
+    },
   });
 
   if (!student || student.adminUserId !== adminUserId) {
@@ -54,59 +50,33 @@ export async function POST(
   const erasureBlockedResponse = await assertStudentNotErasedApi(studentId);
   if (erasureBlockedResponse) return erasureBlockedResponse;
 
-  const now = new Date();
-
-  // Count pending (non-expired, non-revoked, unused) invites
-  const pendingCount = await db.studentClaimInvite.count({
-    where: {
-      studentId,
-      claimedAt: null,
-      revokedAt: null,
-      expiresAt: { gt: now },
-    },
-  });
-
-  if (pendingCount >= 3) {
-    return NextResponse.json(
-      { error: "too_many_pending_invites" },
-      { status: 429 }
-    );
+  if (!student.parentEmail) {
+    return NextResponse.json({ error: "missing_invite_email" }, { status: 422 });
   }
 
-  const rawToken = generateRawToken();
-  const tokenHash = hashToken(rawToken);
-  const expiresAt = new Date(Date.now() + CLAIM_INVITE_TTL_MS);
+  const inviteLabel = rosterPendingDisplayLabel(student);
 
-  const invite = await db.studentClaimInvite.create({
-    data: {
+  try {
+    const minted = await mintStudentClaimInvite({
       studentId,
       adminUserId,
-      tokenHash,
-      expiresAt,
-    },
-  });
+      recipientEmail: student.parentEmail,
+      studentDisplayName: inviteLabel,
+      sendEmail: true,
+    });
 
-  console.log(
-    `[clm] clm=${invite.id} action=invited studentId=${studentId} adminUserId=${adminUserId}`
-  );
-
-  const base = getPublicBaseUrl();
-  const inviteLink = `/claim/${rawToken}`;
-  const inviteUrl = `${base}${inviteLink}`;
-
-  if (student.parentEmail) {
-    const mailed = await sendClaimInviteEmail(
-      student.parentEmail,
-      inviteUrl,
-      student.name,
-      { inviteId: invite.id }
-    );
-    if (!mailed.sent) {
-      console.error(
-        `[clm] clm=${invite.id} action=send_fail studentId=${studentId}`
+    return NextResponse.json({
+      inviteLink: minted.inviteLink,
+      emailSent: minted.emailSent,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (message === "too_many_pending_invites") {
+      return NextResponse.json(
+        { error: "too_many_pending_invites" },
+        { status: 429 }
       );
     }
+    throw err;
   }
-
-  return NextResponse.json({ inviteLink });
 }

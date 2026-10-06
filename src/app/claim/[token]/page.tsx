@@ -5,6 +5,9 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ClaimAuthGate } from "./ClaimAuthGate";
 import { ClaimInterstitial } from "./ClaimInterstitial";
+import { normalizeEmail } from "@/lib/normalize-email";
+import { isSelfLearnerPendingInvite } from "@/lib/roster-invite-target";
+import type { RosterInviteTargetKind } from "@/lib/roster-invite-target";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,9 @@ interface InviteData {
   tutorAdminUserId: string;
   expiresAt: Date;
   state: ClaimState;
+  parentEmail: string | null;
+  learnerProfileId: string | null;
+  inviteTarget: RosterInviteTargetKind;
 }
 
 async function resolveInvite(rawToken: string): Promise<InviteData | null> {
@@ -26,7 +32,9 @@ async function resolveInvite(rawToken: string): Promise<InviteData | null> {
   const invite = await db.studentClaimInvite.findUnique({
     where: { tokenHash },
     include: {
-      student: { select: { name: true } },
+      student: {
+        select: { name: true, parentEmail: true, learnerProfileId: true },
+      },
       adminUser: { select: { displayName: true } },
     },
   });
@@ -46,6 +54,12 @@ async function resolveInvite(rawToken: string): Promise<InviteData | null> {
     state = "PENDING";
   }
 
+  const inviteTarget: RosterInviteTargetKind = isSelfLearnerPendingInvite(
+    invite.student
+  )
+    ? "self_learner"
+    : "child_learner";
+
   return {
     id: invite.id,
     studentName: invite.student.name,
@@ -53,6 +67,9 @@ async function resolveInvite(rawToken: string): Promise<InviteData | null> {
     tutorAdminUserId: invite.adminUserId,
     expiresAt: invite.expiresAt,
     state,
+    parentEmail: invite.student.parentEmail,
+    learnerProfileId: invite.student.learnerProfileId,
+    inviteTarget,
   };
 }
 
@@ -156,7 +173,7 @@ export default async function ClaimPage({
           </CardHeader>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">
-              {"Sign in to your parent account to manage "}
+              {"Sign in to your Self learner / Parent account to manage "}
               <strong>{invite.studentName}</strong>.
             </p>
             <a
@@ -178,6 +195,7 @@ export default async function ClaimPage({
   let ownedProfiles: Array<{ id: string; displayName: string; isSelfLearner: boolean }> = [];
 
   if (ahSession) {
+    const intendedEmail = invite.parentEmail?.trim();
     const ah = await db.accountHolder.findUnique({
       where: { id: ahSession.accountHolderId },
       select: {
@@ -202,6 +220,39 @@ export default async function ClaimPage({
     });
     if (ah && !ah.tombstonedAt) {
       signedInEmail = ah.email;
+      if (
+        intendedEmail &&
+        normalizeEmail(ah.email) !== normalizeEmail(intendedEmail)
+      ) {
+        return (
+          <ClaimShell>
+            <Card className="border-border shadow-sm" data-testid="claim-email-mismatch">
+              <CardHeader className="gap-2 pb-0">
+                <CardTitle className="heading text-2xl font-normal">
+                  Wrong account
+                </CardTitle>
+                <CardDescription className="text-base">
+                  This invitation was sent to{" "}
+                  <strong>{intendedEmail}</strong>, but you are signed in as{" "}
+                  <strong>{ah.email}</strong>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                <p className="text-sm text-muted-foreground">
+                  Sign in with the invited email to approve this connection. This student
+                  will not be linked to your current account.
+                </p>
+                <a
+                  href={`/account/login?returnTo=${encodeURIComponent(`/claim/${rawToken}`)}`}
+                  className="inline-block text-sm text-brand underline-offset-2 hover:underline"
+                >
+                  Switch account
+                </a>
+              </CardContent>
+            </Card>
+          </ClaimShell>
+        );
+      }
       // IAC-3: only show profiles NOT already linked to this tutor
       ownedProfiles = ah.learnerProfiles
         .filter((p) => p.students.length === 0)
@@ -232,6 +283,7 @@ export default async function ClaimPage({
               tutorName={invite.tutorName}
               signedInEmail={signedInEmail}
               ownedProfiles={ownedProfiles}
+              inviteTarget={invite.inviteTarget}
             />
           ) : (
             // Case A/B: not signed in -- show signup or login

@@ -9,7 +9,6 @@ import { SectionCard } from "@/components/SectionCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import {
   Sheet,
   SheetContent,
@@ -17,13 +16,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { createStudent } from "@/app/admin/students/actions";
+import { AddStudentForm } from "@/components/admin/AddStudentForm";
+import { rosterPendingDisplayLabel } from "@/lib/roster-invite-target";
+import { SITE_ROLE_ROSTER_LEARNER } from "@/lib/site-role-labels";
 import { StudentErasurePendingBadge } from "@/components/admin/StudentErasureStatus";
 import type { StudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
 
 export type StudentRosterItem = {
   id: string;
   name: string;
+  parentEmail: string | null;
+  learnerProfileId: string | null;
   createdAt: string;
   erasureState: StudentErasureDisplayState;
 };
@@ -31,30 +34,6 @@ export type StudentRosterItem = {
 type StudentsRosterProps = {
   students: StudentRosterItem[];
 };
-
-function AddStudentForm({ idPrefix = "" }: { idPrefix?: string }) {
-  return (
-    <form action={createStudent} className="flex flex-col gap-4 sm:flex-row sm:items-end">
-      <div className="min-w-0 flex-1 space-y-2">
-        <Label htmlFor={`${idPrefix}studentName`}>Student name</Label>
-        <Input
-          id={`${idPrefix}studentName`}
-          name="name"
-          placeholder="e.g. Jordan S."
-          required
-          className="min-h-11"
-          autoComplete="off"
-        />
-      </div>
-      <FormSubmitButton
-        label="Add student"
-        pendingLabel="Add student…"
-        variant="accent"
-        className="sm:min-w-[140px]"
-      />
-    </form>
-  );
-}
 
 export function StudentsRoster({ students }: StudentsRosterProps) {
   const [query, setQuery] = useState("");
@@ -64,7 +43,10 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return students;
-    return students.filter((s) => s.name.toLowerCase().includes(q));
+    return students.filter((s) => {
+      const label = rosterPendingDisplayLabel(s).toLowerCase();
+      return label.includes(q) || s.name.toLowerCase().includes(q);
+    });
   }, [students, query]);
 
   const onSlashFocus = useCallback((e: KeyboardEvent) => {
@@ -92,8 +74,8 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
       {/* Desktop add card */}
       <div className="hidden md:block">
         <SectionCard realm="admin"
-          title="Add a student"
-          description="Create a roster entry to start sessions and notes."
+          title={`Add a ${SITE_ROLE_ROSTER_LEARNER.toLowerCase()}`}
+          description="Send an invitation to connect — no separate claim link copy step."
           className="border-accent/20 bg-accent-soft/60"
         >
           <AddStudentForm idPrefix="desktop-" />
@@ -162,11 +144,14 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
                 href={`/admin/students/${s.id}`}
                 className="group flex min-h-[60px] items-center gap-3.5 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-ring hover:bg-card/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
-                <StudentAvatar name={s.name} size="md" />
+                <StudentAvatar
+                  name={rosterPendingDisplayLabel(s)}
+                  size="md"
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-[15px] font-semibold text-foreground group-hover:text-brand">
-                      {s.name}
+                      {rosterPendingDisplayLabel(s)}
                     </div>
                     <StudentErasurePendingBadge state={s.erasureState} />
                   </div>

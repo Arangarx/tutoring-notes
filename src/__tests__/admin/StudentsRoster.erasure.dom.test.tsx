@@ -20,6 +20,8 @@ describe("StudentsRoster — erasure state", () => {
           {
             id: "stu-1",
             name: "Jordan S.",
+            parentEmail: null,
+            learnerProfileId: "lp-1",
             createdAt: "2026-06-01T00:00:00.000Z",
             erasureState: { kind: "none" },
           },
@@ -37,6 +39,8 @@ describe("StudentsRoster — erasure state", () => {
           {
             id: "stu-2",
             name: "Alex M.",
+            parentEmail: null,
+            learnerProfileId: "lp-2",
             createdAt: "2026-06-01T00:00:00.000Z",
             erasureState: {
               kind: "pending_grace",

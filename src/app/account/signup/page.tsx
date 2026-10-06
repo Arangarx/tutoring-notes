@@ -173,7 +173,9 @@ function AccountSignupForm() {
             <div>
               <p className="text-sm font-medium text-foreground">{"I'll be taking the lessons myself"}</p>
               <p className="text-xs text-muted-foreground">
-                {"Check this if you are the learner, not a parent or guardian managing a child's account."}
+                {
+                  "Check this if you are a Self learner — not a parent or guardian managing a Child learner's account."
+                }
               </p>
             </div>
           </label>

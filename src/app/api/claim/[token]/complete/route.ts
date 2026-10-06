@@ -21,6 +21,7 @@ import { db } from "@/lib/db";
 import { isPrismaUniqueViolation } from "@/lib/db/prisma-errors";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { hashToken } from "@/lib/crypto/session-tokens";
+import { normalizeEmail } from "@/lib/normalize-email";
 
 type ClaimAction = "create_child" | "attach_existing" | "connect_self";
 
@@ -35,7 +36,7 @@ export async function POST(
 
   const accountHolder = await db.accountHolder.findUnique({
     where: { id: ahSession.accountHolderId },
-    select: { emailVerifiedAt: true, tombstonedAt: true },
+    select: { email: true, emailVerifiedAt: true, tombstonedAt: true },
   });
   if (!accountHolder?.emailVerifiedAt) {
     return NextResponse.json({ error: "email_not_verified" }, { status: 403 });
@@ -66,11 +67,31 @@ export async function POST(
   const invite = await db.studentClaimInvite.findUnique({
     where: { tokenHash },
     include: {
-      student: { select: { id: true, adminUserId: true, learnerProfileId: true, name: true } },
+      student: {
+        select: {
+          id: true,
+          adminUserId: true,
+          learnerProfileId: true,
+          name: true,
+          parentEmail: true,
+        },
+      },
     },
   });
 
   if (!invite) return NextResponse.json({ error: "invalid_link" }, { status: 404 });
+
+  const intendedEmail = invite.student.parentEmail?.trim();
+  if (intendedEmail) {
+    const signedIn = normalizeEmail(accountHolder.email);
+    const intended = normalizeEmail(intendedEmail);
+    if (signedIn !== intended) {
+      console.log(
+        `[clm] clm=${invite.id} action=email_mismatch accountHolderId=${ahSession.accountHolderId}`
+      );
+      return NextResponse.json({ error: "invite_email_mismatch" }, { status: 403 });
+    }
+  }
   if (invite.claimedAt) return NextResponse.json({ error: "student_already_claimed" }, { status: 409 });
   if (invite.revokedAt) return NextResponse.json({ error: "link_revoked" }, { status: 410 });
   if (invite.expiresAt < now) {

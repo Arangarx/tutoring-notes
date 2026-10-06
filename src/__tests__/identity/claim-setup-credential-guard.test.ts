@@ -115,6 +115,52 @@ describe("Credential guard — credential_already_exists 409", () => {
     expect(count).toBe(1);
   });
 
+  it("returns 403 self_learner_no_pin for self-learner profiles", async () => {
+    const tutor = await db.adminUser.create({
+      data: { email: `${uniq("tutor")}@example.com`, role: "TUTOR" },
+    });
+    const ah = await db.accountHolder.create({
+      data: {
+        email: `${uniq("ah")}@example.com`,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const student = await db.student.create({
+      data: { name: "Self", adminUserId: tutor.id },
+    });
+    const rawToken = await generateRawToken();
+    const invite = await db.studentClaimInvite.create({
+      data: {
+        studentId: student.id,
+        adminUserId: tutor.id,
+        tokenHash: hashToken(rawToken),
+        expiresAt: new Date(Date.now() + CLAIM_INVITE_TTL_MS),
+      },
+    });
+    const profile = await db.learnerProfile.create({
+      data: {
+        accountHolderId: ah.id,
+        displayName: "Self",
+        isSelfLearner: true,
+      },
+    });
+    await db.student.update({ where: { id: student.id }, data: { learnerProfileId: profile.id } });
+    await db.studentClaimInvite.update({
+      where: { id: invite.id },
+      data: { claimedAt: new Date(), claimedByAccountHolderId: ah.id },
+    });
+    const { rawToken: ahSessionToken } = await createAccountHolderSession(ah.id);
+
+    const res = await postCredentials(rawToken, ahSessionToken, {
+      action: "credentials",
+      username: shortUser(),
+      pin: "847291",
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "self_learner_no_pin" });
+  });
+
   it("creates credential normally when none exists yet", async () => {
     const fx = await createClaimedInviteFixture({ withCredential: false });
 

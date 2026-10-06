@@ -36,6 +36,10 @@ jest.mock("next-auth", () => ({
 
 jest.mock("@/auth-options", () => ({ authOptions: {} }));
 
+jest.mock("@/lib/email", () => ({
+  sendPlatformMail: jest.fn().mockResolvedValue({ sent: true }),
+}));
+
 import { db } from "@/lib/db";
 import { createStudent } from "@/app/admin/students/actions";
 import { uniq } from "../helpers/unique-test-token";
@@ -44,6 +48,13 @@ import {
   deleteStudent,
 } from "@/app/admin/students/[id]/actions";
 
+
+function formSelfLearner(email: string) {
+  const fd = new FormData();
+  fd.set("learnerKind", "self_learner");
+  fd.set("inviteEmail", email);
+  return fd;
+}
 
 function formWithName(name: string) {
   const fd = new FormData();
@@ -88,28 +99,31 @@ describe("createStudent — roster create contract (P1-J3)", () => {
   it("creates a student row scoped to the calling adminUser", async () => {
     const tutor = await seedTutor();
     mockSessionAsTutor(tutor);
-    const newName = `Created ${uniq()}`;
+    const email = `${uniq("learner")}@example.com`;
 
-    await createStudent(formWithName(newName));
+    const result = await createStudent(null, formSelfLearner(email));
+    expect(result.status).toBe("success");
 
     const rows = await db.student.findMany({
-      where: { adminUserId: tutor.id, name: newName },
+      where: { adminUserId: tutor.id, parentEmail: email },
     });
     expect(rows).toHaveLength(1);
     expect(rows[0]?.adminUserId).toBe(tutor.id);
-    expect(rows[0]?.name).toBe(newName);
+    expect(rows[0]?.name).toBe(email);
   });
 
-  it("rejects empty name with a thrown error (no row created)", async () => {
+  it("rejects missing email (no row created)", async () => {
     const tutor = await seedTutor();
     mockSessionAsTutor(tutor);
     const beforeCount = await db.student.count({
       where: { adminUserId: tutor.id },
     });
 
-    await expect(createStudent(formWithName("   "))).rejects.toThrow(
-      "Name is required"
-    );
+    const fd = new FormData();
+    fd.set("learnerKind", "self_learner");
+    fd.set("inviteEmail", "   ");
+    const result = await createStudent(null, fd);
+    expect(result.status).toBe("error");
 
     const afterCount = await db.student.count({
       where: { adminUserId: tutor.id },
@@ -120,9 +134,9 @@ describe("createStudent — roster create contract (P1-J3)", () => {
   it("unauthenticated scope → redirect to login", async () => {
     mockGetServerSession.mockResolvedValue(null);
 
-    await expect(createStudent(formWithName("Should Not Create"))).rejects.toThrow(
-      "NEXT_REDIRECT:/login"
-    );
+    await expect(
+      createStudent(null, formSelfLearner("nope@example.com"))
+    ).rejects.toThrow("NEXT_REDIRECT:/login");
   });
 });
 

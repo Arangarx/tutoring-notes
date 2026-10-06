@@ -166,7 +166,56 @@ export async function POST(
     }
   }
 
+  if (action === "display_name") {
+    const displayName = String((bodyObj as { displayName?: string }).displayName ?? "").trim();
+    if (!displayName) {
+      return NextResponse.json({ error: "missing_display_name" }, { status: 400 });
+    }
+
+    const learnerProfile = await db.learnerProfile.findUnique({
+      where: { id: learnerProfileId },
+      select: {
+        accountHolderId: true,
+        isSelfLearner: true,
+        accountHolder: { select: { displayName: true } },
+      },
+    });
+    if (!learnerProfile || learnerProfile.accountHolderId !== ahSession.accountHolderId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+
+    await db.$transaction(async (tx) => {
+      await tx.learnerProfile.update({
+        where: { id: learnerProfileId },
+        data: { displayName },
+      });
+      await tx.student.update({
+        where: { id: invite.studentId },
+        data: { name: displayName },
+      });
+      if (learnerProfile.isSelfLearner) {
+        const ahDisplay = learnerProfile.accountHolder.displayName?.trim();
+        if (!ahDisplay) {
+          await tx.accountHolder.update({
+            where: { id: ahSession.accountHolderId },
+            data: { displayName },
+          });
+        }
+      }
+    });
+
+    return NextResponse.json({ ok: true });
+  }
+
   if (action === "credentials") {
+    const profileForCred = await db.learnerProfile.findUnique({
+      where: { id: learnerProfileId },
+      select: { isSelfLearner: true },
+    });
+    if (profileForCred?.isSelfLearner) {
+      return NextResponse.json({ error: "self_learner_no_pin" }, { status: 403 });
+    }
+
     if (!username || !pin) {
       return NextResponse.json({ error: "missing_fields" }, { status: 400 });
     }

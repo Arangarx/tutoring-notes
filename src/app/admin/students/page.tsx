@@ -18,6 +18,8 @@ export default async function StudentsPage() {
     select: {
       id: true,
       name: true,
+      parentEmail: true,
+      learnerProfileId: true,
       createdAt: true,
       erasedAt: true,
       learnerProfile: {
@@ -65,6 +67,8 @@ export default async function StudentsPage() {
           return {
             id: s.id,
             name: s.name,
+            parentEmail: s.parentEmail,
+            learnerProfileId: s.learnerProfileId,
             createdAt: s.createdAt.toISOString(),
             erasureState: deriveStudentErasureDisplayState({
               erasedAt: s.erasedAt,

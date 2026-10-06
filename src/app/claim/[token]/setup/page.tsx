@@ -9,6 +9,8 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { CredentialSetupForm } from "./CredentialSetupForm";
 import { ConsentSetupForm } from "./ConsentSetupForm";
+import { DisplayNameSetupForm } from "./DisplayNameSetupForm";
+import { firstNameLastInitial } from "@/lib/display-name-prefill";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,11 @@ export default async function ClaimSetupPage({
       },
       adminUser: { select: { displayName: true, id: true } },
     },
+  });
+
+  const accountHolderForPrefill = await db.accountHolder.findUnique({
+    where: { id: ahSession.accountHolderId },
+    select: { displayName: true },
   });
 
   // Only the AccountHolder who claimed it may see this page
@@ -90,6 +97,13 @@ export default async function ClaimSetupPage({
   });
   const hasPendingSessionInvite = pendingInviteCount > 0;
 
+  const prefillSource =
+    accountHolderForPrefill?.displayName?.trim() || profile.displayName;
+  const displayNamePrefill = firstNameLastInitial(prefillSource);
+  const displayNamePrompt = isSelfLearner
+    ? "How do you want to be seen by this tutor?"
+    : "How do you want your child to be seen by this tutor?";
+
   return (
     <main className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-[480px]">
@@ -105,6 +119,22 @@ export default async function ClaimSetupPage({
             {" is now linked to your Mynk account."}
           </p>
         </div>
+
+        <Card className="mb-4 border-border shadow-sm">
+          <CardHeader className="gap-1 pb-0">
+            <CardTitle className="heading text-lg font-normal">Display name</CardTitle>
+            <CardDescription className="text-sm">
+              This is what your tutor sees on their roster — not your login email or family id.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <DisplayNameSetupForm
+              rawToken={rawToken}
+              prompt={displayNamePrompt}
+              initialDisplayName={displayNamePrefill}
+            />
+          </CardContent>
+        </Card>
 
         {/* Panel A: Parental consent preferences (B2) */}
         <Card className="mb-4 border-border shadow-sm">
@@ -148,46 +178,64 @@ export default async function ClaimSetupPage({
           </CardContent>
         </Card>
 
-        {/* Panel B: Child credential setup (username + PIN) */}
-        <Card className="border-border shadow-sm">
-          <CardHeader className="gap-1 pb-0">
-            <CardTitle className="heading text-xl font-normal">
-              {"Set up "}
-              {invite.student.name}
-              {"'s login"}
-            </CardTitle>
-            <CardDescription className="text-sm">
-              {credentialAlreadySet
-                ? "Login is already configured for this learner."
-                : "Create a username and PIN so your child can sign in on their device."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {credentialAlreadySet ? (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  {`${invite.student.name}'s login is already set up. You can update it from the parent dashboard.`}
-                </p>
-                {consentComplete ? (
-                  <Link
-                    href="/account/dashboard"
-                    data-testid="credential-existing-dashboard-link"
-                    className="inline-block text-sm text-brand underline-offset-2 hover:underline"
-                  >
-                    {"Go to dashboard \u2192"}
-                  </Link>
-                ) : null}
-              </div>
-            ) : (
-              <CredentialSetupForm
-                rawToken={rawToken}
-                learnerProfileId={profile.id}
-                studentName={invite.student.name}
-                enforcementEnabled={enforcementEnabled && !consentComplete}
-              />
-            )}
-          </CardContent>
-        </Card>
+        {!isSelfLearner ? (
+          <Card className="border-border shadow-sm">
+            <CardHeader className="gap-1 pb-0">
+              <CardTitle className="heading text-xl font-normal">
+                {"Set up "}
+                {invite.student.name}
+                {"'s login"}
+              </CardTitle>
+              <CardDescription className="text-sm">
+                {credentialAlreadySet
+                  ? "Login is already configured for this child learner."
+                  : "Create a username and PIN so your child can sign in on their device."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {credentialAlreadySet ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    {`${invite.student.name}'s login is already set up. You can update it from your Self learner / Parent dashboard.`}
+                  </p>
+                  {consentComplete ? (
+                    <Link
+                      href="/account/dashboard"
+                      data-testid="credential-existing-dashboard-link"
+                      className="inline-block text-sm text-brand underline-offset-2 hover:underline"
+                    >
+                      {"Go to dashboard \u2192"}
+                    </Link>
+                  ) : null}
+                </div>
+              ) : (
+                <CredentialSetupForm
+                  rawToken={rawToken}
+                  learnerProfileId={profile.id}
+                  studentName={invite.student.name}
+                  enforcementEnabled={enforcementEnabled && !consentComplete}
+                />
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-border shadow-sm">
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">
+                Self learners sign in with email and password — no child username or PIN.
+              </p>
+              {consentComplete ? (
+                <Link
+                  href="/account/dashboard"
+                  data-testid="self-learner-dashboard-link"
+                  className="mt-4 inline-block text-sm text-brand underline-offset-2 hover:underline"
+                >
+                  {"Go to dashboard \u2192"}
+                </Link>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </main>
   );

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
+import type { RosterInviteTargetKind } from "@/lib/roster-invite-target";
+import { SITE_ROLE_SELF_LEARNER_PARENT } from "@/lib/site-role-labels";
 
 interface OwnedProfile {
   id: string;
@@ -25,13 +27,16 @@ export function ClaimInterstitial({
   tutorName,
   signedInEmail,
   ownedProfiles,
+  inviteTarget,
 }: {
   rawToken: string;
   studentName: string;
   tutorName: string | null;
   signedInEmail: string;
   ownedProfiles: OwnedProfile[];
+  inviteTarget: RosterInviteTargetKind;
 }) {
+  const selfInviteOnly = inviteTarget === "self_learner";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<
@@ -39,7 +44,7 @@ export function ClaimInterstitial({
     | { type: "create_child" }
     | { type: "connect_self" }
     | null
-  >(null);
+  >(selfInviteOnly ? { type: "connect_self" } : null);
 
   async function handleConfirm() {
     if (!selectedAction) return;
@@ -73,6 +78,8 @@ export function ClaimInterstitial({
           setError("already_linked");
         } else if (data.error === "email_not_verified") {
           setError("email_not_verified");
+        } else if (data.error === "invite_email_mismatch") {
+          setError("invite_email_mismatch");
         } else {
           setError("server");
         }
@@ -103,9 +110,11 @@ export function ClaimInterstitial({
           <strong>{signedInEmail}</strong>.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {"Choose who to connect as a student under "}
+          {selfInviteOnly
+            ? `This invitation is for you as a ${SITE_ROLE_SELF_LEARNER_PARENT.toLowerCase()} under `
+            : "Choose who to connect as a learner under "}
           <strong>{tutorDisplay}</strong>
-          {"'s account:"}
+          {selfInviteOnly ? "." : "'s account:"}
         </p>
       </div>
 
@@ -113,7 +122,8 @@ export function ClaimInterstitial({
       <fieldset className="space-y-2">
         <legend className="sr-only">Select learner to connect</legend>
 
-        {ownedProfiles.map((profile) => (
+        {!selfInviteOnly
+          ? ownedProfiles.map((profile) => (
           <label
             key={profile.id}
             className={`!flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
@@ -141,26 +151,28 @@ export function ClaimInterstitial({
               )}
             </span>
           </label>
-        ))}
+        ))
+          : null}
 
-        {/* Add a new child */}
-        <label
-          className={`!flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
-            selectedAction?.type === "create_child"
-              ? "border-brand bg-brand/5"
-              : "border-border hover:bg-muted/40"
-          }`}
-        >
-          <input
-            type="radio"
-            name="claim-target"
-            value="create_child"
-            checked={selectedAction?.type === "create_child"}
-            onChange={() => setSelectedAction({ type: "create_child" })}
-            className="size-4 shrink-0 accent-brand"
-          />
-          <span className="min-w-0 flex-1 text-sm text-foreground">Add a new child</span>
-        </label>
+        {!selfInviteOnly ? (
+          <label
+            className={`!flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
+              selectedAction?.type === "create_child"
+                ? "border-brand bg-brand/5"
+                : "border-border hover:bg-muted/40"
+            }`}
+          >
+            <input
+              type="radio"
+              name="claim-target"
+              value="create_child"
+              checked={selectedAction?.type === "create_child"}
+              onChange={() => setSelectedAction({ type: "create_child" })}
+              className="size-4 shrink-0 accent-brand"
+            />
+            <span className="min-w-0 flex-1 text-sm text-foreground">Add a new child learner</span>
+          </label>
+        ) : null}
 
         {/* Connect yourself */}
         <label
@@ -200,6 +212,12 @@ export function ClaimInterstitial({
         <AuthFieldError
           id="claim-interstitial-error"
           message="Please verify your email before claiming. Check your inbox for a confirmation link."
+        />
+      ) : null}
+      {error === "invite_email_mismatch" ? (
+        <AuthFieldError
+          id="claim-interstitial-error"
+          message="This invitation was sent to a different email address. Switch accounts to continue."
         />
       ) : null}
       {error === "server" || error === "network" ? (
