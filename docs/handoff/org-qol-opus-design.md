@@ -185,6 +185,29 @@ model OrganizationBillingEntry {
   - Org owner/admin always see prompt answers.
   - Full note text goes to the org only through a **per-org setting the operator turns on** when agreed. The parent's consent names the org. No redaction is promised.
 
+### Learner model, third pass (Andrew, 2026-10-06)
+
+- **An assignment ending never touches a personal relationship.** If the tutor already has the learner as their own student, that `Student` record keeps its sessions, notes and consent unchanged when the org assignment ends or the org removes the tutor. Only access to the org learner record and the org sessions ends. Required test: end the assignment, and the tutor still sees every personal session and note.
+- **What the learner sees:** one account, one dashboard. Sessions are labelled by who arranged them ("with <tutor>" or "via <org>"). An "Organizations" page lists every org they are tied to, what each can see, and the consent given to each.
+- **What the tutor sees:**
+  - In their own student context: the normal personal details.
+  - In org context: the restricted view (first name + last initial, the org's brief, their own org session notes).
+  - Linking is by the same `LearnerProfile` only. It is never a name or email match. A guest (no-account) org learner is never linked to a personal student.
+  - The org never learns that a learner is also the tutor's personal student.
+- **Consent is scoped per relationship.** Consent for org sessions is a different record from personal consent. Neither ever satisfies the other. Proposed shape:
+  - one consent per (learner, org): what may be recorded, and whether the org sees full notes;
+  - plus a lightweight per-tutor approval when a tutor is assigned or reassigned (the "waiting on your approval" state).
+- **Still to plan (not objections):**
+  - **One student surface.** Org learner views must be the same student components parameterized by access scope, never a forked "org student page".
+  - **Erasure and retention (Andrew):** an org keeps exactly what a tutor keeps after erasure, using the same `process-erasure-job.ts` path.
+    - Kept: session rows (dates, durations, billable minutes, tutor), empty note rows (status, dates), the learner renamed "Deleted learner", and the org's own billing entries.
+    - Deleted: all content (boards, audio, transcripts, note text, prompt answers, share links).
+    - We delete content rather than strip PII from it, because stripping cannot be promised.
+    - Check whether `ScheduledSession.subject` free text needs scrubbing.
+    - Org-specific extra-retention agreements are deferred and need their own consent copy.
+  - **Non-compete audit (deferred, Andrew):** some orgs may need to know whether an org learner is also an assigned tutor's private student. The data (same `LearnerProfile`) exists. If it is built, it is an operator-run report under a written agreement, covered by the tutor terms and the parent consent, and audit-logged. It is never an org self-serve query. Nothing in the design should block it.
+  - **Bringing a personal student into an org** (e.g. for org billing) is not supported in the first slice. It would be an explicit, consented share, never automatic.
+
 ### 5-axis review outcome (Sonnet, 2026-10-06) — these override the bullets above where they conflict
 
 Wave C acceptance includes every item below. Items marked **(Andrew)** wait on his answer; do not guess.
