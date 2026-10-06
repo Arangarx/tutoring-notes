@@ -122,6 +122,10 @@ Sign-In UI **shipped on `master`**. **`calendar.events.owned` write, ICS feed, a
 2. **Exhaustive red/green testing to spec on every touched surface.** [`.cursor/rules/exhaustive-testing-mandate.mdc`](../.cursor/rules/exhaustive-testing-mandate.mdc).
 3. **Independent agentic verification** of code + tests before done/merge; moving to a fully agentic pipeline. [`.cursor/rules/agentic-verification-pipeline.mdc`](../.cursor/rules/agentic-verification-pipeline.mdc).
 
+**Recorded waivers**
+
+- **WAIVER-LASER-PW-RED (Andrew 2026-10-06, `feat/org-qol`):** `tests/integration/wb-org-qol-surface.spec.ts` › "a laser drag does not add a stroke to either scene" cannot be shown red through the real app (a laser trail is an ephemeral pointer message, never a scene element). Kept as a regression guard; the red-before proof is the laser adapter unit test. Hardware regression check is item 29 in `docs/handoff/ORG-QOL-TYSON-TEST-PACKET.md`.
+
 ### Triage corrections (Andrew 2026-07-10, on the swing-item review)
 
 - **DEVICE-PICKER-DEDUPE / mobile Back-Front** — **best-effort; do NOT delay release** over it. Stays MAYBE, non-blocking.

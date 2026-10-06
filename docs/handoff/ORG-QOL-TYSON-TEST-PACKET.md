@@ -737,7 +737,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › a laser drag does not add a stroke to either scene]` — `[human-only: what you see during the drag]`
+**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › a laser drag does not add a stroke to either scene]` — `[human-only: what you see during the drag; the automated test cannot be shown to fail, so this hand check is the regression net (waiver WAIVER-LASER-PW-RED)]`
 
 **Notes:**
 
