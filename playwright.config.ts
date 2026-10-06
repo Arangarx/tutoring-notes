@@ -189,6 +189,7 @@ export default defineConfig({
         "**/integration/wb-shift-constrain-shapes.spec.ts",
         "**/integration/wb-org-qol-presence.spec.ts",
         "**/integration/wb-org-qol-bridge.spec.ts",
+        "**/integration/wb-org-qol-surface.spec.ts",
         "**/integration/wb-replay-active-board-tab.spec.ts",
         "**/integration/wb-replay-scrub-seek.spec.ts",
         "**/integration/view-whiteboard-new-replay.spec.ts",
