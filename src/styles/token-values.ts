@@ -60,7 +60,7 @@ export const WB_STROKE_PRESETS: ReadonlyArray<{ hex: string; label: string }> = 
 /**
  * Per-role laser pointer colors for Excalidraw collaborator rendering.
  * Tutor = coral accent (#e27d60 matches --accent); student = sky cyan.
- * Used by broadcastPointer (outbound) and useCollaboratorPointers (inbound render).
+ * Used by broadcastPointer (outbound) and laser-colors (inbound collaborator color).
  */
 export const WB_LASER_TUTOR_HEX = "#e27d60";
 export const WB_LASER_STUDENT_HEX = "#0891b2";

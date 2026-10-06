@@ -62,7 +62,7 @@ const PATH_RULES = [
     tags: [TAG.WB_CHROME],
   },
   {
-    re: /viewport-align|pageViewState|followTutor|useStudentWhiteboardCanvas|useCollaboratorPointers/i,
+    re: /viewport-align|pageViewState|followTutor|useStudentWhiteboardCanvas|useCollaboratorLiveCursors/i,
     tags: [TAG.WB_VIEWPORT],
   },
   {

@@ -44,7 +44,7 @@
  * ST-05 / L1 — tutor local laser color.
  * Excalidraw@0.18.1 hardcodes DEFAULT_LASER_COLOR ("red") for the local user's
  * laser trail (LaserTrails.localTrail). Remote peer lasers use pointer.laserColor
- * (set in useCollaboratorPointers). Override local fill to coral (--accent).
+ * from laser-colors.ts. Override local fill to coral (--accent).
  */
 .mynk-wb-chrome .SVGLayer svg path[fill="red"] {
   fill: var(--accent);
