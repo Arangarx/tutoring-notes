@@ -15,7 +15,7 @@
  *       --grep @wb-presence to run auth/presence subset).
  */
 
-import { test, expect, type BrowserContext } from "@playwright/test";
+import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import {
@@ -41,6 +41,33 @@ import {
   TEST_LEARNER,
 } from "../visual/helpers";
 import { TAG } from "../test-tags";
+
+/** Signed-out /join renders JoinAuthGate. Child sessions offer both sign-in paths. */
+async function expectJoinAuthGate(
+  page: Page,
+  sessionId: string,
+  kind: "child" | "self"
+): Promise<void> {
+  const returnTo = encodeURIComponent(`/join/${sessionId}`);
+  await expect(page.getByTestId("join-auth-gate")).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(new RegExp(`/join/${sessionId}(?:$|[?#])`));
+  await expect(page.getByTestId("student-whiteboard-canvas-mount")).toHaveCount(0);
+  if (kind === "child") {
+    const child = page.getByTestId("join-auth-gate-child-sign-in");
+    const parent = page.getByTestId("join-auth-gate-parent-sign-in");
+    await expect(child).toHaveText("Child sign in");
+    await expect(parent).toHaveText("Parent sign in");
+    await expect(child).toHaveAttribute("href", `/students/login?returnTo=${returnTo}`);
+    await expect(parent).toHaveAttribute("href", `/account/login?returnTo=${returnTo}`);
+    await expect(page.getByTestId("join-auth-gate-self-sign-in")).toHaveCount(0);
+  } else {
+    const self = page.getByTestId("join-auth-gate-self-sign-in");
+    await expect(self).toHaveText("Sign in");
+    await expect(self).toHaveAttribute("href", `/account/login?returnTo=${returnTo}`);
+    await expect(page.getByTestId("join-auth-gate-child-sign-in")).toHaveCount(0);
+    await expect(page.getByTestId("join-auth-gate-parent-sign-in")).toHaveCount(0);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // P2-A: Auth BLOCKERs
@@ -140,7 +167,7 @@ test.describe("Auth BLOCKERs — /join/ participant gate", { tag: [TAG.WB_PRESEN
     }
   });
 
-  test("unauthenticated hit to /join/[sessionId] redirects to learner login (not the board)", async ({
+  test("unauthenticated hit to a child /join shows both sign-in paths and returns there", async ({
     browser,
   }) => {
     test.setTimeout(30_000);
@@ -149,17 +176,29 @@ test.describe("Auth BLOCKERs — /join/ participant gate", { tag: [TAG.WB_PRESEN
     const ctx = await browser.newContext();
     try {
       const page = await ctx.newPage();
-      // No learner cookie — JoinAuthGate should redirect to /students/login.
       await page.goto(`/join/${session.whiteboardSessionId}`, {
         waitUntil: "domcontentloaded",
       });
-      // JoinAuthGate does client-side router.replace — wait for the URL to change.
-      await page.waitForURL(
-        (url) => url.pathname === "/students/login",
-        { timeout: 15_000 }
+      await expectJoinAuthGate(page, session.whiteboardSessionId, "child");
+
+      await page.getByTestId("join-auth-gate-parent-sign-in").click();
+      await page.waitForURL((url) => url.pathname === "/account/login", {
+        timeout: 15_000,
+      });
+      expect(page.url()).toContain(
+        encodeURIComponent(`/join/${session.whiteboardSessionId}`)
       );
+
+      await page.goBack();
+      await expectJoinAuthGate(page, session.whiteboardSessionId, "child");
+      await page.getByTestId("join-auth-gate-child-sign-in").click();
+      await page.waitForURL((url) => url.pathname === "/students/login", {
+        timeout: 15_000,
+      });
       expect(page.url()).toContain("/students/login");
-      // Must NOT show the whiteboard board.
+      expect(page.url()).toContain(
+        encodeURIComponent(`/join/${session.whiteboardSessionId}`)
+      );
       await expect(page.getByTestId("student-whiteboard-canvas-mount")).not.toBeVisible();
     } finally {
       await ctx.close();
@@ -193,13 +232,14 @@ test.describe("Auth BLOCKERs — /join/ participant gate", { tag: [TAG.WB_PRESEN
     }
   });
 
-  test("tutor (NextAuth) session at /join/[sessionId] redirects to learner login", async ({
+  test("tutor NextAuth session at a child /join sees the join sign-in gate", async ({
     browser,
   }) => {
     test.setTimeout(30_000);
     const session = await seedWbLiveSyncSession();
 
-    // Tutor context (has NextAuth session, NOT a learner session cookie).
+    // Tutor NextAuth is not a join principal (learner or owning account holder).
+    // The signed-out gate is the design: both child and parent sign-in, no board.
     const tutorCtx = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
     });
@@ -208,12 +248,14 @@ test.describe("Auth BLOCKERs — /join/ participant gate", { tag: [TAG.WB_PRESEN
       await page.goto(`/join/${session.whiteboardSessionId}`, {
         waitUntil: "domcontentloaded",
       });
-      // No learner cookie → JoinAuthGate → /students/login.
-      await page.waitForURL(
-        (url) => url.pathname === "/students/login",
-        { timeout: 15_000 }
+      await expectJoinAuthGate(page, session.whiteboardSessionId, "child");
+      await page.getByTestId("join-auth-gate-child-sign-in").click();
+      await page.waitForURL((url) => url.pathname === "/students/login", {
+        timeout: 15_000,
+      });
+      expect(page.url()).toContain(
+        encodeURIComponent(`/join/${session.whiteboardSessionId}`)
       );
-      expect(page.url()).toContain("/students/login");
     } finally {
       await tutorCtx.close();
     }
@@ -275,11 +317,20 @@ test.describe("Fragment preservation — #k= survives stale-session /join/ hit",
         { waitUntil: "domcontentloaded" }
       );
 
-      // Wait for client-side redirect to /students/login (JoinAuthGate effect).
-      await page.waitForURL(
-        (url) => url.pathname === "/students/login",
-        { timeout: 15_000 }
-      );
+      await expectJoinAuthGate(page, session.whiteboardSessionId, "child");
+      await expect
+        .poll(async () =>
+          page.evaluate(
+            (sessionId) => sessionStorage.getItem(`mynk_join_hash_${sessionId}`),
+            session.whiteboardSessionId
+          )
+        )
+        .toBe(`#k=${fakeKey}`);
+
+      await page.getByTestId("join-auth-gate-child-sign-in").click();
+      await page.waitForURL((url) => url.pathname === "/students/login", {
+        timeout: 15_000,
+      });
 
       // sessionStorage is per-tab (same browsing context) — persists across the
       // client-side navigation from /join/ to /students/login.
@@ -353,7 +404,17 @@ test.describe("Fragment preservation — #k= survives stale-session /join/ hit",
         { waitUntil: "domcontentloaded" }
       );
 
-      // 2. JoinAuthGate saves hash and client-redirects to /students/login.
+      // 2. Gate saves the hash; the child sign-in link returns to this /join.
+      await expectJoinAuthGate(studentPage, session.whiteboardSessionId, "child");
+      await expect
+        .poll(async () =>
+          studentPage.evaluate(
+            (sessionId) => sessionStorage.getItem(`mynk_join_hash_${sessionId}`),
+            session.whiteboardSessionId
+          )
+        )
+        .toBe(`#k=${encryptionKey}`);
+      await studentPage.getByTestId("join-auth-gate-child-sign-in").click();
       await studentPage.waitForURL(
         (url) => url.pathname === "/students/login",
         { timeout: 15_000 }
@@ -1516,9 +1577,22 @@ test.describe(
             `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
             { waitUntil: "domcontentloaded" }
           );
+          await expectJoinAuthGate(studentPage, session.whiteboardSessionId, "child");
+          await expect
+            .poll(async () =>
+              studentPage.evaluate(
+                (sid) => sessionStorage.getItem(`mynk_join_hash_${sid}`),
+                session.whiteboardSessionId
+              )
+            )
+            .toBe(`#k=${encryptionKey}`);
+          await studentPage.getByTestId("join-auth-gate-child-sign-in").click();
           await studentPage.waitForURL(
             (url) => url.pathname === "/students/login",
             { timeout: 15_000 }
+          );
+          expect(studentPage.url()).toContain(
+            encodeURIComponent(`/join/${session.whiteboardSessionId}`)
           );
 
           // Intermediate oracle: hash was saved to sessionStorage.
@@ -2616,7 +2690,7 @@ test.describe(
     // G2. REDIRECT direction — child session → /students/login (PIN login).
     // -----------------------------------------------------------------------
     test(
-      "unauthenticated hit to child-learner /join/[sessionId] redirects to PIN login",
+      "unauthenticated hit to child-learner /join offers child and parent sign-in",
       async ({ browser }) => {
         test.setTimeout(30_000);
         const session = await seedWbLiveSyncSession();
@@ -2626,12 +2700,16 @@ test.describe(
           await page.goto(`/join/${session.whiteboardSessionId}`, {
             waitUntil: "domcontentloaded",
           });
-          // JoinAuthGate must redirect child session → /students/login.
+          await expectJoinAuthGate(page, session.whiteboardSessionId, "child");
+          await page.getByTestId("join-auth-gate-child-sign-in").click();
           await page.waitForURL(
             (url) => url.pathname === "/students/login",
             { timeout: 15_000 }
           );
           expect(page.url()).toContain("/students/login");
+          expect(page.url()).toContain(
+            encodeURIComponent(`/join/${session.whiteboardSessionId}`)
+          );
         } finally {
           await ctx.close();
         }
@@ -2642,7 +2720,7 @@ test.describe(
     // G3. REDIRECT direction — self-learner session → /account/login.
     // -----------------------------------------------------------------------
     test(
-      "unauthenticated hit to self-learner /join/[sessionId] redirects to account login",
+      "unauthenticated hit to self-learner /join offers account sign-in only",
       async ({ browser }) => {
         test.setTimeout(30_000);
         const session = await seedSelfLearnerWbSession();
@@ -2652,12 +2730,16 @@ test.describe(
           await page.goto(`/join/${session.whiteboardSessionId}`, {
             waitUntil: "domcontentloaded",
           });
-          // JoinAuthGate must redirect self-learner session → /account/login.
+          await expectJoinAuthGate(page, session.whiteboardSessionId, "self");
+          await page.getByTestId("join-auth-gate-self-sign-in").click();
           await page.waitForURL(
             (url) => url.pathname === "/account/login",
             { timeout: 15_000 }
           );
           expect(page.url()).toContain("/account/login");
+          expect(page.url()).toContain(
+            encodeURIComponent(`/join/${session.whiteboardSessionId}`)
+          );
         } finally {
           await ctx.close();
         }
@@ -2772,7 +2854,7 @@ test.describe(
     // self-learner sessions fall through to JoinAuthGate for /account/login.
     // -----------------------------------------------------------------------
     test(
-      "stale learner cookie (non-participant) + NO AH session + self-learner session → /account/login (not 404)",
+      "stale learner cookie (non-participant) + NO AH session + self-learner session → account sign-in (not 404)",
       async ({ browser }) => {
         test.setTimeout(30_000);
 
@@ -2798,12 +2880,18 @@ test.describe(
           );
 
           // Self-learner session + stale non-participant learner cookie + no AH session
-          // → must NOT 404; JoinAuthGate must redirect to /account/login.
+          // → must NOT 404; the gate offers account sign-in back to this /join.
+          await expectJoinAuthGate(page, selfSession.whiteboardSessionId, "self");
+          expect(page.url()).not.toContain("/account/login");
+          await page.getByTestId("join-auth-gate-self-sign-in").click();
           await page.waitForURL(
             (url) => url.pathname === "/account/login",
             { timeout: 15_000 }
           );
           expect(page.url()).toContain("/account/login");
+          expect(page.url()).toContain(
+            encodeURIComponent(`/join/${selfSession.whiteboardSessionId}`)
+          );
         } finally {
           await ctx.close();
         }
