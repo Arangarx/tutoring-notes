@@ -23,12 +23,29 @@ jest.mock("@/lib/blob", () => ({
   __esModule: true,
   deleteBlob: jest.fn(async () => {}),
 }));
+jest.mock("next/navigation", () => ({
+  redirect: (url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  },
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
+}));
+jest.mock("@/lib/server-session", () => ({
+  getLearnerSessionFromHeaders: jest.fn(),
+  getAccountHolderSessionFromHeaders: jest.fn(),
+}));
 
 import { randomBytes } from "crypto";
 import { put } from "@vercel/blob";
 import { deleteBlob } from "@/lib/blob";
 import { db } from "@/lib/db";
 import { getOrCreateWhiteboardForSchedule } from "@/lib/whiteboard/schedule-bridge";
+import { joinScheduledSession } from "@/app/join/scheduled-actions";
+import {
+  getAccountHolderSessionFromHeaders,
+  getLearnerSessionFromHeaders,
+} from "@/lib/server-session";
 import { readServerLiveKey } from "@/lib/whiteboard/live-key";
 import { uniq } from "../helpers/unique-test-token";
 
@@ -280,5 +297,77 @@ describe("getOrCreateWhiteboardForSchedule", () => {
       "r"
     );
     expect(r).toEqual({ ok: false, reason: "not_found" });
+  });
+});
+
+describe("joinScheduledSession", () => {
+  const learnerSession = getLearnerSessionFromHeaders as jest.Mock;
+  const accountSession = getAccountHolderSessionFromHeaders as jest.Mock;
+
+  beforeEach(() => {
+    learnerSession.mockReset();
+    accountSession.mockReset();
+    learnerSession.mockResolvedValue(null);
+    accountSession.mockResolvedValue(null);
+  });
+
+  async function seedLive(opts: {
+    startsInMs: number;
+    allowLiveSession?: boolean;
+  }) {
+    const base = await seed({
+      isSelfLearner: false,
+      allowLiveSession: opts.allowLiveSession ?? true,
+    });
+    const startAt = new Date(Date.now() + opts.startsInMs);
+    const endAt = new Date(startAt.getTime() + 60 * 60_000);
+    await db.scheduledSession.update({
+      where: { id: base.sched.id },
+      data: { startAt, endAt },
+    });
+    return base;
+  }
+
+  it("refuses when nobody is signed in", async () => {
+    const { sched } = await seedLive({ startsInMs: 5 * 60_000 });
+    await expect(joinScheduledSession(sched.id)).resolves.toEqual({
+      error: "not_signed_in",
+    });
+  });
+
+  it("refuses before the join window", async () => {
+    const { ah, sched } = await seedLive({ startsInMs: 2 * 60 * 60_000 });
+    accountSession.mockResolvedValue({ accountHolderId: ah.id });
+    await expect(joinScheduledSession(sched.id)).resolves.toEqual({ error: "not_yet" });
+    expect(await db.whiteboardSession.count({ where: { scheduledSessionId: sched.id } })).toBe(0);
+  });
+
+  it("refuses when live sessions are not allowed", async () => {
+    const { ah, sched } = await seedLive({
+      startsInMs: 5 * 60_000,
+      allowLiveSession: false,
+    });
+    accountSession.mockResolvedValue({ accountHolderId: ah.id });
+    await expect(joinScheduledSession(sched.id)).resolves.toEqual({
+      error: "not_available",
+    });
+    expect(await db.whiteboardSession.count({ where: { scheduledSessionId: sched.id } })).toBe(0);
+  });
+
+  it("refuses another family's parent without opening a room", async () => {
+    const { sched } = await seedLive({ startsInMs: 5 * 60_000 });
+    const other = await seed({ isSelfLearner: false });
+    accountSession.mockResolvedValue({ accountHolderId: other.ah.id });
+    await expect(joinScheduledSession(sched.id)).resolves.toEqual({
+      error: "not_available",
+    });
+    expect(await db.whiteboardSession.count({ where: { scheduledSessionId: sched.id } })).toBe(0);
+  });
+
+  it("redirects a parent into the room inside the window", async () => {
+    const { ah, sched } = await seedLive({ startsInMs: 5 * 60_000 });
+    accountSession.mockResolvedValue({ accountHolderId: ah.id });
+    await expect(joinScheduledSession(sched.id)).rejects.toThrow(/^NEXT_REDIRECT:\/join\//);
+    expect(await db.whiteboardSession.count({ where: { scheduledSessionId: sched.id } })).toBe(1);
   });
 });
