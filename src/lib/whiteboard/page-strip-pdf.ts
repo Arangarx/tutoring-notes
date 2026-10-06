@@ -14,13 +14,13 @@ export function isImageBoardSection(sectionId: string | undefined): boolean {
   return sectionId.startsWith("img-");
 }
 
-/** Derive `isPdf` from section id when building or hydrating page strip rows. */
+/** Derive board-kind flags from the section id. Callers do not pass them. */
 export function enrichPageStripRow(
-  row: Omit<PageStripRow, "isPdf" | "isImage"> & { isPdf?: boolean; isImage?: boolean }
+  row: Omit<PageStripRow, "isPdf" | "isImage">
 ): PageStripRow {
   return {
     ...row,
-    isPdf: row.isPdf ?? isPdfBoardSection(row.section),
-    isImage: row.isImage ?? isImageBoardSection(row.section),
+    isPdf: isPdfBoardSection(row.section),
+    isImage: isImageBoardSection(row.section),
   };
 }

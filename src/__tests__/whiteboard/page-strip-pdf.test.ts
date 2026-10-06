@@ -31,13 +31,24 @@ describe("enrichPageStripRow", () => {
     expect(row.isPdf).toBe(true);
   });
 
-  it("preserves explicit isPdf: false", () => {
+  it("derives image boards from an img- section and does not mark them as PDFs", () => {
     const row = enrichPageStripRow({
-      id: "p1",
-      title: "Page 1",
-      isPdf: false,
+      id: "p-img",
+      title: "photo.png",
+      section: "img-abc",
     });
+    expect(row.isImage).toBe(true);
     expect(row.isPdf).toBe(false);
+  });
+
+  it("derives a pdf_ section as a PDF board and not an image board", () => {
+    const row = enrichPageStripRow({
+      id: "p-pdf",
+      title: "packet p.1",
+      section: "pdf_abc123",
+    });
+    expect(row.isPdf).toBe(true);
+    expect(row.isImage).toBe(false);
   });
 
   it("sets isPdf false for regular pages", () => {

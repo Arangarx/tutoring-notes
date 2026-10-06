@@ -3897,8 +3897,6 @@ export function WhiteboardWorkspaceClient({
               id: r.pageId,
               title: r.title,
               section: sectionId,
-              isPdf: sectionId.startsWith("pdf-") || sectionId.startsWith("pdf_"),
-              isImage: sectionId.startsWith("img-"),
               ...(r.viewState ? { viewState: r.viewState } : {}),
             })
           ),
