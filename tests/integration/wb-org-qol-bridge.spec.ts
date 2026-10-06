@@ -41,15 +41,13 @@ async function clickOpenScheduledRoom(
     .click();
 }
 
-/** LIVE waiting-room Start requires fake media (matches wb-regression project). */
-const WB_LIVE_BROWSER = {
-  permissions: ["microphone", "camera"] as const,
-  launchOptions: {
-    args: [
-      "--use-fake-ui-for-media-stream",
-      "--use-fake-device-for-media-stream",
-    ],
-  },
+/**
+ * Camera + mic permission for contexts opened beside the project browser.
+ * Fake media devices are launch args on the wb-regression project, not
+ * fields of BrowserContextOptions (those are ignored).
+ */
+const WB_LIVE_CONTEXT = {
+  permissions: ["microphone", "camera"] as ("microphone" | "camera")[],
 };
 
 async function seedConsentRecord(
@@ -154,12 +152,12 @@ test.describe("org QoL schedule bridge", () => {
       const tutorContext = await browser.newContext({
         storageState: "tests/integration/.auth/tutor.json",
         viewport: { width: 1280, height: 1200 },
-        ...WB_LIVE_BROWSER,
+        ...WB_LIVE_CONTEXT,
       });
       const studentContext = await browser.newContext({
         storageState: LEARNER_STATE,
         viewport: { width: 1280, height: 640 },
-        ...WB_LIVE_BROWSER,
+        ...WB_LIVE_CONTEXT,
       });
       const tutorPage = await tutorContext.newPage();
       const studentPage = await studentContext.newPage();
@@ -232,12 +230,12 @@ test.describe("org QoL schedule bridge", () => {
       const tutorContext = await browser.newContext({
         storageState: "tests/integration/.auth/tutor.json",
         viewport: { width: 1280, height: 1200 },
-        ...WB_LIVE_BROWSER,
+        ...WB_LIVE_CONTEXT,
       });
       const parentContext = await browser.newContext({
         storageState: PARENT_STATE,
         viewport: { width: 1280, height: 640 },
-        ...WB_LIVE_BROWSER,
+        ...WB_LIVE_CONTEXT,
       });
       const tutorPage = await tutorContext.newPage();
       const parentPage = await parentContext.newPage();
@@ -310,12 +308,12 @@ test.describe("org QoL schedule bridge", () => {
       const parentContext = await browser.newContext({
         storageState: PARENT_STATE,
         viewport: { width: 1280, height: 800 },
-        ...WB_LIVE_BROWSER,
+        ...WB_LIVE_CONTEXT,
       });
       const tutorContext = await browser.newContext({
         storageState: "tests/integration/.auth/tutor.json",
         viewport: { width: 1280, height: 1200 },
-        ...WB_LIVE_BROWSER,
+        ...WB_LIVE_CONTEXT,
       });
       const parentPage = await parentContext.newPage();
       const tutorPage = await tutorContext.newPage();
