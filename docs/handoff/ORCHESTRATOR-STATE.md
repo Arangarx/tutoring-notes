@@ -12,15 +12,15 @@
 
 **⛔ NON-NEGOTIABLE STANDARDS (2026-07-10)** — no exceptions without Andrew's explicit documented waiver; agents may NEVER self-authorize: (1) zero unjustified duplication ([`composition-no-duplication.mdc`](../../.cursor/rules/composition-no-duplication.mdc)); (2) exhaustive red/green tests to spec ([`exhaustive-testing-mandate.mdc`](../../.cursor/rules/exhaustive-testing-mandate.mdc)); (3) independent agentic verification before done ([`agentic-verification-pipeline.mdc`](../../.cursor/rules/agentic-verification-pipeline.mdc)).
 
-**Tip:** `origin/master` @ [`d563bad8`](https://github.com/Arangarx/tutoring-notes/commit/d563bad8). Main checkout is this repo on `master`. The `tutoring-notes-master-ops` worktree is gone.
+**Tip:** branch `feat/org-qol` off `master` @ [`eebafee1`](https://github.com/Arangarx/tutoring-notes/commit/eebafee1). Plan: org and quality-of-life sequencing. Do not push this work straight to `master`.
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-01: deleted local `feature/sarah-forward-migration-q6`. Q6 cutover closed — not run, not needed. June 16 Madison lesson stays on Sarah's student. |
-| **Next action(s)** | **Go over soon:** Sarah meeting raw notes + student detail declutter (BACKLOG top, Andrew 2026-09-28) — review and refine before any build. Later pass on end-time logic (BACKLOG: midnight wrap stays on the same date). Apple ICS hardware follow-up. Wait on Twilio approval. |
-| **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. |
+| **Last action completed** | 2026-10-06: Wave 0 of `feat/org-qol`. Backlog cleanup docs and the `org` log prefix are on this branch. Product work has not started. |
+| **Next action(s)** | Track 1 small wave on `feat/org-qol`: waiting-room labels, tutor tile name, Finish review placement, SMS checkbox order, graph example, board rename, image boards, math keyboard, hide click-to-interact words. |
+| **Open Andrew-confirms** | Twilio campaign approval. Apple ICS subscribe on a real device. Billable wording waits on Sarah. |
 | **In-flight subagents** | None. |
-| **Uncommitted / unmerged** | Main checkout is `master`. `node_modules` here is a junction — use `npm exec -- jest`, not bare `npx jest`. |
+| **Uncommitted / unmerged** | Branch `feat/org-qol`, not merged. `node_modules` here is a junction — use `npm exec -- jest`, not bare `npx jest`. |
 
 **Auth wave shipped on `master` ([`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — workstreams (each independently APPROVE):**
 

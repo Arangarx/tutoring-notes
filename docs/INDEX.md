@@ -2,7 +2,7 @@
 
 > **Start here.** This is the single entry point for any new chat, agent, or human picking up work in this repo. Every canonical doc is mapped below by topic. For the curated reading-list with in-depth framing, see [AGENTS.md](../AGENTS.md) § Key docs.
 >
-> Last updated: 2026-07-09 (doc-cleanup pass — 133 transient docs + 29 plans archived).
+> Last updated: 2026-10-05 (added `docs/SHIPPED.md` to Sequencing table).
 
 ---
 
@@ -32,6 +32,7 @@ Bar to archive a doc or section: **(a)** its still-valid content is provably cap
 | [docs/handoff/ORCHESTRATOR-STATE.md](handoff/ORCHESTRATOR-STATE.md) | **Living orchestrator bootstrap** — current branch/tip, merge gate, execution order, build status | **Every fresh orchestrator chat — read HEAD first** |
 | [docs/handoff/ANDREW-FOLLOW-UPS.md](handoff/ANDREW-FOLLOW-UPS.md) | **Andrew drop-in checklist** — Console / human work that does not block agent feature progress | When returning after a gap; Google Console tasks |
 | [docs/BACKLOG.md](BACKLOG.md) | Pilot feedback items, known follow-ups, reliability gaps (Axes 1–5), security recon, deferred phase notes, pointers to archived bootstrappers | Whenever triaging new work, checking reliability posture, or looking for a deferred item |
+| [docs/SHIPPED.md](SHIPPED.md) | Completed and superseded work moved out of the backlog on 2026-10-05 (reference ledgers + shipped features) | When checking whether something is already done |
 
 ---
 

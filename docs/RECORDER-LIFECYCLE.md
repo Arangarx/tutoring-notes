@@ -559,7 +559,9 @@ key is `ah-login:<normalizedEmail>`; key lines:
 `tfr` (2FA-verify durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
 key is `2fa-verify:<adminUserId>`; key lines:
 `[tfr] tfr=2fa-verify:<id> action=rate-limited count=<n> retryAfterSec=<s>`,
-`[tfr] tfr=2fa-verify:<id> action=approaching-limit count=<n>/20`), and
+`[tfr] tfr=2fa-verify:<id> action=approaching-limit count=<n>/20`),
+`org` (organization membership and visibility — every membership change, schedule-on-behalf, reassignment, and metadata view writes
+`[org] org=<organizationId> action=<action> actor=<adminUserId> ...`; the schedule-to-session bridge also logs the appointment id with `wbsid`), and
 the component-specific ones in `useAudioRecorder` (`aud=`).
 
 ### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)

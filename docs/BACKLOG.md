@@ -4,55 +4,59 @@ Living document for open work, pilot feedback, reliability gaps, and deferred pr
 
 ## Go over soon (Andrew 2026-09-28)
 
+**Keep at the top (Andrew 2026-10-05).** This whole section stays here until Andrew explicitly clears an item. Reviewing or refining does not mean deleting the raw notes or the open items under them, and it does not mean moving them down the backlog.
+
 **Raw — Sarah meeting notes (Andrew 2026-09-28). Review and refine later. Not decisions.** Captured in Andrew’s wording. Do not treat any line as a locked requirement until he clarifies.
 
-- Signing up for SMS: needs to be more clear the box has to be checked. Flow needs to be cleaner.
-- At the time the tutor is adding the student, let them put in the student’s email. Add student might open another form possibly. Shortcut the claim process so the tutor only has one step. The main point: there isn’t a separate claims process from the initial adding of the student.
-- Sarah doesn’t think it needs a setting for whether to show just first name or show last name. She thinks it should just be first and last initial and be done with it. Andrew is not sure the setting should go away altogether, but it should definitely move.
-- Upcoming sessions for specifically that student should be on the student’s home page.
-- Still need to change “parent” to either adult or self learner or something more neutral.
-- For connecting an account, the password field is not offering to create one on the claim page. Test email: `arangarx+sarahstudent@gmail.com`.
-- Self learners are going to be confused by parent vs student. Self learners and parent accounts are the same level.
-- She’s affirming that the student having links to their sessions is good and that we want to make sure they have it.
-- In the waiting room, maybe better copy. Sarah asked what “Live (remote)” means. She’s like should it just be online and in person.
-- She doesn’t like buttons having capital then lowercase; she thinks capital/capital. Andrew is not sure which is better for usage.
-- She thinks the name on the tutor block in a whiteboard session shouldn’t be “Tutor”; it should be like “Sarah P.” Just like a student.
-- She thinks the tutor should only put email when adding someone and let the student themselves define how the tutor sees them. Probably first and last initial by default.
-- “so so so so so so vital”: a moving cursor always shows up. With Wyzant it disappears if it’s inactive for 5 seconds or something, but shows up if it moves.
-- Needs to be able to change the size of her text. She wants to set both the text box size and the text size.
-- “nice to have” locked squares.
-- “MUST HAVE” perfect circles.
-- “would like” triangles. Right triangles is what she would like for now. It’s what she’d use most for trig.
-- Still need ghost of other view.
-- Whiteboard needs some sort of help to tell things like “spacebar to go into grab/pan mode” etc.
-- Whiteboard chat room, maybe hidden/collapsed most of the time.
-- With the graph, she will want to be able to draw over the graph itself, not just graphing. She will want to teach them plotting too.
-- She’s wondering if on the graph it should be the full equation or maybe a simpler example. She feels like it’s incomplete without `y=`. So a `y=` in front of the box, otherwise it feels incomplete/confusing to her. Also a simpler example like just `2x+1`.
-- She was zoomed out so far on `(3x+1)/(x^2+2)` it looked wrong, but she just wasn’t zoomed in enough.
-- Nice to have: board renaming in the whiteboard.
-- Insert math equation: when opening its keyboard, she can’t actually use it, because it clicks away instead of using the keyboard.
-- Need to bring back the ability to insert images, not just PDFs. When inserting an image, do the same behavior as a PDF with making a new board.
-- “Finish Session” on the notes screen is kinda hard to see.
-- Billable presentation might need worked on or other options.
-- Organization stuff: they’ll want to be able to see tutor sessions etc.
+- SMS signup consent (Andrew’s own note, 2026-10-05, not Sarah’s). The agreement checkbox sits after **Send code**, and the button stays disabled until the box is checked, so the prerequisite is unclear. **Decision:** put the consent checkbox before the **Send code** button so it reads as a prerequisite. Not built yet.
+- Adding a student sends the invite in that same step (Andrew 2026-10-05, refined the same day). The tutor does not later copy a claim link and send it. **Self learner:** invite by email alone. **Child learner:** invite by the parent’s email plus a child identifier, or by `childid@familyid` directly. If that account already exists, they approve tying it to this tutor. They are not asked to create a new account. Until the connection is approved, the tutor sees the email or child id we were given, because that is all we know. Not built yet.
+- Calendar name display (Andrew 2026-10-05). **Decision:** calendar titles default to first name and last initial (Sarah’s suggestion). Remove the full-name checkbox from the student detail page. Do not add a tutor override in calendar settings unless later feedback asks for more options. Not built yet.
+- Upcoming sessions (Andrew 2026-10-05). **Decision:** the tutor’s student detail page lists that student’s upcoming sessions (cap the list if many are scheduled far out). Almost everything else currently on that page comes off — Sarah said repeatedly that the page is too cluttered; it should be clean and easy to follow. Separately, the self learner/parent and the child learner see their upcoming sessions after login. Sarah does not send them a join link. Near session time that entry is prominent, and the button becomes active and takes them into the waiting room. Waiting room today: either person can be in the room first. A live remote session still starts only when the tutor presses Start, and that button stays disabled until the student is connected. In person, the tutor can start without the student connected. Not built yet.
+- Role copy across the site (Andrew 2026-10-05). **Decision:** the three labels are **Tutor**, **Self learner/Parent**, and **Child learner**. Replaces “parent” / “student” where those labels confuse a self learner with a child. Not built yet.
+- Claim-page password prompt (Andrew 2026-10-05). Not urgent. **When we touch it:** get Chrome to offer “Use strong password,” not only “Select password,” on the create-account password field. Test address from the Sarah session: `arangarx+sarahstudent@gmail.com`. Play with the form until the prompt is right. Not built yet.
+- Self learner vs child (Andrew 2026-10-05). Same decision as the role-copy line above: a self learner and a parent are the same kind of account (**Self learner/Parent**). A child is **Child learner**. Not built yet.
+- Session entry without a sent link (Andrew 2026-10-05). This affirms the upcoming-sessions decision above. **Decision:** a logged-in self learner/parent or child learner does not need Sarah to send a join link. The session is on their page when they log in. Near session time, that entry is prominent. Not built yet.
+- Waiting-room session type (Andrew 2026-10-05). **Decision:** the two labels are **Online** and **In person** (replacing “Live (remote)” and “In-person”). Not built yet.
+- Button capitalization (Andrew 2026-10-05). **Decision:** keep sentence case (first word and proper nouns only), which is current web practice (Material Design 3 says not to use title case on buttons). Apple’s native apps still title-case button labels; this product is a website, so sentence case stays. Do not add a site setting unless Sarah pushes and Andrew later says to. Not a build.
+- Tutor video-tile name (Andrew 2026-10-05). **Decision:** show the tutor’s name on the tile the same way the student’s name is shown. If the tutor’s name is missing, keep the fallback **Tutor**. Not built yet. Today `resolveParticipantLabel` only fills a name for the student peer, so an unlabeled tutor tile falls back to the word Tutor.
+- Name the tutor sees (Andrew 2026-10-05). **Decision:** before the connection is approved, identify by email or child id. After approval, the self learner or parent sets the name, prompted “How do you want to be seen by this tutor?” or “How do you want your child to be seen by this tutor?”, prefilled with first name and last initial. Family id is the login handle, not the display name. Not built yet.
+- Other person’s cursor (Andrew 2026-10-05). **Decision:** show a live cursor. It hides after about five seconds still and comes back when it moves. There is no live cursor today: pointer sync sends the laser only (`tool: "laser"`, `renderCursor: false`). Same QoL family as the ghost view, which is already **Ghost viewport bounds overlay (VP-01 / SMOKE-POST-1)** in §4. Do not add a second ghost item. Not built yet.
+- Whiteboard text size and text-box bounds (Andrew 2026-10-05). **Decision:** make both possible if the board can do it: the user changes the letter size, and they can set the text box bounds. UX is not decided. Other programs often have you drag the box first, then set the size in a control next to the text tool. Do not design the interaction until Andrew has tried it. Not built yet.
+- Locked squares (Andrew 2026-10-05). **Decision:** on a keyboard, Shift while drawing a rectangle is enough. No separate locked-square tool. On a phone, a square still has to be possible without a keyboard (same open touch control as perfect circles). Not built yet.
+- Perfect circles (Andrew 2026-10-05). **Decision:** Shift while drawing an ellipse, plus the modifier hint, is enough on a keyboard. A phone has no Shift key, so a square and a circle must still be possible there without a keyboard. How the touch control works is not decided. Not built yet.
+- Triangles (Andrew 2026-10-05). **Decision:** add a triangle tool. If we build it ourselves, a right triangle is the default. Shift draws another type, Ctrl another, and further modifiers can add more. Which other types those are is not decided. A phone still needs those variants without a keyboard, same open touch problem as square and circle. Not built yet.
+- Ghost of the other view: already in the backlog as **Ghost viewport bounds overlay (VP-01 / SMOKE-POST-1)** in §4. Andrew confirmed 2026-10-05. Label-only stub today; the rectangle is the open work. Do not add a second item.
+- Modifier hints (Andrew 2026-10-05). **Decision:** common modifiers show on the board. Examples: Shift for a square or circle, Space for grab/pan. Working placement: a small cluster floating at the bottom right, like control hints in a video game. Nothing like that is on the board today. Not built yet.
+- Whiteboard chat (Andrew 2026-10-05). **Decision:** add it, collapsed until someone opens it, as a convenience when audio is in trouble. It must not be a way around billable time. Do not change Start, the billable timer, or when the board is usable. Already **SMOKE-POST-2 — in-app text chat**. Do not add a second item. Not built yet.
+- Drawing on the graph (Andrew 2026-10-05). **Decision:** the tutor can plot points and custom marks on the graph, in the graph’s own coordinates. A point at (1, 1) stays at (1, 1) when the zoom or scale changes. Do not paint Excalidraw strokes on top of the panel. JSXGraph already keeps points and curves in math coordinates. Our saved graph state only stores the bounding box and expression strings, so those objects still have to be added and saved with the graph. Not built yet.
+- Graph expression box (Andrew 2026-10-05). **Decision:** put `y=` in front of the field, and use `2x+1` as the example. Placeholder today is `e.g. x^2, sin(x)`. Not built yet.
+- Graph looked wrong when zoomed out (Andrew 2026-10-05). **Not a build.** Sarah’s `(3x+1)/(x^2+2)` looked wrong because the window was too wide, and zooming in fixed it. A new graph still opens from −10 to 10. Curve-aware framing is a separate later item: **Graph smart framing** in §4.
+- Board renaming (Andrew 2026-10-05). **Decision:** a tutor can rename a board. Tabs are **Board 1**, **Board 2**, and so on, with no rename today. Not built yet.
+- Insert math keyboard (Andrew 2026-10-05). **Decision:** the on-screen math keys must type into the equation and leave the dialog open. Today a click outside the card closes it, and the keyboard sits outside that card. Andrew has not tested this feature. Also check that it works on a phone. Not built yet.
+- Insert image (Andrew 2026-10-05). **Decision:** an image creates a new board, the same way a PDF page does. The board tab gets a small icon that reads as a picture, parallel to the PDF document icon on PDF tabs. The upload chooser is PDF-only today and points PNG, JPEG, and SVG at the toolbar image tool, which places the picture on the current board. Later, if people ask, also allow inserting onto the current board. Not built yet.
+- Finish review placement (Andrew 2026-10-05). **Decision:** move **Finish review** off the top bar and group it with the other two ways to leave the notes screen: **Save to notes** and **Cancel and delete session data**. The three stay visually separate, not crammed into one cluster. Not built yet.
+- Billable presentation (Andrew 2026-10-05). **Open until he talks with Sarah again.** The review screen already shows rounded billed minutes under **Your billable time:** (`55 min`, or `1h 5 min`, plus a local start–end window when those times exist). It does not show the unrounded length beside that. Hypothesis to check with her: she wanted the rounded time and already saw it, but it was not obvious. Possible later presentation: **Actual time** and **Billable time** as two labeled values. Do not build until that conversation.
+- Organizations (Andrew’s own note, 2026-10-05, not Sarah’s). Seed only: people in an organization will want to see tutor sessions. This is the next major feature he wants in, and the reason for the backlog cleanup. Existing home is §12 (org / university pilot) plus [`docs/MYNK-ORG-PILOT-BACKLOG.md`](MYNK-ORG-PILOT-BACKLOG.md). Spec is not locked. Do not build from this line.
+  - **Waitlist (Andrew 2026-10-06):** the tutor waitlist exists so Andrew can cap cost from unsupervised signups. He expects it to be gone by the time he courts orgs. An org does not get its own waitlist. Tutors an org adds are inside a paying customer, so they are not held for his approval.
+  - **Calendars (Andrew 2026-10-06):** a session the org places on a tutor eventually has to show on that tutor’s personal calendar too. Google scopes and setup wait until that work starts. The first slice is the in-app schedule.
 
-**Status:** `OPEN` — review and refine. Andrew will clarify.
+**Status:** `REVIEWED` 2026-10-05. Decisions are on the items above. Still open with no build: billable presentation, until Andrew talks with Sarah. Organizations is his seed for the next major feature, not a Sarah decision. This section stays at the top until he clears each item.
 
 **[P1][WB] Student graph keeps flashing “Click to interact.”** Andrew 2026-09-28, live session with Sarah, Andrew as the student. The graph shows Excalidraw’s `buttons.embeddableInteractionButton` (“Click to interact”) over the middle of the embed. Clicking it does not clear it; it keeps coming back.
 
 Cause: Excalidraw only shows that hint while `activeEmbeddable.state === "hover"`, and hover is the center third of the embed (`node_modules/@excalidraw/excalidraw` `isIframeLikeElementCenter`). A click sets `state: "active"` on that element object. The match is object identity (`activeEmbeddable.element === el`), not element id. Live sync replaces the scene element, so the click no longer matches, pointer-events on `.excalidraw__embeddable-container__inner` go back to disabled, and the next pointer move over the center shows the hint again. Our graph is `renderEmbeddable` → `GraphEmbeddable` with `readOnly={false}` for both roles (`WhiteboardWorkspaceClient`). The hint is Excalidraw chrome, not our graph UI.
 
-**Status:** `OPEN` — go over soon. Do not patch mid-session.
+**Decision (Andrew 2026-10-05):** hide the “Click to interact” words. Keep the click that hands the pointer to the graph, so a drag can still move the box before that click, and point or free draw (once those exist) happen only after it. Make that click survive live sync: today sync replaces the graph object, the click no longer matches, and the graph lets go of the pointer. Not built yet.
 
 **[P1][AUTH] Self-learner claim still asks for a child username and PIN.** Andrew 2026-09-28, after connecting Andrew M as an adult self-learner. Privacy card correctly says parental preferences do not apply. The card under it still says “Create a username and PIN so your child can sign in on their device.” Same item as **WB-ADULT-JOIN-ENABLEMENT B3** (child-only claim PIN). `src/app/claim/[token]/setup/page.tsx` gates privacy on `profile.isSelfLearner` and leaves the credential card on for every profile that has no PIN yet. A self-learner already signs in with the email and password from account creation. **Set up later** skips this card. Server `action: "credentials"` also does not reject a self-learner profile.
 
-**Status:** `OPEN` — go over soon. Fold into B3; do not track a second copy.
+**Decision (Andrew 2026-10-05):** a self learner/parent signs in with email and password only. The child username and PIN card appears only for a child learner. Same item as **WB-ADULT-JOIN-ENABLEMENT B3**. Do not track a second copy. Not built yet.
 
 **[P1][AUTH] Claim verify-email lands on “create account or sign in.”** Andrew 2026-09-28, Sarah’s claim link for student Andrew M, email `arangarx+sarahStudent@gmail.com`. After “Create parent account,” the confirmation email opened the same claim card at the logged-out chooser (“Create parent account” / “I already have an account”) instead of the signed-in claim step.
 
 Cause: signup does not sign the browser in. `/verify-email` → `/auth/verify-done` sets `mynk_ah_session` with `SameSite=Strict` and immediately redirects to `/claim/<token>` (`src/app/auth/verify-done/route.ts`, `buildAhSessionCookie`). A click that starts in Gmail is a cross-site navigation, so that Strict cookie is not sent on the claim request. The claim page shows `ClaimAuthGate` whenever `getAccountHolderSessionFromHeaders()` is empty (`src/app/claim/[token]/page.tsx`). The on-screen copy (“come back to this claim link”) describes a second visit; the email link itself is the return. Workaround this run: “I already have an account” with the password just created, or reload the claim URL once already on the site.
 
-**Status:** `OPEN` — go over soon.
+**Decision (Andrew 2026-10-05):** if the self learner or parent this link is for is already signed in, the link lands them on the signed-in claim step. That is the existing design, and it does not work consistently. The link must not complete the claim for a different signed-in account. Not built yet.
 
 **[P1][UX] Student detail declutter — workshop, then rebuild.** Sarah (2026-09-28, while setting Andrew up as a test student): the student detail page is way too cluttered. A lot of what is on it belongs behind another tab or in settings. The page must be clean and easy to use. **Workshop before any build.**
 
@@ -64,15 +68,7 @@ What is on the page today (`src/app/admin/students/[id]/page.tsx` + `StudentDeta
 - The header pins a site-wide **Outbox** link on every student.
 - The Parent card is claim / connected parent, or the line “Parent account linking is not enabled” when `NEXT_PUBLIC_CLAIM_INVITES_ENABLED` is not `true`. Production env on this machine does not set that flag. Turning the flag on is a separate decision from this declutter.
 
-Direction from the 2026-09-28 chat (workshop still open):
-
-- Front page job is “work with this student”: name, one primary action (start, or the single blocker), open sessions and ended sessions that still need a note (only when some exist), one line for the latest note linking to the notes page.
-- Sharing is one place: share link, send-update email, and parent claim or connected parent.
-- Student settings holds the calendar full-name checkbox, with a short label. The explanatory paragraph stays there.
-- Outbox stays in the main nav.
-- Desktop panels switch, the way the phone already does.
-
-**Open before design lock:** Does Sarah write notes on this page often enough that compose stays up front, or is “latest note → notes page” enough?
+Direction (Andrew 2026-10-05, supersedes the 2026-09-28 workshop sketch): almost everything now on this page comes off. The page lists this student’s upcoming sessions (capped if many are scheduled far out) and stays clean and easy to follow. The calendar full-name checkbox is removed entirely (see the calendar-name decision above), not moved into a student setting. Outbox stays in the main nav. Not built yet.
 
 Related: `ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER` / `MOBILE-ICONS` (merged, verify); “Unclaimed student claim link buried.”
 
@@ -82,15 +78,15 @@ Related: `ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER` / `MOBILE-ICONS` (merged, verify
 
 We are on the **release track**: expand beyond Sarah to unsupervised new pilots. **Re-ranked after Sarah 2026-07-29 meeting** (Andrew chose **B**: Google external before student-detail UX). Ordered priorities:
 
-1. **External Google validation** — Sign-In UI **DONE on `master`**; ICS feed + `calendar.events.owned` write **DONE on `master`** (calendar-wave merge 2026-09-21, Tyson Android/Google scoped pass). **`calendar.events.owned` OAuth verification APPROVED** 2026-09-29 (Google email, project `208762156520` / `my-apps-490005`; that scope only). **Remainder** = Apple ICS hardware follow-up ([`CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md), [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)). A new scope still needs its own verification.
-2. **Student-detail Start / consent / claim findability (P0)** — **DONE on `master`** 2026-08-14 ([`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5)). Optional leftover: flag-off Playwright, mobile viewport, desktop double mint button.
-3. **Tutor signup / self-serve auth** — **DONE on `master`** ([`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111) + auth ship-ready merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca): email confirm, allowlist, platform mail). Pagination **deferred**. Invite links **deferred** (needs Andrew: operator-invite vs open `/signup`).
-4. **2FA pilots will finish** — **DONE on `master`** (email OTP, 2FA chooser, SMS OTP code — merge [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)). SMS **not live in production** until Twilio env (`TWILIO_*`) — fail-closed; see [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md). TOTP stays as upgrade. **Sarah 2026-09-10 (Discord):** prefers SMS when available.
-5. **Finish scheduling** — **native CRUD DONE** 2026-08-14 ([`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216)); **Google outbound write + ICS feed DONE** 2026-09-21 (calendar-wave merge). Two-way sync still P3. Apple ICS subscribe is a hardware follow-up.
+1. **External Google validation** — Apple ICS subscribe on a real device; any new OAuth scope needs its own verification. Write, ICS, and `calendar.events.owned` approval (2026-09-29) are shipped.
+2. **Student-detail Start / consent / claim findability (P0)** — Shipped [`f08d56b5`](https://github.com/Arangarx/tutoring-notes/commit/f08d56b5). Remainder: optional flag-off Playwright, mobile viewport, desktop double mint button.
+3. **Tutor signup / self-serve auth** — Shipped [`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111) + [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Remainder: pagination deferred; invite links deferred (operator-invite vs open `/signup`).
+4. **2FA pilots will finish** — Code shipped [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Remainder: SMS not live until Twilio env; TOTP upgrade; Sarah prefers SMS when available.
+5. **Finish scheduling** — Native CRUD shipped [`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216); Google write + ICS shipped (2026-09-21). Remainder: two-way sync (P3); Apple ICS hardware follow-up.
 6. **Security MUST for strangers** — release-triage MUST security/ownership holes before unsupervised pilots.
-7. **Comprehensive instrumentation** — **chunk 1 DONE** 2026-08-14 ([`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4)): first-party `ProductEvent` tutor funnel (signup/login/approval/session). No PostHog. No COPPA-path events yet. **Terms/Privacy stay 100% honest.** Queued: **TXC-SWEEP-METRICS** (§10) — how often `/api/cron/transcribe-sweep` runs vs actually recovers work (cadence slowed to 15 min 2026-08-28).
+7. **Comprehensive instrumentation** — Chunk 1 shipped [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4). Remainder: **TXC-SWEEP-METRICS** (§10); no COPPA-path events yet. Terms/Privacy stay 100% honest.
 
-**Background (not blocking the ordered list):** Wave C/D dedupe (fragile WB/A/V — Opus-grade); agenticPipeline Phase 2; NativeSelect; design-system gallery. Dedupe Wave A/B + tokens already done — new work still = zero new duplication ([`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md)).
+**Background (not blocking the ordered list):** Wave A/B + tokens are done; Wave C/D dedupe (fragile WB/A/V — Opus-grade) remains open; agenticPipeline Phase 2; NativeSelect; design-system gallery. New work still = zero new duplication ([`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md)).
 
 ### QUEUED — `/admin/design-system` component gallery (Andrew 2026-07-27)
 
@@ -108,23 +104,17 @@ Each specimen: light/dark, canonical path, confidence badge (`isolated` | `compo
 
 **Gate:** Same allowlist as feedback/dev-tools — rename/document as **site operator / platform**, never expand with org-admin roles.
 
-**Sequencing:** After feedback anti-spam Phase 1 lands (in flight); thin Tier 1–2 first, then grow with inventory. Sync with [`V1-COMPONENT-LIBRARY.md`](V1-COMPONENT-LIBRARY.md) + [`handoff/DEDUPE-EYEBALL-LIST.md`](handoff/DEDUPE-EYEBALL-LIST.md).
+**Sequencing:** Feedback anti-spam is on `master` (`src/lib/feedback-spam.ts`); thin Tier 1–2 first, then grow with inventory. Gallery waits on an executor wave. Sync with [`V1-COMPONENT-LIBRARY.md`](V1-COMPONENT-LIBRARY.md) + [`handoff/DEDUPE-EYEBALL-LIST.md`](handoff/DEDUPE-EYEBALL-LIST.md).
 
 **Status:** `OPEN` — queued for next available executor wave (not Wave C/D fragile).
 
-### Priority #1 — external Google approvals (ACTIVE; Calendar-only remainder)
+### Priority #1 — external Google approvals (ACTIVE remainder)
 
-Sign-In UI + self-serve auth slices **shipped on `master`**. **Remaining #1 work = Calendar:** real write + verification resubmit + ICS feed — canonical plan [`docs/handoff/CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md).
+Sign-In UI **shipped on `master`**. **`calendar.events.owned` write, ICS feed, and Google verification approved 2026-09-29** (project `208762156520` / `my-apps-490005`; that scope only — new scopes need their own verification). Legacy connect stub [`da93ab78`](https://github.com/Arangarx/tutoring-notes/commit/da93ab78) was superseded by the calendar wave (scopes already narrowed). Native schedule CRUD **shipped** ([`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216)).
 
-**Supersedes 2026-08-14 bundled-stub strategy:** Google rejected prior submission 2026-09-11 (`calendar.readonly` / `calendar.events` — demo did not justify scopes). Real `calendar.events.owned` write + ICS feed shipped. **Resubmit sent 2026-09-26 (Andrew):** consent-screen scopes are `gmail.send`, `userinfo.email`, and `calendar.events.owned`; demo video updated on the console; reply sent on the existing rejection thread. **Approved 2026-09-29** for `.../auth/calendar.events.owned` only (project `208762156520`, Project ID `my-apps-490005`). Google’s email: a new scope or a consent-screen change needs a new verification; this approval does not cover other sensitive or restricted scopes. Apple-primary tutors: **ICS feed**; CalDAV two-way stays deferred.
+**Remaining #1 work:** Apple ICS hardware follow-up; Andrew Google Cloud Console hygiene in [`docs/handoff/ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md). Canonical plan: [`docs/handoff/CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md).
 
-**Andrew (Google Cloud Console — no code):** [`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md) — check **OAuth Clients first** (Sign-In vs Gmail vs Calendar blast radius; `gmail.send` verified 2026-05-30), then Verification Center, Audience, Branding. Calendar API **enabled** (confirmed 2026-09-11). `calendar.events.owned` available in scope picker.
-
-**Our code:** Sign-In **DONE** ([`122bf761`](https://github.com/Arangarx/tutoring-notes/commit/122bf761)). Legacy connect+stub **DONE** ([`da93ab78`](https://github.com/Arangarx/tutoring-notes/commit/da93ab78)) — to be replaced/narrowed in calendar wave. Native schedule CRUD **DONE** ([`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216)).
-
-**Follow-ups (non-blocking):** shared Gmail/Calendar OAuth helper; tag `calendar-oauth-connect.spec.ts`; schedule sync badge honesty after write ships.
-
-**Optional follow-ups (non-blocking, from Sign-In verify):** update `login.png` visual baseline; Playwright DOM-order assert (Mortensen notice above button); negative test when Google env unset; pre-existing login `page-has-heading-one` a11y.
+**Optional polish (non-blocking):** shared Gmail/Calendar OAuth helper; tag `calendar-oauth-connect.spec.ts`; schedule sync badge honesty — write has shipped; badges covered by `tests/integration/calendar-sync-badge.spec.ts`. Optional Sign-In verify follow-ups: update `login.png` visual baseline; Playwright DOM-order assert; negative test when Google env unset; pre-existing login `page-has-heading-one` a11y.
 
 ### Non-negotiable standards (no exceptions without Andrew's explicit documented waiver — agents may NEVER self-authorize)
 
@@ -134,7 +124,6 @@ Sign-In UI + self-serve auth slices **shipped on `master`**. **Remaining #1 work
 
 ### Triage corrections (Andrew 2026-07-10, on the swing-item review)
 
-- **WS-M** (two-device: tutor hears student) — **RESOLVED**, working for a while. Close; drop from MAYBE.
 - **DEVICE-PICKER-DEDUPE / mobile Back-Front** — **best-effort; do NOT delay release** over it. Stays MAYBE, non-blocking.
 - **Share/copy-link silent clipboard failure** — likely **fixed/moot**; VERIFY then close.
 - **ST-05 laser** — bidirectional works; remaining is **color review only** (WB-LASER-ICON-CONTRAST), not functionality.
@@ -204,11 +193,10 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Gate A6** — replay fidelity + AV/timer sync comprehensive pass (§1)
 - **Hide replay must pause audio** —  (§4)
 - **In-person waiting-room consent projection (Plan #2)** —  (§4)
-- **PDF cross-page stroke bleed (regression)** —  (§4)
+- **PDF cross-page stroke bleed / WB-STROKE-BLEED (verify/watch)** —  (§4)
 - **Replay scrub drag** — 429s + frozen scene (§4)
 - **SMOKE-BLOCK-5** — solo/in-person stroke capture in armed window (§4)
 - **SMOKE-UX-1** — replay auto-play jumps to scrubber end (§1)
-- **SSG-2 / PRESARAH-2** — student-detail End → End-and-review (no silent data loss) (§1)
 - **SSG-3 / A6-1** — multi-segment replay scrubber + proportional seek (§1)
 - **Student canvas file sync (images/PDF)** —  (§4)
 - **Student canvas stuck on "Loading scene…"** —  (§4)
@@ -256,17 +244,13 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 
 #### Auth, identity & security
 
-- **Account-takeover defense (1/3) email-confirmation signup** —  (§6)
 - **Account-takeover defense (2/3) notify-on-password-reset** —  (§6)
 - **Account-takeover gap on existing-email signup** —  (§6)
 - **Email-infrastructure prerequisite (Resend on usemynk.com)** —  (§6)
 - **Gate B2** — parent privacy consent lattice + management UI (§6)
-- **Join denial UX** — **DONE** 2026-08-14 ([`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)): authenticated wrong AH → `/account/not-my-session`; child non-participant still 404 (G6).
 - **npm audit Tier B (SHOULD-FIX-4)** —  (§6)
-- **SEC — /api/test/whiteboard/* gate hardening** — **DONE** 2026-08-14 ([`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095)): `guardPlaywrightTestRoute` hard-404s in production even if `PLAYWRIGHT_TEST=1`.
-- **SEC — tutor-asset/route.ts any-origin blob URL** — **DONE** 2026-08-14 ([`0252a889`](https://github.com/Arangarx/tutoring-notes/commit/0252a889)): `isBlobUrlForSession` pins origin via `isAllowedBlobUrl` (all three wb-asset proxies).
-- **SMOKE-PRIV-1** — learner sign-out leaves parent session on shared device — **DONE** 2026-08-14 ([`4bc96cfb`](https://github.com/Arangarx/tutoring-notes/commit/4bc96cfb)): learner logout revokes + clears AH session when both cookies present.
-- **VERIFY-ACCT-1** — duplicate-account creation block — **DONE** 2026-08-14 ([`2fff57b7`](https://github.com/Arangarx/tutoring-notes/commit/2fff57b7)). Google OAuth cross-realm round-trip remains PLAYWRIGHT-GAP (Jest surrogate).
+- **SEC — /api/test/whiteboard/* gate hardening** — Core shipped [`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095). Remainder: pin empty `PLAYWRIGHT_TEST_SECRET` in prod (§6).
+- **VERIFY-ACCT-1** — Core shipped [`2fff57b7`](https://github.com/Arangarx/tutoring-notes/commit/2fff57b7). Remainder: Google OAuth cross-realm round-trip PLAYWRIGHT-GAP (Jest surrogate exists) (§6).
 - **WB-ADULT-JOIN-ENABLEMENT B2-signup / B3 / B4** —  (§6)
 - **WB-PARENT-JOIN-AS-CHILD** — parent_session_select picker (§6)
 
@@ -406,13 +390,10 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **WB-REVIEW-DELETE-COPY** —  (§4)
 - **WB-REVIEW-THUMBNAIL-PDF** —  (§4)
 - **WB-SHARE-REPLAY-VIEWPORT-PHONE** —  (§4)
-- **WB-STROKE-BLEED** —  (§2)
-- **WB-STROKE-BLEED watch** —  (§4)
 - **WB-STUDENT-BOARD-TABS** —  (§4)
 - **WB-STUDENT-VIEW-LOCK-WHEN-SYNCED** —  (§4)
 - **wb-tab-kill-audio-durability ×2** — empty tutor:mic segments (§1)
 - **WB-TUTOR-REPLAY-PHONE-LAYOUT** —  (§4)
-- **Whiteboard session audio wire** —  (§4)
 - **Whiteboard undo touch + visible button** —  (§13)
 - **Workspace SSR 500** —  (§13)
 - **WS-U 1.4** — empty review screen copy (§4)
@@ -426,7 +407,6 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Mic hot-plug requires hard refresh (B1-B4 smoke)** —  (§8)
 - **Slow first peer connect** —  (§3)
 - **SMOKE-BUG-11** — tutor mic picker not initialized from tn-mic-device-id (§8)
-- **WS-M** — two-device hardware smoke (tutor hears student) (§3)
 
 #### Consent, COPPA & erasure
 
@@ -465,7 +445,6 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **PLAYWRIGHT-GAP** — /join #k= fragment preservation (§6)
 - **SEC-1 R3** — cross-preview impersonation SSO (§6)
 - **Signup waitlist pagination + Google OAuth auto-provision** —  (§6)
-- **Signup waitlist REJECTED + revocation UI** —  (§6)
 - **WB-FLAKE-JOIN-STALECOOKIE** —  (§6)
 - **WB-JOIN-LEARNER-SESSION-PERSISTENCE** —  (§6)
 
@@ -474,7 +453,6 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **DESIGN-SYSTEM-GALLERY** — `/admin/design-system` platform-maintainer-only component gallery (Andrew 2026-07-27). See Release priorities § QUEUED. Enables eyeball without full-site hunting. (§7)
 - **2FA inline verify-at-login** —  (§7)
 - **ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER** —  (§7)
-- **ADMIN-STUDENT-DETAIL-MOBILE-ICONS** —  (§7)
 - **Cohesive pass open questions** —  (§7)
 - **Component-duplication + @layer base CSS cleanup** —  (§7)
 - **dark: → semantic token migration** —  (§7)
@@ -495,7 +473,6 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **MarketingHeader inline styles → primitives** —  (§7)
 - **Missing primitives** —  (§7)
 - **Mobile color palette dismiss I7** —  (§7)
-- **Parent consent editor save wiring** —  (§7)
 - **Parent dashboard Manage button alignment** —  (§7)
 - **Part 3 student Sign out in top-bar ⋯** —  (§7)
 - **Password fields show/hide toggle** —  (§7)
@@ -575,9 +552,9 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 | **§12 Org/university** | 10 | BYU / institutional pitch track separate from Sarah solo story, Stripe / subscription billing, Operator dashboard scaffolding, University department pitch infrastructure, Wyzant + UVU export formatters, Org-aware billing rounding, … |
 | **§13 Strategy/pilot** | 6 | Homework image import workflow, Rethink claim-screen layout, Self-service account deletion, Replay speaker indication, Collapse DRAFT/READY/SENT, Auto-email scheduling |
 | **§14 Deferred/someday** | 13 | WB-SCREEN-WAKE-LOCK / WB-THUMBNAIL-GRAPH / WB-OLD-PHONE-PERF, WB-GRAPH-PLACEHOLDER, WB-ENDSESSION-THUMBNAIL-TABS, Desmos live-state capture Phase 1.5, Debounced-disconnect pause trigger confirm, Engagement/dopamine surfaces, … |
-| **§2 Post-cut cleanup & WATCH** | 2 | MASTER-CUT-2026-07-09, NOTES-QUALITY-HOLD-DETAIL |
+| **§2 Post-cut cleanup & WATCH** | 1 | NOTES-QUALITY-HOLD-DETAIL (waived ledgers → [`docs/SHIPPED.md`](SHIPPED.md)) |
 | **§3 Recorder re-arch & scale** | 11 | Wire-level mute coordination, Remote video track recording, SFU for N>5 peers, Large-mesh CPU profiling, Tier 2 transcribe queue / VAD background job, Speaker diarization (Phase 6 task 6), … |
-| **§4 WB enhancements** | 25 | WB-LEGACY-STUDENT-CLIENT-DELETE, Laser pointer in replay, Student tab crash, Measure wire bandwidth on real session, GitHub Actions wb-regression workflow, relayShowsCollaborator copy parity, … |
+| **§4 WB enhancements** | 25 | Laser pointer in replay, Student tab crash, Measure wire bandwidth on real session, GitHub Actions wb-regression workflow, relayShowsCollaborator copy parity, … |
 | **§5 Notes/GTM someday** | 4 | Formal eval harness + flywheel, AI edit signal Phase 1, CONTINUITY-V1-CARRYOVER, MAP-ACC |
 | **§6 Consent/auth P3** | 28 | allowMessaging / allowVideoRecording when features ship, Child-facing ConsentRestriction UI, CONSENT-UX-REDESIGN / save-on-toggle, Mid-session learner swap (Phase 3), 90-day unclaimed-real-student sunset, Mid-session consent-change poll, … |
 | **§7 UX P3 & strategic** | 13 | T9, T10, Consent floor-block checkbox contrast, BG2, Impersonation pip clarity, Video tile docking (SR-04 follow-up), … |
@@ -590,12 +567,12 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 
 ## 1. NOW / Sarah-facing
 
-Hotlist: P0/P1 items affecting the live pilot. Post-cut REAL-FAIL cluster at end.
+Hotlist: P0/P1 items affecting the live pilot.
 
 ### Recording & session lifecycle
 
 **[P0][REC] SMOKE-AUDIO-1 — first-acquire mic silent until switch-and-back**  
-Hardware PASS on attempt #4 (`3468262d`); **VERIFY** on Sarah Brio path. Residual: cold-start camera picker empty for several seconds — see **WB-WTR-DEVICE-LOADING**. Playwright surrogate + silent-RMS oracle; full fix = unify acquire path (`audio-capture-policy` / `useLiveAV`). [automated partial: `wb-tutor-recording-mute.spec.ts`]
+Remainder: Sarah Brio hardware VERIFY; cold-start picker **WB-WTR-DEVICE-LOADING**. Merge [`3468262d`](https://github.com/Arangarx/tutoring-notes/commit/3468262d) shipped.
 
 **[P0][NOTES] SMOKE-NOTES-1 — post-End shimmer; form must stay visible**  
 REOPEN @ `3cffbb7`. Prior hide-the-form regression. Spec: all fields visible with per-field shimmer; placeholder only on empty fields. Playwright-to-spec required. Cross-ref **WB-NOTES-SKELETON** (historical).
@@ -607,12 +584,12 @@ REOPEN on hardware; green Jest did not catch. Independent oracle: scrubber posit
 Master-cut #11: post-resume segment only in transcribed notes. WS-N landed partial durability; full pre-kill segment assembly still open.
 
 **[P1][REC] SMOKE-END-WINDDOWN — disarm board + immediate student wind-down on End**  
-Andrew decided 2026-07-09; merged `e58e0826` / `69eacbf6`. **VERIFY** on hardware: `wb-end-winddown.spec.ts` `@wb-presence` `@wb-recording`. PERF-1 snapshot de-await deferred.
+Remainder: hardware VERIFY; PERF-1 snapshot de-await. Merges [`e58e0826`](https://github.com/Arangarx/tutoring-notes/commit/e58e0826) / [`69eacbf6`](https://github.com/Arangarx/tutoring-notes/commit/69eacbf6) shipped.
 
 **[P1][AV] SMOKE-BLOCK-1 — reachability under-reports connected peer (Start dead)**  
 Still open on `master`. Start enables only when `reachableParticipants` is at least 1, and a peer counts only when both `peerConnectionState === "connected"` and ICE is `connected` or `completed`. Safari can leave the overall connection on `connecting` while ICE is already up, so the count stays 0 and Start stays disabled. The A/V-required gate is correct. The bug is a false zero. Cross-ref **BUG-8** on reconnect.
 
-`wb-av-reachability-detection-fix` @ `a962171` was deleted 2026-10-01. Do not revive it. Andrew's July 3 Android smoke did not reproduce the dead Start button. Reconnect got worse: board and laser recovered, audio and video did not, and the timer stayed paused. Notes: [`presarah-batch-resmoke-smokebook-2026-07-03.md`](archive/handoff/presarah-batch-resmoke-smokebook-2026-07-03.md) item B1.
+Andrew's July 3 Android smoke did not reproduce the dead Start button. Reconnect got worse: board and laser recovered, audio and video did not, and the timer stayed paused. Notes: [`presarah-batch-resmoke-smokebook-2026-07-03.md`](archive/handoff/presarah-batch-resmoke-smokebook-2026-07-03.md) item B1.
 
 **[P1][AV] BUG-8 — reconnect media transport not rebuilt after peer leave/rejoin**  
 FRAGILE — `peer-mesh.ts` / `useLiveAV.ts`. Pre-existing; surfaced 2026-07-03 re-smoke. Plan + hardware validation before merge.
@@ -621,10 +598,10 @@ FRAGILE — `peer-mesh.ts` / `useLiveAV.ts`. Pre-existing; surfaced 2026-07-03 r
 Same fragile surface as BUG-8. Deferred pending plan.
 
 **[P1][CONSENT] CLIENT-AUDIO-CONSENT-GATE — client consent projection completeness**  
-Block B **base shipped** (`audio-capture-policy.ts`, mode-aware server audio, banners). **OPEN:** shallow client enforcement on upload/IDB/transcription paths; per-speaker lane extension (**p3-consent-recording**). Verify `enqueueChunkTranscriptionAction` gates before calling Sarah blocker closed.
+Remainder: shallow client gates on upload/IDB/transcription and per-speaker **p3-consent-recording**.
 
 **[P1][REC] PRESARAH-1 — always-on recording; remove recording-intent toggles**  
-Locked decision. `userWantsRecording` + `StudentRecordingDefaultToggle` still in tree; gate on `phaseActive && audioCapturePolicy`. Fragile FSM surface — Sonnet 5-axis on diff.
+`StudentRecordingDefaultToggle` is gone. Remainder: `userWantsRecording` still in `WhiteboardWorkspaceClient.tsx`. Fragile FSM surface — Sonnet 5-axis on diff.
 
 **[P1][REC] WS-N5 — resume FSM `armed` window drops stroke capture after reopen**  
 On reopen FSM re-enters `armed` → `wbCaptureActive` false. Related to solo/in-person stroke gap; distinct from audio-only fix.
@@ -633,13 +610,10 @@ On reopen FSM re-enters `armed` → `wbCaptureActive` false. Related to solo/in-
 Map/reduce accuracy + abstain path. Prompt @ `cefc5cd` PASS for teaching; refinement flagged. Cross-ref **MAP-ACC** (#1 post-master).
 
 **[P1][WB] Gate A5 — live bidirectional sync completeness audit**  
-Enumerated bidirectional pass: strokes, shapes, text, eraser, move, pages, PDF, math, graph, undo, assets, **ST-05 laser verify**. Partial: `whiteboard-live-sync-regression.spec.ts` inv 1–12. **Laser wire shipped** (`broadcastPointer`, `useCollaboratorPointers`) — remaining work = hardware verify + color/visibility (**WB-LASER-ICON-CONTRAST**), not "never built."
+Remainder: full enumerated audit; ST-05 hardware verify and **WB-LASER-ICON-CONTRAST**. Laser wire shipped.
 
 **[P1][WB] Gate A6 — replay fidelity + AV/timer sync comprehensive pass**  
 Partial tests exist; enumerated completion still open. Cross-ref **SMOKE-UX-1**, **SSG-3**.
-
-**[P1][AUTH] SMOKE-PRIV-1 — learner sign-out leaves parent session on shared device**  
-**DONE** 2026-08-14 ([`4bc96cfb`](https://github.com/Arangarx/tutoring-notes/commit/4bc96cfb)): `POST /api/auth/learner/logout` revokes + clears `mynk_ah_session` when present. Jest + Playwright identity-e2e.
 
 **[P1][LEGAL] SEC-POLICY-TRUTH — retention lifecycle enforcement**  
 Interim honest copy on `/privacy` (PASS recheck); no enforcing cron / account-closed state modeled. Do not claim fixed retention on `master` until built.
@@ -659,53 +633,17 @@ Not run in master-cut smokebook.
 **[P1][TEST] iOS matrix S1–S14 — real hardware unfilled**  
 [`docs/PHASE-2-IOS-SMOKE-MATRIX.md`](PHASE-2-IOS-SMOKE-MATRIX.md) all rows empty. S3/S4/S7 dispositive on Sarah iPhone.
 
-**[P0][WB] SSG-2 / PRESARAH-2 — student-detail End → End-and-review (no silent data loss)**  
-`ActiveWhiteboardSessionsList` must offer Resume / End and review / Cancel and delete; no silent `endStaleWhiteboardSession` orphan path. In-session End copy reverted to "End session" (distinct surface).
-
 **[P1][WB] SSG-3 / A6-1 — multi-segment replay scrubber + proportional seek**  
 DEFERRED post-Sarah per deferral ledger; still REAL-FAIL cluster. Partial: `replay-audio-timeline.ts`, WS-L. **WS-G** concat may unblock clean end-state.
 
 **[P1][REC] Ship-to-Sarah gate checklist (Andrew confirms)**  
 Proposed gates a–d: End never silent-deletes; replay scrubber; monolithic notes path retired; waiting→WB→end stable. **PENDING** ratification ([`sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md)).
 
-### Post-cut REAL-FAIL cluster (active cleanup)
-
-**[P1][REC] recording-end-to-end — review auto-start from 0**  
-Waived at cut; overlaps **SMOKE-UX-1**, **WB-REPLAY-REOPEN-START-AT-0**.
-
-**[P1][REC] recording-resilience — SessionRecording rows after reopen**  
-Waived at cut.
-
-**[P1][WB] wb-replay-scrub-seek ×3**  
-Waived at cut; scrub drag 429 + frozen scene (**Replay scrub drag** row in §4).
-
-**[P1][WB] view-whiteboard-new-replay — parent share strict-mode locator**  
-Waived at cut.
-
-**[P1][WB] wb-tab-kill-audio-durability ×2 — empty tutor:mic segments**  
-Likely harness; waived at cut.
-
 ---
 
 ## 2. Post-master-cut cleanup (2026-07-09)
 
-**[WAIVED] MASTER-CUT-2026-07-09 — Andrew waived red `test:wb-sync` for Sarah delivery**  
-Merge `v1-redesign` → `master` @ `1c07b5ba` (~22:39 MT). **Green:** `next build`, `test:regression` (117). **Red (isolation):** 9 REAL-FAIL + 2 ENV-FLAKE — triage as cleanup, not Sarah blockers.
-
-| # | Spec | Issue |
-|---|------|-------|
-| 1 | `recording-end-to-end` | Review auto-start from 0 |
-| 2 | `recording-resilience` | SessionRecording rows after reopen |
-| 3–5 | `wb-replay-scrub-seek` ×3 | Scrub seek failures |
-| 6 | `view-whiteboard-new-replay` | Share locator strict-mode ×4 |
-| 7 | `wb-cancel-pending-session` | cancel→B copy link (Andrew smoke PASS) |
-| 8–9 | `wb-tab-kill-audio-durability` ×2 | Empty tutor:mic segments (harness suspect) |
-| ENV | cam-off initials tile; cancel→roster URL | Flakes |
-
-**[WAIVED] AUTH-SHIP-READY-2026-09-15 — Andrew: pre-existing `test:wb-sync` cluster; move on (do not re-triage as this branch)**  
-Auth ship-ready merged to `master` [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca); merge gates 2026-09-12: `next build` exit 0; `test:regression` 149/149; `test:wb-sync` isolation **8 REAL-FAIL + 3 ENV-FLAKE**. Auth diff does not touch recorder/A/V/whiteboard apply-path or these specs. Andrew 2026-09-15: treat as the MASTER-CUT-2026-07-09 cluster; **do not block this merge**; successor orchestrator must still *know* they are red (canonical list in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD). Classification: replay auto-start + scrub-seek ×3 = leftover **product** (SMOKE-UX-1 / scrub drag); tab-kill ×2, cancel-PENDING copy-link (smoke PASS), parent-share locator = **harness**; wave5 polish ×2 + recording-resilience = **ENV-FLAKE**. Does not authorize skipping `test:wb-sync` on unrelated future branches.
-
-**Product knowns waived with cut:** reopen-at-0 (**WB-REPLAY-REOPEN-START-AT-0**), share PDF placeholders (**WB-REPLAY-PDF-PLACEHOLDER**), **WB-WTR-DEVICE-LOADING**.
+Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
 
 **[WATCH] WB-PDF-BLOB-TOKEN** — multi-page PDF import partial fail. Merged `bed79060`; 4-attempt backoff. Watch-only.
 
@@ -774,10 +712,7 @@ Written at enqueue from `Date.now()` vs segment start.
 Blob lost on navigation after retry exhaustion. W1 Ship B.
 
 **[P1][AV] WS-I-PRESTART-MUTE — tutor mute before audio graph arms**  
-**VERIFY shipped:** `WbTopBarMicControl.tsx:65-68` mute-before-acquire; `wb-tutor-recording-mute.spec.ts`. Close backlog row after gate green.
-
-**[P1][AV] WS-M — two-device hardware smoke (tutor hears student)**  
-`createMicPublishGraph` shipped; real two-device smoke before declaring done.
+Remainder: close after gate is green. Implementation shipped (`WbTopBarMicControl`, `wb-tutor-recording-mute.spec.ts`).
 
 **[P2][REC] In-progress segment IDB on crash (reliability #1)**  
 Workspace draft store shipped (Ship A); in-progress `MediaRecorder` chunks still memory-only.
@@ -889,7 +824,7 @@ Session-level idle auto-end / cost guard.
 
 ### Shipped (reference — do not re-open)
 
-Phase 1b outbox + atomic end-session · Phase 1c snapshot · Phase 4a–4d live A/V · gapless rollover B5 · Tier 1 parallel transcribe · recording re-arch Phase 1 core · audio consolidation ffmpeg · W1 Ship A workspace draft · per-chunk map extraction · VAD segment-policy · `session-clock.ts` p3-clock · per-speaker A/B/C (`useRemoteMicRecorders`, worker-driven `transcriptionOnly` enqueue) · WS-N N1–N3 · WS-L scrubber partial · IN_PERSON audio without peer (`wb-in-person-audio-start.spec.ts`) · WS-F waiting-room exit · WS-J billable rounding UI · WS-P deploy freshness · tab-kill N4 gate/roster finalize.
+Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
 
 ---
 
@@ -904,19 +839,19 @@ Phase 1b outbox + atomic end-session · Phase 1c snapshot · Phase 4a–4d live 
 Intermittent "IDB object store not found"; `wb-review-overlay-3paths.spec.ts` fixme.
 
 **[P1][WB] SMOKE-BLOCK-5 — solo/in-person stroke capture in armed window**  
-**Audio + inPersonMode shipped** (`wb-in-person-audio-start.spec.ts`). **OPEN:** FSM `armed/awaiting_first_participant` → `wbCaptureActive` false → empty event log when no remote peer. Fix: `everHadSessionActivity` / WS-N5 family.
+Remainder: FSM `armed` / `wbCaptureActive` false (WS-N5 family). Audio + inPersonMode shipped.
 
 **[P2][WB] SMOKE-BUG-10 — in-person "waiting for student" banner**  
 `sessionMode` not consulted for banner copy. `derivePresentation` partial.
 
 **[P1][WB] Ghost viewport bounds overlay (VP-01 / SMOKE-POST-1)**  
-Label-only stub (`wb-ghost-viewport-label`); bounds geometry deferred. Pre-release required.
+Label-only stub (`wb-ghost-viewport-label`); bounds geometry deferred. Pre-release required. Andrew 2026-10-05: this is the ghost-box note from the Sarah review. Do not open a second copy. Same QoL family as the live cursor (hide after about five seconds still), which is a separate build.
 
 **[P1][WB] ST-05 / WB-LASER-ICON-CONTRAST — laser colors + bidirectional visibility**  
-**Wire shipped** (`broadcastPointer`, `useCollaboratorPointers`). **VERIFY** per-role colors on hardware; tutor blue / student red asymmetry.
+Remainder: per-role color/visibility hardware verify. Wire shipped.
 
-**[P1][WB] PDF cross-page stroke bleed (regression)**  
-Post-PDF-import strokes on wrong board; "solved twice" per Andrew.
+**[P1][WB] PDF cross-page stroke bleed / WB-STROKE-BLEED (verify/watch)**  
+E5/WS-X fixes ([`b8f786c8`](https://github.com/Arangarx/tutoring-notes/commit/b8f786c8), [`34f650a4`](https://github.com/Arangarx/tutoring-notes/commit/34f650a4), [`ef5fb1a0`](https://github.com/Arangarx/tutoring-notes/commit/ef5fb1a0)); keep §2 WATCH regression gate and Playwright coverage. Monitor on hardware; Andrew evening did not repro post-E5.
 
 **[P1][WB] Student Exit → rejoin presence desync**  
 Tutor shows disconnected after student rejoins.
@@ -953,9 +888,6 @@ Popover-only today.
 
 **[P2][WB] WB-IMAGE-IMPORTER — image insert missing**  
 Unify smoke regression.
-
-**[P2][WB] WB-STROKE-BLEED watch**  
-E5 merged; keep regression gate.
 
 **[P2][WB] WB-HAND-TOOL-MISSING (NR-01)**  
 Hand/pan discoverable on student shell.
@@ -1012,7 +944,7 @@ Deferred post-Sarah.
 Play/Pause overlaps Board tab.
 
 **[P2][WB] Freedraw latency PR-01**  
-Option A+E shipped; watch on hardware.
+Remainder: watch on hardware. Option A+E shipped.
 
 **[P2][WB] Student dark-theme canvas background stuck white**  
 `viewBackgroundColor` not synced on theme return.
@@ -1034,9 +966,6 @@ Excalidraw IDB vs app checkpoints.
 
 **[P2][WB] Excalidraw recovery "Load draft" popup**  
 Suppress or single restore story.
-
-**[P2][WB] Whiteboard session audio wire**  
-Strokes-only workspace path (legacy row — verify if superseded by live session).
 
 **[P2][WB] Snapshot multi-page coverage**  
 Single-page snapshot only.
@@ -1083,11 +1012,11 @@ Menu dismiss falls through to canvas.
 **[P2][WB] WB-COMPONENTS-PASS**  
 Unified `WbTopBar`; kill `whiteboard-chrome.css` monolith.
 
-**[P2][WB] WB-LEGACY-STUDENT-CLIENT-DELETE**  
-✅ DONE — unified shell.
-
 **[P2][WB] Graph JSXGraph swap follow-ups**  
-Desmos removal when complete.
+Remainder: legacy Desmos read-only cleanup in `excalidraw-adapter.ts`, not a fresh swap.
+
+**[P3][WB] Graph smart framing**  
+Andrew 2026-10-05, split out of the Sarah zoom note. A new graph opens on −10 to 10 (`DEFAULT_GRAPH_BBOX`). Later: choose a window from the shape of the curve instead of that fixed box. Not part of the `y=` / `2x+1` expression-box change.
 
 **[P2][WB] p3-video-seam**  
 Per-participant video finalize/replay — capture NOT built.
@@ -1155,7 +1084,7 @@ Collab essay, code, Office, Wolfram — gated on Sarah 3-session demo ([`docs/WH
 ### Waiting room & session shell
 
 **[VERIFY][WB] Gate A2 — waiting room**  
-**SHIPPED:** `WaitingRoomOverlay.tsx`, `sessionPhase` PENDING→ACTIVE, `wtr` logs. Functional wiring beyond visual = verify against Gate A2 acceptance. In-person consent projection Plan #2 still open.
+Remainder: acceptance verify; Plan #2 in-person consent projection. Overlay shipped.
 
 **[P2][WB] Gate A3 — Pass-2 in-context end-session / review shell**  
 `SessionReviewMode.tsx` still legacy `.card`. Shell flip architecture shipped partially.
@@ -1188,7 +1117,7 @@ Desktop + student mobile.
 Pre-master; `useExcalidrawThemeFromSystem` → app theme.
 
 **[P3][WB] SMOKE-POST-2 — in-app text chat**  
-Waiting room + live session.
+Waiting room + live session. Andrew 2026-10-05: yes, add it, collapsed until opened, as a convenience. It must not bypass billable time. Do not change Start, the timer, or when the board is usable. This is the only chat row.
 
 **[P3][WB] SMOKE-POST-3 — tutor "Start anyway" degraded mode**  
 After SMOKE-BLOCK-1 fix.
@@ -1217,7 +1146,7 @@ Hero thumbnail placeholder for PDF boards.
 Notes eat half screen on tutor phone replay.
 
 **[P2][WB] WB-SHARE-REPLAY-VIEWPORT-PHONE**  
-✅ MERGED `8a6ab878`; verify share path.
+Remainder: verify share path. Merged [`8a6ab878`](https://github.com/Arangarx/tutoring-notes/commit/8a6ab878).
 
 **[P2][WB] Replay pause→hide→reopen state**  
 Should resume scrub position.
@@ -1254,7 +1183,7 @@ Perceived perf.
 ## 5. Notes & AI quality
 
 **[P1][NOTES] Map/reduce accuracy + abstain-on-low-content + eval harness**  
-Pre-merge quality bar; formal eval harness deferred post-master (#1 follow-up). `ai-models.ts` + prompts shipped.
+Remainder: formal eval harness and abstain bar. Prompts/models exist.
 
 **[P1][NOTES] WS-K — see §3** (incremental reduce + End latency).
 
@@ -1262,7 +1191,7 @@ Pre-merge quality bar; formal eval harness deferred post-master (#1 follow-up). 
 DEFERRED post-Sarah. Incremental reduce + live surface; distinct from WS-K End fast-path.
 
 **[P2][NOTES] AI prompt v7 remainder**  
-(a) input reframe as Whisper transcript; (c) speaker-inference hint; fixture suite. Core reaction-aware Assessment shipped `2026-05-20-v7`.
+Keep (a) Whisper reframe, (c) speaker hint, fixture suite. v7 itself shipped.
 
 **[P2][NOTES] AI prompt — literal vs interpretive Assessment**  
 Gated on Sarah/parent feedback or fixture suite.
@@ -1337,10 +1266,10 @@ Deferral ledger; prompt fix landed — recheck PASS.
 ### Consent collection & enforcement
 
 **[P0][CONSENT] CONSENT-COLLECTION-COMPLETENESS (CC-1/CC-2)**  
-**Largely shipped:** `assertConsentRecordExists`, claim decline path, tests. **VERIFY** Playwright e2e gaps (**CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE**).
+Remainder: Playwright gap **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE**.
 
 **[P1][CONSENT] CONSENT-HONESTY-SARAH-MERGE-BLOCKER**  
-**Largely shipped:** `consent-toggle-copy.ts`, hidden dead toggles. Andrew legal comfort sign-off on modal removal may still be open.
+Remainder: Andrew legal sign-off on modal removal.
 
 **[P1][CONSENT] createChildLearnerAction — no ConsentRecord at create**  
 Learner exists before parent visits consent editor.
@@ -1370,10 +1299,10 @@ Read-only `ConsentRecord` on student detail + scheduler chip.
 Pre-CC-1 sessions; verify end-path fail-closed.
 
 **[P2][CONSENT] LIVE-SESSION-CONSENT-COPY**  
-Honest `allowLiveSession` copy — shipped in `consent-toggle-copy.ts`; verify.
+Remainder: verify on hardware if needed. Copy module shipped.
 
 **[P2][CONSENT] LIVE-SESSION-START-AFFORDANCE**  
-From the June 18 waiting-room plan (`docs/phase3-consent-model`, branch deleted 2026-09-30). If `allowLiveSession` is false, do not render the create/start control. The server already rejects the click ("Live sessions are not permitted under the parent's current privacy preferences."). The button still shows, and the tutor only learns that after clicking. The waiting room does not edit consent. Recording is a separate shipped policy: declined audio on a live session is `tutor_only`, not a hidden tutor control.
+If `allowLiveSession` is false, hide Start (server already rejects). **OPEN UI bug:** Start still shows; tutor learns only after click. Waiting room does not edit consent.
 
 **[P2][CONSENT] WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME**  
 `allowNoteSending` not email privacy gate; manual tutor email ungated interim.
@@ -1398,9 +1327,6 @@ Defer unless Sarah asks.
 
 **[P3][CONSENT] Orphaned IDB audio admin re-register**  
 Post-consent admin path.
-
-**[P3][CONSENT] INTERIM MASTER GATE captureAttestationAt**  
-Never built; superseded by CC-1/CC-2.
 
 **[P3][CONSENT] H-1/H-2 canvas carry-forward on swap**  
 Product decisions.
@@ -1464,16 +1390,13 @@ Spike: not COPPA-mandated; optional hardening.
 Schema shipped; B2-AC-1/2 per-tutor re-consent at claim. Parent editor shipped (`saveParentConsentAction`).
 
 **[P1][AUTH] WB-ADULT-JOIN-ENABLEMENT B2-signup / B3 / B4**  
-B1 won't-fix. B2-signup `isSelfLearner`; B3 child-only claim PIN; B4 parent→self-learner toggle.
+B1 won't-fix. B2-signup `isSelfLearner`; B3 child-only claim PIN (Andrew 2026-10-05: self learner/parent is email login only; the username and PIN card is for a child learner). B4 parent→self-learner toggle.
 
 **[P1][AUTH] WB-PARENT-JOIN-AS-CHILD — parent_session_select picker**  
 Interim `ParentJoinGapCallout` shipped.
 
-**[P1][AUTH] Join denial UX — authenticated wrong principal gets bare 404**  
-**DONE** 2026-08-14 ([`647aaf24`](https://github.com/Arangarx/tutoring-notes/commit/647aaf24)): shared `AccountAccessDenialPage`; join wrong-AH → `/account/not-my-session`. Child non-participant still fail-closed 404.
-
 **[P1][AUTH] VERIFY-ACCT-1 — duplicate-account creation block**  
-**DONE** 2026-08-14 ([`2fff57b7`](https://github.com/Arangarx/tutoring-notes/commit/2fff57b7)): shared `findEmailRealmPresence` blocks cross-realm signup (tutor credentials, parent API, Google tutor provision with signup-intent, `/setup` bootstrap). Google OAuth cross-realm round-trip remains **PLAYWRIGHT-GAP** (Jest surrogate).
+Core shipped [`2fff57b7`](https://github.com/Arangarx/tutoring-notes/commit/2fff57b7). Remainder: Google OAuth cross-realm round-trip PLAYWRIGHT-GAP (Jest surrogate exists).
 
 **[P2][AUTH] BL-RESET-DOMAIN — reset email respects originating host**  
 `getPublicBaseUrl` vs request Host.
@@ -1505,11 +1428,8 @@ Waiting-polish item 7.
 **[P2][AUTH] Claim flow: self-learner shouldn't see child PIN setup**  
 Adult self-learner claim UX.
 
-**[P2][AUTH] Signup waitlist REJECTED + revocation UI**  
-**DONE** 2026-08-14 ([`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111)): reject WAITLISTED→REJECTED (terminal); revoke APPROVED→WAITLISTED.
-
 **[P2][AUTH] Signup waitlist pagination + Google OAuth auto-provision**  
-Google signup → WAITLISTED **first chunk shipped** (`feat/google-signup-waitlisted`). Pagination + REJECTED UI still deferred.
+Remainder: pagination and any remaining REJECTED UI. First chunk shipped.
 
 **[P2][AUTH] BL-SIGNUP-SMTP-LEAK — signup error exposes env var names**  
 Minor info disclosure + poor UX on public `/signup`. Found 2026-09-17 (code inspection for Tyson external-tester packet; tutor-auth [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca); not live-reproduced — prod SMTP config unknown). When email+password signup cannot send confirmation mail, `signup` in `src/app/signup/actions.ts` deletes the new `AdminUser` (fail-closed) but returns the underlying error to the form; with SMTP unconfigured that is `platformSmtpMissingError()` from `src/lib/email.ts` — "Platform SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS." — rendered to anyone attempting signup. **Fix:** return the existing generic copy ("We couldn't send a confirmation email. Try again later, or contact support if this keeps happening.") and log the operator reason server-side. **Tests:** red/green Jest — action must never surface raw SMTP text ([`.cursor/rules/exhaustive-testing-mandate.mdc`](../.cursor/rules/exhaustive-testing-mandate.mdc)).
@@ -1554,7 +1474,7 @@ Hard-blocked today; needs step-up, audit, legal.
 Test-account UI, active-session list, env-only admin warning.
 
 **[P3][AUTH] Real email provider (P2b)**  
-SHIPPED on `master` ([`673c54f3`](https://github.com/Arangarx/tutoring-notes/commit/673c54f3) via [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca)) — parent/claim/2FA-OTP/operator mail uses `sendPlatformMail` (env SMTP). Live Resend + `usemynk.com` DNS + Vercel `SMTP_*` remain Andrew leftover ([`ANDREW-FOLLOW-UPS.md`](handoff/ANDREW-FOLLOW-UPS.md)).
+Code shipped [`673c54f3`](https://github.com/Arangarx/tutoring-notes/commit/673c54f3) (`sendPlatformMail`). Remainder: ops row (Resend/DNS/Vercel) — see Email-infrastructure prerequisite.
 
 **[P2][AUTH] Notes first-class authenticated chrome (P2-AC-12/13)**  
 `/s/*` wall shipped; full parent chrome integration deferred.
@@ -1565,7 +1485,7 @@ Ajax refresh parent block after claim.
 ### Gate B fast-follow
 
 **[P1][AUTH] Gate B1 — approval-gating / waitlist**  
-**Shipped** including REJECTED + revoke ([`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111)). Leftover: pagination, invite links.
+Remainder: pagination and invite links. Core waitlist shipped [`99da0111`](https://github.com/Arangarx/tutoring-notes/commit/99da0111).
 
 **[P2][AUTH] Gate B3 — security checks + final cleanups**  
 Tier B audit remainder.
@@ -1589,9 +1509,6 @@ Mitigations: email-confirmation signup, notify-on-reset.
 **[P2][AUTH] Email-infrastructure prerequisite (Resend on usemynk.com)**  
 Transactional sender for confirmation + reset notify.
 
-**[P2][AUTH] Account-takeover defense (1/3) email-confirmation signup**  
-`emailConfirmedAt`, token table.
-
 **[P2][AUTH] Account-takeover defense (2/3) notify-on-password-reset**  
 Inform existing holder.
 
@@ -1599,13 +1516,10 @@ Inform existing holder.
 Defense in depth.
 
 **[P2][AUTH] In-memory rate limiters → Neon**  
-`api:<ip>`, `setup:<ip>` remain. Learner PIN + auth + 2FA **shipped** durable.
-
-**[P2][SEC] SEC — tutor-asset/route.ts any-origin blob URL**  
-**DONE** 2026-08-14 ([`0252a889`](https://github.com/Arangarx/tutoring-notes/commit/0252a889)): origin pin in `isBlobUrlForSession` via `isAllowedBlobUrl`.
+Remainder: `api:<ip>` and `setup:<ip>`. Learner PIN/auth/2FA durable limiters shipped.
 
 **[P2][SEC] SEC — /api/test/whiteboard/* gate hardening**  
-**DONE** 2026-08-14 ([`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095)): production hard-404 via `guardPlaywrightTestRoute`. Optional leftover: pin empty `PLAYWRIGHT_TEST_SECRET` in prod env.
+Core shipped [`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095). Remainder: pin empty `PLAYWRIGHT_TEST_SECRET` in prod env.
 
 **[P3][LEGAL] Phase 10-pre external pen-test**  
 Before first paying customer.
@@ -1664,9 +1578,6 @@ Group A follow-up.
 **[P2][UX] PreSessionPanel / StartWhiteboardSession mock alignment**  
 PARTIAL vs mock.
 
-**[P2][UX] Parent consent editor save wiring**  
-**Shipped** `saveParentConsentAction` — morning status visual-only note obsolete.
-
 **[P2][UX] Scheduler Group F visual-only**  
 See §11 Scheduling.
 
@@ -1707,10 +1618,7 @@ Toast + error on failure.
 Mis-scoped fix @ `f412767`; target learner shell bar.
 
 **[P2][UX] ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER**  
-✅ MERGED `b5472ab8`; verify.
-
-**[P2][UX] ADMIN-STUDENT-DETAIL-MOBILE-ICONS**  
-✅ MERGED `a97722df`.
+Remainder: verify. Merged [`b5472ab8`](https://github.com/Arangarx/tutoring-notes/commit/b5472ab8).
 
 **[P2][UX] Double scrollbars on admin pages**  
 Single architectural root.
@@ -1746,7 +1654,7 @@ Part1 checkpoint preference.
 Student Exit confirm, admin Outbox rename, etc.
 
 **[P2][UX] Known issues page placement/tone**  
-Draft shipped `/admin/settings/known-issues`; Andrew review.
+Remainder: Andrew review. Draft exists.
 
 **[P2][UX] Start/end session flash reload feel**  
 Nav perceived perf.
@@ -1784,7 +1692,7 @@ Needs Andrew clarification.
 Mask icon, click-to-exit.
 
 **[P3][UX] Video tile docking (SR-04 follow-up)**  
-Post-V1; SR-04 base shipped.
+Remainder: post-V1 docking. Base shipped.
 
 **[P3][UX] Triangle / n-gon shapes v1.1**  
 No native Excalidraw triangle.
@@ -1809,7 +1717,7 @@ Strategy discussion only.
 
 ### Shipped design reference
 
-Phase 0 tokens · Phase A fonts/palette · Phase B1/B2 auth+dashboard · A′ theme plumbing · Groups A–G surface fan-out · Phase D landing · OAuth notice · CheckboxField · StudentAvatar · Waiting room overlay visual · Parent consent POST · Continue button color X7.
+Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
 
 ---
 
@@ -1863,7 +1771,7 @@ Full `npm run test:identity-e2e` run (60 passed, 7 failed) surfaced failures unr
 None of these were fixed as part of WS3 (SMS 2FA) — flagged per the "report, don't fix unless you caused it" scope discipline. Needs its own investigation pass.
 
 **[P1][TEST] WS-V / Part-2 site-wide mechanical test buildout**  
-P1-WB-1…10 serial relay batches; P1-ID-1…4. Pure-jest tranche DONE @ 2026-07-05.
+Remainder: P1-WB and P1-ID relay batches. Pure-jest tranche done 2026-07-05.
 
 **[P1][TEST] CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE**  
 See §6.
@@ -1872,7 +1780,7 @@ See §6.
 jsdom cannot prove student absent from mixdown while heard live.
 
 **[P2][TEST] RELAY-MARATHON-SHARDS**  
-~20min serial marathon; shard runner exists (`fb3c039` merge fix).
+Remainder: marathon/shard runner ops. Shard merge fix [`fb3c0391`](https://github.com/Arangarx/tutoring-notes/commit/fb3c0391) shipped.
 
 **[P2][TEST] JEST-ISOLATION-CLASS-2**  
 Jest shares one local Postgres (`tutoring_notes_test`). Parallel workers race each other's rows, so the suite stays on `--workers=1` until per-test cleanup is proven on its own.
@@ -1949,7 +1857,7 @@ Surrogates shipped in jest/dom; hardware rows remain named gaps per playwright-o
 ## 10. Platform / ops / cost / observability
 
 **[P2][OPS] Cost observability Phase 2**  
-OpenAI `/v1/usage` reconciliation cron, monthly blob storage cron, Vercel compute API. Phase 1 **shipped:** `/admin/cost`, `CostEvent`, `rate-card.ts`.
+Remainder: Phase 2 cron/API reconciliation. Phase 1 page shipped.
 
 **[P2][OPS] Cost-event durability hardening**  
 `tutorKey`, `isTestFixture`, recent events table — V1-gating follow-ons.
@@ -1958,16 +1866,10 @@ OpenAI `/v1/usage` reconciliation cron, monthly blob storage cron, Vercel comput
 First-party, learner-type-keyed; sub-learner zero 3rd-party egress. Reframes PostHog bootstrapper.
 
 **[P2][OPS][REC] TXC-SWEEP-METRICS — transcribe-sweep usefulness (Andrew 2026-08-28)**  
-**Why:** Neon compute was always-on this month; `/api/cron/transcribe-sweep` ran every minute and always queries Postgres (empty sweep still wakes the DB). Cadence slowed to `*/15 * * * *` until we have evidence the 1-minute backstop is actually needed. Layer 1 (`after()` enqueue) + layer 3 (end-session kick) still cover the happy path.  
-**What to record (first-party, no third-party, no COPPA-path PII):** per invocation — ran_at, `scanned` / `processed` / `done` / `failed` / `timedOut`, notes equivalents, and a boolean `foundWork` (`scanned + notesScanned > 0`). Queryable ratio: useful runs / total runs over N days + during live sessions specifically.  
-**Decision gate:** tighten back toward every minute only if metrics show mid-session orphans the 15-minute cadence is missing; otherwise keep 15 min (or gate the sweep so idle invocations skip the DB).  
-**Status:** `OPEN` — cadence change is in `vercel.json`; metrics not built yet.
+Remainder: metrics + decision gate. Cadence `*/15` already in `vercel.json`.
 
-**[P2][OPS] NEON-SCALE-TO-ZERO-REVISIT — re-review always-on once the site is used for real (Andrew 2026-08-28)**  
-**What we did:** Production + preview-dev + project default `suspend_timeout_seconds` flipped `0` → `300` (5 min scale-to-zero). Idle August compute was ~661 hours / ~314 CU-hours with almost no user traffic. A live session keeps the DB awake by itself; first request after idle can cold-start (mitigations: `connect_timeout=60`, `withDbRetry` — `docs/DEPLOY.md`).  
-**Re-review when:** Sarah (or any pilot) is running real lessons regularly — first login/dashboard after idle, Start session after overnight suspend, Prisma timeout / wake failures. If cold-start pain is user-visible and retries don't absorb it, consider always-on (`-1`) **only for production**, not preview-dev.  
-**Do not flip back** just because compute shows Active during a lesson — that's expected.  
-**Status:** `WATCH` — setting is live in Neon Console now; revisit is the open work.
+**[P2][OPS] NEON-SCALE-TO-ZERO-REVISIT**  
+Remainder: re-review under real pilot traffic. Setting is live.
 
 **[P3][OPS] PostHog analytics Tier 0+1**  
 **Unbuilt** (`posthog` absent in `src/`). Event taxonomy reference: [`docs/archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md`](archive/handoff/posthog-analytics-tier-0-1-bootstrapper.md). Product direction = first-party instrumentation above.
@@ -1976,12 +1878,12 @@ First-party, learner-type-keyed; sub-learner zero 3rd-party egress. Reframes Pos
 See §5 + archive bootstrapper.
 
 **[P2][OPS] Vercel Skew Protection enablement**  
-Andrew dashboard action; WS-P deliverables otherwise shipped.
+Remainder: Andrew dashboard enable. Other WS-P deliverables shipped.
 
 **[P2][OPS] SEC-POLICY-TRUTH** — see §1.
 
 **[P3][OPS] Operator scoped test-data wipe + orphaned blob sweep**  
-No `operator:wipe` in `package.json`. Blob/branch CLIs **shipped:** `scripts/blob-cleanup.mjs`, `scripts/branch-sweep.mjs` (`blb`/`brs` in AGENTS.md).
+Remainder: no `operator:wipe` script. `scripts/blob-cleanup.mjs` and `scripts/branch-sweep.mjs` shipped.
 
 **[P3][OPS] scripts/smoke-long-form-transcribe.mjs headless harness**  
 UI Server Action only today.
@@ -2047,7 +1949,7 @@ AI edit signal + instrumentation.
 **Decision (Andrew 2026-06-08):** post-V1, pre-release (before recruiting new pilots). Requirements: [`docs/handoff/scheduling-requirements-2026-06-11.md`](handoff/scheduling-requirements-2026-06-11.md) (canonical; may move to archive with backlog pointer).
 
 **[P2][OPS] Scheduling — backend wiring + calendar sync**  
-**Visual-only shipped:** `src/lib/schedule/mock-data.ts`, `SchedulePageClient.tsx`, `CalendarIntegrationsPanel.tsx`. No DB models, OAuth routes, or real sync. **OPEN:** native-first scheduling + Apple + Google integrations.
+`ScheduledSession` + schedule page load real sessions; Google write shipped. **Remainder:** Apple ICS hardware, two-way sync (P3), native-first gaps.
 
 **[P2][OPS] S5 — scheduled topic + notes visible in live session**  
 "Today's plan" panel; depends on scheduler→session linkage.
@@ -2062,21 +1964,18 @@ Visual prototype only.
 Google watch / Apple CalDAV + conflict policy — unresolved.
 
 **[P1][OPS] Calendar integration wave (ICS feed + Google `calendar.events.owned` write)**  
-**SHIPPED on `master`** 2026-09-21 (`merge --no-ff feat/calendar-wave`). Andrew chose merge on Tyson’s scoped Android/Google pass; Apple ICS subscribe deferred as hardware follow-up. Plan: [`docs/handoff/CALENDAR-WAVE-PLAN.md`](handoff/CALENDAR-WAVE-PLAN.md).
+Shipped [`f53ee658`](https://github.com/Arangarx/tutoring-notes/commit/f53ee658) (calendar-wave merge 2026-09-21). **Remainder:** PLAYWRIGHT-GAP Apple ICS + poll lag.
 
 **PLAYWRIGHT-GAP — live ICS subscribe (calendar wave WS1 surrogate)**  
 Hermetic stand-in: jest `src/__tests__/calendar/ics-feed-stability.test.ts`, `ics-summary-privacy.test.ts`, `ics-google-timezone.test.ts` (third-party `node-ical` parser oracle). **Still owed:** subscribe feed URL in **Apple Calendar** (Sarah-primary; no device on 2026-09-21 merge) + Google Calendar “From URL” poll lag. Not a merge blocker.
-
-**[P2][UX] Schedule page calendar block points at an ICS feed that is not on that page (Andrew 2026-09-26)**  
-Removed the compact calendar block from the schedule page. That page already links to Settings → Calendar integrations, which is where the ICS feed is. Planned length now moves the end time when start (or the length) changes, until the end time is edited directly.
 
 **[P3][UX] Double-check schedule end-time logic (Andrew 2026-09-26)**  
 Andrew asked for a later pass after the planned-length behavior landed. Playwright covers a new session (start and length move the end until the end is edited) and one saved session whose end is not start + length. Still open: a start near midnight wraps the clock (23:30 + 90 min shows 01:00) but the session date does not move to the next day, so the stored end can fall earlier on the same date. Confirm that on a real form before relying on late-night sessions.
 
 **Calendar wave follow-up nits (non-blocking):** Outlook/desktop clients may need explicit `VTIMEZONE` blocks for some recurring-edge cases (jest oracle covers primary paths; hardware spot-check). Google Calendar URL-subscribe can lag on **event list identity** (`UID`/`iCalUID` stability) even when individual `VEVENT` bytes are correct — track if tutors report duplicate or stale rows after reschedule. Playwright: calendar specs live on `wb-regression` (`workers: 1`); `schedule-native-crud.spec.ts` still mutates the same `TEST_ADMIN` Google row on the parallel `integration` project — a concurrent full multi-project `playwright test` could race (normal `test:integration` vs `test:wb-playwright` split does not).
 
-**[P3][OPS] Google OAuth calendar scopes (legacy row — see calendar wave)**  
-Old connect+stub (`da93ab78`) being replaced in calendar wave; resubmit verification only after real write demo on crawlable URL.
+**[P3][OPS] Google OAuth calendar scopes (legacy row)**  
+Superseded by calendar wave [`f53ee658`](https://github.com/Arangarx/tutoring-notes/commit/f53ee658) — see [`docs/SHIPPED.md`](SHIPPED.md) Superseded plans; not an open build task.
 
 **[P3][OPS] Apple CalDAV vs EventKit path**  
 Not started.
@@ -2126,23 +2025,22 @@ Status model, Stripe, org MVP, etc. — roadmap waves 4–5.
 
 ### Product positioning (ratified)
 
-Independent tutors, subscription, not marketplace. Wedge: AI notes from recording + tutor keeps 100% rate + parent share link. Wyzant has lesson recordings (~30 days) — lead with notes + economics, not recording alone. Pitch: *"Keep 100% of your rate. Better tools than Wyzant, ~$20/month."*
+Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
+
 
 ### Pilot feedback — action items (selected open)
 
-**[P2][NOTES] End-session discard / SSG-2** — see §1.
-
 **[P2][REC] Recording auto-pause on student disconnect**  
-✅ SHIPPED structurally in lifecycle FSM; verify replay gap-marker rendering.
+Structurally shipped in `lifecycle-machine.ts`. Remainder: verify replay gap-marker rendering.
 
 **[P2][REC] Per-student recording default**  
-✅ Shipped `recordingDefaultEnabled`; coordinate with consent B2.
+Remainder: coordinate with consent B2. Schema field exists.
 
 **[P2][WB] Whiteboard undo touch + visible button**  
-✅ Shipped tutor+student; verify iOS Safari touch.
+Remainder: verify iOS Safari touch. Playwright coverage exists.
 
 **[P2][WB] Session time logging**  
-✅ Shipped `startTime`/`endTime`; timezone follow-up in adversarial section.
+Remainder: timezone follow-up.
 
 **[P2][NOTES] AI link extraction, scrubbing, playback during review, gap detection**  
 See §5.
@@ -2211,7 +2109,7 @@ Depends on status-model rethink.
 
 ### Adversarial review UX gaps (2026-04-19)
 
-Real bugs: admin audio proxy env-only admin; share seen-tracking; time-storage display. Slow-burn: orphan session cleanup cron, storage ledger. Scaling: rate limits partially migrated. UX tutor/parent gaps in original audit — many addressed by v1 redesign; remainder cross-linked above.
+Real bugs: admin audio proxy env-only admin; share seen-tracking; time-storage display. Slow-burn: orphan session cleanup cron, storage ledger. Scaling: rate limits partially migrated. UX tutor/parent gaps — remainder cross-linked in open backlog rows.
 
 ### Component redesign B2 smoke (2026-06-01)
 
@@ -2223,15 +2121,13 @@ Public surfaces brand sign-off pending.
 
 ### Strategic lessons (ChatGPT brainstorm 2026-05-15)
 
-Captured in pricing subsection; transcript local only.
+Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
+
 
 ### Tonight / days / weeks / months buckets (historical sequencing)
 
-Many items above supersede these buckets. Remaining highlights:
+Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
 
-- **Weeks/moat:** Phase 1 WB largely shipped per [`docs/WHITEBOARD-STATUS.md`](WHITEBOARD-STATUS.md); session timer 1.6 pending.
-- **Months polish:** discount system, native/PWA, whiteboard sync hardening at scale.
-- **Later in-person:** iPad whiteboard, two-device handoff, PDF annotation.
 
 ---
 
@@ -2248,9 +2144,6 @@ End-session thumbnail tabs.
 
 **[P3][WB] Desmos live-state capture Phase 1.5**  
 [`docs/RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) backlog.
-
-**[P3][REC] Debounced-disconnect pause trigger confirm**  
-~6s `PEER_EVICTION_TIMEOUT_MS` vs 8s freeze — Andrew confirmed freeze path.
 
 **[P3][GTM] Engagement/dopamine surfaces**  
 Mascot, charts, streaks — design-compatible-only.
@@ -2276,8 +2169,11 @@ Process cleanup.
 **[P3][DOCS] Usersmoke quicklists**  
 [`docs/handoff/usersmoke-2026-07-08-problem-quicklist.md`](handoff/usersmoke-2026-07-08-problem-quicklist.md), [`usersmoke-2026-07-09-recheck-quicklist.md`](handoff/usersmoke-2026-07-09-recheck-quicklist.md) — living triage until master cut complete.
 
-**Resolved / do not re-open (reference):** CONSENT_ENFORCEMENT flag removed · anonymous `/w` join retired to redirect · phantom stroke bug · Slice-3 B4 save model · Auth role-refresh · Parent-create-learner path · Weak PIN validators · Gate B1 core waitlist · SEC-1 impersonation pillar · Tier A security quick wins · Note save vs transcribe race (#6) · B5 gapless rollover · Client-direct blob upload B1 · Multi-recording schema · Share seen-tracking baseline · Billable WS-J · Housekeeping CLIs · Cost admin dashboard · Waiting room overlay · Per-speaker C transcription · In-person audio without peer · 2FA remember device · IAC-13 tutor disconnect parent · Session wrong-identity RC-A · Erasure Option A tombstone + cancel-restore · CF-1–CF-4 consent-honesty blockers · PRESARAH-1 partial (toggle removal not done) · SMOKE-BLOCK-2/3/4 · SMOKE-BUG-1/6 · SMOKE-UX-2/4 · **WS-X** PDF board stroke leak (`34f650a4`, `ef5fb1a0`; parked branch `wb-wave5-ws-x-wip` deleted 2026-10-01) · **Sarah Q6 forward-migration** not run and not needed (one June 16 lesson already on her student; branch `feature/sarah-forward-migration-q6` deleted 2026-10-01) · Many wave5 polish items per known-issues DRAFT appendix.
+**Resolved / do not re-open (reference):**
+
+Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
+
 
 ---
 
-*Last reorganized: 2026-07-09 (doc-cleanup master). Sources: EXTRACT-A through J2, prior BACKLOG.md, RELEASE-ROADMAP.md. Item count reflects deduplicated open work — verify shipped rows before deleting.*
+*Last reorganized: 2026-10-05 (open-work split — shipped items moved to [`docs/SHIPPED.md`](SHIPPED.md)).*
