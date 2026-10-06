@@ -50,3 +50,18 @@ export async function joinScheduledSession(
   if (result.ok) redirect(`/join/${result.whiteboardSessionId}`);
   return { error: result.reason === "not_yet" ? "not_yet" : "not_available" };
 }
+
+/**
+ * Form adapter for {@link joinScheduledSession}. Success still redirects;
+ * refusals come back as state so the dashboard can show them.
+ */
+export async function joinScheduledSessionFromForm(
+  _prev: JoinScheduledSessionError | null,
+  formData: FormData
+): Promise<JoinScheduledSessionError | null> {
+  const scheduledSessionId = formData.get("scheduledSessionId");
+  if (typeof scheduledSessionId !== "string" || scheduledSessionId.length === 0) {
+    return { error: "not_available" };
+  }
+  return joinScheduledSession(scheduledSessionId);
+}

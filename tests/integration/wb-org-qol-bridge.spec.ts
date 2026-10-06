@@ -367,6 +367,55 @@ test.describe("org QoL schedule bridge", () => {
     }
   );
 
+  test.describe("Join refused when live consent is off", () => {
+    test.use({ storageState: PARENT_STATE });
+    test(
+      "Parent Join shows refusal when live session consent is off",
+      { tag: [TAG.WB_CHROME] },
+      async ({ page }) => {
+        await seedParentAccountHolder();
+        const adminUserId = await seedTestAdmin();
+        const fx = await seedParentConsentFixture({ adminUserId });
+        const prisma = new PrismaClient();
+        try {
+          await prisma.consentRecord.create({
+            data: {
+              learnerProfileId: fx.learnerProfileId,
+              adminUserId: fx.adminUserId,
+              version: 1,
+              allowLiveSession: false,
+              allowAudioRecording: false,
+              allowWhiteboardRecording: false,
+              allowNoteSending: true,
+              setByAccountHolderId: fx.accountHolderId,
+              captureMethod: "electronic",
+            },
+          });
+        } finally {
+          await prisma.$disconnect();
+        }
+        const sched = await seedBridgeScheduledSession({
+          adminUserId: fx.adminUserId,
+          studentId: fx.studentId,
+          learnerProfileId: fx.learnerProfileId,
+          accountHolderId: fx.accountHolderId,
+          startsInMs: 5 * 60_000,
+        });
+        await page.goto("/account/dashboard", { waitUntil: "domcontentloaded" });
+        const row = page.getByTestId(`upcoming-session-row-${sched.scheduledSessionId}`);
+        const joinBtn = row.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`);
+        await expect(joinBtn).toBeVisible({ timeout: 15_000 });
+        await expect(joinBtn).toBeEnabled();
+        await joinBtn.click();
+        await expect(row.getByRole("status")).toHaveText(
+          "This session is not available to join right now.",
+          { timeout: 15_000 }
+        );
+        await expect(page).toHaveURL(/\/account\/dashboard/);
+      }
+    );
+  });
+
   test.describe("Join disabled outside window", () => {
     test.use({ storageState: PARENT_STATE });
     test(

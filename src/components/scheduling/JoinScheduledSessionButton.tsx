@@ -1,8 +1,18 @@
 "use client";
 
+import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { joinScheduledSession } from "@/app/join/scheduled-actions";
+import {
+  joinScheduledSessionFromForm,
+  type JoinScheduledSessionError,
+} from "@/app/join/scheduled-actions";
 import { Button } from "@/components/ui/button";
+
+const JOIN_REFUSAL_COPY: Record<JoinScheduledSessionError["error"], string> = {
+  not_signed_in: "Sign in to join this session.",
+  not_yet: "Join opens shortly before the scheduled start.",
+  not_available: "This session is not available to join right now.",
+};
 
 function JoinSubmit({
   scheduledSessionId,
@@ -33,6 +43,8 @@ export function JoinScheduledSessionButton({
   scheduledSessionId: string;
   joinWindowOpen: boolean;
 }) {
+  const [state, formAction] = useActionState(joinScheduledSessionFromForm, null);
+
   if (!joinWindowOpen) {
     return (
       <Button
@@ -48,14 +60,24 @@ export function JoinScheduledSessionButton({
     );
   }
 
-  const joinAction = joinScheduledSession.bind(null, scheduledSessionId);
+  const refusal = state ? JOIN_REFUSAL_COPY[state.error] : null;
 
   return (
-    <form action={joinAction}>
+    <form action={formAction} className="flex flex-col items-end gap-1">
+      <input type="hidden" name="scheduledSessionId" value={scheduledSessionId} />
       <JoinSubmit
         scheduledSessionId={scheduledSessionId}
         joinWindowOpen={joinWindowOpen}
       />
+      {refusal ? (
+        <p
+          className="max-w-56 text-right text-xs text-muted-foreground"
+          role="status"
+          data-testid={`join-scheduled-refusal-${scheduledSessionId}`}
+        >
+          {refusal}
+        </p>
+      ) : null}
     </form>
   );
 }
