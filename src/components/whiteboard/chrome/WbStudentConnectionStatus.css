@@ -24,3 +24,27 @@
   background: var(--warning-soft);
   color: var(--warning);
 }
+
+/*
+ * Narrow student bar: the status cluster is the only shrinkable region.
+ * Wordmark, ⋯, and Exit stay flex-shrink 0. Without this, "Call reconnecting…"
+ * plus a long "(waiting)" timer (or any copy a few pixels wider than
+ * "Connected" / "0m (waiting)") pushes the trailing controls past the viewport.
+ * The zone rule lives here because this component owns that cluster.
+ */
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-topbar__zone:has(> .mynk-wb-status-pill) {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-status-pill,
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-timer {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+}

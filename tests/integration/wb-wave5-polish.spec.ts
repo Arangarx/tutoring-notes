@@ -790,34 +790,6 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     });
     try {
       const page = peers.studentPage;
-      await assertStudentPortraitTopBarControls(page);
-
-      const header = page.locator(".mynk-wb-topbar");
-      // No clipped/overflowing content: scrollWidth must fit clientWidth.
-      const overflow = await header.evaluate((el) => ({
-        scrollWidth: el.scrollWidth,
-        clientWidth: el.clientWidth,
-      }));
-      expect(
-        overflow.scrollWidth,
-        "student narrow top bar overflows horizontally (content clipped)"
-      ).toBeLessThanOrEqual(overflow.clientWidth + 1);
-
-      // Trailing controls + leading pill must not overlap each other.
-      const ids = [
-        "wb-student-sync-pill",
-        "wb-student-topbar-overflow",
-        "wb-student-exit",
-      ];
-      const boxes = await Promise.all(
-        ids.map(async (id) => ({
-          id,
-          box: await page.getByTestId(id).boundingBox(),
-        }))
-      );
-      for (const b of boxes) {
-        expect(b.box, `${b.id} bounding box`).not.toBeNull();
-      }
       const overlaps = (
         a: { x: number; y: number; width: number; height: number },
         b: { x: number; y: number; width: number; height: number }
@@ -826,13 +798,119 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         b.x < a.x + a.width &&
         a.y < b.y + b.height &&
         b.y < a.y + a.height;
-      for (let i = 0; i < boxes.length; i++) {
-        for (let j = i + 1; j < boxes.length; j++) {
-          expect(
-            overlaps(boxes[i].box!, boxes[j].box!),
-            `${boxes[i].id} overlaps ${boxes[j].id}`
-          ).toBe(false);
+
+      const assertFits = async (width: number) => {
+        await page.setViewportSize({ width, height: 568 });
+        await assertStudentPortraitTopBarControls(page);
+
+        const header = page.locator(".mynk-wb-topbar");
+        // No clipped/overflowing content: scrollWidth must fit clientWidth.
+        const overflow = await header.evaluate((el) => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }));
+        expect(
+          overflow.scrollWidth,
+          `student narrow top bar overflows horizontally at ${width}px`
+        ).toBeLessThanOrEqual(overflow.clientWidth + 1);
+
+        const ids = [
+          "wb-student-sync-pill",
+          "wb-student-topbar-overflow",
+          "wb-student-exit",
+        ];
+        const boxes = await Promise.all(
+          ids.map(async (id) => ({
+            id,
+            box: await page.getByTestId(id).boundingBox(),
+          }))
+        );
+        for (const b of boxes) {
+          expect(b.box, `${b.id} bounding box at ${width}px`).not.toBeNull();
         }
+        for (let i = 0; i < boxes.length; i++) {
+          for (let j = i + 1; j < boxes.length; j++) {
+            expect(
+              overlaps(boxes[i].box!, boxes[j].box!),
+              `${boxes[i].id} overlaps ${boxes[j].id} at ${width}px`
+            ).toBe(false);
+          }
+        }
+      };
+
+      // Longest copy WbStudentConnectionStatus can render: reconnecting pill
+      // plus an hours-long timer with the waiting suffix. Measured in one
+      // turn so a later React render cannot restore the shorter live text.
+      const assertLongestCopyFits = async (width: number) => {
+        const fitted = await page.evaluate(() => {
+          const pill = document.querySelector(
+            '[data-testid="wb-student-sync-pill"]'
+          );
+          const timer = document.querySelector('[data-testid="wb-student-timer"]');
+          if (!(pill instanceof HTMLElement) || !(timer instanceof HTMLElement)) {
+            throw new Error("student status pill or timer missing");
+          }
+          pill.textContent = "Call reconnecting…";
+          timer.textContent = "10h 59m (waiting)";
+          const header = document.querySelector(".mynk-wb-topbar");
+          if (!(header instanceof HTMLElement)) {
+            throw new Error("student top bar missing");
+          }
+          const ids = [
+            "wb-student-sync-pill",
+            "wb-student-topbar-overflow",
+            "wb-student-exit",
+          ];
+          return {
+            innerWidth: window.innerWidth,
+            scrollWidth: header.scrollWidth,
+            clientWidth: header.clientWidth,
+            rects: ids.map((id) => {
+              const el = document.querySelector(`[data-testid="${id}"]`);
+              if (!(el instanceof HTMLElement)) {
+                throw new Error(`${id} missing`);
+              }
+              const r = el.getBoundingClientRect();
+              return {
+                id,
+                left: r.left,
+                right: r.right,
+                top: r.top,
+                bottom: r.bottom,
+                width: r.width,
+                height: r.height,
+              };
+            }),
+          };
+        });
+        expect(fitted.innerWidth, `viewport width at ${width}px`).toBe(width);
+        expect(
+          fitted.scrollWidth,
+          `longest status copy overflows the bar at ${width}px`
+        ).toBeLessThanOrEqual(fitted.clientWidth);
+        for (const rect of fitted.rects) {
+          expect(rect.width, `${rect.id} width at ${width}px`).toBeGreaterThan(0);
+          expect(rect.height, `${rect.id} height at ${width}px`).toBeGreaterThan(0);
+          expect(rect.left, `${rect.id} left edge at ${width}px`).toBeGreaterThanOrEqual(0);
+          expect(rect.top, `${rect.id} top edge at ${width}px`).toBeGreaterThanOrEqual(0);
+          expect(
+            rect.right,
+            `${rect.id} right edge at ${width}px`
+          ).toBeLessThanOrEqual(fitted.innerWidth);
+        }
+        for (let i = 0; i < fitted.rects.length; i++) {
+          for (let j = i + 1; j < fitted.rects.length; j++) {
+            expect(
+              overlaps(fitted.rects[i], fitted.rects[j]),
+              `${fitted.rects[i].id} overlaps ${fitted.rects[j].id} at ${width}px with longest copy`
+            ).toBe(false);
+          }
+        }
+      };
+
+      for (const width of [320, 360, 390]) {
+        await assertFits(width);
+        await assertLongestCopyFits(width);
       }
     } finally {
       await peers.close();
