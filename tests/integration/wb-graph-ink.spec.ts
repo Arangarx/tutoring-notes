@@ -181,6 +181,176 @@ test.describe("graph points and free draw", () => {
   );
 
   test(
+    "draw preview follows the drag locally, persists once on release, and cancels on Escape or mode switch",
+    { tag: [TAG.WB_GRAPH, TAG.WB_SYNC] },
+    async ({ browser }) => {
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session);
+      try {
+        const { tutorPage, studentPage } = peers;
+        const graphId = await insertGraphOnRole(tutorPage, "tutor", session, []);
+        await waitForElementOnPeer(studentPage, "student", graphId, 30_000);
+        await activateTutorGraph(tutorPage);
+        await tutorPage.waitForTimeout(700);
+        await tutorPage.getByTestId("wb-graph-mode-draw").click();
+
+        const host = tutorPage.locator(".wb-graph-board-host").first();
+        const box = await host.boundingBox();
+        expect(box, "graph board box").not.toBeNull();
+        const strokeStart = {
+          x: box!.x + box!.width * 0.35,
+          y: box!.y + box!.height * 0.4,
+        };
+        const strokeEnd = {
+          x: box!.x + box!.width * 0.72,
+          y: box!.y + box!.height * 0.22,
+        };
+
+        const versionBefore = await readElementVersion(tutorPage, "tutor", graphId);
+        await tutorPage.mouse.move(strokeStart.x, strokeStart.y);
+        await tutorPage.mouse.down();
+        await tutorPage.mouse.move(
+          strokeStart.x + (strokeEnd.x - strokeStart.x) * 0.5,
+          strokeStart.y + (strokeEnd.y - strokeStart.y) * 0.5,
+          { steps: 6 }
+        );
+        await tutorPage.waitForTimeout(50);
+        await tutorPage.mouse.move(strokeEnd.x, strokeEnd.y, { steps: 6 });
+        await tutorPage.waitForTimeout(50);
+
+        // In-progress curve is on the tutor board, in user coords, before release.
+        const startUser = await graphUserAt(tutorPage, strokeStart.x, strokeStart.y);
+        const endUser = await graphUserAt(tutorPage, strokeEnd.x, strokeEnd.y);
+        const midDrag = await readMountedGraphInk(tutorPage);
+        expect(midDrag.strokes).toHaveLength(0);
+        expect(midDrag.previews).toHaveLength(1);
+        expect(midDrag.previews[0].pts.length).toBeGreaterThanOrEqual(2);
+        expect(nearestGraphDistance(midDrag.previews[0].pts, startUser)).toBeLessThan(0.6);
+        expect(nearestGraphDistance(midDrag.previews[0].pts, endUser)).toBeLessThan(0.6);
+        expect(await readElementVersion(tutorPage, "tutor", graphId)).toBe(versionBefore);
+        expect((await readMountedGraphInk(studentPage)).strokes).toHaveLength(0);
+        expect((await readMountedGraphInk(studentPage)).previews).toHaveLength(0);
+
+        await tutorPage.mouse.up();
+        await expect
+          .poll(async () => (await readMountedGraphInk(tutorPage)).strokes.length, {
+            timeout: 10_000,
+          })
+          .toBe(1);
+        expect((await readMountedGraphInk(tutorPage)).previews).toHaveLength(0);
+        await tutorPage.waitForTimeout(700);
+        expect((await readElementVersion(tutorPage, "tutor", graphId)) - versionBefore).toBe(1);
+        await expect
+          .poll(async () => (await readMountedGraphInk(studentPage)).strokes.length, {
+            timeout: 20_000,
+          })
+          .toBe(1);
+
+        const versionAfterPersist = await readElementVersion(tutorPage, "tutor", graphId);
+        const cancelStart = {
+          x: box!.x + box!.width * 0.3,
+          y: box!.y + box!.height * 0.62,
+        };
+        const cancelEnd = {
+          x: box!.x + box!.width * 0.6,
+          y: box!.y + box!.height * 0.55,
+        };
+        await tutorPage.mouse.move(cancelStart.x, cancelStart.y);
+        await tutorPage.mouse.down();
+        await tutorPage.mouse.move(cancelEnd.x, cancelEnd.y, { steps: 6 });
+        await tutorPage.waitForTimeout(50);
+        expect((await readMountedGraphInk(tutorPage)).previews).toHaveLength(1);
+        await tutorPage.keyboard.press("Escape");
+        expect((await readMountedGraphInk(tutorPage)).previews).toHaveLength(0);
+        expect((await readMountedGraphInk(tutorPage)).strokes).toHaveLength(1);
+        await tutorPage.mouse.up();
+        await tutorPage.waitForTimeout(400);
+        expect((await readMountedGraphInk(tutorPage)).strokes).toHaveLength(1);
+        expect(await readElementVersion(tutorPage, "tutor", graphId)).toBe(versionAfterPersist);
+
+        await tutorPage.getByTestId("wb-graph-mode-draw").click();
+        const switchStart = {
+          x: box!.x + box!.width * 0.4,
+          y: box!.y + box!.height * 0.7,
+        };
+        await tutorPage.mouse.move(switchStart.x, switchStart.y);
+        await tutorPage.mouse.down();
+        await tutorPage.mouse.move(switchStart.x + 40, switchStart.y - 24, { steps: 4 });
+        await tutorPage.waitForTimeout(50);
+        expect((await readMountedGraphInk(tutorPage)).previews).toHaveLength(1);
+        const panBtn = tutorPage.getByTestId("wb-graph-mode-pan");
+        const panBox = await panBtn.boundingBox();
+        expect(panBox, "pan mode button box").not.toBeNull();
+        await tutorPage.mouse.move(
+          panBox!.x + panBox!.width / 2,
+          panBox!.y + panBox!.height / 2,
+          { steps: 8 }
+        );
+        await tutorPage.mouse.up();
+        await expect(panBtn).toHaveAttribute("aria-pressed", "true");
+        await tutorPage.waitForTimeout(400);
+        expect((await readMountedGraphInk(tutorPage)).previews).toHaveLength(0);
+        expect((await readMountedGraphInk(tutorPage)).strokes).toHaveLength(1);
+        expect(await readElementVersion(tutorPage, "tutor", graphId)).toBe(versionAfterPersist);
+        expect((await readMountedGraphInk(studentPage)).strokes).toHaveLength(1);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+async function graphUserAt(
+  page: Page,
+  clientX: number,
+  clientY: number
+): Promise<[number, number]> {
+  return page.evaluate(
+    ({ x, y }) => {
+      const host = document.querySelector(
+        '[data-testid="wb-graph-embed-host"] .wb-graph-board-host'
+      );
+      const JXG = (
+        window as unknown as {
+          JXG?: {
+            boards: Record<
+              string,
+              {
+                containerObj?: Element | null;
+                getUsrCoordsOfMouse?: (evt: MouseEvent) => number[];
+              }
+            >;
+          };
+        }
+      ).JXG;
+      if (!JXG || !host) return [Number.NaN, Number.NaN];
+      const board = Object.values(JXG.boards).find(
+        (candidate) =>
+          candidate.containerObj === host ||
+          (candidate.containerObj != null && host.contains(candidate.containerObj))
+      );
+      const coords = board?.getUsrCoordsOfMouse?.(
+        new MouseEvent("mousemove", { clientX: x, clientY: y, bubbles: true })
+      );
+      if (!coords || coords.length < 2) return [Number.NaN, Number.NaN];
+      return [coords[0], coords[1]] as [number, number];
+    },
+    { x: clientX, y: clientY }
+  );
+}
+
+function nearestGraphDistance(
+  pts: [number, number][],
+  target: [number, number]
+): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (const pt of pts) {
+    const d = Math.hypot(pt[0] - target[0], pt[1] - target[1]);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+  test(
     "a graph with no points or strokes still plots its expression",
     { tag: [TAG.WB_GRAPH, TAG.WB_SYNC] },
     async ({ browser }) => {

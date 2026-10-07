@@ -1455,6 +1455,8 @@ export async function pointerReachesGraphHost(
 export type MountedGraphInk = {
   points: { id: string; x: number; y: number }[];
   strokes: { id: string; pts: [number, number][] }[];
+  /** In-progress draw curves. Not persisted and not synced. */
+  previews: { id: string; pts: [number, number][] }[];
   bbox: [number, number, number, number] | null;
   functionGraphCount: number;
 };
@@ -1468,6 +1470,7 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
     const empty = {
       points: [] as { id: string; x: number; y: number }[],
       strokes: [] as { id: string; pts: [number, number][] }[],
+      previews: [] as { id: string; pts: [number, number][] }[],
       bbox: null as [number, number, number, number] | null,
       functionGraphCount: 0,
     };
@@ -1512,7 +1515,27 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
     if (!board) return empty;
     const points: { id: string; x: number; y: number }[] = [];
     const strokes: { id: string; pts: [number, number][] }[] = [];
+    const previews: { id: string; pts: [number, number][] }[] = [];
     let functionGraphCount = 0;
+    const readCurvePts = (obj: {
+      dataX?: number[];
+      dataY?: number[];
+      points?: Array<{ usrCoords?: number[] }>;
+    }): [number, number][] => {
+      if (
+        Array.isArray(obj.dataX) &&
+        Array.isArray(obj.dataY) &&
+        obj.dataX.length === obj.dataY.length
+      ) {
+        return obj.dataX.map((x, i) => [x, obj.dataY![i]] as [number, number]);
+      }
+      if (Array.isArray(obj.points)) {
+        return obj.points
+          .filter((c) => Array.isArray(c.usrCoords) && c.usrCoords.length >= 3)
+          .map((c) => [c.usrCoords![1], c.usrCoords![2]] as [number, number]);
+      }
+      return [];
+    };
     for (const obj of Object.values(board.objects)) {
       if (obj.visProp?.curvetype === "functiongraph") functionGraphCount += 1;
       if (obj.wbInk === "point" && typeof obj.X === "function" && typeof obj.Y === "function") {
@@ -1522,31 +1545,25 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
           y: obj.Y(),
         });
       }
-      if (obj.wbInk === "stroke") {
-        let pts: [number, number][] = [];
-        if (
-          Array.isArray(obj.dataX) &&
-          Array.isArray(obj.dataY) &&
-          obj.dataX.length === obj.dataY.length
-        ) {
-          pts = obj.dataX.map((x, i) => [x, obj.dataY![i]] as [number, number]);
-        } else if (Array.isArray(obj.points)) {
-          pts = obj.points
-            .filter((c) => Array.isArray(c.usrCoords) && c.usrCoords.length >= 3)
-            .map((c) => [c.usrCoords![1], c.usrCoords![2]] as [number, number]);
-        }
-        strokes.push({ id: String(obj.wbInkId ?? obj.id ?? ""), pts });
+      if (obj.wbInk === "stroke" || obj.wbInk === "preview") {
+        const rec = {
+          id: String(obj.wbInkId ?? obj.id ?? ""),
+          pts: readCurvePts(obj),
+        };
+        if (obj.wbInk === "preview") previews.push(rec);
+        else strokes.push(rec);
       }
     }
     points.sort((a, b) => a.id.localeCompare(b.id));
     strokes.sort((a, b) => a.id.localeCompare(b.id));
+    previews.sort((a, b) => a.id.localeCompare(b.id));
     let bbox: [number, number, number, number] | null = null;
     try {
       bbox = board.getBoundingBox();
     } catch {
       bbox = null;
     }
-    return { points, strokes, bbox, functionGraphCount };
+    return { points, strokes, previews, bbox, functionGraphCount };
   });
 }
 
