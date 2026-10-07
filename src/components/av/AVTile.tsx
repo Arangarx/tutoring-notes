@@ -408,6 +408,16 @@ export function AVTile({
       data-role={participant.role}
       data-is-local={isLocalTile ? "true" : "false"}
       data-state-kind={pill.kind}
+      {...(remoteParticipant
+        ? {
+            "data-cam-on":
+              remoteParticipant.camOn === true
+                ? "true"
+                : remoteParticipant.camOn === false
+                  ? "false"
+                  : "unknown",
+          }
+        : {})}
       style={{
         display: "flex",
         flexDirection: "column",

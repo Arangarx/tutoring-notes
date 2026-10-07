@@ -1418,6 +1418,12 @@ test.describe(
           await expect(camToggle).toHaveClass(/mynk-wb-tb-btn/);
           await expect(camToggle).toHaveClass(/mynk-wb-tb-btn--icon/);
 
+          // isCamMuted starts true, so the button reads Off while acquire is
+          // still in flight. A click then calls acquire, not toggle. Wait
+          // until the camera is actually on before asserting the off class.
+          await expect(camToggle).toHaveClass(/mynk-wb-tb-btn--cam-on/, {
+            timeout: 60_000,
+          });
           await camToggle.click();
           await expect(camToggle).toHaveClass(/mynk-wb-tb-btn--cam-off/, {
             timeout: 10_000,
@@ -1687,11 +1693,30 @@ test.describe(
           const remoteTile = tutorTiles.locator('[data-is-local="false"]').first();
           await expect(remoteTile).toBeVisible();
 
-          await studentPage.getByTestId("wb-topbar-cam-toggle").click();
-          await expect(studentPage.getByTestId("wb-topbar-cam-toggle")).toHaveClass(
-            /mynk-wb-tb-btn--cam-off/,
-            { timeout: 10_000 }
-          );
+          const studentCam = studentPage.getByTestId("wb-topbar-cam-toggle");
+          // The button starts cam-off while getUserMedia is in flight, and a
+          // click with no stream means "turn camera on". Wait until the
+          // camera is actually live, then turn it off.
+          await expect(studentCam).toHaveClass(/mynk-wb-tb-btn--cam-on/, {
+            timeout: 60_000,
+          });
+          await expect(remoteTile).toHaveAttribute("data-cam-on", "true", {
+            timeout: 60_000,
+          });
+          await expect(
+            remoteTile.locator('[data-placeholder-kind="awaiting-video"]')
+          ).toHaveCount(0, { timeout: 60_000 });
+          // Presence can report camOn before the inbound track is active.
+          // Connected-but-no-video also renders initials, so wait until that
+          // placeholder is gone — otherwise the post-click oracle is already true.
+          await expect(
+            remoteTile.locator('[data-placeholder-kind="initials"]')
+          ).toHaveCount(0, { timeout: 60_000 });
+
+          await studentCam.click();
+          await expect(studentCam).toHaveClass(/mynk-wb-tb-btn--cam-off/, {
+            timeout: 10_000,
+          });
 
           await expect(
             remoteTile.locator('[data-placeholder-kind="initials"]')

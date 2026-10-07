@@ -8,6 +8,9 @@
  *
  * Oracle (offset-invariant): after PDF import, the first PDF board's scene
  * contains ONLY its PDF image element(s) — none of the anchor board's stroke ids.
+ * A captured board-3 scene is then delivered to the workspace onChange handler
+ * after the PDF page is active (Excalidraw's late onChange). The PDF bucket and
+ * live scene must still exclude that stroke; board 3 must still have it.
  *
  * Red-before: without the entry guard, board-3 stroke ids appear on the PDF board.
  * Green-after: entry guard + tutorSwitchTokenRef bump closes the race.
@@ -39,6 +42,35 @@ import {
 import { TAG } from "../test-tags";
 
 type SceneElementSummary = { id: string; type?: string };
+
+type WbE2TestWindow = Window & {
+  __TN_WB_E2E__?: Record<
+    string,
+    { getElements: () => Array<{ id: string; type?: string }> }
+  >;
+  __WBX_INJECT_HANDLE_CHANGE__?: (els: unknown) => void;
+  __WBX_FINGERPRINT_HAS__?: (pageId: string) => boolean;
+};
+
+/**
+ * Settle past selectTutorPage's guard tail so the injected change is a late
+ * onChange: programmatic suppression has released and the legitimate PDF
+ * onChange has cleared the fingerprint.
+ */
+async function waitForLateOnChangeWindow(
+  page: import("@playwright/test").Page,
+  pdfPageId: string
+): Promise<void> {
+  await page.waitForTimeout(500);
+  await expect(async () => {
+    const fingerprintActive = await page.evaluate((pageId) => {
+      const win = window as WbE2TestWindow;
+      return win.__WBX_FINGERPRINT_HAS__?.(pageId) ?? false;
+    }, pdfPageId);
+    expect(fingerprintActive).toBe(false);
+  }).toPass({ timeout: 30_000 });
+  await page.waitForTimeout(200);
+}
 
 async function readSceneElementSummary(
   page: import("@playwright/test").Page,
@@ -108,6 +140,17 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
           15_000
         );
 
+        // Snapshot the board-3 scene while it is still the live canvas.
+        // Delivered later, after the PDF batch has switched pages.
+        const board3Scene = await peers.tutorPage.evaluate(() => {
+          const bridge = (window as WbE2TestWindow).__TN_WB_E2E__?.tutor;
+          const els = bridge?.getElements?.() ?? [];
+          return JSON.parse(JSON.stringify(els)) as unknown[];
+        });
+        expect(
+          (board3Scene as Array<{ id?: string }>).map((e) => e.id)
+        ).toContain(board3StrokeId);
+
         await peers.tutorPage.getByTestId("wb-insert-asset-btn").click();
         await expect(peers.tutorPage.getByTestId("wb-insert-dialog")).toBeVisible();
         await peers.tutorPage.getByTestId("wb-insert-pick-file").click();
@@ -152,6 +195,39 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
         expect(
           pdfBucketIds,
           "PDF page stored bucket must not contain the board-3 stroke"
+        ).not.toContain(board3StrokeId);
+
+        await waitForLateOnChangeWindow(peers.tutorPage, pdfPageId);
+
+        const seamsAvailable = await peers.tutorPage.evaluate(() => ({
+          injectHandleChange:
+            typeof (window as WbE2TestWindow).__WBX_INJECT_HANDLE_CHANGE__ ===
+            "function",
+        }));
+        expect(
+          seamsAvailable.injectHandleChange,
+          "__WBX_INJECT_HANDLE_CHANGE__ seam must be defined"
+        ).toBe(true);
+
+        await peers.tutorPage.evaluate((elements) => {
+          (window as WbE2TestWindow).__WBX_INJECT_HANDLE_CHANGE__!(elements);
+        }, board3Scene);
+
+        const pdfBucketAfterLate = await readPageDataBucketIds(
+          peers.tutorPage,
+          pdfPageId
+        );
+        expect(
+          pdfBucketAfterLate,
+          "after the late board-3 onChange, the PDF page stored bucket must not contain the board-3 stroke"
+        ).not.toContain(board3StrokeId);
+        const pdfLiveAfterLate = await readSceneElementIds(
+          peers.tutorPage,
+          "tutor"
+        );
+        expect(
+          pdfLiveAfterLate,
+          "after the late board-3 onChange, the PDF page live scene must not contain the board-3 stroke"
         ).not.toContain(board3StrokeId);
 
         await clickBoardPageTab(peers.tutorPage, "tutor", "Board 3");

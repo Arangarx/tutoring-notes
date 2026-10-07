@@ -378,6 +378,47 @@ describe("AVTile — remote participant", () => {
       (screen.getByTestId("av-tile-video-p-presence-cam-off") as HTMLVideoElement)
         .style.display
     ).toBe("none");
+    expect(screen.getByTestId("av-tile-p-presence-cam-off")).toHaveAttribute(
+      "data-cam-on",
+      "false"
+    );
+  });
+
+  test("presence-signaled camOn=true exposes data-cam-on and hides initials", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-presence-cam-on",
+      label: "Jamie Fox",
+      camOn: true,
+      videoStream: makeFakeStream([
+        { kind: "video", enabled: true, muted: false, readyState: "live" },
+      ]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    expect(screen.getByTestId("av-tile-p-presence-cam-on")).toHaveAttribute(
+      "data-cam-on",
+      "true"
+    );
+    expect(
+      screen.queryByTestId("av-tile-cam-placeholder-p-presence-cam-on")
+    ).toBeNull();
+  });
+
+  test("omitted camOn is data-cam-on=unknown; connected with no video still shows initials", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-cam-unknown",
+      label: "Riley Chen",
+      videoStream: makeFakeStream([]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    expect(screen.getByTestId("av-tile-p-cam-unknown")).toHaveAttribute(
+      "data-cam-on",
+      "unknown"
+    );
+    expect(
+      screen.getByTestId("av-tile-cam-placeholder-p-cam-unknown")
+    ).toHaveAttribute("data-placeholder-kind", "initials");
   });
 
   test("muted remote video track shows initials (black-frame cam-off)", () => {
