@@ -23,6 +23,8 @@ type ShellBaseProps = {
 export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   role: "tutor";
   studentName: string;
+  /** Tutor display name, same string the student tile uses for this tutor. */
+  tutorName?: string;
   adminUserId: string;
   startedAtIso: string;
   bothConnectedAtIso: string | null;
@@ -63,6 +65,8 @@ export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
   joinToken?: string;
   syncUrl: string;
   tutorName: string;
+  /** Learner name, same string the tutor tile uses for this student. */
+  studentName?: string;
   initialActiveMs: number;
   initialLastActiveAtIso: string | null;
   /** Session phase at SSR time — allows the client to start in PENDING state. */
@@ -96,6 +100,7 @@ export function WhiteboardSessionShell(props: WhiteboardSessionShellProps) {
         joinToken={props.joinToken}
         syncUrl={props.syncUrl}
         tutorName={props.tutorName}
+        studentName={props.studentName}
         initialActiveMs={props.initialActiveMs}
         initialLastActiveAtIso={props.initialLastActiveAtIso}
         initialSessionPhase={props.initialSessionPhase}
@@ -112,6 +117,7 @@ function TutorWhiteboardSessionShell({
   whiteboardSessionId,
   studentId,
   studentName,
+  tutorName,
   adminUserId,
   startedAtIso,
   bothConnectedAtIso,
@@ -161,6 +167,7 @@ function TutorWhiteboardSessionShell({
         whiteboardSessionId={whiteboardSessionId}
         studentId={studentId}
         studentName={studentName}
+        tutorName={tutorName}
         adminUserId={adminUserId}
         startedAtIso={startedAtIso}
         bothConnectedAtIso={bothConnectedAtIso}

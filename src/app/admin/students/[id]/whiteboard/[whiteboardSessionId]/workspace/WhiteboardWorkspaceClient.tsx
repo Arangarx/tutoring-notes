@@ -89,6 +89,7 @@ import { useCollaboratorLiveCursors } from "@/hooks/useCollaboratorLiveCursors";
 import { useActiveEmbeddableRebind } from "@/lib/whiteboard/active-embeddable-rebind";
 import { usePeerPageViewState } from "@/hooks/usePeerPageViewState";
 import { useViewportWireBroadcast } from "@/hooks/useViewportWireBroadcast";
+import { useInvertWheelZoom } from "@/hooks/useInvertWheelZoom";
 import { useSessionChat } from "@/hooks/useSessionChat";
 import { WbGhostViewportOverlay } from "@/components/whiteboard/chrome/WbGhostViewportOverlay";
 import { WbSessionChat } from "@/components/whiteboard/chrome/WbSessionChat";
@@ -164,6 +165,8 @@ import {
 import { GraphInsertButton } from "@/components/whiteboard/GraphInsertButton";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbModifierHints } from "@/components/whiteboard/chrome/WbModifierHints";
+import { WbCollaboratorCursorScale } from "@/components/whiteboard/chrome/WbCollaboratorCursorScale";
+import { WbMenuScrollCue } from "@/components/whiteboard/chrome/WbMenuScrollCue";
 import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
 import {
   WbActionSheet,
@@ -196,6 +199,7 @@ import {
   WbIconMatchView,
   WbIconMic,
   WbIconMore,
+  WbIconSessionOptions,
   WbIconPencil,
   WbIconRedo,
   WbIconSelect,
@@ -1792,12 +1796,13 @@ export function WhiteboardWorkspaceClient({
 
   const peerPageView = usePeerPageViewState(effectivePointerSync, role);
   useViewportWireBroadcast({
-    enabled: role === "student" && Boolean(pathJoinToken && studentSyncClient),
+    enabled: role === "student" && Boolean(studentSyncClient),
     sync: studentSyncClient,
     excalidrawAPI,
     activePageIdRef: studentActivePageIdRef,
     canvasMountRef: wbCanvasRef,
   });
+  useInvertWheelZoom({ canvasMountRef: wbCanvasRef });
   const sessionChat = useSessionChat(
     effectivePointerSync,
     syncConnectedForExtras
@@ -5638,7 +5643,7 @@ export function WhiteboardWorkspaceClient({
     <div className="mynk-wb-topbar-overflow-wrap" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
-        className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
+        className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn mynk-wb-session-options-btn"
         title="More session options"
         aria-label="More session options"
         aria-expanded={topbarMoreOpen}
@@ -5648,7 +5653,7 @@ export function WhiteboardWorkspaceClient({
         }}
         data-testid={testId}
       >
-        <WbIconMore size={14} />
+        <WbIconSessionOptions size={16} />
       </button>
       {topbarMoreOpen && (
         <div
@@ -5658,9 +5663,7 @@ export function WhiteboardWorkspaceClient({
           data-testid="wb-topbar-overflow-dropdown"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="mynk-wb-topbar-overflow-dropdown__scroll">
-            {renderTopBarOverflowItems()}
-          </div>
+          <WbMenuScrollCue>{renderTopBarOverflowItems()}</WbMenuScrollCue>
         </div>
       )}
     </div>
@@ -7405,11 +7408,15 @@ export function WhiteboardWorkspaceClient({
             label={role === "tutor" ? "Student view" : "Tutor view"}
           />
 
+          <WbCollaboratorCursorScale />
+
           <WbSessionChat
             chatAvailable={sessionChat.chatAvailable}
             messages={sessionChat.messages}
             onSend={sessionChat.send}
             viewerRole={role}
+            tutorName={tutorName}
+            studentName={studentName}
           />
 
           {/* SR-04 — AV cluster */}
@@ -7520,7 +7527,7 @@ export function WhiteboardWorkspaceClient({
         className="mynk-wb-pagestrip bg-card border-t border-border"
         aria-label="Boards"
       >
-        <WbModifierHints />
+        <WbModifierHints activeTool={activeToolType} />
         <BoardTabStrip
           pageList={chromePageList}
           activePageId={role === "student" ? (studentActivePageIdRef.current ?? activePageId) : activePageId}

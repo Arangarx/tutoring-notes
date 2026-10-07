@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { SessionChatMessage } from "@/hooks/useSessionChat";
@@ -11,15 +11,44 @@ export type WbSessionChatProps = {
   messages: SessionChatMessage[];
   onSend: (text: string) => boolean;
   viewerRole: "tutor" | "student";
+  /** Same strings the video tiles use. Empty or the prose placeholder falls back. */
+  tutorName?: string;
+  studentName?: string;
 };
+
+/** Tile display name, or Tutor/Student when that name is missing. */
+export function sessionChatSenderLabel(
+  role: "tutor" | "student",
+  names: { tutorName?: string; studentName?: string }
+): string {
+  const raw = (role === "tutor" ? names.tutorName : names.studentName)?.trim() ?? "";
+  if (!raw || raw === "your tutor") {
+    return role === "tutor" ? "Tutor" : "Student";
+  }
+  return raw;
+}
 
 export function WbSessionChat({
   chatAvailable,
   messages,
   onSend,
+  viewerRole,
+  tutorName,
+  studentName,
 }: WbSessionChatProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const seenThroughRef = useRef(0);
+
+  useEffect(() => {
+    if (open) seenThroughRef.current = messages.length;
+  }, [open, messages.length]);
+
+  const unread = open
+    ? 0
+    : messages
+        .slice(seenThroughRef.current)
+        .filter((m) => m.role !== viewerRole).length;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +79,7 @@ export function WbSessionChat({
               messages.map((m) => (
                 <div key={m.id} className="mynk-wb-session-chat__msg">
                   <span className="mynk-wb-session-chat__msg-role">
-                    {m.role === "tutor" ? "Tutor" : "Student"}
+                    {sessionChatSenderLabel(m.role, { tutorName, studentName })}
                   </span>
                   {m.text}
                 </div>
@@ -81,6 +110,11 @@ export function WbSessionChat({
         onClick={() => setOpen((v) => !v)}
       >
         {open ? "Hide chat" : "Chat"}
+        {unread > 0 ? (
+          <span className="mynk-wb-session-chat__unread" data-testid="wb-session-chat-unread">
+            {unread}
+          </span>
+        ) : null}
       </Button>
     </div>
   );

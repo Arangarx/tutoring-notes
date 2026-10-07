@@ -1,0 +1,6 @@
+/* Excalidraw draws the collaborator click ring at a hardcoded 15px radius
+   on the canvas. This variable is the scale the chrome applies to that ring.
+   Laser trails are SVG and are not affected. */
+.mynk-wb-chrome {
+  --mynk-wb-collab-cursor-scale: 0.8;
+}

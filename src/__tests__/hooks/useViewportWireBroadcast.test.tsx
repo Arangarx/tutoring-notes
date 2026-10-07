@@ -98,4 +98,75 @@ describe("useViewportWireBroadcast", () => {
     }
     expect(s.broadcastPageViewState).toHaveBeenCalledTimes(1);
   });
+
+  it("subscribes after the canvas node appears", () => {
+    const broadcastPageViewState = jest.fn();
+    const ref = { current: null as HTMLDivElement | null };
+    function Host() {
+      const pageRef = useRef("page-1");
+      useViewportWireBroadcast({
+        enabled: true,
+        sync: { broadcastPageViewState } as never,
+        excalidrawAPI: {
+          getAppState: () => ({ scrollX: 1, scrollY: 2, zoom: { value: 1 }, width: 390, height: 700 }),
+        } as never,
+        activePageIdRef: pageRef,
+        canvasMountRef: ref,
+      });
+      return null;
+    }
+    render(<Host />);
+    jest.advanceTimersByTime(300);
+    expect(broadcastPageViewState).not.toHaveBeenCalled();
+    ref.current = document.createElement("div");
+    jest.advanceTimersByTime(400);
+    expect(broadcastPageViewState).toHaveBeenCalledWith(
+      expect.objectContaining({ viewportWidth: 390, viewportHeight: 700 })
+    );
+  });
+
+  it("retries until the excalidraw API exists", () => {
+    const broadcastPageViewState = jest.fn();
+    let apiReady = false;
+    function Host() {
+      const ref = useRef<HTMLDivElement | null>(null);
+      const pageRef = useRef("page-1");
+      useViewportWireBroadcast({
+        enabled: true,
+        sync: { broadcastPageViewState } as never,
+        excalidrawAPI: apiReady
+          ? ({
+              getAppState: () => ({
+                scrollX: 0,
+                scrollY: 0,
+                zoom: { value: 1 },
+                width: 400,
+                height: 300,
+              }),
+            } as never)
+          : null,
+        activePageIdRef: pageRef,
+        canvasMountRef: ref,
+      });
+      return <div ref={ref} />;
+    }
+    const view = render(<Host />);
+    jest.advanceTimersByTime(500);
+    expect(broadcastPageViewState).not.toHaveBeenCalled();
+    apiReady = true;
+    view.rerender(<Host />);
+    jest.advanceTimersByTime(500);
+    expect(broadcastPageViewState).toHaveBeenCalledTimes(1);
+  });
+
+  it("broadcasts a programmatic view change without a pointer event", () => {
+    const s = setup();
+    jest.advanceTimersByTime(250);
+    s.view.scrollX = 55;
+    jest.advanceTimersByTime(800);
+    expect(s.broadcastPageViewState).toHaveBeenCalledTimes(2);
+    expect(s.broadcastPageViewState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ panX: 55 })
+    );
+  });
 });

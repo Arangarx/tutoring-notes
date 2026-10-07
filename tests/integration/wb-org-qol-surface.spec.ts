@@ -23,7 +23,9 @@ import {
   waitForTutorStudentConnected,
   waitUntilPageFingerprintClear,
   waitForWbE2eBridge,
+  readViewportSnapshot,
 } from "./whiteboard-live-sync.helpers";
+import { viewportCoordsToSceneCoords } from "@/lib/whiteboard/excalidraw-viewport-coords";
 import { BOARD_TITLE_MAX_LENGTH } from "@/lib/whiteboard/board-title";
 import {
   createEmptyEventLog,
@@ -554,15 +556,13 @@ test.describe("whiteboard QoL surfaces", () => {
     }
   );
 
-  test("modifier hints sit in the lower part of the board and name Shift and Space", {
+  test("modifier hints sit in the lower part of the board and name Space pan", {
     tag: [TAG.WB_CHROME],
   }, async ({ page }) => {
     test.setTimeout(120_000);
     await openTutorBoard(page);
     const hints = page.getByTestId("wb-modifier-hints");
     await expect(hints).toBeVisible();
-    await expect(hints).toContainText("Shift");
-    await expect(hints).toContainText("Square or circle");
     await expect(hints).toContainText("Space");
     await expect(hints).toContainText("Pan");
     const hintsBox = await hints.boundingBox();
@@ -704,6 +704,177 @@ test.describe("whiteboard QoL surfaces", () => {
       } finally {
         await peers.close();
       }
+    }
+  );
+
+  test(
+    "plain wheel zooms, modifier wheel pans, space still pans",
+    { tag: [TAG.WB_VIEWPORT] },
+    async ({ page }) => {
+      test.setTimeout(120_000);
+      await openTutorBoard(page);
+      const canvas = page
+        .locator('[data-testid="tutor-whiteboard-canvas-mount"] .excalidraw')
+        .first();
+      await expect(canvas).toBeVisible();
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+      const cx = box!.x + box!.width / 2;
+      const cy = box!.y + box!.height / 2;
+      await page.mouse.click(cx, cy);
+
+      const sceneUnderPointer = async () => {
+        const frame = await canvas.boundingBox();
+        const vp = await readViewportSnapshot(page, "tutor");
+        const offsets = await page.evaluate(() => {
+          const st = (
+            window as Window & {
+              __TN_WB_E2E__?: Record<string, { getAppState: () => Record<string, unknown> }>;
+            }
+          ).__TN_WB_E2E__?.tutor?.getAppState?.();
+          return {
+            offsetLeft: Number(st?.offsetLeft) || 0,
+            offsetTop: Number(st?.offsetTop) || 0,
+          };
+        });
+        return viewportCoordsToSceneCoords(
+          { clientX: cx - frame!.x, clientY: cy - frame!.y },
+          {
+            zoom: { value: vp.zoom },
+            offsetLeft: offsets.offsetLeft,
+            offsetTop: offsets.offsetTop,
+            scrollX: vp.scrollX,
+            scrollY: vp.scrollY,
+          }
+        );
+      };
+
+      const before = await readViewportSnapshot(page, "tutor");
+      const beforePoint = await sceneUnderPointer();
+      await page.mouse.move(cx, cy);
+      await page.mouse.wheel(0, -240);
+      await page.waitForTimeout(250);
+      const zoomed = await readViewportSnapshot(page, "tutor");
+      const zoomedPoint = await sceneUnderPointer();
+      expect(Math.abs(zoomed.zoom - before.zoom)).toBeGreaterThan(0.05);
+      expect(Math.abs(zoomedPoint.x - beforePoint.x)).toBeLessThanOrEqual(8);
+      expect(Math.abs(zoomedPoint.y - beforePoint.y)).toBeLessThanOrEqual(8);
+
+      const panBefore = await readViewportSnapshot(page, "tutor");
+      const panBeforePoint = await sceneUnderPointer();
+      await page.keyboard.down("Control");
+      await page.mouse.wheel(0, 280);
+      await page.keyboard.up("Control");
+      await page.waitForTimeout(250);
+      const panned = await readViewportSnapshot(page, "tutor");
+      const pannedPoint = await sceneUnderPointer();
+      expect(Math.abs(panned.zoom - panBefore.zoom)).toBeLessThanOrEqual(0.02);
+      const moved =
+        Math.abs(pannedPoint.x - panBeforePoint.x) +
+        Math.abs(pannedPoint.y - panBeforePoint.y);
+      expect(moved).toBeGreaterThan(12);
+
+      const spaceBefore = await readViewportSnapshot(page, "tutor");
+      await page.keyboard.down("Space");
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      await page.mouse.move(cx + 90, cy + 40, { steps: 8 });
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+      await page.waitForTimeout(200);
+      const spaced = await readViewportSnapshot(page, "tutor");
+      expect(Math.abs(spaced.zoom - spaceBefore.zoom)).toBeLessThanOrEqual(0.02);
+      const spaceMoved =
+        Math.abs(spaced.scrollX - spaceBefore.scrollX) +
+        Math.abs(spaced.scrollY - spaceBefore.scrollY);
+      expect(spaceMoved).toBeGreaterThan(8);
+    }
+  );
+
+  test(
+    "modifier hints follow the selected shape and the help list names wheel zoom",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      test.setTimeout(120_000);
+      await openTutorBoard(page);
+      const hints = page.getByTestId("wb-modifier-hints");
+      await expect(hints).toBeVisible();
+      await expect(hints).toContainText("Space");
+      await expect(hints).toContainText("Pan");
+
+      await page.locator('[aria-label="Open shape picker"]').click();
+      await page.getByRole("menuitem", { name: "Rectangle (R)" }).click();
+      await expect(hints).toContainText("Square");
+      await expect(hints).not.toContainText("Circle");
+
+      await page.locator('[aria-label="Open shape picker"]').click();
+      await page.getByRole("menuitem", { name: "Ellipse (O)" }).click();
+      await expect(hints).toContainText("Circle");
+      await expect(hints).not.toContainText("Square");
+      await expect(hints).toContainText("Space");
+      await expect(hints).toContainText("Pan");
+
+      await page.getByTestId("wb-shortcut-help").click();
+      const help = page.getByTestId("wb-shortcut-help-panel");
+      await expect(help).toBeVisible();
+      await expect(help).toContainText(/wheel/i);
+      await expect(help).toContainText(/zoom/i);
+      await expect(help).toContainText("Space");
+      await expect(help).toContainText("Pan");
+
+      await page.setViewportSize({ width: 380, height: 700 });
+      const toolbar = page.getByTestId("wb-bottom-toolbar");
+      await expect(toolbar).toBeVisible();
+      const hintsBox = await hints.boundingBox();
+      const toolbarBox = await toolbar.boundingBox();
+      expect(hintsBox).not.toBeNull();
+      expect(toolbarBox).not.toBeNull();
+      const overlaps =
+        hintsBox!.x < toolbarBox!.x + toolbarBox!.width &&
+        hintsBox!.x + hintsBox!.width > toolbarBox!.x &&
+        hintsBox!.y < toolbarBox!.y + toolbarBox!.height &&
+        hintsBox!.y + hintsBox!.height > toolbarBox!.y;
+      expect(overlaps, "hints must not sit in the bottom tool bar").toBe(false);
+    }
+  );
+
+  test(
+    "session menu and drawing menu use different icons and a more-below cue",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      test.setTimeout(120_000);
+      await openTutorBoard(page);
+      await page.setViewportSize({ width: 1000, height: 800 });
+      const sessionBtn = page.getByRole("button", { name: "More session options" });
+      const drawBtn = page.getByRole("button", { name: "More — z-order, delete, hand" });
+      await expect(sessionBtn).toBeVisible();
+      await expect(drawBtn).toBeVisible();
+      const sessionIcon = await sessionBtn.locator("svg").innerHTML();
+      const drawIcon = await drawBtn.locator("svg").innerHTML();
+      expect(sessionIcon).not.toBe(drawIcon);
+
+      await page.setViewportSize({ width: 1000, height: 480 });
+      await sessionBtn.click();
+      const scroll = page.locator(".mynk-wb-topbar-overflow-dropdown__scroll");
+      await expect(scroll).toBeVisible();
+      const overflow = await scroll.evaluate((el) => el.scrollHeight - el.clientHeight);
+      expect(overflow).toBeGreaterThan(8);
+      const cue = page.getByTestId("wb-session-menu-more-below");
+      await expect(cue).toBeVisible();
+      await scroll.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      await expect(cue).toHaveCount(0);
+
+      await page.setViewportSize({ width: 1000, height: 1400 });
+      await expect(sessionBtn).toBeVisible();
+      if (!(await page.getByTestId("wb-topbar-overflow-dropdown").isVisible())) {
+        await sessionBtn.click();
+      }
+      await expect(scroll).toBeVisible();
+      const fits = await scroll.evaluate((el) => el.scrollHeight - el.clientHeight <= 4);
+      expect(fits).toBe(true);
+      await expect(page.getByTestId("wb-session-menu-more-below")).toHaveCount(0);
     }
   );
 });

@@ -150,6 +150,20 @@ export function WbIconEndSession({ size = 16, className }: IconProps) {
   );
 }
 
+/** Session menu — sliders, distinct from the tool-rail vertical ellipsis. */
+export function WbIconSessionOptions({ size = 16, className }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="18" x2="20" y2="18" />
+      <circle cx="9" cy="6" r="1.75" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1.75" fill="currentColor" stroke="none" />
+      <circle cx="11" cy="18" r="1.75" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function WbIconMore({ size = 16, className }: IconProps) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

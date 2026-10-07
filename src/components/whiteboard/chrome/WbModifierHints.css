@@ -7,6 +7,7 @@
   z-index: 4;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   max-width: min(360px, calc(100vw - 200px));
   pointer-events: none;
@@ -16,6 +17,14 @@
 
 .mynk-wb-modifier-hints * {
   pointer-events: none;
+}
+
+/* Phone layouts put the drawing tools in the bottom bar. Keep hints above it. */
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-modifier-hints,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-modifier-hints,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-modifier-hints {
+  left: 8px;
+  bottom: 112px;
 }
 
 .mynk-wb-modifier-hints__item {
@@ -31,4 +40,51 @@
   background: var(--surface-raised, var(--card));
   font-family: inherit;
   font-size: 11px;
+}
+
+.mynk-wb-modifier-hints__help,
+.mynk-wb-shortcut-help,
+.mynk-wb-shortcut-help * {
+  pointer-events: auto;
+}
+
+.mynk-wb-modifier-hints__help {
+  border: 1px solid var(--border-default, var(--border));
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--surface-raised, var(--card));
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mynk-wb-shortcut-help {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(50dvh, 320px);
+  overflow: auto;
+  padding: 8px 10px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.mynk-wb-shortcut-help__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mynk-wb-shortcut-help__list li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }

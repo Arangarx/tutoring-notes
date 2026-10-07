@@ -83,6 +83,7 @@ export default async function JoinSessionPage({
       },
       student: {
         select: {
+          name: true,
           learnerProfileId: true,
           learnerProfile: {
             select: {
@@ -304,6 +305,7 @@ export default async function JoinSessionPage({
         studentId={session.studentId}
         syncUrl={env.WHITEBOARD_SYNC_URL}
         tutorName={tutorName}
+        studentName={session.student?.name}
         initialActiveMs={session.activeMs ?? 0}
         initialLastActiveAtIso={session.lastActiveAt?.toISOString() ?? null}
         initialSessionPhase={

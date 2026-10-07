@@ -6,12 +6,14 @@ import type { Browser } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import fs from "node:fs";
 import path from "node:path";
+import { PrismaClient } from "@prisma/client";
 import {
   seedWbLiveSyncSession,
   waitForWbE2eBridge,
   waitForTutorStudentConnected,
   readEncryptionKeyFromHash,
   loginLearnerInContext,
+  readViewportSnapshot,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 
@@ -155,6 +157,96 @@ test.describe("org QoL presence", { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] }, () =>
     }
   });
 
+  test(
+    "tutor ghost matches the student's visible area",
+    { tag: [TAG.WB_CHROME, TAG.WB_VIEWPORT] },
+    async ({ browser }) => {
+      test.setTimeout(180_000);
+      const session = await seedWbLiveSyncSession();
+      const tutorContext = await browser.newContext({
+        storageState: "tests/integration/.auth/tutor.json",
+        viewport: { width: 1280, height: 900 },
+      });
+      const learnerAuthFile = path.join(
+        process.cwd(),
+        "tests",
+        "integration",
+        ".auth",
+        "learner.json"
+      );
+      const studentContext = await browser.newContext({
+        viewport: { width: 390, height: 700 },
+        ...(fs.existsSync(learnerAuthFile)
+          ? { storageState: learnerAuthFile }
+          : {}),
+      });
+      if (!fs.existsSync(learnerAuthFile)) {
+        await loginLearnerInContext(
+          studentContext,
+          session.learnerHandle,
+          session.learnerPin
+        );
+      }
+      const tutorPage = await tutorContext.newPage();
+      const studentPage = await studentContext.newPage();
+      try {
+        await tutorPage.goto(
+          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await waitForWbE2eBridge(tutorPage, "tutor");
+        const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+        await studentPage.goto(
+          `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(
+          studentPage.getByTestId("student-whiteboard-canvas-mount")
+        ).toBeVisible({ timeout: 90_000 });
+        await waitForWbE2eBridge(studentPage, "student");
+        await waitForTutorStudentConnected(tutorPage);
+
+        await expect(studentPage.getByTestId("wb-ghost-viewport-rect")).toBeVisible({
+          timeout: 20_000,
+        });
+
+        const tutorGhost = tutorPage.getByTestId("wb-ghost-viewport-rect");
+        await expect(tutorGhost).toBeVisible({ timeout: 20_000 });
+
+        const studentView = await readViewportSnapshot(studentPage, "student");
+        const tutorView = await readViewportSnapshot(tutorPage, "tutor");
+        const studentSceneW = studentView.width / studentView.zoom;
+        const studentSceneH = studentView.height / studentView.zoom;
+        const tutorSceneW = tutorView.width / tutorView.zoom;
+        const tutorSceneH = tutorView.height / tutorView.zoom;
+        expect(studentSceneW).toBeGreaterThan(40);
+        expect(studentSceneH).toBeGreaterThan(40);
+        // The two canvases must actually differ, or a tutor-sized ghost would pass.
+        expect(Math.abs(studentSceneW - tutorSceneW)).toBeGreaterThan(80);
+        expect(Math.abs(studentSceneH - tutorSceneH)).toBeGreaterThan(40);
+
+        const box = await tutorGhost.boundingBox();
+        expect(box).not.toBeNull();
+        // Screen px / viewer zoom = scene units (Excalidraw). Independent of the overlay's placement formula.
+        const ghostSceneW = box!.width / tutorView.zoom;
+        const ghostSceneH = box!.height / tutorView.zoom;
+        expect(Math.abs(ghostSceneW - studentSceneW)).toBeLessThanOrEqual(
+          Math.max(24, studentSceneW * 0.12)
+        );
+        expect(Math.abs(ghostSceneH - studentSceneH)).toBeLessThanOrEqual(
+          Math.max(24, studentSceneH * 0.12)
+        );
+        expect(Math.abs(ghostSceneW - tutorSceneW)).toBeGreaterThan(80);
+      } finally {
+        await tutorContext.close();
+        await studentContext.close();
+      }
+    }
+  );
+
   test("live cursor — student pointer shows collaborator on tutor canvas", async ({
     browser,
   }) => {
@@ -189,4 +281,75 @@ test.describe("org QoL presence", { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] }, () =>
       await peers.close();
     }
   });
+
+  test(
+    "chat uses tile names and badges unread from the other person",
+    { tag: [TAG.WB_CHROME] },
+    async ({ browser }) => {
+      test.setTimeout(180_000);
+      const session = await seedWbLiveSyncSession();
+      const prisma = new PrismaClient();
+      let tutorName = "";
+      let studentName = "";
+      try {
+        const admin = await prisma.adminUser.findUnique({
+          where: { id: session.adminUserId },
+          select: { displayName: true },
+        });
+        const student = await prisma.student.findUnique({
+          where: { id: session.studentId },
+          select: { name: true },
+        });
+        tutorName = admin?.displayName?.trim() ?? "";
+        studentName = student?.name?.trim() ?? "";
+      } finally {
+        await prisma.$disconnect();
+      }
+      expect(tutorName.length).toBeGreaterThan(0);
+      expect(studentName.length).toBeGreaterThan(0);
+
+      const peers = await openTutorAndStudent(browser, session);
+      try {
+        await waitForTutorStudentConnected(peers.tutorPage);
+        const fromStudent = `from-student-${Date.now()}`;
+        await clickChatToggle(peers.studentPage);
+        await peers.studentPage.getByTestId("wb-session-chat-input").fill(fromStudent);
+        await peers.studentPage
+          .getByTestId("wb-session-chat-panel")
+          .getByRole("button", { name: "Send" })
+          .click();
+        await clickChatToggle(peers.studentPage);
+        await expect(peers.studentPage.getByTestId("wb-session-chat-panel")).toBeHidden();
+
+        const tutorUnread = peers.tutorPage.getByTestId("wb-session-chat-unread");
+        await expect(tutorUnread).toBeVisible({ timeout: 15_000 });
+        await expect(peers.studentPage.getByTestId("wb-session-chat-unread")).toHaveCount(0);
+
+        await clickChatToggle(peers.tutorPage);
+        await expect(peers.tutorPage.getByTestId("wb-session-chat-panel")).toBeVisible();
+        await expect(tutorUnread).toHaveCount(0);
+        await expect(
+          peers.tutorPage.locator(".mynk-wb-session-chat__msg-role").first()
+        ).toHaveText(studentName);
+
+        const fromTutor = `from-tutor-${Date.now()}`;
+        await peers.tutorPage.getByTestId("wb-session-chat-input").fill(fromTutor);
+        await peers.tutorPage
+          .getByTestId("wb-session-chat-panel")
+          .getByRole("button", { name: "Send" })
+          .click();
+        await expect(peers.tutorPage.getByTestId("wb-session-chat-unread")).toHaveCount(0);
+
+        const studentUnread = peers.studentPage.getByTestId("wb-session-chat-unread");
+        await expect(studentUnread).toBeVisible({ timeout: 15_000 });
+        await clickChatToggle(peers.studentPage);
+        await expect(studentUnread).toHaveCount(0);
+        await expect(
+          peers.studentPage.locator(".mynk-wb-session-chat__msg-role").last()
+        ).toHaveText(tutorName);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
 });

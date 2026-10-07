@@ -99,6 +99,9 @@ export default async function WhiteboardWorkspacePage({
           student: {
             select: { id: true, name: true, learnerProfileId: true },
           },
+          adminUser: {
+            select: { displayName: true, email: true },
+          },
           consentSnapshot: {
             select: {
               allowAudioRecording: true,
@@ -136,6 +139,11 @@ export default async function WhiteboardWorkspacePage({
       whiteboardSessionId={detail.id}
       studentId={detail.student.id}
       studentName={detail.student.name}
+      tutorName={
+        detail.adminUser.displayName?.trim() ||
+        detail.adminUser.email.split("@")[0] ||
+        undefined
+      }
       adminUserId={session.adminUserId}
       startedAtIso={detail.startedAt.toISOString()}
       bothConnectedAtIso={detail.bothConnectedAt?.toISOString() ?? null}
