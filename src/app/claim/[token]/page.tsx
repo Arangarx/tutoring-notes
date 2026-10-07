@@ -5,6 +5,7 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ClaimAuthGate } from "./ClaimAuthGate";
 import { ClaimInterstitial } from "./ClaimInterstitial";
+import { maskEmailForDisplay } from "@/lib/mask-email";
 import { normalizeEmail } from "@/lib/normalize-email";
 import {
   inviteIntendedEmail,
@@ -231,8 +232,8 @@ export default async function ClaimPage({
                 </CardTitle>
                 <CardDescription className="text-base">
                   This invitation was sent to{" "}
-                  <strong>{intendedEmail}</strong>, but you are signed in as{" "}
-                  <strong>{ah.email}</strong>.
+                  <strong>{maskEmailForDisplay(intendedEmail)}</strong>, but you are signed in as{" "}
+                  <strong>{maskEmailForDisplay(ah.email)}</strong>.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-6">
