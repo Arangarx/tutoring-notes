@@ -130,6 +130,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `AuthMortensenNotice` | `src/components/auth/AuthMortensenNotice.tsx` | Legal notice about Google OAuth via mortensenapps.com — **ONLY on Google-OAuth click-points**, NOT on credentials pages | `variant` (connect/signin), `className`, `style` | `OAuthEmailSection` "Connect Gmail" only | **canonical — placement is legally binding (see v1-redesign-STATUS.md)** |
 | `AuthFieldError` | `src/components/auth/AuthFieldError.tsx` | Inline field-level error message for form fields | `children`, `id` | Auth form fields | **canonical** |
 | `PasswordStrengthField` | `src/components/auth/PasswordStrengthField.tsx` | Password input + strength indicator (zxcvbn). Shared across credential forms. | Props TBD (see file) | Signup, reset-password, change-password | **canonical — use for all 8 credential forms per B1 acceptance criteria** |
+| `SmsPhoneConsentForm` | `src/components/identity/SmsPhoneConsentForm.tsx` | Phone number plus A2P consent for SMS 2FA. Consent checkbox is above the phone field. First-time setup and change-method both use this form. | `consentId`, `phoneId`, `phoneValue`, `onPhoneChange`, `consentChecked`, `onConsentChange`, `onSubmit`, `pending`, `placeholder`, `phoneLabel?`, `hidePhoneLabel?` | 2FA setup, change-method | **canonical** |
 
 ### Marketing Surfaces
 
@@ -153,7 +154,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `UpcomingSessionRow` | `src/components/scheduling/UpcomingSessionRow.tsx` | Single upcoming appointment row (subject, start time, optional learner label, action slot) | `subject`, `startAtIso`, `learnerLabel?`, `action`, `joinMessage?` | Tutor student detail, account dashboard, `/join` learner home | **canonical** |
 | `UpcomingSessionsCard` | `src/components/scheduling/UpcomingSessionsCard.tsx` | Card list of upcoming sessions; `mode="tutor"` (Open room) or `mode="family"` (Join) | `sessions`, `mode`, `realm?`, `title?`, `description?` | `/admin/students/[id]`, `/account/dashboard`, `/join` | **canonical** |
 | `OpenScheduledRoomButton` | `src/components/scheduling/OpenScheduledRoomButton.tsx` | Calls `openScheduledWhiteboardSession` | `scheduledSessionId` | Tutor upcoming list | **canonical** |
-| `JoinScheduledSessionButton` | `src/components/scheduling/JoinScheduledSessionButton.tsx` | Calls `joinScheduledSession`; disabled when outside join window; surfaces `not_yet` / `not_available` copy | `scheduledSessionId`, `joinWindowOpen` | Family upcoming lists | **canonical** |
+| `JoinScheduledSessionButton` | `src/components/scheduling/JoinScheduledSessionButton.tsx` | Calls `joinScheduledSession`; disabled when outside join window; re-checks on a 30s timer and at the exact open time; surfaces `not_yet` / `not_available` copy | `scheduledSessionId`, `startAtIso`, `endAtIso` | Family upcoming lists | **canonical** |
 
 ### Recording / Session Capture (Slice 3 collision zone — DO NOT EDIT from UI chunks)
 

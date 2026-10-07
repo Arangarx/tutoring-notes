@@ -14,6 +14,7 @@ import { createWhiteboardSessionCore } from "@/lib/whiteboard/create-session-cor
 import { getOrCreateWhiteboardForSchedule } from "@/lib/whiteboard/schedule-bridge";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
+import { registeredAdminId } from "@/lib/whiteboard/require-registered-admin";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { mapWithConcurrency, transcribeAudio } from "@/lib/transcribe";
@@ -94,21 +95,14 @@ export async function createWhiteboardSession(
   const rid = createActionCorrelationId();
 
   const scope = await requireStudentScope();
-  if (scope.kind !== "admin") {
-    // The whiteboard requires a real (DB-backed) admin row because
-    // the session needs an FK to AdminUser. The legacy env-only login
-    // (`scope.kind === "env"`) doesn't have one.
-    console.warn(
-      `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: env-only admin (no AdminUser row)`
-    );
-    throw new Error(
-      "Whiteboard sessions require a registered admin account. Please complete account setup first."
-    );
-  }
+  const adminUserId = registeredAdminId(
+    scope,
+    `[createWhiteboardSession] rid=${rid} studentId=${studentId}`
+  );
   await assertOwnsStudent(studentId);
 
   const session = await createWhiteboardSessionCore({
-    adminUserId: scope.adminId,
+    adminUserId,
     studentId,
     rid,
   });
@@ -131,15 +125,14 @@ export async function openScheduledWhiteboardSession(
 ): Promise<void> {
   const rid = createActionCorrelationId();
   const scope = await requireStudentScope();
-  if (scope.kind !== "admin") {
-    throw new Error(
-      "Whiteboard sessions require a registered admin account. Please complete account setup first."
-    );
-  }
+  const adminUserId = registeredAdminId(
+    scope,
+    `[openScheduledWhiteboardSession] rid=${rid} scheduledSessionId=${scheduledSessionId}`
+  );
   const owned = await withDbRetry(
     () =>
       db.scheduledSession.findFirst({
-        where: { id: scheduledSessionId, adminUserId: scope.adminId },
+        where: { id: scheduledSessionId, adminUserId },
         select: { studentId: true },
       }),
     { label: "openScheduledWhiteboardSession.owned" }
@@ -149,7 +142,7 @@ export async function openScheduledWhiteboardSession(
 
   const result = await getOrCreateWhiteboardForSchedule(
     scheduledSessionId,
-    { kind: "tutor", adminUserId: scope.adminId },
+    { kind: "tutor", adminUserId },
     rid
   );
   if (!result.ok) throw new Error("Scheduled session not found.");
