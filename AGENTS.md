@@ -441,12 +441,15 @@ criteria in the next subsection):
   determining the shape of a future Phase that doesn't yet have a
   scope.
 
-**Conductor tier — orchestration itself is tierable (2026-06-12)**
+**Conductor tier — orchestration itself is tierable (2026-06-12; default conductor Grok 4.7 as of 2026-10-07)**
 
 The tier-assignment bullets above govern which model **executes** work
 (via subagent dispatch). A separate axis governs which model **conducts**
 the orchestration chat itself — and this is where the largest API-cost
-lever lives.
+lever lives. Hands-work dispatches use Grok, which supersedes the
+`model="composer-2.5"` execution default earlier in this protocol
+(`composer-2.5` remains an allowed cheap executor; `composer-2.5-fast`
+stays forbidden).
 
 - **The cost mechanic:** subagents are cheap; the expensive line item is
   the *standing Opus orchestration chat*. Every turn re-bills the entire
@@ -466,11 +469,11 @@ lever lives.
   is-this-grouping-safe, when-to-merge/defer/escalate), or mostly running
   a KNOWN loop (dispatch scoped item → merge → build → push → repeat)?"*
   - **Known-loop backlog burndown** (e.g. a visual/UX tweak wave with
-    pre-specified items) → **Composer 2.5** conducts (if every decision
-    is already made) or **Sonnet** (if you want a safety net that reads
-    subagent reports critically).
+    pre-specified items) → **Grok 4.7** conducts (or Composer 2.5).
   - **Mixed** (scoped work + live design/grouping/reliability calls) →
-    **Sonnet** conducts.
+    **Grok 4.7** conducts, dispatching Sonnet
+    (`claude-sonnet-5-5-high`, readonly) when a critical read is the
+    safety net.
   - **New judgment** (phase planning, novel architecture, auth/migration
     design, strategic calls like cut-to-master / Vercel tier / brand
     gating, multi-day high-blast-radius) → **Opus**, **episodically** —
@@ -478,26 +481,52 @@ lever lives.
 - **Key reframe:** "Opus reserved for orchestration only" (above) is
   refined — orchestration is a **spectrum**. Planning/design/strategy
   orchestration = Opus; execution-queue / merge-train orchestration =
-  Sonnet or Composer. Keep Opus for **episodes**, not as a standing
+  Grok (or Composer). Keep Opus for **episodes**, not as a standing
   conductor. The "in doubt → Opus" rule is for **judgment/quality-risk
   calls**, NOT for keeping a conductor warm.
 - **Validating example (2026-06-12):** the v1 design-system wave-2
   burndown (6-agent fan-out + merge-train + smokebook) was a known loop;
   the only genuine Opus-grade call was grouping agents for file-
   disjointness, which Sonnet would also handle.
-- **Default conductor is Composer 2.5; escalate UP by tripwire (2026-06-23).**
-  Andrew now conducts from Composer 2.5 by default and escalates to
-  Sonnet/Opus only on a tripwire.   **First response to a tripwire is a plan-mode "step back"** (read-only,
-  still on Composer 2.5) — re-think and write a concrete plan; that alone
-  often clears the tripwire. Only if the step-back confirms it's genuinely
-  above-tier do you escalate the model. Because **Composer cannot dispatch
-  Anthropic models**, escalation = **STOP and recommend Andrew switch
-  this chat's model up** (not "dispatch up"). Use plan mode liberally in
-  general — including for small/narrow problems — not only at tripwires. The self-detectable
-  tripwire checklist + STOP-and-switch handoff protocol is the
-  authoritative, always-applied source:
+- **Default conductor is Grok 4.7; escalate UP by tripwire (Andrew 2026-10-07).**
+  Chat settings are chosen by Andrew in the picker: **Very High effort,
+  500k context, NOT fast**. Grok and Composer draw from the same Cursor
+  model pool, which gives far more monthly usage than Opus or Sonnet.
+  Fast + Very High + 500k burns that pool too quickly to use for
+  everything, so it is not the default. Opus stays for episodic
+  new-judgment sessions.
+  **Grok CAN dispatch other models**, including Anthropic ones; Composer
+  cannot. A Grok conductor dispatches the required Sonnet
+  review/verification subagents itself (`claude-sonnet-5-5-high`,
+  readonly), and may dispatch Opus subagents for genuinely Opus-grade
+  judgment. It does not need the STOP-and-switch handoff. That handoff
+  stays, scoped to a **Composer conductor only** — Composer cannot
+  dispatch Anthropic models, so it must STOP and ask Andrew to switch
+  the chat model.
+  **Subagent execution tier:** dispatch Grok for hands work. The only
+  Grok slug currently exposed to the Task tool is `grok-4.7-xhigh-fast`;
+  effort and context can't be set per dispatch. Andrew's preference is
+  lower effort + fast + ~300k for subagents when such a slug becomes
+  available, and conductors should prefer it then. `composer-2.5`
+  remains an allowed cheap executor. The `composer-2.5-fast` ban stays.
+  **Notification discipline (cost lesson, 2026-10-07):** an Opus
+  conductor spent ~$30 overnight, mostly re-billing its whole context
+  on ~25 background shell-completion pings that needed no decision.
+  The conductor does NOT act on a subagent's intermediate
+  shell-completion notifications. Reply in one line or not at all, and
+  do real work only on the subagent's final report. Also, do not poll
+  subagents more than necessary.
+  **First response to a tripwire is a plan-mode "step back"** (read-only,
+  still on Grok (or Composer)) — re-think and write a concrete plan; that
+  alone often clears the tripwire. Only if the step-back confirms it's
+  genuinely above-tier do you escalate. A Grok conductor dispatches that
+  tier itself. A Composer conductor uses the STOP-and-switch handoff.
+  Use plan mode liberally in general — including for small/narrow
+  problems — not only at tripwires. The self-detectable tripwire
+  checklist + STOP-and-switch handoff protocol is the authoritative,
+  always-applied source:
   [`.cursor/rules/orchestrator-discipline.mdc`](.cursor/rules/orchestrator-discipline.mdc)
-  § "DEFAULT CONDUCTOR IS COMPOSER 2.5 — escalate UP by tripwire".
+  § "DEFAULT CONDUCTOR IS GROK 4.7 — escalate UP by tripwire".
   Tripwires in brief: 2nd failed attempt at the same bug; changing a
   fragile/load-bearing surface (recorder FSM, outbox, end-session,
   live-A/V, WB sync/viewport, auth boundary, migration); multiple viable

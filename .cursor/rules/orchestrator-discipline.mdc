@@ -1,5 +1,5 @@
 ---
-description: Orchestrator chats orchestrate; executor work dispatches to Composer 2.5 subagents. Applies to every chat in this repo, especially Opus.
+description: Orchestrator chats orchestrate; default conductor is Grok 4.7. Hands work dispatches to Grok (`composer-2.5` remains an allowed cheap executor). Applies to every chat in this repo, especially Opus.
 alwaysApply: true
 ---
 
@@ -16,25 +16,29 @@ Don't run a chat until it truncates or slows. **Cursor flags ~60–70% context c
 This is a **hard dependency on doc diligence**, not a nicety: a swap is only clean if `ORCHESTRATOR-STATE.md` is current at the moment of the swap. Therefore:
 
 - Keep the lightweight head **continuously current** (per the OPERATING CONTRACT above) so the chat is *always* swap-ready — never "I'll catch the state doc up before we swap."
-- A swap is a natural trigger for a **heavy `ORCHESTRATOR-STATE.md` restructure** (dispatch Composer 2.5 from the template) — especially if it coincides with a milestone.
+- A swap is a natural trigger for a **heavy `ORCHESTRATOR-STATE.md` restructure** (dispatch Grok, or Composer 2.5, from the template) — especially if it coincides with a milestone.
 - When you recommend a swap, state it plainly: *"~65% context — good swap point. State is current; start a fresh chat, `@`-reference this one + `ORCHESTRATOR-STATE.md`, and say continue."*
 
-If you are an **Opus orchestrator chat** in this repo, your **default verb is dispatch**. Opus should do **nothing that doesn't require Opus-grade judgment.** Every token Opus spends on work Composer 2.5 could have done is wasted money (Opus ≈ 30× Composer at Standard tier), and a Composer subagent reading the codebase fresh often surfaces things Opus misses while reasoning from its in-context mental model. **Bias aggressively toward farming work out — including small tasks.** The presumption is "dispatch this"; keeping work in-chat is the thing you must justify, not the other way around.
+If you are an **Opus orchestrator chat** in this repo, your **default verb is dispatch**. Opus should do **nothing that doesn't require Opus-grade judgment.** Every token Opus spends on work a Grok or Composer 2.5 subagent could have done is wasted money (Opus ≈ 30× Composer at Standard tier), and a dispatched subagent reading the codebase fresh often surfaces things Opus misses while reasoning from its in-context mental model. **Bias aggressively toward farming work out — including small tasks.** The presumption is "dispatch this"; keeping work in-chat is the thing you must justify, not the other way around.
 
-**Conductor tier is selectable.** The model conducting this chat is not fixed at Opus — use the judgment-vs-loop heuristic in [`AGENTS.md`](../../AGENTS.md) § Model usage protocol ("Conductor tier — orchestration itself is tierable"). Opus-conductor is for **new-judgment episodes** (phase planning, novel architecture, strategic calls); pure known-loop burndown (dispatch → merge → smoke → repeat) can be conducted by Sonnet or Composer 2.5.
+**Conductor tier is selectable.** The model conducting this chat is not fixed at Opus — use the judgment-vs-loop heuristic in [`AGENTS.md`](../../AGENTS.md) § Model usage protocol ("Conductor tier — orchestration itself is tierable"). Opus-conductor is for **new-judgment episodes** (phase planning, novel architecture, strategic calls); pure known-loop burndown (dispatch → merge → smoke → repeat) is conducted by Grok (or Composer).
 
-## DEFAULT CONDUCTOR IS COMPOSER 2.5 — escalate UP by tripwire (read this if you are a Composer chat)
+## DEFAULT CONDUCTOR IS GROK 4.7 — escalate UP by tripwire (read this if you are a Grok or Composer chat)
 
-Andrew's default is to **conduct from Composer 2.5** to control cost (the standing Opus chat re-bills its whole context every turn — it is the largest API-cost lever). Opus and Sonnet are **on-call episodes**, not the standing conductor.
+Andrew's default is to **conduct from Grok 4.7**. Chat settings are chosen by Andrew in the picker: **Very High effort, 500k context, NOT fast**. Grok and Composer draw from the same Cursor model pool, which gives far more monthly usage than Opus or Sonnet. Fast + Very High + 500k burns that pool too quickly to use for everything, so it is not the default. Opus and Sonnet are **on-call episodes**, not the standing conductor. A standing Opus chat re-bills its whole context every turn — that remains the largest API-cost lever when Opus is the conductor.
 
-**Composer cannot dispatch Anthropic models** (no Sonnet/Opus subagents). So when you need a higher tier you cannot farm it out — you must **STOP, not take the risky action, and tell Andrew to switch this chat's model up.** (You may still dispatch Composer/`explore`/`generalPurpose` subagents for execution and investigation as normal.)
+**Grok CAN dispatch other models**, including Anthropic ones. A Grok conductor therefore dispatches the required Sonnet review/verification subagents itself (`claude-sonnet-5-5-high`, readonly), and may dispatch Opus subagents for genuinely Opus-grade judgment. It does **not** use the "STOP and ask Andrew to switch the chat model" handoff.
 
-Your job as the Composer conductor is to **stay on 2.5 for the bulk of the work AND reliably recognize the moment you're out of depth** — before you burn a turn pushing through. The tripwires below are deliberately concrete and self-detectable so you don't need Opus-grade judgment to notice them.
+**Composer cannot dispatch Anthropic models** (no Sonnet/Opus subagents). The STOP-and-switch handoff below is for a **Composer conductor only**. When a Composer conductor needs a higher tier it cannot farm it out — it must **STOP, not take the risky action, and tell Andrew to switch this chat's model up.** (It may still dispatch Composer/`explore`/`generalPurpose` subagents for execution and investigation as normal.)
+
+Your job as the Grok (or Composer) conductor is to **stay on that model for the bulk of the work AND reliably recognize the moment you're out of depth** — before you burn a turn pushing through. The tripwires below are deliberately concrete and self-detectable so you don't need Opus-grade judgment to notice them.
 
 ### STOP and recommend a switch the moment ANY tripwire trips
 
+For a Grok conductor, "switch" means dispatch the higher tier after the plan-mode step-back. Asking Andrew to change this chat's model is the Composer-conductor handoff only.
+
 1. **Second failed attempt at the same bug/fix.** If attempt #2 at the same root cause didn't work, do **not** attempt #3. A regression loop is forming — that exact pattern has cost this project weeks. Stop and escalate.
-2. **Fragile / load-bearing surface.** The change touches any of: recorder lifecycle FSM (`lifecycle-machine.ts`), `upload-outbox`, atomic end-session, live-A/V (`peer-mesh.ts`, `useLiveAV.ts`, `mic-recorder-audio.ts`), whiteboard sync / apply-path / viewport-follow (`src/lib/whiteboard/`, `useStudentWhiteboardCanvas.ts`), an auth / ownership-assertion boundary, or a DB migration. These have dedicated docs + hard-won-lessons entries *because* they bite. (Reading/diagnosing them is fine on Composer; **changing** them is the tripwire.)
+2. **Fragile / load-bearing surface.** The change touches any of: recorder lifecycle FSM (`lifecycle-machine.ts`), `upload-outbox`, atomic end-session, live-A/V (`peer-mesh.ts`, `useLiveAV.ts`, `mic-recorder-audio.ts`), whiteboard sync / apply-path / viewport-follow (`src/lib/whiteboard/`, `useStudentWhiteboardCanvas.ts`), an auth / ownership-assertion boundary, or a DB migration. These have dedicated docs + hard-won-lessons entries *because* they bite. (Reading/diagnosing them is fine on Grok (or Composer); **changing** them is the tripwire.)
 3. **More than one viable approach with real trade-offs**, or a decision that's **expensive to unwind** (architecture, sequencing, "should this be built this way at all").
 4. **Concurrency / ordering / geometry reasoning, or cross-cutting >3 areas.** Races, event ordering, viewport/coordinate math (the jsdom blind-spot class — green unit tests will *not* save you here).
 5. **Scope explosion.** The task is materially bigger than it looked when scoped ("a couple days" becoming a week). Stop and re-plan at a higher tier rather than grinding.
@@ -42,38 +46,47 @@ Your job as the Composer conductor is to **stay on 2.5 for the bulk of the work 
 7. **5-axis reliability review not yet done** on a feature plan you're about to execute.
 8. **Strategic / judgment call** — product direction, when to merge/defer, brand gating, cut-to-master. Not execution.
 
-### Stay on Composer 2.5 (do NOT escalate) for
+### Stay on Grok (or Composer) (do NOT escalate) for
 
 Well-patterned execution of any size; reading & investigation (incl. of the fragile surfaces above); running gates (`npx jest`, `npm run test:wb-sync`, `npx next build`) and reporting results; writing tests/docs that follow an established pattern; mechanical refactors; the bulk of feature work where the pattern is clear from prior similar work in this repo. **Capability doubt on a well-patterned execution task is NOT a switch trigger** — do it, and escalate only on an *actual* tripwire above, not on speculation that you might struggle.
 
 ### FIRST response to a tripwire: step back in plan mode (before any model switch)
 
-When a tripwire trips, the **first** move is NOT to recommend a model switch — it is to **step back into plan mode** (read-only, still on Composer 2.5). Switching the model is the *second* resort, only if the step-back doesn't clear it.
+When a tripwire trips, the **first** move is NOT to recommend a model switch — it is to **step back into plan mode** (read-only, still on Grok (or Composer)). Switching the model is the *second* resort, only if the step-back doesn't clear it.
 
-- **Why:** most tripwires fire because you're about to *act* while under-thought, not because the work is genuinely above-tier. A read-only planning pass — re-read the relevant code, lay out the approaches, name the trade-offs, write the plan — often dissolves the uncertainty on Composer 2.5 alone. It also stops the "act → fail → act again" loop cold (tripwire #1).
+- **Why:** most tripwires fire because you're about to *act* while under-thought, not because the work is genuinely above-tier. A read-only planning pass — re-read the relevant code, lay out the approaches, name the trade-offs, write the plan — often dissolves the uncertainty on Grok (or Composer) alone. It also stops the "act → fail → act again" loop cold (tripwire #1).
 - **How:** call `SwitchMode` to `plan`. Investigate read-only (or dispatch an `explore` subagent), then produce a concrete plan: root-cause hypothesis, the chosen approach + why, the alternatives rejected + why, the blast radius, and the verification gate. Share it with Andrew before executing.
 - **Use plan mode liberally — not only at tripwires.** Andrew wants more plan-mode passes in general, including for **small or narrowly-scoped problems**: any time the path isn't obvious, a quick step-back plan beats guessing. Cheap insurance against a regression loop.
 - **Two outcomes:**
-  - **Step-back resolves it** — you now have a confident, well-patterned plan → switch back to `agent` and execute on Composer 2.5. No model escalation needed.
-  - **Step-back confirms it's genuinely above-tier** — after thinking it through you *still* have unresolved trade-offs, still can't form a confident root cause, or the design fork is real → NOW escalate the model (below). The plan you just wrote becomes your escalation note — hand it straight to the switched-up chat.
+  - **Step-back resolves it** — you now have a confident, well-patterned plan → switch back to `agent` and execute on Grok (or Composer). No model escalation needed.
+  - **Step-back confirms it's genuinely above-tier** — after thinking it through you *still* have unresolved trade-offs, still can't form a confident root cause, or the design fork is real → NOW escalate (below). The plan you just wrote is the escalation note.
+    - **Grok conductor:** dispatch the tier. Sonnet review/verification is `claude-sonnet-5-5-high` (readonly). Opus subagents only for genuinely Opus-grade judgment. Do not ask Andrew to switch the chat model.
+    - **Composer conductor:** use the STOP-and-switch handoff and hand that plan straight to the switched-up chat.
 
 ### Escalate to the CHEAPEST tier that clears the bar (second resort, after the step-back)
 
 - **→ Sonnet** (the default escalation) for tripwires 2, 3, 4, 6, 7 in ordinary form: bounded-but-novel design, cross-cutting change, large-diff review, concurrency/geometry reasoning, the 5-axis review.
 - **→ Opus** (skip Sonnet) only for the heavy class: introducing a new architectural pillar to the recorder/outbox/sync layer, revisiting a design that has **already cost a recovery cycle**, multi-day high-blast-radius work, or shaping a future Phase that has no scope yet.
-- **When unsure between Sonnet and Opus, recommend Sonnet first** — it's cheaper and Andrew can escalate again if Sonnet also hits a wall.
+- **When unsure between Sonnet and Opus, choose Sonnet first** — it's cheaper and Andrew can escalate again if Sonnet also hits a wall. A Grok conductor dispatches that Sonnet subagent; a Composer conductor recommends the switch.
 
-### The STOP-and-switch handoff (only after the step-back confirms it's above-tier)
+### The STOP-and-switch handoff (Composer conductor only; only after the step-back confirms it's above-tier)
+
+A Grok conductor does not use this handoff — it dispatches Sonnet or Opus itself. This handoff is only for a **Composer** conductor, which cannot dispatch Anthropic models.
 
 1. **Stop before the risky action** — no attempt #3, no fragile-surface edit, no committing the design guess.
 2. **Hand over the plan you wrote in the step-back as the escalation note** (don't rewrite it from scratch): what you were doing, **which tripwire** tripped, the specific decision/risk, the options you laid out, and your **recommended tier** (Sonnet vs Opus — default Sonnet).
 3. **Refresh `ORCHESTRATOR-STATE.md`** head so the switched-up chat picks up cold (per the OPERATING CONTRACT above).
 4. **Tell Andrew explicitly:** *"Switch this chat to [Sonnet/Opus] and say continue."* Then stop — don't keep working.
 
+### Notification discipline (cost lesson, 2026-10-07)
+
+An Opus conductor spent ~$30 overnight, mostly re-billing its whole context on ~25 background shell-completion pings that needed no decision. The conductor does **NOT** act on a subagent's intermediate shell-completion notifications. Reply in one line or not at all, and do real work only on the subagent's final report. Do not poll subagents more than necessary.
+
 ## Hard model rules (apply to EVERY dispatch, always)
 
 These are unconditional and override any convenience default:
 
+- **Hands work dispatches to Grok.** The only Grok slug currently exposed to the Task tool is `grok-4.7-xhigh-fast`; effort and context can't be set per dispatch. Andrew's preference is lower effort + fast + ~300k for subagents when such a slug becomes available, and conductors should prefer it then. `composer-2.5` remains an allowed cheap executor.
 - **`composer-2.5-fast` is FORBIDDEN.** It is ~6× the cost of `composer-2.5` for latency-only benefit and buys us nothing on this codebase. Composer work is **`composer-2.5` only**, every time.
 - **Every dispatch sets `model` explicitly, plus its options.** Never rely on model inheritance/defaults (including on `resume` — see AGENTS.md § Model usage protocol, where inheritance is documented as unreliable). If a dispatch does not name its model, that is a bug.
 
@@ -90,7 +103,7 @@ These are unconditional and override any convenience default:
 For any action you're about to take in-chat, ask one question: **does this require Opus-grade *judgment*, or just *hands*?**
 
 - **Judgment** — what to do next, which trade-off, when to merge / defer / escalate, high-blast-radius or multi-phase design, synthesizing multiple subagents into a recommendation for Andrew. → **Opus.** **When genuinely in doubt about a judgment or quality-risk call, keep it on Opus** — farming out something whose wrong answer costs hours of unwinding is the expensive mistake. This is the *only* "in doubt → Opus."
-- **Hands** — reading code to learn a thing, writing or editing code/tests/migrations of *any* size, running an investigation, mechanical refactors, typing durable prose. → **Composer 2.5, always.** **Doubt about whether Composer is *capable* of an execution task is NOT a reason to keep it on Opus.** Dispatch it: it's cheap to try, and you escalate on an *actual observed* failure, never on speculation that it might struggle.
+- **Hands** — reading code to learn a thing, writing or editing code/tests/migrations of *any* size, running an investigation, mechanical refactors, typing durable prose. → **Grok** (`grok-4.7-xhigh-fast` until a lower-effort, fast, ~300k slug exists; prefer that slug when it does). `composer-2.5` remains an allowed cheap executor. **Doubt about whether Grok (or Composer) is *capable* of an execution task is NOT a reason to keep it on Opus.** Dispatch it: it's cheap to try, and you escalate on an *actual observed* failure, never on speculation that it might struggle.
 
 Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the result) and there is no perfect dividing line. That tension is resolved in exactly one direction: when overhead genuinely dwarfs the task, the narrow carve-out below applies — treat it as a **rare exception**, not a general escape hatch. Everywhere else, when the two are close, **dispatch.**
 
@@ -98,14 +111,14 @@ Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the r
 
 | About to do | Dispatch instead |
 |---|---|
-| Read code to understand a thing — **even ONE file beyond a quick glance** | `Task` `subagent_type="explore"` `model="composer-2.5"` |
-| Write **or edit** production code, tests, or migrations — **any size, including a "one-line" fix** | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` |
-| Investigate / debug / trace behavior through the codebase | `Task` `subagent_type="explore"` (`generalPurpose` if it needs edits) `model="composer-2.5"` |
-| Author **any** durable doc/report/bootstrapper longer than a few lines | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` — Opus provides the scope blob (what to capture, structural template, links to existing reference docs), Composer types the prose |
-| Multi-step refactor of any size | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` |
-| Run a verification pass (tsc/eslint/jest/build) to *check* something | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` — don't burn Opus tokens watching a build |
+| Read code to understand a thing — **even ONE file beyond a quick glance** | `Task` `subagent_type="explore"` `model="grok-4.7-xhigh-fast"` |
+| Write **or edit** production code, tests, or migrations — **any size, including a "one-line" fix** | `Task` `subagent_type="generalPurpose"` `model="grok-4.7-xhigh-fast"` |
+| Investigate / debug / trace behavior through the codebase | `Task` `subagent_type="explore"` (`generalPurpose` if it needs edits) `model="grok-4.7-xhigh-fast"` |
+| Author **any** durable doc/report/bootstrapper longer than a few lines | `Task` `subagent_type="generalPurpose"` `model="grok-4.7-xhigh-fast"` — Opus provides the scope blob (what to capture, structural template, links to existing reference docs), the executor types the prose |
+| Multi-step refactor of any size | `Task` `subagent_type="generalPurpose"` `model="grok-4.7-xhigh-fast"` |
+| Run a verification pass (tsc/eslint/jest/build) to *check* something | `Task` `subagent_type="generalPurpose"` `model="grok-4.7-xhigh-fast"` — don't burn Opus tokens watching a build |
 | Investigate a failing CI check | `Task` `subagent_type="ci-investigator"` |
-| 5-axis adversarial reliability review on a large diff | `Task` `subagent_type="generalPurpose"` `model="claude-4.6-sonnet-medium-thinking"` |
+| 5-axis adversarial reliability review on a large diff | `Task` `subagent_type="generalPurpose"` `model="claude-sonnet-5-5-high"` (readonly) |
 
 **Smokebook dispatches:** any prompt that asks a subagent to produce a smokebook MUST reference [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](../../docs/handoff/SMOKEBOOK-TEMPLATE.md) + the fetch-don't-guess preview URL rule ([`.cursor/rules/smokebook-template.mdc`](smokebook-template.mdc)); supply the verified Vercel `branchAlias` when already known.
 
@@ -133,7 +146,7 @@ Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the r
 - "I'll fix this one small bug while I'm here..." → that's a `generalPurpose` subagent.
 - "It's a one-line change, dispatch overhead isn't worth it..." → if it touches code/tests, **dispatch anyway**; the carve-out is docs-only.
 - "Let me run tsc/the build real quick to confirm..." → that's a `generalPurpose` subagent; don't spend Opus tokens watching output scroll.
-- "I'm not sure Composer can handle this, I'd better do it..." → capability doubt on an *execution* task is not a reason to keep it; dispatch and escalate only on observed failure.
+- "I'm not sure Grok (or Composer) can handle this, I'd better do it..." → capability doubt on an *execution* task is not a reason to keep it; dispatch and escalate only on observed failure.
 
 If you catch yourself mid-action: stop, dispatch, and acknowledge the catch.
 
@@ -143,7 +156,7 @@ Canonical source: [`docs/handoff/ORCHESTRATOR-STATE.md`](../../docs/handoff/ORCH
 
 **Every turn that materially changes state:** keep the lightweight head current **inline** (cheap docs edit, same cadence as a todo list) — **Last action completed**, **Next action(s)**, **Open Andrew-confirms**, **In-flight subagents**, **Uncommitted / unmerged state**. Opus may do this head update in-chat (docs-only carve-out).
 
-**Heavy full restructure** (dispatch Composer 2.5 from a scope blob — do not have Opus retype the whole doc) at ANY of these triggers:
+**Heavy full restructure** (dispatch Grok, or Composer 2.5, from a scope blob — do not have Opus retype the whole doc) at ANY of these triggers:
 
 - Immediately after a `merge --no-ff` to master of any feature/wave branch.
 - After closing a multi-day thread or a long-standing bug (e.g. a recurring regression finally fixed).
@@ -152,7 +165,7 @@ Canonical source: [`docs/handoff/ORCHESTRATOR-STATE.md`](../../docs/handoff/ORCH
 
 Template for heavy passes: [`docs/handoff/orchestrator-state-template.md`](../../docs/handoff/orchestrator-state-template.md). Mechanism detail: `AGENTS.md` § Conventions ("Orchestrator state checkpoints").
 
-**Self-catch:** if you just merged to master, or just declared a hard-won bug resolved, and `ORCHESTRATOR-STATE.md` still describes the old reality — STOP and update (head inline now; dispatch Composer for full restructure if warranted) before starting the next thing. A stale durable state is a silent failure; treat "I'll update state later" the same as "I'll write this test later."
+**Self-catch:** if you just merged to master, or just declared a hard-won bug resolved, and `ORCHESTRATOR-STATE.md` still describes the old reality — STOP and update (head inline now; dispatch Grok, or Composer, for full restructure if warranted) before starting the next thing. A stale durable state is a silent failure; treat "I'll update state later" the same as "I'll write this test later."
 
 ## Full protocol with tier escalation criteria + observed quality
 
