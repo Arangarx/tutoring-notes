@@ -164,6 +164,7 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   writes   `[tap] tap=<adminUserId|operatorId> action=approved|rejected|revoked|allowlist_add|allowlist_signup_approved|assert_rejected ...`).
   `ics` (ICS subscription feed — `src/app/api/calendar/ics/[token]/route.ts` + `src/lib/calendar/ics-access-log.ts`; every fetch/denial/error writes `[ics] ics=<token:8> action=feed_served|denied|error adminUserId=<id>` when known).
   `gcw` (Google Calendar write — `src/lib/calendar/google-calendar-write.ts`; every insert/patch/delete attempt writes `[gcw] adminUserId=<id> sessionId=<id> action=insert_start|insert_success|insert_error|insert_linked|patch_start|patch_success|patch_error|delete_start|delete_success|delete_error|invalid_grant|persist_error` with optional `googleEventId=<id>`).
+  `org` (organization membership — `src/lib/org-scope.ts`; writes `[org] org=<organizationId> action=<action> actor=<adminUserId|email> inv=<inviteId:8>`. Never log the invite token.)
  See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.- **Migrations are additive.** Production runs on Neon; never drop or

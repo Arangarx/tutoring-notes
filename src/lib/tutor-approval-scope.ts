@@ -21,7 +21,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
-import type { TutorApprovalStatus } from "@prisma/client";
+import type { Prisma, TutorApprovalStatus } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
 // Typed error so callers can distinguish approval failures from other errors
@@ -169,21 +169,35 @@ export async function assertTutorApproved(
 // Operator action: approve a tutor
 // ---------------------------------------------------------------------------
 
+export type ApproveTutorOptions = {
+  /** When set, the [tap] line records which org invite caused the approval. */
+  viaOrg?: { organizationId: string; inviteId: string };
+  /**
+   * Run the conditional update on this transaction client.
+   * Product-event insert is skipped so the caller can write it after commit.
+   */
+  client?: Prisma.TransactionClient;
+};
+
 /**
  * Approve a WAITLISTED tutor.
- * Sets approvalStatus=APPROVED, approvedAt=now(), approvedByAdminId=operatorId.
+ * Conditional updateMany: only a row still WAITLISTED changes (count 0 = no-op).
+ * REJECTED and operator-revoked races that leave a non-WAITLISTED status stay put.
  *
- * Caller MUST run requireOperator() before calling this.
+ * Caller MUST run requireOperator() before calling this, except the org-invite
+ * accept path which passes the inviter id and checks org status in the same transaction.
  *
  * @param adminUserId  - AdminUser.id of the tutor to approve
- * @param operatorId   - AdminUser.id of the operator performing the approval
+ * @param operatorId   - AdminUser.id stored on approvedByAdminId (operator, or the inviter)
  */
 export async function approveTutor(
   adminUserId: string,
-  operatorId: string
-): Promise<void> {
-  await db.adminUser.update({
-    where: { id: adminUserId },
+  operatorId: string,
+  options?: ApproveTutorOptions
+): Promise<{ approved: boolean }> {
+  const client = options?.client ?? db;
+  const result = await client.adminUser.updateMany({
+    where: { id: adminUserId, approvalStatus: "WAITLISTED" },
     data: {
       approvalStatus: "APPROVED",
       approvedAt: new Date(),
@@ -191,16 +205,27 @@ export async function approveTutor(
     },
   });
 
+  if (result.count !== 1) {
+    return { approved: false };
+  }
+
+  const via = options?.viaOrg
+    ? ` approvedVia org=${options.viaOrg.organizationId} inv=${options.viaOrg.inviteId.slice(0, 8)}`
+    : "";
   console.log(
-    `[tap] tap=${adminUserId} action=approved byOperator=${operatorId}`
+    `[tap] tap=${adminUserId} action=approved byOperator=${operatorId}${via}`
   );
 
-  const { logProductEvent } = await import("@/lib/observability/product-events");
-  await logProductEvent({
-    kind: "TUTOR_APPROVED",
-    adminUserId,
-    metadata: { operatorId },
-  });
+  if (!options?.client) {
+    const { logProductEvent } = await import("@/lib/observability/product-events");
+    await logProductEvent({
+      kind: "TUTOR_APPROVED",
+      adminUserId,
+      metadata: { operatorId },
+    });
+  }
+
+  return { approved: true };
 }
 
 /**

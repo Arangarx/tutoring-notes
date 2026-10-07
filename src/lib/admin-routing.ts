@@ -79,12 +79,19 @@ export function realAdminHomePath(): string {
  * /admin/pending-approval. 2FA setup is intentionally NOT exempt here —
  * WAITLISTED users should never reach the 2FA flow (the 2FA gate must also
  * exempt /admin/pending-approval so the two gates don't ping-pong).
+ * /org-invite is included so the accept page stays outside that redirect.
  */
+/** Org invite accept lives outside /admin so the waitlist redirect cannot swallow it. */
+export function isOrgInvitePath(pathname: string): boolean {
+  return pathname === "/org-invite" || pathname.startsWith("/org-invite/");
+}
+
 export function isApprovalExemptAdminPath(pathname: string): boolean {
   return (
     pathname === "/admin/pending-approval" ||
     pathname.startsWith("/admin/pending-approval/") ||
-    pathname.startsWith("/api/auth/")
+    pathname.startsWith("/api/auth/") ||
+    isOrgInvitePath(pathname)
   );
 }
 
@@ -104,7 +111,8 @@ export function is2faExemptAdminPath(pathname: string): boolean {
     pathname.startsWith("/admin/settings/2fa/verify") ||
     // Must be exempt to prevent pending-approval ↔ 2fa/setup redirect loop.
     pathname === "/admin/pending-approval" ||
-    pathname.startsWith("/admin/pending-approval/")
+    pathname.startsWith("/admin/pending-approval/") ||
+    isOrgInvitePath(pathname)
   );
 }
 
@@ -121,7 +129,8 @@ export function isEmailVerifyExemptAdminPath(pathname: string): boolean {
   return (
     pathname === "/admin/pending-approval" ||
     pathname.startsWith("/admin/pending-approval/") ||
-    pathname.startsWith("/api/auth/")
+    pathname.startsWith("/api/auth/") ||
+    isOrgInvitePath(pathname)
   );
 }
 
