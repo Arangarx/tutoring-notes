@@ -86,7 +86,7 @@ An Opus conductor spent ~$30 overnight, mostly re-billing its whole context on ~
 
 These are unconditional and override any convenience default:
 
-- **Hands work dispatches to Grok.** The only Grok slug currently exposed to the Task tool is `grok-4.7-xhigh-fast`; effort and context can't be set per dispatch. Andrew's preference is lower effort + fast + ~300k for subagents when such a slug becomes available, and conductors should prefer it then. `composer-2.5` remains an allowed cheap executor.
+- **Hands work dispatches to Grok.** The Grok slug exposed to the Task tool **follows Andrew's current model-picker setting** and changes when he changes it (observed 2026-10-07: `grok-4.7-xhigh-fast` → `grok-4.7-xhigh`). **Never hardcode a Grok slug from a doc or a previous dispatch.** Before each dispatch, read the available-models list in your own system context and use whichever `grok-4.7-*` slug is listed there. If none is listed, fall back to `composer-2.5`, never `-fast`. If a dispatch is rejected for an unknown model, re-read the list and retry with the listed slug instead of stopping. Effort and context can't be set per dispatch yet. Andrew's preference is lower effort + fast + ~300k for subagents when that becomes settable. `composer-2.5` remains an allowed cheap executor.
 - **`composer-2.5-fast` is FORBIDDEN.** It is ~6× the cost of `composer-2.5` for latency-only benefit and buys us nothing on this codebase. Composer work is **`composer-2.5` only**, every time.
 - **Every dispatch sets `model` explicitly, plus its options.** Never rely on model inheritance/defaults (including on `resume` — see AGENTS.md § Model usage protocol, where inheritance is documented as unreliable). If a dispatch does not name its model, that is a bug.
 
@@ -103,7 +103,7 @@ These are unconditional and override any convenience default:
 For any action you're about to take in-chat, ask one question: **does this require Opus-grade *judgment*, or just *hands*?**
 
 - **Judgment** — what to do next, which trade-off, when to merge / defer / escalate, high-blast-radius or multi-phase design, synthesizing multiple subagents into a recommendation for Andrew. → **Opus.** **When genuinely in doubt about a judgment or quality-risk call, keep it on Opus** — farming out something whose wrong answer costs hours of unwinding is the expensive mistake. This is the *only* "in doubt → Opus."
-- **Hands** — reading code to learn a thing, writing or editing code/tests/migrations of *any* size, running an investigation, mechanical refactors, typing durable prose. → **Grok** (`grok-4.7-xhigh-fast` until a lower-effort, fast, ~300k slug exists; prefer that slug when it does). `composer-2.5` remains an allowed cheap executor. **Doubt about whether Grok (or Composer) is *capable* of an execution task is NOT a reason to keep it on Opus.** Dispatch it: it's cheap to try, and you escalate on an *actual observed* failure, never on speculation that it might struggle.
+- **Hands** — reading code to learn a thing, writing or editing code/tests/migrations of *any* size, running an investigation, mechanical refactors, typing durable prose. → **Grok** (whichever `grok-4.7-*` slug is currently listed. It follows Andrew's picker, so don't hardcode it; see Hard model rules). `composer-2.5` remains an allowed cheap executor. **Doubt about whether Grok (or Composer) is *capable* of an execution task is NOT a reason to keep it on Opus.** Dispatch it: it's cheap to try, and you escalate on an *actual observed* failure, never on speculation that it might struggle.
 
 Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the result) and there is no perfect dividing line. That tension is resolved in exactly one direction: when overhead genuinely dwarfs the task, the narrow carve-out below applies — treat it as a **rare exception**, not a general escape hatch. Everywhere else, when the two are close, **dispatch.**
 
@@ -111,12 +111,12 @@ Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the r
 
 | About to do | Dispatch instead |
 |---|---|
-| Read code to understand a thing — **even ONE file beyond a quick glance** | `Task` `subagent_type="explore"` `model="grok-4.7-xhigh-fast"` |
-| Write **or edit** production code, tests, or migrations — **any size, including a "one-line" fix** | `Task` `subagent_type="generalPurpose"` `model="grok-4.7-xhigh-fast"` |
-| Investigate / debug / trace behavior through the codebase | `Task` `subagent_type="explore"` (`generalPurpose` if it needs edits) `model="grok-4.7-xhigh-fast"` |
-| Author **any** durable doc/report/bootstrapper longer than a few lines | `Task` `subagent_type="generalPurpose"` `model="grok-4.7-xhigh-fast"` — Opus provides the scope blob (what to capture, structural template, links to existing reference docs), the executor types the prose |
-| Multi-step refactor of any size | `Task` `subagent_type="generalPurpose"` `model="grok-4.7-xhigh-fast"` |
-| Run a verification pass (tsc/eslint/jest/build) to *check* something | `Task` `subagent_type="generalPurpose"` `model="grok-4.7-xhigh-fast"` — don't burn Opus tokens watching a build |
+| Read code to understand a thing — **even ONE file beyond a quick glance** | `Task` `subagent_type="explore"` `model=<current Grok 4.7 slug>` |
+| Write **or edit** production code, tests, or migrations — **any size, including a "one-line" fix** | `Task` `subagent_type="generalPurpose"` `model=<current Grok 4.7 slug>` |
+| Investigate / debug / trace behavior through the codebase | `Task` `subagent_type="explore"` (`generalPurpose` if it needs edits) `model=<current Grok 4.7 slug>` |
+| Author **any** durable doc/report/bootstrapper longer than a few lines | `Task` `subagent_type="generalPurpose"` `model=<current Grok 4.7 slug>` — Opus provides the scope blob (what to capture, structural template, links to existing reference docs), the executor types the prose |
+| Multi-step refactor of any size | `Task` `subagent_type="generalPurpose"` `model=<current Grok 4.7 slug>` |
+| Run a verification pass (tsc/eslint/jest/build) to *check* something | `Task` `subagent_type="generalPurpose"` `model=<current Grok 4.7 slug>` — don't burn Opus tokens watching a build |
 | Investigate a failing CI check | `Task` `subagent_type="ci-investigator"` |
 | 5-axis adversarial reliability review on a large diff | `Task` `subagent_type="generalPurpose"` `model="claude-sonnet-5-5-high"` (readonly) |
 

@@ -503,11 +503,13 @@ stays forbidden).
   stays, scoped to a **Composer conductor only** — Composer cannot
   dispatch Anthropic models, so it must STOP and ask Andrew to switch
   the chat model.
-  **Subagent execution tier:** dispatch Grok for hands work. The only
-  Grok slug currently exposed to the Task tool is `grok-4.7-xhigh-fast`;
-  effort and context can't be set per dispatch. Andrew's preference is
-  lower effort + fast + ~300k for subagents when such a slug becomes
-  available, and conductors should prefer it then. `composer-2.5`
+  **Subagent execution tier:** dispatch Grok for hands work. The Grok slug
+  exposed to the Task tool follows Andrew's current model-picker setting.
+  Never hardcode it: use whichever `grok-4.7-*` slug is in your
+  available-models list right now, and fall back to `composer-2.5` if
+  none is listed (see orchestrator-discipline.mdc § Hard model rules).
+  Effort and context can't be set per dispatch yet. Andrew's preference
+  is lower effort + fast + ~300k for subagents when that becomes settable. `composer-2.5`
   remains an allowed cheap executor. The `composer-2.5-fast` ban stays.
   **Notification discipline (cost lesson, 2026-10-07):** an Opus
   conductor spent ~$30 overnight, mostly re-billing its whole context
