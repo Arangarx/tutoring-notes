@@ -10,6 +10,7 @@ import {
 import { createNote } from "./actions";
 import { formatLocalTimeSnapped, TIME_INPUT_STEP_SECONDS } from "@/lib/time/snap";
 import { Button } from "@/components/ui/button";
+import { useHydrated } from "@/hooks/useHydrated";
 
 export type PopulatePayload = {
   topics: string;
@@ -102,6 +103,11 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
   const [shareRecordingInEmail, setShareRecordingInEmail] = useState(false);
   const [, startTransition] = useTransition();
   const [submitting, setSubmitting] = useState(false);
+  // SSR markup is in the document before React's onChange exists. A keystroke
+  // in that gap changes the DOM only; the next commit writes state ("") back
+  // and the tutor loses whatever they typed first. Keep every control inert
+  // until the client effect runs.
+  const hydrated = useHydrated();
 
   useImperativeHandle(ref, () => ({
     populate(payload: PopulatePayload) {
@@ -231,6 +237,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
           name="date"
           type="date"
           value={noteDate}
+          disabled={!hydrated}
           onChange={(e) => setNoteDate(e.target.value)}
         />
         </div>
@@ -240,6 +247,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
             id="note-template"
             name="template"
             value={template}
+            disabled={!hydrated}
             onChange={(e) => setTemplate(e.target.value)}
           >
             {TEMPLATES.map((t) => (
@@ -265,6 +273,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
             // on submit.
             step={TIME_INPUT_STEP_SECONDS}
             value={startTime}
+            disabled={!hydrated}
             onChange={(e) => setStartTime(e.target.value)}
           />
         </div>
@@ -276,6 +285,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
             type="time"
             step={TIME_INPUT_STEP_SECONDS}
             value={endTime}
+            disabled={!hydrated}
             onChange={(e) => setEndTime(e.target.value)}
           />
         </div>
@@ -289,6 +299,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
           rows={3}
           placeholder="What did you work on today?"
           value={topics}
+          disabled={!hydrated}
           onChange={(e) => setTopics(e.target.value)}
         />
       </div>
@@ -300,6 +311,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
           rows={3}
           placeholder="What should they do before next time?"
           value={homework}
+          disabled={!hydrated}
           onChange={(e) => setHomework(e.target.value)}
         />
       </div>
@@ -311,6 +323,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
           rows={3}
           placeholder="Where does the student stand on what was covered? Strengths, struggles."
           value={assessment}
+          disabled={!hydrated}
           onChange={(e) => setAssessment(e.target.value)}
         />
       </div>
@@ -322,6 +335,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
           rows={3}
           placeholder="What's the plan for next session?"
           value={plan}
+          disabled={!hydrated}
           onChange={(e) => setPlan(e.target.value)}
         />
       </div>
@@ -333,6 +347,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
           rows={3}
           placeholder="https://..."
           value={links}
+          disabled={!hydrated}
           onChange={(e) => setLinks(e.target.value)}
         />
       </div>
@@ -364,6 +379,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
             <input
               type="checkbox"
               checked={shareRecordingInEmail}
+              disabled={!hydrated}
               onChange={(e) => setShareRecordingInEmail(e.target.checked)}
               style={{ marginTop: 2, flexShrink: 0 }}
               data-testid="share-recording-checkbox"
@@ -383,12 +399,12 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
           type="button"
           variant="outline"
           className="min-h-11"
-          disabled={!hasContent || submitting}
+          disabled={!hydrated || !hasContent || submitting}
           onClick={handleClear}
         >
           Clear form
         </Button>
-        <Button type="submit" className="min-h-11" disabled={submitting || !hasContent}>
+        <Button type="submit" className="min-h-11" disabled={!hydrated || submitting || !hasContent}>
           {submitting ? "Saving…" : "Save note"}
         </Button>
       </div>

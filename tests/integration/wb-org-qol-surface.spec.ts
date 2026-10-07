@@ -190,6 +190,16 @@ test.describe("whiteboard QoL surfaces", () => {
         sessionPhase: "PENDING",
         sessionMode: "IN_PERSON",
       });
+      const hydrationErrors: string[] = [];
+      page.on("console", (msg) => {
+        const text = msg.text();
+        if (
+          text.includes("hydrated but some attributes") ||
+          text.includes("hydration-mismatch")
+        ) {
+          hydrationErrors.push(text);
+        }
+      });
       await page.goto(
         `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
         { waitUntil: "domcontentloaded" }
@@ -200,6 +210,12 @@ test.describe("whiteboard QoL surfaces", () => {
       const boards = page.getByRole("tablist", { name: "Boards" });
       // The waiting room covers the strip until Start. Hide it only so the
       // rename can be clicked; phase stays pending and recording stays off.
+      // Cancel stays disabled until the workspace hydration latch flips, so
+      // this wait is "React is listening." Writing display:none before that
+      // mismatches the SSR overlay and the dev error overlay eats the click.
+      await expect(page.getByTestId("wb-waiting-cancel")).toBeEnabled({
+        timeout: 30_000,
+      });
       await page.evaluate(() => {
         const overlay = document.querySelector('[data-testid="wb-waiting-overlay"]');
         if (overlay instanceof HTMLElement) overlay.style.display = "none";
@@ -210,6 +226,7 @@ test.describe("whiteboard QoL surfaces", () => {
       await nameField.fill("Algebra");
       await nameField.press("Enter");
       await expect(boards.getByRole("tab", { name: "Algebra" })).toBeVisible();
+      expect(hydrationErrors).toEqual([]);
       await page.evaluate(() => {
         const overlay = document.querySelector('[data-testid="wb-waiting-overlay"]');
         if (overlay instanceof HTMLElement) overlay.style.display = "";

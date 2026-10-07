@@ -22,6 +22,20 @@ if (!process.env.TWILIO_FROM_NUMBER?.trim()) {
   process.env.TWILIO_FROM_NUMBER = PW_TWILIO_FROM_NUMBER;
 }
 
+const path = require("path");
+// Headless Chromium's built-in fake mic is silent once Playwright adds
+// `--mute-audio`. Every slot then sits under the silent-track RMS floor,
+// recovery burns ~6s, and a short session only keeps a sub-second webm.
+// A real tone plus dropping that mute gives the analyser energy.
+const PW_FAKE_MIC_WAV = path
+  .resolve(__dirname, "tests/fixtures/pw-fake-mic.wav")
+  .replace(/\\/g, "/");
+const PW_FAKE_MEDIA_ARGS = [
+  "--use-fake-ui-for-media-stream",
+  "--use-fake-device-for-media-stream",
+  `--use-file-for-fake-audio-capture=${PW_FAKE_MIC_WAV}`,
+];
+
 /**
  * Playwright config — visual regression, a11y, smoke, e2e, and integration tests.
  *
@@ -134,10 +148,8 @@ export default defineConfig({
         storageState: "tests/integration/.auth/tutor.json",
         permissions: ["microphone"],
         launchOptions: {
-          args: [
-            "--use-fake-ui-for-media-stream",
-            "--use-fake-device-for-media-stream",
-          ],
+          ignoreDefaultArgs: ["--mute-audio"],
+          args: PW_FAKE_MEDIA_ARGS,
         },
       },
       testMatch: [
@@ -174,10 +186,8 @@ export default defineConfig({
         storageState: "tests/integration/.auth/tutor.json",
         permissions: ["microphone"],
         launchOptions: {
-          args: [
-            "--use-fake-ui-for-media-stream",
-            "--use-fake-device-for-media-stream",
-          ],
+          ignoreDefaultArgs: ["--mute-audio"],
+          args: PW_FAKE_MEDIA_ARGS,
         },
       },
       testMatch: [
@@ -238,10 +248,8 @@ export default defineConfig({
         storageState: "tests/integration/.auth/tutor.json",
         permissions: ["microphone"],
         launchOptions: {
-          args: [
-            "--use-fake-ui-for-media-stream",
-            "--use-fake-device-for-media-stream",
-          ],
+          ignoreDefaultArgs: ["--mute-audio"],
+          args: PW_FAKE_MEDIA_ARGS,
         },
       },
       testMatch: ["**/integration/wb-in-person-audio-start.spec.ts"],

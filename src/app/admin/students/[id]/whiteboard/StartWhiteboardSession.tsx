@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useHydrated } from "@/hooks/useHydrated";
 import { Button } from "@/components/ui/button";
 import {
   formatConsentActionError,
@@ -60,10 +61,7 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // SSR HTML is clickable before hydration; that click never runs handleStart.
-  const [actionsEnabled, setActionsEnabled] = useState(false);
-  useEffect(() => {
-    setActionsEnabled(true);
-  }, []);
+  const actionsEnabled = useHydrated();
 
   if (!canStartSession(props)) {
     if (props.accessSuspended) {
