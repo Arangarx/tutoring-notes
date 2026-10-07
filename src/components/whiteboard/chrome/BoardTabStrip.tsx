@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, ImageIcon } from "lucide-react";
 import type { PageStripRow } from "@/components/whiteboard/PageStrip";
+import { BOARD_TITLE_MAX_LENGTH } from "@/lib/whiteboard/board-title";
 import { isImageBoardSection, isPdfBoardSection } from "@/lib/whiteboard/page-strip-pdf";
 import { WbIconPdf } from "@/components/whiteboard/chrome/wb-icons";
 import { Button } from "@/components/ui/button";
@@ -220,6 +221,7 @@ export function BoardTabStrip({
                 <input
                   aria-label={`Name for ${boardLabel}`}
                   data-testid={`wb-board-rename-input-${index}`}
+                  maxLength={BOARD_TITLE_MAX_LENGTH}
                   value={renameDraft}
                   onChange={(e) => setRenameDraft(e.target.value)}
                   onKeyDown={(e) => {
