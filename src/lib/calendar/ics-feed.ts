@@ -63,13 +63,10 @@ function tutoringEventTitle(displayName: string): string {
   return `Tutoring — ${displayName.trim()}`;
 }
 
-function nameIsEmailAddress(name: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name.trim());
-}
-
 function calendarDisplayName(name: string): string {
   const trimmed = name.trim();
-  if (!trimmed || nameIsEmailAddress(trimmed)) return SITE_ROLE_ROSTER_LEARNER;
+  // Any "@" is a login handle or email, not a name to publish on a calendar.
+  if (!trimmed || trimmed.includes("@")) return SITE_ROLE_ROSTER_LEARNER;
   return firstNameLastInitial(trimmed) || SITE_ROLE_ROSTER_LEARNER;
 }
 

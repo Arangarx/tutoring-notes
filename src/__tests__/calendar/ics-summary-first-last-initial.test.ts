@@ -74,6 +74,43 @@ describe("ICS SUMMARY — first name + last initial", () => {
     expect(buildIcsEventSummary({ name: "Cher" })).toBe("Tutoring — Cher");
   });
 
+  it("replaces a child login handle that contains @ with Learner", () => {
+    const handle = "alex@smith";
+    expect(buildIcsEventSummary({ name: handle })).toBe("Tutoring — Learner");
+    const body = buildIcsCalendarBody(
+      [
+        {
+          ...base,
+          id: "s-handle",
+          student: { name: handle, icsShowFullName: true },
+        },
+      ],
+      "America/Denver"
+    );
+    const summaries = summariesFromIcs(body);
+    expect(summaries).toEqual(["Tutoring — Learner"]);
+    for (const summary of summaries) {
+      expect(summary).not.toContain("@");
+      expect(summary).not.toContain("alex");
+    }
+
+    const google = buildScheduledSessionGoogleEventResource(
+      {
+        id: "g-handle",
+        date: base.date,
+        startTime: base.startTime,
+        endTime: base.endTime,
+        subject: base.subject,
+        notes: "",
+        location: "",
+        student: { name: handle, icsShowFullName: true },
+      },
+      "America/Denver"
+    );
+    expect(google.summary).toBe("Tutoring — Learner");
+    expect(google.summary).not.toContain("@");
+  });
+
   it("does not put an unclaimed self-learner's email in the title", () => {
     const email = "ada.learner@example.com";
     expect(buildIcsEventSummary({ name: email })).toBe("Tutoring — Learner");
