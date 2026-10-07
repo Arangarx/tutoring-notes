@@ -67,12 +67,12 @@
 | Path | Project | Coverage character |
 |------|---------|-------------------|
 | `tests/smoke/*.spec.ts` | desktop + mobile | Console-clean smoke; wb consent+mount needs `BLOB_*` |
-| `tests/smoke-admin-student-detail.spec.ts` | desktop | Note + outbox + share link; auth redirect; forgot-password load |
+| `tests/smoke-admin-student-detail.spec.ts` | integration | Auth redirect, forgot-password load, feedback link |
 | `tests/visual/pages.spec.ts` | desktop | Screenshot + axe; login, signup, share, feedback, admin list/detail |
 | `tests/integration/*.spec.ts` | integration | Recording e2e, resilience, live-av, group presence (tutor auth) |
 | `tests/integration/whiteboard-live-sync-regression.spec.ts` | wb-regression | **RB** sync invariants |
 | `tests/e2e/audio-rollover.spec.ts` | e2e | **Opt-in** (`RUN_AUDIO_ROLLOVER_E2E=1`) |
-| `tests/audio-upload.spec.ts`, `tests/ai-panel.spec.ts` | (default e2e project if matched) | Legacy paths; verify before relying on CI |
+| `tests/audio-upload.spec.ts` | wb-regression | Upload tab + transcribe fills the note form |
 
 **Why Playwright is not in `test:regression`:** separate toolchain, Docker/webServer startup cost, and intentional split — regression folder guards **fast, deterministic** production bugs; Playwright is the **slow browser net** (smoke/integration/wb-sync).
 
@@ -93,20 +93,20 @@
 | Impersonation start/exit | Tutor/admin | U | `impersonation-b.test.ts`, `impersonation-c.test.ts`, `impersonation-d.test.ts` | Banner, session mint, forbidden cases — **M** dashboard round-trip |
 | Impersonation role guards (TUTOR cannot impersonate) | Tutor/admin | U | `auth-sec1.test.ts`, `impersonation-b.test.ts` | — |
 | Student list (`/admin/students`) | Tutor/admin | E (visual) | `tests/visual/pages.spec.ts` | Screenshot + a11y only — **M** for data/actions |
-| Student detail | Tutor/admin | U, E | `note-and-share.test.ts`, `tests/visual/pages.spec.ts`, `tests/smoke-admin-student-detail.spec.ts` | Note create + outbox + share **E**; not all detail actions |
+| Student detail | Tutor/admin | U, E | `note-and-share.test.ts`, `tests/visual/pages.spec.ts` | Note create + share **U**; visual **E**; not all detail actions |
 | Create / send claim invite (tutor) | Tutor/admin | I | `identity-p2b.test.ts` (P2B-CLM), `identity-p2a.test.ts` | API/state — **M** for "Send invite" UI behind flag |
 | In-person audio record (student page) | Tutor/admin | U, E | `useAudioRecorder.dom.test.tsx`, `lifecycle-machine.test.ts`, `tests/smoke/audio-recording.spec.ts` | Hook + smoke with mocked media — **M** real mic/iOS |
-| Audio upload tab + transcribe | Tutor/admin | E | `tests/audio-upload.spec.ts`, `tests/ai-panel.spec.ts` | Playwright; not in default pre-merge gate |
+| Audio upload tab + transcribe | Tutor/admin | E | `tests/audio-upload.spec.ts` | Playwright wb-regression |
 | Whiteboard session create (consent checkbox) | Tutor/admin | U, E | `createWhiteboardSession.test.ts`, `tests/smoke/whiteboard-workspace.spec.ts` | Server rejects missing consent — **E** needs Blob token |
 | Whiteboard workspace lifecycle (draw, pause, end) | Tutor/admin | U, E, RB | `endWhiteboardSession.test.ts`, `recorder-lifecycle.test.ts`, `tests/integration/recording-*.spec.ts`, `whiteboard-live-sync-regression.spec.ts` | End-session atomicity **U**; full path **E/RB** local only |
 | Whiteboard share / parent replay | Tutor/admin | U, E | `joinToken.test.ts`, `tests/visual/pages.spec.ts` (`/s/token`) | Share page visual — **M** for replay scrub on device |
-| Email outbox + share link from outbox | Tutor/admin | U, E | `upload-outbox.test.ts`, `tests/smoke-admin-student-detail.spec.ts` | Outbox row logic **U**; click-through **E** |
+| Email outbox + share link from outbox | Tutor/admin | U | `upload-outbox.test.ts` | Outbox row logic **U**; browser click-through not enrolled |
 | Revoke / rotate share links | Tutor/admin | U | `note-and-share.test.ts` | — |
 | Tutor settings profile / change password | Tutor/admin | M | — | **M**; policy drift vs signup backlogged |
 | Tutor settings email (Gmail OAuth) | Tutor/admin | M | — | **M** (pilot); integration smoke manual |
 | Tutor forgot / reset password | Tutor/admin | U, E (shallow) | `password-reset.test.ts`, `tests/smoke-admin-student-detail.spec.ts` | Tutor reset **U**; smoke loads forgot page only |
 | Live A/V (mic/cam, mesh) | Tutor/admin | U, E | `peer-mesh.test.ts`, `useLiveAV.dom.test.tsx`, `tests/integration/live-av-4d-regressions.spec.ts` | **M** for student tile/camera on hardware |
-| AI assist panel → note form | Tutor/admin | E | `tests/ai-panel.spec.ts` | Not wired to `test:regression` |
+| AI assist panel → note form | Tutor/admin | U, E | `AiAssistPanel.race.dom.test.tsx`, `tests/audio-upload.spec.ts` | Text generate **U**; transcribe fill **E** |
 | AccountHolder signup | Identity/parent | I, M | `identity-p2b.test.ts` (P2B-AHSIGN) | Route validation **I**; confirm-password field **M** (smoke queued `96c6a6b`) |
 | AccountHolder login | Identity/parent | I, M | `identity-p2a.test.ts` (session, cookies) | **M** UI; **in-memory** IP limiter not durable |
 | Verify email (AH) | Identity/parent | I | `identity-p2b.test.ts` (P2B-REDIR) | Redirect origin — **M** full verify flow |

@@ -375,16 +375,20 @@ describe("P2-J5 — outbox drain UI (fake-IDB + real observer)", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(mockFinalize).toHaveBeenCalled();
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.queryByRole("button", { name: /Saving your recording/i })
-      ).not.toBeInTheDocument();
-    });
-
-    expect(await outbox.listAllRows(WBSID)).toEqual([]);
+    // The saving copy clears when end-session leaves "finalizing", which is
+    // before finalizeOutboxAfterEnd logs and deletes the row. Waiting only
+    // for that copy lets the test return while the drain's finalize log is
+    // still queued. router.replace runs after that log.
+    await waitFor(
+      async () => {
+        expect(mockFinalize).toHaveBeenCalled();
+        expect(
+          screen.queryByRole("button", { name: /Saving your recording/i })
+        ).not.toBeInTheDocument();
+        expect(await outbox.listAllRows(WBSID)).toEqual([]);
+        expect(mockRouterReplace).toHaveBeenCalled();
+      },
+      { timeout: 15_000 }
+    );
   });
 });

@@ -1,13 +1,21 @@
 .mynk-wb-modifier-hints {
   position: fixed;
-  right: 16px;
+  /* Lower-left of the board. The chat toggle owns the bottom-right corner;
+     a right anchor paints Shift/Space across that button. */
+  left: 64px;
   bottom: 72px;
-  z-index: 5;
+  z-index: 4;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  max-width: min(360px, calc(100vw - 200px));
   pointer-events: none;
   font-size: 11px;
   color: var(--text-muted, var(--muted-foreground));
+}
+
+.mynk-wb-modifier-hints * {
+  pointer-events: none;
 }
 
 .mynk-wb-modifier-hints__item {

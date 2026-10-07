@@ -245,7 +245,24 @@ export async function seedTestLearner(
       });
     }
 
-    // 3. Link student row to the learner profile (idempotent)
+    // 3. Link this student to the learner profile. The pair
+    // (adminUserId, learnerProfileId) is unique, and each setup creates a
+    // new student row, so drop the profile off any previous harness student
+    // before attaching it here.
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      select: { adminUserId: true },
+    });
+    if (student) {
+      await prisma.student.updateMany({
+        where: {
+          adminUserId: student.adminUserId,
+          learnerProfileId,
+          NOT: { id: studentId },
+        },
+        data: { learnerProfileId: null },
+      });
+    }
     await prisma.student.update({
       where: { id: studentId },
       data: { learnerProfileId },
@@ -334,7 +351,21 @@ export async function seedSelfLearner(
       learnerProfileId = profile.id;
     }
 
-    // Link student to the self-learner profile (idempotent).
+    // Same unique (adminUserId, learnerProfileId) as seedTestLearner.
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      select: { adminUserId: true },
+    });
+    if (student) {
+      await prisma.student.updateMany({
+        where: {
+          adminUserId: student.adminUserId,
+          learnerProfileId,
+          NOT: { id: studentId },
+        },
+        data: { learnerProfileId: null },
+      });
+    }
     await prisma.student.update({
       where: { id: studentId },
       data: { learnerProfileId },

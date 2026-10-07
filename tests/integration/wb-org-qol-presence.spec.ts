@@ -76,6 +76,25 @@ async function openTutorAndStudent(
   };
 }
 
+async function clickChatToggle(page: import("@playwright/test").Page) {
+  const toggle = page.getByTestId("wb-session-chat-toggle");
+  await expect(toggle).toBeVisible();
+  const box = await toggle.boundingBox();
+  expect(box, "chat toggle box").not.toBeNull();
+  const center = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
+  const topId = await page.evaluate(({ x, y }) => {
+    const hit = document.elementFromPoint(x, y);
+    if (hit?.closest("[data-testid='wb-session-chat-toggle']")) {
+      return "wb-session-chat-toggle";
+    }
+    return hit?.getAttribute("data-testid") ?? hit?.tagName ?? "none";
+  }, center);
+  expect(topId, "chat toggle is the element under the pointer").toBe(
+    "wb-session-chat-toggle"
+  );
+  await page.mouse.click(center.x, center.y);
+}
+
 test.describe("org QoL presence", { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] }, () => {
   test("in-app chat — collapsed until opened; message reaches peer", async ({
     browser,
@@ -84,13 +103,18 @@ test.describe("org QoL presence", { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] }, () =>
     const session = await seedWbLiveSyncSession();
     const peers = await openTutorAndStudent(browser, session);
     try {
-      await peers.tutorPage.getByTestId("wb-session-chat-toggle").click();
+      await clickChatToggle(peers.tutorPage);
       await expect(peers.tutorPage.getByTestId("wb-session-chat-panel")).toBeVisible();
       const msg = `pw-chat-${Date.now()}`;
       await peers.tutorPage.getByTestId("wb-session-chat-input").fill(msg);
       await peers.tutorPage.getByTestId("wb-session-chat-panel").getByRole("button", { name: "Send" }).click();
 
-      await peers.studentPage.getByTestId("wb-session-chat-toggle").click();
+      // Two tiles on the 640px student viewport grow the AV cluster over the
+      // chat corner. Open chat only after that stack is up.
+      await expect(peers.studentPage.locator("[data-testid^='av-tile-label-']")).toHaveCount(2, {
+        timeout: 30_000,
+      });
+      await clickChatToggle(peers.studentPage);
       await expect(peers.studentPage.getByTestId("wb-session-chat-panel")).toContainText(msg, {
         timeout: 15_000,
       });

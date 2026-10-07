@@ -29,6 +29,41 @@ const PNG_1X1 = Buffer.from(
   "base64"
 );
 
+/** Chat toggle must be the hit target, and the hint box must not cover it. */
+async function expectChatToggleClearOfModifierHints(
+  page: import("@playwright/test").Page
+) {
+  const hints = page.getByTestId("wb-modifier-hints");
+  const toggle = page.getByTestId("wb-session-chat-toggle");
+  await expect(hints).toBeVisible();
+  await expect(toggle).toBeVisible();
+  const hintsBox = await hints.boundingBox();
+  const toggleBox = await toggle.boundingBox();
+  expect(hintsBox, "modifier hint box").not.toBeNull();
+  expect(toggleBox, "chat toggle box").not.toBeNull();
+  const separated =
+    hintsBox!.x + hintsBox!.width <= toggleBox!.x + 1 ||
+    toggleBox!.x + toggleBox!.width <= hintsBox!.x + 1 ||
+    hintsBox!.y + hintsBox!.height <= toggleBox!.y + 1 ||
+    toggleBox!.y + toggleBox!.height <= hintsBox!.y + 1;
+  expect(separated, "modifier hints must not intersect the chat toggle").toBe(true);
+  const center = {
+    x: toggleBox!.x + toggleBox!.width / 2,
+    y: toggleBox!.y + toggleBox!.height / 2,
+  };
+  const topId = await page.evaluate(({ x, y }) => {
+    const hit = document.elementFromPoint(x, y);
+    if (hit?.closest("[data-testid='wb-session-chat-toggle']")) {
+      return "wb-session-chat-toggle";
+    }
+    const testId = hit?.getAttribute?.("data-testid");
+    return testId ? `${hit?.tagName}#${testId}` : (hit?.tagName ?? "none");
+  }, center);
+  expect(topId, "chat toggle is the element under the pointer").toBe(
+    "wb-session-chat-toggle"
+  );
+}
+
 async function openTutorBoard(page: import("@playwright/test").Page) {
   const session = await seedWbLiveSyncSession();
   await page.goto(
@@ -366,6 +401,7 @@ test.describe("whiteboard QoL surfaces", () => {
     expect(hintsMidY).toBeGreaterThan(canvasMidY);
     expect(hintsBox!.x).toBeGreaterThan(canvas!.x);
     expect(hintsBox!.x + hintsBox!.width).toBeLessThanOrEqual(canvas!.x + canvas!.width + 8);
+    await expectChatToggleClearOfModifierHints(page);
   });
 
   test("plotting y= stores that expression on the graph", { tag: [TAG.WB_GRAPH] }, async ({
@@ -434,24 +470,10 @@ test.describe("whiteboard QoL surfaces", () => {
         await waitForTutorStudentConnected(peers.tutorPage);
         const line = "bridge is up";
         const openChat = async (page: import("@playwright/test").Page) => {
-          const toggle = page.getByTestId("wb-session-chat-toggle");
-          await expect(toggle).toBeVisible();
-          const box = await toggle.boundingBox();
+          await expectChatToggleClearOfModifierHints(page);
+          const box = await page.getByTestId("wb-session-chat-toggle").boundingBox();
           expect(box, "chat toggle box").not.toBeNull();
-          const center = {
-            x: box!.x + box!.width / 2,
-            y: box!.y + box!.height / 2,
-          };
-          const topId = await page.evaluate(({ x, y }) => {
-            const hit = document.elementFromPoint(x, y);
-            return hit?.closest("[data-testid='wb-session-chat-toggle']")
-              ? "wb-session-chat-toggle"
-              : (hit?.tagName ?? "none");
-          }, center);
-          expect(topId, "chat toggle is the element under the pointer").toBe(
-            "wb-session-chat-toggle"
-          );
-          await page.mouse.click(center.x, center.y);
+          await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
           await expect(page.getByTestId("wb-session-chat-panel")).toBeVisible();
         };
         await openChat(peers.tutorPage);

@@ -34,6 +34,7 @@
 
 import { test, expect } from "./fixtures";
 import {
+  boardTab,
   clickBoardPageTab,
   drawTestStrokeOnRole,
   openTutorAndStudent,
@@ -111,6 +112,53 @@ async function getActivePageId(
   });
 }
 
+/**
+ * Student bucket oracle. The student's pageDataRef lives in
+ * useStudentWhiteboardCanvas and is not on the tutor E2E seam. Leaving the
+ * empty board and coming back re-applies that bucket into the live scene
+ * (runV3Apply merges pageDataRef[pageId] with the remote page). A stroke
+ * stored into the new page shows up on the way back.
+ */
+async function expectStudentEmptyBoardHasNoAnchor(
+  tutorPage: import("@playwright/test").Page,
+  studentPage: import("@playwright/test").Page,
+  emptyTitle: string,
+  otherTitle: string,
+  strokeId: string
+): Promise<void> {
+  const studentOn = (title: string) => boardTab(studentPage, "student", title);
+  await expect(studentOn(emptyTitle)).toHaveAttribute("aria-selected", "true", {
+    timeout: 20_000,
+  });
+  await studentPage.waitForTimeout(500);
+  const liveOnArrival = await readSceneElementIds(studentPage, "student");
+  expect(
+    liveOnArrival,
+    `student live scene on ${emptyTitle} must not contain the anchor stroke`
+  ).not.toContain(strokeId);
+
+  await clickBoardPageTab(tutorPage, "tutor", otherTitle);
+  await expect(studentOn(otherTitle)).toHaveAttribute("aria-selected", "true", {
+    timeout: 20_000,
+  });
+  await expect
+    .poll(async () => readSceneElementIds(studentPage, "student"), {
+      timeout: 15_000,
+    })
+    .toContain(strokeId);
+
+  await clickBoardPageTab(tutorPage, "tutor", emptyTitle);
+  await expect(studentOn(emptyTitle)).toHaveAttribute("aria-selected", "true", {
+    timeout: 20_000,
+  });
+  await studentPage.waitForTimeout(500);
+  const liveOnReturn = await readSceneElementIds(studentPage, "student");
+  expect(
+    liveOnReturn,
+    `student live scene on ${emptyTitle} after tabbing away and back must not contain the anchor stroke`
+  ).not.toContain(strokeId);
+}
+
 test.describe("E3 blank-board switch — stale-onChange must not bleed into empty board's pageDataRef bucket", () => {
   test.setTimeout(300_000);
 
@@ -137,6 +185,7 @@ test.describe("E3 blank-board switch — stale-onChange must not bleed into empt
           200
         );
         await waitForElementOnPeer(peers.tutorPage, "tutor", board2StrokeId, 15_000);
+        await waitForElementOnPeer(peers.studentPage, "student", board2StrokeId, 20_000);
 
         // Capture Board 2's elements — these are the stale payload.
         const board2Elements = await readSceneElementsFull(peers.tutorPage, "tutor");
@@ -156,6 +205,14 @@ test.describe("E3 blank-board switch — stale-onChange must not bleed into empt
         // Capture the new board's page ID before the injection.
         const board3PageId = await getActivePageId(peers.tutorPage);
         expect(board3PageId).not.toBe("");
+
+        await expectStudentEmptyBoardHasNoAnchor(
+          peers.tutorPage,
+          peers.studentPage,
+          "Board 3",
+          "Board 2",
+          board2StrokeId
+        );
 
         // ── Step 3: wait for pageSwitchProgrammaticRef guard to drop ──
         // Guard releases after 2×rAF + setTimeout(0) ≈ ~50 ms.
@@ -245,6 +302,7 @@ test.describe("E3 blank-board switch — stale-onChange must not bleed into empt
           180
         );
         await waitForElementOnPeer(peers.tutorPage, "tutor", board2StrokeId, 15_000);
+        await waitForElementOnPeer(peers.studentPage, "student", board2StrokeId, 20_000);
 
         const board2Elements = await readSceneElementsFull(peers.tutorPage, "tutor");
         expect(board2Elements.map((e) => e.id)).toContain(board2StrokeId);
@@ -255,6 +313,14 @@ test.describe("E3 blank-board switch — stale-onChange must not bleed into empt
         await expect(
           strip.getByRole("tab", { name: "Board 3", exact: true })
         ).toHaveAttribute("aria-selected", "true", { timeout: 10_000 });
+
+        await expectStudentEmptyBoardHasNoAnchor(
+          peers.tutorPage,
+          peers.studentPage,
+          "Board 3",
+          "Board 2",
+          board2StrokeId
+        );
 
         // Wait for guard to drop.
         await peers.tutorPage.waitForTimeout(200);

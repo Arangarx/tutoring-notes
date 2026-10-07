@@ -864,6 +864,9 @@ Label-only stub (`wb-ghost-viewport-label`); bounds geometry deferred. Pre-relea
 **[P1][WB] ST-05 / WB-LASER-ICON-CONTRAST — laser colors + bidirectional visibility**  
 Remainder: per-role color/visibility hardware verify. Wire shipped.
 
+**[P1][WB] WB-STUDENT-V3-APPLY-ORDER (2026-10-07)**  
+Student `runV3Apply` moves `activePageId` before replacing the live scene, so a document whose new page is already active can store the visible anchor stroke into the new page. Mitigated for PDF/image insert by broadcasting new boards before the switch (`a5eaa056`). Real fix in `useStudentWhiteboardCanvas.ts` — Opus-owned.
+
 **[P1][WB] PDF cross-page stroke bleed / WB-STROKE-BLEED (verify/watch)**  
 E5/WS-X fixes ([`b8f786c8`](https://github.com/Arangarx/tutoring-notes/commit/b8f786c8), [`34f650a4`](https://github.com/Arangarx/tutoring-notes/commit/34f650a4), [`ef5fb1a0`](https://github.com/Arangarx/tutoring-notes/commit/ef5fb1a0)); keep §2 WATCH regression gate and Playwright coverage. Monitor on hardware; Andrew evening did not repro post-E5.
 

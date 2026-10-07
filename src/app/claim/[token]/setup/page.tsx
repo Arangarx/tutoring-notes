@@ -159,13 +159,23 @@ export default async function ClaimSetupPage({
                 </p>
               </div>
             ) : consentAlreadySaved ? (
-              <div className="rounded-md border border-border bg-muted/40 p-4">
+              <div
+                data-testid="consent-saved-indicator"
+                className="rounded-md border border-border bg-muted/40 p-4 space-y-2"
+              >
                 <p className="text-sm font-medium text-foreground">
                   ✓ Preferences saved
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   You can update these preferences any time from your account dashboard.
                 </p>
+                <Link
+                  href="/account/dashboard"
+                  data-testid="consent-saved-dashboard-link"
+                  className="inline-block text-sm text-brand underline-offset-2 hover:underline"
+                >
+                  {"Finish \u2014 go to dashboard \u2192"}
+                </Link>
               </div>
             ) : (
               <ConsentSetupForm
@@ -186,11 +196,11 @@ export default async function ClaimSetupPage({
                 {invite.student.name}
                 {"'s login"}
               </CardTitle>
-              <CardDescription className="text-sm">
-                {credentialAlreadySet
-                  ? "Login is already configured for this child learner."
-                  : "Create a username and PIN so your child can sign in on their device."}
-              </CardDescription>
+              {credentialAlreadySet ? null : (
+                <CardDescription className="text-sm">
+                  Create a username and PIN so your child can sign in on their device.
+                </CardDescription>
+              )}
             </CardHeader>
             <CardContent className="pt-6">
               {credentialAlreadySet ? (

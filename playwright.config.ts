@@ -140,7 +140,10 @@ export default defineConfig({
           ],
         },
       },
-      testMatch: ["**/integration/**/*.spec.ts"],
+      testMatch: [
+        "**/integration/**/*.spec.ts",
+        "**/smoke-admin-student-detail.spec.ts",
+      ],
       testIgnore: [
         "**/integration/auth.setup.ts",
         "**/integration/identity/**/*.spec.ts",

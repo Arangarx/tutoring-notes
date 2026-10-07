@@ -58,9 +58,15 @@ test.describe("CC-3 — claim setup: credential skip + attach_existing escape", 
       await expect(page.getByTestId("consent-save-btn")).toBeVisible({ timeout: 15_000 });
       await page.getByTestId("consent-save-btn").click();
       await expect(page.getByTestId("consent-saved-indicator")).toBeVisible({ timeout: 15_000 });
+      // router.refresh() remounts the credential form. Wait until the saved
+      // card's dashboard link is back (server render) so "Set up later" is the
+      // post-refresh link, not one detached mid-click.
+      await expect(page.getByTestId("consent-saved-dashboard-link")).toBeVisible({
+        timeout: 15_000,
+      });
 
-      // "Set up later" link must now be visible (decoupled from consent gate)
       const skipLink = page.getByTestId("skip-credential-link");
+      await skipLink.scrollIntoViewIfNeeded();
       await expect(skipLink).toBeVisible({ timeout: 8_000 });
 
       // Clicking it navigates to dashboard
