@@ -84,6 +84,9 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
 4. **2FA pilots will finish** — Code shipped [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca). Remainder: SMS not live until Twilio env; TOTP upgrade; Sarah prefers SMS when available.
 5. **Finish scheduling** — Native CRUD shipped [`1bbd9216`](https://github.com/Arangarx/tutoring-notes/commit/1bbd9216); Google write + ICS shipped (2026-09-21). Remainder: two-way sync (P3); Apple ICS hardware follow-up.
 6. **Security MUST for strangers** — release-triage MUST security/ownership holes before unsupervised pilots.
+   - **SEC-TUTOR-ADD-CAP** (Andrew 2026-10-06, deferred from feat/org-qol review): per-tutor daily cap on student adds/invite emails (prevents using our domain to spam and protects sender reputation); the existing pendingBeforeMint >= MAX check is dead for new students.
+   - **SEC-ROSTER-HANDLE-ENUM** (Andrew 2026-10-06, deferred): createStudent by child username@familyid is a hit/miss oracle across families; needs rate limiting / indistinguishable responses before open signup.
+   - **WB-SESSION-MAX-DURATION** (nit): end time earlier than start silently becomes ~23h session; consider a max-duration guard.
 7. **Comprehensive instrumentation** — Chunk 1 shipped [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4). Remainder: **TXC-SWEEP-METRICS** (§10); no COPPA-path events yet. Terms/Privacy stay 100% honest.
 
 **Background (not blocking the ordered list):** Wave A/B + tokens are done; Wave C/D dedupe (fragile WB/A/V — Opus-grade) remains open; agenticPipeline Phase 2; NativeSelect; design-system gallery. New work still = zero new duplication ([`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md)).
@@ -256,6 +259,9 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **SEC — /api/test/whiteboard/* gate hardening** — Core shipped [`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095). Remainder: pin empty `PLAYWRIGHT_TEST_SECRET` in prod (§6).
 - **VERIFY-ACCT-1** — Core shipped [`2fff57b7`](https://github.com/Arangarx/tutoring-notes/commit/2fff57b7). Remainder: Google OAuth cross-realm round-trip PLAYWRIGHT-GAP (Jest surrogate exists) (§6).
 - **WB-ADULT-JOIN-ENABLEMENT B2-signup / B3 / B4** —  (§6)
+- **SEC-TUTOR-ADD-CAP** (Andrew 2026-10-06, deferred from feat/org-qol review) — per-tutor daily cap on student adds/invite emails. The existing `pendingBeforeMint >= MAX` check is dead for new students.
+- **SEC-ROSTER-HANDLE-ENUM** (Andrew 2026-10-06, deferred) — `createStudent` by child `username@familyid` is a hit/miss oracle across families. Needs rate limiting / indistinguishable responses before open signup.
+- **WB-SESSION-MAX-DURATION** (nit) — an end time earlier than the start silently becomes about a 23-hour session. Consider a max-duration guard.
 - **WB-PARENT-JOIN-AS-CHILD** — parent_session_select picker (§6)
 
 ### MAYBE — Andrew to prioritize
