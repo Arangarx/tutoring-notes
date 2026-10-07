@@ -11,6 +11,7 @@ import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { mintStudentClaimInvite, reinviteTargetKind } from "@/lib/claim-invite-service";
+import { normalizeEmail } from "@/lib/normalize-email";
 import { rosterPendingDisplayLabel } from "@/lib/roster-invite-target";
 
 export async function POST(
@@ -50,17 +51,35 @@ export async function POST(
   const erasureBlockedResponse = await assertStudentNotErasedApi(studentId);
   if (erasureBlockedResponse) return erasureBlockedResponse;
 
-  if (!student.parentEmail) {
-    return NextResponse.json({ error: "missing_invite_email" }, { status: 422 });
+  let body: { inviteEmail?: string } = {};
+  try {
+    body = (await req.json()) as { inviteEmail?: string };
+  } catch {
+    body = {};
   }
 
-  const inviteLabel = rosterPendingDisplayLabel(student);
+  let recipientEmail = student.parentEmail?.trim() ?? "";
+  if (!recipientEmail) {
+    recipientEmail = normalizeEmail(String(body.inviteEmail ?? ""));
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+      return NextResponse.json({ error: "missing_invite_email" }, { status: 422 });
+    }
+    await db.student.update({
+      where: { id: studentId },
+      data: { parentEmail: recipientEmail },
+    });
+  }
+
+  const inviteLabel = rosterPendingDisplayLabel({
+    ...student,
+    parentEmail: recipientEmail,
+  });
 
   try {
     const minted = await mintStudentClaimInvite({
       studentId,
       adminUserId,
-      recipientEmail: student.parentEmail,
+      recipientEmail,
       targetKind: await reinviteTargetKind(student),
       studentDisplayName: inviteLabel,
       sendEmail: true,

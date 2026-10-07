@@ -10,9 +10,11 @@ import { ClaimInviteSection } from "@/app/admin/students/[id]/ClaimInviteSection
 export function UnclaimedParentClaimBanner({
   studentId,
   studentName,
+  needsInviteEmail = false,
 }: {
   studentId: string;
   studentName: string;
+  needsInviteEmail?: boolean;
 }) {
   return (
     <Alert
@@ -33,6 +35,7 @@ export function UnclaimedParentClaimBanner({
             studentId={studentId}
             studentName={studentName}
             alreadyClaimed={false}
+            needsInviteEmail={needsInviteEmail}
             prominent
           />
         </div>

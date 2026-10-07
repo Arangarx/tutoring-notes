@@ -344,6 +344,7 @@ export default async function StudentDetailPage({
           studentId={student.id}
           studentName={student.name}
           alreadyClaimed={!!student.learnerProfileId}
+          needsInviteEmail={!student.parentEmail}
         />
       )}
     </>
@@ -390,6 +391,7 @@ export default async function StudentDetailPage({
         <UnclaimedParentClaimBanner
           studentId={student.id}
           studentName={student.name}
+          needsInviteEmail={!student.parentEmail}
         />
       ) : null}
       <StudentDetailShell

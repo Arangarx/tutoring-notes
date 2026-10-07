@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 /**
  * Tutor-facing "Send claim invite" control on the student detail page.
@@ -19,14 +21,18 @@ export function ClaimInviteSection({
   studentName,
   alreadyClaimed,
   prominent = false,
+  needsInviteEmail = false,
 }: {
   studentId: string;
   studentName: string;
   alreadyClaimed: boolean;
   /** Larger CTA for top-of-page banner placement. */
   prominent?: boolean;
+  /** No parent email on the roster row — collect one before minting. */
+  needsInviteEmail?: boolean;
 }) {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,6 +53,8 @@ export function ClaimInviteSection({
     try {
       const res = await fetch(`/api/students/${studentId}/claim-invites`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(needsInviteEmail ? { inviteEmail: inviteEmail.trim() } : {}),
       });
       const data = (await res.json()) as {
         inviteLink?: string;
@@ -58,6 +66,8 @@ export function ClaimInviteSection({
           setError("already_claimed");
         } else if (data.error === "too_many_pending_invites") {
           setError("too_many_pending");
+        } else if (data.error === "missing_invite_email") {
+          setError("missing_email");
         } else {
           setError("server");
         }
@@ -112,6 +122,42 @@ export function ClaimInviteSection({
             Generate new link
           </Button>
         </>
+      ) : needsInviteEmail ? (
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSendInvite();
+          }}
+        >
+          <p className="text-sm text-muted-foreground" data-testid="claim-missing-email-prompt">
+            This learner has no invitation email on file. Add a parent or guardian email, then
+            send the invite.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor={`claim-invite-email-${studentId}`}>Parent / guardian email</Label>
+            <Input
+              id={`claim-invite-email-${studentId}`}
+              type="email"
+              required
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              autoComplete="email"
+              data-testid="claim-invite-email-input"
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+            size={prominent ? "default" : "sm"}
+            variant={prominent ? "accent" : "default"}
+            className={prominent ? "min-h-11" : undefined}
+            data-testid="create-claim-link-btn"
+          >
+            {busy ? "Sending invite..." : "Send invite"}
+          </Button>
+        </form>
       ) : (
         <Button
           onClick={handleSendInvite}
@@ -129,6 +175,11 @@ export function ClaimInviteSection({
       {error === "already_claimed" ? (
         <p className="text-sm text-muted-foreground">
           {"This student's account has already been claimed."}
+        </p>
+      ) : null}
+      {error === "missing_email" ? (
+        <p className="text-sm text-destructive" role="alert">
+          Add a parent or guardian email before sending the invite.
         </p>
       ) : null}
       {error === "too_many_pending" ? (
