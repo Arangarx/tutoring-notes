@@ -119,12 +119,6 @@ test.describe("whiteboard QoL surfaces", () => {
     { tag: [TAG.WB_CHROME] },
     async ({ page }) => {
       test.setTimeout(120_000);
-      // Holds the checkpoint response open so a rename that awaits persist
-      // and then writes a stale page list loses the tab added during the wait.
-      await page.route("**/checkpoint", async (route) => {
-        await new Promise((resolve) => setTimeout(resolve, 2_500));
-        await route.continue();
-      });
       await openTutorBoard(page);
       const boards = page.getByRole("tablist", { name: "Boards" });
       await boards.getByRole("tab", { name: "Board 1" }).hover();
@@ -136,9 +130,54 @@ test.describe("whiteboard QoL surfaces", () => {
       await boards.getByRole("button", { name: "Add board" }).click();
       await expect(boards.getByRole("tab", { name: "Algebra" })).toBeVisible();
       await expect(boards.getByRole("tab", { name: "Board 2", exact: true })).toBeVisible();
-      await page.waitForTimeout(3_500);
+    }
+  );
+
+  test(
+    "a renamed board title survives reload after a later stroke batch",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      test.setTimeout(180_000);
+      const session = await openTutorBoard(page);
+      const boards = page.getByRole("tablist", { name: "Boards" });
+      await boards.getByRole("tab", { name: "Board 1" }).hover();
+      await boards.getByRole("button", { name: "Rename Board 1" }).click();
+      const nameField = boards.getByRole("textbox", { name: "Name for Board 1" });
+      await nameField.fill("Algebra");
+      await nameField.press("Enter");
       await expect(boards.getByRole("tab", { name: "Algebra" })).toBeVisible();
-      await expect(boards.getByRole("tab", { name: "Board 2", exact: true })).toBeVisible();
+
+      await drawTestStrokeOnRole(page, "tutor", "rename-persist-stroke", 80, 80, 180, 160);
+
+      const prisma = new PrismaClient();
+      try {
+        await expect
+          .poll(
+            async () => {
+              const latest = await prisma.whiteboardEventBatch.findFirst({
+                where: { whiteboardSessionId: session.whiteboardSessionId },
+                orderBy: { batchSeq: "desc" },
+                select: { boardDocumentJson: true },
+              });
+              const doc = latest?.boardDocumentJson as {
+                pageList?: Array<{ title?: string }>;
+              } | null;
+              return doc?.pageList?.some((entry) => entry.title === "Algebra") ?? false;
+            },
+            { timeout: 30_000 }
+          )
+          .toBe(true);
+      } finally {
+        await prisma.$disconnect();
+      }
+
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+        timeout: 90_000,
+      });
+      await expect(page.getByRole("tab", { name: "Algebra" })).toBeVisible({
+        timeout: 20_000,
+      });
     }
   );
 

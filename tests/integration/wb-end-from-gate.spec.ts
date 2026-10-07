@@ -17,6 +17,13 @@ import {
 } from "../helpers/blob-gate";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+import { RESUME_GATE_STALENESS_MS } from "@/lib/whiteboard/resume-gate";
+
+/**
+ * Well past the 10-minute gate so SSR and hydration `Date.now()` cannot
+ * land on different sides of the fresh/stale minute boundary.
+ */
+const STALE_SESSION_AGE_MS = RESUME_GATE_STALENESS_MS + 60 * 60 * 1000;
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
@@ -179,7 +186,7 @@ async function seedStaleSession() {
   try {
     await prisma.whiteboardSession.update({
       where: { id: session.whiteboardSessionId },
-      data: { startedAt: new Date(Date.now() - 11 * 60 * 1000) },
+      data: { startedAt: new Date(Date.now() - STALE_SESSION_AGE_MS) },
     });
   } finally {
     await prisma.$disconnect();
@@ -252,7 +259,7 @@ test.describe(
         try {
           await prisma.whiteboardSession.update({
             where: { id: whiteboardSessionId },
-            data: { startedAt: new Date(Date.now() - 11 * 60 * 1000) },
+            data: { startedAt: new Date(Date.now() - STALE_SESSION_AGE_MS) },
           });
         } finally {
           await prisma.$disconnect();
