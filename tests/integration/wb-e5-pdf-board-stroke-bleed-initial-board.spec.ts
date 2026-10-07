@@ -199,6 +199,18 @@ test.describe(
           const board2PageId = await getActivePageId(peers.tutorPage);
           expect(board2PageId).not.toBe("");
 
+          // Student follows onto the PDF board. The anchor stroke must not
+          // be merged into that page (same leak as image-as-board).
+          await expect(
+            peers.studentPage.getByRole("tab", { name: e2eTwoPagePdfBoardTitle(1) })
+          ).toBeVisible({ timeout: 20_000 });
+          await expect
+            .poll(async () => {
+              const els = await readSceneElementsFull(peers.studentPage, "student");
+              return els.some((e) => e.id === board1StrokeId);
+            })
+            .toBe(false);
+
           // ── Step 3: wait for the fingerprint guard cycle ──
           await waitForPdfFingerprintCycle(peers.tutorPage, board2PageId);
 

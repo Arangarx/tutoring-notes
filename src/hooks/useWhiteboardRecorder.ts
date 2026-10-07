@@ -394,7 +394,11 @@ export type UseWhiteboardRecorderReturn = {
     viewportHeight?: number
   ) => void;
   /** Record a tutor board-tab switch for replay active-tab tracking (E4). */
-  recordPageSwitch: (pageId: string, title: string) => void;
+  recordPageSwitch: (
+    pageId: string,
+    title: string,
+    opts?: { evenIfNotRecording?: boolean }
+  ) => void;
 };
 
 export type ResumeAvailability = {
@@ -835,8 +839,8 @@ export function useWhiteboardRecorder(
   );
 
   const recordPageSwitch = useCallback(
-    (pageId: string, title: string) => {
-      if (!recordingActiveRef.current) return;
+    (pageId: string, title: string, opts?: { evenIfNotRecording?: boolean }) => {
+      if (!recordingActiveRef.current && !opts?.evenIfNotRecording) return;
       if (!pageId) return;
       const t = Math.max(0, Math.floor(getAudioMsRef.current()));
       pushEvent({

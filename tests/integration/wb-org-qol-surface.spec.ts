@@ -150,13 +150,36 @@ test.describe("whiteboard QoL surfaces", () => {
           peers.studentPage.getByRole("tab", { name: "diagram" })
         ).toBeVisible({ timeout: 20_000 });
         await expect
-          .poll(async () => {
-            const summary = await readSceneElementSummary(peers.studentPage, "student");
-            return summary.map((el) => el.type);
-          })
+          .poll(
+            async () => {
+              const summary = await readSceneElementSummary(peers.studentPage, "student");
+              return summary.map((el) => el.type);
+            },
+            { timeout: 20_000 }
+          )
           .toEqual(["image"]);
         const studentIds = await readSceneElementIds(peers.studentPage, "student");
         expect(studentIds).not.toContain(anchorStrokeId);
+
+        // Leaving and returning loads the student's stored page bucket.
+        await clickBoardPageTab(peers.tutorPage, "tutor", "Board 1");
+        await expect
+          .poll(async () => readSceneElementIds(peers.studentPage, "student"), {
+            timeout: 20_000,
+          })
+          .toContain(anchorStrokeId);
+        await clickBoardPageTab(peers.tutorPage, "tutor", "diagram");
+        await expect
+          .poll(
+            async () => {
+              const summary = await readSceneElementSummary(peers.studentPage, "student");
+              return summary.map((el) => el.type);
+            },
+            { timeout: 20_000 }
+          )
+          .toEqual(["image"]);
+        const studentAfterRoundTrip = await readSceneElementIds(peers.studentPage, "student");
+        expect(studentAfterRoundTrip).not.toContain(anchorStrokeId);
 
         await waitUntilPageFingerprintClear(peers.tutorPage, imagePageId);
         await injectStaleHandleChange(peers.tutorPage, anchorScene);
@@ -186,36 +209,118 @@ test.describe("whiteboard QoL surfaces", () => {
       await mathField.locator(".ML__virtual-keyboard-toggle").click();
       const keyboard = page.locator("body > .ML__keyboard.is-visible");
       await expect(keyboard).toBeVisible({ timeout: 15_000 });
-      const keyPoint = await page.evaluate(() => {
-        const ih = window.innerHeight;
-        const iw = window.innerWidth;
-        for (let y = ih - 12; y > ih * 0.45; y -= 10) {
-          for (let x = Math.floor(iw * 0.25); x < iw * 0.75; x += 16) {
-            const hit = document.elementFromPoint(x, y);
-            const key = hit?.closest(".MLK__keycap");
-            if (!(key instanceof HTMLElement)) continue;
-            const label = (key.getAttribute("aria-label") || "").trim();
-            if (!/^[0-9]$/.test(label)) continue;
+      // The keyboard slides in. Measuring during that animation places the
+      // digit row below the viewport (top > innerHeight), and the click hits
+      // the scrim. Keycaps live in the keyboard's shadow tree. Wait until two
+      // digit keys are stable across two frames, then use their centers.
+      const digitKeys = await keyboard.evaluate((el) => {
+        const digitLabel = (node: HTMLElement): string => {
+          const aria = (node.getAttribute("aria-label") || "").trim();
+          if (/^[0-9]$/.test(aria)) return aria;
+          const text = (node.textContent || "").replace(/\s+/g, "");
+          return /^[0-9]$/.test(text) ? text : "";
+        };
+        const collect = (root: ParentNode): HTMLElement[] => {
+          const found: HTMLElement[] = [];
+          const walk = (node: ParentNode) => {
+            if (node instanceof Element && node.shadowRoot) walk(node.shadowRoot);
+            const kids = Array.from(node.children ?? []);
+            for (const child of kids) {
+              if (
+                child instanceof HTMLElement &&
+                child.classList.contains("MLK__keycap")
+              ) {
+                found.push(child);
+              }
+              walk(child);
+            }
+          };
+          walk(root);
+          return found;
+        };
+        const visibleDigits = () => {
+          const out: { x: number; y: number; label: string }[] = [];
+          const seen = new Set<string>();
+          for (const key of collect(el)) {
+            const label = digitLabel(key);
+            if (!label || seen.has(label)) continue;
             const rect = key.getBoundingClientRect();
-            return {
-              x: rect.left + rect.width / 2,
-              y: rect.top + rect.height / 2,
-              label,
-            };
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            if (rect.width < 4 || rect.height < 4) continue;
+            if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) {
+              continue;
+            }
+            seen.add(label);
+            out.push({ x: cx, y: cy, label });
           }
-        }
-        return null;
+          return out;
+        };
+        return new Promise<{ x: number; y: number; label: string }[]>((resolve, reject) => {
+          let last = "";
+          let stable = 0;
+          let frames = 0;
+          const step = () => {
+            frames += 1;
+            const keys = visibleDigits();
+            const sig = keys
+              .map((key) => `${key.label}:${key.x.toFixed(1)}:${key.y.toFixed(1)}`)
+              .join("|");
+            const box = el.getBoundingClientRect();
+            const hostSettled =
+              box.height > 40 &&
+              box.top < window.innerHeight &&
+              box.bottom <= window.innerHeight + 1;
+            if (keys.length >= 2 && hostSettled && sig === last && sig.length > 0) {
+              stable += 1;
+            } else {
+              stable = 0;
+            }
+            last = sig;
+            if (stable >= 2) {
+              resolve(keys.slice(0, 2));
+              return;
+            }
+            if (frames > 180) {
+              const shadowKids =
+                el.shadowRoot?.querySelectorAll("*").length ?? "no-shadow";
+              const sample = Array.from(el.querySelectorAll("[class]"))
+                .slice(0, 6)
+                .map((node) => node.className)
+                .join(",");
+              reject(
+                new Error(
+                  `keyboard digits did not settle count=${keys.length} top=${box.top} bottom=${box.bottom} innerHeight=${window.innerHeight} shadowNodes=${shadowKids} sample=${sample}`
+                )
+              );
+              return;
+            }
+            requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        });
       });
-      expect(keyPoint, "a digit key under the pointer on the real MathLive keyboard").not.toBeNull();
-      await page.mouse.move(keyPoint!.x, keyPoint!.y);
-      await page.mouse.down();
-      await page.mouse.up();
+      expect(digitKeys, "two digit keys on the settled MathLive keyboard").toHaveLength(2);
+      const pressKey = async (key: { x: number; y: number }) => {
+        await page.mouse.move(key.x, key.y);
+        await page.mouse.down();
+        await page.mouse.up();
+        await page.mouse.click(key.x, key.y);
+      };
+      await pressKey(digitKeys[0]!);
       await expect(dialog).toBeVisible();
       await expect
         .poll(async () =>
           mathField.evaluate((el) => (el as { value?: string }).value ?? "")
         )
-        .toContain(keyPoint!.label);
+        .toContain(digitKeys[0]!.label);
+      await pressKey(digitKeys[1]!);
+      await expect(dialog).toBeVisible();
+      await expect
+        .poll(async () =>
+          mathField.evaluate((el) => (el as { value?: string }).value ?? "")
+        )
+        .toContain(`${digitKeys[0]!.label}${digitKeys[1]!.label}`);
 
       const scrimPoint = await page.evaluate(() => {
         const scrim = document.querySelector('[aria-labelledby="wb-math-title"]');

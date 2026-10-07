@@ -3677,9 +3677,20 @@ export function WhiteboardWorkspaceClient({
       page.id === id ? { ...page, title: nextTitle } : page
     );
     pageListRef.current = nextList;
-    setPageList(nextList);
-    flushDocumentBroadcastNow();
-  }, [flushDocumentBroadcastNow]);
+    // Same board-document snapshot PDF page titles use (session draft now,
+    // checkpoint batch once the title is in the log). Reload hydrates that
+    // document; without the write the strip falls back to "Board 1".
+    flushSessionBoardDocumentNow();
+    recorder.recordPageSwitch(id, nextTitle, { evenIfNotRecording: true });
+    void (async () => {
+      try {
+        await recorder.flushServerPersist();
+      } finally {
+        setPageList(nextList);
+        flushDocumentBroadcastNow();
+      }
+    })();
+  }, [flushDocumentBroadcastNow, flushSessionBoardDocumentNow, recorder]);
 
   const addTutorPage = useCallback(() => {
     // Bump the switch token: any in-flight selectTutorPage will abandon
@@ -3919,6 +3930,15 @@ export function WhiteboardWorkspaceClient({
             `[whiteboard] wbsid=${whiteboardSessionId} pdf-page-insert pageId=${row.pageId} sectionId=${sectionId}`
           );
         }
+        // Publish the new boards while the tutor is still on the anchor.
+        // The student's v3 apply switches `activePageId` before it replaces
+        // the live scene. If the first document that contains the new page
+        // already has that page active, the empty prefetch leaves the anchor
+        // stroke on the canvas, onChange stores it in the new page bucket,
+        // and reconcile keeps the stroke beside the image. This flush lets
+        // the student store the image-only bucket first; selectTutorPage
+        // then sends the page-switch packet.
+        flushDocumentBroadcastNow();
         // 7. Navigate to first imported page IF tutor still on anchor.
         // Entry guard (+1 above) covers steps 1–6; selectTutorPage adds
         // its own +1 during hydrate. Release the entry guard after
