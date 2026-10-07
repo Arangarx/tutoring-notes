@@ -13,6 +13,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Google Calendar connect section added 2026-08-14 (honest stub — no sync claim).
  * Twilio (SMS 2FA) added to third-party services list 2026-09-11.
  * Calendar ICS feed + Google write honesty (product-specific) 2026-09-16.
+ * Calendar titles are first name + last initial (product-specific) 2026-10-06.
  * Mynk SMS two-factor texts program (product-specific) 2026-09-21.
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
@@ -42,7 +43,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalDocumentShell title="Terms of Use" lastUpdated="September 21, 2026">
+    <LegalDocumentShell title="Terms of Use" lastUpdated="October 6, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           These terms govern your use of <strong>Tutoring Notes</strong>, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
@@ -132,8 +133,9 @@ export default function TermsPage() {
             <p style={{ margin: "8px 0 0" }}>
               You may subscribe to a read-only ICS/webcal feed of your scheduled sessions. Your
               calendar application polls the feed URL on its own schedule; updates are not
-              instantaneous. Session titles default to first names unless you opt in per student to
-              show full names. Keep the subscription URL confidential; revoke it from Settings if it
+              instantaneous. Session titles in the feed and in Google Calendar events we create use
+              the student&apos;s first name and last initial (for example, &ldquo;Tutoring — Maya
+              R.&rdquo;). Keep the subscription URL confidential; revoke it from Settings if it
               may have been exposed.
             </p>
           </div>

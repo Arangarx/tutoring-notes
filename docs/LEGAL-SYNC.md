@@ -179,7 +179,7 @@ first, then re-submit. The consent screen will continue to display
 | Your content | Product |
 | Gmail integration | Product |
 | Google Calendar integration | **Product** — `calendar.events.owned` write to primary calendar; disconnect stops future sync, does not remove existing Google events |
-| Calendar subscription feed | **Product** — ICS/webcal URL, client polling, first name + last initial titles |
+| Calendar subscription feed | **Product** — ICS/webcal URL, client polling, first name + last initial titles (same sentence as `/privacy`; no per-student full-name opt-in) |
 | Live whiteboard session encryption key | **Product** — see `/privacy` product-specific section (2026-10-06) |
 | Third-party services | **Hybrid** — umbrella's framing, product-specific subprocessor list (incl. Twilio for optional SMS 2FA, 2026-09-11) with link to privacy policy |
 | Children and parental consent | **Hybrid** — umbrella now has this section (added 2026-05-31 on `coppa-312-10-disclosure` branch); product facade adds Tutoring-Notes-specific COPPA language (COPPA applicability, representation-of-consent, cross-reference to privacy policy COPPA section). |
@@ -244,6 +244,8 @@ repo lands a verification-team-driven change before the deploy):
   changes.
 
 ## History
+
+- **2026-10-06** — Calendar titles (product-specific; umbrella SYNCED FROM date unchanged 2026-09-10). Terms no longer say tutors can opt in per student to show full names. The feed and Google Calendar events use the student's first name and last initial (example “Tutoring — Maya R.”), matching `/privacy` and `buildIcsEventSummary`. Terms in-UI Last updated: October 6, 2026. Privacy in-UI Last updated was already October 6, 2026.
 
 - **2026-09-17** — Calendar event titles: per-student full-name opt-in keeps the `Tutoring —` prefix (`Tutoring — Maya Rodriguez`). Privacy product-specific ICS section only; umbrella SYNCED FROM date unchanged 2026-09-10. Privacy in-UI Last updated: September 17, 2026. Terms unchanged (September 16, 2026).
 
