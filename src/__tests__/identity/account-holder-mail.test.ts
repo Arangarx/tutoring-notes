@@ -160,6 +160,35 @@ describe("account-holder platform mail", () => {
     await db.accountHolder.delete({ where: { id: holder.id } });
   });
 
+  it("caps an oversize student name and strips control characters and HTML from the invite subject and body", async () => {
+    const { calls, sender } = capturePlatformSender();
+    setPlatformMailSenderForTests(sender);
+    const dirty = `${"Z".repeat(70)}<b>\u0007</b>${"Q".repeat(40)}`;
+
+    const result = await sendClaimInviteEmail(
+      "parent@example.com",
+      "https://app.example.com/claim/abc123token",
+      dirty
+    );
+
+    expect(result.sent).toBe(true);
+    expect(calls).toHaveLength(1);
+    const { subject, text } = calls[0]!;
+    for (const part of [subject, text]) {
+      expect(part).not.toContain("<");
+      expect(part).not.toContain(">");
+      expect(part).not.toContain("\u0007");
+    }
+    const nameInSubject = subject.slice(
+      "Connect to ".length,
+      subject.indexOf("'s learning on Mynk")
+    );
+    expect(nameInSubject.length).toBeLessThanOrEqual(80);
+    expect(nameInSubject.length).toBeLessThan(dirty.length);
+    expect(nameInSubject.startsWith("Z".repeat(70))).toBe(true);
+    expect(text).toContain(nameInSubject);
+  });
+
   it("claim invite email includes /claim/ in invite URL", async () => {
     const { calls, sender } = capturePlatformSender();
     setPlatformMailSenderForTests(sender);

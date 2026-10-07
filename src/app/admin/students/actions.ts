@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { sanitizeClaimDisplayName } from "@/lib/claim-display-name";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { requireStudentScope, studentsWhereForScope } from "@/lib/student-scope";
 import { parseChildRosterHandle } from "@/lib/parse-child-roster-handle";
@@ -118,7 +119,11 @@ export async function createStudent(
     if (!resolved.ok) {
       return { status: "error", message: resolved.message };
     }
-    rosterName = resolved.childLabel;
+    const safeLabel = sanitizeClaimDisplayName(resolved.childLabel);
+    if (!safeLabel) {
+      return { status: "error", message: "Enter a name or username@familyid." };
+    }
+    rosterName = safeLabel;
   }
 
   const where = studentsWhereForScope(scope);

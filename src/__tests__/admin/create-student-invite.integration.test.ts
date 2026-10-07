@@ -144,4 +144,32 @@ describe("createStudent — invite on add", () => {
       await db.student.count({ where: { adminUserId: tutor.id } })
     ).toBe(0);
   });
+
+  it("stores a capped child name with control characters and HTML removed", async () => {
+    const tutor = await seedTutor();
+    mockSessionAsTutor(tutor);
+    const dirty = `${"Z".repeat(70)}<b>\u0007</b>${"Q".repeat(40)}`;
+    const email = `${uniq("parent")}@example.com`;
+
+    const result = await createStudent(
+      null,
+      form({
+        learnerKind: "child_learner",
+        inviteEmail: email,
+        childIdentifier: dirty,
+      })
+    );
+
+    expect(result.status).toBe("success");
+    const row = await db.student.findFirst({
+      where: { adminUserId: tutor.id, parentEmail: email },
+    });
+    expect(row).not.toBeNull();
+    expect(row!.name.length).toBeLessThanOrEqual(80);
+    expect(row!.name.length).toBeLessThan(dirty.length);
+    expect(row!.name.startsWith("Z".repeat(70))).toBe(true);
+    expect(row!.name).not.toContain("<");
+    expect(row!.name).not.toContain(">");
+    expect(row!.name).not.toContain("\u0007");
+  });
 });

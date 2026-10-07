@@ -12,6 +12,7 @@ import {
   EMAIL_TOKEN_TTL_MS_24H,
 } from "@/lib/crypto/session-tokens";
 import { isPlaywrightHarnessActive } from "@/lib/playwright-harness";
+import { sanitizeClaimDisplayName } from "@/lib/claim-display-name";
 import { normalizeEmail } from "@/lib/normalize-email";
 
 export interface AccountHolderEmailPayload {
@@ -80,9 +81,10 @@ export async function sendClaimInviteEmail(
     return { sent: false, error: "Invalid recipient email." };
   }
 
-  const subject = `Connect to ${studentName}'s learning on Mynk`;
+  const safeName = sanitizeClaimDisplayName(studentName) ?? "Learner";
+  const subject = `Connect to ${safeName}'s learning on Mynk`;
   const text = [
-    `You've been invited to connect to ${studentName}'s learning account on Mynk.`,
+    `You've been invited to connect to ${safeName}'s learning account on Mynk.`,
     "",
     "Open this link to claim the account (valid for 7 days):",
     inviteUrl,
