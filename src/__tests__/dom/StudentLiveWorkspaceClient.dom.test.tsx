@@ -152,6 +152,7 @@ jest.mock("@/lib/whiteboard/sync-client", () => ({
     onRoomPeersChange: () => () => undefined,
     setLocalAvMediaState: () => undefined,
     onRemoteScene: () => () => undefined,
+    onRemoteSessionLifecycle: () => () => undefined,
     onRemotePointer: () => () => undefined,
     onRemoteCursor: () => () => undefined,
     onRemoteChat: () => () => undefined,
