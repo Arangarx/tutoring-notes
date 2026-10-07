@@ -7,6 +7,7 @@ import { BOARD_TITLE_MAX_LENGTH } from "@/lib/whiteboard/board-title";
 import { isImageBoardSection, isPdfBoardSection } from "@/lib/whiteboard/page-strip-pdf";
 import { WbIconPdf } from "@/components/whiteboard/chrome/wb-icons";
 import { Button } from "@/components/ui/button";
+import "./BoardTabStrip.css";
 
 export type BoardTabStripProps = {
   pageList: PageStripRow[];
@@ -204,7 +205,7 @@ export function BoardTabStrip({
               {!readOnly && onRenamePage && active && renamingId !== page.id ? (
                 <button
                   type="button"
-                  className="mynk-wb-board-tab-del"
+                  className="mynk-wb-board-tab-action mynk-wb-board-tab-action--label mynk-wb-board-tab-rename"
                   aria-label={`Rename ${boardLabel}`}
                   data-testid={`wb-board-rename-${index}`}
                   disabled={disabled}
@@ -245,7 +246,7 @@ export function BoardTabStrip({
                   <>
                     <button
                       type="button"
-                      className="mynk-wb-board-tab-del mynk-wb-board-tab-del--confirm"
+                      className="mynk-wb-board-tab-action mynk-wb-board-tab-action--label mynk-wb-board-tab-del mynk-wb-board-tab-del--confirm"
                       title={`Confirm delete ${boardLabel}`}
                       aria-label={`Confirm delete ${boardLabel}`}
                       data-testid={`wb-board-delete-confirm-${index}`}
@@ -260,7 +261,7 @@ export function BoardTabStrip({
                     </button>
                     <button
                       type="button"
-                      className="mynk-wb-board-tab-del mynk-wb-board-tab-del--cancel"
+                      className="mynk-wb-board-tab-action mynk-wb-board-tab-action--label mynk-wb-board-tab-del mynk-wb-board-tab-del--cancel"
                       title="Cancel"
                       aria-label="Cancel delete"
                       data-testid={`wb-board-delete-cancel-${index}`}
@@ -275,7 +276,7 @@ export function BoardTabStrip({
                 ) : (
                   <button
                     type="button"
-                    className="mynk-wb-board-tab-del"
+                    className="mynk-wb-board-tab-action mynk-wb-board-tab-del"
                     title={`Delete ${boardLabel}`}
                     aria-label={`Delete ${boardLabel}`}
                     data-testid={`wb-board-delete-${index}`}

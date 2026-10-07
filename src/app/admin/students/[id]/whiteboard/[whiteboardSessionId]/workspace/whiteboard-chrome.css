@@ -1290,44 +1290,7 @@
   padding: 0 14px;
 }
 
-/* Delete ×, Confirm, Cancel buttons */
-.mynk-wb-board-tab-del {
-  display: flex;
-  align-items: center;
-  padding: 0 6px 0 2px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 14px;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.1s, color 0.1s;
-}
-
-.mynk-wb-board-tab-wrap:hover .mynk-wb-board-tab-del,
-.mynk-wb-board-tab-del--confirm,
-.mynk-wb-board-tab-del--cancel {
-  opacity: 1;
-}
-
-.mynk-wb-board-tab-del:hover:not(:disabled) {
-  color: var(--destructive);
-  background: color-mix(in srgb, var(--destructive) 9%, transparent);
-  border-radius: 3px;
-}
-
-.mynk-wb-board-tab-del--confirm {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--destructive);
-  padding: 0 4px;
-}
-
-.mynk-wb-board-tab-del--cancel {
-  font-size: 10px;
-  color: var(--text-muted);
-  padding: 0 4px;
-}
+/* Tab action buttons (rename / delete) live in BoardTabStrip.css. */
 
 .mynk-wb-board-tab__dot {
   width: 5px;

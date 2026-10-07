@@ -1,0 +1,56 @@
+/**
+ * Board tab actions — co-located with BoardTabStrip.tsx.
+ * Rename and delete share one base. Delete-only rules stay on
+ * `.mynk-wb-board-tab-del` so a rename control cannot match the
+ * "no delete on the last board" check.
+ * Tokens only — no raw hex; theme-agnostic.
+ */
+
+.mynk-wb-board-tab-action {
+  display: flex;
+  align-items: center;
+  padding: 0 6px 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.mynk-wb-board-tab-wrap:hover .mynk-wb-board-tab-action,
+.mynk-wb-board-tab-del--confirm,
+.mynk-wb-board-tab-del--cancel {
+  opacity: 1;
+}
+
+.mynk-wb-board-tab-action--label {
+  font-size: 10px;
+  padding: 0 4px;
+}
+
+.mynk-wb-board-tab-rename,
+.mynk-wb-board-tab-del--confirm {
+  font-weight: 600;
+}
+
+.mynk-wb-board-tab-rename:hover:not(:disabled) {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 9%, transparent);
+  border-radius: 3px;
+}
+
+.mynk-wb-board-tab-del:hover:not(:disabled) {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+  border-radius: 3px;
+}
+
+.mynk-wb-board-tab-del--confirm {
+  color: var(--destructive);
+}
+
+.mynk-wb-board-tab-del--cancel {
+  color: var(--text-muted);
+}

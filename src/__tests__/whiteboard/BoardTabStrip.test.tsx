@@ -65,4 +65,20 @@ describe("BoardTabStrip", () => {
     fireEvent.keyDown(screen.getByTestId("wb-board-rename-input-0"), { key: "Enter" });
     expect(onRenamePage).toHaveBeenCalledWith("p1", "Homework");
   });
+
+  it("rename is not a delete control, and the last board has no delete button", () => {
+    const { container } = render(
+      <BoardTabStrip
+        pageList={[{ id: "p1", title: "Board 1", section: "board" as const }]}
+        activePageId="p1"
+        onRenamePage={jest.fn()}
+        onDeletePage={jest.fn()}
+        onSelectPage={jest.fn()}
+      />
+    );
+    const rename = screen.getByTestId("wb-board-rename-0");
+    expect(rename.className.split(/\s+/)).not.toContain("mynk-wb-board-tab-del");
+    expect(container.querySelector(".mynk-wb-board-tab-del")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete Board 1" })).not.toBeInTheDocument();
+  });
 });
