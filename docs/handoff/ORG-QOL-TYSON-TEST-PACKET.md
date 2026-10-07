@@ -8,19 +8,20 @@ This packet is for the tutoring app **Mynk**. It covers joining a scheduled sess
 
 ---
 
-## Before you start (Andrew)
+## Before you start (Tyson)
 
-Tyson does not score these. Check them before you send him the packet. He stalls if the tutor allowlist or the preview link is missing.
+You set these up yourself on the preview. This is a test database, so new learners here are fine.
 
-- [ ] His tutor email (and any plus-address he will use as a **tutor**) is on `/admin/tutor-approvals` under **Pre-approved emails**. He should text you each new tutor address first. Accounts cannot be deleted; plus-addresses are how he repeats a run (`tysonrdewitt+qol1@gmail.com` and similar).
-- [ ] The **Preview** line above is [preview.usemynk.com](https://preview.usemynk.com), a Ready deployment of `feat/org-qol`. Do not send him the live site.
-- [ ] Email sending works on that preview, so claim invitations arrive.
-- [ ] His tutor account has a **display name** set (not blank). Item 18 checks that the learner sees that name on the video tile.
-- [ ] A learner on his roster whose parent has **Allow live tutoring sessions** turned **on**, with a username and PIN, and a scheduled session whose start time is **inside the next 15 minutes**. If that window will expire before he sits down, leave this unchecked and he creates the session himself in item 16's neighborhood (item 2 tells him how).
-- [ ] A **second** learner on his roster whose parent has **Allow live tutoring sessions** turned **off**, also with a session inside the next 15 minutes. Item 5 needs this. He cannot turn another family's consent off.
-- [ ] Optional: Google Calendar is already connected on his tutor account, if you want item 15 to include a Google event. If not, he marks that part N/A with notes.
-- [ ] Optional: text-message two-factor is actually available on this preview (Twilio and the campaign). If it is not, tell him to mark item 33 N/A with notes. The card will say **SMS not available**.
-- [ ] Optional: a second tutor login that has signed up and is **not** approved. Item 10 needs it. If you skip this, he marks item 10 SKIP.
+- Open [preview.usemynk.com](https://preview.usemynk.com). Do not use the normal Mynk website.
+- Sign in with the tutor account you already have.
+- If **Settings → Profile → Display name** is blank, set one. Item 18 checks that the other person sees that name on the video tile. If that page will not save a name, tell Andrew and keep going.
+- If your roster has no connected learner yet, do item 9 and finish the parent's claim before item 1. Schedule the session when you sit down (item 2, step 5: start time about 10 minutes from now).
+- Item 5 needs a second learner whose parent account you control. Turn **Allow live tutoring sessions** off on that child's privacy page (item 32 shows where), and schedule that session inside the 15-minute window when you run the item.
+- Item 15: connect Google Calendar on your tutor account only if you want the event on your own calendar. Otherwise mark that part N/A with notes.
+- Items 33 and 44: try text-message setup. If the card says **SMS not available**, mark those items N/A with notes and tell Andrew.
+- Item 10: sign up a second tutor with a plus-address and leave it unapproved. Do not ask for that address to be pre-approved.
+
+Text Andrew only if an invitation email never arrives, or if you need a brand-new tutor address to be **approved**.
 
 ---
 
@@ -43,7 +44,7 @@ Sign-in pages (bookmark these on the preview host):
 
 Tutor sign-in still asks for the second factor you set up in the September packet (email code, authenticator app, or text). That is expected.
 
-Use a **plus-address** for each role so you can tell the inboxes apart, and text Andrew any new tutor address before you create it. Parent and child addresses do not go on the tutor allowlist.
+Use a **plus-address** for each role so you can tell the inboxes apart (`tysonrdewitt+qol1@gmail.com` and similar). Parent and child addresses do not go on the tutor allowlist. Your existing tutor account is the approved one. The extra tutor for item 10 stays unapproved on purpose.
 
 Allow the microphone and camera when the browser asks.
 
@@ -60,7 +61,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 **Action:**
 
 1. On Device A, sign in as the tutor at `/login`.
-2. Open **Students** and open the learner Andrew seeded (or any learner you have already connected).
+2. Open **Students** and open a learner you have already connected. If the roster is empty, do item 9 first and come back.
 3. Open the **Whiteboard** / session area on that student's page.
 4. Find the card titled **Upcoming sessions**. Its line under the title says "Open the live room when it is time for the appointment."
 5. On the row for the session that starts soon, press **Open room**. While it works the button may say **Opening…**.
@@ -152,7 +153,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 **Action:**
 
-1. Use the learner Andrew set up with **Allow live tutoring sessions** turned **off**, and a session that starts within 15 minutes. If you were not given one, mark N/A with notes and stop.
+1. Use a learner whose parent account you control. On that child's privacy page (item 32), turn **Allow live tutoring sessions** off. Schedule a session that starts within 15 minutes (item 2, step 5). Do this on a learner you can spare — leave the learner from items 1–3 allowed to join.
 2. On Device B, sign in as **that** parent.
 3. On the upcoming row, press **Join** (this time the button should be pressable, because you are inside the window).
 
@@ -275,8 +276,8 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 **Action:**
 
-1. Only if Andrew gave you a tutor login that is **not** pre-approved. Otherwise mark SKIP and write "No unapproved tutor account."
-2. Sign in as that tutor (you may be on a waitlist or able to open Students — follow whatever the site actually lets you do).
+1. Sign up a second tutor with a plus-address you can open. Leave it unapproved.
+2. Sign in as that tutor. You may land on a waitlist, or you may be able to open Students — follow whatever the site actually lets you do.
 3. Try **Add learner & send invite** with any email.
 
 **Expect:** The form does not create the learner. You see "Your account is not approved to add learners yet."
@@ -289,7 +290,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[human-only: needs an account Andrew did not approve]`
+**Coverage:** `[human-only: a tutor account that was never pre-approved]`
 
 **Notes:**
 
@@ -813,7 +814,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 **Action:**
 
-1. If Andrew told you text-message setup is not available, mark N/A with notes and stop. On the chooser, **Text message (SMS)** will say "Not available yet — SMS sender is not configured." and the button **SMS not available** will not press.
+1. On the chooser, if **Text message (SMS)** says "Not available yet — SMS sender is not configured." and **SMS not available** will not press, mark N/A with notes and tell Andrew. Otherwise continue.
 2. On Device A, as the tutor, open **Settings**, then **Two-Factor Authentication**.
 3. If you are asked to pick a method, open **Text message (SMS)** and press **Set up with text message**.
 4. Look at the order of the agreement checkbox, the **Mobile number** box, and **Send code**. Do not finish sending a code unless you want a real text. **Send code** must stay disabled until the box is checked.
@@ -821,7 +822,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 **Expect:** On first-time text setup, the agreement ("I agree to receive one-time sign-in and setup codes from **Mynk**…") is **above** the **Mobile number** field, and **Send code** is below both. **Send code** does nothing until the box is checked and a number is typed. The sentence mentions Privacy Policy, Terms of Use, HELP, and STOP.
 
-**Ignore this run:** The change-method screen may still show the checkbox **under** the phone number. Do not mark FAIL for that screen alone. Do not complete a real opt-in if Andrew has said the texting campaign is not approved.
+**Ignore this run:** The change-method screen may still show the checkbox **under** the phone number. Do not mark FAIL for that screen alone. You do not have to send a real text to grade the order.
 
 - [ ] PASS
 - [ ] FAIL
@@ -1136,7 +1137,7 @@ These are checks that the changes above did not break the paths you already know
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[human-only: the disabled button; do not send a real SMS unless Andrew has said the campaign is approved]`
+**Coverage:** `[human-only: the disabled button; sending a real text is optional]`
 
 **Notes:**
 
