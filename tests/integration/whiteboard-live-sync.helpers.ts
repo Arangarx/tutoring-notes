@@ -241,7 +241,8 @@ export async function readSceneElementSummary(
         >;
       }
     ).__TN_WB_E2E__?.[r];
-    return bridge?.getElements?.() ?? [];
+    const elements = bridge?.getElements?.() ?? [];
+    return elements.map((element) => ({ id: element.id, type: element.type }));
   }, role);
 }
 
