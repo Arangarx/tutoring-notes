@@ -38,8 +38,11 @@ import {
   seedTestAdmin,
   seedTestStudent,
   seedOpenWhiteboardSession,
+  seedSelfLearner,
   TEST_LEARNER,
+  TEST_SELF_LEARNER,
 } from "../visual/helpers";
+import { mintServerLiveKey, readServerLiveKey } from "@/lib/whiteboard/live-key";
 import { TAG } from "../test-tags";
 
 /** Signed-out /join renders JoinAuthGate. Child sessions offer both sign-in paths. */
@@ -2659,6 +2662,48 @@ test.describe(
   }
 );
 
+/**
+ * Plaintext live key for a harness session. Seeded sessions do not mint one;
+ * persist a key the Playwright webServer can decrypt (same root key) so the
+ * denial page can be searched for a real leak.
+ */
+async function readOrMintSessionLiveKey(whiteboardSessionId: string): Promise<string> {
+  const { WB_REGRESSION_TOTP_ENCRYPTION_KEY } = require("../../scripts/wb-regression-local-db.cjs") as {
+    WB_REGRESSION_TOTP_ENCRYPTION_KEY: string;
+  };
+  const previous = process.env.TOTP_ENCRYPTION_KEY;
+  process.env.TOTP_ENCRYPTION_KEY = WB_REGRESSION_TOTP_ENCRYPTION_KEY;
+  try {
+    const prisma = new PrismaClient();
+    try {
+      const row = await prisma.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { liveKeyEnc: true },
+      });
+      const existing = readServerLiveKey(whiteboardSessionId, row?.liveKeyEnc);
+      if (existing) return existing;
+      const minted = mintServerLiveKey(`wbsid=${whiteboardSessionId}`);
+      if (!minted) {
+        throw new Error("live key mint failed");
+      }
+      await prisma.whiteboardSession.update({
+        where: { id: whiteboardSessionId },
+        data: { liveKeyEnc: minted.liveKeyEnc },
+      });
+      const roundTrip = readServerLiveKey(whiteboardSessionId, minted.liveKeyEnc);
+      if (roundTrip !== minted.liveKey) {
+        throw new Error("live key round-trip failed");
+      }
+      return minted.liveKey;
+    } finally {
+      await prisma.$disconnect();
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TOTP_ENCRYPTION_KEY;
+    else process.env.TOTP_ENCRYPTION_KEY = previous;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // P2-G: WB-JOIN-ADULT-LEARNER — adult self-learner join access
 // ---------------------------------------------------------------------------
@@ -2668,43 +2713,111 @@ test.describe(
   { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] },
   () => {
     // -----------------------------------------------------------------------
-    // G1. DENIAL (REQUIRED): AH session MUST be denied for a child
-    //     (non-self) learner session. This ensures widening self-learner
-    //     access does NOT leak to child accounts.
-    //
-    // Strategy: seed a self-learner AH (who has a known password), then
-    // attempt to access a *child* session. isSelfLearner=false → 404.
+    // G1. DENIAL (REQUIRED): an account holder who does not own the child
+    //     learner profile must not reach the workspace. The owning parent
+    //     may join as that child; this AH is a different account.
+    //     Denied decideAhJoin redirects to /account/not-my-session
+    //     (redirectJoinWrongPrincipal). The board, the live key, and the
+    //     session id must not leave with that redirect.
     // -----------------------------------------------------------------------
     test(
-      "account-holder session denied for child (non-self) learner session → 404",
+      "account-holder who does not own the child session lands on not-my-session without the board or key",
       async ({ browser }) => {
-        test.setTimeout(30_000);
+        test.setTimeout(45_000);
 
-        // Seed a CHILD learner session (isSelfLearner=false by default in seedWbLiveSyncSession).
         const childSession = await seedWbLiveSyncSession();
+        const liveKey = await readOrMintSessionLiveKey(childSession.whiteboardSessionId);
+        expect(liveKey.length).toBeGreaterThan(16);
 
-        // Seed a self-learner AH with a known password so we can log in as AH.
-        // We use a separate session here just for the accountHolder; we discard its
-        // whiteboardSessionId. The test only needs a valid AH cookie.
-        const selfSession = await seedSelfLearnerWbSession();
+        // Own student for the self-learner AH. seedSelfLearnerWbSession retargets
+        // the shared "Playwright Student" row, which would move this child
+        // session onto the AH's own profile.
+        const prisma = new PrismaClient();
+        try {
+          const selfStudent = await prisma.student.create({
+            data: {
+              name: `Self AH ${Date.now()}`,
+              adminUserId: childSession.adminUserId,
+              parentEmail: "self-ah-denial@test.local",
+            },
+            select: { id: true },
+          });
+          await seedSelfLearner(selfStudent.id);
+          const linked = await prisma.whiteboardSession.findUnique({
+            where: { id: childSession.whiteboardSessionId },
+            select: {
+              student: {
+                select: {
+                  learnerProfile: {
+                    select: { accountHolderId: true, isSelfLearner: true },
+                  },
+                },
+              },
+            },
+          });
+          const selfAh = await prisma.accountHolder.findUnique({
+            where: { email: TEST_SELF_LEARNER.email },
+            select: { id: true },
+          });
+          expect(linked?.student?.learnerProfile?.isSelfLearner).toBe(false);
+          expect(linked?.student?.learnerProfile?.accountHolderId).not.toBe(selfAh?.id);
+        } finally {
+          await prisma.$disconnect();
+        }
 
         const ahCtx = await browser.newContext();
         try {
-          // Log in as the self-learner account holder.
           await loginAccountHolderInContext(
             ahCtx,
-            selfSession.ahEmail,
-            selfSession.ahPassword
+            TEST_SELF_LEARNER.email,
+            TEST_SELF_LEARNER.password
           );
           const page = await ahCtx.newPage();
-          // Attempt to access the CHILD learner session via AH session.
-          // The page must deny this: child sessions are never joinable via AH.
-          const response = await page.goto(
-            `/join/${childSession.whiteboardSessionId}`,
-            { waitUntil: "domcontentloaded" }
-          );
-          // 404: isSelfLearner=false → AH path is hard-denied.
-          expect(response?.status()).toBe(404);
+          const seen: Array<{ url: string; status: number }> = [];
+          page.on("response", (response) => {
+            seen.push({ url: response.url(), status: response.status() });
+          });
+          await page.goto(`/join/${childSession.whiteboardSessionId}`, {
+            waitUntil: "domcontentloaded",
+          });
+
+          const finalUrl = new URL(page.url());
+          expect(finalUrl.pathname).toBe("/account/not-my-session");
+          expect(finalUrl.href).not.toContain(childSession.whiteboardSessionId);
+          expect(finalUrl.href).not.toContain(liveKey);
+          expect(finalUrl.hash).not.toMatch(/#k=/);
+
+          const joinHits = seen.filter((entry) => {
+            try {
+              return (
+                new URL(entry.url).pathname ===
+                `/join/${childSession.whiteboardSessionId}`
+              );
+            } catch {
+              return false;
+            }
+          });
+          expect(
+            joinHits.some((entry) => entry.status === 200),
+            `join document must not render 200; saw ${JSON.stringify(joinHits)}`
+          ).toBe(false);
+
+          await expect(page.getByTestId("student-whiteboard-canvas-mount")).toHaveCount(0);
+          await expect(
+            page.getByText("Session not linked to your account", { exact: true })
+          ).toBeVisible();
+
+          const html = await page.content();
+          expect(html).not.toContain(liveKey);
+          expect(html).not.toContain("#k=");
+          expect(html).not.toContain(childSession.whiteboardSessionId);
+
+          const nextData = page.locator("script#__NEXT_DATA__");
+          if ((await nextData.count()) > 0) {
+            const text = (await nextData.textContent()) ?? "";
+            expect(text).not.toContain(liveKey);
+            expect(text).not.toContain(childSession.whiteboardSessionId);
+          }
         } finally {
           await ahCtx.close();
         }
