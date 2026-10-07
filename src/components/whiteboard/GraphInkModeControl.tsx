@@ -38,6 +38,8 @@ export function GraphInkModeControl({
           size="sm"
           variant={mode === item.id ? "secondary" : "outline"}
           aria-pressed={mode === item.id}
+          data-graph-mode-control=""
+          data-graph-mode={item.id}
           data-testid={`wb-graph-mode-${item.id}`}
           onPointerDown={onPointerDown}
           onMouseDown={onPointerDown}

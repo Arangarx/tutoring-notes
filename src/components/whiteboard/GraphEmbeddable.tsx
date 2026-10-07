@@ -512,9 +512,9 @@ export function GraphEmbeddable({
       }
       const modeHit = document
         .elementFromPoint(event.clientX, event.clientY)
-        ?.closest("[data-testid^='wb-graph-mode-']");
+        ?.closest("[data-graph-mode-control]");
       if (modeHit) {
-        const next = modeHit.getAttribute("data-testid")?.replace("wb-graph-mode-", "");
+        const next = modeHit.getAttribute("data-graph-mode");
         cancelStrokePreview();
         if (next === "pan" || next === "point" || next === "draw") setInkMode(next);
         return;
