@@ -8,11 +8,16 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { MARKETING_HOME_HREF } from "@/lib/marketing-routes";
+import {
+  SITE_ROLE_CHILD_LEARNER,
+  SITE_ROLE_SELF_LEARNER_PARENT,
+  SITE_ROLE_TUTOR,
+} from "@/lib/site-role-labels";
 
 const SIGN_IN_LINKS = [
-  { href: "/login", label: "Tutor sign in" },
-  { href: "/account/login", label: "Parent sign in" },
-  { href: "/students/login", label: "Student sign in" },
+  { href: "/login", label: `${SITE_ROLE_TUTOR} sign in` },
+  { href: "/account/login", label: `${SITE_ROLE_SELF_LEARNER_PARENT} sign in` },
+  { href: "/students/login", label: `${SITE_ROLE_CHILD_LEARNER} sign in` },
 ] as const;
 
 function SignInMenu() {
@@ -47,7 +52,7 @@ function SignInMenu() {
   }, [open, close]);
 
   return (
-    <div ref={rootRef} style={{ position: "relative" }}>
+    <div ref={rootRef} style={{ flexShrink: 0 }}>
       <Button
         type="button"
         variant="outline"
@@ -67,9 +72,12 @@ function SignInMenu() {
           aria-label="Sign in options"
           style={{
             position: "absolute",
-            right: 0,
+            right: "max(16px, env(safe-area-inset-right))",
             top: "calc(100% + 6px)",
-            minWidth: 180,
+            width: "max-content",
+            maxWidth:
+              "calc(100% - max(16px, env(safe-area-inset-left)) - max(16px, env(safe-area-inset-right)))",
+            boxSizing: "border-box",
             margin: 0,
             padding: 6,
             listStyle: "none",
@@ -86,6 +94,7 @@ function SignInMenu() {
                 href={href}
                 role="menuitem"
                 className="sign-in-menuitem"
+                style={{ whiteSpace: "normal", overflowWrap: "break-word" }}
                 onClick={close}
               >
                 {label}
@@ -117,40 +126,63 @@ export function MarketingHeader() {
     >
       <div
         style={{
-          maxWidth: 1100,
+          position: "relative",
+          boxSizing: "border-box",
+          width: "100%",
+          maxWidth: "min(1100px, 100%)",
           margin: "0 auto",
-          padding: "0 24px",
-          height: 56,
+          minHeight: 56,
+          paddingTop: 8,
+          paddingBottom: 8,
+          paddingLeft: "max(16px, env(safe-area-inset-left))",
+          paddingRight: "max(16px, env(safe-area-inset-right))",
           display: "flex",
+          flexWrap: "wrap",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 12,
+          columnGap: 12,
+          rowGap: 8,
         }}
       >
-        <Link href={signedIn ? MARKETING_HOME_HREF : "/"} aria-label="Mynk home">
+        <Link
+          href={signedIn ? MARKETING_HOME_HREF : "/"}
+          aria-label="Mynk home"
+          style={{ flexShrink: 0 }}
+        >
           <MynkWordmark size="sm" />
         </Link>
 
         <nav
           role="navigation"
           aria-label="Site navigation"
-          style={{ display: "flex", alignItems: "center", gap: 8 }}
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 8,
+            flex: "1 1 auto",
+            minWidth: "min(100%, max-content)",
+            maxWidth: "100%",
+          }}
         >
           <Link
             href="/features"
             className="label-mono"
             style={{
+              flexShrink: 0,
               padding: "6px 10px",
               borderRadius: 8,
               color: "var(--text-muted)",
               transition: "color 0.15s",
               fontSize: 12,
+              whiteSpace: "nowrap",
             }}
           >
             Features
           </Link>
 
-          <ThemeToggle />
+          <ThemeToggle className="shrink-0" />
           {signedIn ? (
             <Button asChild variant="accent" size="sm">
               <Link href="/admin">Dashboard</Link>

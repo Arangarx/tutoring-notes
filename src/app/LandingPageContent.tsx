@@ -6,6 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SITE_ROLE_SELF_LEARNER_PARENT } from "@/lib/site-role-labels";
 
 function ValuePropCard({
   eyebrow,
@@ -17,7 +18,7 @@ function ValuePropCard({
   body: string;
 }) {
   return (
-    <Card className="min-w-[280px] flex-1 rounded-2xl">
+    <Card className="min-w-0 max-w-full shrink-0 grow basis-[min(100%,280px)] rounded-2xl">
       <CardContent className="pt-6">
         <p className="label-mono mb-2.5 text-accent-text">{eyebrow}</p>
         <h3 className="heading mb-2.5 mt-0 text-lg">{headline}</h3>
@@ -92,12 +93,11 @@ export function LandingPageContent() {
 
           {!signedIn ? (
             <p className="mt-5 text-sm text-muted-foreground">
-              Parent or family member?{" "}
               <Link
                 href="/account/login"
                 className="font-medium text-primary underline underline-offset-[3px]"
               >
-                Sign in to your parent account
+                {SITE_ROLE_SELF_LEARNER_PARENT} sign in
               </Link>
             </p>
           ) : null}
@@ -114,7 +114,7 @@ export function LandingPageContent() {
           <h2 id="value-props-heading" className="sr-only">
             How Mynk works
           </h2>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex min-w-0 flex-wrap gap-4">
             <ValuePropCard
               eyebrow="Sessions captured"
               headline="Write less between sessions"
