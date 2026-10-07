@@ -494,11 +494,27 @@ test.describe("org QoL schedule bridge", () => {
     async ({ page }) => {
       test.setTimeout(120_000);
       const adminUserId = await seedTestAdmin();
-      const { studentId } = await seedTestStudent(adminUserId);
+      const studentName = `Midnight ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const seedPrisma = new PrismaClient();
+      let studentId: string;
+      try {
+        const student = await seedPrisma.student.create({
+          data: {
+            name: studentName,
+            adminUserId,
+            parentEmail: "parent@test.local",
+          },
+          select: { id: true },
+        });
+        studentId = student.id;
+      } finally {
+        await seedPrisma.$disconnect();
+      }
       await page.goto("/admin/schedule");
       await page.getByTestId("schedule-new-session").first().click();
       await page.locator("#schedule-student").click();
-      await page.getByRole("option", { name: "Playwright Student" }).click();
+      await page.getByRole("option", { name: studentName, exact: true }).click();
+      await expect(page.locator("#schedule-student")).toContainText(studentName);
       await page.locator("#schedule-duration").click();
       await page.getByRole("option", { name: /90 min/ }).click();
       await page.locator("#schedule-start").fill("23:30");
