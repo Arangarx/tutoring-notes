@@ -1,12 +1,10 @@
 # Session joining and whiteboard quality — Tyson test packet
 
 **Branch:** `feat/org-qol`
-**Tip commit:** [`27ff164`](https://github.com/Arangarx/tutoring-notes/commit/27ff1642057e7c2efd4ceee22f42207af03d87d3) — draft; orchestrator updates at hand-off
-**Preview:** <pending — build fix in progress; orchestrator fills in>
+**Tip commit:** [`c0f05e73`](https://github.com/Arangarx/tutoring-notes/commit/c0f05e736c6d5786a797ac91941ae79f99eee89c)
+**Preview:** [preview.usemynk.com](https://preview.usemynk.com)
 
-**Orchestrator only (do not send Tyson here until this deployment is Ready):** branch alias `https://tutoring-notes-git-feat-org-qol-arangarx-5209s-projects.vercel.app` on deployment `dpl_4zjQgKX284sKCMi8QdwQDEEpYxCJ`, which was **Building** when this draft was written. The previous preview of `54b13452` (`dpl_EHcNP3jCLPhD52tSksif6oqfHkxm`) **failed**. [https://preview.usemynk.com](https://preview.usemynk.com) is an older Ready site for branch `feat/sms-a2p-consent` (25 Sep 2026). It is not this branch.
-
-This packet is for the tutoring app **Mynk**. It covers joining a scheduled session, who is allowed to claim a learner, and a set of whiteboard changes. School / organization accounts are **not** in this build. A section at the end for drawing points on a graph is not built yet.
+This packet is for the tutoring app **Mynk**. It covers joining a scheduled session, who is allowed to claim a learner, and a set of whiteboard changes. School / organization accounts are **not** in this build.
 
 ---
 
@@ -15,7 +13,7 @@ This packet is for the tutoring app **Mynk**. It covers joining a scheduled sess
 Tyson does not score these. Check them before you send him the packet. He stalls if the tutor allowlist or the preview link is missing.
 
 - [ ] His tutor email (and any plus-address he will use as a **tutor**) is on `/admin/tutor-approvals` under **Pre-approved emails**. He should text you each new tutor address first. Accounts cannot be deleted; plus-addresses are how he repeats a run (`tysonrdewitt+qol1@gmail.com` and similar).
-- [ ] The **Preview** line above is a Ready deployment of `feat/org-qol`. Do not send him [https://preview.usemynk.com](https://preview.usemynk.com) or the live site.
+- [ ] The **Preview** line above is [preview.usemynk.com](https://preview.usemynk.com), a Ready deployment of `feat/org-qol`. Do not send him the live site.
 - [ ] Email sending works on that preview, so claim invitations arrive.
 - [ ] His tutor account has a **display name** set (not blank). Item 18 checks that the learner sees that name on the video tile.
 - [ ] A learner on his roster whose parent has **Allow live tutoring sessions** turned **on**, with a username and PIN, and a scheduled session whose start time is **inside the next 15 minutes**. If that window will expire before he sits down, leave this unchecked and he creates the session himself in item 16's neighborhood (item 2 tells him how).
@@ -28,7 +26,7 @@ Tyson does not score these. Check them before you send him the packet. He stalls
 
 ## How to run this (Tyson)
 
-Use only the **Preview** link at the top, after Andrew has filled it in. Do not use the normal Mynk website, and do not use `preview.usemynk.com` (that is an older test site).
+Use only the **Preview** link at the top. Do not use the normal Mynk website.
 
 You need two places to be "in the room" at once:
 
@@ -683,7 +681,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 **Expect:** Before that one click, a drag on the graph moves the board (or does not pan the graph itself). After one click in the graph, the graph takes the pointer and you can pan or use the graph. There are **no** words "Click to interact". After the other person changes the graph, Device A can still use the graph **without clicking it a second time**.
 
-**Ignore this run:** Plotting your own points or freehand inside the graph. That is not built yet (see the placeholder section below).
+**Ignore this run:** Plotting points and freehand inside the graph are items 45 and 46.
 
 - [ ] PASS
 - [ ] FAIL
@@ -706,7 +704,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 **Expect:** You see a **y=** label immediately left of the box. The faded example is `2x+1`. After insert, the board shows a straight line for that formula. The small print says it uses standard function notation with x as the variable.
 
-**Ignore this run:** Point plotting and free draw inside the graph (not built yet).
+**Ignore this run:** Point plotting and free draw inside the graph are items 45 and 46.
 
 - [ ] PASS
 - [ ] FAIL
@@ -839,9 +837,54 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 ## Graph points and free draw
 
-Not built yet — will be filled in before hand-off.
+Use the graph from item 27. If you are not in a room, start one the way item 34 describes, insert a blank graph, and click once in the middle of the graph so it takes the pointer.
 
-Planned, not in this build: inside a graph, a way to plot points and to free-draw a stroke that stays on the graph after you reload. Do not test it. There are no checkboxes for this section.
+### 45. Plot two points, pan, and reload
+
+**Action:**
+
+1. On the graph, press **Point**.
+2. Click two different spots on the open part of the graph, not on the axis labels.
+3. Press **Pan**. Press **Pan right** once and **Zoom in** once.
+4. Reload the tutor page. Open the same board and click the graph once if it does not take the pointer.
+
+**Expect:** Two points appear where you clicked. The other device shows the same two points. Panning and zooming move the view and do not delete the points. After reload, both points are still there.
+
+**Ignore this run:** Whether the points sit on exact grid numbers.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-graph-ink.spec.ts › tutor points and one stroke sync in user coordinates, persist once, and survive reload]`
+
+**Notes:**
+
+### 46. Draw a stroke on the graph
+
+**Action:**
+
+1. On the same graph, press **Draw**.
+2. Drag a short stroke across the open part of the graph. While you are still holding the mouse, look at the other device.
+3. Let go.
+4. Start a second stroke, and while you are still holding, press **Escape**.
+5. Start a third stroke, and while you are still holding, press **Pan**.
+
+**Expect:** While you are dragging, the line follows your cursor on your screen and the other device does not show it yet. When you let go, the stroke stays, and the other device shows that one stroke. Escape and switching to **Pan** both drop the stroke you had not finished. The finished stroke stays. Reload still shows the finished stroke and not the cancelled ones.
+
+**Ignore this run:** How smooth the line looks.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-graph-ink.spec.ts › draw preview follows the drag locally, persists once on release, and cancels on Escape or mode switch]`
+
+**Notes:**
 
 ---
 
@@ -1152,7 +1195,7 @@ Run this section **after** `feat/org-qol` merges into `master`. Use the **master
 
 ## Overall result
 
-Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. The graph-points section has no items until it is filled in. Overall verdict is PASS or FAIL only.
+Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS or FAIL only.
 
 - [ ] PASS
 - [ ] FAIL
