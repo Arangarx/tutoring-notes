@@ -22,8 +22,9 @@ test("smoke: create note, send update, outbox link opens share page", async ({
     timeout: 15_000,
   });
 
-  await page.locator('input[name="name"]').fill("Playwright Student");
-  await page.getByRole("button", { name: "Add student" }).click();
+  await page.getByLabel("Parent / guardian email").fill(`pw-student-${Date.now()}@example.com`);
+  await page.getByLabel("Child identifier").fill("Playwright Student");
+  await page.getByRole("button", { name: "Add learner & send invite" }).click();
 
   await page.getByText("Playwright Student", { exact: true }).first().click();
 

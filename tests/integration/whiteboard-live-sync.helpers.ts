@@ -227,6 +227,68 @@ export async function readPageDataBucketIds(
   }, pageId);
 }
 
+/** Live scene element id + type from the E2E bridge. */
+export async function readSceneElementSummary(
+  page: Page,
+  role: "tutor" | "student"
+): Promise<Array<{ id: string; type?: string }>> {
+  return page.evaluate((r) => {
+    const bridge = (
+      window as Window & {
+        __TN_WB_E2E__?: Record<
+          string,
+          { getElements?: () => Array<{ id: string; type?: string }> }
+        >;
+      }
+    ).__TN_WB_E2E__?.[r];
+    return bridge?.getElements?.() ?? [];
+  }, role);
+}
+
+/**
+ * Deliver a stale onChange through the E2 seam (`__WBX_INJECT_HANDLE_CHANGE__`).
+ * Shared by the PDF leak specs and image-as-board.
+ */
+export async function injectStaleHandleChange(
+  page: Page,
+  elements: unknown
+): Promise<void> {
+  const ready = await page.evaluate(
+    () =>
+      typeof (
+        window as Window & { __WBX_INJECT_HANDLE_CHANGE__?: unknown }
+      ).__WBX_INJECT_HANDLE_CHANGE__ === "function"
+  );
+  if (!ready) {
+    throw new Error("__WBX_INJECT_HANDLE_CHANGE__ seam must be defined");
+  }
+  await page.evaluate((els) => {
+    (
+      window as Window & {
+        __WBX_INJECT_HANDLE_CHANGE__?: (value: unknown) => void;
+      }
+    ).__WBX_INJECT_HANDLE_CHANGE__!(els);
+  }, elements);
+}
+
+/** Wait until the page-switch fingerprint has cleared so a later inject is late. */
+export async function waitUntilPageFingerprintClear(
+  page: Page,
+  pageId: string
+): Promise<void> {
+  await page.waitForTimeout(500);
+  await expect(async () => {
+    const active = await page.evaluate((id) => {
+      const win = window as Window & {
+        __WBX_FINGERPRINT_HAS__?: (pageId: string) => boolean;
+      };
+      return win.__WBX_FINGERPRINT_HAS__?.(id) ?? false;
+    }, pageId);
+    expect(active).toBe(false);
+  }).toPass({ timeout: 30_000 });
+  await page.waitForTimeout(200);
+}
+
 /** Active whiteboard page id from the tutor E2E bridge. */
 export async function readActiveWhiteboardPageId(page: Page): Promise<string> {
   return page.evaluate(() => {

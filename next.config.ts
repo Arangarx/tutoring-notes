@@ -80,6 +80,9 @@ const CONTENT_SECURITY_POLICY = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // The Next dev indicator sits on the bottom corner and swallows clicks
+  // on whiteboard chrome during Playwright. Production builds do not show it.
+  ...(process.env.PLAYWRIGHT_TEST === "1" ? { devIndicators: false as const } : {}),
   env: {
     NEXT_PUBLIC_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "development",
   },

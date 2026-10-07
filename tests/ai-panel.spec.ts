@@ -32,8 +32,9 @@ test("AI panel: typing session text and clicking Generate populates the note for
   await expect(page).toHaveURL(/\/admin\/students/, { timeout: 15_000 });
 
   // --- Create a test student ---
-  await page.locator('input[name="name"]').fill("AI Smoke Student");
-  await page.getByRole("button", { name: "Add student" }).click();
+  await page.getByLabel("Parent / guardian email").fill(`ai-smoke-${Date.now()}@example.com`);
+  await page.getByLabel("Child identifier").fill("AI Smoke Student");
+  await page.getByRole("button", { name: "Add learner & send invite" }).click();
   await page.getByText("AI Smoke Student", { exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "AI Smoke Student" })).toBeVisible();
 
@@ -123,8 +124,9 @@ test("AI panel: is visible on the student detail page", async ({ page }) => {
   await expect(page).toHaveURL(/\/admin\/students/, { timeout: 15_000 });
 
   // Navigate to any student or create one
-  await page.locator('input[name="name"]').fill("AI Visibility Student");
-  await page.getByRole("button", { name: "Add student" }).click();
+  await page.getByLabel("Parent / guardian email").fill(`ai-visibility-${Date.now()}@example.com`);
+  await page.getByLabel("Child identifier").fill("AI Visibility Student");
+  await page.getByRole("button", { name: "Add learner & send invite" }).click();
   await page.getByText("AI Visibility Student", { exact: true }).first().click();
 
   // Panel must be present

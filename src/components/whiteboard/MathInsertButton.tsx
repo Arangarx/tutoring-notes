@@ -231,6 +231,19 @@ export function MathInsertButton({
     };
   }, [dialogIsOpen, mathLiveReady]);
 
+  // MathLive's keyboard defaults to z-index 105. The dialog scrim is 1000,
+  // so a click on a key would hit the scrim and dismiss the dialog.
+  useEffect(() => {
+    if (!dialogIsOpen) return;
+    const root = document.documentElement;
+    const previous = root.style.getPropertyValue("--keyboard-zindex");
+    root.style.setProperty("--keyboard-zindex", "1200");
+    return () => {
+      if (previous) root.style.setProperty("--keyboard-zindex", previous);
+      else root.style.removeProperty("--keyboard-zindex");
+    };
+  }, [dialogIsOpen]);
+
   // Mount the <math-field> after MathLive registers — we create the
   // element imperatively because React's JSX type checker doesn't
   // know about it without a global declaration, and the value-binding
