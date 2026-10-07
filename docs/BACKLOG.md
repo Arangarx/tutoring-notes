@@ -663,6 +663,8 @@ Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
 
 **[P1][WB] AV-CAMON-NO-STREAM (2026-10-06, pre-existing on master):** presence omits camOn when no local video stream exists and permission is not denied, so a student whose camera never starts sends no explicit camera-off. Tutor tile relies on the legacy fallback. Initials in that case come only from the connected-but-no-video path (`AVTile.tsx` ~352–363): `showCamPlaceholder` is true when there is no active video track, and `remoteAwaitingVideo` is false once the peer is past `new`/`connecting` and `camOn` is not explicitly false — so the tile renders the initials placeholder rather than "Waiting for video…". Fix must not reintroduce the mid-GUM false latch (b68efd9c). Opus-owned (useLiveAV).
 
+**[P2][AV] AVTile mount latch deferred (2026-10-07):** `useHydratedDomPeerId` in `src/components/av/AVTile.tsx` still has its own mount latch. Deferred because it touches live A/V.
+
 **[P1][WB] AV-CAM-BUTTON-ACQUIRING (2026-10-06):** the camera button reads Off while the student camera is still starting (`isCamMuted` starts true); clicking it then means turn on, and the in-flight acquire sets `isCamMuted(false)` regardless (`useLiveAV.ts` ~1378/~1505). Consider an explicit starting state on the button. The contract comment at `useLiveAV.ts` ~347–351 does not match :1378. Opus-owned.
 
 **[P2][WB] WB-REPLAY-PDF-PLACEHOLDER** — parent share PDF boards show placeholders. Asset hydrate / share proxy.
