@@ -8,9 +8,34 @@
 
 ---
 
-## 0. Open questions for Andrew
+## 0. Andrew, 2026-10-07 — assignment, roster, and consent
 
-These are the only places where the written decisions do not decide. Each has a default the executor builds to unless Andrew answers otherwise. The default is always the more restrictive choice.
+This pass supersedes the Q1–Q8 defaults below, and it supersedes any later section that treats "assignment ended" as a normal lifecycle. The body of this doc is not rewritten yet. Where they conflict, this section wins.
+
+**Scheduling is the relationship.** An org learner can have lessons with more than one tutor, for example two subjects. The org decides who teaches which lesson by scheduling it. Keeping the same tutor is a scheduling choice, not a hard lock that one tutor owns the learner.
+
+**Taking a tutor off a live session is a deliberate cancel.** It is not something that falls out of "unassigning" a learner. Someone at the org would be ending that open session on purpose.
+
+**The access cut is removal from the org roster.** A tutor who is still a member keeps access to the org sessions they teach, including replay of the board, audio, and transcript for their own sessions (Andrew: yes to replay). Booking a different tutor next week does not create an "after unassignment" state. What a tutor keeps after they are removed from the roster is still open (see below).
+
+**A live org session requires a Mynk account.** Anonymous guest links are out. "Do not record" does not cover consent to be in an online session at all (COPPA). Signing up for tutoring with the org includes creating a Mynk account. The signup can be branded for the organization. Consent to be online is collected there, before the first session. A later lightweight login, if any, still has to be a specific person who already consented, so we know it is the same person.
+
+**Suspended or not-yet-approved org.** A session already live may finish. It must not be able to run out to the normal runaway guard (`SESSION_SAFETY_MAX_SECONDS`, 8 hours in `src/lib/recording/segment-policy.ts`). Working proposal, not yet confirmed: end at the appointment's planned end, or 15 minutes after the org is suspended if that is sooner.
+
+**Scheduler.** The scheduler sees the learner's full name and the brief, and not parent contact, consent detail, or notes. Seeing more means holding another role as well (admin or owner), not widening scheduler.
+
+**Erasure.** Today the in-app control is operator-only (`/admin/erasure`: "Operator-only. Use for verified parental erasure requests."). A person who only came in through an org can ask Mynk directly. The org may pass a request along. The org is not the only door. The operator still performs the erasure, same as a verified parent request today.
+
+**Schedule bridge.** This is the scheduled-session join work on `feat/org-qol` (open the room from an appointment, 15-minute join window, server-held key, parent can join as the child). It is not org code. `feat/org` was cut from master before that work, so it does not have the bridge. No org features are on the branch Tyson is testing. Slice 2 should call that bridge after `feat/org-qol` is on master, and must not copy it.
+
+**Still open**
+
+- When a tutor is removed from the org roster, do they keep read-only access to sessions they already taught, or does org access stop entirely?
+- Confirm the suspended-org time cap (proposal above: planned end, or 15 minutes after suspension, whichever is sooner).
+
+## 0b. Earlier open questions (superseded 2026-10-07)
+
+The table is the questions as asked. The answers are in § 0. Do not build to the old defaults.
 
 | # | Question | Default until answered |
 |---|---|---|
