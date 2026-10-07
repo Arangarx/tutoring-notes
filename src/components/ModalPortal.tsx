@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useHydrated } from "@/hooks/useHydrated";
 
 /**
  * Render `children` as a child of `document.body` instead of the
@@ -41,15 +42,12 @@ import { createPortal } from "react-dom";
  * The component renders `null` until after the first client-mount
  * tick so SSR + hydration stays in sync (the server renders nothing,
  * the first client render renders nothing, the second render —
- * triggered by `setMounted(true)` in a useEffect — renders the
- * portal). Without this guard React would throw a hydration
- * mismatch error in dev when the parent did SSR.
+ * after `useHydrated()` flips true — renders the portal). Without
+ * this guard React would throw a hydration mismatch error in dev
+ * when the parent did SSR.
  */
 export function ModalPortal({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useHydrated();
   if (!mounted) return null;
   return createPortal(children, document.body);
 }

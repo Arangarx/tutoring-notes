@@ -48,6 +48,7 @@ import {
   parseConsentActionError,
 } from "@/lib/consent-action-error";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHydrated } from "@/hooks/useHydrated";
 import { createPortal } from "react-dom";
 import { useWindowScrollToTopOnMount } from "@/hooks/useWindowScrollToTopOnMount";
 import { useTheme } from "@/components/ThemeProvider";
@@ -1533,8 +1534,7 @@ export function WhiteboardWorkspaceClient({
   // useEffect. Mic controls are disabled until then, so Playwright's
   // actionability check waits for the button to enable (which happens before
   // the mic graph is built), ensuring the click fires post-hydration.
-  const [clientMounted, setClientMounted] = useState(false);
-  useEffect(() => { setClientMounted(true); }, []);
+  const clientMounted = useHydrated();
 
   // Session phase gate — PENDING = waiting room (A/V mesh live, but
   // capture + billing timer inert); ACTIVE = tutor has clicked Start.
