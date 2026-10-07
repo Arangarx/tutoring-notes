@@ -41,6 +41,7 @@
  *   - Delete failure surfaces an alert and keeps the gate visible.
  */
 
+import { renderToString } from "react-dom/server";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -152,6 +153,37 @@ describe("WorkspaceResumeGate", () => {
     expect(
       screen.queryByRole("button", { name: /^End session$/i })
     ).not.toBeInTheDocument();
+    // After the client effect, the same buttons accept clicks.
+    expect(screen.getByTestId("wb-resume-gate-cancel-delete")).toBeEnabled();
+  });
+
+  it("stale gate action buttons are disabled in server HTML until hydration", () => {
+    // SSR does not run effects. A click on that markup never reaches onClick
+    // (the Cancel/Start pre-hydration miss). The buttons must ship disabled.
+    const html = renderToString(
+      <WorkspaceResumeGate
+        whiteboardSessionId="wb_1"
+        studentId="stu_1"
+        startedAtIso={new Date(NOW - 60 * 60_000).toISOString()}
+        initialLastActiveAtIso={null}
+        syncEnabled={true}
+        __testOverrides={{ nowMs: NOW }}
+      >
+        <CanaryChildren />
+      </WorkspaceResumeGate>
+    );
+    for (const testId of [
+      "wb-resume-gate-resume",
+      "wb-resume-gate-end-and-review",
+      "wb-resume-gate-cancel-delete",
+    ]) {
+      const marker = `data-testid="${testId}"`;
+      const at = html.indexOf(marker);
+      expect(at).toBeGreaterThan(-1);
+      const openTag = html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+      // Tailwind's `disabled:` utility contains the letters "disabled"; require the attribute.
+      expect(openTag).toMatch(/(?:^|\s)disabled(?:=|\s|>)/);
+    }
   });
 
   it("clicking Resume reveals the children and never hides them again", async () => {

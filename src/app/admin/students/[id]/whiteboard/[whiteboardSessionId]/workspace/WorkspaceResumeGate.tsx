@@ -25,7 +25,9 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { finalizeWhiteboardSessionWithOutbox } from "@/lib/recording/finalize-whiteboard-session-client";
-import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";import { Button } from "@/components/ui/button";
+import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { Button } from "@/components/ui/button";
+import { useHydrated } from "@/hooks/useHydrated";
 import {
   deriveResumeGateState,
   describeResumeGate,
@@ -101,6 +103,9 @@ export function WorkspaceResumeGate({
     }
   }, [autoConsent]);
 
+  // SSR HTML is clickable before hydration; that click never runs the handler.
+  // Same latch as the waiting-room Cancel/Start buttons (clientMounted).
+  const hydrated = useHydrated();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
@@ -174,7 +179,7 @@ export function WorkspaceResumeGate({
             markSkipIndexedDbResumeAfterGate(whiteboardSessionId);
             setConsented(true);
           }}
-          disabled={deleting}
+          disabled={!hydrated || deleting}
           data-testid="wb-resume-gate-resume"
           autoFocus
         >
@@ -185,7 +190,7 @@ export function WorkspaceResumeGate({
           type="button"
           variant="outline"
           onClick={handleEndAndReview}
-          disabled={deleting || finalizing || showDeleteConfirm}
+          disabled={!hydrated || deleting || finalizing || showDeleteConfirm}
           data-testid="wb-resume-gate-end-and-review"
         >
           {finalizing ? "Finalizing…" : "End and review"}
@@ -194,7 +199,7 @@ export function WorkspaceResumeGate({
           type="button"
           variant="outline"
           onClick={() => setShowDeleteConfirm(true)}
-          disabled={deleting || showDeleteConfirm}
+          disabled={!hydrated || deleting || showDeleteConfirm}
           data-testid="wb-resume-gate-cancel-delete"
           style={{ color: "var(--sign-out)" }}
         >

@@ -270,7 +270,7 @@ test.describe(
         await expect(gateDialog).toBeVisible({ timeout: 30_000 });
 
         const endAndReviewBtn = page.getByTestId("wb-resume-gate-end-and-review");
-        await expect(endAndReviewBtn).toBeVisible({ timeout: 5_000 });
+        await expect(endAndReviewBtn).toBeEnabled({ timeout: 15_000 });
         await endAndReviewBtn.click();
 
         await expect(page).not.toHaveURL(/intent=endreview/, { timeout: 5_000 });
@@ -353,7 +353,9 @@ test.describe(
       const gateDialog = page.getByTestId("wb-resume-gate");
       await expect(gateDialog).toBeVisible({ timeout: 30_000 });
 
+      // Disabled in SSR HTML until hydration; click waits for the handler to exist.
       const deleteBtn = page.getByTestId("wb-resume-gate-cancel-delete");
+      await expect(deleteBtn).toBeEnabled({ timeout: 15_000 });
       await deleteBtn.click();
 
       const confirmDialog = page.getByTestId("wb-resume-gate-cancel-delete-confirm");
@@ -395,7 +397,9 @@ test.describe(
       await page.waitForLoadState("networkidle");
 
       await expect(page.getByTestId("wb-resume-gate")).toBeVisible({ timeout: 30_000 });
-      await page.getByTestId("wb-resume-gate-resume").click();
+      const resumeBtn = page.getByTestId("wb-resume-gate-resume");
+      await expect(resumeBtn).toBeEnabled({ timeout: 15_000 });
+      await resumeBtn.click();
 
       await expect(page.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
         timeout: 90_000,
