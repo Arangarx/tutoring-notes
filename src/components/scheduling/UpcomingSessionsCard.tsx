@@ -57,7 +57,8 @@ export function UpcomingSessionsCard({
                   ) : (
                     <JoinScheduledSessionButton
                       scheduledSessionId={session.id}
-                      joinWindowOpen={session.joinWindowOpen}
+                      startAtIso={session.startAt.toISOString()}
+                      endAtIso={session.endAt.toISOString()}
                     />
                   )
                 }

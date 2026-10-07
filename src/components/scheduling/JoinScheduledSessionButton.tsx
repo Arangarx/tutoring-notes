@@ -1,12 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import {
   joinScheduledSessionFromForm,
   type JoinScheduledSessionError,
 } from "@/app/join/scheduled-actions";
 import { Button } from "@/components/ui/button";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
+import {
+  isWithinJoinWindow,
+  JOIN_WINDOW_OPENS_BEFORE_MS,
+} from "@/lib/scheduling/join-window";
 
 const JOIN_REFUSAL_COPY: Record<JoinScheduledSessionError["error"], string> = {
   not_signed_in: "Sign in to join this session.",
@@ -16,13 +20,54 @@ const JOIN_REFUSAL_COPY: Record<JoinScheduledSessionError["error"], string> = {
 
 const JOIN_BUTTON_CLASS = "min-h-10 rounded-full whitespace-nowrap";
 
+/**
+ * Re-check the join window while the dashboard stays open. A 30s tick covers
+ * a long wait; a timeout at the exact open and close instants flips the
+ * button without waiting for the next tick.
+ */
+function useJoinWindowOpen(startAtIso: string, endAtIso: string): boolean {
+  const [open, setOpen] = useState(() =>
+    isWithinJoinWindow(
+      { startAt: new Date(startAtIso), endAt: new Date(endAtIso) },
+      new Date()
+    )
+  );
+
+  useEffect(() => {
+    const startAt = new Date(startAtIso);
+    const endAt = new Date(endAtIso);
+    const tick = () => {
+      setOpen(isWithinJoinWindow({ startAt, endAt }, new Date()));
+    };
+    tick();
+    const interval = window.setInterval(tick, 30_000);
+    const now = Date.now();
+    const openAt = startAt.getTime() - JOIN_WINDOW_OPENS_BEFORE_MS;
+    const closeAt = endAt.getTime();
+    const openTimer =
+      openAt > now ? window.setTimeout(tick, openAt - now) : undefined;
+    const closeTimer =
+      closeAt > now ? window.setTimeout(tick, closeAt - now) : undefined;
+    return () => {
+      window.clearInterval(interval);
+      if (openTimer !== undefined) window.clearTimeout(openTimer);
+      if (closeTimer !== undefined) window.clearTimeout(closeTimer);
+    };
+  }, [startAtIso, endAtIso]);
+
+  return open;
+}
+
 export function JoinScheduledSessionButton({
   scheduledSessionId,
-  joinWindowOpen,
+  startAtIso,
+  endAtIso,
 }: {
   scheduledSessionId: string;
-  joinWindowOpen: boolean;
+  startAtIso: string;
+  endAtIso: string;
 }) {
+  const joinWindowOpen = useJoinWindowOpen(startAtIso, endAtIso);
   const [state, formAction] = useActionState(joinScheduledSessionFromForm, null);
 
   if (!joinWindowOpen) {
