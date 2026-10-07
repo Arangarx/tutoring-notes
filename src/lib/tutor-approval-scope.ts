@@ -268,29 +268,52 @@ export async function rejectTutor(
   );
 }
 
+export type RevokeTutorApprovalOptions = {
+  /** Run the status update on this transaction client. */
+  client?: Prisma.TransactionClient;
+  /**
+   * When true, only a row that is still APPROVED changes.
+   * Any other status is left alone and is not logged.
+   */
+  onlyIfApproved?: boolean;
+};
+
 /**
  * Revoke an APPROVED tutor's access.
  * Sets approvalStatus=WAITLISTED so the operator can re-approve later.
  * Does not delete the AdminUser row.
  *
  * Caller MUST run requireOperator() before calling this.
+ * This is the only writer of a revoke (approval status back to WAITLISTED).
  */
 export async function revokeTutorApproval(
   adminUserId: string,
-  operatorId: string
-): Promise<void> {
-  await db.adminUser.update({
-    where: { id: adminUserId },
-    data: {
-      approvalStatus: "WAITLISTED",
-      approvedAt: null,
-      approvedByAdminId: null,
-    },
-  });
+  operatorId: string,
+  options?: RevokeTutorApprovalOptions
+): Promise<{ revoked: boolean }> {
+  const client = options?.client ?? db;
+  const data = {
+    approvalStatus: "WAITLISTED" as const,
+    approvedAt: null,
+    approvedByAdminId: null,
+  };
+  if (options?.onlyIfApproved) {
+    const result = await client.adminUser.updateMany({
+      where: { id: adminUserId, approvalStatus: "APPROVED" },
+      data,
+    });
+    if (result.count !== 1) return { revoked: false };
+  } else {
+    await client.adminUser.update({
+      where: { id: adminUserId },
+      data,
+    });
+  }
 
   console.log(
     `[tap] tap=${adminUserId} action=revoked to=WAITLISTED byOperator=${operatorId}`
   );
+  return { revoked: true };
 }
 
 // ---------------------------------------------------------------------------

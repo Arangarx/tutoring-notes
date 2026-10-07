@@ -18,7 +18,7 @@ import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { requireOperator, type OperatorIdentity } from "@/lib/operator";
 import { requireStudentScope } from "@/lib/student-scope";
-import { approveTutor } from "@/lib/tutor-approval-scope";
+import { approveTutor, revokeTutorApproval } from "@/lib/tutor-approval-scope";
 
 export class OrgMutationError extends Error {
   readonly code:
@@ -287,8 +287,9 @@ export async function setOrganizationCaps(
 
 /**
  * Operator action: tutors this org approved (approvedViaOrg) go back to WAITLISTED.
- * Does not run when an org is suspended. Does not touch operator-approved tutors.
- * Does not re-approve anyone.
+ * Clears approvedViaOrg in the same revoke so a later operator approval is not
+ * treated as org-granted. Does not run when an org is suspended. Does not touch
+ * tutors who were not approved via this org. Does not re-approve anyone.
  */
 export async function revokeOrgGrantedApprovals(
   organizationId: string
@@ -299,24 +300,28 @@ export async function revokeOrgGrantedApprovals(
     select: { adminUserId: true },
   });
   let revoked = 0;
+  const operatorId = actorLabel(operator);
   for (const member of members) {
-    const result = await db.adminUser.updateMany({
-      where: { id: member.adminUserId, approvalStatus: "APPROVED" },
-      data: {
-        approvalStatus: "WAITLISTED",
-        approvedAt: null,
-        approvedByAdminId: null,
-      },
+    const didRevoke = await db.$transaction(async (tx) => {
+      const result = await revokeTutorApproval(member.adminUserId, operatorId, {
+        client: tx,
+        onlyIfApproved: true,
+      });
+      if (!result.revoked) return false;
+      await tx.organizationMember.updateMany({
+        where: {
+          organizationId,
+          adminUserId: member.adminUserId,
+          approvedViaOrg: true,
+        },
+        data: { approvedViaOrg: false },
+      });
+      return true;
     });
-    if (result.count === 1) {
-      revoked += 1;
-      console.log(
-        `[tap] tap=${member.adminUserId} action=revoked to=WAITLISTED byOperator=${actorLabel(operator)}`
-      );
-    }
+    if (didRevoke) revoked += 1;
   }
   orgLog(organizationId, "revoke_org_approvals", {
-    actor: actorLabel(operator),
+    actor: operatorId,
     count: String(revoked),
   });
   return { revoked };
@@ -417,6 +422,22 @@ export async function acceptOrgInvite(
 
   const outcome = await db.$transaction(async (tx) => {
     await lockOrg(tx, invite.organizationId);
+
+    const inviter = await tx.organizationMember.findUnique({
+      where: {
+        organizationId_adminUserId: {
+          organizationId: invite.organizationId,
+          adminUserId: invite.invitedByAdminUserId,
+        },
+      },
+      select: { roles: true, removedAt: true },
+    });
+    const inviterCanGrant =
+      !!inviter &&
+      inviter.removedAt == null &&
+      invite.roles.every((role) => canGrantRole(inviter.roles, role));
+    if (!inviterCanGrant) return null;
+
     const consumed = await tx.organizationInvite.updateMany({
       where: {
         id: invite.id,
@@ -442,11 +463,32 @@ export async function acceptOrgInvite(
         },
       },
     });
-    const reactivated = existing?.removedAt != null;
-    if (existing) {
+    let reactivated = false;
+    if (existing && existing.removedAt == null) {
+      // Already active: consume the token and leave roles unchanged.
+    } else if (existing) {
+      reactivated = true;
+      const stripsOwner =
+        existing.roles.includes("owner") && !invite.roles.includes("owner");
+      let keepCurrentRoles = false;
+      if (stripsOwner) {
+        const otherOwners = await tx.organizationMember.count({
+          where: {
+            organizationId: invite.organizationId,
+            removedAt: null,
+            roles: { has: "owner" },
+            NOT: { id: existing.id },
+          },
+        });
+        // Applying the invite would leave the org with no owner. Come back
+        // with the roles already on the row (still owner) instead.
+        if (otherOwners < 1) keepCurrentRoles = true;
+      }
       await tx.organizationMember.update({
         where: { id: existing.id },
-        data: { removedAt: null, roles: invite.roles },
+        data: keepCurrentRoles
+          ? { removedAt: null }
+          : { removedAt: null, roles: invite.roles },
       });
     } else {
       await tx.organizationMember.create({

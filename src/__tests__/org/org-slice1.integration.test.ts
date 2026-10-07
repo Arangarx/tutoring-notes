@@ -32,8 +32,10 @@ jest.mock("@/auth-options", () => ({ authOptions: {} }));
 
 import fs from "node:fs";
 import path from "node:path";
+import { generateRawToken, hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
 import { OrgMutationError, acceptOrgInvite, assertOrgRole, createOrgInvite, getActiveOrgRoles, removeOrgMember, revokeOrgInvite, setOrgMemberRoles } from "@/lib/org-scope";
+import { approveTutor } from "@/lib/tutor-approval-scope";
 import {
   createOrganizationAction,
   revokeOrgGrantedApprovalsAction,
@@ -108,9 +110,42 @@ beforeEach(() => {
   mockGetServerSession.mockReset();
 });
 
+beforeAll(async () => {
+  const rows = await db.$queryRaw<Array<{ name: string }>>`
+    SELECT current_database() AS name
+  `;
+  const name = rows[0]?.name;
+  if (name !== "tutoring_notes_org_test") {
+    throw new Error(
+      `org tests must run on tutoring_notes_org_test (current_database=${name ?? "unknown"})`
+    );
+  }
+});
+
 afterAll(async () => {
   await db.$disconnect();
 });
+
+async function insertDirectInvite(input: {
+  organizationId: string;
+  email: string;
+  roles: OrgRole[];
+  invitedByAdminUserId: string;
+}) {
+  const rawToken = generateRawToken();
+  const row = await db.organizationInvite.create({
+    data: {
+      organizationId: input.organizationId,
+      email: input.email.trim().toLowerCase(),
+      roles: input.roles,
+      tokenHash: hashToken(rawToken),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      invitedByAdminUserId: input.invitedByAdminUserId,
+    },
+    select: { id: true },
+  });
+  return { inviteId: row.id, rawToken };
+}
 
 describe("org slice 1", () => {
   it("stores instructor, not tutor, as an org role", async () => {
@@ -484,6 +519,47 @@ describe("org invite accept", () => {
     );
   });
 
+  it("does not waitlist a tutor an operator re-approved after an org grant", async () => {
+    const invitee = await seedUser({ approvalStatus: "WAITLISTED" });
+    const { organizationId, invite } = await activeOrgWithInvite({
+      invitee,
+      status: "active",
+    });
+    mockSession({ email: invitee.email, id: invitee.id });
+    await acceptOrgInvite(invite.rawToken);
+    expect(
+      (
+        await db.organizationMember.findUnique({
+          where: { organizationId_adminUserId: { organizationId, adminUserId: invitee.id } },
+        })
+      )?.approvedViaOrg
+    ).toBe(true);
+
+    const operator = await asOperator();
+    expect((await revokeOrgGrantedApprovalsAction(organizationId)).revoked).toBe(1);
+    expect((await db.adminUser.findUnique({ where: { id: invitee.id } }))?.approvalStatus).toBe(
+      "WAITLISTED"
+    );
+    expect(
+      (
+        await db.organizationMember.findUnique({
+          where: { organizationId_adminUserId: { organizationId, adminUserId: invitee.id } },
+        })
+      )?.approvedViaOrg
+    ).toBe(false);
+
+    await approveTutor(invitee.id, operator.id);
+    expect((await db.adminUser.findUnique({ where: { id: invitee.id } }))?.approvalStatus).toBe(
+      "APPROVED"
+    );
+
+    await asOperator();
+    expect((await revokeOrgGrantedApprovalsAction(organizationId)).revoked).toBe(0);
+    expect((await db.adminUser.findUnique({ where: { id: invitee.id } }))?.approvalStatus).toBe(
+      "APPROVED"
+    );
+  });
+
   it("leaves a suspended-during-accept tutor unapproved and still a member", async () => {
     const invitee = await seedUser({ approvalStatus: "WAITLISTED" });
     const { organizationId, invite } = await activeOrgWithInvite({
@@ -661,6 +737,110 @@ describe("org invite accept", () => {
     expect(rows[0]?.id).toBe(first?.id);
     expect(rows[0]?.removedAt).toBeNull();
     expect(rows[0]?.roles).toEqual(["scheduler"]);
+  });
+
+  it("does not demote an active sole owner who accepts an instructor invite", async () => {
+    const owner = await seedUser();
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("sole-owner-invite"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    await setOrganizationStatusAction(organizationId, "active");
+    const invite = await insertDirectInvite({
+      organizationId,
+      email: owner.email,
+      roles: ["instructor"],
+      invitedByAdminUserId: owner.id,
+    });
+    mockSession({ email: owner.email, id: owner.id });
+    const result = await acceptOrgInvite(invite.rawToken);
+    expect(result.ok).toBe(true);
+    const member = await db.organizationMember.findUnique({
+      where: { organizationId_adminUserId: { organizationId, adminUserId: owner.id } },
+    });
+    expect(member?.removedAt).toBeNull();
+    expect(member?.roles).toEqual(["owner"]);
+    expect(
+      await db.organizationMember.count({
+        where: { organizationId, removedAt: null, roles: { has: "owner" } },
+      })
+    ).toBe(1);
+    expect(
+      (await db.organizationInvite.findUnique({ where: { id: invite.inviteId } }))?.acceptedAt
+    ).not.toBeNull();
+  });
+
+  it("does not drop the last owner when a removed owner accepts a non-owner invite", async () => {
+    const owner = await seedUser();
+    const admin = await seedUser();
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("last-owner-reactivate"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    await setOrganizationStatusAction(organizationId, "active");
+    mockSession({ email: owner.email, id: owner.id });
+    const adminInvite = await createOrgInvite(organizationId, admin.email, ["admin"]);
+    mockSession({ email: admin.email, id: admin.id });
+    await acceptOrgInvite(adminInvite.rawToken);
+    await db.organizationMember.update({
+      where: { organizationId_adminUserId: { organizationId, adminUserId: owner.id } },
+      data: { removedAt: new Date() },
+    });
+    mockSession({ email: admin.email, id: admin.id });
+    const invite = await createOrgInvite(organizationId, owner.email, ["instructor"]);
+    mockSession({ email: owner.email, id: owner.id });
+    const result = await acceptOrgInvite(invite.rawToken);
+    expect(result.ok).toBe(true);
+    const member = await db.organizationMember.findUnique({
+      where: { organizationId_adminUserId: { organizationId, adminUserId: owner.id } },
+    });
+    expect(member?.removedAt).toBeNull();
+    expect(member?.roles).toContain("owner");
+    expect(
+      await db.organizationMember.count({
+        where: { organizationId, removedAt: null, roles: { has: "owner" } },
+      })
+    ).toBe(1);
+    expect(
+      (await db.organizationInvite.findUnique({ where: { id: invite.inviteId } }))?.acceptedAt
+    ).not.toBeNull();
+  });
+
+  it("refuses an invite when the inviter can no longer grant its roles", async () => {
+    const owner = await seedUser();
+    const successor = await seedUser();
+    const invitee = await seedUser({ approvalStatus: "WAITLISTED" });
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("stale-inviter"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    await setOrganizationStatusAction(organizationId, "active");
+    mockSession({ email: owner.email, id: owner.id });
+    const successorInvite = await createOrgInvite(organizationId, successor.email, ["owner"]);
+    mockSession({ email: successor.email, id: successor.id });
+    await acceptOrgInvite(successorInvite.rawToken);
+    mockSession({ email: owner.email, id: owner.id });
+    const invite = await createOrgInvite(organizationId, invitee.email, ["owner"]);
+    mockSession({ email: successor.email, id: successor.id });
+    await setOrgMemberRoles(organizationId, owner.id, ["admin"]);
+    const logs = spyLogs();
+    mockSession({ email: invitee.email, id: invitee.id });
+    const result = await acceptOrgInvite(invite.rawToken);
+    logs.restore();
+    expect(result).toEqual({ ok: false, error: "invite_unavailable" });
+    expect(
+      (await db.organizationInvite.findUnique({ where: { id: invite.inviteId } }))?.acceptedAt
+    ).toBeNull();
+    expect(
+      await db.organizationMember.count({ where: { organizationId, adminUserId: invitee.id } })
+    ).toBe(0);
+    expect(logs.lines.join("\n")).not.toContain(invite.rawToken);
   });
 });
 
