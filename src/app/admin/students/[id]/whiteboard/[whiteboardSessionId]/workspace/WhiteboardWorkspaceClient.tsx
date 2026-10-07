@@ -3673,24 +3673,19 @@ export function WhiteboardWorkspaceClient({
   const renameTutorPage = useCallback((id: string, title: string) => {
     const nextTitle = capBoardTitle(title);
     if (!nextTitle) return;
-    const nextList = pageListRef.current.map((page) =>
-      page.id === id ? { ...page, title: nextTitle } : page
-    );
-    pageListRef.current = nextList;
-    // Same board-document snapshot PDF page titles use (session draft now,
-    // checkpoint batch once the title is in the log). Reload hydrates that
-    // document; without the write the strip falls back to "Board 1".
+    const retitle = <T extends { id: string; title: string }>(pages: T[]): T[] =>
+      pages.map((page) => (page.id === id ? { ...page, title: nextTitle } : page));
+    // Functional update so a tab added or removed while this handler runs
+    // is not replaced by a list captured earlier. The ref is what the wire
+    // and the session draft read; React state catches up on the next commit.
+    pageListRef.current = retitle(pageListRef.current);
+    setPageList((prev) => retitle(prev));
+    // Session board document (sessionStorage) is what a same-tab reload
+    // hydrates. A rename does not touch the canvas, so the debounced
+    // onChange draft would keep the old title. Not a replay page-switch.
     flushSessionBoardDocumentNow();
-    recorder.recordPageSwitch(id, nextTitle, { evenIfNotRecording: true });
-    void (async () => {
-      try {
-        await recorder.flushServerPersist();
-      } finally {
-        setPageList(nextList);
-        flushDocumentBroadcastNow();
-      }
-    })();
-  }, [flushDocumentBroadcastNow, flushSessionBoardDocumentNow, recorder]);
+    flushDocumentBroadcastNow();
+  }, [flushDocumentBroadcastNow, flushSessionBoardDocumentNow]);
 
   const addTutorPage = useCallback(() => {
     // Bump the switch token: any in-flight selectTutorPage will abandon

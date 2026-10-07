@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { updateNote, deleteNote, setNoteStatus } from "./actions";
 import { TIME_INPUT_STEP_SECONDS } from "@/lib/time/snap";
@@ -35,14 +35,6 @@ export function NoteCardActions({
 }: NoteCardActionsProps) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [, startTransition] = useTransition();
-
-  function markReady() {
-    startTransition(() => { void setNoteStatus(noteId, studentId, "READY"); });
-  }
-  function markDraft() {
-    startTransition(() => { void setNoteStatus(noteId, studentId, "DRAFT"); });
-  }
 
   if (confirmDelete) {
     return (
@@ -136,9 +128,13 @@ export function NoteCardActions({
   return (
     <div className="row" style={{ flexWrap: "wrap" }}>
       {status !== "READY" ? (
-        <button className="btn" type="button" onClick={markReady}>Mark ready</button>
+        <form action={setNoteStatus.bind(null, noteId, studentId, "READY")}>
+          <button className="btn" type="submit">Mark ready</button>
+        </form>
       ) : (
-        <button className="btn" type="button" onClick={markDraft}>Mark draft</button>
+        <form action={setNoteStatus.bind(null, noteId, studentId, "DRAFT")}>
+          <button className="btn" type="submit">Mark draft</button>
+        </form>
       )}
       <button className="btn" type="button" onClick={() => setEditing(true)}>Edit</button>
       <button

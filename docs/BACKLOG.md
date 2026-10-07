@@ -867,6 +867,9 @@ Remainder: per-role color/visibility hardware verify. Wire shipped.
 **[P1][WB] WB-STUDENT-V3-APPLY-ORDER (2026-10-07)**  
 Student `runV3Apply` moves `activePageId` before replacing the live scene, so a document whose new page is already active can store the visible anchor stroke into the new page. Mitigated for PDF/image insert by broadcasting new boards before the switch (`a5eaa056`). Real fix in `useStudentWhiteboardCanvas.ts` — Opus-owned.
 
+**[P2][WB] WB-RENAME-PERSIST (2026-10-07)**  
+A renamed board tab is live (the student sees it) and is written into the sessionStorage board draft, but a reload of an active session shows **Board 1** again. Reload prefers the recorder checkpoint's `boardDocument`, and that document is only stored with an event batch. Writing a batch for the rename required `recordPageSwitch({ evenIfNotRecording: true })`, which put a pre-Start `page-switch` (title "Algebra", page `p1`) into the replay log; replay treats the latest page-switch as the active tab. That option is reverted. Persisting the title across reload without a page-switch needs a recorder or checkpoint change Andrew has to approve. No migration is required — `boardDocumentJson` already exists.
+
 **[P1][WB] PDF cross-page stroke bleed / WB-STROKE-BLEED (verify/watch)**  
 E5/WS-X fixes ([`b8f786c8`](https://github.com/Arangarx/tutoring-notes/commit/b8f786c8), [`34f650a4`](https://github.com/Arangarx/tutoring-notes/commit/34f650a4), [`ef5fb1a0`](https://github.com/Arangarx/tutoring-notes/commit/ef5fb1a0)); keep §2 WATCH regression gate and Playwright coverage. Monitor on hardware; Andrew evening did not repro post-E5.
 

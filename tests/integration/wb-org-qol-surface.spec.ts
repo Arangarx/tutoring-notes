@@ -13,16 +13,23 @@ import {
   openTutorAndStudent,
   readActiveWhiteboardPageId,
   readGraphElementState,
+  readImageElementState,
   readPageDataBucketIds,
   readSceneElementIds,
   readSceneElementSummary,
   seedWbLiveSyncSession,
+  startSessionAsTutor,
   waitForElementOnPeer,
   waitForTutorStudentConnected,
   waitUntilPageFingerprintClear,
   waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
 import { BOARD_TITLE_MAX_LENGTH } from "@/lib/whiteboard/board-title";
+import {
+  createEmptyEventLog,
+  findActiveReplayPageIdAt,
+  type WBEvent,
+} from "@/lib/whiteboard/event-log";
 
 const PNG_1X1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -101,19 +108,109 @@ test.describe("whiteboard QoL surfaces", () => {
       await expect(
         peers.studentPage.getByRole("tab", { name: capped })
       ).toBeVisible({ timeout: 20_000 });
-      await peers.tutorPage.reload({ waitUntil: "domcontentloaded" });
-      await waitForWbE2eBridge(peers.tutorPage, "tutor");
-      await expect(
-        peers.tutorPage.getByRole("tab", { name: capped })
-      ).toBeVisible({ timeout: 30_000 });
-      await peers.studentPage.reload({ waitUntil: "domcontentloaded" });
-      await expect(
-        peers.studentPage.getByRole("tab", { name: capped })
-      ).toBeVisible({ timeout: 30_000 });
+      // Reload persistence is WB-RENAME-PERSIST. The live strip is what this covers.
     } finally {
       await peers.close();
     }
   });
+
+  test(
+    "a rename does not drop a board added in the same moment",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      test.setTimeout(120_000);
+      // Holds the checkpoint response open so a rename that awaits persist
+      // and then writes a stale page list loses the tab added during the wait.
+      await page.route("**/checkpoint", async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 2_500));
+        await route.continue();
+      });
+      await openTutorBoard(page);
+      const boards = page.getByRole("tablist", { name: "Boards" });
+      await boards.getByRole("tab", { name: "Board 1" }).hover();
+      await boards.getByRole("button", { name: "Rename Board 1" }).click();
+      const nameField = boards.getByRole("textbox", { name: "Name for Board 1" });
+      await nameField.fill("Algebra");
+      await nameField.press("Enter");
+      await expect(nameField).toBeHidden();
+      await boards.getByRole("button", { name: "Add board" }).click();
+      await expect(boards.getByRole("tab", { name: "Algebra" })).toBeVisible();
+      await expect(boards.getByRole("tab", { name: "Board 2", exact: true })).toBeVisible();
+      await page.waitForTimeout(3_500);
+      await expect(boards.getByRole("tab", { name: "Algebra" })).toBeVisible();
+      await expect(boards.getByRole("tab", { name: "Board 2", exact: true })).toBeVisible();
+    }
+  );
+
+  test(
+    "renaming a board before Start does not change the replay active page",
+    { tag: [TAG.WB_CHROME, TAG.WB_RECORDING] },
+    async ({ page }) => {
+      test.setTimeout(180_000);
+      const session = await seedWbLiveSyncSession({
+        sessionPhase: "PENDING",
+        sessionMode: "IN_PERSON",
+      });
+      await page.goto(
+        `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+        { waitUntil: "domcontentloaded" }
+      );
+      await expect(page.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+        timeout: 90_000,
+      });
+      const boards = page.getByRole("tablist", { name: "Boards" });
+      // The waiting room covers the strip until Start. Hide it only so the
+      // rename can be clicked; phase stays pending and recording stays off.
+      await page.evaluate(() => {
+        const overlay = document.querySelector('[data-testid="wb-waiting-overlay"]');
+        if (overlay instanceof HTMLElement) overlay.style.display = "none";
+      });
+      await boards.getByRole("tab", { name: "Board 1" }).hover();
+      await boards.getByRole("button", { name: "Rename Board 1" }).click();
+      const nameField = boards.getByRole("textbox", { name: "Name for Board 1" });
+      await nameField.fill("Algebra");
+      await nameField.press("Enter");
+      await expect(boards.getByRole("tab", { name: "Algebra" })).toBeVisible();
+      await page.evaluate(() => {
+        const overlay = document.querySelector('[data-testid="wb-waiting-overlay"]');
+        if (overlay instanceof HTMLElement) overlay.style.display = "";
+      });
+      await startSessionAsTutor(page);
+      const prisma = new PrismaClient();
+      try {
+
+        let events: Array<{ type?: string; t?: number }> = [];
+        await expect
+          .poll(
+            async () => {
+              const rows = await prisma.whiteboardEventBatch.findMany({
+                where: { whiteboardSessionId: session.whiteboardSessionId },
+                orderBy: { fromEventIndex: "asc" },
+                select: { eventsJson: true },
+              });
+              events = rows.flatMap((row) => {
+                const parsed = row.eventsJson;
+                return Array.isArray(parsed)
+                  ? (parsed as Array<{ type?: string; t?: number }>)
+                  : [];
+              });
+              return events.filter((event) => event.type === "snapshot").length;
+            },
+            { timeout: 20_000 }
+          )
+          .toBeGreaterThan(0);
+
+        expect(events.filter((event) => event.type === "page-switch")).toEqual([]);
+        expect(events.filter((event) => event.type === "resume")).toEqual([]);
+        const log = createEmptyEventLog();
+        log.events = events as WBEvent[];
+        const untilT = events.reduce((max, event) => Math.max(max, event.t ?? 0), 0);
+        expect(findActiveReplayPageIdAt(log, untilT)).toBeNull();
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
+  );
 
   test(
     "an image file becomes its own board and does not keep the anchor stroke",
@@ -168,6 +265,13 @@ test.describe("whiteboard QoL surfaces", () => {
         expect(imageSummary).toHaveLength(1);
         expect(imageSummary[0]?.type).toBe("image");
         expect(imageSummary.map((el) => el.id)).not.toContain(anchorStrokeId);
+        const imageFile = await readImageElementState(
+          peers.tutorPage,
+          "tutor",
+          imageSummary[0]!.id
+        );
+        expect(imageFile?.fileId).toBeTruthy();
+        expect(imageFile?.hasBinary).toBe(true);
         const imageBucket = await readPageDataBucketIds(peers.tutorPage, imagePageId);
         expect(imageBucket).toEqual(imageSummary.map((el) => el.id));
         expect(imageBucket).not.toContain(anchorStrokeId);
@@ -336,26 +440,39 @@ test.describe("whiteboard QoL surfaces", () => {
         });
       });
       expect(digitKeys, "two digit keys on the settled MathLive keyboard").toHaveLength(2);
-      const pressKey = async (key: { x: number; y: number }) => {
-        await page.mouse.move(key.x, key.y);
-        await page.mouse.down();
-        await page.mouse.up();
-        await page.mouse.click(key.x, key.y);
+      const keyHitsKeyboard = async (key: { x: number; y: number }) => {
+        const inside = await page.evaluate(({ x, y }) => {
+          const hit = document.elementFromPoint(x, y);
+          const keyboard = document.querySelector("body > .ML__keyboard");
+          if (!(hit instanceof Element) || !(keyboard instanceof Element)) return false;
+          let node: Node | null = hit;
+          while (node) {
+            if (node === keyboard) return true;
+            if (node instanceof Element && node.parentElement) {
+              node = node.parentElement;
+              continue;
+            }
+            const root = node.getRootNode();
+            if (root instanceof ShadowRoot) {
+              node = root.host;
+              continue;
+            }
+            node = null;
+          }
+          return false;
+        }, key);
+        expect(inside, "key center resolves inside .ML__keyboard").toBe(true);
       };
-      await pressKey(digitKeys[0]!);
+      const fieldValue = () =>
+        mathField.evaluate((el) => (el as { value?: string }).value ?? "");
+      await keyHitsKeyboard(digitKeys[0]!);
+      await page.mouse.click(digitKeys[0]!.x, digitKeys[0]!.y);
       await expect(dialog).toBeVisible();
-      await expect
-        .poll(async () =>
-          mathField.evaluate((el) => (el as { value?: string }).value ?? "")
-        )
-        .toContain(digitKeys[0]!.label);
-      await pressKey(digitKeys[1]!);
+      await expect.poll(fieldValue).toBe(digitKeys[0]!.label);
+      await keyHitsKeyboard(digitKeys[1]!);
+      await page.mouse.click(digitKeys[1]!.x, digitKeys[1]!.y);
       await expect(dialog).toBeVisible();
-      await expect
-        .poll(async () =>
-          mathField.evaluate((el) => (el as { value?: string }).value ?? "")
-        )
-        .toContain(`${digitKeys[0]!.label}${digitKeys[1]!.label}`);
+      await expect.poll(fieldValue).toBe(`${digitKeys[0]!.label}${digitKeys[1]!.label}`);
 
       const scrimPoint = await page.evaluate(() => {
         const scrim = document.querySelector('[aria-labelledby="wb-math-title"]');

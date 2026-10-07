@@ -1,12 +1,10 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Public auth pages. The old create-note / outbox / AI-panel flows in this
- * file no longer match the student detail DOM (sections render twice; the
- * add-learner result is not a heading of the child identifier). Those
- * behaviors are covered by note-and-share.test.ts, upload-outbox tests,
- * AiAssistPanel.race.dom.test.tsx, and tests/audio-upload.spec.ts.
- * AuthShell titles are divs, not headings.
+ * Public auth pages. Note → outbox → share and the AI text panel are in
+ * tests/integration/note-outbox-share.spec.ts and
+ * tests/integration/ai-assist-panel.spec.ts. AuthShell titles are divs,
+ * not headings.
  */
 test.describe("public pages", () => {
   test.use({ storageState: { cookies: [], origins: [] } });

@@ -265,6 +265,20 @@ export async function generateNoteFromTextAction(
     return { ok: false, error: "Session text is too long. Please shorten it and try again." };
   }
 
+  // Playwright harness only. The text panel still calls this action and
+  // fills the note form; the sentinel skips the live OpenAI request.
+  if (process.env.PLAYWRIGHT_TEST === "1" && trimmed.includes("PW_AI_HARNESS")) {
+    return {
+      ok: true,
+      topics: "Fractions on a number line",
+      homework: "Worksheet pages 4-6",
+      assessment: "Places halves correctly",
+      plan: "Tenths next session",
+      links: "https://example.com/fractions",
+      promptVersion: "playwright-harness",
+    };
+  }
+
   const student = await db.student.findUniqueOrThrow({
     where: { id: studentId },
     select: { name: true },
@@ -797,6 +811,7 @@ export async function setNoteStatus(noteId: string, studentId: string, status: "
   if (!row) return;
   await db.sessionNote.update({ where: { id: noteId }, data: { status } });
   revalidatePath(`/admin/students/${studentId}`);
+  revalidatePath(`/admin/students/${studentId}/notes`);
 }
 
 export async function renameStudent(studentId: string, formData: FormData) {

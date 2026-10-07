@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 
-import { maskEmailForDisplay } from "@/lib/mask-email";
 import { TEST_PARENT } from "./identity.helpers";
 import { seedUnclaimedClaimInvite } from "./claim-wizard.helpers";
 
@@ -23,8 +22,8 @@ test.describe("wrong-account claim hides the full email", () => {
     await page.goto(`/claim/${invite.rawToken}`);
     const mismatch = page.getByTestId("claim-email-mismatch");
     await expect(mismatch).toBeVisible({ timeout: 15_000 });
-    await expect(mismatch).toContainText(maskEmailForDisplay(INVITED));
-    await expect(mismatch).toContainText(maskEmailForDisplay(TEST_PARENT.email));
+    await expect(mismatch).toContainText("i***@e***.com");
+    await expect(mismatch).toContainText("p***@t***.local");
     await expect(mismatch).not.toContainText(INVITED);
     await expect(mismatch).not.toContainText(TEST_PARENT.email);
 
