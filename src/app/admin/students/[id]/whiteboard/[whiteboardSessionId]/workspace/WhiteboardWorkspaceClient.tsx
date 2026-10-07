@@ -5,9 +5,11 @@
  *
  * Composes (in dependency order):
  *
- *   1. URL-fragment encryption key — generated on first mount, parked
- *      in `window.location.hash` so refresh keeps the same key. The
- *      server NEVER sees this. Same model the student page uses.
+ *   1. URL-fragment encryption key — the browser carries it in
+ *      `window.location.hash`. Sessions created after the server-held
+ *      key release also store that key encrypted at rest and seed it
+ *      into the hash for an authorized participant. Older sessions
+ *      keep the key only in the hash. Same model the student page uses.
  *
  *   2. Live-sync client — `createWhiteboardSyncClient` against
  *      `WHITEBOARD_SYNC_URL`. Disabled gracefully if the env var is
@@ -228,6 +230,7 @@ import {
   type ExcalidrawApiLike,
   type InsertPdfBoardPagesIntegrate,
 } from "@/lib/whiteboard/insert-asset";
+import { capBoardTitle } from "@/lib/whiteboard/board-title";
 import {
   ensureNativeImageAssetUrlsForSync,
   type BinaryFileFromExcalidraw,
@@ -3668,7 +3671,7 @@ export function WhiteboardWorkspaceClient({
   );
 
   const renameTutorPage = useCallback((id: string, title: string) => {
-    const nextTitle = title.trim();
+    const nextTitle = capBoardTitle(title);
     if (!nextTitle) return;
     const nextList = pageListRef.current.map((page) =>
       page.id === id ? { ...page, title: nextTitle } : page

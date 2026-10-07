@@ -5,8 +5,12 @@
  * Why this module exists (May 15, pilot smoke fallout):
  *
  *   The encryption key the tutor uses to scramble live-sync messages
- *   lives in `window.location.hash` (`#k=…`) so the server NEVER
- *   sees it. That part of the threat model is unchanged. But the
+ *   lives in `window.location.hash` (`#k=…`). The relay only sees
+ *   ciphertext. Sessions minted after the server-held key release
+ *   also store that key encrypted at rest; the server decrypts it
+ *   only to seed a page for an already-authorized participant.
+ *   Older sessions still keep the key only in the hash and this
+ *   origin's localStorage. The
  *   original implementation TREATED the hash as the only source of
  *   truth — minting a fresh key whenever the hash was empty, which
  *   silently happened any time the tutor opened the workspace via a
@@ -60,10 +64,10 @@
  *   localStorage is per-device. If a tutor opens the same session
  *   on both phone and laptop, each device mints its own K_initial.
  *   Whichever device joined first defines the room's key (everyone
- *   else's traffic fails to decrypt). For the pilot this is
- *   acceptable — Sarah works from one device per session. A real
- *   fix would key-on-server, but that breaks the "server never sees
- *   the key" invariant and needs a separate threat-model review.
+ *   else's traffic fails to decrypt). Sessions minted after the
+ *   server-held key release share one key stored encrypted at rest,
+ *   so a second device can join without minting its own. Older
+ *   sessions still mint per device when the hash is empty.
  */
 
 import { useEffect, useState } from "react";
