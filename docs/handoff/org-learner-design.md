@@ -16,11 +16,13 @@ This pass supersedes the Q1–Q8 defaults below, and it supersedes any later sec
 
 **Taking a tutor off a live session is a deliberate cancel.** It is not something that falls out of "unassigning" a learner. Someone at the org would be ending that open session on purpose.
 
-**The access cut is removal from the org roster.** A tutor who is still a member keeps access to the org sessions they teach, including replay of the board, audio, and transcript for their own sessions (Andrew: yes to replay). Booking a different tutor next week does not create an "after unassignment" state. What a tutor keeps after they are removed from the roster is still open (see below).
+**The access cut is removal from the org roster.** A tutor who is still a member keeps access to the org sessions they teach, including replay of the board, audio, and transcript for their own sessions (Andrew: yes to replay). Booking a different tutor next week does not create an "after unassignment" state.
+
+**After removal, org sessions are read-only (Andrew 2026-10-07).** Sessions the org initiated, that this tutor taught, stay readable and stop being writable. Personal students are a different record and are not part of this cut. Later, the org may choose what a removed tutor keeps, including cutting them off entirely (for example after a removal for behavioral issues). That choice waits on org feedback. The default until then is read-only.
 
 **A live org session requires a Mynk account.** Anonymous guest links are out. "Do not record" does not cover consent to be in an online session at all (COPPA). Signing up for tutoring with the org includes creating a Mynk account. The signup can be branded for the organization. Consent to be online is collected there, before the first session. A later lightweight login, if any, still has to be a specific person who already consented, so we know it is the same person.
 
-**Suspended or not-yet-approved org.** A session already live may finish. It must not be able to run out to the normal runaway guard (`SESSION_SAFETY_MAX_SECONDS`, 8 hours in `src/lib/recording/segment-policy.ts`). Working proposal, not yet confirmed: end at the appointment's planned end, or 15 minutes after the org is suspended if that is sooner.
+**Suspended or not-yet-approved org.** A session already live may finish. It must not be able to run out to the normal runaway guard (`SESSION_SAFETY_MAX_SECONDS`, 8 hours in `src/lib/recording/segment-policy.ts`). For a **suspended** org (Andrew 2026-10-07): show a pill that the session will force end because the organization that set up the tutoring has had its account suspended. Force-end is the end of the current clock hour, with a floor of 10 minutes from the moment of suspension. Five minutes left in the hour still means 10 minutes before force close. The same timing covers a session already live while the org is not yet approved. The pill copy above is the suspension copy.
 
 **Scheduler.** The scheduler sees the learner's full name and the brief, and not parent contact, consent detail, or notes. Seeing more means holding another role as well (admin or owner), not widening scheduler.
 
@@ -28,10 +30,10 @@ This pass supersedes the Q1–Q8 defaults below, and it supersedes any later sec
 
 **Schedule bridge.** This is the scheduled-session join work on `feat/org-qol` (open the room from an appointment, 15-minute join window, server-held key, parent can join as the child). It is not org code. `feat/org` was cut from master before that work, so it does not have the bridge. No org features are on the branch Tyson is testing. Slice 2 should call that bridge after `feat/org-qol` is on master, and must not copy it.
 
-**Still open**
+**Closed 2026-10-07 (later the same day)**
 
-- When a tutor is removed from the org roster, do they keep read-only access to sessions they already taught, or does org access stop entirely?
-- Confirm the suspended-org time cap (proposal above: planned end, or 15 minutes after suspension, whichever is sooner).
+- Removed tutor: org-initiated sessions they taught become read-only. A later org setting may retain less, including nothing. Default is read-only until orgs are asked.
+- Suspended org: pill as above. Force-end at the end of the current clock hour, and never sooner than 10 minutes after suspension.
 
 ## 0b. Earlier open questions (superseded 2026-10-07)
 
