@@ -508,8 +508,10 @@ stays forbidden).
   Never hardcode it: use whichever `grok-4.7-*` slug is in your
   available-models list right now, and fall back to `composer-2.5` if
   none is listed (see orchestrator-discipline.mdc § Hard model rules).
-  Effort and context can't be set per dispatch yet. Andrew's preference
-  is lower effort + fast + ~300k for subagents when that becomes settable. `composer-2.5`
+  Effort, context, and fast can't be set per dispatch yet, so a Grok
+  subagent runs at the same picker setting as the conductor (Andrew
+  2026-10-07). His preferred subagent settings, once settable separately,
+  are lower effort, fast, and 256k context. `composer-2.5`
   remains an allowed cheap executor. The `composer-2.5-fast` ban stays.
   **Notification discipline (cost lesson, 2026-10-07):** an Opus
   conductor spent ~$30 overnight, mostly re-billing its whole context
