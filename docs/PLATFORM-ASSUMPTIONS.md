@@ -383,6 +383,7 @@
   - `frame-src 'self'` only — Desmos origins removed from CSP (2026-06-10 Phase 2b)
 - **Legacy read**: Old pilot sessions may still contain Desmos iframe embeds in the event log (`type: "desmos"`). `excalidraw-adapter.ts` maps them for replay without throwing; they no longer render live (CSP blocks external iframes) — acceptable per pilot scope.
 - **What breaks if violated**: graph insert shows "Empty Web Embed" if `link`/`validateEmbeddable` drift; student board shows stale graph if `renderEmbeddable` or `graphStateJson` re-hydrate path is removed.
+- **Graph ink lockstep**: `parseGraphPoints` / `parseGraphStrokes` keep at most 500 points, 200 strokes, and 2000 points per stroke (`GRAPH_INK_MAX_*` in `graph-state.ts`). Deploy clients together. An older client that edits an expression re-saves state through this parser and drops ink past those caps. Missing `points` / `strokes` still means empty, so an old board without ink fields is unchanged.
 - **Migration check**: new embeddable features should prefer `renderEmbeddable` on `'self'` over third-party iframes to avoid multi-directive CSP expansion.
 
 ### 5.4 Permissions-Policy MUST be site-wide (not per-route)

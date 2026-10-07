@@ -175,6 +175,31 @@ describe("graph-state", () => {
     ]);
   });
 
+  it("truncates oversize ink to 500 points, 200 strokes, and 2000 points per stroke", () => {
+    const points = Array.from({ length: 600 }, (_, i) => ({
+      id: `p${i}`,
+      x: i,
+      y: i + 1,
+    }));
+    const strokes = Array.from({ length: 250 }, (_, i) => ({
+      id: `s${i}`,
+      pts: Array.from({ length: i === 0 ? 2500 : 2 }, (__, j) => [j, j + 1] as [number, number]),
+    }));
+    const parsed = parseGraphStateJson({
+      bbox: [-1, 1, 1, -1],
+      expressions: [],
+      points,
+      strokes,
+    });
+    expect(parsed.points).toHaveLength(500);
+    expect(parsed.points?.[0]).toEqual({ id: "p0", x: 0, y: 1 });
+    expect(parsed.points?.[499]).toEqual({ id: "p499", x: 499, y: 500 });
+    expect(parsed.strokes).toHaveLength(200);
+    expect(parsed.strokes?.[0]?.pts).toHaveLength(2000);
+    expect(parsed.strokes?.[0]?.pts[0]).toEqual([0, 1]);
+    expect(parsed.strokes?.[199]?.id).toBe("s199");
+  });
+
   describe("square-unit bbox math", () => {
     const aspectCases = [
       { label: "square", width: 400, height: 400 },

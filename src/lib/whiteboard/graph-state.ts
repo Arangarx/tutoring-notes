@@ -207,6 +207,11 @@ function emptyGraphState(): GraphState {
   };
 }
 
+/** Ink payload caps. An older client that edits an expression drops points and strokes past these. */
+export const GRAPH_INK_MAX_POINTS = 500;
+export const GRAPH_INK_MAX_STROKES = 200;
+export const GRAPH_INK_MAX_POINTS_PER_STROKE = 2000;
+
 function parseGraphPoints(raw: unknown): GraphPoint[] {
   if (!Array.isArray(raw)) return [];
   const points: GraphPoint[] = [];
@@ -217,6 +222,7 @@ function parseGraphPoints(raw: unknown): GraphPoint[] {
     if (typeof rec.x !== "number" || !Number.isFinite(rec.x)) continue;
     if (typeof rec.y !== "number" || !Number.isFinite(rec.y)) continue;
     points.push({ id: rec.id, x: rec.x, y: rec.y });
+    if (points.length >= GRAPH_INK_MAX_POINTS) break;
   }
   return points;
 }
@@ -237,9 +243,11 @@ function parseGraphStrokes(raw: unknown): GraphStroke[] {
       if (typeof x !== "number" || typeof y !== "number") continue;
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       pts.push([x, y]);
+      if (pts.length >= GRAPH_INK_MAX_POINTS_PER_STROKE) break;
     }
     if (pts.length === 0) continue;
     strokes.push({ id: rec.id, pts });
+    if (strokes.length >= GRAPH_INK_MAX_STROKES) break;
   }
   return strokes;
 }
