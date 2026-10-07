@@ -54,6 +54,14 @@
   align-items: center;
 }
 
+/* Layout only — button look comes from the shared Button primitive. */
+.wb-graph-ink-modes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
 .wb-graph-strip-btn {
   display: inline-flex;
   align-items: center;

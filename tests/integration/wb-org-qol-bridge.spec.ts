@@ -16,6 +16,7 @@ import {
 import {
   drawTestStrokeOnRole,
   insertGraphOnRole,
+  pointerReachesGraphHost,
   addGraphExpressionViaUI,
   readGraphElementState,
   waitForElementOnPeer,
@@ -452,15 +453,8 @@ test.describe("org QoL schedule bridge", () => {
         const graphId = await insertGraphOnRole(tutorPage, "tutor", session, []);
         await waitForElementOnPeer(studentPage, "student", graphId, 30_000);
 
-        // Oracle: what the browser would deliver a click at (x, y) to — the graph or the canvas over it.
         const pointerReachesGraph = (x: number, y: number) =>
-          tutorPage.evaluate(
-            ([px, py]) =>
-              !!document
-                .elementFromPoint(px, py)
-                ?.closest('[data-testid="wb-graph-embed-host"]'),
-            [x, y] as const
-          );
+          pointerReachesGraphHost(tutorPage, x, y);
 
         const host = tutorPage.getByTestId("wb-graph-embed-host").first();
         await expect(host).toBeVisible({ timeout: 30_000 });

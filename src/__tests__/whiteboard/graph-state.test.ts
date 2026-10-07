@@ -33,13 +33,19 @@ describe("graph-state", () => {
       expressions: ["x^2", "sin(x)"],
     };
     const json = serializeGraphStateJson(state);
-    expect(parseGraphStateJson(json)).toEqual(state);
+    expect(parseGraphStateJson(json)).toEqual({
+      ...state,
+      points: [],
+      strokes: [],
+    });
   });
 
   it("returns defaults for missing input", () => {
     expect(parseGraphStateJson(null)).toEqual({
       bbox: DEFAULT_GRAPH_BBOX,
       expressions: [],
+      points: [],
+      strokes: [],
     });
   });
 
@@ -47,6 +53,8 @@ describe("graph-state", () => {
     expect(parseGraphStateJson("{not json")).toEqual({
       bbox: DEFAULT_GRAPH_BBOX,
       expressions: [],
+      points: [],
+      strokes: [],
     });
   });
 
@@ -54,6 +62,8 @@ describe("graph-state", () => {
     expect(parseGraphStateJson({ bbox: [1, 2, "bad"], expressions: [] })).toEqual({
       bbox: DEFAULT_GRAPH_BBOX,
       expressions: [],
+      points: [],
+      strokes: [],
     });
   });
 
@@ -63,6 +73,8 @@ describe("graph-state", () => {
     ).toEqual({
       bbox: DEFAULT_GRAPH_BBOX,
       expressions: ["x", "y"],
+      points: [],
+      strokes: [],
     });
   });
 
@@ -109,6 +121,58 @@ describe("graph-state", () => {
       );
       expect(preprocessGraphExpression("tan(2x)")).toBe("tan(2*x)");
     });
+  });
+
+  it("round-trips points and strokes in graph user coordinates", () => {
+    const state = {
+      bbox: [-10, 10, 10, -10] as [number, number, number, number],
+      expressions: ["x"],
+      points: [
+        { id: "p1", x: 1.5, y: -2 },
+        { id: "p2", x: 0, y: 4 },
+      ],
+      strokes: [
+        {
+          id: "s1",
+          pts: [
+            [0, 0],
+            [1, 2],
+            [-3, 0.5],
+          ] as [number, number][],
+        },
+      ],
+    };
+    expect(parseGraphStateJson(serializeGraphStateJson(state))).toEqual(state);
+  });
+
+  it("treats a graph saved before ink fields as empty points and strokes", () => {
+    const parsed = parseGraphStateJson({
+      bbox: [-5, 5, 5, -5],
+      expressions: ["x^2"],
+    });
+    expect(parsed.expressions).toEqual(["x^2"]);
+    expect(parsed.points).toEqual([]);
+    expect(parsed.strokes).toEqual([]);
+  });
+
+  it("drops unknown fields instead of copying them onto graph state", () => {
+    const parsed = parseGraphStateJson({
+      expressions: ["sin(x)"],
+      futureTool: { kind: "wiggle" },
+      points: [{ id: "p", x: 1, y: 2, color: "red" }],
+      strokes: [{ id: "s", pts: [[0, 0], [1, 1]], width: 9 }],
+    });
+    expect(parsed).not.toHaveProperty("futureTool");
+    expect(parsed.points).toEqual([{ id: "p", x: 1, y: 2 }]);
+    expect(parsed.points?.[0]).not.toHaveProperty("color");
+    expect(parsed.strokes).toEqual([{ id: "s", pts: [[0, 0], [1, 1]] }]);
+    expect(parsed.strokes?.[0]).not.toHaveProperty("width");
+    expect(Object.keys(parsed).sort()).toEqual([
+      "bbox",
+      "expressions",
+      "points",
+      "strokes",
+    ]);
   });
 
   describe("square-unit bbox math", () => {

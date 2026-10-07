@@ -6,10 +6,41 @@
 /** JSXGraph boundingbox: [xmin, ymax, xmax, ymin] */
 export type GraphBbox = [number, number, number, number];
 
+/** A fixed point in graph user coordinates (not screen pixels). */
+export type GraphPoint = {
+  id: string;
+  x: number;
+  y: number;
+};
+
+/** A freehand stroke in graph user coordinates. `pts` is sampled, not every pointer move. */
+export type GraphStroke = {
+  id: string;
+  pts: [number, number][];
+};
+
 export type GraphState = {
   bbox?: GraphBbox;
   expressions?: string[];
+  /** Missing on old boards. Decode fills `[]`. */
+  points?: GraphPoint[];
+  /** Missing on old boards. Decode fills `[]`. */
+  strokes?: GraphStroke[];
 };
+
+/** About 30 Hz. Pointer-move samples closer than this are dropped; pointer-up still persists once. */
+export const GRAPH_INK_SAMPLE_MS = 1000 / 30;
+
+export type GraphStrokeDraft = {
+  id: string;
+  pts: [number, number][];
+  lastAtMs: number;
+};
+
+export type GraphInkPointerEvent =
+  | { type: "down"; id: string; pt: [number, number]; nowMs: number }
+  | { type: "move"; pt: [number, number]; nowMs: number }
+  | { type: "up"; pt: [number, number]; nowMs: number };
 
 export const DEFAULT_GRAPH_BBOX: GraphBbox = [-10, 10, 10, -10];
 
@@ -167,9 +198,55 @@ export function serializeGraphStateJson(state: GraphState): string {
  * Parse `graphStateJson` from an embeddable element's customData.
  * Returns a safe default on missing or malformed input.
  */
+function emptyGraphState(): GraphState {
+  return {
+    bbox: DEFAULT_GRAPH_BBOX,
+    expressions: [],
+    points: [],
+    strokes: [],
+  };
+}
+
+function parseGraphPoints(raw: unknown): GraphPoint[] {
+  if (!Array.isArray(raw)) return [];
+  const points: GraphPoint[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.id !== "string" || rec.id.length === 0) continue;
+    if (typeof rec.x !== "number" || !Number.isFinite(rec.x)) continue;
+    if (typeof rec.y !== "number" || !Number.isFinite(rec.y)) continue;
+    points.push({ id: rec.id, x: rec.x, y: rec.y });
+  }
+  return points;
+}
+
+function parseGraphStrokes(raw: unknown): GraphStroke[] {
+  if (!Array.isArray(raw)) return [];
+  const strokes: GraphStroke[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.id !== "string" || rec.id.length === 0) continue;
+    if (!Array.isArray(rec.pts)) continue;
+    const pts: [number, number][] = [];
+    for (const pair of rec.pts) {
+      if (!Array.isArray(pair) || pair.length < 2) continue;
+      const x = pair[0];
+      const y = pair[1];
+      if (typeof x !== "number" || typeof y !== "number") continue;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      pts.push([x, y]);
+    }
+    if (pts.length === 0) continue;
+    strokes.push({ id: rec.id, pts });
+  }
+  return strokes;
+}
+
 export function parseGraphStateJson(raw: unknown): GraphState {
   if (raw == null || raw === "") {
-    return { bbox: DEFAULT_GRAPH_BBOX, expressions: [] };
+    return emptyGraphState();
   }
 
   let parsed: unknown = raw;
@@ -177,15 +254,17 @@ export function parseGraphStateJson(raw: unknown): GraphState {
     try {
       parsed = JSON.parse(raw);
     } catch {
-      return { bbox: DEFAULT_GRAPH_BBOX, expressions: [] };
+      return emptyGraphState();
     }
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return { bbox: DEFAULT_GRAPH_BBOX, expressions: [] };
+    return emptyGraphState();
   }
 
   const obj = parsed as Record<string, unknown>;
+  // Fresh object — unknown keys (and extras on a point or stroke) are not copied.
+  // An older build of this same parser ignored `points` and `strokes` the same way.
   const state: GraphState = {};
 
   if (Array.isArray(obj.bbox) && obj.bbox.length === 4) {
@@ -205,6 +284,9 @@ export function parseGraphStateJson(raw: unknown): GraphState {
     state.bbox = DEFAULT_GRAPH_BBOX;
   }
 
+  state.points = parseGraphPoints(obj.points);
+  state.strokes = parseGraphStrokes(obj.strokes);
+
   return state;
 }
 
@@ -218,12 +300,63 @@ export function extractGraphStateFromElement(element: {
   return parseGraphStateJson(customData.graphStateJson);
 }
 
-/** Clone graph state with a normalized expression list. */
+/** Clone graph state with a normalized expression list and ink. */
 export function cloneGraphState(state: GraphState): GraphState {
   return {
     bbox: state.bbox ? ([...state.bbox] as GraphBbox) : DEFAULT_GRAPH_BBOX,
     expressions: [...(state.expressions ?? [])],
+    points: (state.points ?? []).map((point) => ({ id: point.id, x: point.x, y: point.y })),
+    strokes: (state.strokes ?? []).map((stroke) => ({
+      id: stroke.id,
+      pts: stroke.pts.map((pt) => [pt[0], pt[1]] as [number, number]),
+    })),
   };
+}
+
+/**
+ * Draw-mode pointer reducer. Moves closer than {@link GRAPH_INK_SAMPLE_MS}
+ * do not add a sample and never persist. Pointer-up appends the stroke and
+ * reports a single persist.
+ */
+export function reduceGraphInkGesture(
+  state: GraphState,
+  draft: GraphStrokeDraft | null,
+  event: GraphInkPointerEvent
+): { state: GraphState; draft: GraphStrokeDraft | null; persist: boolean } {
+  if (event.type === "down") {
+    return {
+      state,
+      draft: { id: event.id, pts: [event.pt], lastAtMs: event.nowMs },
+      persist: false,
+    };
+  }
+  if (!draft) {
+    return { state, draft: null, persist: false };
+  }
+  if (event.type === "move") {
+    if (event.nowMs - draft.lastAtMs < GRAPH_INK_SAMPLE_MS) {
+      return { state, draft, persist: false };
+    }
+    return {
+      state,
+      draft: {
+        id: draft.id,
+        pts: [...draft.pts, event.pt],
+        lastAtMs: event.nowMs,
+      },
+      persist: false,
+    };
+  }
+  const last = draft.pts[draft.pts.length - 1];
+  const sameAsLast =
+    last != null && last[0] === event.pt[0] && last[1] === event.pt[1];
+  const pts = sameAsLast ? draft.pts : [...draft.pts, event.pt];
+  if (pts.length === 0) {
+    return { state, draft: null, persist: false };
+  }
+  const next = cloneGraphState(state);
+  next.strokes = [...(next.strokes ?? []), { id: draft.id, pts }];
+  return { state: next, draft: null, persist: true };
 }
 
 export function addGraphExpression(state: GraphState, expression: string): GraphState {

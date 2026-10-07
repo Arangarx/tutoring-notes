@@ -1433,3 +1433,137 @@ export async function waitForGraphExpressions(
     { timeout: timeoutMs }
   );
 }
+
+/**
+ * What the browser would deliver a click at (x, y) to.
+ * True when the topmost element is inside the graph embed (the canvas is not covering it).
+ */
+export async function pointerReachesGraphHost(
+  page: Page,
+  x: number,
+  y: number
+): Promise<boolean> {
+  return page.evaluate(
+    ([px, py]) =>
+      !!document
+        .elementFromPoint(px, py)
+        ?.closest('[data-testid="wb-graph-embed-host"]'),
+    [x, y] as const
+  );
+}
+
+export type MountedGraphInk = {
+  points: { id: string; x: number; y: number }[];
+  strokes: { id: string; pts: [number, number][] }[];
+  bbox: [number, number, number, number] | null;
+  functionGraphCount: number;
+};
+
+/**
+ * Read the mounted JSXGraph board in user coordinates.
+ * Point coords come from the library's X()/Y(); stroke coords from the curve's data arrays.
+ */
+export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> {
+  return page.evaluate(() => {
+    const empty = {
+      points: [] as { id: string; x: number; y: number }[],
+      strokes: [] as { id: string; pts: [number, number][] }[],
+      bbox: null as [number, number, number, number] | null,
+      functionGraphCount: 0,
+    };
+    const JXG = (
+      window as unknown as {
+        JXG?: {
+          boards: Record<
+            string,
+            {
+              containerObj?: Element | null;
+              objects: Record<
+                string,
+                {
+                  elType?: string;
+                  wbInk?: string;
+                  wbInkId?: string;
+                  id?: string;
+                  visProp?: { curvetype?: string };
+                  X?: () => number;
+                  Y?: () => number;
+                  dataX?: number[];
+                  dataY?: number[];
+                  points?: Array<{ usrCoords?: number[] }>;
+                }
+              >;
+              getBoundingBox: () => [number, number, number, number];
+            }
+          >;
+        };
+      }
+    ).JXG;
+    // JSXGraph keys JXG.boards by its own id, which is not the DOM id.
+    const host = document.querySelector(
+      '[data-testid="wb-graph-embed-host"] .wb-graph-board-host'
+    );
+    if (!JXG || !host) return empty;
+    const board = Object.values(JXG.boards).find(
+      (candidate) =>
+        candidate.containerObj === host ||
+        (candidate.containerObj != null && host.contains(candidate.containerObj))
+    );
+    if (!board) return empty;
+    const points: { id: string; x: number; y: number }[] = [];
+    const strokes: { id: string; pts: [number, number][] }[] = [];
+    let functionGraphCount = 0;
+    for (const obj of Object.values(board.objects)) {
+      if (obj.visProp?.curvetype === "functiongraph") functionGraphCount += 1;
+      if (obj.wbInk === "point" && typeof obj.X === "function" && typeof obj.Y === "function") {
+        points.push({
+          id: String(obj.wbInkId ?? obj.id ?? ""),
+          x: obj.X(),
+          y: obj.Y(),
+        });
+      }
+      if (obj.wbInk === "stroke") {
+        let pts: [number, number][] = [];
+        if (
+          Array.isArray(obj.dataX) &&
+          Array.isArray(obj.dataY) &&
+          obj.dataX.length === obj.dataY.length
+        ) {
+          pts = obj.dataX.map((x, i) => [x, obj.dataY![i]] as [number, number]);
+        } else if (Array.isArray(obj.points)) {
+          pts = obj.points
+            .filter((c) => Array.isArray(c.usrCoords) && c.usrCoords.length >= 3)
+            .map((c) => [c.usrCoords![1], c.usrCoords![2]] as [number, number]);
+        }
+        strokes.push({ id: String(obj.wbInkId ?? obj.id ?? ""), pts });
+      }
+    }
+    points.sort((a, b) => a.id.localeCompare(b.id));
+    strokes.sort((a, b) => a.id.localeCompare(b.id));
+    let bbox: [number, number, number, number] | null = null;
+    try {
+      bbox = board.getBoundingBox();
+    } catch {
+      bbox = null;
+    }
+    return { points, strokes, bbox, functionGraphCount };
+  });
+}
+
+export async function readElementVersion(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string
+): Promise<number> {
+  return page.evaluate(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<string, { versionOf?: (eid: string) => number }>;
+        }
+      ).__TN_WB_E2E__?.[r];
+      return bridge?.versionOf?.(id) ?? -1;
+    },
+    { r: role, id: elementId }
+  );
+}

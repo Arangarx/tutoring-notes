@@ -22,16 +22,24 @@ import {
   parseGraphStateJson,
   preprocessGraphExpression,
   recomputeBboxForResize,
+  reduceGraphInkGesture,
   removeGraphExpression,
   updateGraphExpression,
   withGraphBbox,
   type GraphBbox,
+  type GraphPoint,
   type GraphState,
+  type GraphStroke,
+  type GraphStrokeDraft,
 } from "@/lib/whiteboard/graph-state";
 import {
   persistGraphElementState,
   type GraphPersistApiLike,
 } from "@/lib/whiteboard/graph-persist";
+import {
+  GraphInkModeControl,
+  type GraphInkMode,
+} from "@/components/whiteboard/GraphInkModeControl";
 import "./graph-embeddable.css";
 
 type EmbeddableElementLike = {
@@ -39,6 +47,12 @@ type EmbeddableElementLike = {
   width?: number;
   height?: number;
   customData?: Record<string, unknown>;
+};
+
+type JxgElement = {
+  id?: string;
+  wbInk?: "point" | "stroke" | "preview";
+  wbInkId?: string;
 };
 
 type JxgBoard = {
@@ -49,9 +63,15 @@ type JxgBoard = {
     type: string,
     parents: unknown[],
     attributes?: Record<string, unknown>
-  ) => { id?: string };
+  ) => JxgElement;
   removeObject: (obj: { id?: string }) => void;
+  objects?: Record<string, JxgElement>;
   getBoundingBox: () => GraphBbox;
+  getUsrCoordsOfMouse?: (evt: Event) => [number, number];
+  attr?: {
+    pan?: { enabled?: boolean };
+    zoom?: { wheel?: boolean };
+  };
   zoomIn: (x?: number, y?: number) => JxgBoard;
   zoomOut: (x?: number, y?: number) => JxgBoard;
   clickLeftArrow: () => JxgBoard;
@@ -218,6 +238,85 @@ function mountGraphBoard(
   return board;
 }
 
+const INK_POINT_ATTRS = {
+  fixed: true,
+  withLabel: false,
+  name: "",
+  size: 2,
+  showInfobox: false,
+  strokeColor: "var(--accent)",
+  fillColor: "var(--accent)",
+};
+
+const INK_STROKE_ATTRS = {
+  strokeColor: "var(--accent)",
+  strokeWidth: 2,
+};
+
+let inkSeq = 0;
+
+function newInkId(kind: "point" | "stroke"): string {
+  inkSeq += 1;
+  return `${kind}-${Date.now().toString(36)}-${inkSeq.toString(36)}`;
+}
+
+function clearInk(board: JxgBoard, kinds: Array<NonNullable<JxgElement["wbInk"]>>): void {
+  const objects = board.objects ? Object.values(board.objects) : [];
+  for (const obj of objects) {
+    if (obj.wbInk && kinds.includes(obj.wbInk)) {
+      try {
+        board.removeObject(obj);
+      } catch {
+        // stale handle
+      }
+    }
+  }
+}
+
+function plotGraphInk(
+  board: JxgBoard,
+  points: readonly GraphPoint[],
+  strokes: readonly GraphStroke[]
+): void {
+  clearInk(board, ["point", "stroke", "preview"]);
+  for (const point of points) {
+    const obj = board.create("point", [point.x, point.y], INK_POINT_ATTRS);
+    obj.wbInk = "point";
+    obj.wbInkId = point.id;
+  }
+  for (const stroke of strokes) {
+    if (stroke.pts.length === 0) continue;
+    const obj = board.create(
+      "curve",
+      [stroke.pts.map((pt) => pt[0]), stroke.pts.map((pt) => pt[1])],
+      INK_STROKE_ATTRS
+    );
+    obj.wbInk = "stroke";
+    obj.wbInkId = stroke.id;
+  }
+  board.update();
+}
+
+function paintStrokePreview(board: JxgBoard, draft: GraphStrokeDraft | null): void {
+  clearInk(board, ["preview"]);
+  if (draft && draft.pts.length > 0) {
+    const obj = board.create(
+      "curve",
+      [draft.pts.map((pt) => pt[0]), draft.pts.map((pt) => pt[1])],
+      INK_STROKE_ATTRS
+    );
+    obj.wbInk = "preview";
+  }
+  board.update();
+}
+
+function applyInkPointerMode(board: JxgBoard, mode: GraphInkMode): void {
+  if (!board.attr?.pan) return;
+  const pan = mode === "pan";
+  board.attr.pan.enabled = pan;
+  if (board.attr.zoom) board.attr.zoom.wheel = pan;
+}
+
 function stopEmbedDrag(event: React.SyntheticEvent): void {
   event.stopPropagation();
 }
@@ -262,6 +361,10 @@ export function GraphEmbeddable({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingDraft, setEditingDraft] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [inkMode, setInkMode] = useState<GraphInkMode>("pan");
+  const inkModeRef = useRef<GraphInkMode>("pan");
+  inkModeRef.current = inkMode;
+  const strokeDraftRef = useRef<GraphStrokeDraft | null>(null);
 
   const elementId = element.id ?? "";
 
@@ -284,6 +387,112 @@ export function GraphEmbeddable({
       if (changed) onAfterPersist?.();
     },
     [excalidrawAPI, excalidrawAPIRef, elementId, onAfterPersist, readOnly]
+  );
+
+  const commitInk = useCallback(
+    (next: GraphState) => {
+      const board = boardRef.current;
+      let state = next;
+      if (board) {
+        try {
+          state = withGraphBbox(next, board.getBoundingBox());
+        } catch {
+          // keep the caller's bbox
+        }
+        plotGraphInk(board, state.points ?? [], state.strokes ?? []);
+      }
+      persistState(state);
+    },
+    [persistState]
+  );
+
+  const userPointFromPointer = useCallback(
+    (event: React.PointerEvent): [number, number] | null => {
+      const board = boardRef.current;
+      if (!board?.getUsrCoordsOfMouse) return null;
+      try {
+        const [x, y] = board.getUsrCoordsOfMouse(event.nativeEvent);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return [x, y];
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  const handleBoardPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      stopEmbedDrag(event);
+      if (event.button !== 0 || inkModeRef.current !== "draw") return;
+      const pt = userPointFromPointer(event);
+      if (!pt) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      const reduced = reduceGraphInkGesture(graphStateRef.current, null, {
+        type: "down",
+        id: newInkId("stroke"),
+        pt,
+        nowMs: event.timeStamp,
+      });
+      strokeDraftRef.current = reduced.draft;
+      const board = boardRef.current;
+      if (board) paintStrokePreview(board, reduced.draft);
+    },
+    [userPointFromPointer]
+  );
+
+  const handleBoardPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (inkModeRef.current !== "draw" || !strokeDraftRef.current) return;
+      const pt = userPointFromPointer(event);
+      if (!pt) return;
+      const previousLength = strokeDraftRef.current.pts.length;
+      const reduced = reduceGraphInkGesture(graphStateRef.current, strokeDraftRef.current, {
+        type: "move",
+        pt,
+        nowMs: event.timeStamp,
+      });
+      strokeDraftRef.current = reduced.draft;
+      const board = boardRef.current;
+      if (
+        board &&
+        reduced.draft &&
+        reduced.draft.pts.length !== previousLength
+      ) {
+        paintStrokePreview(board, reduced.draft);
+      }
+    },
+    [userPointFromPointer]
+  );
+
+  const handleBoardPointerUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      if (event.button !== 0) return;
+      const mode = inkModeRef.current;
+      const pt = userPointFromPointer(event);
+      if (!pt) return;
+      if (mode === "point") {
+        const next = cloneGraphState(graphStateRef.current);
+        next.points = [
+          ...(next.points ?? []),
+          { id: newInkId("point"), x: pt[0], y: pt[1] },
+        ];
+        commitInk(next);
+        return;
+      }
+      if (mode !== "draw" || !strokeDraftRef.current) return;
+      const reduced = reduceGraphInkGesture(graphStateRef.current, strokeDraftRef.current, {
+        type: "up",
+        pt,
+        nowMs: event.timeStamp,
+      });
+      strokeDraftRef.current = null;
+      if (reduced.persist) commitInk(reduced.state);
+    },
+    [commitInk, userPointFromPointer]
   );
 
   const replot = useCallback(
@@ -470,6 +679,8 @@ export function GraphEmbeddable({
 
         const initialExprs = initialState.expressions ?? [];
         const errors = plotExpressions(board, initialExprs, plotRefsRef.current);
+        plotGraphInk(board, initialState.points ?? [], initialState.strokes ?? []);
+        if (!readOnly) applyInkPointerMode(board, inkModeRef.current);
         if (!cancelled) setExprErrors(errors);
 
         const syncSize = () => {
@@ -585,6 +796,7 @@ export function GraphEmbeddable({
       synced.expressions ?? [],
       plotRefsRef.current
     );
+    plotGraphInk(board, synced.points ?? [], synced.strokes ?? []);
     setExprErrors(errors);
 
     try {
@@ -594,6 +806,13 @@ export function GraphEmbeddable({
       // ignore during teardown
     }
   }, [readOnly, syncFromBoard, graphStateJsonRaw]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    const board = boardRef.current;
+    if (!board) return;
+    applyInkPointerMode(board, inkMode);
+  }, [inkMode, readOnly]);
 
   const handleAddExpression = () => {
     if (readOnly) return;
@@ -646,7 +865,9 @@ export function GraphEmbeddable({
         <div
           ref={hostRef}
           className="wb-graph-board-host"
-          onPointerDown={readOnly ? undefined : stopEmbedDrag}
+          onPointerDown={readOnly ? undefined : handleBoardPointerDown}
+          onPointerMove={readOnly ? undefined : handleBoardPointerMove}
+          onPointerUp={readOnly ? undefined : handleBoardPointerUp}
           onMouseDown={readOnly ? undefined : stopEmbedDrag}
           onWheel={readOnly ? undefined : stopEmbedDrag}
         />
@@ -658,6 +879,11 @@ export function GraphEmbeddable({
         onMouseDownCapture={stopEmbedDragCapture}
       >
         <div className="wb-graph-controls-strip">
+          <GraphInkModeControl
+            mode={inkMode}
+            onMode={setInkMode}
+            onPointerDown={stopEmbedDrag}
+          />
           <button
             type="button"
             className="wb-graph-strip-btn wb-graph-reset-view"
