@@ -1,9 +1,9 @@
 /**
  * @jest-environment jsdom
  *
- * Session chat: a sender's line appears once even when the relay echoes it,
- * a colliding id with a different payload is kept, and the list cannot grow
- * without a bound.
+ * Session chat: a colliding id with a different payload is kept, and the
+ * list cannot grow without a bound. The sender's line comes from
+ * broadcastChat's return value (the relay does not echo it).
  */
 import { act, renderHook } from "@testing-library/react";
 import { useSessionChat } from "@/hooks/useSessionChat";
@@ -40,14 +40,13 @@ function createSync(opts?: { echo?: boolean; sentAt?: () => number }) {
 }
 
 describe("useSessionChat", () => {
-  it("shows an echoed own message once", () => {
-    const sync = createSync({ echo: true });
+  it("shows the sender's own line from the wire message broadcastChat returns", () => {
+    const sync = createSync({ echo: false });
     const { result } = renderHook(() => useSessionChat(sync as never, true));
     act(() => {
       expect(result.current.send("can you hear me")).toBe(true);
     });
-    const hits = result.current.messages.filter((m) => m.text === "can you hear me");
-    expect(hits).toHaveLength(1);
+    expect(result.current.messages.map((m) => m.text)).toEqual(["can you hear me"]);
   });
 
   it("keeps two different messages that share a timestamp", () => {
@@ -62,7 +61,7 @@ describe("useSessionChat", () => {
   });
 
   it("drops the oldest lines once the transcript is no longer bounded by the send count", () => {
-    const sync = createSync({ echo: true });
+    const sync = createSync({ echo: false });
     const { result } = renderHook(() => useSessionChat(sync as never, true));
     act(() => {
       for (let i = 0; i < 250; i++) result.current.send(`line-${i}`);

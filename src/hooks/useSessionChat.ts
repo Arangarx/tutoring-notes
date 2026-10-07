@@ -24,35 +24,23 @@ export function sessionChatMessageFromWire(msg: WhiteboardWireChatMsg): SessionC
   };
 }
 
-function sameChatPayload(a: SessionChatMessage, b: SessionChatMessage): boolean {
-  return (
-    a.peerId === b.peerId &&
-    a.role === b.role &&
-    a.text === b.text &&
-    a.sentAt === b.sentAt
-  );
-}
-
 /**
- * Append a chat line. An echo of a line already shown (same id and payload)
- * is ignored. A different payload that collides on id is kept under a new id.
- * The list never grows past the history cap; older lines drop first.
+ * Append a chat line. A different payload that collides on id (same peer,
+ * same millisecond) is kept under a new id. The list never grows past the
+ * history cap; older lines drop first.
+ *
+ * The relay does not echo a message to its sender, and the sync client drops
+ * a self-delivery if one ever arrived, so a same-payload dedupe here never
+ * runs in production.
  */
 export function appendSessionChatMessage(
   prev: readonly SessionChatMessage[],
   incoming: SessionChatMessage
 ): SessionChatMessage[] {
   const existing = prev.find((m) => m.id === incoming.id);
-  let next: SessionChatMessage[];
-  if (existing) {
-    if (sameChatPayload(existing, incoming)) return prev as SessionChatMessage[];
-    next = [
-      ...prev,
-      { ...incoming, id: `${incoming.id}#${prev.length}` },
-    ];
-  } else {
-    next = [...prev, incoming];
-  }
+  const next = existing
+    ? [...prev, { ...incoming, id: `${incoming.id}#${prev.length}` }]
+    : [...prev, incoming];
   if (next.length <= CHAT_HISTORY_CAP) return next;
   return next.slice(next.length - CHAT_HISTORY_CAP);
 }
@@ -83,6 +71,8 @@ export function useSessionChat(
       if (!syncConnected || !sync || typeof sync.broadcastChat !== "function") {
         return false;
       }
+      // The sender's own line is this return value. The relay does not deliver
+      // the message back to the sender, so the hook must append it locally.
       const sent = sync.broadcastChat({ text });
       if (!sent) return false;
       setMessages((prev) => appendSessionChatMessage(prev, sessionChatMessageFromWire(sent)));
