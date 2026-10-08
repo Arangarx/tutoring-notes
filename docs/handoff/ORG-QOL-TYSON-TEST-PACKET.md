@@ -1,10 +1,22 @@
 # Session joining and whiteboard quality — Tyson test packet
 
 **Branch:** `feat/org-qol`
-**Tip commit:** [`c0f05e73`](https://github.com/Arangarx/tutoring-notes/commit/c0f05e736c6d5786a797ac91941ae79f99eee89c)
+**Tip commit:** [`a0ff5d63`](https://github.com/Arangarx/tutoring-notes/commit/a0ff5d63)
 **Preview:** [preview.usemynk.com](https://preview.usemynk.com)
 
 This packet is for the tutoring app **Mynk**. It covers joining a scheduled session, who is allowed to claim a learner, and a set of whiteboard changes. School / organization accounts are **not** in this build.
+
+## Run these again
+
+The preview changed on 7 Oct after this packet was first sent. If you already scored one of these, clear that box and run it again. Each changed item is also marked **Re-test**.
+
+- **23** — hints depend on the tool, and they are not in the phone's bottom bar
+- **24** — the other person's cursor circle is a bit smaller
+- **25** — both directions, including the tutor seeing the phone's view
+- **26** — chat uses the video-tile names, and a closed chat shows a count
+- **47, 48, 49** — new: wheel zoom, the two menus, and the homepage Sign in menu
+
+Item 8 is unchanged. The join page still says **Child sign in** and **Parent sign in**. The renamed words are on the homepage **Sign in** menu (item 49), not on that join page.
 
 ---
 
@@ -38,9 +50,9 @@ Sign-in pages (bookmark these on the preview host):
 
 | Who | Page | What you should see |
 |---|---|---|
-| Tutor | `/login` | "Sign in with your tutor account." Button **Sign in**. |
-| Parent, or an adult learning for themselves | `/account/login` | "Sign in to your account." |
-| Child | `/students/login` | Username and PIN. Button **Sign in**. |
+| Tutor | `/login` | "Sign in with your tutor account." Button **Sign in**. Also in the homepage **Sign in** menu as **Tutor sign in** (item 49). |
+| Self learner / Parent | `/account/login` | "Sign in to your account." Homepage menu: **Self learner / Parent sign in**. |
+| Child learner | `/students/login` | Username and PIN. Button **Sign in**. Homepage menu: **Child learner sign in**. |
 
 Tutor sign-in still asks for the second factor you set up in the September packet (email code, authenticator app, or text). That is expected.
 
@@ -444,7 +456,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 ## On the whiteboard
 
-Use Device A as the tutor and Device B as the parent or child, in a live room: **Open room**, **Join**, then **Start session** once both sides show as connected. **Online** should be the selected mode (item 17). Talk only if you want to; these items are about the board.
+Use Device A as the tutor and Device B as the parent or child, in a live room: **Open room**, **Join**, then **Start session** once both sides show as connected. **Online** should be the selected mode (item 17). Talk only if you want to; these items are about the board. Items **47** and **48** are in this same room; they are numbered at the end of this section so earlier numbers stay put.
 
 ### 17. Waiting room says Online and In person
 
@@ -580,14 +592,18 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 ### 23. Shift for a square or circle, and the Space hint
 
+**Re-test:** Yes. Clear any earlier box. The hints no longer always say "Square or circle."
+
 **Action:**
 
-1. On Device A, look at the lower-right of the board for small key hints.
-2. Choose the rectangle tool. Hold **Shift** while you drag. Release.
-3. Choose the ellipse / circle tool. Hold **Shift** while you drag.
-4. Hold **Space** and drag on the board.
+1. On Device A, with the pencil or select tool active, read the small key hints. They sit in the lower part of the board, not in the top bar.
+2. On a phone (Device B is fine, or narrow the tutor window), confirm those hints are **not** sitting inside the bottom tool bar.
+3. Choose the rectangle tool. The hints should now include **Shift** / **Square**, and not **Circle**. Hold **Shift** while you drag.
+4. Choose the ellipse tool. The hints should now include **Shift** / **Circle**, and not **Square**. Hold **Shift** while you drag.
+5. With either tool, **Space** / **Pan** is still shown. Hold **Space** and drag.
+6. Press **Shortcuts**. Read the list, then close it.
 
-**Expect:** The hints read **Shift** / **Square or circle** and **Space** / **Pan**, and they sit in the lower part of the board, not in the top bar. Shift plus a rectangle drag makes a square (sides equal). Shift plus an ellipse drag makes a circle. Space pans the board instead of drawing.
+**Expect:** **Space** / **Pan** is always there. **Shift** / **Square** appears only while the rectangle tool is selected. **Shift** / **Circle** appears only while the ellipse tool is selected. Shift plus a rectangle drag makes a square. Shift plus an ellipse drag makes a circle. Space pans instead of drawing. On a phone the hints do not cover the bottom tool bar. **Shortcuts** lists **Wheel** / **Zoom** and **Space** / **Pan**.
 
 **Ignore this run:** Nothing.
 
@@ -597,11 +613,13 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › modifier hints sit in the lower part of the board and name Shift and Space]` — `[automated: tests/integration/wb-shift-constrain-shapes.spec.ts › Shift+rectangle drag yields equal width and height]` — `[automated: tests/integration/wb-shift-constrain-shapes.spec.ts › Shift+ellipse drag yields equal width and height]`
+**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › modifier hints sit in the lower part of the board and name Space pan]` — `[automated: tests/integration/wb-org-qol-surface.spec.ts › modifier hints follow the selected shape and the help list names wheel zoom]` — `[automated: tests/integration/wb-shift-constrain-shapes.spec.ts › Shift+rectangle drag yields equal width and height]` — `[automated: tests/integration/wb-shift-constrain-shapes.spec.ts › Shift+ellipse drag yields equal width and height]`
 
 **Notes:**
 
 ### 24. You can see the other person's cursor
+
+**Re-test:** Yes. Clear any earlier box. The circle is slightly smaller than on the first preview.
 
 **Action:**
 
@@ -609,7 +627,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 2. Watch Device A.
 3. Then move the pointer on Device A and watch Device B.
 
-**Expect:** Each person sees the other's pointer move on the board while they are on the same board. The pointer is not a line of ink that stays behind after they stop.
+**Expect:** Each person sees the other's pointer move on the board while they are on the same board. The pointer is a small circle, a bit smaller than the first preview, and it is still easy to see. It is not a line of ink that stays behind after they stop.
 
 **Ignore this run:** The laser / pointer-wand tool (item 29). The ghost rectangle (item 25).
 
@@ -625,13 +643,17 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 ### 25. A ghost rectangle shows the other person's view
 
+**Re-test:** Yes. Clear any earlier box. The first preview showed the tutor's view on the phone and did not show the phone's view on the tutor's screen.
+
 **Action:**
 
-1. On Device A, pan or zoom the board (hold **Space** and drag, or use the hand / scroll).
-2. On Device B, look at the same board for a rectangle and a label.
-3. Pan on Device B and look at Device A.
+1. Device A is the tutor on a computer. Device B is the learner on a phone, in the same live session, on the same board.
+2. On Device A, pan the board (hold **Space** and drag, or use the hand tool). A plain mouse wheel zooms (item 47). Do not use the wheel for this pan.
+3. On Device B, look for a rectangle and a label.
+4. On Device B, pan to a different area of the board than Device A.
+5. On Device A, look for a rectangle and a label.
 
-**Expect:** The other screen shows a rectangle outlining where you are looking, labeled **Tutor view** when the tutor is the one who moved, and **Student view** when the learner is the one who moved. It tracks the pan. It is not a second copy of the ink.
+**Expect:** Device B shows a rectangle labeled **Tutor view** around the area the tutor is looking at. Device A shows a rectangle labeled **Student view** around the area the phone is looking at. The phone's rectangle is the smaller view, not a copy of the tutor's whole screen. Both track further pans. Neither rectangle is a second copy of the ink.
 
 **Ignore this run:** Nothing.
 
@@ -641,22 +663,25 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-presence.spec.ts › ghost viewport — tutor pan shows student-view rect on student canvas]` — `[human-only: both directions on real screens]`
+**Coverage:** `[automated: tests/integration/wb-org-qol-presence.spec.ts › ghost viewport — tutor pan shows student-view rect on student canvas]` — `[automated: tests/integration/wb-org-qol-presence.spec.ts › tutor ghost matches the student's visible area]` — `[human-only: both directions on a real phone and a computer]`
 
 **Notes:**
 
 ### 26. Chat starts collapsed, and your line shows once
+
+**Re-test:** Yes. Clear any earlier box. Names and the closed-chat count are new.
 
 **Action:**
 
 1. On Device A, find the **Chat** button. Do not open it yet. Confirm you do not already see a message list.
 2. Press **Chat**. You should see "No messages yet. Use when audio is in trouble." and a box "Type a message…".
 3. Type `bridge is up` and press **Send**.
-4. Count how many times that sentence appears on Device A.
-5. On Device B, press **Chat** and count how many times it appears there.
-6. Press **Hide chat** on Device A.
+4. Count how many times that sentence appears on Device A, and read the name in front of it.
+5. On Device B, leave chat **closed**. Look at the **Chat** button.
+6. Press **Chat** on Device B. Count the sentence, read the name, and look at the **Chat** button again after it is open.
+7. Press **Hide chat** on Device A. From Device B, send `second line`. Look at Device A's closed **Chat** button.
 
-**Expect:** Chat is only a **Chat** button until you open it. After send, the sentence appears **once** for you and **once** for the other person, labeled **Tutor** or **Student**. **Hide chat** collapses it back to the button. The board still works if you never open chat.
+**Expect:** Chat is only a **Chat** button until you open it. After send, the sentence appears **once** for you and **once** for the other person. The name in front of the line is the same name as that person's video tile (the tutor's display name, or the learner's name), not the plain words **Tutor** or **Student**, when that name exists. While chat is closed, a new line from the other person puts a count on the **Chat** button. Opening chat clears the count. Your own send does not put a count on your own button. **Hide chat** collapses it back to the button. The board still works if you never open chat.
 
 **Ignore this run:** Nothing.
 
@@ -666,7 +691,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-presence.spec.ts › in-app chat — collapsed until opened; message reaches peer]` — `[automated: tests/integration/wb-org-qol-surface.spec.ts › a chat line shows once for the sender and once for the peer]`
+**Coverage:** `[automated: tests/integration/wb-org-qol-presence.spec.ts › in-app chat — collapsed until opened; message reaches peer]` — `[automated: tests/integration/wb-org-qol-presence.spec.ts › chat uses tile names and badges unread from the other person]` — `[automated: tests/integration/wb-org-qol-surface.spec.ts › a chat line shows once for the sender and once for the peer]`
 
 **Notes:**
 
@@ -760,6 +785,74 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 - [ ] SKIP
 
 **Coverage:** `[automated: tests/integration/wb-finish-review-cta.spec.ts › Save stays on review URL with chip; Finish review opens student detail]` — `[automated: tests/integration/wb-finish-review-cta.spec.ts › failed generation still offers Finish review]` — `[automated: tests/integration/wb-finish-review-cta.spec.ts › empty generated notes still offer Finish review]` — `[automated: tests/integration/wb-finish-review-cta.spec.ts › timed-out generation still offers Finish review]`
+
+**Notes:**
+
+### 47. A plain mouse wheel zooms
+
+**Action:**
+
+1. Stay in the live room on Device A, with a mouse. Use the select or hand tool so a drag is not drawing.
+2. Roll the wheel with no keys held. Watch whether the board zooms or slides up and down.
+3. Hold **Ctrl** (or **Cmd** on a Mac) and roll the wheel.
+4. Hold **Space** and drag.
+
+**Expect:** A plain wheel zooms. **Ctrl** or **Cmd** plus the wheel pans up and down and does not zoom. **Space** and a drag still pans, and does not draw. Shift plus the wheel is unchanged from before (it pans sideways).
+
+**Ignore this run:** A phone with no mouse wheel. Mark N/A with notes on Device B if it has no wheel, and still grade Device A.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › plain wheel zooms, modifier wheel pans, space still pans]` — `[human-only: a real mouse wheel]`
+
+**Notes:**
+
+### 48. The session menu and the drawing menu are not the same button
+
+**Action:**
+
+1. On Device A, in the live room, find the top-bar button named **More session options**. It is a sliders icon (three horizontal lines with knobs), not three vertical dots.
+2. Find the tool-rail button named **More — z-order, delete, hand**. It is still the vertical three dots.
+3. On a phone, or with the window short, press **More session options**. If the list is taller than the panel, look at the bottom of the panel. Scroll to the end of the list.
+
+**Expect:** The two buttons do not look the same, and the names above are the ones you hear or see on hover. You do not have to guess which three-dot control holds session options, because that control is the sliders. When the session list is taller than the panel, the bottom says **More below** until you scroll to the end, and that line is gone at the end. When everything fits, **More below** is not shown. On a phone the session button is large enough to hit without opening the drawing menu by mistake.
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › session menu and drawing menu use different icons and a more-below cue]` — `[human-only: whether the session button is obvious on a phone]`
+
+**Notes:**
+
+### 49. Homepage Sign in menu, and the page stays on the phone
+
+**Action:**
+
+1. Sign out. On a phone, open the preview homepage (not `/login`).
+2. Confirm the page does not slide sideways. The header may wrap onto a second line. **Create account** stays on the screen.
+3. Press **Sign in** in the header. Read the three rows.
+4. On the page under the main buttons, read the link under **Create your account**.
+
+**Expect:** The menu rows are **Tutor sign in**, **Self learner / Parent sign in**, and **Child learner sign in**. They are not **Parent sign in** or **Student sign in**. The link under the main buttons goes to the self-learner / parent sign-in and uses those words. Nothing on the page is cut off the right edge of the phone.
+
+**Ignore this run:** The join page in item 8. That page still says **Child sign in** and **Parent sign in**.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/marketing-signin-phone.spec.ts › sign-in menu labels and page stay inside a phone viewport]` — `[human-only: a real phone, not only a narrow window]`
 
 **Notes:**
 
