@@ -73,7 +73,7 @@ All eleven are still in the code. Several earlier "fixes" did not do what was as
 
 Fix order: quick, non-fragile 10, 5, 4, 9 first. Fragile 1, 2, 3, 6, 7, 8, 11 get a step-back plan and a Sonnet review before edits.
 
-Open question for Andrew on 6: a center marker or coordinate grid, or only a faster ghost after a board switch.
+**Andrew decided on 6 (2026-10-11):** the priority is that the other person's view box shows up quickly and accurately, including right after a board switch. Center marker versus coordinate grid is undecided; start with a "recenter view" button. Exact recenter target (the other person's view, or the board's content) still to confirm.
 
 ## Status
 
