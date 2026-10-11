@@ -54,9 +54,7 @@ Proposed, not accepted:
 
 Flag for later review. This sentence stays for now. It is permanent copy. It shows every time a session is stopped in the middle, including after the pilot. It is not a temporary pilot notice.
 
-"This invite can't be used. This student is already set up with the organization." Shown to the parent or self-learner. They cannot remove the organization's extra entry.
-
-"This student is already set up with this organization. Remove the extra entry." Shown to the organization staff member who can remove it.
+A later invite for someone already tied to the organization has no message. They pass through to the account and see the existing link. The spare unclaimed row is closed. Nobody is asked to remove it.
 
 "After an account is deleted, we keep a record of the consent choices that were made and a one-way fingerprint of the account email, so we can answer questions about consent later. The fingerprint cannot be turned back into the email."
 
