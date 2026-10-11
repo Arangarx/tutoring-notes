@@ -33,7 +33,7 @@ Earlier design (`docs/handoff/org-qol-opus-design.md` Wave B item 3) called `/jo
 - The child home lists their own past session notes and replays.
 - When nothing is booked, the child sees an Upcoming sessions section that says nothing is scheduled. It is not hidden.
 - PIN change: decided. The child can change their own PIN after entering the current one. The parent can still reset it at any time and is notified when the child changes it. Edge cases (forgotten PIN, sibling knows the old PIN) are handled by the parent reset; revisit only if users raise them.
-- Privacy switches: open. Andrew leans toward all four, but asked whether a parent simply overrides a minor's preference.
+- Privacy switches: decided. The child can turn any of the four off. The parent sees it and can turn it back on, and the child sees when the parent did.
 
 ## B. Consent wording
 
@@ -74,6 +74,19 @@ All eleven are still in the code. Several earlier "fixes" did not do what was as
 Fix order: quick, non-fragile 10, 5, 4, 9 first. Fragile 1, 2, 3, 6, 7, 8, 11 get a step-back plan and a Sonnet review before edits.
 
 **Andrew decided on 6 (2026-10-11):** the priority is that the other person's view box shows up quickly and accurately, including right after a board switch. Center marker versus coordinate grid is undecided; start with a tutor "recenter view" button that returns the tutor to the center of the board's content. Students do not get it; they already have the sync-to-tutor button.
+
+## Plan for 1, 2, 3, 6 (2026-10-11, [Plan viewport lock and ghost fixes](9c1b635b-7299-4e65-b30f-e1413716ccea))
+
+PLAN READY (Sonnet, readonly). Order: (a) item 3 wire change (send `visualViewport ∩ canvas` as the visible rect, plus optional `visibleLeft/visibleTop/viewLocked`) together with item 6 (tutor sends its view right after a board switch; student flushes right after applying; sample/debounce down to ~100ms); (b) item 2, ghost freezes in screen space while the viewer's camera is moving; (c) item 1, block pan/zoom at the source on a locked student (wheel, second touch pointer, Safari gesture events, keyboard) plus an on-canvas "locked" indicator. Tests: new `wb-student-view-lock.spec.ts` and `wb-ghost-viewport.spec.ts`; rewrite tests that currently pass on snap-back or on the sender's own size. Student runs in WebKit (iPhone 13 profile) for items 1 and 3 — needs `npx playwright install webkit`.
+
+**Andrew decided (2026-10-11):**
+
+- Indicator: pill with lock icon, "Locked to tutor's view", in a canvas corner clear of chrome, pulses on a blocked attempt. **Tapping it offers to unlock.**
+- Second finger during a stroke: ignore it; the stroke continues.
+- View box occlusion: **always exclude the area under the student's top bar; exclude the left nav when it is expanded; exclude only the part of the bottom bar that is always there.** Do not exclude temporary pop-ups (styles sheet, menus).
+- Keyboard pan/zoom (Space, H, +/−, Shift+1/2/3) is blocked for a locked student.
+- WebKit for Playwright: approved (dev and CI). Update `docs/PLATFORM-ASSUMPTIONS.md`.
+- Child privacy switches: the child can turn any of the four off; the parent sees it and can turn it back on; the child sees when the parent did.
 
 ## Status
 
