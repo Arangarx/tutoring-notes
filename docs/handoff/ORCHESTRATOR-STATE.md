@@ -16,7 +16,7 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-11: Andrew corrected the end-now warning. It is not back-billing. After the free pilot, cancelling a session does not give the time back. Orgs may later be charged up front at a discounted rate. That billing shape is not in this finish. Proposed sentence is in the stage-1 handoff. Stage 2 still waits for his go. |
+| **Last action completed** | 2026-10-11: Duplicate-entry copy is split. Staff who can remove the extra entry are told to remove it. The parent or self-learner is told the invite can't be used. The mid-session warning stays as written and is flagged for later review because it is permanent copy, not a pilot notice. Stage 2 still waits for Andrew's go. |
 | **Next action(s)** | Stage 2 build waits for Andrew's go. Do not start it. Do not merge to master. Do not touch production Neon. Do not seed Sarah's or Tyson's emails. Proposed strings for his review are in `docs/handoff/org-sales-stage1-handoff.md`. |
 | **Open Andrew-confirms** | Stage 2 go. Proposed strings: fingerprint privacy sentence, consent sentence (parent or self-learner), End-now-no-notes warning, duplicate-claim message, suspension pill. Also still open: prod migration greenlight, Twilio campaign approval, Apple ICS on a real device, billable wording (Sarah). |
 | **MODEL RULE (Andrew 2026-10-06 11:08)** | **Opus does only Opus parts** (oracle design, verification judgment, merge calls). **All other hands work goes to Grok** (`grok-4.7-xhigh-fast`, set explicitly on every dispatch) — not Composer, not Opus. |

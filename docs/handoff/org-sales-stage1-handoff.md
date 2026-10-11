@@ -52,7 +52,11 @@ Proposed, not accepted:
 
 "No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used."
 
-"This student is already set up with this organization. Ask the organization to remove the extra entry."
+Flag for later review. This sentence stays for now. It is permanent copy. It shows every time a session is stopped in the middle, including after the pilot. It is not a temporary pilot notice.
+
+"This invite can't be used. This student is already set up with the organization." Shown to the parent or self-learner. They cannot remove the organization's extra entry.
+
+"This student is already set up with this organization. Remove the extra entry." Shown to the organization staff member who can remove it.
 
 "After an account is deleted, we keep a record of the consent choices that were made and a one-way fingerprint of the account email, so we can answer questions about consent later. The fingerprint cannot be turned back into the email."
 
