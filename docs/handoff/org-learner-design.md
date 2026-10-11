@@ -1,7 +1,7 @@
 # Org learner — implementation contract (stages 2–7)
 
 - **Branch:** `feat/org-qol`. Tip this design was written against: `266732a6`.
-- **Status:** design rewritten 2026-10-11, then the 2026-10-11 review folds were inserted in this file. Four product questions await Andrew. Stages that need an answer do not start. A second Sonnet pass has not happened. No learner code in this stage. No tests, schema, or migrations in this stage. Not committed by this fold.
+- **Status:** Andrew's decisions of 2026-10-11 are written in below. The four review questions are closed. Stage 2 build starts only when Andrew says go. Stages 3, 5, and 7 are not waiting on an answer. Stage 4 still depends on stage 3. A second Sonnet pass on this design has not happened. No learner code in this stage. No tests, schema, or migrations in this stage.
 - **Contract:** § 0 below (Andrew, 2026-10-07) plus the org-sales finish plan. This body is the build contract for stages 2–7. A later executor builds from this file and that plan.
 - **Slice 1 is already on this branch.** Call it. Do not redesign it. Facts are in § 7.
 - **Log prefix:** `[org]`. Never log a token or an email.
@@ -22,9 +22,13 @@ This pass supersedes the Q1–Q8 defaults below, and it supersedes any later sec
 
 **After removal, org sessions are read-only (Andrew 2026-10-07).** Sessions the org initiated, that this tutor taught, stay readable and stop being writable. Personal students are a different record and are not part of this cut. When that read-only rule starts for a session that is still open is § 3 and § 6.3: ended sessions are read-only; a session with `endedAt` null stays writable for upload and `endWhiteboardSession` until the § 6 deadline. Later, the org may choose what a removed tutor keeps, including cutting them off entirely (for example after a removal for behavioral issues). That choice waits on org feedback. The default until then is read-only.
 
+Note (Andrew 2026-10-11): notes are narrower than the read-only sentence above. See § 6.2. The later decision wins for notes. The 7 days to finalize notes start at session end, when `endedAt` is set, not at removal and not at the force-end deadline.
+
 **A live org session requires a Mynk account.** Anonymous guest links are out. "Do not record" does not cover consent to be in an online session at all (COPPA). Signing up for tutoring with the org includes creating a Mynk account. The signup can be branded for the organization. Consent to be online is collected there, before the first session. A later lightweight login, if any, still has to be a specific person who already consented, so we know it is the same person.
 
 **Suspended or not-yet-approved org.** A session already live may finish. It must not be able to run out to the normal runaway guard (`SESSION_SAFETY_MAX_SECONDS`, 8 hours in `src/lib/recording/segment-policy.ts`). For a **suspended** org (Andrew 2026-10-07): show a pill that the session will force end because the organization that set up the tutoring has had its account suspended. Force-end is the end of the current clock hour, with a floor of 10 minutes from the moment of suspension. Five minutes left in the hour still means 10 minutes before force close. The same timing covers a session already live while the org is not yet approved. The pill copy above is the suspension copy (description only; the display string is proposed in §6.2).
+
+Note (Andrew 2026-10-11): the timer in the paragraph above is Let it finish. Suspension uses the same three choices as removal (§ 6.2). The operator's default when suspending is Let it finish. End it now ends the session immediately. End it now and no notes is read-only for the tutor immediately, with no finalize window. If the session is allowed to finish on the timer, the tutor can always finalize notes. The 7 days start at session end, when `endedAt` is set.
 
 **Scheduler.** The scheduler sees the learner's full name and the brief, and not parent contact, consent detail, or notes. Seeing more means holding another role as well (admin or owner), not widening scheduler.
 
@@ -72,29 +76,18 @@ The rules behind this are in `AGENTS.md`, `.cursor/rules/exhaustive-testing-mand
 
 ---
 
-## Awaiting Andrew (2026-10-11 review)
+## Decided 2026-10-11
 
-A Sonnet 5-axis review returned STOP FOR ANDREW. The folds from that review are in this design. They are not new product decisions. The four questions below are unanswered. Stages that need an answer do not start. Nobody may guess. Do not choose an answer in code, in tests, or in a later edit of this file.
+Andrew answered the open design questions on 2026-10-11. Do not reopen them. Do not soften them. The review record is `docs/handoff/org-sales-stage1-handoff.md`. A second Sonnet pass on this design has not happened.
 
-A second Sonnet pass is still required before this rewrite is called verified. That pass has not happened. The review record is `docs/handoff/org-sales-stage1-handoff.md`.
+Stage 2 build starts only when Andrew says go. Stages 3, 5, and 7 are not waiting on an answer. Stage 4 still depends on stage 3.
 
-Stage 2 (staff UI) does not need the caps answer, the periodic-close answer, or the consent-row answer. This design pass does not start stage 2. The conductor stopped the build because the review returned these product calls.
-
-1. **Erasure of the org `ConsentRecord` row.** Blocks stage 7's erasure assertion. The facts and the question are in § 2.7.
-
-After erasure, do we keep the org consent row unchanged, as we do for a tutor's row, or delete it?
-
-2. **Periodic close.** Blocks only the no-browser close. End it now is an accepted remover action (Andrew 2026-10-11) and does not wait on this question. The facts and the question are in § 6.1. Do not add a sweeper in this design.
-
-When no browser is open, does a server job force-end the room, or is the pill plus refusing new activity enough until someone ends it?
-
-3. **Daily caps for org learners.** Blocks stage 3 learner-create limits. The facts and the question are in § 9. Do not pick a number.
-
-Do the 20-learner and 30-claim-email daily limits apply to an org owner or admin, or does an org get its own number?
-
-4. **Who an org learner can be.** Also blocks stage 3 (`inviteTargetKind`, `connect_self`, and the reinvite choice). The plan describes parent consent on the child consent page and does not say whether an organization can add an adult who consents themselves. The facts and the question are in § 2.3. Do not set `inviteTargetKind` and do not refuse `connect_self` until he answers.
-
-Are org learners in this finish only children (parent claim), or can an organization also add an adult who consents as themselves?
+1. **Consent rows after erasure.** Kept, for an organization row exactly as for a tutor row. A keyed one-way fingerprint of the account email is stored in stage 7. Details are in § 2.7.
+2. **A room with no browser.** No new background job. The first server touch after the deadline marks the session ended. Details are in § 6.1.
+3. **Daily caps.** Counted per organization, all staff combined. Tutors keep their own caps. Details are in § 9. Review the numbers later.
+4. **Who an org learner can be.** A self-learner or a child learner. All account types are supported. Details are in § 2.3.
+5. **Removing a tutor who is teaching live.** The warning offers three choices. Details are in § 6.2.
+6. **Suspension.** Mynk's action on the whole organization. Suspension uses the same three choices as removal. The operator's default when suspending is Let it finish. Details are in § 6.2. The suspension pill text stays proposed.
 
 ---
 
@@ -102,7 +95,7 @@ Are org learners in this finish only children (parent claim), or can an organiza
 
 After this branch is on master, Andrew can create an organization, invite its staff, and that organization can add learners, collect consent, and run scheduled live sessions. A math department is its own organization. There is no parent-org tree and no public "start an organization" signup. Andrew still creates the org; the school does not self-serve.
 
-Scheduling is the relationship (§ 0). A live org session requires a Mynk account. Consent to be online is collected at signup. A removed tutor's ended org sessions are read-only (§ 3, § 6.3). A session still open stays writable for upload and end until the § 6 deadline. A suspended org's live session shows the suspension pill and uses the clock in § 6. Whether a server job closes an abandoned room is awaiting Andrew.
+Scheduling is the relationship (§ 0). A live org session requires a Mynk account. Consent to be online is collected at signup. A removed tutor's ended org sessions are read-only (§ 3, § 6.3), with the notes exception in § 6.2. A session still open under "Let it finish" stays writable for upload and end until the § 6 deadline. A suspended org's live session, when the operator chose Let it finish, shows the suspension pill and uses the clock in § 6. The operator's default when suspending is Let it finish. A room with no browser is not closed by a background job (§ 6.1).
 
 Text-message two-factor is already live. It is not a gap in this finish.
 
@@ -158,11 +151,21 @@ New model `OrganizationLearner`, one-to-one with the org `Student`:
 
 There is one brief. The scheduler sees "the brief". Do not add `briefGrade`, `briefSubject`, or `briefGoals`. Those columns are not in the schema on this branch.
 
-Parent email stays on `Student.parentEmail`. The side table does not copy it. The create inputs are name, brief, and parent email.
+Parent email stays on `Student.parentEmail`. The side table does not copy it. Staff enter the name, the brief, who the invite is for, and that person's email.
 
-Org learner create requires a valid parent email, the same as `createStudent`. It is stored on `Student.parentEmail` and is the `intendedEmail` of the claim invite. `mintStudentClaimInvite` requires `recipientEmail`. A blank email is already rejected (`createStudent`: "A valid email address is required."; claim-invites: 422 `missing_invite_email`). That is the existing rule.
+Org learner create requires that email, the same existing rule as `createStudent`. It is stored on `Student.parentEmail` and is the `intendedEmail` of the claim invite. `mintStudentClaimInvite` requires `recipientEmail`. A blank email is already rejected (`createStudent`: "A valid email address is required."; claim-invites: 422 `missing_invite_email`). That is the existing rule.
 
-The plan describes parent consent on the child consent page and does not say whether an organization can add an adult who consents themselves. AWAITING ANDREW (item 4 above): Are org learners in this finish only children (parent claim), or can an organization also add an adult who consents as themselves? Do not set `inviteTargetKind` and do not refuse `connect_self` until he answers. Do not choose.
+**Who an org learner can be (Andrew 2026-10-11).** An org learner can be a self-learner or a child learner. All account types are supported. When staff add a learner they choose "the student" or "their parent", the same way a tutor chooses today. The invite email is the student's own email for a self-learner, or the parent's email for a child. That choice is stored as `inviteTargetKind` on the invite, the same values a tutor invite already uses. Do not refuse a self-learner. Do not add a second invite implementation.
+
+The organization's link to a person is its own org-owned `Student` row pointing at the learner profile, the same shape as a tutor's student row. One row per organization per learner profile (§ 2.2). A parent with several children at one organization has several rows under the same parent account. The same child can also have a row with a tutor and rows with other organizations.
+
+The scheduler books the student by name. On the day, the parent signs in and joins for the child, or the child uses the family login if the parent made one. That is today's schedule bridge. Do not change it.
+
+A self-learner accepts the general agreement at setup and gets the four switches in Settings. That consent is written to the organization. A parent consents on the child consent page. That consent is written to the organization. The agreement text and the four switches are § 4.4 and § 4.1. Do not write a second consent path.
+
+Duplicate before claim: the organization may add the same person twice before either invite is claimed. `learnerProfileId` is still null, so § 2.2 allows both rows. The second claim fails the uniqueness rule and shows this proposed message, not an accepted quote: "This student is already set up with this organization. Ask the organization to remove the extra entry."
+
+The reinvite that passes `student.adminUserId!` is `retryStudentClaimInvite` in `src/app/admin/students/actions.ts`. An earlier draft of this design named `students/[id]/actions.ts`. That file does not contain that assertion. Stage 3 gives this reinvite an organization-aware caller through `mintStudentClaimInvite`. It does not add a second invite implementation.
 
 One writer, `writeOrgLearnerName`, in `src/lib/org-learner.ts`, is the only function that writes `givenName`, `familyName`, and `Student.name` for an org row. `Student.name` is the trimmed given name, a single space, and the trimmed family name. A test asserts the two never drift. No other writer sets `Student.name` on an org row.
 
@@ -231,18 +234,35 @@ The grep guard covers Student-scope queries only. It fails if a student-scope qu
 
 The operator still performs erasure at `/admin/erasure`. An org is not the only way a person asks (§ 0).
 
+**Decided (Andrew 2026-10-11).** Do not move all identity into separate tables that hold only personal information. Content is deleted outright. Identity columns are scrubbed in place, as today. The guards below make that checkable.
+
+Erasure deletes and clears by ownership, the erased learner's ids and the account's ids. It never matches text. Free text on that learner's own rows is cleared because the row belongs to them, not because the text contains their name. That includes `ScheduledSession.subject`, `notes`, and `location`, and any other free text tied to their rows.
+
 `scrubDbContent` in `src/lib/erasure/process-erasure-job.ts` already sets `Student.name` to the existing deleted-learner name and `parentEmail` to null. Extend that same function. Do not add a second erasure path.
 
-The job also scrubs:
+The `OrganizationLearner` row is deleted outright. Do not scrub the name and brief and leave the row. `Student.name` is still scrubbed in place. The test that `Student.name` equals the side-table name does not apply once that row is gone.
 
-- the `OrganizationLearner` given name, family name, and brief
-- scheduled-session free text on that student: `ScheduledSession.subject`, `notes`, and `location`
+An unclaimed org learner has no `LearnerProfile` and so no erasure scope. Owner or admin removal of an unclaimed learner is out of scope here.
 
-The `ScheduledSession` free-text scrub runs for all `studentId`s, not only org rows (today's job never scrubs it). Scrub sets `OrganizationLearner` given and family name so the `Student.name` equals-the-writer test still holds, or that test excludes `erasedAt` rows. The stage does not have to pick which of those two keeps the test honest. An unclaimed org learner has no `LearnerProfile` and so no erasure scope. Owner or admin removal of an unclaimed learner is out of scope here.
+**Consent rows are kept** after erasure, for an organization row exactly as for a tutor row. The reason, for this design, is an audit trail and a legal defense. The row shows what we were allowed to collect, and when. The kept row holds no personal information. It holds ids, the four on or off answers, who set them by id, and when. Today `process-erasure-job.ts` does not touch `ConsentRecord`, and the tutor-row test asserts the row is retained. Stage 7 asserts the same retain for the organization row. Do not delete it.
 
-One integration test erases an org learner end to end and asserts that scrub list. It does not assert a consent-row outcome until Andrew answers.
+**Fingerprint.** At erasure, before identity is scrubbed, store a keyed one-way hash (HMAC) of the account email in its own row, linked to the erasure record. The account email is the parent's email, or the self-learner's own email. The key is a server secret in an environment variable. The key is never stored in the database. The hash cannot be turned back into the email. If someone later comes forward, we hash the email they give and find the matching consent rows and erasure record. Stage 7 builds this. Stage 7 does not name the variable in this design; Andrew did not name it. The stage 7 commit adds that environment variable to `docs/PLATFORM-ASSUMPTIONS.md`. Do not edit that file before stage 7.
 
-AWAITING ANDREW (item 1 above): Today `process-erasure-job.ts` does not touch `ConsentRecord`. The tutor-row test asserts the row is retained untouched. The row has no personal-data column. The plan's word "scrubs" does not match today's retain, and it does not say delete. After erasure, do we keep the org consent row unchanged, as we do for a tutor's row, or delete it? The stage 7 test asserts his answer. Do not choose. Stage 7's erasure assertion does not start until he answers.
+**Privacy** is updated to match in stage 7. This sentence is proposed for Andrew's review. It is not accepted copy: "After an account is deleted, we keep a record of the consent choices that were made and a one-way fingerprint of the account email, so we can answer questions about consent later. The fingerprint cannot be turned back into the email."
+
+Counsel reviews the fingerprint and the keeping of consent rows when Andrew has counsel. The list is `docs/LEGAL-SYNC.md`, Questions for counsel. Do not start a second list.
+
+**Guard 1.** A registry classifies every database column as personal or not personal. A test fails if a column is unclassified. A second test fails if erasure does not clear or delete every personal column for the erased scope.
+
+**Guard 2.** An end-to-end test seeds a learner with a unique marker string in the name, the email, and free text. It runs erasure. It searches every text column in every table for the marker. Any hit fails.
+
+**Guard 3 (Andrew 2026-10-11).** The same test seeds a second learner with exactly the same name and similar email-like text. It erases the first learner. It asserts every row of the second learner is unchanged. Names are not unique. Erasure must never touch another learner's data.
+
+**Copies outside the database.** Stage 7 writes an inventory. For each place it says what we delete, what we cannot delete, and what the privacy copy says. The places are: Google Calendar events on the tutor's calendar (first name and last initial), the ICS feed, sent email and outbox email, application logs, OpenAI, Vercel Blob, Neon restore history (backups until the window passes), and preview and test databases. Stage 7 must check how today's erasure handles outbox emails and Google events, and report that. Unresolved items are added to the counsel list in `docs/LEGAL-SYNC.md`. Do not guess them in this design.
+
+**Billing.** When billing is built, billing rows reference ids only. They never store names or emails. Billing itself is not in this finish (§ 12).
+
+One integration test erases an org learner end to end and asserts this section: side table deleted, consent row kept, free text cleared by ownership, fingerprint row present and not reversible from the database, and guards 1 through 3 green.
 
 ### 2.8 Status-change time
 
@@ -272,7 +292,7 @@ Org sessions are created only from an appointment (`ScheduledSession`). There is
 `resolveOrgSessionAccess` returns read-write, read-only, or denied:
 
 - **While the tutor is an active member** (`OrganizationMember.removedAt` null) and `approvalStatus` is `APPROVED`, and the caller is the session's tutor (`WhiteboardSession.adminUserId`): read and write that session. Notes, replay, audio, and transcript for sessions they taught. They never receive parent email. The loader must not select `Student.parentEmail`.
-- **After removal** (`removedAt` set): read-only applies to ended sessions. A removed instructor's session with `endedAt` null stays writable for upload and `endWhiteboardSession` until its § 6 deadline. Once that session has ended, it is read-only. Personal students are untouched. No code in the removal path reads or writes a `Student` with `adminUserId` set. An operator `revokeOrgGrantedApprovals` does not cut a session already live.
+- **After removal** (`removedAt` set): read-only applies to ended sessions, with the notes exception in § 6.2. If the remover chose Let it finish, a session with `endedAt` null stays writable for upload and `endWhiteboardSession` until its § 6 deadline. If the remover chose End it now and no notes, the session is read-only for the tutor immediately, there is no finalize window, and uploads already on their way still land. Personal students are untouched. No code in the removal path reads or writes a `Student` with `adminUserId` set. An operator `revokeOrgGrantedApprovals` does not cut a session already live.
 - **Owner and admin** of the organization can open any learner record of that organization (full name, the brief, parent email, because the organization entered it). The org-sales finish plan (Andrew-approved, section "From the earlier sequencing plan") says: "Owner and admin can open the learner record they created. They do not open the board, the audio, or the note." "The record they created" is the org role, not a per-creator lock. That record is the organization learner screen, not a grant on `resolveOrgSessionAccess`. § 0 says seeing more than the scheduler sees means holding admin or owner, which includes notes in that "more." The note line is that plan sentence.
 - **The access cut is removal** (§ 0). Dropping the `instructor` role without setting `removedAt` is not the cut. Booking a different tutor is another appointment, not an "after unassignment" state.
 
@@ -306,15 +326,15 @@ Org claim is authorized by an owner or admin of that org. Consent from the claim
 
 The parent consent editor lists the organization by name, with the same edit and withdraw behavior as a tutor row. One component, parameterized. The four switches are the existing toggles.
 
-Nit, not a product decision: the claim-complete `attach_existing` unique-violation path answers `already_linked_to_tutor`. For an org row that label is wrong. Stage 3 maps it to a specific org sentence and lists that sentence in the handoff. Stage 3 writes it plainly and lists it. This design does not invent the sentence.
+Nit, not a product decision: the claim-complete `attach_existing` unique-violation path answers `already_linked_to_tutor`. For an org row that label is wrong. Stage 3 uses the proposed sentence in § 2.3 and lists it in the handoff. Do not invent a different sentence.
 
-Nit, not a product decision: `students/[id]/actions.ts` reinvite uses `student.adminUserId!`, which throws on an org row. Whether stage 3 gives that path an org-aware behavior or a typed refusal depends on item 4, because an adult who consents as themselves is a different invite from a parent claim. Do not pick which until he answers. Do not build a second invite path in this design.
+The reinvite path is § 2.3. It calls `mintStudentClaimInvite` with an organization-aware owner. It does not get a second invite implementation.
 
 ### 4.2 Pending or suspended org
 
 A pending or suspended org cannot start a new session, including a room created just before the status change. `startWhiteboardSession` re-checks status. A session already live when the status changes uses the § 6 timer. It is not a new start.
 
-The org status, membership, and approval re-check and the PENDING→ACTIVE `updateMany` run in one transaction under the existing `lockOrg` row lock. Stage 5 has a test for Start racing suspension, and for a double-submitted removal being idempotent. The no-browser close does not start until Andrew answers the periodic-close question. End it now does not wait on that question.
+The org status, membership, and approval re-check and the pending-to-active `updateMany` run in one transaction under the existing `lockOrg` row lock. Stage 5 has a test for Start racing suspension, and for a double-submitted removal being idempotent. A room with no browser is § 6.1. There is no new background job.
 
 ### 4.3 Live sessions off
 
@@ -338,7 +358,7 @@ Settings: the same four switches the parent sees. Audio help text:
 
 Existing self-learners are treated as having agreed (Andrew 2026-10-11). They get the off switches, with no prompt.
 
-The migration backfills a version-1 `ConsentRecord` (all four toggles true, `setByAccountHolderId` = the profile's account holder, capture method marked presumed rather than ticked) for every existing self-learner and tutor link that has no record. The five sites that skip the toggle today must read the record after the backfill: `assertEffectiveConsent`, both branches of `resolveModeAwareAudioRecordingConsent`, `createSessionConsentSnapshot`, `assertConsentRecordExists`, `assertConsentFromLiveRecord`. Stage 3 seeds a pre-migration self-learner with no record and asserts recording still works and the off switch is honored. Stage 3 does not start until Andrew answers the questions that block it.
+The migration backfills a version-1 `ConsentRecord` (all four toggles true, `setByAccountHolderId` = the profile's account holder, capture method marked presumed rather than ticked) for every existing self-learner and tutor link that has no record. The five sites that skip the toggle today must read the record after the backfill: `assertEffectiveConsent`, both branches of `resolveModeAwareAudioRecordingConsent`, `createSessionConsentSnapshot`, `assertConsentRecordExists`, `assertConsentFromLiveRecord`. Stage 3 seeds a pre-migration self-learner with no record and asserts recording still works and the off switch is honored. An org self-learner uses this same agreement and these same four switches. The consent row is the organization's (§ 2.3).
 
 Audio off for a self-learner works the same as for a child (Andrew 2026-10-11, replacing the 2026-10-10 wording that dropped the tutor's microphone online). Online, their voice is left out of the saved recording, and the tutor's microphone can still be saved and transcribed. In person, nothing is saved.
 
@@ -393,9 +413,9 @@ The client shows the pill. The deadline and removal state reach both clients on 
 
 The server refuses new activity after the deadline. A session already in flight keeps accepting the uploads that finish it, whether removal or suspension.
 
-Today `wb-asset`, checkpoint, and `active-ping` reject once `endedAt` is set, so a naive End it now would drop the instructor's own final uploads. For org-forced ends, `wb-asset` and checkpoint keep accepting that session's uploads for a stated window after `endedAt`. `active-ping` still refuses new activity once `endedAt` is set; the poll only carries the deadline and the removal state. A Playwright test proves the instructor's pending outbox lands after End it now. The window length is an implementation cap named in one place, not an Andrew number, unless he sets one when he answers the periodic-close question. Do not copy the number. Do not choose the number in this design.
+Today `wb-asset`, checkpoint, and `active-ping` reject once `endedAt` is set, so a naive End it now would drop the instructor's own final uploads. For org-forced ends, `wb-asset` and checkpoint keep accepting that session's uploads for a stated window after `endedAt`. `active-ping` still refuses new activity once `endedAt` is set; the poll only carries the deadline and the removal state. A Playwright test proves the instructor's pending outbox lands after End it now. Andrew did not set the window length. It stays an implementation cap named in one place. Do not copy the number.
 
-AWAITING ANDREW (item 2 above): `vercel.json` has no job that stamps `endedAt` on an open room. `endStaleWhiteboardSession` is tutor-authenticated and calls `assertOwnsWhiteboardSession`, so a cron cannot call it, and a removed tutor is read-only. When no browser is open, does a server job force-end the room, or is the pill plus refusing new activity enough until someone ends it? End it now does not wait on this question. Do not add a sweeper in this design. Do not specify a new cron. That waits on this question. Do not choose.
+**A room with no browser (Andrew 2026-10-11).** No new background job. A room with no browser is a stored session that was not marked ended. Nothing records without a browser. After the deadline the server refuses to start, join, or reopen that room. The first server touch after the deadline marks it ended through the single end-session core. That touch is the tutor opening the student page or the schedule, or someone trying to rejoin. Pending uploads that finish the session are still accepted. A room nobody touches again never gets its notes drafted. That is the same consequence as a personal session nobody touches again today. Do not add a sweeper. Do not add a cron.
 
 The force-end must not wait for `SESSION_SAFETY_MAX_SECONDS` (8 hours).
 
@@ -413,20 +433,31 @@ Removal, Let it finish, student pill (Andrew 2026-10-11):
 
 The suspension pill text in § 0 is a description, not a quoted UI sentence. Keep those words: a pill that the session will force end because the organization that set up the tutoring has had its account suspended.
 
-Nit, not a product decision: the displayed sentence is proposed for Andrew's review, capitalized as a sentence, and is not an accepted quote. Proposed display string: "This session will end soon because the organization that set up this tutoring has had its account suspended."
+The displayed sentence stays proposed for Andrew's review. It is not an accepted quote: "This session will end soon because the organization that set up this tutoring has had its account suspended."
 
-§ 0 says taking a tutor off a live session is a deliberate cancel, not something that falls out of unassigning. Andrew 2026-10-11 is that cancel: the remover is warned and chooses. Do not implement removal as "the session always runs to the hour" and do not implement it as an assignment row.
+**Why Mynk suspends the whole organization (Andrew 2026-10-11).** Nonpayment, the contract ended, a terms violation, or safety or security. These are organization-level. They are not something the individual tutor did. In a violation or safety case the tutor could be part of it. Suspension uses the same three choices as removing a live tutor. The operator's default when suspending is Let it finish.
 
-- **Let it finish.** Same timer as suspension. Pills above.
-- **End it now.** The session ends immediately, the same way as cancelling a session in the middle. Uploads already in flight still finish, through the stated window after `endedAt` in § 6.1. End it now is an accepted remover action (Andrew 2026-10-11). It does not wait on the question of a close when no browser is open.
+§ 0 says taking a tutor off a live session is a deliberate cancel, not something that falls out of unassigning. Andrew 2026-10-11 is that cancel: the remover is warned and chooses one of three. Do not implement removal as "the session always runs to the hour" and do not implement it as an assignment row.
 
-The choice applies to each live org session that instructor is teaching in that org. End it now ends those sessions in the same action as the removal. A session that is still open after removal is Let it finish, timed from `removedAt`.
+In every case, uploads already on their way still land.
+
+The same three choices apply to removing a live tutor and to Mynk suspending the organization. "No notes" is only a sub-option of ending the session immediately. If the session is allowed to finish on the timer, the tutor can always finalize notes for those 7 days. The 7 days start at session end, when `endedAt` is set, not at removal and not at the force-end deadline.
+
+- **Let it finish.** The timer runs. It is the end of the clock hour, with the 10-minute floor. The tutor may finalize notes. The 7 days start at session end, when `endedAt` is set. After that, the notes are read-only. On removal, the two accepted removal pills apply. On suspension, the proposed suspension pill applies.
+- **End it now, and the tutor may finalize notes.** The session ends immediately, the same way as cancelling a session in the middle. The tutor may finalize notes. The 7 days start at session end, when `endedAt` is set. After that, the notes are read-only.
+- **End it now, and no notes.** The session is read-only for the tutor immediately. There is no finalize window. The warning tells the remover that no notes will come from this session and that, once billing starts, the time still counts against the organization's billed time. This warning text is proposed for Andrew's review. It is not accepted copy: "No notes will come from this session. Once billing starts, this session's time still counts toward your organization's billed time."
+
+A tutor who may finalize (the first two choices) has 7 days to finalize the notes for that session. The 7 days start at session end, when `endedAt` is set, not at removal and not at the force-end deadline. After that, the session is read-only. Stage 5 tests that the window is `endedAt` plus 7 days.
+
+Future feature, not this finish: auto-finalize at that deadline, as if the tutor accepted the draft and saved it unchanged. Tracked in `docs/BACKLOG.md`. Ask organizations what they want to happen to notes when a session is ended early. The questions are in `docs/interviews/ORG-INTERVIEW-GUIDE.md`.
+
+The choice applies to each live org session that instructor is teaching in that organization, and to each live session when Mynk suspends the organization. Both End it now choices end those sessions in the same action as the removal or the suspension. A session that is still open is Let it finish. Removal times that session from `removedAt`. Suspension times it from `statusChangedAt`.
 
 ### 6.3 After the session
 
 Future appointments for that instructor are cancelled, including the Google event. While the org is suspended, upcoming rows say unavailable.
 
-After removal, read-only applies to ended sessions (§ 0, § 3). A removed instructor's session with `endedAt` null stays writable for upload and `endWhiteboardSession` until its § 6 deadline. An operator `revokeOrgGrantedApprovals` does not cut a session already live. Personal students are untouched.
+After removal, read-only applies to ended sessions (§ 0, § 3, § 6.2). A removed instructor on Let it finish, with `endedAt` null, stays writable for upload and `endWhiteboardSession` until the § 6 deadline. Notes finalizing follows § 6.2. An operator `revokeOrgGrantedApprovals` does not cut a session already live. Personal students are untouched.
 
 § 0 leaves a later org setting that may retain less, including nothing. That full-cutoff setting is not in this finish (§ 12). This finish builds read-only.
 
@@ -464,9 +495,9 @@ On this branch, slice 1 already has:
 
 The operator creates an org by the owner's email. The screen resolves that email to an `AdminUser` with `emailVerifiedAt` set. A clear error when that person has no verified account. Then `createOrganization({ ownerAdminUserId })`.
 
-Creating an organization sets a daily invite cap. Starting limit (Andrew 2026-10-11): a new organization may send 25 staff invites a day. Mynk can raise that or set unlimited, through `setOrganizationCaps`. Unlimited is an explicit operator choice, not the default.
+Creating an organization sets a daily invite cap. Starting limit (Andrew 2026-10-11): a new organization may send 25 staff invites a day. The learner cap and the claim-email cap are § 9. Mynk can raise any of the three, or set any of them unlimited, through `setOrganizationCaps`. Unlimited is an explicit operator choice, not the default.
 
-Today `createOrganization` uses `input.dailyInviteCap ?? null`, so an omitted cap is stored as unlimited. Stage 2 separates "omitted" from "unlimited". Omitted stores 25. Null is stored only when the operator explicitly chooses unlimited.
+Today `createOrganization` uses `input.dailyInviteCap ?? null`, so an omitted cap is stored as unlimited. Stage 2 separates "omitted" from "unlimited" for the staff-invite cap. Omitted stores 25. Null is stored only when the operator explicitly chooses unlimited. Stage 3 uses that same omitted-versus-unlimited rule for the learner cap and the claim-email cap.
 
 ### 7.2 Invites
 
@@ -530,7 +561,7 @@ Org staff use the same account and two-factor gate as a tutor. An org owner is n
 These holes are fixed on `feat/org-qol` before the branch is called ready. Each one gets a red-before / green-after test.
 
 - **Tutor add cap (Andrew 2026-10-11).** A tutor may add 20 new students and send 30 claim emails a day. The current `pendingBeforeMint` check only counts pending invites on a student that already exists, so brand-new students bypass it. One counter, one place. The user-visible refusal is Playwright. The count rule is Jest.
-- **Daily caps for org learners.** AWAITING ANDREW (item 3 above): The plan caps a tutor at 20 new students and 30 claim emails a day, and a new org at 25 staff invites a day. Those tutor caps are keyed to students the tutor owns. Org rows have `adminUserId` null, so they are not covered. Do the 20-learner and 30-claim-email daily limits apply to an org owner or admin, or does an org get its own number? Do not pick a number. This blocks stage 3 learner-create limits. Stage 3 does not start until he answers.
+- **Daily caps (Andrew 2026-10-11).** Counted per organization, all staff combined: 20 new learners, 30 claim emails, and 25 staff invites a day. Mynk can raise any of them, or set any of them unlimited, for that organization. Tutors keep their own caps: 20 new students and 30 claim emails a day. Review the numbers later. Org rows have `adminUserId` null, so the tutor counters do not cover them. The organization counters are separate. `dailyInviteCap` remains the staff-invite cap. Stage 3 adds the learner cap and the claim-email cap on `Organization`, beside `dailyInviteCap`, counted with `startOfZonedDay` in `Organization.timezone`. Null means unlimited, and only when the operator explicitly chooses it. Omitted on create stores the starting number. The user-visible refusal is Playwright. The count rule is Jest. An alert when an account or an organization reaches half a cap, or when bounces spike, is later instrumentation (`docs/BACKLOG.md`, CAP-BOUNCE-ALERTS). Detection is a later layer. The caps stay.
 - **Roster handle oracle.** Creating a child by `username@familyid` must not tell the caller whether that handle exists in another family. Same response for hit and miss, plus a rate limit.
 - **Session length.** An end time at or before the start is rejected. Today that input becomes about a 23-hour session. Org and personal booking use this one guard (§ 5).
 - **Signup errors.** A failed confirmation email returns a generic sentence and must not include SMTP setting names. The leak is `mailed.error` in `src/app/signup/actions.ts` (the action returns `mailed.error` when it is set).
@@ -555,7 +586,7 @@ Design accepted 2026-10-10, not built. The page is for doing sessions with that 
 - Notes holds paste-a-note. Send update email becomes **Email a reminder**, a dialog on the Notes page. The dialog says the notes and replay are already in the family's account, and the email only reminds them.
 - Record and Upload audio on the student page stay hidden and show as under construction / coming soon until they use the whiteboard chunking. Do not present them as a working recorder in this finish.
 - Parent linking and the share link go to a new Account & sharing page. Share-link copy says the family signs in. It does not say the link works without an account.
-- **Unset-up self learner card.** Shows when the tutor already has the student and that person has not finished their own account: "{name} needs to set up their account before you can start a session. Send the invite below. Once they accept and finish privacy preferences, Start session turns on." A child still gets the parent sentence. Today the page always shows the parent sentence, because it reads self-learner from a profile that does not exist yet. The invite's `inviteTargetKind` is where the page can learn it. That is the personal student page. Org learner create does not set `inviteTargetKind`, and does not refuse `connect_self`, until Andrew answers item 4. Before any invite has been sent, the card says (accepted 2026-10-11): "{name} needs an account before you can start a session. Send an invite below to {name}, or to their parent if {name} is a minor."
+- **Unset-up self learner card.** Shows when the tutor already has the student and that person has not finished their own account: "{name} needs to set up their account before you can start a session. Send the invite below. Once they accept and finish privacy preferences, Start session turns on." A child still gets the parent sentence. Today the page always shows the parent sentence, because it reads self-learner from a profile that does not exist yet. The invite's `inviteTargetKind` is where the page can learn it. That is the personal student page. Org staff choose "the student" or "their parent" (§ 2.3), and that choice is stored the same way. Before any invite has been sent, the card says (accepted 2026-10-11): "{name} needs an account before you can start a session. Send an invite below to {name}, or to their parent if {name} is a minor."
 - **Coming-soon label** where Record and Upload were (accepted 2026-10-11): "Recording and uploading audio here is coming soon. For now, record during a whiteboard session."
 - **Deletion card.** A tutor cannot start a data deletion and cannot stop one. The card only says the account is being deleted, sessions are off, and the date. No line asks the tutor to do anything, and it does not say "contact your operator." A parent or self-learner asks Mynk, and Mynk presses the button on the operator page.
 - Disconnecting the family puts the setup card back. Delete student removes the row immediately and shows no card.
@@ -589,7 +620,7 @@ The metadata-view line carries ids only. It cannot include parent email, because
 - Guest or anonymous join links.
 - An assignment table as the way a tutor owns a learner. Booking a different tutor next week is just another appointment.
 - Per-tutor parent approval on top of signup consent.
-- Org billing, org note prompts, a full-cutoff setting for removed tutors, and department hierarchy.
+- Org billing, org note prompts, a full-cutoff setting for removed tutors, and department hierarchy. When billing is built later, billing rows reference ids only, never names or emails (§ 2.7).
 - Production Neon migration. Production waits for an explicit go. Andrew approved (2026-10-11) migrating the preview database once the local gates pass.
 - A parent or self-learner button to request a data deletion or to stop one. They ask Mynk, and Mynk uses the operator page. In-app automation waits until that process is safe.
 
@@ -605,13 +636,13 @@ Stages 2–7. Stage 1 is this document. Each stage is red-before / green-after, 
 
 No duplicated services. The consent resolver, the session-access check, the env-admin helper, the name writer, and the deadline function each exist once. Components own their CSS. New screens are compositions of existing components and get an entry in `docs/V1-COMPONENT-LIBRARY.md`.
 
-Stages 3 and 7 do not start until Andrew answers the questions that block them. Stage 4 is blocked: depends on stage 3. It needs the org Student, org ConsentRecord, and consent resolver that stage 3 builds. Caps block learner create limits (stage 3). The adult-learner question also blocks stage 3 (`inviteTargetKind`, `connect_self`, and the reinvite choice). The periodic-close question blocks only the no-browser close in stage 5. End it now is an accepted remover action (Andrew 2026-10-11) and does not wait on that question. The consent-row erasure question blocks stage 7's erasure assertion. Stage 2 (staff UI) does not need those three answers (caps, periodic close, consent-row erasure). This design pass does not start stage 2. The conductor stopped the build because the review returned product calls.
+Stage 2 build starts only when Andrew says go. Stages 3, 5, and 7 are not waiting on an answer. Stage 4 still depends on stage 3. It needs the org Student, org ConsentRecord, and consent resolver that stage 3 builds.
 
 Each stage handoff lists tested versus assumed per platform (desktop Chrome, iOS Safari, Android Chrome). The org claim page, invite page, and student pill are marked assumed on iOS Safari until real hardware.
 
 ### Stage 2 — Staff can use slice 1
 
-Not started. Does not need the caps answer, the periodic-close answer, or the consent-row answer. This design pass does not start it.
+Not started. Stage 2 build starts only when Andrew says go.
 
 Prove: operator creates an org by owner email and gets a clear error when that person has no verified account; a new org stores daily invite cap 25; unlimited is stored only when the operator explicitly chooses it; invite email contains the org name and role; the invite page shows the org, the role, and the invited email; Sign in and Create account go to the teaching-account flow with that email prefilled and a return path that survives email confirmation; the wrong signed-in email gets a switch-account message; a holder sees a specific reason, not the generic unavailable page; activating the org lists waitlisted members for operator approval; scheduler and instructor cannot invite or set roles; the § 7.3 accept guards go red when removed.
 
@@ -619,17 +650,17 @@ Layer: Playwright for the brand-new teacher path, revoke, removed inviter, and t
 
 ### Stage 3 — Learners, claim, consent, self-learner
 
-Blocked. Does not start until Andrew answers the daily-cap question (learner create limits) and the adult-learner question (`inviteTargetKind`, `connect_self`, and whether reinvite is org-aware or a typed refusal). Do not guess either answer. Do not set `inviteTargetKind`. Do not refuse `connect_self`. Do not build a second invite path.
+Not waiting on an answer (Andrew 2026-10-11). Staff choose "the student" or "their parent" (§ 2.3). The reinvite goes through `mintStudentClaimInvite`. Do not add a second invite implementation. Do not refuse a self-learner.
 
-Prove, once those answers exist: one org `Student` (`organizationId` set, `adminUserId` null); the CHECK rejects both owners; `Student.organizationId` and `OrganizationLearner.organizationId` are `onDelete: Restrict`; one row per organization and learner profile, and the old tutor unique does not cover org rows; `writeOrgLearnerName` keeps `Student.name` in sync; parent email is required, the same existing rule as `createStudent` (§ 2.3); claim is owner or admin, the page shows the organization name, and consent is stored on `ConsentRecord` for the org, not the minter; the `already_linked_to_tutor` label on an org row is mapped to a specific org sentence that stage 3 writes plainly and lists (this design does not invent it); the parent editor lists the org by name and can edit and withdraw; the scheduler loader selects full name, brief, and a short blocked reason, and does not select parent email, toggles, or notes; the instructor sees notes, replay, audio, and transcript for sessions they taught and never receives parent email; env-admin listing requires both ids null, the caller's select includes `organizationId`, and the grep guard fails on a new inline Student-scope copy; the calendar callback route stays exempt; self-learner agreement checkbox and the four settings switches; the version-1 backfill in § 4.4; stage 3 seeds a pre-migration self-learner with no record and asserts recording still works and the off switch is honored; existing self-learners are not prompted; the self-learner skip in the audio check is gone; audio off matches § 4.4.
+Prove: one org `Student` (`organizationId` set, `adminUserId` null); the CHECK rejects both owners; `Student.organizationId` and `OrganizationLearner.organizationId` are `onDelete: Restrict`; one row per organization and learner profile, and the old tutor unique does not cover org rows; `writeOrgLearnerName` keeps `Student.name` in sync; the invite email is required, the same existing rule as `createStudent` (§ 2.3); claim is owner or admin, the page shows the organization name, and consent is stored on `ConsentRecord` for the org, not the minter; the second claim of a duplicate uses the proposed sentence in § 2.3; the parent editor lists the org by name and can edit and withdraw; a self-learner org learner accepts the general agreement and the four switches, and that consent is written to the org; a parent's consent on the child page is written to the org; the scheduler loader selects full name, brief, and a short blocked reason, and does not select parent email, toggles, or notes; the instructor sees notes, replay, audio, and transcript for sessions they taught and never receives parent email; env-admin listing requires both ids null, the caller's select includes `organizationId`, and the grep guard fails on a new inline Student-scope copy; the calendar callback route stays exempt; self-learner agreement checkbox and the four settings switches; the version-1 backfill in § 4.4; stage 3 seeds a pre-migration self-learner with no record and asserts recording still works and the off switch is honored; existing self-learners are not prompted; the self-learner skip in the audio check is gone; audio off matches § 4.4; the organization caps in § 9 refuse the 21st new learner, the 31st claim email, and count all staff together.
 
-Layer: Jest for scope, the resolver, uniqueness, and the env-admin where. Playwright for the branded claim and for self-learner audio off (online voice excluded; in person nothing saved), enrolled in `wb-regression`, tagged from `tests/test-tags.ts` (`@wb-recording` at minimum). The org claim page is marked assumed on iOS Safari until real hardware.
+Layer: Jest for scope, the resolver, uniqueness, the caps, and the env-admin where. Playwright for the branded claim, the duplicate-claim message, and self-learner audio off (online voice excluded; in person nothing saved), enrolled in `wb-regression`, tagged from `tests/test-tags.ts` (`@wb-recording` at minimum). The org claim page is marked assumed on iOS Safari until real hardware.
 
 Fragile: step back, then Sonnet review, before changing `resolveModeAwareAudioRecordingConsent` and the recording path.
 
 ### Stage 4 — Booking calls the bridge
 
-Blocked: depends on stage 3. It needs the org Student, org ConsentRecord, and consent resolver that stage 3 builds. The stage 4 handoff lists every direct `assertOwnsStudent` caller and states fail-closed or org-aware for each. `openScheduledWhiteboardSession`'s `assertOwnsStudent(owned.studentId)` is replaced for org rows, not supplemented.
+Depends on stage 3. It needs the org Student, org ConsentRecord, and consent resolver that stage 3 builds. The stage 4 handoff lists every direct `assertOwnsStudent` caller and states fail-closed or org-aware for each. `openScheduledWhiteboardSession`'s `assertOwnsStudent(owned.studentId)` is replaced for org rows, not supplemented.
 
 Prove: owner, admin, or scheduler can create, change, and cancel an appointment for an org learner and one current approved instructor; no personal `Student` is created for that instructor; Google event is the instructor's or skipped; calendar titles that show a first name use `OrganizationLearner.givenName` for org rows; overlap warns from `startAt` and `endAt`; the org week is `Organization.timezone`; `resolveOrgSessionAccess` lets that instructor open the workspace, start, end, upload, and write notes while they are an active member; for org rows the student layout admits only the workspace and notes routes the instructor needs; `getOrCreateWhiteboardForSchedule`, `createWhiteboardSessionCore`, and `startWhiteboardSession` use `resolveRecordedConsent` and re-check that the org is `active` and the instructor is still an approved member, in one transaction under the existing `lockOrg` row lock with the PENDING→ACTIVE `updateMany`; personal appointments keep today's owner and consent checks; a LIVE start is refused when live sessions are off and the button is hidden; in-person start stays allowed; an end time at or before the start is rejected (§ 9).
 
@@ -637,11 +668,11 @@ Layer: Jest for the bridge decision and the consent re-check. Playwright for boo
 
 ### Stage 5 — Removal and suspension
 
-The no-browser close is blocked until Andrew answers the periodic-close question. End it now is an accepted remover action (Andrew 2026-10-11) and does not wait on that question. Do not add a sweeper. Do not specify a new cron for a close when no browser is open.
+Not waiting on an answer (Andrew 2026-10-11). No new background job (§ 6.1). The remover's warning and the operator suspending the organization offer the same three choices (§ 6.2). The operator's default when suspending is Let it finish.
 
-Prove: removing a member cancels their future org appointments, including the Google event; read-only after removal applies to ended sessions; a removed instructor's session with `endedAt` null stays writable for upload and `endWhiteboardSession` until its § 6 deadline; `revokeOrgGrantedApprovals` does not cut a session already live; personal students are unchanged; for org-forced ends, `wb-asset` and checkpoint keep accepting that session's uploads for the stated window after `endedAt`, and a Playwright test proves the instructor's pending outbox lands after End it now; the remover who is taking someone off a live session is warned and chooses Let it finish or End it now; the two removal pill sentences in § 6.2 are used as written; the suspension display string stays the proposed sentence in § 6.2 until Andrew accepts it; suspension and not-yet-approved use `statusChangedAt` and the same deadline; the clock hour is the one containing `storedAt`; five minutes left in that hour yields 10 minutes; the deadline is a fixed absolute instant; Jest covers a half-hour-offset zone and a DST-change day; the server refuses new activity after the deadline; the deadline and removal state reach both clients on an existing per-session poll route, not the sync wire; Start racing suspension is tested, and a double-submitted removal is idempotent; while the org is suspended, upcoming rows say unavailable; the pill is additive chrome and does not rewrite `WhiteboardWorkspaceClient` engine behavior. Force-end of a room the browser never ended is not in this prove list until he answers.
+Prove: removing a member cancels their future org appointments, including the Google event; read-only after removal applies to ended sessions, with the notes window in § 6.2; Let it finish keeps a session with `endedAt` null writable for upload and `endWhiteboardSession` until its § 6 deadline; End it now and no notes is read-only for the tutor immediately, and uploads already on their way still land; the proposed choice-3 warning is the sentence in § 6.2; a tutor who may finalize has 7 days, and this stage tests that the window is `endedAt` plus 7 days; `revokeOrgGrantedApprovals` does not cut a session already live; personal students are unchanged; for org-forced ends, `wb-asset` and checkpoint keep accepting that session's uploads for the stated window after `endedAt`, and a Playwright test proves the instructor's pending outbox lands after End it now; the two removal pill sentences in § 6.2 are used as written; the suspension display string stays the proposed sentence in § 6.2 until Andrew accepts it; suspension uses the same three choices as removal, the operator's default when suspending is Let it finish, and End it now and no notes has no finalize window; suspension and not-yet-approved use `statusChangedAt` and the same deadline; the clock hour is the one containing `storedAt`; five minutes left in that hour yields 10 minutes; the deadline is a fixed absolute instant; Jest covers a half-hour-offset zone and a DST-change day; the server refuses new activity after the deadline; the first server touch after the deadline marks the room ended through the single end-session core; a room nobody touches is not ended by a job; the deadline and removal state reach both clients on an existing per-session poll route, not the sync wire; Start racing suspension is tested, and a double-submitted removal is idempotent; while the org is suspended, upcoming rows say unavailable; the pill is additive chrome and does not rewrite `WhiteboardWorkspaceClient` engine behavior.
 
-Layer: Jest for `orgForceEndDeadline`. Playwright for the suspension pill, the removal pills, read-only after an ended session, the outbox landing after End it now, and End it now, enrolled in `wb-regression` (`@wb-chrome` for the pill, plus a session tag for the force-end). The student pill is marked assumed on iOS Safari until real hardware.
+Layer: Jest for `orgForceEndDeadline`. Playwright for the suspension pill, the removal pills, the three-choice warning, read-only after an ended session, the outbox landing after End it now, and End it now with no notes, enrolled in `wb-regression` (`@wb-chrome` for the pill, plus a session tag for the force-end). The student pill is marked assumed on iOS Safari until real hardware.
 
 ### Stage 6 — Student detail page
 
@@ -651,11 +682,11 @@ Layer: Playwright for the main button order, Start hidden while a critical-step 
 
 ### Stage 7 — Honesty, erasure, and the gate
 
-Blocked. The erasure assertion does not start until Andrew answers whether the org `ConsentRecord` row is kept unchanged or deleted (§ 2.7). Do not choose. The plan's words "the parent consents" in the prove line below are the existing copy requirement. They are not an answer to item 4.
+Not waiting on an answer (Andrew 2026-10-11). Consent rows are kept. The side-table row is deleted. The fingerprint and the three guards are § 2.7. Privacy and terms must be accurate for both children and self-learners. The consent sentence is proposed, not accepted. Andrew reviews it before it is applied to the pages. The sentence is in § 14 and in the stage 1 handoff.
 
-Prove, once that answer exists: the accepted copy in the plan is applied as written (§ 14); privacy and terms say an organization owner, admin, and scheduler can see learners they did not personally teach, that the organization enters the learner, and that the parent consents in a Mynk account before any session; they do not claim a self-serve org signup, guest rooms, a cutoff switch, or retention automation; `docs/LEGAL-SYNC.md` is followed; erasure at `/admin/erasure` also scrubs the org learner side table and scheduled-session free text for all `studentId`s (§ 2.7); the stage 7 test asserts his answer for the org consent row; the § 9 holes that are not already proved in stages 2–4 are green (tutor 20/30 caps, roster-handle oracle, signup SMTP leak). Org learner create limits stay blocked on the daily-cap question until he answers it.
+Prove: the accepted copy in the plan is applied as written (§ 14); the proposed privacy sentence in § 2.7 is listed for Andrew and is not treated as accepted; privacy and terms say an organization owner, admin, and scheduler can see learners they did not personally teach, and that the organization enters the learner; the consent sentence is proposed and Andrew reviews it before it is applied to the pages: "Consent is recorded in a Mynk account before any session. A parent records it for a child. A self-learner records it for themselves."; they do not claim a self-serve org signup, guest rooms, a cutoff switch, or retention automation; `docs/LEGAL-SYNC.md` is followed; erasure at `/admin/erasure` deletes the org learner side table, keeps the consent row, clears free text by ownership, and stores the fingerprint (§ 2.7); guards 1, 2, and 3 are green; the outside-database inventory is written, today's outbox emails and Google events are checked, and unresolved items are added to the counsel list; the new environment variable is added to `docs/PLATFORM-ASSUMPTIONS.md` in this stage's commit; the § 9 holes that are not already proved in stages 2–4 are green (tutor 20/30 caps, organization caps, roster-handle oracle, signup SMTP leak).
 
-Layer: integration test for org-learner erasure. Playwright for the first-session walk below. Sonnet verification of tests-to-spec, soundness, and no duplication before the branch is called ready. Merge to master still waits for the full gate (`test:wb-sync`, `test:regression`, `npx next build`) and Andrew's smoke. Preview database migration is a separate go from production.
+Layer: integration test for org-learner erasure, including guards 2 and 3. Jest for the column registry (guard 1). Playwright for the first-session walk below. Sonnet verification of tests-to-spec, soundness, and no duplication before the branch is called ready. Merge to master still waits for the full gate (`test:wb-sync`, `test:regression`, `npx next build`) and Andrew's smoke. Preview database migration is a separate go from production.
 
 **One Playwright walk** of the first real session, one test, enrolled in `wb-regression`, tagged from `tests/test-tags.ts`. Authored once stages 2–5 exist. It is part of the stage 7 gate:
 
@@ -669,7 +700,15 @@ Stage 7 applies the accepted sentence list in the org-sales finish plan (homepag
 
 New UI strings that are not already decided get written plainly at build time and listed in the handoff so Andrew can review them before his smoke. That includes organization home, staff invites, the invite page, booking, the remover's warning, the scheduler's blocked reasons beyond the two examples in § 3, and the login-page line for private tutors and organization staff.
 
-Exact sentences already in this design and the plan are used as written. That includes the two accepted removal pills (§ 6.2), the student-page cards (§ 10), the self-learner agreement and audio help text (§ 4.4), and the plan's marketing and legal sentences. The suspension pill display string in § 6.2 is proposed, not an accepted quote.
+Exact sentences already in this design and the plan are used as written. That includes the two accepted removal pills (§ 6.2), the student-page cards (§ 10), the self-learner agreement and audio help text (§ 4.4), and the plan's marketing and legal sentences.
+
+These sentences are proposed for Andrew's review. They are not accepted quotes.
+
+- Suspension pill: "This session will end soon because the organization that set up this tutoring has had its account suspended."
+- End it now, no notes: "No notes will come from this session. Once billing starts, this session's time still counts toward your organization's billed time."
+- Duplicate claim: "This student is already set up with this organization. Ask the organization to remove the extra entry."
+- Privacy, after deletion: "After an account is deleted, we keep a record of the consent choices that were made and a one-way fingerprint of the account email, so we can answer questions about consent later. The fingerprint cannot be turned back into the email."
+- Consent, proposed. Andrew reviews it before it is applied to the privacy and terms pages: "Consent is recorded in a Mynk account before any session. A parent records it for a child. A self-learner records it for themselves."
 
 When the organization screens exist, the legal wave also revisits: independent-tutor positioning, "a tutor only sees their own students" in the privacy security list, and "helps private tutors" in "What Mynk is." Those follow the same one-sentence-at-a-time approval before master.
 

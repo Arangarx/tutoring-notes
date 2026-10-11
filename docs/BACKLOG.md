@@ -87,7 +87,7 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
    - **SEC-TUTOR-ADD-CAP** (Andrew 2026-10-06, deferred from feat/org-qol review): per-tutor daily cap on student adds/invite emails (prevents using our domain to spam and protects sender reputation); the existing pendingBeforeMint >= MAX check is dead for new students.
    - **SEC-ROSTER-HANDLE-ENUM** (Andrew 2026-10-06, deferred): createStudent by child username@familyid is a hit/miss oracle across families; needs rate limiting / indistinguishable responses before open signup.
    - **WB-SESSION-MAX-DURATION** (nit): end time earlier than start silently becomes ~23h session; consider a max-duration guard.
-7. **Comprehensive instrumentation** — Chunk 1 shipped [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4). Remainder: **TXC-SWEEP-METRICS** (§10); no COPPA-path events yet. Terms/Privacy stay 100% honest.
+7. **Comprehensive instrumentation** — Chunk 1 shipped [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4). Remainder: **TXC-SWEEP-METRICS** (§10); **CAP-BOUNCE-ALERTS** (§10); no COPPA-path events yet. Terms/Privacy stay 100% honest.
 
 **Background (not blocking the ordered list):** Wave A/B + tokens are done; Wave C/D dedupe (fragile WB/A/V — Opus-grade) remains open; agenticPipeline Phase 2; NativeSelect; design-system gallery. New work still = zero new duplication ([`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md)).
 
@@ -263,6 +263,10 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **SEC-ROSTER-HANDLE-ENUM** (Andrew 2026-10-06, deferred) — `createStudent` by child `username@familyid` is a hit/miss oracle across families. Needs rate limiting / indistinguishable responses before open signup.
 - **WB-SESSION-MAX-DURATION** (nit) — an end time earlier than the start silently becomes about a 23-hour session. Consider a max-duration guard.
 - **WB-PARENT-JOIN-AS-CHILD** — parent_session_select picker (§6)
+
+#### Feedback and bug reports
+
+- **FEEDBACK-BUG-BEFORE-PILOTS** (Andrew 2026-10-11) — Before unsupervised pilots, the public feedback and bug-report form needs stronger anti-spam than it has today, and it needs to let people enter anything they might want to, particularly for bugs. Today `/feedback` is public, with no account required. The form takes a type (feedback or bug report), an optional email, and one message of up to 10,000 characters. It uses a hidden honeypot field, a limit of 5 submissions an hour per address, and a spam score in `src/lib/feedback-spam.ts`. Flagged rows are stored as spam. Operators read them at `/admin/feedback`. Do not design past those two requirements.
 
 ### MAYBE — Andrew to prioritize
 
@@ -1307,7 +1311,7 @@ Operator action before V1.
 §4.1 PROPOSED — awaiting Andrew.
 
 **[P1][LEGAL] CONSENT-LEGAL-CONSULT**  
-VPC method, OpenAI processor status, retention timeframe. Pack: [`docs/coppa-compliance-research-2026-05-31.md`](handoff/coppa-compliance-research-2026-05-31.md) → [`docs/LEGAL-SYNC.md`](LEGAL-SYNC.md).
+VPC method, OpenAI processor status, retention timeframe. Questions for counsel, including the 2026-10-11 erasure fingerprint, live in [`docs/LEGAL-SYNC.md`](LEGAL-SYNC.md) under Questions for counsel. Do not start a second list. Research pack: [`docs/coppa-compliance-research-2026-05-31.md`](handoff/coppa-compliance-research-2026-05-31.md).
 
 **[P1][LEGAL] Umbrella + product privacy retention (§312.10)**  
 Honest interim on `/privacy`; mortensenapps sync.
@@ -1891,6 +1895,9 @@ Remainder: Phase 2 cron/API reconciliation. Phase 1 page shipped.
 **[P2][OPS] Full product usage instrumentation — NEAR-IMMEDIATE POST-MASTER**  
 First-party, learner-type-keyed; sub-learner zero 3rd-party egress. Reframes PostHog bootstrapper.
 
+**[P2][OPS] CAP-BOUNCE-ALERTS — half-cap and bounce alerts (Andrew 2026-10-11)**  
+Alert when an account or an organization reaches half of a daily cap, or when bounces spike. Detection is a later layer. The caps themselves stay. Not part of the org stage build.
+
 **[P2][OPS][REC] TXC-SWEEP-METRICS — transcribe-sweep usefulness (Andrew 2026-08-28)**  
 Remainder: metrics + decision gate. Cadence `*/15` already in `vercel.json`.
 
@@ -2044,6 +2051,9 @@ See [`docs/COMMERCIAL-LAUNCH-CHECKLIST.md`](COMMERCIAL-LAUNCH-CHECKLIST.md).
 
 **[P3][GTM] Master plan Phases 7–12**  
 Status model, Stripe, org MVP, etc. — roadmap waves 4–5.
+
+**[P3][GTM] Auto-finalize notes when the finalize window ends (Andrew 2026-10-11)**  
+Future. When a removed tutor was allowed to finalize notes and the deadline passes, finalize automatically as if the tutor had accepted the draft and saved it unchanged. Not in the current org finish. Ask organizations whether they want this. See [docs/interviews/ORG-INTERVIEW-GUIDE.md](interviews/ORG-INTERVIEW-GUIDE.md).
 
 ---
 

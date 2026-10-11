@@ -1,5 +1,7 @@
 # Sarah call prep
 
+General tutor interviews use [docs/interviews/TUTOR-INTERVIEW-GUIDE.md](interviews/TUTOR-INTERVIEW-GUIDE.md). This file stays the record for the current pilot tutor.
+
 > **Purpose.** Durable home for questions that need Sarah's input before downstream design / product decisions can land. Rolling doc — newest call section at the top, prior calls captured below with the answers we got. Each open question links to what it gates so we don't forget *why* we're asking.
 
 ---

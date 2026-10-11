@@ -77,7 +77,9 @@ Bar to archive a doc or section: **(a)** its still-valid content is provably cap
 
 | Doc | What's in it | When to read |
 |---|---|---|
-| [docs/SARAH-CALL-PREP.md](SARAH-CALL-PREP.md) | **Living doc** — next-call open questions + answered questions from all prior calls (newest at top) | Before any Sarah call or when acting on pilot questions |
+| [docs/SARAH-CALL-PREP.md](SARAH-CALL-PREP.md) | **Living doc** — next-call open questions + answered questions from all prior calls (newest at top). General tutor interviews use the tutor guide below. | Before any Sarah call or when acting on pilot questions |
+| [docs/interviews/TUTOR-INTERVIEW-GUIDE.md](interviews/TUTOR-INTERVIEW-GUIDE.md) | Open questions for tutor interviews. Find what tutors need. Do not lead them toward what we already built. | Before a tutor interview that is not the current pilot |
+| [docs/interviews/ORG-INTERVIEW-GUIDE.md](interviews/ORG-INTERVIEW-GUIDE.md) | Open questions for organization interviews. Find what organizations need. Do not lead them toward what we already built. | Before an organization interview |
 | [docs/BACKLOG.md](BACKLOG.md) §1 NOW / Sarah-facing | Actionable pilot feedback and Sarah-merge gate items | When triaging pilot-driven work |
 | *Historical pilot/orchestrator reports* | Dated call captures and session retrospectives (e.g. 2026-05-26 pilot feedback) | Archived; see Archive section |
 
@@ -100,7 +102,7 @@ Bar to archive a doc or section: **(a)** its still-valid content is provably cap
 
 | Doc | What's in it | When to read |
 |---|---|---|
-| [docs/LEGAL-SYNC.md](LEGAL-SYNC.md) | Sync protocol between the product's `/privacy` + `/terms` facades and the canonical umbrella at `mortensenapps.com`; quarterly drift review cadence; section classification table (umbrella-derived vs. product-specific) | Before touching legal facades, Gmail OAuth consent flow, or any external policy reference |
+| [docs/LEGAL-SYNC.md](LEGAL-SYNC.md) | Sync protocol between the product's `/privacy` + `/terms` facades and the canonical umbrella at `mortensenapps.com`; quarterly drift review cadence; section classification table (umbrella-derived vs. product-specific). Questions for counsel live in that file, not in a second list. | Before touching legal facades, Gmail OAuth consent flow, or any external policy reference |
 | `src/app/privacy/page.tsx` | Local subordinate privacy facade — product-specific sections supplement the umbrella; NOT the registered canonical OAuth URL | Edit only per [docs/LEGAL-SYNC.md](LEGAL-SYNC.md) protocol |
 | `src/app/terms/page.tsx` | Local subordinate terms facade — same subordinate relationship as privacy | Edit only per [docs/LEGAL-SYNC.md](LEGAL-SYNC.md) protocol |
 | [docs/legal-drafts/umbrella-pending-2026-05-18.md](legal-drafts/umbrella-pending-2026-05-18.md) | Drafted umbrella additions NOT yet shipped to `mortensenapps.com` | Before work that depends on umbrella PostHog or AI-edit-signal copy (see [docs/BACKLOG.md](BACKLOG.md)) |

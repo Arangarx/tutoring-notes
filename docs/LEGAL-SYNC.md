@@ -312,3 +312,10 @@ repo lands a verification-team-driven change before the deploy):
   `mortensenapps.com/*` to `www.mortensenapps.com/*` to exact-match
   the consent-screen registration. The earlier "pending action item"
   in this doc is now resolved (see "Confirmed state" section above).
+
+## Questions for counsel
+
+This is the list to take to legal counsel when Andrew has counsel. Do not start a second list. Add new questions here. These items are not legal advice, and they are not a claim that the product is compliant.
+
+- Keeping consent rows after an account is deleted, and storing a keyed one-way fingerprint of the account email. The fingerprint is a hash. It cannot be turned back into the email. The product decision is in [docs/handoff/org-learner-design.md](handoff/org-learner-design.md) § 2.7 (Andrew 2026-10-11). Counsel reviews it when Andrew has counsel.
+- Copies of personal information outside the database that erasure cannot clear. Stage 7 of the org learner design checks how today's erasure handles outbox emails and Google Calendar events, writes the inventory, and adds each unresolved item to this list. Do not add a guess before that check.
