@@ -16,7 +16,7 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-11: A later org invite does not error. The person passes through to the account and sees the existing organization link. The spare unclaimed row is closed. No learner sentence and no staff cleanup sentence. Stage 2 still waits for Andrew's go. |
+| **Last action completed** | 2026-10-11: A later invite passes through only when it is the same learner already tied to the organization. The same parent email can be a different child. That invite is a new learner, and both children stay. Stage 2 still waits for Andrew's go. |
 | **Next action(s)** | Stage 2 build waits for Andrew's go. Do not start it. Do not merge to master. Do not touch production Neon. Do not seed Sarah's or Tyson's emails. Proposed strings for his review are in `docs/handoff/org-sales-stage1-handoff.md`. |
 | **Open Andrew-confirms** | Stage 2 go. Proposed strings: fingerprint privacy sentence, consent sentence (parent or self-learner), End-now-no-notes warning, suspension pill. The duplicate invite has no sentence. Also still open: prod migration greenlight, Twilio campaign approval, Apple ICS on a real device, billable wording (Sarah). |
 | **MODEL RULE (Andrew 2026-10-06 11:08)** | **Opus does only Opus parts** (oracle design, verification judgment, merge calls). **All other hands work goes to Grok** (`grok-4.7-xhigh-fast`, set explicitly on every dispatch) — not Composer, not Opus. |

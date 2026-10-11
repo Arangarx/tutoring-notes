@@ -163,7 +163,12 @@ The scheduler books the student by name. On the day, the parent signs in and joi
 
 A self-learner accepts the general agreement at setup and gets the four switches in Settings. That consent is written to the organization. A parent consents on the child consent page. That consent is written to the organization. The agreement text and the four switches are § 4.4 and § 4.1. Do not write a second consent path.
 
-Duplicate before claim: the organization may add the same person twice before either invite is claimed. `learnerProfileId` is still null, so § 2.2 allows both rows until a claim. A later invite for someone already tied to that organization does not fail and does not show an error. The person passes through to their account and sees the existing organization link. The second invite does not create a second link. The spare unclaimed row is closed as a duplicate of that link, so nobody is asked to remove it. There is no learner-facing sentence and no staff-facing sentence for this case. Stage 3 tests the pass-through: the account shows one organization link, and the spare row is not a second learner.
+A later invite is not a duplicate just because the email matches. One parent can have several children at one organization. The parent email is not the match.
+
+- **Same learner, already tied to that organization.** The invite does not fail and does not show an error. The person passes through to their account and sees that existing link. The invite does not create a second link. The spare unclaimed row for that same learner is closed. Nobody is asked to remove it.
+- **A different child, even to the same parent email.** This is a new learner. The parent signs in and sets that child up. Both children stay linked to the organization. Do not close the row. Do not send them through as if it were the child they already have.
+
+The invite shows the child's name, so the parent can tell these apart. Stage 3 tests both: a second invite for the same learner leaves one link, and a second invite for a different child leaves two.
 
 The reinvite that passes `student.adminUserId!` is `retryStudentClaimInvite` in `src/app/admin/students/actions.ts`. An earlier draft of this design named `students/[id]/actions.ts`. That file does not contain that assertion. Stage 3 gives this reinvite an organization-aware caller through `mintStudentClaimInvite`. It does not add a second invite implementation.
 
@@ -706,7 +711,7 @@ These sentences are proposed for Andrew's review. They are not accepted quotes.
 
 - Suspension pill: "This session will end soon because the organization that set up this tutoring has had its account suspended."
 - End it now, no notes: "No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used."
-- A later invite does not add a sentence. The person passes through to the account and sees the existing organization link.
+- A later invite for the same learner does not add a sentence. They pass through to the account and see that existing link. An invite for a different child, even to the same parent email, is a new learner.
 - Privacy, after deletion: "After an account is deleted, we keep a record of the consent choices that were made and a one-way fingerprint of the account email, so we can answer questions about consent later. The fingerprint cannot be turned back into the email."
 - Consent, proposed. Andrew reviews it before it is applied to the privacy and terms pages: "Consent is recorded in a Mynk account before any session. A parent records it for a child. A self-learner records it for themselves."
 
