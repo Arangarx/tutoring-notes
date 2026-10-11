@@ -188,7 +188,7 @@ Prioritize **(hand-test frequency) × (blast radius)**. Target: **Playwright E2E
 
 ### Explicit non-goals (stay manual for now)
 
-- **iOS Safari** matrix (`docs/PHASE-2-IOS-SMOKE-MATRIX.md`) — Playwright WebKit ≠ real WebKit; keep hardware rows.
+- **iOS Safari** matrix (`docs/PHASE-2-IOS-SMOKE-MATRIX.md`) — Playwright WebKit is required automated coverage for iOS-student behavior (Andrew 2026-10-11); keep hardware rows only for what WebKit cannot reproduce (real toolbars, keyboard, multi-touch feel).
 - **Long-form 60–90 min transcribe** — `docs/SMOKE-LONG-FORM-TRANSCRIBE.md`; scheduled manual or dedicated job.
 - **PDF inv 8 in wb-regression** — quarantined until pdfjs headless fix (`BACKLOG`).
 
