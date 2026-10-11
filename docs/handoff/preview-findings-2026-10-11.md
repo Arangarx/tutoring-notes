@@ -32,7 +32,7 @@ Earlier design (`docs/handoff/org-qol-opus-design.md` Wave B item 3) called `/jo
 
 - The child home lists their own past session notes and replays.
 - When nothing is booked, the child sees an Upcoming sessions section that says nothing is scheduled. It is not hidden.
-- PIN change: open. Andrew asked what the argument against it is. Recommendation given: let the child change it after entering the current PIN; the parent can still reset it.
+- PIN change: decided. The child can change their own PIN after entering the current one. The parent can still reset it at any time and is notified when the child changes it. Edge cases (forgotten PIN, sibling knows the old PIN) are handled by the parent reset; revisit only if users raise them.
 - Privacy switches: open. Andrew leans toward all four, but asked whether a parent simply overrides a minor's preference.
 
 ## B. Consent wording
@@ -73,7 +73,7 @@ All eleven are still in the code. Several earlier "fixes" did not do what was as
 
 Fix order: quick, non-fragile 10, 5, 4, 9 first. Fragile 1, 2, 3, 6, 7, 8, 11 get a step-back plan and a Sonnet review before edits.
 
-**Andrew decided on 6 (2026-10-11):** the priority is that the other person's view box shows up quickly and accurately, including right after a board switch. Center marker versus coordinate grid is undecided; start with a "recenter view" button. Exact recenter target (the other person's view, or the board's content) still to confirm.
+**Andrew decided on 6 (2026-10-11):** the priority is that the other person's view box shows up quickly and accurately, including right after a board switch. Center marker versus coordinate grid is undecided; start with a tutor "recenter view" button that returns the tutor to the center of the board's content. Students do not get it; they already have the sync-to-tutor button.
 
 ## Status
 
