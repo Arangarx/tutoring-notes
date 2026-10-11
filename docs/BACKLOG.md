@@ -87,6 +87,7 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
    - **SEC-TUTOR-ADD-CAP** (Andrew 2026-10-06, deferred from feat/org-qol review): per-tutor daily cap on student adds/invite emails (prevents using our domain to spam and protects sender reputation); the existing pendingBeforeMint >= MAX check is dead for new students.
    - **SEC-ROSTER-HANDLE-ENUM** (Andrew 2026-10-06, deferred): createStudent by child username@familyid is a hit/miss oracle across families; needs rate limiting / indistinguishable responses before open signup.
    - **WB-SESSION-MAX-DURATION** (nit): end time earlier than start silently becomes ~23h session; consider a max-duration guard.
+   - **SEC-AUDIT-PIPELINE + PEN-TEST — RELEASE GATE** (Andrew 2026-10-11): we do not go out to new pilots, even after `feat/org-qol` is done, until (a) a full security audit is hooked into the pipeline as a standing gate (runs on changes, not one-off), and (b) comprehensive pen testing has been run, AI pen-testing tools included (Andrew: "AI pen testing is pretty damn thorough now"). Separate follow-up plan after `feat/org-qol`; not in the org-sales plan. Supersedes the P3 "Phase 10-pre external pen-test" timing below (was "before first paying customer").
 7. **Comprehensive instrumentation** — Chunk 1 shipped [`3e9cccf4`](https://github.com/Arangarx/tutoring-notes/commit/3e9cccf4). Remainder: **TXC-SWEEP-METRICS** (§10); **CAP-BOUNCE-ALERTS** (§10); no COPPA-path events yet. Terms/Privacy stay 100% honest.
 
 **Background (not blocking the ordered list):** Wave A/B + tokens are done; Wave C/D dedupe (fragile WB/A/V — Opus-grade) remains open; agenticPipeline Phase 2; NativeSelect; design-system gallery. New work still = zero new duplication ([`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md)).
@@ -1552,7 +1553,7 @@ Remainder: `api:<ip>` and `setup:<ip>`. Learner PIN/auth/2FA durable limiters sh
 Core shipped [`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095). Remainder: pin empty `PLAYWRIGHT_TEST_SECRET` in prod env.
 
 **[P3][LEGAL] Phase 10-pre external pen-test**  
-Before first paying customer.
+Before first paying customer. Now pulled forward: see **SEC-AUDIT-PIPELINE + PEN-TEST — RELEASE GATE** under Release priorities #6 (Andrew 2026-10-11).
 
 **[P2][LEGAL] Audio recording of minors — consent flow research**  
 Per jurisdiction before scale.
