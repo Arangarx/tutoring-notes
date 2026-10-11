@@ -15,7 +15,9 @@ import {
   EMAIL_TOKEN_TTL_MS_24H,
 } from "@/lib/crypto/session-tokens";
 import { isPlaywrightHarnessActive } from "@/lib/playwright-harness";
+import { writeHarnessMailUrl } from "@/lib/playwright-harness-mail";
 import { normalizeEmail } from "@/lib/normalize-email";
+import { safeRelativeReturnPath } from "@/lib/safe-return-path";
 
 export type ConsumeSignupVerifyResult =
   | { ok: true; adminUserId: string; replay: boolean }
@@ -56,9 +58,13 @@ async function persistSignupVerifyToken(adminUserId: string): Promise<{
   return { id: row.id, raw };
 }
 
-function verifyUrl(base: string, raw: string): string {
+function verifyUrl(base: string, raw: string, returnTo: string | null): string {
   const origin = base.replace(/\/$/, "");
-  return `${origin}/verify-email?type=admin&token=${encodeURIComponent(raw)}`;
+  const url = new URL(`${origin}/verify-email`);
+  url.searchParams.set("type", "admin");
+  url.searchParams.set("token", raw);
+  if (returnTo) url.searchParams.set("returnTo", returnTo);
+  return url.toString();
 }
 
 /**
@@ -69,11 +75,14 @@ export async function sendTutorSignupVerifyEmail(params: {
   adminUserId: string;
   email: string;
   baseUrl: string;
+  returnTo?: string | null;
 }): Promise<{ sent: boolean; error?: string; tokenId: string }> {
   const { id, raw } = await persistSignupVerifyToken(params.adminUserId);
-  const url = verifyUrl(params.baseUrl, raw);
+  const safeReturn = safeRelativeReturnPath(params.returnTo);
+  const url = verifyUrl(params.baseUrl, raw, safeReturn);
 
   if (isPlaywrightHarnessActive()) {
+    writeHarnessMailUrl("tutor-verify", params.email, url);
     evfLog(id, params.adminUserId, "sent");
     return { sent: true, tokenId: id };
   }
@@ -143,6 +152,7 @@ export async function consumeTutorSignupVerifyToken(
 export async function resendTutorSignupVerifyEmail(params: {
   email: string;
   baseUrl: string;
+  returnTo?: string | null;
 }): Promise<{ attempted: boolean }> {
   const email = normalizeEmail(params.email);
   if (!email) return { attempted: false };
@@ -159,6 +169,7 @@ export async function resendTutorSignupVerifyEmail(params: {
     adminUserId: admin.id,
     email,
     baseUrl: params.baseUrl,
+    returnTo: params.returnTo,
   });
   if (result.sent) {
     evfLog(result.tokenId, admin.id, "resent");

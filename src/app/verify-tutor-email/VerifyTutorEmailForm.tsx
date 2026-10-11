@@ -20,6 +20,7 @@ function errorCopy(code: string | null): string | null {
 export default function VerifyTutorEmailForm() {
   const searchParams = useSearchParams();
   const linkError = errorCopy(searchParams.get("error"));
+  const returnTo = searchParams.get("returnTo");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -49,7 +50,10 @@ export default function VerifyTutorEmailForm() {
             const res = await fetch("/api/auth/tutor/resend-verification", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email }),
+              body: JSON.stringify({
+                email,
+                ...(returnTo ? { returnTo } : {}),
+              }),
             });
             const data = (await res.json()) as { ok?: boolean; message?: string; error?: string };
             if (!res.ok || !data.ok) {

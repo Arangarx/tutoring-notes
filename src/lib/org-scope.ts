@@ -3,8 +3,9 @@ import "server-only";
 /**
  * Organization membership, invites, and roles.
  *
- * Log prefix: [org] org=<id> action=<action> actor=<adminUserId|email> inv=<id:8>
- * Never log an invite token.
+ * Log prefix: [org] org=<id> action=<action> actor=<adminUserId|operator> inv=<id:8>
+ * Never log an invite token or an email. When the operator has no AdminUser
+ * row, the actor field is the fixed marker "operator".
  *
  * Org roles do not grant AdminRole.ADMIN. assertOwnsStudent does not consult this module.
  */
@@ -47,6 +48,12 @@ export type AcceptOrgInviteResult =
 
 const UNAVAILABLE: AcceptOrgInviteResult = { ok: false, error: "invite_unavailable" };
 
+/** Starting staff-invite cap for a new organization. Omitted on create stores this. */
+const STARTING_DAILY_INVITE_CAP = 25;
+
+/** Logged when the operator has no AdminUser row. Never an email address. */
+const OPERATOR_ACTOR_MARKER = "operator";
+
 const ROLE_RANK: Record<OrgRole, number> = {
   instructor: 1,
   scheduler: 1,
@@ -55,7 +62,7 @@ const ROLE_RANK: Record<OrgRole, number> = {
 };
 
 function actorLabel(operator: OperatorIdentity): string {
-  return operator.adminId ?? operator.email;
+  return operator.adminId ?? OPERATOR_ACTOR_MARKER;
 }
 
 function orgLog(organizationId: string, action: string, fields: Record<string, string>): void {
@@ -109,6 +116,13 @@ function canGrantRole(actorRoles: OrgRole[], role: OrgRole): boolean {
   if (actorRoles.includes("owner")) return true;
   if (actorRoles.includes("admin")) return role === "scheduler" || role === "instructor";
   return false;
+}
+
+const ALL_ORG_ROLES: OrgRole[] = ["owner", "admin", "scheduler", "instructor"];
+
+/** Roles this member may put on an invite or another member. */
+export function rolesActorMayGrant(actorRoles: OrgRole[]): OrgRole[] {
+  return ALL_ORG_ROLES.filter((role) => canGrantRole(actorRoles, role));
 }
 
 function assertNextRoles(
@@ -226,7 +240,10 @@ export async function createOrganization(input: {
   const timezone = input.timezone ?? "America/Denver";
   assertIanaTimeZone(timezone);
   const maxMembers = input.maxMembers ?? null;
-  const dailyInviteCap = input.dailyInviteCap ?? null;
+  // Omitted stores the starting cap. Null is unlimited, and only when the
+  // caller passes null on purpose. Do not treat those as the same value.
+  const dailyInviteCap =
+    input.dailyInviteCap === undefined ? STARTING_DAILY_INVITE_CAP : input.dailyInviteCap;
   assertPositiveIntOrNull(maxMembers, "max_members");
   assertPositiveIntOrNull(dailyInviteCap, "daily_invite_cap");
 
@@ -255,8 +272,225 @@ export async function createOrganization(input: {
     },
     select: { id: true, status: true },
   });
-  orgLog(org.id, "created", { actor: createdByOperatorId, status: org.status });
+  orgLog(org.id, "created", { actor: actorLabel(operator), status: org.status });
   return { organizationId: org.id };
+}
+
+/**
+ * Operator screen: resolve an owner email to a verified teaching account.
+ * Missing and unverified are the same result. This does not create the org.
+ */
+export async function resolveVerifiedOrgOwner(
+  email: string
+): Promise<
+  | { ok: true; adminUserId: string }
+  | { ok: false; error: "no_verified_account" | "test_account" }
+> {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return { ok: false, error: "no_verified_account" };
+  const admin = await db.adminUser.findUnique({
+    where: { email: normalized },
+    select: { id: true, emailVerifiedAt: true, isTestAccount: true },
+  });
+  if (!admin || !admin.emailVerifiedAt) return { ok: false, error: "no_verified_account" };
+  if (admin.isTestAccount) return { ok: false, error: "test_account" };
+  return { ok: true, adminUserId: admin.id };
+}
+
+export type OrgInviteHolderView =
+  | {
+      kind: "open" | "expired" | "revoked" | "already_used";
+      organizationName: string;
+      roles: OrgRole[];
+      email: string;
+    }
+  | { kind: "unavailable" };
+
+/**
+ * What the person holding the invite link may see. Facts about the invite
+ * row only. Does not look up whether the invited email has an account.
+ */
+export async function readOrgInviteForHolder(
+  rawToken: string,
+  now = new Date()
+): Promise<OrgInviteHolderView> {
+  const trimmed = rawToken.trim();
+  if (!trimmed) return { kind: "unavailable" };
+  const invite = await db.organizationInvite.findUnique({
+    where: { tokenHash: hashToken(trimmed) },
+    select: {
+      email: true,
+      roles: true,
+      acceptedAt: true,
+      revokedAt: true,
+      expiresAt: true,
+      organization: { select: { name: true } },
+    },
+  });
+  if (!invite) return { kind: "unavailable" };
+  const facts = {
+    organizationName: invite.organization.name,
+    roles: invite.roles,
+    email: invite.email,
+  };
+  if (invite.acceptedAt) return { kind: "already_used", ...facts };
+  if (invite.revokedAt) return { kind: "revoked", ...facts };
+  if (invite.expiresAt <= now) return { kind: "expired", ...facts };
+  return { kind: "open", ...facts };
+}
+
+const STAFF_HOME_ROLES: OrgRole[] = ["owner", "admin", "scheduler"];
+
+function activeStaffHomeWhere(adminUserId: string) {
+  return {
+    adminUserId,
+    removedAt: null,
+    OR: STAFF_HOME_ROLES.map((role) => ({ roles: { has: role } })),
+  };
+}
+
+/** Owner, admin, or scheduler with an active membership. Instructors are not included. */
+export async function hasStaffHomeMembership(adminUserId: string): Promise<boolean> {
+  const count = await db.organizationMember.count({
+    where: activeStaffHomeWhere(adminUserId),
+  });
+  return count > 0;
+}
+
+/**
+ * Sign-in landing for organization staff.
+ * One organization opens its members and invitations page.
+ * More than one opens the organization list.
+ * A private tutor, or an instructor who is not also owner, admin, or scheduler, returns null.
+ */
+export async function staffHomeLandingPath(adminUserId: string): Promise<string | null> {
+  const rows = await db.organizationMember.findMany({
+    where: activeStaffHomeWhere(adminUserId),
+    select: { organizationId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (rows.length === 0) return null;
+  if (rows.length === 1) return `/admin/organization/${rows[0].organizationId}`;
+  return "/admin/organization";
+}
+
+export async function listStaffHomeOrganizations(): Promise<
+  Array<{
+    id: string;
+    name: string;
+    status: "pending" | "active" | "suspended";
+    roles: OrgRole[];
+  }>
+> {
+  const actor = await requireStaffHomeActor();
+  const rows = await db.organizationMember.findMany({
+    where: activeStaffHomeWhere(actor.adminId),
+    select: {
+      roles: true,
+      organization: { select: { id: true, name: true, status: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((row) => ({
+    id: row.organization.id,
+    name: row.organization.name,
+    status: row.organization.status,
+    roles: row.roles,
+  }));
+}
+
+async function requireStaffHomeActor(): Promise<{ adminId: string }> {
+  const scope = await requireStudentScope();
+  if (scope.kind !== "admin") notFound();
+  const session = await getServerSession(authOptions);
+  if (session?.user?.isImpersonating) notFound();
+  const admin = await db.adminUser.findUnique({
+    where: { id: scope.adminId },
+    select: { approvalStatus: true, isTestAccount: true },
+  });
+  if (!admin || admin.approvalStatus !== "APPROVED" || admin.isTestAccount) notFound();
+  return { adminId: scope.adminId };
+}
+
+export type OrgStaffHomeData = {
+  actor: { adminId: string; email: string; roles: OrgRole[] };
+  org: {
+    id: string;
+    name: string;
+    status: "pending" | "active" | "suspended";
+    dailyInviteCap: number | null;
+    maxMembers: number | null;
+  };
+  members: Array<{
+    id: string;
+    roles: OrgRole[];
+    adminUser: {
+      id: string;
+      email: string;
+      displayName: string | null;
+      approvalStatus: "WAITLISTED" | "APPROVED" | "REJECTED";
+      createdAt: Date;
+    };
+  }>;
+  invites: Array<{
+    id: string;
+    email: string;
+    roles: OrgRole[];
+    expiresAt: Date;
+  }>;
+  grantable: OrgRole[];
+};
+
+export async function loadOrgStaffHome(organizationId: string): Promise<OrgStaffHomeData> {
+  const actor = await assertOrgRole(organizationId, STAFF_HOME_ROLES);
+  const org = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      dailyInviteCap: true,
+      maxMembers: true,
+    },
+  });
+  if (!org) notFound();
+  const now = new Date();
+  const [members, invites] = await Promise.all([
+    db.organizationMember.findMany({
+      where: { organizationId, removedAt: null },
+      select: {
+        id: true,
+        roles: true,
+        adminUser: {
+          select: {
+            id: true,
+            email: true,
+            displayName: true,
+            approvalStatus: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.organizationInvite.findMany({
+      where: {
+        organizationId,
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      select: { id: true, email: true, roles: true, expiresAt: true },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+  return {
+    actor,
+    org,
+    members,
+    invites,
+    grantable: rolesActorMayGrant(actor.roles),
+  };
 }
 
 export async function setOrganizationStatus(

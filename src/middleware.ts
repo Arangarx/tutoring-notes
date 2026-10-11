@@ -14,7 +14,6 @@ import {
   isTutorExperiencePath,
   realAdminHomePath,
   shouldRedirectToTutorEmailVerify,
-  tutorExperienceLandingPath,
 } from "@/lib/admin-routing";
 import {
   applySignupIntentCookieToResponse,
@@ -304,26 +303,9 @@ export async function middleware(req: NextRequest) {
       return headersFor(NextResponse.redirect(home), pathname);
     }
 
-    // TUTOR sessions (real login, e.g. Sarah) landing on /admin dashboard → send to workspace.
-    // Page-level redirect in page.tsx already handles this for SSR, but middleware catches it
-    // early (avoids a double-render and gives Sarah a clean redirect on direct URL entry).
-    if (
-      mode === "tutor-experience" &&
-      pathname === realAdminHomePath() &&
-      !token.isImpersonating
-    ) {
-      // Only redirect TUTOR role — impersonating sessions get the same treatment via page.tsx
-      // (the dashboard is already blocked from non-admin sessions at the panel level).
-      if (token.role === "TUTOR") {
-        console.log(
-          `[imp] route=${tutorExperienceLandingPath()} mode=tutor-experience role=TUTOR redirected-from=${pathname}`
-        );
-        const students = req.nextUrl.clone();
-        students.pathname = tutorExperienceLandingPath();
-        students.search = "";
-        return headersFor(NextResponse.redirect(students), pathname);
-      }
-    }
+    // Tutor landing stays on the /admin page. This layer cannot see organization
+    // roles, so it must not send every tutor to the student list. The page sends
+    // an owner, admin, or scheduler to the staff home, and everyone else to students.
   }
 
   // --- AccountHolder route protection (cookie-presence only — UX redirect) ---

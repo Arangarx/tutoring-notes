@@ -22,10 +22,18 @@ export async function POST(req: NextRequest) {
     typeof (body as { email: unknown }).email === "string"
       ? (body as { email: string }).email
       : "";
+  const returnTo =
+    typeof body === "object" &&
+    body !== null &&
+    "returnTo" in body &&
+    typeof (body as { returnTo: unknown }).returnTo === "string"
+      ? (body as { returnTo: string }).returnTo
+      : null;
 
   await resendTutorSignupVerifyEmail({
     email,
     baseUrl: getRequestBaseUrlSafe(req),
+    returnTo,
   });
 
   return NextResponse.json(OK);

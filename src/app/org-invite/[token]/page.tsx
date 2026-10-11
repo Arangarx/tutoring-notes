@@ -1,6 +1,10 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { acceptOrgInviteAction } from "./actions";
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
+
+import { OrgInviteCard } from "@/components/org/OrgInviteCard";
+import { authOptions } from "@/auth-options";
+import { normalizeEmail } from "@/lib/normalize-email";
+import { readOrgInviteForHolder } from "@/lib/org-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -10,20 +14,11 @@ export default async function OrgInvitePage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Organization invitation</CardTitle>
-          <CardDescription>Accept to join this organization with the invited role.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={acceptOrgInviteAction}>
-            <input type="hidden" name="token" value={token} />
-            <Button type="submit">Accept invitation</Button>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
-  );
+  const view = await readOrgInviteForHolder(token);
+  if (view.kind === "unavailable") redirect("/org-invite/unavailable");
+
+  const session = await getServerSession(authOptions);
+  const sessionEmail = session?.user?.email ? normalizeEmail(session.user.email) : null;
+
+  return <OrgInviteCard token={token} view={view} sessionEmail={sessionEmail} />;
 }

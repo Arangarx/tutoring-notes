@@ -21,6 +21,8 @@ export type BuildAdminNavLinksOpts = {
   showOperatorLinks?: boolean;
   showCostDashboard?: boolean;
   showDevTools?: boolean;
+  /** Owner, admin, or scheduler. Instructors do not get this link. */
+  showOrgStaffHome?: boolean;
   /**
    * AdminNav: `"always"`.
    * AdminSidebarNav: `"when-real-admin-home"`.
@@ -52,10 +54,14 @@ export function buildAdminNavLinks(opts: BuildAdminNavLinksOpts): AdminNavLink[]
   return [
     ...(includeDashboard ? [{ href: "/admin", label: "Dashboard" }] : []),
     ...(sessionMode === "tutor-experience" ? TUTOR_LINKS : []),
+    ...(opts.showOrgStaffHome
+      ? [{ href: "/admin/organization", label: "Organization" }]
+      : []),
     ...(opts.showOperatorLinks
       ? [
           { href: "/admin/feedback", label: "Feedback inbox" },
           { href: "/admin/tutor-approvals", label: "Tutor approvals" },
+          { href: "/admin/orgs", label: "Organizations" },
           { href: "/admin/design-system", label: "Design system" },
         ]
       : []),

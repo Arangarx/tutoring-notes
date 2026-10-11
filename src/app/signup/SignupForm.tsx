@@ -11,12 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
+import { teachingSignInHref } from "@/lib/teaching-account-href";
 import { signup } from "./actions";
 
 export default function SignupForm({
   googleOAuthAvailable,
+  initialEmail = "",
+  returnTo = null,
 }: {
   googleOAuthAvailable: boolean;
+  initialEmail?: string;
+  returnTo?: string | null;
 }) {
   const [state, formAction] = useActionState(signup, null);
   const [busy, setBusy] = useState(false);
@@ -34,10 +39,13 @@ export default function SignupForm({
 
   return (
     <>
+      <p className="mb-4 text-sm text-muted-foreground">
+        This account is for private tutors and organization staff.
+      </p>
       {googleOAuthAvailable ? (
         <div className="mb-4">
           <GoogleSignInSection
-            callbackUrl="/admin/pending-approval"
+            callbackUrl={returnTo ?? "/admin/pending-approval"}
             noticeVariant="sign-up"
           />
           <p className="my-4 text-center text-sm text-muted-foreground">or</p>
@@ -45,6 +53,7 @@ export default function SignupForm({
       ) : null}
 
       <form action={formAction} className="flex flex-col gap-4" onSubmit={() => setBusy(true)}>
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
       <div className="space-y-2">
         <Label htmlFor="signup-email">Email</Label>
         <Input
@@ -53,6 +62,7 @@ export default function SignupForm({
           type="email"
           autoComplete="email"
           required
+          defaultValue={initialEmail}
           className="min-h-11"
           aria-invalid={state?.error ? true : undefined}
           aria-describedby={state?.error ? formErrorId : undefined}
@@ -121,7 +131,10 @@ export default function SignupForm({
 
       <p className="text-center text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link href="/login" className="text-brand underline-offset-2 hover:underline">
+        <Link
+          href={teachingSignInHref(returnTo, initialEmail)}
+          className="text-brand underline-offset-2 hover:underline"
+        >
           Sign in
         </Link>
       </p>

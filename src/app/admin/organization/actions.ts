@@ -1,0 +1,91 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import type { OrgRole } from "@prisma/client";
+
+import { db } from "@/lib/db";
+import { sendOrgInviteEmail } from "@/lib/org-invite-mail";
+import {
+  OrgMutationError,
+  createOrgInvite,
+  removeOrgMember,
+  revokeOrgInvite,
+  setOrgMemberRoles,
+} from "@/lib/org-scope";
+
+const ROLE_VALUES = new Set<OrgRole>(["owner", "admin", "scheduler", "instructor"]);
+
+function readRoles(formData: FormData): OrgRole[] {
+  return formData
+    .getAll("roles")
+    .map(String)
+    .filter((role): role is OrgRole => ROLE_VALUES.has(role as OrgRole));
+}
+
+function staffHome(organizationId: string, code?: string): never {
+  const path = `/admin/organization/${organizationId}`;
+  redirect(code ? `${path}?error=${encodeURIComponent(code)}` : path);
+}
+
+export async function inviteStaffAction(formData: FormData): Promise<void> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const email = String(formData.get("email") ?? "");
+  const roles = readRoles(formData);
+  try {
+    const created = await createOrgInvite(organizationId, email, roles);
+    const org = await db.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true },
+    });
+    const mailed = await sendOrgInviteEmail({
+      to: email,
+      organizationName: org?.name ?? "this organization",
+      roles,
+      rawToken: created.rawToken,
+    });
+    if (!mailed.sent) {
+      try {
+        await revokeOrgInvite(organizationId, created.inviteId);
+      } catch {
+        // The screen still reports that the email was not sent.
+      }
+      staffHome(organizationId, "mail_failed");
+    }
+  } catch (err) {
+    if (err instanceof OrgMutationError) staffHome(organizationId, err.code);
+    throw err;
+  }
+  staffHome(organizationId);
+}
+
+export async function revokeStaffInviteAction(formData: FormData): Promise<void> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const inviteId = String(formData.get("inviteId") ?? "");
+  await revokeOrgInvite(organizationId, inviteId);
+  staffHome(organizationId);
+}
+
+export async function setStaffRolesAction(formData: FormData): Promise<void> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const adminUserId = String(formData.get("adminUserId") ?? "");
+  const roles = readRoles(formData);
+  try {
+    await setOrgMemberRoles(organizationId, adminUserId, roles);
+  } catch (err) {
+    if (err instanceof OrgMutationError) staffHome(organizationId, err.code);
+    throw err;
+  }
+  staffHome(organizationId);
+}
+
+export async function removeStaffMemberAction(formData: FormData): Promise<void> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const adminUserId = String(formData.get("adminUserId") ?? "");
+  try {
+    await removeOrgMember(organizationId, adminUserId);
+  } catch (err) {
+    if (err instanceof OrgMutationError) staffHome(organizationId, err.code);
+    throw err;
+  }
+  staffHome(organizationId);
+}

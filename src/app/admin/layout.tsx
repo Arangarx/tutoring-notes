@@ -7,6 +7,7 @@ import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { getAdminSessionMode } from "@/lib/admin-routing";
 import { isDevToolsEnabled } from "@/lib/dev-fixtures";
 import { getAdminByEmail } from "@/lib/auth-db";
+import { hasStaffHomeMembership } from "@/lib/org-scope";
 import { SeedTutorTimezoneFromSystem } from "@/components/admin/SeedTutorTimezoneFromSystem";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getBuildIdentity } from "@/lib/build-identity";
@@ -36,6 +37,12 @@ export default async function AdminLayout({
 
   const userEmail = session?.user?.email ?? "";
   const admin = userEmail ? await getAdminByEmail(userEmail) : null;
+  const showOrgStaffHome =
+    !!admin &&
+    admin.approvalStatus === "APPROVED" &&
+    !admin.isTestAccount &&
+    !isImpersonating &&
+    (await hasStaffHomeMembership(admin.id));
 
   const navProps = {
     showOperatorLinks,
@@ -43,6 +50,7 @@ export default async function AdminLayout({
     sessionMode,
     isImpersonating,
     showDevTools,
+    showOrgStaffHome,
     userEmail,
     userDisplayName: admin?.displayName ?? session?.user?.name ?? null,
   };

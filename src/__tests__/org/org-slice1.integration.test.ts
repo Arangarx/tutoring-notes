@@ -34,14 +34,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { generateRawToken, hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
-import { OrgMutationError, acceptOrgInvite, assertOrgRole, createOrgInvite, getActiveOrgRoles, removeOrgMember, revokeOrgInvite, setOrgMemberRoles } from "@/lib/org-scope";
+import { setPlatformMailSenderForTests } from "@/lib/email";
+import { sendOrgInviteEmail } from "@/lib/org-invite-mail";
+import { OrgMutationError, acceptOrgInvite, assertOrgRole, createOrgInvite, getActiveOrgRoles, readOrgInviteForHolder, removeOrgMember, resolveVerifiedOrgOwner, revokeOrgInvite, setOrgMemberRoles, staffHomeLandingPath } from "@/lib/org-scope";
 import { approveTutor } from "@/lib/tutor-approval-scope";
 import {
   createOrganizationAction,
   revokeOrgGrantedApprovalsAction,
+  saveOrganizationCapsAction,
   setOrganizationCapsAction,
   setOrganizationStatusAction,
 } from "@/app/admin/orgs/actions";
+import { inviteStaffAction } from "@/app/admin/organization/actions";
 import { assertAdminOrNotFound } from "@/lib/impersonation";
 import { startImpersonation } from "@/app/admin/actions/impersonate";
 import { ImpersonationForbiddenError } from "@/lib/impersonation";
@@ -185,7 +189,9 @@ describe("org slice 1", () => {
     expect(org?.status).toBe("pending");
     expect(org?.createdByOperatorId).toBe(operator.id);
     expect(org?.maxMembers).toBeNull();
-    expect(org?.dailyInviteCap).toBeNull();
+    // Stage 2: an omitted staff-invite cap stores the starting limit, 25.
+    // Unlimited is only an explicit null (asserted below), not the omitted case.
+    expect(org?.dailyInviteCap).toBe(25);
     const member = await db.organizationMember.findUnique({
       where: { organizationId_adminUserId: { organizationId, adminUserId: owner.id } },
     });
@@ -199,13 +205,50 @@ describe("org slice 1", () => {
     const owner = await seedUser();
     mockSession({ email: ENV_OPERATOR_EMAIL, id: "admin" });
     const name = uniq("env-org");
+    const lines: string[] = [];
+    const spy = jest.spyOn(console, "log").mockImplementation((msg?: unknown) => {
+      lines.push(String(msg));
+    });
     const { organizationId } = await createOrganizationAction({
       name,
       ownerAdminUserId: owner.id,
     });
+    spy.mockRestore();
     const org = await db.organization.findUnique({ where: { id: organizationId } });
     expect(org?.createdByOperatorId).toBe(ENV_OPERATOR_EMAIL);
     expect(await db.adminUser.findUnique({ where: { email: ENV_OPERATOR_EMAIL } })).toBeNull();
+    const orgLines = lines.filter((line) => line.includes("[org]"));
+    expect(orgLines.join("\n")).not.toMatch(/@/);
+    expect(orgLines.join("\n")).not.toContain(ENV_OPERATOR_EMAIL);
+    expect(orgLines.join("\n")).toContain("actor=operator");
+  });
+
+  it("stores unlimited only when the operator passes null, and leaves an existing null row unchanged", async () => {
+    const owner = await seedUser();
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("explicit-unlimited"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+      dailyInviteCap: null,
+    });
+    const created = await db.organization.findUnique({ where: { id: organizationId } });
+    expect(created?.dailyInviteCap).toBeNull();
+
+    const legacy = await db.organization.create({
+      data: {
+        name: uniq("legacy-unlimited"),
+        timezone: "UTC",
+        dailyInviteCap: null,
+        createdByOperatorId: "legacy-operator",
+        members: { create: { adminUserId: owner.id, roles: ["owner"], approvedViaOrg: false } },
+      },
+      select: { id: true },
+    });
+    await setOrganizationStatusAction(legacy.id, "active");
+    const after = await db.organization.findUnique({ where: { id: legacy.id } });
+    expect(after?.dailyInviteCap).toBeNull();
+    expect(after?.status).toBe("active");
   });
 
   it("lets only an operator write status", async () => {
@@ -1009,6 +1052,242 @@ describe("org role matrix and caps", () => {
   });
 });
 
+describe("stage 2 staff invite rules", () => {
+  it("refuses a scheduler or instructor who invites or sets roles", async () => {
+    const owner = await seedUser();
+    const scheduler = await seedUser();
+    const instructor = await seedUser();
+    const target = await seedUser();
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("staff-gate"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    mockSession({ email: owner.email, id: owner.id });
+    const schedulerInvite = await createOrgInvite(organizationId, scheduler.email, ["scheduler"]);
+    const instructorInvite = await createOrgInvite(organizationId, instructor.email, ["instructor"]);
+    mockSession({ email: scheduler.email, id: scheduler.id });
+    await acceptOrgInvite(schedulerInvite.rawToken);
+    mockSession({ email: instructor.email, id: instructor.id });
+    await acceptOrgInvite(instructorInvite.rawToken);
+
+    const before = await db.organizationInvite.count({ where: { organizationId } });
+    mockSession({ email: scheduler.email, id: scheduler.id });
+    await expect(
+      createOrgInvite(organizationId, target.email, ["instructor"])
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+    mockSession({ email: instructor.email, id: instructor.id });
+    await expect(
+      createOrgInvite(organizationId, `${uniq("inst-invite")}@example.com`, ["instructor"])
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(
+      setOrgMemberRoles(organizationId, instructor.id, ["scheduler"])
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(await db.organizationInvite.count({ where: { organizationId } })).toBe(before);
+    expect(
+      (
+        await db.organizationMember.findUnique({
+          where: { organizationId_adminUserId: { organizationId, adminUserId: instructor.id } },
+        })
+      )?.roles
+    ).toEqual(["instructor"]);
+  });
+
+  it("does not trust a removed inviter", async () => {
+    const owner = await seedUser();
+    const invitee = await seedUser({ approvalStatus: "WAITLISTED" });
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("removed-inviter"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    await setOrganizationStatusAction(organizationId, "active");
+    mockSession({ email: owner.email, id: owner.id });
+    const invite = await createOrgInvite(organizationId, invitee.email, ["instructor"]);
+    await db.organizationMember.update({
+      where: { organizationId_adminUserId: { organizationId, adminUserId: owner.id } },
+      data: { removedAt: new Date() },
+    });
+    mockSession({ email: invitee.email, id: invitee.id });
+    const result = await acceptOrgInvite(invite.rawToken);
+    expect(result).toEqual({ ok: false, error: "invite_unavailable" });
+    expect(
+      (await db.organizationInvite.findUnique({ where: { id: invite.inviteId } }))?.acceptedAt
+    ).toBeNull();
+    expect(
+      await db.organizationMember.count({ where: { organizationId, adminUserId: invitee.id } })
+    ).toBe(0);
+  });
+
+  it("does not mark an already-approved tutor as approved via the organization", async () => {
+    const owner = await seedUser();
+    const invitee = await seedUser({ approvalStatus: "APPROVED" });
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("already-approved"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    await setOrganizationStatusAction(organizationId, "active");
+    mockSession({ email: owner.email, id: owner.id });
+    const invite = await createOrgInvite(organizationId, invitee.email, ["instructor"]);
+    mockSession({ email: invitee.email, id: invitee.id });
+    const result = await acceptOrgInvite(invite.rawToken);
+    expect(result).toEqual({ ok: true, refreshSession: false });
+    const member = await db.organizationMember.findUnique({
+      where: { organizationId_adminUserId: { organizationId, adminUserId: invitee.id } },
+    });
+    expect(member?.approvedViaOrg).toBe(false);
+    expect((await db.adminUser.findUnique({ where: { id: invitee.id } }))?.approvalStatus).toBe(
+      "APPROVED"
+    );
+  });
+
+  it("uses the same unavailable result whether or not the invited email has an account", async () => {
+    const owner = await seedUser();
+    const existing = await seedUser({ approvalStatus: "WAITLISTED" });
+    const missingEmail = `${uniq("missing-holder")}@example.com`;
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("oracle"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    mockSession({ email: owner.email, id: owner.id });
+    const hit = await createOrgInvite(organizationId, existing.email, ["instructor"]);
+    const miss = await createOrgInvite(organizationId, missingEmail, ["instructor"]);
+    await db.organizationInvite.update({
+      where: { id: hit.inviteId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    await db.organizationInvite.update({
+      where: { id: miss.inviteId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    mockSession({ email: existing.email, id: existing.id });
+    const hitAccept = await acceptOrgInvite(hit.rawToken);
+    mockSession({ email: missingEmail, id: "no-such-admin" });
+    const missAccept = await acceptOrgInvite(miss.rawToken);
+    expect(hitAccept).toEqual({ ok: false, error: "invite_unavailable" });
+    expect(missAccept).toEqual(hitAccept);
+    expect(JSON.stringify(hitAccept)).not.toMatch(/account/i);
+
+    const hitView = await readOrgInviteForHolder(hit.rawToken);
+    const missView = await readOrgInviteForHolder(miss.rawToken);
+    expect(hitView.kind).toBe("expired");
+    expect(missView.kind).toBe(hitView.kind);
+    expect(JSON.stringify(hitView)).not.toMatch(/account/i);
+    expect(JSON.stringify(missView)).not.toMatch(/account/i);
+  });
+
+  it("does not approve members who joined while the organization was pending", async () => {
+    const owner = await seedUser();
+    const invitee = await seedUser({ approvalStatus: "WAITLISTED" });
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("activate-waitlist"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    mockSession({ email: owner.email, id: owner.id });
+    const invite = await createOrgInvite(organizationId, invitee.email, ["scheduler"]);
+    mockSession({ email: invitee.email, id: invitee.id });
+    await acceptOrgInvite(invite.rawToken);
+    await asOperator();
+    await setOrganizationStatusAction(organizationId, "active");
+    expect((await db.adminUser.findUnique({ where: { id: invitee.id } }))?.approvalStatus).toBe(
+      "WAITLISTED"
+    );
+    expect(
+      (
+        await db.organizationMember.findUnique({
+          where: { organizationId_adminUserId: { organizationId, adminUserId: invitee.id } },
+        })
+      )?.approvedViaOrg
+    ).toBe(false);
+  });
+
+  it("resolves a verified owner and rejects a missing or unverified email the same way", async () => {
+    const verified = await seedUser();
+    const unverified = await seedUser({ emailVerifiedAt: null });
+    const missing = `${uniq("no-owner")}@example.com`;
+    const verifiedResult = await resolveVerifiedOrgOwner(verified.email);
+    const unverifiedResult = await resolveVerifiedOrgOwner(unverified.email);
+    const missingResult = await resolveVerifiedOrgOwner(missing);
+    expect(verifiedResult).toEqual({ ok: true, adminUserId: verified.id });
+    expect(unverifiedResult).toEqual({ ok: false, error: "no_verified_account" });
+    expect(missingResult).toEqual(unverifiedResult);
+    const testAccount = await seedUser({ isTestAccount: true });
+    expect(await resolveVerifiedOrgOwner(testAccount.email)).toEqual({
+      ok: false,
+      error: "test_account",
+    });
+  });
+
+  it("sends the organization name and role and does not log the token or the address", async () => {
+    const sent = jest.fn().mockResolvedValue({ sent: true });
+    setPlatformMailSenderForTests(sent);
+    const lines: string[] = [];
+    const spy = jest.spyOn(console, "log").mockImplementation((msg?: unknown) => {
+      lines.push(String(msg));
+    });
+    const token = generateRawToken();
+    const address = `${uniq("mail")}@example.com`;
+    try {
+      const result = await sendOrgInviteEmail({
+        to: address,
+        organizationName: "North Studio",
+        roles: ["scheduler"],
+        rawToken: token,
+      });
+      expect(result).toEqual({ sent: true });
+    } finally {
+      spy.mockRestore();
+      setPlatformMailSenderForTests(null);
+    }
+    expect(sent).toHaveBeenCalledTimes(1);
+    const message = sent.mock.calls[0][0] as { subject: string; text: string; to: string };
+    expect(message.subject).toContain("North Studio");
+    expect(message.text).toContain("North Studio");
+    expect(message.text).toContain("Scheduler");
+    expect(message.text).toContain(`/org-invite/${token}`);
+    expect(message.to).toBe(address);
+    const orgLines = lines.filter((line) => line.includes("[org]"));
+    expect(lines.join("\n")).not.toContain(token);
+    expect(orgLines.join("\n")).not.toMatch(/@/);
+  });
+
+  it("revokes the invitation when the email is not sent and does not show the mail error", async () => {
+    const owner = await seedUser();
+    const address = `${uniq("mail-fail")}@example.com`;
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("mail-fail-org"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    mockSession({ email: owner.email, id: owner.id });
+    setPlatformMailSenderForTests(async () => ({ sent: false, error: "smtp-host-down" }));
+    const form = new FormData();
+    form.set("organizationId", organizationId);
+    form.set("email", address);
+    form.append("roles", "instructor");
+    try {
+      await expect(inviteStaffAction(form)).rejects.toThrow(/error=mail_failed/);
+    } finally {
+      setPlatformMailSenderForTests(null);
+    }
+    const invite = await db.organizationInvite.findFirst({
+      where: { organizationId, email: address },
+    });
+    expect(invite?.revokedAt).toBeInstanceOf(Date);
+    expect(invite?.acceptedAt).toBeNull();
+  });
+});
+
 describe("jwt refresh after org approval", () => {
   it("session update reloads approval without waiting out the throttle", async () => {
     const invitee = await seedUser({ approvalStatus: "WAITLISTED" });
@@ -1054,5 +1333,149 @@ describe("jwt refresh after org approval", () => {
       trigger: "update",
     });
     expect(refreshed.approvalStatus).toBe("APPROVED");
+  });
+});
+
+function capsForm(fields: Record<string, string>): FormData {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  return form;
+}
+
+async function redirectedTo(run: () => Promise<void>): Promise<string> {
+  try {
+    await run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const prefix = "NEXT_REDIRECT:";
+    if (message.startsWith(prefix)) return message.slice(prefix.length);
+    throw err;
+  }
+  throw new Error("expected a redirect");
+}
+
+describe("saveOrganizationCapsAction", () => {
+  it("stores null for no daily limit, a number when given, and refuses blank or invalid input", async () => {
+    const owner = await seedUser();
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("cap-form"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+    const back = `/admin/orgs/${organizationId}`;
+    const fields = {
+      organizationId,
+      maxMembers: "",
+      returnTo: back,
+    };
+
+    expect(
+      await redirectedTo(() =>
+        saveOrganizationCapsAction(
+          capsForm({ ...fields, unlimited: "1", dailyInviteCap: "25" })
+        )
+      )
+    ).toBe(back);
+    expect(
+      (await db.organization.findUnique({ where: { id: organizationId } }))?.dailyInviteCap
+    ).toBeNull();
+
+    expect(
+      await redirectedTo(() =>
+        saveOrganizationCapsAction(
+          capsForm({ ...fields, unlimited: "0", dailyInviteCap: "12" })
+        )
+      )
+    ).toBe(back);
+    expect(
+      (await db.organization.findUnique({ where: { id: organizationId } }))?.dailyInviteCap
+    ).toBe(12);
+
+    for (const dailyInviteCap of ["", "0", "nope", "-3", "1.5"]) {
+      expect(
+        await redirectedTo(() =>
+          saveOrganizationCapsAction(
+            capsForm({ ...fields, unlimited: "0", dailyInviteCap })
+          )
+        )
+      ).toBe(`${back}?error=invalid_cap`);
+    }
+    expect(
+      (await db.organization.findUnique({ where: { id: organizationId } }))?.dailyInviteCap
+    ).toBe(12);
+  });
+});
+
+describe("sign-in landing", () => {
+  it("opens the staff home for owner, admin, or scheduler, and the student list otherwise", async () => {
+    const owner = await seedUser();
+    const orgAdmin = await seedUser();
+    const scheduler = await seedUser();
+    const instructor = await seedUser();
+    const tutor = await seedUser();
+    await asOperator();
+    const { organizationId } = await createOrganizationAction({
+      name: uniq("landing"),
+      ownerAdminUserId: owner.id,
+      timezone: "UTC",
+    });
+
+    expect(await staffHomeLandingPath(owner.id)).toBe(
+      `/admin/organization/${organizationId}`
+    );
+    expect(await staffHomeLandingPath(tutor.id)).toBeNull();
+
+    await db.organizationMember.createMany({
+      data: [
+        { organizationId, adminUserId: orgAdmin.id, roles: ["admin"], approvedViaOrg: false },
+        {
+          organizationId,
+          adminUserId: scheduler.id,
+          roles: ["scheduler"],
+          approvedViaOrg: false,
+        },
+        {
+          organizationId,
+          adminUserId: instructor.id,
+          roles: ["instructor"],
+          approvedViaOrg: false,
+        },
+      ],
+    });
+    expect(await staffHomeLandingPath(orgAdmin.id)).toBe(
+      `/admin/organization/${organizationId}`
+    );
+    expect(await staffHomeLandingPath(scheduler.id)).toBe(
+      `/admin/organization/${organizationId}`
+    );
+    expect(await staffHomeLandingPath(instructor.id)).toBeNull();
+
+    await db.organizationMember.update({
+      where: { organizationId_adminUserId: { organizationId, adminUserId: owner.id } },
+      data: { roles: ["owner", "instructor"] },
+    });
+    expect(await staffHomeLandingPath(owner.id)).toBe(
+      `/admin/organization/${organizationId}`
+    );
+
+    await asOperator();
+    const second = await createOrganizationAction({
+      name: uniq("landing-two"),
+      ownerAdminUserId: scheduler.id,
+      timezone: "UTC",
+    });
+    expect(await staffHomeLandingPath(scheduler.id)).toBe("/admin/organization");
+
+    await db.organizationMember.update({
+      where: {
+        organizationId_adminUserId: { organizationId, adminUserId: scheduler.id },
+      },
+      data: { removedAt: new Date() },
+    });
+    expect(await staffHomeLandingPath(scheduler.id)).toBe(
+      `/admin/organization/${second.organizationId}`
+    );
+    expect(await staffHomeLandingPath(instructor.id)).toBeNull();
   });
 });

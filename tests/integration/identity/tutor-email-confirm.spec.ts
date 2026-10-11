@@ -1,10 +1,23 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 import { hashToken, EMAIL_TOKEN_TTL_MS_24H } from "@/lib/crypto/session-tokens";
 import { generateRawToken } from "@/lib/crypto/session-tokens";
+import { teachingSignInHref } from "@/lib/teaching-account-href";
 import { loginTutorWithPassword } from "./tutor-2fa-login.helpers";
+
+/** Confirm redirect is the teaching sign-in URL with verified=1, including the email. */
+async function waitForConfirmedTeachingLogin(page: Page, email: string): Promise<void> {
+  await page.waitForURL(
+    (url) => {
+      const expected = new URL(teachingSignInHref(null, email), url.origin);
+      expected.searchParams.set("verified", "1");
+      return url.href === expected.href;
+    },
+    { timeout: 30_000 }
+  );
+}
 
 const EMPTY_STATE = { cookies: [] as [], origins: [] as [] };
 
@@ -46,7 +59,7 @@ test.describe("P1-ID-EVF — tutor confirm-link", () => {
       });
 
       await page.goto(`/verify-email?type=admin&token=${encodeURIComponent(raw)}`);
-      await page.waitForURL(/\/login\?verified=1/, { timeout: 30_000 });
+      await waitForConfirmedTeachingLogin(page, email);
       await expect(page.getByText(/email confirmed/i)).toBeVisible();
 
       const refreshed = await prisma.adminUser.findUnique({
@@ -97,7 +110,7 @@ test.describe("P1-ID-EVF — tutor confirm-link", () => {
       });
 
       await page.goto(`/verify-email?type=admin&token=${encodeURIComponent(raw)}`);
-      await page.waitForURL(/\/login\?verified=1/, { timeout: 30_000 });
+      await waitForConfirmedTeachingLogin(page, email);
     } finally {
       await prisma.adminUser.deleteMany({ where: { email } });
       await prisma.$disconnect();

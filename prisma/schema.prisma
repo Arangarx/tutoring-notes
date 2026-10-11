@@ -840,7 +840,8 @@ model Organization {
   status              OrganizationStatus @default(pending)
   /// Null means no member cap. Operator-set; never defaulted.
   maxMembers          Int?
-  /// Null means no daily invite cap. Operator-set; counted in `timezone`.
+  /// Null means unlimited, and only when the operator sets that explicitly.
+  /// createOrganization stores 25 when this cap is omitted. Existing null rows stay unlimited.
   dailyInviteCap      Int?
   /// AdminUser.id when the operator has a row, otherwise the operator email.
   createdByOperatorId String

@@ -10,6 +10,7 @@ import { validatePasswordStrength, MIN_PASSWORD_LENGTH } from "@/lib/password-st
 import { normalizeEmail } from "@/lib/normalize-email";
 import { sendTutorSignupVerifyEmail } from "@/lib/admin-email-verify";
 import { getRequestBaseUrlSafeFromHeaders } from "@/lib/public-url";
+import { safeRelativeReturnPath } from "@/lib/safe-return-path";
 
 const SignupSchema = z
   .object({
@@ -67,10 +68,12 @@ export async function signup(
 
   const created = await createAdmin(normalized, password, displayName ?? null);
   const baseUrl = await getRequestBaseUrlSafeFromHeaders();
+  const returnTo = safeRelativeReturnPath(String(formData.get("returnTo") ?? ""));
   const mailed = await sendTutorSignupVerifyEmail({
     adminUserId: created.id,
     email: normalized,
     baseUrl,
+    returnTo,
   });
 
   if (!mailed.sent) {
@@ -93,5 +96,8 @@ export async function signup(
     displayName: displayName ?? null,
     method: "credentials",
   });
+  if (returnTo) {
+    redirect(`/verify-tutor-email?${new URLSearchParams({ returnTo }).toString()}`);
+  }
   redirect("/verify-tutor-email");
 }

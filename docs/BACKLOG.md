@@ -1800,6 +1800,9 @@ Full `npm run test:identity-e2e` run (60 passed, 7 failed) surfaced failures unr
 
 None of these were fixed as part of WS3 (SMS 2FA) — flagged per the "report, don't fix unless you caused it" scope discipline. Needs its own investigation pass.
 
+**[P2][TEST] identity-e2e enroll chooser expects "SMS not available" while Playwright sets dummy Twilio (observed 2026-10-11, org stage 2; this stage did not cause it)**  
+`tests/integration/identity/tutor-email-2fa-login.spec.ts` › `enroll default: unenrolled tutor sees first-class chooser with email default` expects a disabled button named "SMS not available". `playwright.config.ts` sets dummy `TWILIO_*`, so the button reads "Set up with text message". Pre-existing. Not fixed in the org stage 2 pass.
+
 **[P1][TEST] WS-V / Part-2 site-wide mechanical test buildout**  
 Remainder: P1-WB and P1-ID relay batches. Pure-jest tranche done 2026-07-05.
 

@@ -19,6 +19,7 @@ export type AdminSidebarNavProps = {
   sessionMode?: AdminSessionMode;
   isImpersonating?: boolean;
   showDevTools?: boolean;
+  showOrgStaffHome?: boolean;
   userEmail?: string;
   userDisplayName?: string | null;
 };
@@ -34,6 +35,7 @@ export function AdminSidebarNav({
   sessionMode = "tutor-experience",
   isImpersonating = false,
   showDevTools = false,
+  showOrgStaffHome = false,
   userEmail = "",
   userDisplayName,
 }: AdminSidebarNavProps) {
@@ -44,6 +46,7 @@ export function AdminSidebarNav({
       showCostDashboard,
       sessionMode,
       showDevTools,
+      showOrgStaffHome,
     })
   );
 

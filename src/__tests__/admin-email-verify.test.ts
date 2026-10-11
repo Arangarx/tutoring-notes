@@ -10,10 +10,13 @@ import { createAdmin } from "@/lib/auth-db";
 import {
   consumeTutorSignupVerifyToken,
   resendTutorSignupVerifyEmail,
+  sendTutorSignupVerifyEmail,
 } from "@/lib/admin-email-verify";
 import { setPlatformMailSenderForTests } from "@/lib/email";
 import { requestPasswordReset } from "@/lib/password-reset";
 import { POST as resendVerification } from "@/app/api/auth/tutor/resend-verification/route";
+import { GET as verifyEmailGET } from "@/app/verify-email/route";
+import { teachingSignInHref } from "@/lib/teaching-account-href";
 import { NextRequest } from "next/server";
 
 const FIXTURE_EMAILS = [
@@ -28,6 +31,9 @@ const FIXTURE_EMAILS = [
   "tutor-evf-resend-unverified@test.com",
   "tutor-evf-resend-route-a@test.com",
   "tutor-evf-resend-route-b@test.com",
+  "tutor-evf-return-path@test.com",
+  "tutor-evf-resend-return@test.com",
+  "tutor-evf-signin-href@test.com",
 ] as const;
 
 async function cleanup() {
@@ -246,13 +252,119 @@ test("resendTutorSignupVerifyEmail sends and persists a token for an unverified 
   expect(tokens).toHaveLength(1);
 });
 
-function resendRequest(email: string): NextRequest {
+function resendRequest(email: string, returnTo?: string): NextRequest {
   return new NextRequest("https://localhost/api/auth/tutor/resend-verification", {
     method: "POST",
     headers: { "Content-Type": "application/json", host: "localhost" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify(returnTo === undefined ? { email } : { email, returnTo }),
   });
 }
+
+function mailedReturnTo(text: string): string | null {
+  const link = text.match(/https?:\/\/\S+/)?.[0] ?? "";
+  return new URL(link).searchParams.get("returnTo");
+}
+
+test("tutor confirm link keeps a same-site return path", async () => {
+  const admin = await createAdmin(
+    "tutor-evf-return-path@test.com",
+    "Sunrise-Kangaroo-Pluto-47!"
+  );
+  const sent = jest.fn().mockResolvedValue({ sent: true });
+  setPlatformMailSenderForTests(sent);
+  const returnTo = "/org-invite/abc123";
+
+  await sendTutorSignupVerifyEmail({
+    adminUserId: admin.id,
+    email: admin.email,
+    baseUrl: "https://preview.example",
+    returnTo,
+  });
+
+  const text = String(sent.mock.calls[0][0].text);
+  const link = text.match(/https:\/\/preview\.example\S+/)?.[0] ?? "";
+  const url = new URL(link);
+  expect(url.pathname).toBe("/verify-email");
+  expect(url.searchParams.get("type")).toBe("admin");
+  expect(url.searchParams.get("returnTo")).toBe(returnTo);
+  expect(url.searchParams.get("token")).toBeTruthy();
+  setPlatformMailSenderForTests(null);
+});
+
+test("resend of the tutor confirmation keeps a sanitized return path", async () => {
+  const admin = await createAdmin(
+    "tutor-evf-resend-return@test.com",
+    "Sunrise-Kangaroo-Pluto-47!"
+  );
+  const sent = jest.fn().mockResolvedValue({ sent: true });
+  setPlatformMailSenderForTests(sent);
+  const returnTo = "/org-invite/abc123";
+
+  const kept = await resendTutorSignupVerifyEmail({
+    email: admin.email,
+    baseUrl: RESEND_BASE,
+    returnTo,
+  });
+  expect(kept).toEqual({ attempted: true });
+  expect(mailedReturnTo(String(sent.mock.calls[0][0].text))).toBe(returnTo);
+
+  sent.mockClear();
+  await resendTutorSignupVerifyEmail({
+    email: admin.email,
+    baseUrl: RESEND_BASE,
+    returnTo: "https://evil.example/phish",
+  });
+  const hostile = String(sent.mock.calls[0][0].text);
+  expect(hostile).not.toContain("evil.example");
+  expect(mailedReturnTo(hostile)).toBeNull();
+
+  const routeSent = jest.fn().mockResolvedValue({ sent: true });
+  setPlatformMailSenderForTests(routeSent);
+  const dropped = await resendVerification(resendRequest(admin.email, "//host"));
+  expect(dropped.status).toBe(200);
+  expect(mailedReturnTo(String(routeSent.mock.calls[0][0].text))).toBeNull();
+
+  routeSent.mockClear();
+  const forwarded = await resendVerification(resendRequest(admin.email, returnTo));
+  expect(forwarded.status).toBe(200);
+  expect(mailedReturnTo(String(routeSent.mock.calls[0][0].text))).toBe(returnTo);
+  setPlatformMailSenderForTests(null);
+});
+
+test("admin confirm redirects through the teaching sign-in link plus verified=1", async () => {
+  const email = "tutor-evf-signin-href@test.com";
+  const admin = await createAdmin(email, "Sunrise-Kangaroo-Pluto-47!");
+  const origin = "http://localhost:3000";
+  const returnTo = "/org-invite/abc123";
+
+  async function confirmLocation(raw: string, returnToRaw: string): Promise<string | null> {
+    await db.adminUserEmailToken.create({
+      data: {
+        adminUserId: admin.id,
+        tokenHash: hashToken(raw),
+        purpose: "SIGNUP_VERIFY",
+        expiresAt: new Date(Date.now() + EMAIL_TOKEN_TTL_MS_24H),
+      },
+    });
+    const params = new URLSearchParams({ type: "admin", token: raw });
+    if (returnToRaw) params.set("returnTo", returnToRaw);
+    const response = await verifyEmailGET(
+      new NextRequest(`${origin}/verify-email?${params.toString()}`)
+    );
+    return response.headers.get("location");
+  }
+
+  function expectedLogin(returnPath: string | null): string {
+    const login = new URL(teachingSignInHref(returnPath, email), origin);
+    login.searchParams.set("verified", "1");
+    return login.toString();
+  }
+
+  expect(await confirmLocation("raw-signin-href-return", returnTo)).toBe(
+    expectedLogin(returnTo)
+  );
+  expect(await confirmLocation("raw-signin-href-bare", "")).toBe(expectedLogin(null));
+});
 
 test("POST /api/auth/tutor/resend-verification is anti-enumerating: same body for unknown vs unverified", async () => {
   setPlatformMailSenderForTests(async () => ({ sent: true }));

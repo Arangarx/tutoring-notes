@@ -102,7 +102,18 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
-| `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. **REQ-S3-3:** redesign must add a persistent signed-in identity indicator (display name/email; badge when impersonating or test account) — pairs with `ImpersonationBanner`. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
+| `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. **REQ-S3-3:** redesign must add a persistent signed-in identity indicator (display name/email; badge when impersonating or test account) — pairs with `ImpersonationBanner`. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard`, `showOrgStaffHome` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
+
+### Organization staff (stage 2)
+
+| Component | File | Purpose | Key Props | Surfaces | Dedup Status |
+|---|---|---|---|---|---|
+| `OrgInviteCard` | `src/components/org/OrgInviteCard.tsx` | Public invite: organization, role, invited email, teaching-account doors, wrong-account message, or a specific expired/revoked/used reason. Composes `AuthShell` + `Button`. | `token`, `view`, `sessionEmail` | `/org-invite/[token]` | **canonical** |
+| `OrgInviteSignOutButton` | `src/components/org/OrgInviteSignOutButton.tsx` | Sign out and return to the invite. | `callbackUrl` | Invite card when the signed-in email does not match | **canonical** |
+| `OrgRolePicker` | `src/components/org/OrgRolePicker.tsx` | Role checkboxes for invites and member role edits. Composes `CheckboxField`. | `allowed`, `selected`, `idPrefix` | Staff home | **canonical** |
+| `OrgDailyCapFields` | `src/components/org/OrgDailyCapFields.tsx` | Daily invite limit or an explicit "No daily limit". Composes `CheckboxField` + `Input`. | `current` | Operator organization page and staff home when the viewer is an operator | **canonical** |
+| `OrgActivationPanel` | `src/components/org/OrgActivationPanel.tsx` | Activate, caps, and waitlisted members approved with `TutorWaitlistActions`. | `organizationId`, `status`, `dailyInviteCap`, `maxMembers`, `waitlisted`, `returnTo` | `/admin/orgs/[id]`, staff home for an operator | **canonical** |
+| `OrgStaffHome` | `src/components/org/OrgStaffHome.tsx` | Members, invitations, and activation for one organization. | `data`, `canActivate`, `error` | `/admin/organization/[id]` | **canonical** |
 
 ### Shared layout (cross-realm)
 

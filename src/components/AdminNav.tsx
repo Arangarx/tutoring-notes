@@ -26,6 +26,7 @@ export function AdminNav({
   sessionMode = "tutor-experience",
   isImpersonating = false,
   showDevTools = false,
+  showOrgStaffHome = false,
   layout = "full",
 }: AdminNavProps) {
   const adminLinks = buildAdminNavLinks(
@@ -34,6 +35,7 @@ export function AdminNav({
       showCostDashboard,
       sessionMode,
       showDevTools,
+      showOrgStaffHome,
     })
   );
   const pathname = usePathname();

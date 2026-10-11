@@ -7,6 +7,7 @@ import {
   realAdminHomePath,
   tutorExperienceLandingPath,
 } from "@/lib/admin-routing";
+import { staffHomeLandingPath } from "@/lib/org-scope";
 import { AdminTestAccountsPanel } from "./AdminTestAccountsPanel";
 import { QuickLinkCard } from "@/components/admin/QuickLinkCard";
 import { PageShell } from "@/components/PageShell";
@@ -32,10 +33,19 @@ export default async function AdminHomePage() {
   if (mode === "unauthenticated") redirect("/login");
 
   if (mode === "tutor-experience") {
+    let landing = tutorExperienceLandingPath();
+    if (
+      session?.user?.id &&
+      session.user.id !== "admin" &&
+      session.user.isImpersonating !== true
+    ) {
+      const staffHome = await staffHomeLandingPath(session.user.id);
+      if (staffHome) landing = staffHome;
+    }
     console.log(
-      `[imp] route=${tutorExperienceLandingPath()} mode=tutor-experience from=${realAdminHomePath()}`
+      `[imp] route=${landing} mode=tutor-experience from=${realAdminHomePath()}`
     );
-    redirect(tutorExperienceLandingPath());
+    redirect(landing);
   }
 
   const email = session?.user?.email ?? "admin";

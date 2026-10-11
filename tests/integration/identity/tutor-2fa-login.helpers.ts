@@ -304,17 +304,11 @@ export async function submitTotpOnVerifyPage(
   await page.getByRole("button", { name: "Verify" }).click();
 }
 
-/** Tutor authed landing — past 2FA gate, on tutor workspace (not challenge UI). */
+/** Private tutor with no organization: the student list, after two-factor. */
 export async function expectTutorAuthedLanding(page: Page): Promise<void> {
-  await page.waitForURL(
-    (url) =>
-      url.pathname.startsWith("/admin") &&
-      !url.pathname.startsWith("/admin/settings/2fa") &&
-      url.pathname !== "/admin/pending-approval",
-    { timeout: 30_000 }
-  );
-  const pathname = new URL(page.url()).pathname;
-  expect(pathname).toMatch(/^\/admin(\/students)?/);
+  await page.waitForURL((url) => url.pathname === "/admin/students", {
+    timeout: 30_000,
+  });
 }
 
 export function attachNetworkCapture(page: Page): NetworkCapture {

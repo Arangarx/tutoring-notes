@@ -2,7 +2,7 @@
  * GET /verify-email?token=<rawToken>&type=ah|admin[&returnTo=<path>]
  *
  * type=ah — AccountHolder signup/email-change (session + handoff cookie).
- * type=admin — tutor confirm-link. No auto-session. Success → /login?verified=1.
+ * type=admin — tutor confirm-link. No auto-session. Success → teaching sign-in URL with verified=1.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,6 +14,8 @@ import {
 } from "@/lib/account-holder-session";
 import { createHandoffToken } from "@/lib/crypto/handoff-token";
 import { consumeTutorSignupVerifyToken } from "@/lib/admin-email-verify";
+import { safeRelativeReturnPath } from "@/lib/safe-return-path";
+import { teachingSignInHref } from "@/lib/teaching-account-href";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin;
 
   if (type === "admin") {
-    return handleAdminVerify(origin, rawToken);
+    return handleAdminVerify(origin, rawToken, returnToRaw);
   }
 
   if (type !== "ah" || !rawToken) {
@@ -140,9 +142,17 @@ export async function GET(req: NextRequest) {
   return NextResponse.redirect(verifyDoneUrl.toString());
 }
 
-async function handleAdminVerify(origin: string, rawToken: string) {
+function tutorEmailConfirmRetryUrl(origin: string, error: string, returnToRaw: string): string {
+  const url = new URL("/verify-tutor-email", origin);
+  url.searchParams.set("error", error);
+  const safeReturn = safeRelativeReturnPath(returnToRaw);
+  if (safeReturn) url.searchParams.set("returnTo", safeReturn);
+  return url.toString();
+}
+
+async function handleAdminVerify(origin: string, rawToken: string, returnToRaw: string) {
   if (!rawToken.trim()) {
-    return NextResponse.redirect(`${origin}/verify-tutor-email?error=link_invalid`);
+    return NextResponse.redirect(tutorEmailConfirmRetryUrl(origin, "link_invalid", returnToRaw));
   }
 
   const result = await consumeTutorSignupVerifyToken(rawToken);
@@ -153,8 +163,15 @@ async function handleAdminVerify(origin: string, rawToken: string) {
         : result.reason === "already_used"
           ? "link_already_used"
           : "link_invalid";
-    return NextResponse.redirect(`${origin}/verify-tutor-email?error=${code}`);
+    return NextResponse.redirect(tutorEmailConfirmRetryUrl(origin, code, returnToRaw));
   }
 
-  return NextResponse.redirect(`${origin}/login?verified=1`);
+  const safeReturn = safeRelativeReturnPath(returnToRaw);
+  const admin = await db.adminUser.findUnique({
+    where: { id: result.adminUserId },
+    select: { email: true },
+  });
+  const login = new URL(teachingSignInHref(safeReturn, admin?.email), origin);
+  login.searchParams.set("verified", "1");
+  return NextResponse.redirect(login.toString());
 }

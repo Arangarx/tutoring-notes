@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRetryAfterCountdown } from "@/hooks/useRetryAfterCountdown";
 import { credentialsSignIn } from "@/lib/auth-client";
+import { teachingSignUpHref } from "@/lib/teaching-account-href";
 
 // Map URL ?error= param values (NextAuth error codes + app-defined codes) to
 // internal error keys for rendering.  This fires when NextAuth redirects to
@@ -42,10 +43,11 @@ export default function LoginForm({
 }) {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/admin";
+  const emailFromQuery = searchParams.get("email") ?? "";
   const resetOk = searchParams.get("reset") === "1";
   const registeredOk = searchParams.get("registered") === "1";
   const verifiedOk = searchParams.get("verified") === "1";
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailFromQuery);
   const [password, setPassword] = useState("");
   // Seed error state from URL param (safety-net for NextAuth redirects).
   const [error, setError] = useState<string | null>(() =>
@@ -86,12 +88,21 @@ export default function LoginForm({
       footer={
         <p>
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-brand underline-offset-2 hover:underline">
+          <Link
+            href={teachingSignUpHref(
+              callbackUrl !== "/admin" ? callbackUrl : null,
+              emailFromQuery
+            )}
+            className="text-brand underline-offset-2 hover:underline"
+          >
             Sign up
           </Link>
         </p>
       }
     >
+      <p className="mb-4 text-sm text-muted-foreground">
+        This account is for private tutors and organization staff.
+      </p>
       {registeredOk ? (
         <p className="mb-4 text-sm text-success" role="status">
           Account created. Sign in with the email and password you just chose.

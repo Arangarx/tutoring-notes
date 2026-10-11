@@ -5,6 +5,8 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { env } from "@/lib/env";
 import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 
+import { safeRelativeReturnPath } from "@/lib/safe-return-path";
+
 import SignupForm from "./SignupForm";
 
 export const metadata: Metadata = {
@@ -13,8 +15,15 @@ export const metadata: Metadata = {
   ...productionCanonicalMetadata("/signup"),
 };
 
-export default async function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string; callbackUrl?: string }>;
+}) {
   const googleOAuthAvailable = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  const params = await searchParams;
+  const returnTo = safeRelativeReturnPath(params.callbackUrl);
+  const initialEmail = (params.email ?? "").trim();
 
   return (
     <AuthShell
@@ -26,7 +35,11 @@ export default async function SignupPage() {
         </Link>
       }
     >
-      <SignupForm googleOAuthAvailable={googleOAuthAvailable} />
+      <SignupForm
+        googleOAuthAvailable={googleOAuthAvailable}
+        initialEmail={initialEmail}
+        returnTo={returnTo}
+      />
     </AuthShell>
   );
 }

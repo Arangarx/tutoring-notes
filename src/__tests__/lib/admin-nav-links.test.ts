@@ -76,6 +76,7 @@ function oracleAdminNav(
       ? [
           { href: "/admin/feedback", label: "Feedback inbox" },
           { href: "/admin/tutor-approvals", label: "Tutor approvals" },
+          { href: "/admin/orgs", label: "Organizations" },
           { href: "/admin/design-system", label: "Design system" },
         ]
       : []),
@@ -106,6 +107,7 @@ function oracleSidebarNav(
       ? [
           { href: "/admin/feedback", label: "Feedback inbox" },
           { href: "/admin/tutor-approvals", label: "Tutor approvals" },
+          { href: "/admin/orgs", label: "Organizations" },
           { href: "/admin/design-system", label: "Design system" },
         ]
       : []),
@@ -209,6 +211,7 @@ describe("buildAdminNavLinks — drift locks (consumers must not converge)", () 
       { href: "/admin/outbox", label: "Outbox" },
       { href: "/admin/feedback", label: "Feedback inbox" },
       { href: "/admin/tutor-approvals", label: "Tutor approvals" },
+      { href: "/admin/orgs", label: "Organizations" },
       { href: "/admin/design-system", label: "Design system" },
       { href: "/admin/cost", label: "Cost" },
       { href: "/admin/erasure", label: "Erasure" },
@@ -222,12 +225,29 @@ describe("buildAdminNavLinks — drift locks (consumers must not converge)", () 
       { href: "/admin/outbox", label: "Outbox" },
       { href: "/admin/feedback", label: "Feedback inbox" },
       { href: "/admin/tutor-approvals", label: "Tutor approvals" },
+      { href: "/admin/orgs", label: "Organizations" },
       { href: "/admin/design-system", label: "Design system" },
       { href: "/admin/cost", label: "Cost" },
       { href: "/admin/erasure", label: "Erasure" },
       { href: "/admin/settings", label: "Settings" },
       { href: "/admin/dev-tools", label: "Dev tools" },
     ]);
+  });
+});
+
+describe("organization nav", () => {
+  it("adds Organization for staff home and leaves it off otherwise", () => {
+    const withHome = buildAdminNavLinks(
+      adminSidebarNavLinkOpts({
+        sessionMode: "tutor-experience",
+        showOrgStaffHome: true,
+      })
+    );
+    const without = buildAdminNavLinks(
+      adminSidebarNavLinkOpts({ sessionMode: "tutor-experience" })
+    );
+    expect(withHome).toContainEqual({ href: "/admin/organization", label: "Organization" });
+    expect(without.find((link) => link.href === "/admin/organization")).toBeUndefined();
   });
 });
 
