@@ -2,6 +2,21 @@
 
 Branch: `feat/org-qol` at `0dfcdec1` plus uncommitted stage 3 work. Not committed. Not pushed.
 
+## Ad-hoc session list
+
+**New for Andrew.** A tutor start with no appointment ahead of time, for a personal student (the student's `adminUserId` is that tutor), writes one `ScheduledSession` and points the whiteboard row at it. The parent list and the child list already read those rows, so the session shows immediately. There is no Google Calendar write, no invite email, and no second list.
+
+The subject stored on that row is exactly: "Tutoring session."
+
+Organization-owned students (`organizationId` set, `adminUserId` null) are unchanged. This does not add an organization booking path. A start that is already linked to a `ScheduledSession` does not create another one. If creating the whiteboard throws because there is no consent record, the ad-hoc `ScheduledSession` is deleted.
+
+Reds (`src/__tests__/whiteboard/adhoc-scheduled-session.integration.test.ts`):
+
+- Personal student, before the insert: expected length 1, received 0.
+- Organization-owned student. Removing only `organizationId != null` stayed green: a null `adminUserId` still returned no row (expected length 0, received 0). Removing the rest of that early return, so a null owner was no longer skipped, inserted a row and linked the whiteboard to it. Expected length 0, received 1. That row's id was `17a7d3ea-d3e1-4e9c-bc44-b5dc3e52b76f`. The guard is restored.
+- Wall-clock `startTime` and `endTime` stored as empty strings: expected startTime not `""`, received `""`.
+- Missing consent, with the rollback delete removed: the `ScheduledSession` remained. Expected length 0, received 1. The delete is restored.
+
 ## What was built
 
 - One organization-owned `Student`: `organizationId` set, `adminUserId` null. `student_single_owner` forbids both owners and allows both null (env-admin).

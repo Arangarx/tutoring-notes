@@ -12,6 +12,7 @@ import {
 } from "@/lib/blob-harness";
 import { createWhiteboardSessionCore } from "@/lib/whiteboard/create-session-core";
 import { getOrCreateWhiteboardForSchedule } from "@/lib/whiteboard/schedule-bridge";
+import { ensureAdHocScheduledSession } from "@/lib/scheduling/ad-hoc-scheduled-session";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { registeredAdminId } from "@/lib/whiteboard/require-registered-admin";
@@ -101,11 +102,32 @@ export async function createWhiteboardSession(
   );
   await assertOwnsStudent(studentId);
 
-  const session = await createWhiteboardSessionCore({
+  const scheduledSessionId = await ensureAdHocScheduledSession({
     adminUserId,
     studentId,
-    rid,
   });
+
+  let session: { id: string };
+  try {
+    session = await createWhiteboardSessionCore({
+      adminUserId,
+      studentId,
+      rid,
+      ...(scheduledSessionId ? { scheduledSessionId } : {}),
+    });
+  } catch (err) {
+    if (scheduledSessionId) {
+      await withDbRetry(
+        () => db.scheduledSession.delete({ where: { id: scheduledSessionId } }),
+        { label: "ensureAdHocScheduledSession.rollback" }
+      ).catch((delErr: unknown) => {
+        console.warn(
+          `[slc] action=adhoc_scheduled_session_rollback_failed scheduledSessionId=${scheduledSessionId} err=${delErr instanceof Error ? delErr.name : "unknown"}`
+        );
+      });
+    }
+    throw err;
+  }
 
   // redirect() throws a NEXT_REDIRECT internally; the calling form
   // path treats that as "navigate" rather than as an error. Place it

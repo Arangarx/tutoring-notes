@@ -90,7 +90,7 @@ const PATH_RULES = [
     tags: [TAG.WB_PRESENCE, TAG.WB_SYNC, TAG.WB_CHROME, TAG.WB_AV],
   },
   {
-    re: /wb-org-qol-bridge|schedule-bridge|upcoming-sessions|JoinScheduledSession|openScheduledWhiteboardSession/i,
+    re: /wb-org-qol-bridge|wb-adhoc-session-list|schedule-bridge|upcoming-sessions|JoinScheduledSession|openScheduledWhiteboardSession/i,
     tags: [TAG.WB_SYNC, TAG.WB_PRESENCE, TAG.WB_CHROME],
   },
   {
