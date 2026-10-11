@@ -170,7 +170,7 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
 
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         // CredentialsProvider: authorize() sets isTestAccount + role + approvalStatus on the returned user.
         const u = user as {
@@ -265,7 +265,12 @@ export const authOptions: NextAuthOptions = {
       // session invalidation during DB outages.
       if (!user && !account && token.sub && token.sub !== "admin" && !token.isImpersonating) {
         const now = Date.now();
-        const lastCheck = (token._roleCheckedAt as number | undefined) ?? 0;
+        // Org-invite accept asks the client to call session.update(), which
+        // arrives here with trigger "update" and must not wait out the throttle.
+        const forceRefresh = trigger === "update";
+        const lastCheck = forceRefresh
+          ? 0
+          : ((token._roleCheckedAt as number | undefined) ?? 0);
         if (now - lastCheck >= ROLE_REFRESH_INTERVAL_MS) {
           try {
             const dbAdmin = await getAdminById(token.sub);

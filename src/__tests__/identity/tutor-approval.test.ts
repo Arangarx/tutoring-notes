@@ -30,6 +30,7 @@
 
 const mockAdminUserFindUnique = jest.fn();
 const mockAdminUserUpdate = jest.fn();
+const mockAdminUserUpdateMany = jest.fn();
 const mockAdminUserCreate = jest.fn();
 const mockLogProductEvent = jest.fn();
 
@@ -44,6 +45,7 @@ jest.mock("@/lib/db", () => ({
     adminUser: {
       findUnique: (...args: unknown[]) => mockAdminUserFindUnique(...args),
       update: (...args: unknown[]) => mockAdminUserUpdate(...args),
+      updateMany: (...args: unknown[]) => mockAdminUserUpdateMany(...args),
       create: (...args: unknown[]) => mockAdminUserCreate(...args),
     },
     whiteboardSession: {
@@ -275,25 +277,25 @@ describe("TAP-6 — approveTutor updates DB", () => {
     mockLogProductEvent.mockReset();
   });
 
-  it("calls db.adminUser.update with APPROVED status and operatorId", async () => {
-    mockAdminUserUpdate.mockResolvedValueOnce({});
+  it("calls db.adminUser.updateMany only while WAITLISTED", async () => {
+    mockAdminUserUpdateMany.mockResolvedValueOnce({ count: 1 });
     await approveTutor(WAITLISTED_ADMIN_ID, OPERATOR_ID);
 
-    expect(mockAdminUserUpdate).toHaveBeenCalledWith(
+    expect(mockAdminUserUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: WAITLISTED_ADMIN_ID },
+        where: { id: WAITLISTED_ADMIN_ID, approvalStatus: "WAITLISTED" },
         data: expect.objectContaining({
           approvalStatus: "APPROVED",
           approvedByAdminId: OPERATOR_ID,
         }),
       })
     );
-    const call = mockAdminUserUpdate.mock.calls[0][0];
+    const call = mockAdminUserUpdateMany.mock.calls[0][0];
     expect(call.data.approvedAt).toBeInstanceOf(Date);
   });
 
   it("logs TUTOR_APPROVED product event with operatorId", async () => {
-    mockAdminUserUpdate.mockResolvedValueOnce({});
+    mockAdminUserUpdateMany.mockResolvedValueOnce({ count: 1 });
     await approveTutor(WAITLISTED_ADMIN_ID, OPERATOR_ID);
 
     expect(mockLogProductEvent).toHaveBeenCalledWith({

@@ -113,6 +113,21 @@ enum TutorApprovalStatus {
   REJECTED
 }
 
+/// Operator-controlled organization lifecycle. Only operator code writes this.
+enum OrganizationStatus {
+  pending
+  active
+  suspended
+}
+
+/// Org staff roles. `instructor` is the teaching role (not AdminRole, not "tutor").
+enum OrgRole {
+  owner
+  admin
+  scheduler
+  instructor
+}
+
 enum SessionPhase {
   PENDING
   ACTIVE
@@ -803,6 +818,8 @@ model AdminUser {
   tutorTimezone               String?
   tutorEmailAllowlistCreated  TutorEmailAllowlist[] @relation("TutorEmailAllowlistCreatedBy")
   calendarFeedTokens          CalendarFeedToken[]
+  organizationMemberships     OrganizationMember[]
+  organizationInvitesSent     OrganizationInvite[]  @relation("OrganizationInvitesSent")
 }
 
 /// Pre-approved tutor signup emails — normalized at write time.
@@ -813,6 +830,58 @@ model TutorEmailAllowlist {
   createdByAdminId  String
   createdByAdmin    AdminUser @relation("TutorEmailAllowlistCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   createdAt         DateTime  @default(now())
+}
+
+/// Operator-created organization. Status, caps, and creation are operator-only.
+model Organization {
+  id                  String             @id @default(uuid())
+  name                String
+  timezone            String             @default("America/Denver")
+  status              OrganizationStatus @default(pending)
+  /// Null means no member cap. Operator-set; never defaulted.
+  maxMembers          Int?
+  /// Null means no daily invite cap. Operator-set; counted in `timezone`.
+  dailyInviteCap      Int?
+  /// AdminUser.id when the operator has a row, otherwise the operator email.
+  createdByOperatorId String
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  members             OrganizationMember[]
+  invites             OrganizationInvite[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  adminUserId    String
+  adminUser      AdminUser    @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  roles          OrgRole[]
+  /// True only when an active-org invite accept moved this tutor off WAITLISTED.
+  approvedViaOrg Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  removedAt      DateTime?
+
+  @@unique([organizationId, adminUserId])
+  @@index([adminUserId])
+}
+
+model OrganizationInvite {
+  id                   String       @id @default(uuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// Normalized. Only an AdminUser with this email may accept.
+  email                String
+  roles                OrgRole[]
+  tokenHash            String       @unique
+  expiresAt            DateTime
+  acceptedAt           DateTime?
+  revokedAt            DateTime?
+  invitedByAdminUserId String
+  invitedBy            AdminUser    @relation("OrganizationInvitesSent", fields: [invitedByAdminUserId], references: [id], onDelete: Restrict)
+  createdAt            DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
 }
 
 /// One-time hashed tokens for tutor signup email confirm. Do not reuse AccountHolderEmailToken.

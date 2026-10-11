@@ -69,7 +69,10 @@ export async function approveTutorAction(
     return { ok: false, error: "Rejected tutors cannot be approved." };
   }
 
-  await approveTutor(adminUserId, operator.operatorId);
+  const approved = await approveTutor(adminUserId, operator.operatorId);
+  if (!approved.approved) {
+    return { ok: false, error: "Tutor could not be approved." };
+  }
 
   revalidatePath("/admin/tutor-approvals");
 

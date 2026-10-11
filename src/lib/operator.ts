@@ -1,7 +1,14 @@
 import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { authOptions } from "@/auth-options";
+import { getAdminByEmail } from "@/lib/auth-db";
 import { env } from "@/lib/env";
+
+/** Signed-in operator. `adminId` is null when the email has no AdminUser row. */
+export type OperatorIdentity = {
+  adminId: string | null;
+  email: string;
+};
 
 /** For tests — builds the same set as `getOperatorEmailSet` from raw strings. */
 export function buildOperatorEmailSet(
@@ -36,8 +43,16 @@ export function isOperatorEmail(email: string | null | undefined): boolean {
   return set.has(email.trim().toLowerCase());
 }
 
-/** Use on server-only routes that must not be visible to every tutor. */
-export async function requireOperator(): Promise<void> {
+/**
+ * Use on server-only routes that must not be visible to every tutor.
+ * Gate is the operator email set, not AdminRole.ADMIN.
+ * Returns the DB admin id when one exists, otherwise null plus the email.
+ */
+export async function requireOperator(): Promise<OperatorIdentity> {
   const session = await getServerSession(authOptions);
-  if (!isOperatorEmail(session?.user?.email)) notFound();
+  const raw = session?.user?.email;
+  if (!isOperatorEmail(raw)) notFound();
+  const email = raw!.trim().toLowerCase();
+  const admin = await getAdminByEmail(email);
+  return { adminId: admin?.id ?? null, email };
 }
