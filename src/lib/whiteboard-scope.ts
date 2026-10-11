@@ -47,7 +47,7 @@ export async function assertOwnsWhiteboardSession(
           consentAcknowledged: true,
           eventsBlobUrl: true,
           endedAt: true,
-          student: { select: { adminUserId: true } },
+          student: { select: { adminUserId: true, organizationId: true } },
         },
       }),
     { label: "assertOwnsWhiteboardSession" }

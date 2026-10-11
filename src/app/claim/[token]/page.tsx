@@ -22,6 +22,8 @@ interface InviteData {
   studentName: string;
   tutorName: string | null;
   tutorAdminUserId: string;
+  organizationId: string | null;
+  organizationName: string | null;
   expiresAt: Date;
   state: ClaimState;
   /** Normalized email allowed to claim; null only on legacy invites. */
@@ -38,7 +40,13 @@ async function resolveInvite(rawToken: string): Promise<InviteData | null> {
     where: { tokenHash },
     include: {
       student: {
-        select: { name: true, parentEmail: true, learnerProfileId: true },
+        select: {
+          name: true,
+          parentEmail: true,
+          learnerProfileId: true,
+          organizationId: true,
+          organization: { select: { name: true } },
+        },
       },
       adminUser: { select: { displayName: true } },
     },
@@ -64,6 +72,8 @@ async function resolveInvite(rawToken: string): Promise<InviteData | null> {
     studentName: invite.student.name,
     tutorName: invite.adminUser.displayName ?? null,
     tutorAdminUserId: invite.adminUserId,
+    organizationId: invite.student.organizationId,
+    organizationName: invite.student.organization?.name ?? null,
     expiresAt: invite.expiresAt,
     state,
     intendedEmail: inviteIntendedEmail(invite, invite.student),
@@ -210,7 +220,9 @@ export default async function ClaimPage({
             isSelfLearner: true,
             // IAC-3: filter out profiles already connected to this tutor's student
             students: {
-              where: { adminUserId: invite.tutorAdminUserId },
+              where: invite.organizationId
+                ? { organizationId: invite.organizationId }
+                : { adminUserId: invite.tutorAdminUserId },
               select: { id: true },
             },
           },
@@ -254,7 +266,7 @@ export default async function ClaimPage({
       }
       // IAC-3: only show profiles NOT already linked to this tutor
       ownedProfiles = ah.learnerProfiles
-        .filter((p) => p.students.length === 0)
+        .filter((p) => invite.organizationId || p.students.length === 0)
         .map((p) => ({ id: p.id, displayName: p.displayName, isSelfLearner: p.isSelfLearner }));
     }
   }
@@ -267,10 +279,12 @@ export default async function ClaimPage({
             {"Connect "}
             {invite.studentName}
           </CardTitle>
-          <CardDescription className="text-base text-muted-foreground">
-            {invite.tutorName
-              ? `${invite.tutorName} invited you to connect ${invite.studentName}'s tutoring account.`
-              : `You've been invited to connect ${invite.studentName}'s tutoring account.`}
+          <CardDescription className="text-base text-muted-foreground" data-testid="claim-invite-for">
+            {invite.organizationName
+              ? `${invite.organizationName} invited you to connect ${invite.studentName}'s tutoring account.`
+              : invite.tutorName
+                ? `${invite.tutorName} invited you to connect ${invite.studentName}'s tutoring account.`
+                : `You've been invited to connect ${invite.studentName}'s tutoring account.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
@@ -280,6 +294,7 @@ export default async function ClaimPage({
               rawToken={rawToken}
               studentName={invite.studentName}
               tutorName={invite.tutorName}
+              organizationName={invite.organizationName}
               signedInEmail={signedInEmail}
               ownedProfiles={ownedProfiles}
               inviteTarget={invite.inviteTarget}

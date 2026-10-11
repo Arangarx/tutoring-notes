@@ -33,7 +33,10 @@ jest.mock("@/lib/consent-write", () => {
 });
 
 import { db } from "@/lib/db";
-import { saveParentConsentAction } from "@/app/account/children/[id]/consent/actions";
+import {
+  saveParentConsentAction,
+  saveSelfLearnerConsentAction,
+} from "@/app/account/children/[id]/consent/actions";
 import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
 import {
   ConsentAlreadySavedError,
@@ -309,5 +312,112 @@ describe("saveParentConsentAction", () => {
     });
 
     expect(result).toEqual({ ok: false, error: "consent_already_saved" });
+  });
+});
+
+describe("organization and self-learner consent writes", () => {
+  const flags = {
+    allowLiveSession: true,
+    allowAudioRecording: false,
+    allowWhiteboardRecording: true,
+    allowNoteSending: false,
+  };
+
+  it("writes the organization row and refuses an organization that is not linked", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const profile = await createLearnerProfile(ah.id);
+    const org = await db.organization.create({
+      data: {
+        name: `Consent org ${uniq("org")}`,
+        createdByOperatorId: "consent-op@test.local",
+      },
+      select: { id: true },
+    });
+    await db.student.create({
+      data: {
+        name: "Org child",
+        adminUserId: null,
+        organizationId: org.id,
+        learnerProfileId: profile.id,
+      },
+    });
+    (getAccountHolderSessionFromHeaders as jest.Mock).mockResolvedValue({
+      accountHolderId: ah.id,
+    });
+
+    const saved = await saveParentConsentAction(profile.id, {
+      tutors: [],
+      organizations: [{ organizationId: org.id, ...flags }],
+      restrictions: defaultRestrictions,
+    });
+    expect(saved.ok).toBe(true);
+    const row = await db.consentRecord.findFirst({
+      where: { learnerProfileId: profile.id },
+    });
+    expect(row).toMatchObject({
+      organizationId: org.id,
+      adminUserId: null,
+      allowLiveSession: true,
+      allowAudioRecording: false,
+      allowWhiteboardRecording: true,
+      allowNoteSending: false,
+      setByAccountHolderId: ah.id,
+    });
+
+    const other = await db.organization.create({
+      data: {
+        name: `Unlinked org ${uniq("org")}`,
+        createdByOperatorId: "consent-op@test.local",
+      },
+      select: { id: true },
+    });
+    const forbidden = await saveParentConsentAction(profile.id, {
+      tutors: [],
+      organizations: [{ organizationId: other.id, ...flags }],
+      restrictions: defaultRestrictions,
+    });
+    expect(forbidden).toEqual({ ok: false, error: "forbidden" });
+    expect(
+      await db.consentRecord.count({
+        where: { learnerProfileId: profile.id, organizationId: other.id },
+      })
+    ).toBe(0);
+  });
+
+  it("saveSelfLearnerConsentAction writes the tutor row and refuses a child profile", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder({ isSelfLearner: true });
+    const self = await createLearnerProfile(ah.id, { isSelfLearner: true });
+    await createStudent(tutor.id, self.id);
+    (getAccountHolderSessionFromHeaders as jest.Mock).mockResolvedValue({
+      accountHolderId: ah.id,
+    });
+
+    const saved = await saveSelfLearnerConsentAction(self.id, {
+      tutors: [{ adminUserId: tutor.id, ...flags }],
+      restrictions: defaultRestrictions,
+    });
+    expect(saved.ok).toBe(true);
+    const row = await db.consentRecord.findFirst({
+      where: { learnerProfileId: self.id, adminUserId: tutor.id },
+    });
+    expect(row).toMatchObject({
+      allowLiveSession: true,
+      allowAudioRecording: false,
+      version: 1,
+      setByAccountHolderId: ah.id,
+    });
+    expect(
+      await db.consentRestriction.count({ where: { learnerProfileId: self.id } })
+    ).toBe(0);
+
+    const child = await createLearnerProfile(ah.id, { isSelfLearner: false });
+    await createStudent(tutor.id, child.id);
+    const refused = await saveSelfLearnerConsentAction(child.id, {
+      tutors: [{ adminUserId: tutor.id, ...flags }],
+      restrictions: defaultRestrictions,
+    });
+    expect(refused).toEqual({ ok: false, error: "not_self_learner" });
   });
 });

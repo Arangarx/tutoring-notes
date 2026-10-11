@@ -6,6 +6,7 @@ import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
 import {
   ConsentAlreadySavedError,
   createVersionedConsentRecord,
+  type ConsentFlags,
 } from "@/lib/consent-write";
 
 export type SaveTutorConsentInput = {
@@ -22,18 +23,44 @@ export type SaveConsentRestrictionInput = {
   restrictNoteSending: boolean;
 };
 
+export type SaveOrgConsentInput = {
+  organizationId: string;
+  allowLiveSession: boolean;
+  allowAudioRecording: boolean;
+  allowWhiteboardRecording: boolean;
+  allowNoteSending: boolean;
+};
+
 export type SaveParentConsentInput = {
   tutors: SaveTutorConsentInput[];
+  organizations?: SaveOrgConsentInput[];
   restrictions: SaveConsentRestrictionInput;
 };
 
+function consentFlags(row: {
+  allowLiveSession: boolean;
+  allowAudioRecording: boolean;
+  allowWhiteboardRecording: boolean;
+  allowNoteSending: boolean;
+}): ConsentFlags {
+  return {
+    allowLiveSession: row.allowLiveSession,
+    allowAudioRecording: row.allowAudioRecording,
+    allowWhiteboardRecording: row.allowWhiteboardRecording,
+    allowNoteSending: row.allowNoteSending,
+  };
+}
+
+type ConsentActor = "parent" | "self_learner";
+
 /**
- * B2 Step 6 — parent updates per-tutor ConsentRecord versions + ConsentRestriction.
- * Mirrors claim setup consent writes; asserts ownership before any mutation.
+ * One writer for parent and self-learner consent.
+ * A parent also stores the hard limits. A self-learner does not.
  */
-export async function saveParentConsentAction(
+async function saveConsentForActor(
   learnerProfileId: string,
-  input: SaveParentConsentInput
+  input: SaveParentConsentInput,
+  actor: ConsentActor
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -47,27 +74,36 @@ export async function saveParentConsentAction(
     learnerProfileId
   );
 
-  if (profile.isSelfLearner) {
+  if (actor === "parent" && profile.isSelfLearner) {
     return { ok: false, error: "self_learner" };
   }
+  if (actor === "self_learner" && !profile.isSelfLearner) {
+    return { ok: false, error: "not_self_learner" };
+  }
 
-  if (!input.tutors.length) {
+  const organizations = input.organizations ?? [];
+  if (!input.tutors.length && !organizations.length) {
     return { ok: false, error: "no_tutors" };
   }
 
+  const linked = await db.student.findMany({
+    where: { learnerProfileId },
+    select: { adminUserId: true, organizationId: true },
+  });
   const linkedTutorIds = new Set(
-    (
-      await db.student.findMany({
-        where: { learnerProfileId },
-        select: { adminUserId: true },
-      })
-    )
-      .map((s) => s.adminUserId)
-      .filter((id): id is string => Boolean(id))
+    linked.map((s) => s.adminUserId).filter((id): id is string => Boolean(id))
+  );
+  const linkedOrgIds = new Set(
+    linked.map((s) => s.organizationId).filter((id): id is string => Boolean(id))
   );
 
   for (const tutor of input.tutors) {
     if (!linkedTutorIds.has(tutor.adminUserId)) {
+      return { ok: false, error: "forbidden" };
+    }
+  }
+  for (const org of organizations) {
+    if (!linkedOrgIds.has(org.organizationId)) {
       return { ok: false, error: "forbidden" };
     }
   }
@@ -81,34 +117,38 @@ export async function saveParentConsentAction(
           learnerProfileId,
           adminUserId: tutor.adminUserId,
           setByAccountHolderId: ahSession.accountHolderId,
-          flags: {
-            allowLiveSession: tutor.allowLiveSession,
-            allowAudioRecording: tutor.allowAudioRecording,
-            allowWhiteboardRecording: tutor.allowWhiteboardRecording,
-            allowNoteSending: tutor.allowNoteSending,
-          },
+          flags: consentFlags(tutor),
           logAction: "consent_set",
         });
-
         tutorVersions[tutor.adminUserId] = nextVersion;
       }
 
-      await tx.consentRestriction.upsert({
-        where: { learnerProfileId },
-        create: {
+      for (const org of organizations) {
+        await createVersionedConsentRecord(tx, {
           learnerProfileId,
-          restrictAudioRecording: input.restrictions.restrictAudioRecording,
-          restrictWhiteboardRecording:
-            input.restrictions.restrictWhiteboardRecording,
-          restrictNoteSending: input.restrictions.restrictNoteSending,
-        },
-        update: {
-          restrictAudioRecording: input.restrictions.restrictAudioRecording,
-          restrictWhiteboardRecording:
-            input.restrictions.restrictWhiteboardRecording,
-          restrictNoteSending: input.restrictions.restrictNoteSending,
-        },
-      });
+          organizationId: org.organizationId,
+          setByAccountHolderId: ahSession.accountHolderId,
+          flags: consentFlags(org),
+          logAction: "consent_set",
+        });
+      }
+
+      if (actor === "parent") {
+        await tx.consentRestriction.upsert({
+          where: { learnerProfileId },
+          create: {
+            learnerProfileId,
+            restrictAudioRecording: input.restrictions.restrictAudioRecording,
+            restrictWhiteboardRecording: input.restrictions.restrictWhiteboardRecording,
+            restrictNoteSending: input.restrictions.restrictNoteSending,
+          },
+          update: {
+            restrictAudioRecording: input.restrictions.restrictAudioRecording,
+            restrictWhiteboardRecording: input.restrictions.restrictWhiteboardRecording,
+            restrictNoteSending: input.restrictions.restrictNoteSending,
+          },
+        });
+      }
     });
   } catch (err) {
     if (err instanceof ConsentAlreadySavedError) {
@@ -118,4 +158,28 @@ export async function saveParentConsentAction(
   }
 
   return { ok: true, tutorVersions };
+}
+
+/**
+ * B2 Step 6 — parent updates per-tutor ConsentRecord versions + ConsentRestriction.
+ * Mirrors claim setup consent writes; asserts ownership before any mutation.
+ */
+export async function saveParentConsentAction(
+  learnerProfileId: string,
+  input: SaveParentConsentInput
+): Promise<{
+  ok: boolean;
+  error?: string;
+  tutorVersions?: Record<string, number>;
+}> {
+  return saveConsentForActor(learnerProfileId, input, "parent");
+}
+
+/** Self-learner settings write the same versioned rows. */
+export async function saveSelfLearnerConsentAction(
+  learnerProfileId: string,
+  input: SaveParentConsentInput
+): Promise<{ ok: boolean; error?: string }> {
+  const result = await saveConsentForActor(learnerProfileId, input, "self_learner");
+  return { ok: result.ok, error: result.error };
 }

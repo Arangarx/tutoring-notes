@@ -570,3 +570,37 @@ export async function assertOwnsConsentRecord(
 
   return record;
 }
+
+/**
+ * Stage 4 reads this. The five recording readers are unchanged and do not call it yet.
+ * Exactly one of adminUserId or organizationId.
+ */
+export async function resolveRecordedConsent(input: {
+  learnerProfileId: string;
+  adminUserId?: string;
+  organizationId?: string;
+}): Promise<{
+  allowLiveSession: boolean;
+  allowAudioRecording: boolean;
+  allowWhiteboardRecording: boolean;
+  allowNoteSending: boolean;
+} | null> {
+  const adminUserId = input.adminUserId;
+  const organizationId = input.organizationId;
+  if ((adminUserId && organizationId) || (!adminUserId && !organizationId)) {
+    throw new Error("consent_owner_required");
+  }
+  const record = await db.consentRecord.findFirst({
+    where: organizationId
+      ? { learnerProfileId: input.learnerProfileId, organizationId, adminUserId: null }
+      : { learnerProfileId: input.learnerProfileId, adminUserId },
+    orderBy: { version: "desc" },
+    select: {
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+    },
+  });
+  return record;
+}

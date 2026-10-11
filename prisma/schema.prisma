@@ -165,10 +165,16 @@ model Student {
   parentEmail             String? // Saved so tutor doesn't re-enter every time
   createdAt               DateTime            @default(now())
   /**
-   * Tutor who owns this student (multi-tenant). Null = legacy rows before scoping or env-only admin.
+   * Tutor who owns this student (multi-tenant).
+   * Null together with organizationId null is the env-only admin (or a legacy row).
+   * An organization learner keeps this null and sets organizationId. A row must not have both owners.
    */
   adminUserId             String?
   adminUser               AdminUser?          @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  /// Set for an organization-owned learner. Null on tutor-owned and env-admin rows.
+  organizationId          String?
+  organization            Organization?       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organizationLearner     OrganizationLearner?
   /**
    * Per-student default for the whiteboard "Start recording" toggle
    * DEPRECATED (PRESARAH-1, 2026-07): per-student "start recording by
@@ -204,8 +210,13 @@ model Student {
 
   /// IAC-2: per-tutor uniqueness — a tutor cannot link the same learner profile twice;
   /// a second tutor can link the same profile under their own adminUserId.
+  /// Null adminUserId does not collide (org rows). Org uniqueness is the index below.
   @@unique([adminUserId, learnerProfileId])
+  /// One organization learner per learner profile. Null learnerProfileId does not collide,
+  /// so several not-yet-linked learners in one org stay separate rows.
+  @@unique([organizationId, learnerProfileId])
   @@index([adminUserId])
+  @@index([organizationId])
 }
 
 model SessionNote {
@@ -820,6 +831,7 @@ model AdminUser {
   calendarFeedTokens          CalendarFeedToken[]
   organizationMemberships     OrganizationMember[]
   organizationInvitesSent     OrganizationInvite[]  @relation("OrganizationInvitesSent")
+  organizationLearnersCreated OrganizationLearner[] @relation("OrgLearnerCreatedBy")
 }
 
 /// Pre-approved tutor signup emails — normalized at write time.
@@ -843,12 +855,23 @@ model Organization {
   /// Null means unlimited, and only when the operator sets that explicitly.
   /// createOrganization stores 25 when this cap is omitted. Existing null rows stay unlimited.
   dailyInviteCap      Int?
+  /// New learners per day, all staff combined. Null is unlimited, and only when the operator chooses it.
+  /// createOrganization stores 20 when this cap is omitted. Not a backfill of dailyInviteCap.
+  dailyLearnerCap     Int?
+  /// Claim emails per day, all staff combined. Null is unlimited, and only when the operator chooses it.
+  /// createOrganization stores 30 when this cap is omitted.
+  dailyClaimEmailCap  Int?
+  /// When status last changed. createOrganization sets it. setOrganizationStatus is the only later writer.
+  statusChangedAt     DateTime           @default(now())
   /// AdminUser.id when the operator has a row, otherwise the operator email.
   createdByOperatorId String
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   members             OrganizationMember[]
   invites             OrganizationInvite[]
+  students            Student[]
+  learners            OrganizationLearner[]
+  consentRecords      ConsentRecord[]
 }
 
 model OrganizationMember {
@@ -883,6 +906,26 @@ model OrganizationInvite {
   createdAt            DateTime     @default(now())
 
   @@index([organizationId, createdAt])
+}
+
+/// Name, family name, and one brief for an organization-owned Student.
+/// Parent email stays on Student.parentEmail. Scheduling is the relationship: no assignment table.
+model OrganizationLearner {
+  id                   String       @id @default(uuid())
+  studentId            String       @unique
+  student              Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  givenName            String
+  familyName           String
+  /// One brief. Not grade, subject, or goals.
+  brief                String       @default("")
+  createdByAdminUserId String
+  createdBy            AdminUser    @relation("OrgLearnerCreatedBy", fields: [createdByAdminUserId], references: [id], onDelete: Restrict)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@index([organizationId])
 }
 
 /// One-time hashed tokens for tutor signup email confirm. Do not reuse AccountHolderEmailToken.
@@ -1460,34 +1503,38 @@ model LearnerLoginThrottle {
 // Enforcement is dormant until CONSENT_ENFORCEMENT=true.
 // =============================================================================
 
-/// Versioned per-tutor consent record set by the parent (AccountHolder).
+/// Versioned consent record for one tutor or one organization.
 /// Each "Save preferences" creates a new version (MAX+1 or 1 for first).
-/// Legal record: onDelete: Restrict on both FKs — rows are never deleted.
-/// Per-tutor: (learnerProfileId, adminUserId) pair; consent for tutor A
-/// does not propagate to tutor B.
+/// Legal record: onDelete: Restrict — rows are never deleted.
+/// Exactly one of adminUserId or organizationId. Both-null is rejected.
+/// @@unique keeps the Prisma key. Null adminUserId does not collide in Postgres.
+/// Partial unique indexes in the stage 3 migration still enforce tutor rows
+/// and organization rows.
 model ConsentRecord {
-  id                        String         @id @default(uuid())
+  id                        String          @id @default(uuid())
   learnerProfileId          String
-  learnerProfile            LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Restrict)
-  adminUserId               String
-  adminUser                 AdminUser      @relation("TutorConsentRecords", fields: [adminUserId], references: [id], onDelete: Restrict)
-  /// Version counter — monotonically increasing per (learnerProfileId, adminUserId).
+  learnerProfile            LearnerProfile  @relation(fields: [learnerProfileId], references: [id], onDelete: Restrict)
+  adminUserId               String?
+  adminUser                 AdminUser?      @relation("TutorConsentRecords", fields: [adminUserId], references: [id], onDelete: Restrict)
+  organizationId            String?
+  organization              Organization?   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// Version counter — monotonically increasing per tutor pair or per organization pair.
   /// Starts at 1; incremented on each "Save preferences".
   version                   Int
-  /// V1 consent toggles — boolean ceiling set by the parent.
+  /// V1 consent toggles — boolean ceiling set by the parent or the self-learner.
   allowLiveSession          Boolean
   allowAudioRecording       Boolean
   allowWhiteboardRecording  Boolean
   allowNoteSending          Boolean
   /// AccountHolder who set this record (must equal LearnerProfile.accountHolderId).
   setByAccountHolderId      String
-  /// Capture method — always "electronic" in V1 (web form).
-  captureMethod             String         @default("electronic")
-  setAt                     DateTime       @default(now())
+  /// "electronic" for a ticked form. "presumed" for the version-1 self-learner backfill.
+  captureMethod             String          @default("electronic")
+  setAt                     DateTime        @default(now())
 
-  /// Per-tutor versioning uniqueness.
   @@unique([learnerProfileId, adminUserId, version])
   @@index([learnerProfileId, adminUserId])
+  @@index([learnerProfileId, organizationId])
 }
 
 /// Child-narrowing restrictions (floor) set on a LearnerProfile.

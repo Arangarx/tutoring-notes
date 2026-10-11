@@ -24,6 +24,10 @@ export default async function globalSetup() {
           "jest global-setup: force-reset the local test DB (tutoring_notes_test at 127.0.0.1:5432) on every test run to keep schema in sync. Safe: this is an ephemeral test database.",
       },
     });
+    execSync("node scripts/apply-org-learner-guards.cjs", {
+      stdio: "inherit",
+      env: process.env,
+    });
   } catch {
     // DB not reachable — unit tests (mocked, no DB) will still pass.
     // Integration tests that need the DB will fail on their own connection errors.

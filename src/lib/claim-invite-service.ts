@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import {
   generateRawToken,
   hashToken,
@@ -25,9 +26,10 @@ export const MAX_PENDING_CLAIM_INVITES = 3;
 
 export async function countPendingClaimInvites(
   studentId: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  client: Prisma.TransactionClient | typeof db = db
 ): Promise<number> {
-  return db.studentClaimInvite.count({
+  return client.studentClaimInvite.count({
     where: {
       studentId,
       claimedAt: null,
@@ -70,10 +72,12 @@ export async function mintStudentClaimInvite(params: {
   targetKind: RosterInviteTargetKind;
   studentDisplayName: string;
   sendEmail: boolean;
+  client?: Prisma.TransactionClient;
 }): Promise<MintClaimInviteResult> {
   const now = new Date();
+  const client = params.client ?? db;
 
-  const pendingCount = await countPendingClaimInvites(params.studentId, now);
+  const pendingCount = await countPendingClaimInvites(params.studentId, now, client);
 
   if (pendingCount >= MAX_PENDING_CLAIM_INVITES) {
     throw new Error("too_many_pending_invites");
@@ -83,7 +87,7 @@ export async function mintStudentClaimInvite(params: {
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + CLAIM_INVITE_TTL_MS);
 
-  const invite = await db.studentClaimInvite.create({
+  const invite = await client.studentClaimInvite.create({
     data: {
       studentId: params.studentId,
       adminUserId: params.adminUserId,

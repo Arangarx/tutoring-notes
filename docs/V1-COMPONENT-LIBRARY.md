@@ -114,6 +114,11 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `OrgDailyCapFields` | `src/components/org/OrgDailyCapFields.tsx` | Daily invite limit or an explicit "No daily limit". Composes `CheckboxField` + `Input`. | `current` | Operator organization page and staff home when the viewer is an operator | **canonical** |
 | `OrgActivationPanel` | `src/components/org/OrgActivationPanel.tsx` | Activate, caps, and waitlisted members approved with `TutorWaitlistActions`. | `organizationId`, `status`, `dailyInviteCap`, `maxMembers`, `waitlisted`, `returnTo` | `/admin/orgs/[id]`, staff home for an operator | **canonical** |
 | `OrgStaffHome` | `src/components/org/OrgStaffHome.tsx` | Members, invitations, and activation for one organization. | `data`, `canActivate`, `error` | `/admin/organization/[id]` | **canonical** |
+| `OrgLearnerPanel` | `src/components/org/OrgLearnerPanel.tsx` | Add an organization learner and list records or scheduler cards. | `organizationId`, `canManage`, `records`, `schedulerCards` | `/admin/organization/[id]` | **canonical** |
+| `OrgInviteForPicker` | `src/components/org/OrgInviteForPicker.tsx` | Who receives the claim email. Composes `RadioGroup`. | none | Organization learner panel | **canonical** |
+| `ConsentSwitches` | `src/components/consent/ConsentSwitches.tsx` | The four consent switches for a parent and a self-learner. | `idPrefix`, `switches`, `values`, `onToggle`, `testIdPrefix` | Parent consent editor, claim setup, self-learner settings | **canonical** |
+| `SelfLearnerAgreement` | `src/components/consent/SelfLearnerAgreement.tsx` | The self-learner agreement checkbox. | `checked`, `onCheckedChange`, `id` | Claim setup and self-learner settings | **canonical** |
+| `SelfLearnerConsentSettings` | `src/components/consent/SelfLearnerConsentSettings.tsx` | Self-learner agreement and the shared switches. | `learnerProfileId`, `tutors`, `organizations`, `showAgreement` | Child consent page | **canonical** |
 
 ### Shared layout (cross-realm)
 

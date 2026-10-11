@@ -5,7 +5,7 @@
  *
  * Coverage:
  *   T5 — consent_decline writes all-off ConsentRecord v1; second decline → v2
- *   Self-learner decline → 200 { skipped: true }, no record
+ *   Self-learner decline writes an all-off ConsentRecord (same as an org self-learner)
  *   H-1 — P2002 on create → 409 consent_already_saved (consent + consent_decline)
  *
  * DB: uses tutoring_notes_test via jest.global-setup.ts (db push on run).
@@ -189,23 +189,32 @@ describe("CC-2 consent_decline API (T5)", () => {
   });
 });
 
-describe("CC-2 consent_decline — self-learner exemption (D-5)", () => {
-  it("returns 200 { skipped: true } and writes no ConsentRecord", async () => {
+describe("self-learner consent_decline writes a record", () => {
+  it("writes an all-off ConsentRecord for a self-learner with no record", async () => {
     const fx = await createClaimedInviteFixture({ isSelfLearner: true });
 
     const res = await postSetup(fx.rawToken, fx.ahSessionToken, {
       action: "consent_decline",
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, skipped: true });
+    const body = (await res.json()) as { ok?: boolean; skipped?: boolean; version?: number };
+    expect(body.ok).toBe(true);
+    expect(body.skipped).toBeUndefined();
+    expect(body.version).toBe(1);
 
-    const count = await db.consentRecord.count({
+    const records = await db.consentRecord.findMany({
       where: {
         learnerProfileId: fx.learnerProfileId,
         adminUserId: fx.adminUserId,
       },
     });
-    expect(count).toBe(0);
+    expect(records).toHaveLength(1);
+    expect(records[0]?.allowLiveSession).toBe(false);
+    expect(records[0]?.allowAudioRecording).toBe(false);
+    expect(records[0]?.allowWhiteboardRecording).toBe(false);
+    expect(records[0]?.allowNoteSending).toBe(false);
+    expect(records[0]?.setByAccountHolderId).toBe(fx.ah.id);
+    expect(records[0]?.captureMethod).toBe("electronic");
   });
 });
 

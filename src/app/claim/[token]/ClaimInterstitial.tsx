@@ -25,6 +25,7 @@ export function ClaimInterstitial({
   rawToken,
   studentName,
   tutorName,
+  organizationName,
   signedInEmail,
   ownedProfiles,
   inviteTarget,
@@ -32,6 +33,7 @@ export function ClaimInterstitial({
   rawToken: string;
   studentName: string;
   tutorName: string | null;
+  organizationName?: string | null;
   signedInEmail: string;
   ownedProfiles: OwnedProfile[];
   inviteTarget: RosterInviteTargetKind;
@@ -101,7 +103,8 @@ export function ClaimInterstitial({
     window.location.href = `/account/login?returnTo=${encodeURIComponent(`/claim/${rawToken}`)}`;
   }
 
-  const tutorDisplay = tutorName ? tutorName : "your tutor";
+  const partyName = organizationName?.trim() || (tutorName ? tutorName : "your tutor");
+  const forOrganization = Boolean(organizationName?.trim());
 
   return (
     <div className="space-y-4" data-testid="claim-interstitial">
@@ -112,11 +115,15 @@ export function ClaimInterstitial({
           <strong>{signedInEmail}</strong>.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {selfInviteOnly
-            ? `This invitation is for you as a ${SITE_ROLE_SELF_LEARNER_PARENT.toLowerCase()} under `
-            : "Choose who to connect as a learner under "}
-          <strong>{tutorDisplay}</strong>
-          {selfInviteOnly ? "." : "'s account:"}
+          {forOrganization
+            ? selfInviteOnly
+              ? `This invitation is for you as a ${SITE_ROLE_SELF_LEARNER_PARENT.toLowerCase()} with `
+              : "Choose who to connect as a learner for "
+            : selfInviteOnly
+              ? `This invitation is for you as a ${SITE_ROLE_SELF_LEARNER_PARENT.toLowerCase()} under `
+              : "Choose who to connect as a learner under "}
+          <strong data-testid="claim-party-name">{partyName}</strong>
+          {forOrganization ? "." : selfInviteOnly ? "." : "'s account:"}
         </p>
       </div>
 

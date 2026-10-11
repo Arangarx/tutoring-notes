@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { db, withDbRetry, isTransientDbConnectionError } from "@/lib/db";
@@ -816,6 +817,13 @@ export async function setNoteStatus(noteId: string, studentId: string, status: "
 
 export async function renameStudent(studentId: string, formData: FormData) {
   await assertOwnsMutableStudent(studentId);
+  const existing = await db.student.findUnique({
+    where: { id: studentId },
+    select: { organizationId: true },
+  });
+  if (existing?.organizationId) {
+    notFound();
+  }
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required");
   await db.student.update({ where: { id: studentId }, data: { name } });

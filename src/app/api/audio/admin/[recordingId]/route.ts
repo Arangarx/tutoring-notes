@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
-import { getStudentScope } from "@/lib/student-scope";
+import { envOnlyNullOwnerWhere, getStudentScope } from "@/lib/student-scope";
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
 import { logBlobEgressEvent } from "@/lib/observability/cost-events";
 
@@ -37,7 +37,7 @@ export async function GET(
     where:
       scope.kind === "admin"
         ? { id: recordingId, adminUserId: scope.adminId }
-        : { id: recordingId, student: { adminUserId: null } },
+        : { id: recordingId, student: envOnlyNullOwnerWhere() },
     select: {
       blobUrl: true,
       mimeType: true,

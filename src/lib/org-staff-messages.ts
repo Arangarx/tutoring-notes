@@ -26,6 +26,18 @@ export function orgStaffErrorSentence(code: string): string {
       return "The invitation email could not be sent. Try again.";
     case "invalid_cap":
       return "Enter a daily invite limit, or choose no daily limit.";
+    case "learner_cap":
+      return "This organization has reached its learner limit for today.";
+    case "claim_email_cap":
+      return "This organization has reached its claim email limit for today.";
+    case "missing_email":
+      return "A valid email address is required.";
+    case "brief_too_long":
+      return "The brief is too long.";
+    case "already_connected":
+      return "This learner is already connected.";
+    case "not_org_learner":
+      return "That learner is not in this organization.";
     default:
       return "That did not work. Try again.";
   }

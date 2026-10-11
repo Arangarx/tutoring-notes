@@ -52,6 +52,44 @@ describe("FIXTURE_CHILD_PIN constant", () => {
 // isDevToolsEnabled
 // ---------------------------------------------------------------------------
 
+describe("createTutorFixture() — usable without an operator approval", () => {
+  it("creates the tutor fixture already APPROVED", async () => {
+    const create = jest.fn().mockResolvedValue({
+      id: "fixture-admin-1",
+      email: "fixture-tutor-abc@dev.local",
+    });
+    jest.doMock("@/lib/db", () => ({
+      db: { adminUser: { create } },
+    }));
+    jest.doMock("bcryptjs", () => ({
+      __esModule: true,
+      default: { hash: jest.fn().mockResolvedValue("hashed-password") },
+    }));
+    jest.doMock("@/lib/crypto/session-tokens", () => ({
+      generateRawToken: jest.fn(),
+      hashToken: jest.fn(),
+      CLAIM_INVITE_TTL_MS: 0,
+    }));
+    jest.doMock("@/lib/account-holder-auth", () => ({
+      hashAccountHolderPassword: jest.fn(),
+      hashLearnerPin: jest.fn(),
+    }));
+    jest.doMock("@/lib/public-url", () => ({ getPublicBaseUrl: jest.fn() }));
+
+    const { createTutorFixture } = await import("@/lib/dev-fixtures");
+    await createTutorFixture();
+
+    expect(create).toHaveBeenCalledTimes(1);
+    const data = create.mock.calls[0][0].data;
+    expect(data.approvalStatus).toBe("APPROVED");
+    expect(data.approvedAt).toBeInstanceOf(Date);
+    expect(data.isTestFixture).toBe(true);
+    expect(data.isTestAccount).toBe(true);
+    expect(data.role).toBe("TUTOR");
+    expect(data.emailVerifiedAt).toBeInstanceOf(Date);
+  });
+});
+
 describe("isDevToolsEnabled()", () => {
   it("returns true when VERCEL_ENV is undefined (local dev)", async () => {
     delete process.env.VERCEL_ENV;

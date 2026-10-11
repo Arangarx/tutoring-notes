@@ -12,8 +12,10 @@ import { SubNav } from "@/components/SubNav";
 import {
   ParentConsentEditor,
   type ConsentRestrictionState,
+  type OrgConsentState,
   type TutorConsentState,
 } from "./ParentConsentEditor";
+import { SelfLearnerConsentSettings } from "@/components/consent/SelfLearnerConsentSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -63,12 +65,14 @@ export default async function LearnerConsentPage({
       students: {
         select: {
           adminUserId: true,
+          organizationId: true,
           adminUser: {
             select: {
               displayName: true,
               email: true,
             },
           },
+          organization: { select: { name: true } },
         },
       },
     },
@@ -94,14 +98,27 @@ export default async function LearnerConsentPage({
     }
   }
 
+  const orgMap = new Map<string, { organizationId: string; organizationName: string }>();
+  for (const student of learnerProfile.students) {
+    if (!student.organizationId || !student.organization) continue;
+    if (!orgMap.has(student.organizationId)) {
+      orgMap.set(student.organizationId, {
+        organizationId: student.organizationId,
+        organizationName: student.organization.name,
+      });
+    }
+  }
+
   const tutorIds = [...tutorMap.keys()];
-  const latestRecords = await Promise.all(
-    tutorIds.map((adminUserId) =>
+  const orgIds = [...orgMap.keys()];
+  const latestRecords = await Promise.all([
+    ...tutorIds.map((adminUserId) =>
       db.consentRecord.findFirst({
         where: { learnerProfileId: learnerId, adminUserId },
         orderBy: { version: "desc" },
         select: {
           adminUserId: true,
+          organizationId: true,
           version: true,
           allowLiveSession: true,
           allowAudioRecording: true,
@@ -109,8 +126,23 @@ export default async function LearnerConsentPage({
           allowNoteSending: true,
         },
       })
-    )
-  );
+    ),
+    ...orgIds.map((organizationId) =>
+      db.consentRecord.findFirst({
+        where: { learnerProfileId: learnerId, organizationId },
+        orderBy: { version: "desc" },
+        select: {
+          adminUserId: true,
+          organizationId: true,
+          version: true,
+          allowLiveSession: true,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+        },
+      })
+    ),
+  ]);
 
   const tutors: TutorConsentState[] = tutorIds.map((adminUserId) => {
     const meta = tutorMap.get(adminUserId)!;
@@ -118,6 +150,20 @@ export default async function LearnerConsentPage({
     return {
       adminUserId,
       tutorLabel: meta.tutorLabel,
+      version: record?.version ?? null,
+      allowLiveSession: record?.allowLiveSession ?? false,
+      allowAudioRecording: record?.allowAudioRecording ?? false,
+      allowWhiteboardRecording: record?.allowWhiteboardRecording ?? false,
+      allowNoteSending: record?.allowNoteSending ?? false,
+    };
+  });
+
+  const organizations: OrgConsentState[] = orgIds.map((organizationId) => {
+    const meta = orgMap.get(organizationId)!;
+    const record = latestRecords.find((r) => r?.organizationId === organizationId);
+    return {
+      organizationId,
+      organizationName: meta.organizationName,
       version: record?.version ?? null,
       allowLiveSession: record?.allowLiveSession ?? false,
       allowAudioRecording: record?.allowAudioRecording ?? false,
@@ -157,16 +203,15 @@ export default async function LearnerConsentPage({
       <SubNav realm="account-child" learnerId={learnerId} />
 
       {learnerProfile.isSelfLearner ? (
-        <SectionCard realm="account"
-          title="Privacy preferences"
-          className="rounded-[10px]"
-        >
-          <p className="text-sm text-muted-foreground">
-            {
-              "You are set up as a self-learner on this account. Parent privacy consent does not apply — you manage your own tutoring data as an adult account holder."
-            }
-          </p>
-        </SectionCard>
+        <SelfLearnerConsentSettings
+          learnerProfileId={learnerId}
+          tutors={tutors}
+          organizations={organizations}
+          showAgreement={
+            !tutors.some((tutor) => tutor.version != null) &&
+            !organizations.some((org) => org.version != null)
+          }
+        />
       ) : (
         <SectionCard realm="account"
           title="Privacy preferences"
@@ -177,6 +222,7 @@ export default async function LearnerConsentPage({
             learnerProfileId={learnerId}
             learnerName={learnerName}
             tutors={tutors}
+            organizations={organizations}
             restrictions={restrictions}
           />
         </SectionCard>

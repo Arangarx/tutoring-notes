@@ -33,7 +33,9 @@ export class OrgMutationError extends Error {
     | "test_account"
     | "invalid_timezone"
     | "invalid_name"
-    | "not_a_member";
+    | "not_a_member"
+    | "learner_cap"
+    | "claim_email_cap";
 
   constructor(code: OrgMutationError["code"]) {
     super(code);
@@ -51,6 +53,12 @@ const UNAVAILABLE: AcceptOrgInviteResult = { ok: false, error: "invite_unavailab
 /** Starting staff-invite cap for a new organization. Omitted on create stores this. */
 const STARTING_DAILY_INVITE_CAP = 25;
 
+/** Starting new-learner cap. Omitted on create stores this. Andrew 2026-10-11. */
+const STARTING_DAILY_LEARNER_CAP = 20;
+
+/** Starting claim-email cap. Omitted on create stores this. Andrew 2026-10-11. */
+const STARTING_DAILY_CLAIM_EMAIL_CAP = 30;
+
 /** Logged when the operator has no AdminUser row. Never an email address. */
 const OPERATOR_ACTOR_MARKER = "operator";
 
@@ -65,7 +73,7 @@ function actorLabel(operator: OperatorIdentity): string {
   return operator.adminId ?? OPERATOR_ACTOR_MARKER;
 }
 
-function orgLog(organizationId: string, action: string, fields: Record<string, string>): void {
+export function orgLog(organizationId: string, action: string, fields: Record<string, string>): void {
   const extra = Object.entries(fields)
     .map(([key, value]) => `${key}=${value}`)
     .join(" ");
@@ -184,7 +192,74 @@ async function assertWithinCaps(
   }
 }
 
-function assertPositiveIntOrNull(value: number | null, code: "max_members" | "daily_invite_cap"): void {
+type OrgCapClient = Prisma.TransactionClient;
+
+async function orgDayCounts(
+  tx: OrgCapClient,
+  organizationId: string,
+  now: Date
+): Promise<{
+  timezone: string;
+  dailyLearnerCap: number | null;
+  dailyClaimEmailCap: number | null;
+  learnersToday: number;
+  claimEmailsToday: number;
+}> {
+  await lockOrg(tx, organizationId);
+  const org = await tx.organization.findUnique({
+    where: { id: organizationId },
+    select: { timezone: true, dailyLearnerCap: true, dailyClaimEmailCap: true },
+  });
+  if (!org) throw new OrgMutationError("not_a_member");
+  const start = startOfZonedDay(now, org.timezone);
+  const [learnersToday, claimEmailsToday] = await Promise.all([
+    tx.student.count({
+      where: { organizationId, createdAt: { gte: start } },
+    }),
+    tx.studentClaimInvite.count({
+      where: { student: { organizationId }, createdAt: { gte: start } },
+    }),
+  ]);
+  return {
+    timezone: org.timezone,
+    dailyLearnerCap: org.dailyLearnerCap,
+    dailyClaimEmailCap: org.dailyClaimEmailCap,
+    learnersToday,
+    claimEmailsToday,
+  };
+}
+
+/** All staff share one learner count. Null cap is unlimited. */
+export async function assertCanAddOrgLearner(
+  tx: OrgCapClient,
+  organizationId: string,
+  now = new Date()
+): Promise<void> {
+  const counts = await orgDayCounts(tx, organizationId, now);
+  if (counts.dailyLearnerCap != null && counts.learnersToday >= counts.dailyLearnerCap) {
+    throw new OrgMutationError("learner_cap");
+  }
+}
+
+/** All staff share one claim-email count. Null cap is unlimited. */
+export async function assertCanSendOrgClaimEmail(
+  tx: OrgCapClient,
+  organizationId: string,
+  now = new Date()
+): Promise<void> {
+  const counts = await orgDayCounts(tx, organizationId, now);
+  if (
+    counts.dailyClaimEmailCap != null &&
+    counts.claimEmailsToday >= counts.dailyClaimEmailCap
+  ) {
+    throw new OrgMutationError("claim_email_cap");
+  }
+}
+
+function assertPositiveIntOrNull(
+  value: number | null,
+  code: "max_members" | "daily_invite_cap" | "learner_cap" | "claim_email_cap"
+): void {
   if (value == null) return;
   if (!Number.isInteger(value) || value < 1) throw new OrgMutationError(code);
 }
@@ -233,6 +308,8 @@ export async function createOrganization(input: {
   timezone?: string;
   maxMembers?: number | null;
   dailyInviteCap?: number | null;
+  dailyLearnerCap?: number | null;
+  dailyClaimEmailCap?: number | null;
 }): Promise<{ organizationId: string }> {
   const operator = await requireOperator();
   const name = input.name.trim();
@@ -244,8 +321,16 @@ export async function createOrganization(input: {
   // caller passes null on purpose. Do not treat those as the same value.
   const dailyInviteCap =
     input.dailyInviteCap === undefined ? STARTING_DAILY_INVITE_CAP : input.dailyInviteCap;
+  const dailyLearnerCap =
+    input.dailyLearnerCap === undefined ? STARTING_DAILY_LEARNER_CAP : input.dailyLearnerCap;
+  const dailyClaimEmailCap =
+    input.dailyClaimEmailCap === undefined
+      ? STARTING_DAILY_CLAIM_EMAIL_CAP
+      : input.dailyClaimEmailCap;
   assertPositiveIntOrNull(maxMembers, "max_members");
   assertPositiveIntOrNull(dailyInviteCap, "daily_invite_cap");
+  assertPositiveIntOrNull(dailyLearnerCap, "learner_cap");
+  assertPositiveIntOrNull(dailyClaimEmailCap, "claim_email_cap");
 
   const owner = await db.adminUser.findUnique({
     where: { id: input.ownerAdminUserId },
@@ -261,6 +346,9 @@ export async function createOrganization(input: {
       timezone,
       maxMembers,
       dailyInviteCap,
+      dailyLearnerCap,
+      dailyClaimEmailCap,
+      statusChangedAt: new Date(),
       createdByOperatorId,
       members: {
         create: {
@@ -500,21 +588,39 @@ export async function setOrganizationStatus(
   const operator = await requireOperator();
   await db.organization.update({
     where: { id: organizationId },
-    data: { status },
+    data: { status, statusChangedAt: new Date() },
   });
   orgLog(organizationId, "status_set", { actor: actorLabel(operator), status });
 }
 
 export async function setOrganizationCaps(
   organizationId: string,
-  caps: { maxMembers: number | null; dailyInviteCap: number | null }
+  caps: {
+    maxMembers: number | null;
+    dailyInviteCap: number | null;
+    dailyLearnerCap?: number | null;
+    dailyClaimEmailCap?: number | null;
+  }
 ): Promise<void> {
   const operator = await requireOperator();
   assertPositiveIntOrNull(caps.maxMembers, "max_members");
   assertPositiveIntOrNull(caps.dailyInviteCap, "daily_invite_cap");
+  if ("dailyLearnerCap" in caps) {
+    assertPositiveIntOrNull(caps.dailyLearnerCap ?? null, "learner_cap");
+  }
+  if ("dailyClaimEmailCap" in caps) {
+    assertPositiveIntOrNull(caps.dailyClaimEmailCap ?? null, "claim_email_cap");
+  }
   await db.organization.update({
     where: { id: organizationId },
-    data: { maxMembers: caps.maxMembers, dailyInviteCap: caps.dailyInviteCap },
+    data: {
+      maxMembers: caps.maxMembers,
+      dailyInviteCap: caps.dailyInviteCap,
+      ...("dailyLearnerCap" in caps ? { dailyLearnerCap: caps.dailyLearnerCap ?? null } : {}),
+      ...("dailyClaimEmailCap" in caps
+        ? { dailyClaimEmailCap: caps.dailyClaimEmailCap ?? null }
+        : {}),
+    },
   });
   orgLog(organizationId, "caps_set", { actor: actorLabel(operator) });
 }

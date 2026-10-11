@@ -28,6 +28,14 @@ import {
   createVersionedConsentRecord,
 } from "@/lib/consent-write";
 
+function consentOwnerForInvite(invite: {
+  adminUserId: string;
+  student: { organizationId: string | null };
+}): { organizationId: string } | { adminUserId: string } {
+  if (invite.student.organizationId) return { organizationId: invite.student.organizationId };
+  return { adminUserId: invite.adminUserId };
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -48,7 +56,7 @@ export async function POST(
   const invite = await db.studentClaimInvite.findUnique({
     where: { tokenHash },
     include: {
-      student: { select: { learnerProfileId: true } },
+      student: { select: { learnerProfileId: true, organizationId: true } },
     },
   });
 
@@ -108,7 +116,7 @@ export async function POST(
     try {
       const { version: nextVersion } = await createVersionedConsentRecord(db, {
         learnerProfileId,
-        adminUserId: invite.adminUserId,
+        ...consentOwnerForInvite(invite),
         setByAccountHolderId: ahSession.accountHolderId,
         flags: {
           allowLiveSession,
@@ -142,14 +150,10 @@ export async function POST(
     if (learnerProfile.accountHolderId !== ahSession.accountHolderId) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
-    if (learnerProfile.isSelfLearner) {
-      return NextResponse.json({ ok: true, skipped: true });
-    }
-
     try {
       const { version: nextVersion } = await createVersionedConsentRecord(db, {
         learnerProfileId,
-        adminUserId: invite.adminUserId,
+        ...consentOwnerForInvite(invite),
         setByAccountHolderId: ahSession.accountHolderId,
         flags: ALL_OFF_CONSENT_FLAGS,
         logAction: "consent_declined",
@@ -192,10 +196,12 @@ export async function POST(
         where: { id: learnerProfileId },
         data: { displayName },
       });
-      await tx.student.update({
-        where: { id: invite.studentId },
-        data: { name: displayName },
-      });
+      if (!invite.student.organizationId) {
+        await tx.student.update({
+          where: { id: invite.studentId },
+          data: { name: displayName },
+        });
+      }
       if (learnerProfile.isSelfLearner) {
         const ahDisplay = learnerProfile.accountHolder.displayName?.trim();
         if (!ahDisplay) {

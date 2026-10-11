@@ -36,7 +36,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
 
   const student = await db.student.findUnique({
     where: { id },
-    select: { id: true, name: true, adminUserId: true },
+    select: { id: true, name: true, adminUserId: true, organizationId: true },
   });
 
   if (!student) notFound();

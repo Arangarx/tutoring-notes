@@ -1,5 +1,7 @@
+import { OrgLearnerPanel } from "@/components/org/OrgLearnerPanel";
 import { OrgStaffHome } from "@/components/org/OrgStaffHome";
 import { PageShell } from "@/components/PageShell";
+import { listSchedulerLearners, loadOrgLearnerRecords } from "@/lib/org-learner";
 import { orgStaffErrorSentence } from "@/lib/org-staff-messages";
 import { loadOrgStaffHome } from "@/lib/org-scope";
 import { isOperatorEmail } from "@/lib/operator";
@@ -17,18 +19,32 @@ export default async function StaffOrganizationPage({
   const query = await searchParams;
   const data = await loadOrgStaffHome(id);
   const error = query.error ? orgStaffErrorSentence(query.error) : null;
+  const canManage =
+    data.actor.roles.includes("owner") || data.actor.roles.includes("admin");
+  const isScheduler = data.actor.roles.includes("scheduler");
+  const records = canManage ? await loadOrgLearnerRecords(id) : [];
+  const schedulerCards =
+    !canManage && isScheduler ? await listSchedulerLearners(id) : [];
 
   return (
     <PageShell
       realm="admin"
       title={data.org.name}
-      description="Members and invitations. Learners and the schedule are not on this page."
+      description="Members, invitations, and learners."
     >
       <OrgStaffHome
         data={data}
         canActivate={isOperatorEmail(data.actor.email)}
         error={error}
       />
+      {canManage || isScheduler ? (
+        <OrgLearnerPanel
+          organizationId={id}
+          canManage={canManage}
+          records={records}
+          schedulerCards={schedulerCards}
+        />
+      ) : null}
     </PageShell>
   );
 }

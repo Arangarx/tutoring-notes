@@ -91,6 +91,7 @@ type FixtureOpts = {
   withConsent?: boolean;
   withOpenSession?: boolean;
   withActiveJoinToken?: boolean;
+  asOrganization?: boolean;
 };
 
 async function createClaimedSetupFixture(opts: FixtureOpts = {}) {
@@ -139,18 +140,35 @@ async function createClaimedSetupFixture(opts: FixtureOpts = {}) {
     });
   }
 
-  if (opts.withConsent && !opts.isSelfLearner) {
+  let organizationId: string | null = null;
+  if (opts.asOrganization) {
+    const org = await db.organization.create({
+      data: {
+        name: `Setup org ${uniq("org")}`,
+        createdByOperatorId: "setup-op@test.local",
+      },
+      select: { id: true },
+    });
+    organizationId = org.id;
+    await db.student.update({
+      where: { id: student.id },
+      data: { adminUserId: null, organizationId: org.id },
+    });
+  }
+
+  if (opts.withConsent) {
     await db.consentRecord.create({
       data: {
         learnerProfileId: profile.id,
-        adminUserId: tutor.id,
+        adminUserId: organizationId ? null : tutor.id,
+        organizationId,
         version: 1,
         allowLiveSession: true,
         allowAudioRecording: true,
         allowWhiteboardRecording: true,
         allowNoteSending: true,
         setByAccountHolderId: ah.id,
-        captureMethod: "electronic",
+        captureMethod: opts.isSelfLearner ? "presumed" : "electronic",
       },
     });
   }
@@ -224,15 +242,15 @@ describe("Claim setup page — T-new-C dashboard gate (B-3)", () => {
 
     await renderSetupPage(fx.rawToken, fx.ah.id);
 
-    expect(screen.getByRole("link", { name: /go to dashboard/i })).toHaveAttribute(
+    expect(screen.getByTestId("credential-existing-dashboard-link")).toHaveAttribute(
       "href",
       "/account/dashboard"
     );
   });
 });
 
-describe("Claim setup page — T7 self-learner exemption (L-2)", () => {
-  it("skips consent form and allows dashboard when self-learner with credential", async () => {
+describe("Claim setup page — self-learner agreement until a record exists", () => {
+  it("shows the agreement checkbox when a self-learner has no ConsentRecord", async () => {
     const fx = await createClaimedSetupFixture({
       isSelfLearner: true,
       withCredential: true,
@@ -241,15 +259,53 @@ describe("Claim setup page — T7 self-learner exemption (L-2)", () => {
 
     await renderSetupPage(fx.rawToken, fx.ah.id);
 
+    expect(screen.getByTestId("self-learner-agreement")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save preferences/i })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /save preferences/i })
+      screen.queryByText(/parental privacy preferences do not apply/i)
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/parental privacy preferences do not apply/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /go to dashboard/i })
-    ).toBeInTheDocument();
+      screen.queryByRole("link", { name: /go to dashboard/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not prompt a self-learner who already has a ConsentRecord", async () => {
+    const fx = await createClaimedSetupFixture({
+      isSelfLearner: true,
+      withCredential: true,
+      withConsent: true,
+    });
+
+    await renderSetupPage(fx.rawToken, fx.ah.id);
+
+    expect(screen.queryByTestId("self-learner-agreement")).not.toBeInTheDocument();
+    expect(screen.getByTestId("consent-saved-indicator")).toBeInTheDocument();
+    expect(screen.getByTestId("self-learner-dashboard-link")).toHaveAttribute(
+      "href",
+      "/account/dashboard"
+    );
+  });
+
+  it("shows the agreement for an organization self-learner with no ConsentRecord", async () => {
+    const missing = await createClaimedSetupFixture({
+      isSelfLearner: true,
+      asOrganization: true,
+      withConsent: false,
+    });
+    await renderSetupPage(missing.rawToken, missing.ah.id);
+    expect(screen.getByTestId("self-learner-agreement")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /go to dashboard/i })).not.toBeInTheDocument();
+  });
+
+  it("does not prompt an organization self-learner who already has a ConsentRecord", async () => {
+    const saved = await createClaimedSetupFixture({
+      isSelfLearner: true,
+      asOrganization: true,
+      withConsent: true,
+    });
+    await renderSetupPage(saved.rawToken, saved.ah.id);
+    expect(screen.queryByTestId("self-learner-agreement")).not.toBeInTheDocument();
+    expect(screen.getByTestId("consent-saved-indicator")).toBeInTheDocument();
   });
 
   it("does not show child PIN credential card for self-learner without credential", async () => {

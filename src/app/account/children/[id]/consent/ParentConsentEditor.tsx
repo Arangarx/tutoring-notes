@@ -13,14 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { SectionCard } from "@/components/SectionCard";
-import {
-  AUDIO_RECORDING_CONSENT_COPY,
-  LIVE_SESSION_CONSENT_COPY,
-} from "@/lib/consent-toggle-copy";
-import { cn } from "@/lib/utils";
-
+import { CONSENT_SWITCHES } from "@/lib/consent-toggle-copy";
+import { ConsentSwitches, type ConsentSwitchKey } from "@/components/consent/ConsentSwitches";
 import { saveParentConsentAction } from "./actions";
 
 export type TutorConsentState = {
@@ -41,30 +36,15 @@ export type ConsentRestrictionState = {
   restrictNoteSending: boolean;
 };
 
-type PermissionKey = keyof Omit<
-  TutorConsentState,
-  "adminUserId" | "tutorLabel" | "version"
->;
-
-type PermissionToggleDef = {
-  key: PermissionKey;
-  label: string;
-  description: string;
-  emphasis: "critical" | "recommended" | "standard";
+export type OrgConsentState = {
+  organizationId: string;
+  organizationName: string;
+  version: number | null;
+  allowLiveSession: boolean;
+  allowAudioRecording: boolean;
+  allowWhiteboardRecording: boolean;
+  allowNoteSending: boolean;
 };
-
-const PERMISSION_TOGGLES: ReadonlyArray<PermissionToggleDef> = [
-  {
-    key: "allowLiveSession",
-    ...LIVE_SESSION_CONSENT_COPY,
-    emphasis: "critical",
-  },
-  {
-    key: "allowAudioRecording",
-    ...AUDIO_RECORDING_CONSENT_COPY,
-    emphasis: "recommended",
-  },
-];
 
 const RESTRICTION_TOGGLES = [
   {
@@ -89,6 +69,7 @@ type ParentConsentEditorProps = {
   learnerProfileId: string;
   learnerName: string;
   tutors: TutorConsentState[];
+  organizations?: OrgConsentState[];
   restrictions: ConsentRestrictionState;
 };
 
@@ -96,9 +77,11 @@ export function ParentConsentEditor({
   learnerProfileId,
   learnerName,
   tutors,
+  organizations = [],
   restrictions: initialRestrictions,
 }: ParentConsentEditorProps) {
   const [tutorStates, setTutorStates] = useState(tutors);
+  const [orgStates, setOrgStates] = useState(organizations);
   const [restrictions, setRestrictions] = useState(initialRestrictions);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -106,11 +89,18 @@ export function ParentConsentEditor({
 
   function updateTutorToggle(
     adminUserId: string,
-    key: (typeof PERMISSION_TOGGLES)[number]["key"],
+    key: ConsentSwitchKey,
     checked: boolean
   ) {
     setTutorStates((prev) =>
       prev.map((t) => (t.adminUserId === adminUserId ? { ...t, [key]: checked } : t))
+    );
+    setSaved(false);
+  }
+
+  function updateOrgToggle(organizationId: string, key: ConsentSwitchKey, checked: boolean) {
+    setOrgStates((prev) =>
+      prev.map((org) => (org.organizationId === organizationId ? { ...org, [key]: checked } : org))
     );
     setSaved(false);
   }
@@ -144,6 +134,21 @@ export function ParentConsentEditor({
           })
         ),
         restrictions,
+        organizations: orgStates.map(
+          ({
+            organizationId,
+            allowLiveSession,
+            allowAudioRecording,
+            allowWhiteboardRecording,
+            allowNoteSending,
+          }) => ({
+            organizationId,
+            allowLiveSession,
+            allowAudioRecording,
+            allowWhiteboardRecording,
+            allowNoteSending,
+          })
+        ),
       });
 
       if (!result.ok) {
@@ -167,7 +172,7 @@ export function ParentConsentEditor({
     }
   }
 
-  if (tutors.length === 0) {
+  if (tutors.length === 0 && organizations.length === 0) {
     return (
       <div className="rounded-[10px] border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
         <p>
@@ -224,29 +229,75 @@ export function ParentConsentEditor({
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-4">
-                <div
-                  className={cn(
-                    "space-y-3 rounded-[10px] p-3",
-                    !tutor.allowLiveSession &&
-                      "border border-warning/30 border-l-4 border-l-warning/50 bg-warning/10"
-                  )}
-                >
-                  {PERMISSION_TOGGLES.map((perm) => (
-                    <PermissionToggleRow
-                      key={perm.key}
-                      perm={perm}
-                      tutor={tutor}
-                      onToggle={(checked) =>
-                        updateTutorToggle(tutor.adminUserId, perm.key, checked)
-                      }
-                    />
-                  ))}
+                <div className="space-y-3">
+                  {!tutor.allowLiveSession ? (
+                    <div className="rounded-[8px] border border-warning/30 bg-warning/10 px-3 py-2">
+                      <p className="text-sm font-medium text-warning">
+                        Limited to scheduling without live sessions
+                      </p>
+                    </div>
+                  ) : null}
+                  <ConsentSwitches
+                    idPrefix={tutor.adminUserId}
+                    testIdPrefix="parent-consent-toggle"
+                    switches={CONSENT_SWITCHES}
+                    values={tutor}
+                    onToggle={(key, checked) =>
+                      updateTutorToggle(tutor.adminUserId, key, checked)
+                    }
+                  />
                 </div>
               </AccordionContent>
             </AccordionItem>
           ))}
         </Accordion>
       </div>
+
+      {orgStates.length > 0 ? (
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">What each organization may do</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              These choices are for the organization, not for an individual tutor.
+            </p>
+          </div>
+          <Accordion
+            type="multiple"
+            defaultValue={orgStates.map((org) => org.organizationId)}
+            className="rounded-[10px] border border-border bg-card px-4"
+          >
+            {orgStates.map((org) => (
+              <AccordionItem key={org.organizationId} value={org.organizationId}>
+                <AccordionTrigger className="py-4 hover:no-underline">
+                  <span className="font-medium text-foreground">{org.organizationName}</span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
+                  <ConsentSwitches
+                    idPrefix={org.organizationId}
+                    switches={CONSENT_SWITCHES}
+                    values={org}
+                    onToggle={(key, checked) => updateOrgToggle(org.organizationId, key, checked)}
+                  />
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      data-testid={`org-consent-withdraw-${org.organizationId}`}
+                      onClick={() => {
+                        (["allowLiveSession", "allowAudioRecording", "allowWhiteboardRecording", "allowNoteSending"] as const).forEach(
+                          (key) => updateOrgToggle(org.organizationId, key, false)
+                        );
+                      }}
+                    >
+                      Withdraw consent
+                    </Button>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </div>
+      ) : null}
 
       <SectionCard realm="account" title={`Always-off limits for ${learnerName}`}>
         <p className="mb-4 text-sm text-muted-foreground">
@@ -319,90 +370,6 @@ export function ParentConsentEditor({
             </AlertDescription>
           </Alert>
         ) : null}
-      </div>
-    </div>
-  );
-}
-
-function PermissionToggleRow({
-  perm,
-  tutor,
-  onToggle,
-}: {
-  perm: PermissionToggleDef;
-  tutor: TutorConsentState;
-  onToggle: (checked: boolean) => void;
-}) {
-  const inputId = `${tutor.adminUserId}-${perm.key}`;
-  const isCritical = perm.emphasis === "critical";
-  const isRecommended = perm.emphasis === "recommended";
-  const liveSessionsOff = isCritical && !tutor.allowLiveSession;
-
-  return (
-    <div
-      className={cn(
-        "rounded-[10px] border bg-background p-3",
-        liveSessionsOff
-          ? "border-warning/30"
-          : isRecommended
-            ? "border-accent/30 bg-accent-soft/20"
-            : "border-border"
-      )}
-    >
-      {liveSessionsOff ? (
-        <div className="mb-3 rounded-[8px] border border-warning/30 bg-warning/10 px-3 py-2">
-          <p className="text-sm font-medium text-warning">
-            Limited to scheduling without live sessions
-          </p>
-          <p className="mt-1 text-xs text-foreground">
-            {
-              "Without live sessions, Mynk is effectively just a scheduling calendar — your child cannot join tutoring on the whiteboard. You can decline, but there is little reason to use the app if this stays off."
-            }
-          </p>
-        </div>
-      ) : null}
-
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Label
-              htmlFor={inputId}
-              className={cn(
-                "cursor-pointer",
-                isCritical ? "text-base font-semibold" : "text-sm font-medium"
-              )}
-            >
-              {perm.label}
-            </Label>
-            {isRecommended ? (
-              <Badge className="bg-accent-soft text-accent-text font-mono text-[10px] uppercase">
-                Recommended
-              </Badge>
-            ) : null}
-          </div>
-          <p
-            className={cn(
-              "text-muted-foreground",
-              isCritical || isRecommended ? "text-sm" : "text-xs"
-            )}
-          >
-            {perm.description}
-          </p>
-          {isRecommended ? (
-            <p className="text-xs text-foreground">
-              You can turn this off, but most families keep it on so sessions are
-              useful after class ends.
-            </p>
-          ) : null}
-        </div>
-        <Switch
-          id={inputId}
-          data-testid={`parent-consent-toggle-${tutor.adminUserId}-${perm.key}`}
-          checked={tutor[perm.key]}
-          onCheckedChange={onToggle}
-          aria-label={perm.label}
-          className="shrink-0"
-        />
       </div>
     </div>
   );

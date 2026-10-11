@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ConsentSwitches, type ConsentSwitchKey } from "@/components/consent/ConsentSwitches";
+import { SelfLearnerAgreement } from "@/components/consent/SelfLearnerAgreement";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,51 +16,37 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  AUDIO_RECORDING_CONSENT_COPY,
-  CONSENT_DECLINE_WARNING,
-  LIVE_SESSION_CONSENT_COPY,
-} from "@/lib/consent-toggle-copy";
-
-interface ConsentToggle {
-  key: "allowLiveSession" | "allowAudioRecording";
-  label: string;
-  description: string;
-}
-
-const TOGGLES: ConsentToggle[] = [
-  { key: "allowLiveSession", ...LIVE_SESSION_CONSENT_COPY },
-  { key: "allowAudioRecording", ...AUDIO_RECORDING_CONSENT_COPY },
-];
+import { CONSENT_DECLINE_WARNING, CONSENT_SWITCHES } from "@/lib/consent-toggle-copy";
 
 export function ConsentSetupForm({
   rawToken,
   studentName,
   enforcementEnabled,
   hasPendingSessionInvite,
+  showAgreement = false,
 }: {
   rawToken: string;
   studentName: string;
   enforcementEnabled: boolean;
   hasPendingSessionInvite: boolean;
+  showAgreement?: boolean;
 }) {
   const router = useRouter();
 
-  // D-4: always start all-OFF on every render (no carryover)
   const [values, setValues] = useState({
     allowLiveSession: false,
     allowAudioRecording: false,
     allowWhiteboardRecording: false,
-    // Dormant schema field — not surfaced in UI (WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME).
     allowNoteSending: false,
   });
+  const [agreed, setAgreed] = useState(false);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
 
-  function toggle(key: ConsentToggle["key"]) {
-    setValues((v) => ({ ...v, [key]: !v[key] }));
+  function toggle(key: ConsentSwitchKey, checked: boolean) {
+    setValues((v) => ({ ...v, [key]: checked }));
   }
 
   async function postSetupAction(action: "consent" | "consent_decline") {
@@ -89,6 +75,10 @@ export function ConsentSetupForm({
   }
 
   async function handleSave() {
+    if (showAgreement && !agreed) {
+      setError("agreement_required");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -136,9 +126,13 @@ export function ConsentSetupForm({
     );
   }
 
-  const declineWarningBody = hasPendingSessionInvite
-    ? CONSENT_DECLINE_WARNING.pendingInvite
-    : CONSENT_DECLINE_WARNING.plain;
+  const declineWarningBody = showAgreement
+    ? hasPendingSessionInvite
+      ? CONSENT_DECLINE_WARNING.selfLearnerPending
+      : CONSENT_DECLINE_WARNING.selfLearner
+    : hasPendingSessionInvite
+      ? CONSENT_DECLINE_WARNING.pendingInvite
+      : CONSENT_DECLINE_WARNING.plain;
 
   return (
     <div className="space-y-4">
@@ -147,29 +141,16 @@ export function ConsentSetupForm({
       </p>
 
       <div className="space-y-3">
-        {TOGGLES.map((t) => (
-          <div
-            key={t.key}
-            className="flex items-start justify-between gap-4 rounded-md border border-border bg-card p-3"
-          >
-            <div className="space-y-0.5 flex-1">
-              <Label
-                htmlFor={`consent-${t.key}`}
-                className="text-sm font-medium cursor-pointer"
-              >
-                {t.label}
-              </Label>
-              <p className="text-xs text-muted-foreground">{t.description}</p>
-            </div>
-            <Switch
-              id={`consent-${t.key}`}
-              data-testid={`consent-toggle-${t.key}`}
-              checked={values[t.key]}
-              onCheckedChange={() => toggle(t.key)}
-              aria-label={t.label}
-            />
-          </div>
-        ))}
+        {showAgreement ? (
+          <SelfLearnerAgreement checked={agreed} onCheckedChange={setAgreed} />
+        ) : null}
+        <ConsentSwitches
+          idPrefix=""
+          testIdPrefix="consent-toggle"
+          switches={CONSENT_SWITCHES}
+          values={values}
+          onToggle={toggle}
+        />
       </div>
 
       {error ? (
@@ -178,6 +159,8 @@ export function ConsentSetupForm({
             ? "Network error — please try again."
             : error === "consent_already_saved"
               ? "Preferences were already saved. Refresh the page to continue."
+              : error === "agreement_required"
+                ? "Check the agreement before saving."
               : "Could not save preferences. Please try again."}
         </p>
       ) : null}

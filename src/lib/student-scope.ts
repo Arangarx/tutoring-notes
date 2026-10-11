@@ -35,19 +35,31 @@ export async function requireStudentScope(): Promise<Exclude<StudentScope, { kin
 }
 
 /** Prisma `where` for listing/creating students for this scope. */
+export function envOnlyNullOwnerWhere(): { adminUserId: null; organizationId: null } {
+  return { adminUserId: null, organizationId: null };
+}
+
+/**
+ * Env-admin outbox filter. EmailMessage has no organizationId, so this is not
+ * the student helper and must not be a spread of it.
+ */
+export function envOnlyEmailMessageWhere(): { adminUserId: null } {
+  return { adminUserId: null };
+}
+
 export function studentsWhereForScope(
   scope: Exclude<StudentScope, { kind: "none" }>
-): { adminUserId: string } | { adminUserId: null } {
+): { adminUserId: string } | { adminUserId: null; organizationId: null } {
   if (scope.kind === "admin") return { adminUserId: scope.adminId };
-  return { adminUserId: null };
+  return envOnlyNullOwnerWhere();
 }
 
 export function canAccessStudentRow(
   scope: Exclude<StudentScope, { kind: "none" }>,
-  student: { adminUserId: string | null }
+  student: { adminUserId: string | null; organizationId: string | null }
 ): boolean {
   if (scope.kind === "admin") return student.adminUserId === scope.adminId;
-  return student.adminUserId === null;
+  return student.adminUserId === null && student.organizationId === null;
 }
 
 /** Call at the start of server actions that mutate a student by id. */
@@ -57,7 +69,7 @@ export async function assertOwnsStudent(studentId: string): Promise<void> {
     () =>
       db.student.findUnique({
         where: { id: studentId },
-        select: { adminUserId: true },
+        select: { adminUserId: true, organizationId: true },
       }),
     { label: "assertOwnsStudent" }
   );

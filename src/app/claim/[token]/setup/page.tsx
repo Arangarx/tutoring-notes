@@ -68,19 +68,19 @@ export default async function ClaimSetupPage({
   }
 
   const isSelfLearner = profile.isSelfLearner;
+  const isOrgLearner = Boolean(invite.student.organizationId);
   const credentialAlreadySet = !!profile.credential;
 
-  // Check if a ConsentRecord already exists for this (learner, tutor) pair
   const existingConsent = await db.consentRecord.findFirst({
-    where: {
-      learnerProfileId: profile.id,
-      adminUserId: invite.adminUserId,
-    },
+    where: isOrgLearner
+      ? { learnerProfileId: profile.id, organizationId: invite.student.organizationId }
+      : { learnerProfileId: profile.id, adminUserId: invite.adminUserId },
     orderBy: { version: "desc" },
     select: { id: true },
   });
   const consentAlreadySaved = !!existingConsent;
-  const consentComplete = consentAlreadySaved || isSelfLearner;
+  const selfLearnerNeedsAgreement = isSelfLearner && !consentAlreadySaved;
+  const consentComplete = consentAlreadySaved;
   const enforcementEnabled = !isSelfLearner;
 
   const pendingInviteCount = await db.whiteboardSession.count({
@@ -143,22 +143,13 @@ export default async function ClaimSetupPage({
               Privacy preferences
             </CardTitle>
             <CardDescription className="text-sm">
-              {isSelfLearner
-                ? "As an adult managing your own learning, parental privacy preferences do not apply."
-                : consentAlreadySaved
-                  ? "Your preferences have been saved. You can update them from your account dashboard."
-                  : `Control what ${invite.student.name}'s tutor may record and share.`}
+              {consentAlreadySaved
+                ? "Your preferences have been saved. You can update them from your account dashboard."
+                : `Control what ${invite.student.name}'s tutor may record and share.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
-            {isSelfLearner ? (
-              <div className="rounded-md border border-border bg-muted/40 p-4">
-                <p className="text-sm text-muted-foreground">
-                  You can manage your session preferences from your account dashboard when
-                  needed.
-                </p>
-              </div>
-            ) : consentAlreadySaved ? (
+            {consentAlreadySaved ? (
               <div
                 data-testid="consent-saved-indicator"
                 className="rounded-md border border-border bg-muted/40 p-4 space-y-2"
@@ -183,6 +174,7 @@ export default async function ClaimSetupPage({
                 studentName={invite.student.name}
                 enforcementEnabled={enforcementEnabled}
                 hasPendingSessionInvite={hasPendingSessionInvite}
+                showAgreement={selfLearnerNeedsAgreement}
               />
             )}
           </CardContent>

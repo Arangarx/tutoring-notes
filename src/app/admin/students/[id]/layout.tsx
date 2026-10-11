@@ -33,9 +33,10 @@ export default async function StudentDetailLayout({
 
   const student = await db.student.findUnique({
     where: { id },
-    select: {
-      adminUserId: true,
-      erasedAt: true,
+      select: {
+        adminUserId: true,
+        organizationId: true,
+        erasedAt: true,
       name: true,
       learnerProfile: {
         select: {

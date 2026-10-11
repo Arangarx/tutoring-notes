@@ -9,6 +9,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: jest.fn(), push: jest.fn() }),
+}));
+
 import { ConsentSetupForm } from "@/app/claim/[token]/setup/ConsentSetupForm";
 
 const defaultProps = {
@@ -18,23 +22,14 @@ const defaultProps = {
   hasPendingSessionInvite: false,
 } as const;
 
-describe("ConsentSetupForm — dormant consent toggles", () => {
-  test("does not render notes email permission toggle", () => {
+describe("ConsentSetupForm — consent switches", () => {
+  test("renders the four consent switches, including notes and whiteboard", () => {
     render(<ConsentSetupForm {...defaultProps} />);
 
-    expect(screen.queryByLabelText(/allow notes email/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/session summary notes can be emailed/i)).not.toBeInTheDocument();
-  });
-
-  test("does not render whiteboard recording permission toggle", () => {
-    render(<ConsentSetupForm {...defaultProps} />);
-
-    expect(
-      screen.queryByLabelText(/allow whiteboard recording/i)
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/whiteboard strokes are saved/i)
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/allow session notes/i)).toBeInTheDocument();
+    expect(screen.getByText(/mynk can draft session notes/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/allow whiteboard recording/i)).toBeInTheDocument();
+    expect(screen.getByText(/shared whiteboard can be saved and replayed/i)).toBeInTheDocument();
   });
 
   test("still renders active consent toggles", () => {
@@ -138,6 +133,54 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
     await waitFor(() =>
       expect(screen.getByText(/✓ preferences saved/i)).toBeInTheDocument()
     );
+  });
+
+  test("self-learner decline dialog does not address a parent", async () => {
+    const user = userEvent.setup();
+    render(
+      <ConsentSetupForm
+        {...defaultProps}
+        showAgreement
+        enforcementEnabled={false}
+        hasPendingSessionInvite={false}
+      />
+    );
+
+    expect(
+      screen.getByText(/save these preferences later from your account dashboard/i)
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /no consent now, i'll review later/i })
+    );
+
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent(
+      "No consent is recorded yet. You will not be able to join a session until you record it. You can turn each part on later in Settings."
+    );
+    expect(dialog).not.toHaveTextContent(/your child/i);
+  });
+
+  test("self-learner pending-invite decline dialog does not address a parent", async () => {
+    const user = userEvent.setup();
+    render(
+      <ConsentSetupForm
+        {...defaultProps}
+        showAgreement
+        enforcementEnabled={false}
+        hasPendingSessionInvite
+      />
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /no consent now, i'll review later/i })
+    );
+
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent(
+      "If you continue without enabling any options, you will not be able to join the live tutoring session you have already been invited to. You can turn each part on later in Settings."
+    );
+    expect(dialog).not.toHaveTextContent(/your child/i);
   });
 
   test("decline flow: variant (a) when hasPendingSessionInvite", async () => {

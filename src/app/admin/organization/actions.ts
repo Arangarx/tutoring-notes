@@ -89,3 +89,45 @@ export async function removeStaffMemberAction(formData: FormData): Promise<void>
   }
   staffHome(organizationId);
 }
+
+export async function createOrgLearnerAction(formData: FormData): Promise<void> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const inviteFor = String(formData.get("inviteFor") ?? "");
+  try {
+    const { createOrgLearner } = await import("@/lib/org-learner");
+    if (inviteFor !== "student" && inviteFor !== "parent") {
+      staffHome(organizationId, "invalid_name");
+    }
+    await createOrgLearner({
+      organizationId,
+      givenName: String(formData.get("givenName") ?? ""),
+      familyName: String(formData.get("familyName") ?? ""),
+      brief: String(formData.get("brief") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      inviteFor,
+    });
+  } catch (err) {
+    const { OrgLearnerError } = await import("@/lib/org-learner");
+    if (err instanceof OrgMutationError || err instanceof OrgLearnerError) {
+      staffHome(organizationId, err.code);
+    }
+    throw err;
+  }
+  staffHome(organizationId);
+}
+
+export async function reinviteOrgLearnerAction(formData: FormData): Promise<void> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const studentId = String(formData.get("studentId") ?? "");
+  try {
+    const { reinviteOrgLearner } = await import("@/lib/org-learner");
+    await reinviteOrgLearner(organizationId, studentId);
+  } catch (err) {
+    const { OrgLearnerError } = await import("@/lib/org-learner");
+    if (err instanceof OrgMutationError || err instanceof OrgLearnerError) {
+      staffHome(organizationId, err.code);
+    }
+    throw err;
+  }
+  staffHome(organizationId);
+}

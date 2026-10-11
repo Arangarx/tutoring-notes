@@ -72,6 +72,7 @@ export async function POST(
         select: {
           id: true,
           adminUserId: true,
+          organizationId: true,
           learnerProfileId: true,
           name: true,
           parentEmail: true,
@@ -113,6 +114,7 @@ export async function POST(
   console.log(`[clm] clm=${invite.id} action=viewed`);
 
   let newProfileId: string | null = null;
+  let closedSpare = false;
 
   try {
     await db.$transaction(async (tx) => {
@@ -182,6 +184,22 @@ export async function POST(
 
       newProfileId = profileId;
 
+      if (invite.student.organizationId) {
+        const alreadyLinked = await tx.student.findFirst({
+          where: {
+            organizationId: invite.student.organizationId,
+            learnerProfileId: profileId,
+            NOT: { id: invite.studentId },
+          },
+          select: { id: true },
+        });
+        if (alreadyLinked) {
+          await tx.student.delete({ where: { id: invite.studentId } });
+          closedSpare = true;
+          return;
+        }
+      }
+
       // Link Student to the LearnerProfile — IAC-2: unique per (adminUserId, learnerProfileId)
       // Use updateMany with WHERE learnerProfileId IS NULL (race safety for the same profile-tutor pair)
       const updatedCount = await tx.student.updateMany({
@@ -232,6 +250,24 @@ export async function POST(
     // Check for Prisma unique constraint violation (concurrent attach to same tutor-profile pair)
     const e = err as { code?: string };
     if (isPrismaUniqueViolation(e)) {
+      if (invite.student.organizationId && newProfileId) {
+        const alreadyLinked = await db.student.findFirst({
+          where: {
+            organizationId: invite.student.organizationId,
+            learnerProfileId: newProfileId,
+            NOT: { id: invite.studentId },
+          },
+          select: { id: true },
+        });
+        if (alreadyLinked) {
+          await db.student.delete({ where: { id: invite.studentId } }).catch(() => undefined);
+          return NextResponse.json({
+            ok: true,
+            learnerProfileId: newProfileId,
+            setupPath: `/account/children/${newProfileId}`,
+          });
+        }
+      }
       return NextResponse.json({ error: "already_linked_to_tutor" }, { status: 409 });
     }
     throw err;
@@ -244,7 +280,9 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     learnerProfileId: newProfileId,
-    setupPath: `/claim/${rawToken}/setup`,
+    setupPath: closedSpare
+      ? `/account/children/${newProfileId}`
+      : `/claim/${rawToken}/setup`,
   });
 }
 

@@ -107,6 +107,8 @@ export type DevFixture = TutorFixture | FamilyFixture;
  *   isTestAccount = true  (enables impersonation via existing SEC-1 flow)
  *   isTestFixture = true  (marks it as dev-tools-deletable)
  *   role = TUTOR
+ *   approvalStatus = APPROVED (signup waitlist does not apply to fixtures)
+ *   approvedAt = now
  *
  * Returns the tutor fixture, including the plaintext password for display.
  */
@@ -126,6 +128,8 @@ export async function createTutorFixture(): Promise<TutorFixture> {
       isTestAccount: true,
       isTestFixture: true,
       role: "TUTOR",
+      approvalStatus: "APPROVED",
+      approvedAt: new Date(),
       emailVerifiedAt: new Date(),
     },
     select: { id: true, email: true },

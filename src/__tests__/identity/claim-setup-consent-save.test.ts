@@ -211,4 +211,69 @@ describe("CC-2 consent API — happy path", () => {
     const student = await db.student.findUniqueOrThrow({ where: { id: fx.student.id } });
     expect(student.name).toBe(profile.displayName);
   });
+
+  it("writes the organization on the consent row and not the minting admin", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder({ isSelfLearner: true });
+    const org = await db.organization.create({
+      data: {
+        name: `Claim org ${uniq("org")}`,
+        createdByOperatorId: "claim-op@test.local",
+      },
+      select: { id: true },
+    });
+    const student = await db.student.create({
+      data: {
+        name: "Org self",
+        adminUserId: null,
+        organizationId: org.id,
+      },
+    });
+    const rawToken = await generateRawToken();
+    const invite = await db.studentClaimInvite.create({
+      data: {
+        studentId: student.id,
+        adminUserId: tutor.id,
+        tokenHash: hashToken(rawToken),
+        expiresAt: new Date(Date.now() + CLAIM_INVITE_TTL_MS),
+      },
+    });
+    const profile = await db.learnerProfile.create({
+      data: {
+        accountHolderId: ah.id,
+        displayName: student.name,
+        isSelfLearner: true,
+      },
+    });
+    await db.student.update({
+      where: { id: student.id },
+      data: { learnerProfileId: profile.id },
+    });
+    await db.studentClaimInvite.update({
+      where: { id: invite.id },
+      data: { claimedAt: new Date(), claimedByAccountHolderId: ah.id },
+    });
+    const { rawToken: ahSessionToken } = await createAccountHolderSession(ah.id);
+
+    const res = await postSetup(rawToken, ahSessionToken, {
+      action: "consent",
+      allowLiveSession: true,
+      allowAudioRecording: false,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+    });
+    expect(res.status).toBe(200);
+    const record = await db.consentRecord.findFirst({
+      where: { learnerProfileId: profile.id },
+    });
+    expect(record).toMatchObject({
+      organizationId: org.id,
+      adminUserId: null,
+      allowAudioRecording: false,
+      allowLiveSession: true,
+      setByAccountHolderId: ah.id,
+      captureMethod: "electronic",
+    });
+    expect(record?.adminUserId).not.toBe(tutor.id);
+  });
 });

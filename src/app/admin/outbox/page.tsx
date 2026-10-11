@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getStudentScope } from "@/lib/student-scope";
+import { envOnlyEmailMessageWhere, getStudentScope } from "@/lib/student-scope";
 import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
@@ -15,7 +15,7 @@ export default async function OutboxPage() {
 
   const where = scope.kind === "admin"
     ? { adminUserId: scope.adminId }
-    : { adminUserId: null };
+    : envOnlyEmailMessageWhere();
 
   const messages = await db.emailMessage.findMany({
     where,
