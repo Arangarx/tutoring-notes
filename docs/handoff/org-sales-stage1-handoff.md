@@ -54,7 +54,7 @@ Proposed, not accepted:
 
 Flag for later review. This sentence stays for now. It is permanent copy. It shows every time a session is stopped in the middle, including after the pilot. It is not a temporary pilot notice.
 
-A later invite for the same learner has no message. They pass through to the account and see that existing link. The spare row for that same learner is closed. An invite for a different child, even to the same parent email, is a new learner. The parent sets that child up, and both stay.
+An organization invite uses the tutor claim. The parent sees the intended name and ties it to the correct learner. Choosing the child already tied to the organization leaves one link. Choosing or adding a different child leaves both. The parent email is not the match. No new sentence.
 
 "After an account is deleted, we keep a record of the consent choices that were made and a one-way fingerprint of the account email, so we can answer questions about consent later. The fingerprint cannot be turned back into the email."
 
