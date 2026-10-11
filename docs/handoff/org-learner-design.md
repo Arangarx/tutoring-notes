@@ -445,7 +445,7 @@ The same three choices apply to removing a live tutor and to Mynk suspending the
 
 - **Let it finish.** The timer runs. It is the end of the clock hour, with the 10-minute floor. The tutor may finalize notes. The 7 days start at session end, when `endedAt` is set. After that, the notes are read-only. On removal, the two accepted removal pills apply. On suspension, the proposed suspension pill applies.
 - **End it now, and the tutor may finalize notes.** The session ends immediately, the same way as cancelling a session in the middle. The tutor may finalize notes. The 7 days start at session end, when `endedAt` is set. After that, the notes are read-only.
-- **End it now, and no notes.** The session is read-only for the tutor immediately. There is no finalize window. The warning tells the remover that no notes will come from this session and that, once billing starts, the time still counts against the organization's billed time. This warning text is proposed for Andrew's review. It is not accepted copy: "No notes will come from this session. Once billing starts, this session's time still counts toward your organization's billed time."
+- **End it now, and no notes.** The session is read-only for the tutor immediately. There is no finalize window. The warning tells the remover that no notes will come from this session, and that ending it does not give the time back. This is not back-billing. A session during the free pilot is not charged later. After the pilot, when Mynk charges for use, a cancelled session still counts as time used. Organizations may later be charged up front, at a discounted rate. That shape is not built in this finish. This warning text is proposed for Andrew's review. It is not accepted copy: "No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used."
 
 A tutor who may finalize (the first two choices) has 7 days to finalize the notes for that session. The 7 days start at session end, when `endedAt` is set, not at removal and not at the force-end deadline. After that, the session is read-only. Stage 5 tests that the window is `endedAt` plus 7 days.
 
@@ -705,7 +705,7 @@ Exact sentences already in this design and the plan are used as written. That in
 These sentences are proposed for Andrew's review. They are not accepted quotes.
 
 - Suspension pill: "This session will end soon because the organization that set up this tutoring has had its account suspended."
-- End it now, no notes: "No notes will come from this session. Once billing starts, this session's time still counts toward your organization's billed time."
+- End it now, no notes: "No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used."
 - Duplicate claim: "This student is already set up with this organization. Ask the organization to remove the extra entry."
 - Privacy, after deletion: "After an account is deleted, we keep a record of the consent choices that were made and a one-way fingerprint of the account email, so we can answer questions about consent later. The fingerprint cannot be turned back into the email."
 - Consent, proposed. Andrew reviews it before it is applied to the privacy and terms pages: "Consent is recorded in a Mynk account before any session. A parent records it for a child. A self-learner records it for themselves."

@@ -50,7 +50,7 @@ Proposed, not accepted:
 
 "This session will end soon because the organization that set up this tutoring has had its account suspended."
 
-"No notes will come from this session. Once billing starts, this session's time still counts toward your organization's billed time."
+"No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used."
 
 "This student is already set up with this organization. Ask the organization to remove the extra entry."
 

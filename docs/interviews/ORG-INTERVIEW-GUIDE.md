@@ -178,7 +178,7 @@ What we want to learn (do not read this aloud): answers we do not have yet. Writ
 
 - What should happen to the notes when a session is ended early? What, if anything, would you change about ending it with notes, ending it with no notes, or letting it finish first?
 - A removed tutor can currently keep read-only access to sessions they taught. Cutting them off completely is a later option. What, if anything, would you change? When would you want the cutoff?
-- If a session is ended early and no notes are written, should that time still count toward what the organization is billed? Tell me how you would count the last session that ended early.
+- After the free pilot, ending a session early does not give that time back. It still counts as time used. A session during the pilot is not charged later. What, if anything, would you change? Tell me how you counted the last session that ended early.
 - We may later finalize notes automatically at a deadline, as if the tutor had accepted the draft unchanged. What, if anything, would you change about that? Tell me about a draft you would not have wanted saved as-is.
 - We are considering daily limits for the whole organization, all staff combined: 20 new learners, 30 claim emails, and 25 staff invites. Mynk could raise a limit or remove it for one organization. What, if anything, would you change?
 - When a tutor is removed, or the whole organization is suspended, what should that tutor still be able to finish? For how many days? What should they not be able to finish?

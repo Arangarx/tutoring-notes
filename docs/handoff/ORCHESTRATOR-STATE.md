@@ -16,7 +16,7 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | 2026-10-11: Andrew's design answers are in the org design, the stage-1 handoff, the backlog, `docs/LEGAL-SYNC.md` (counsel list), and the two interview guides. Sonnet [Check decisions and interviews](c719ca84-9d2e-410b-9124-982ff1f32d2d) said COMMIT. Docs only. No learner code. Not merged. |
+| **Last action completed** | 2026-10-11: Andrew corrected the end-now warning. It is not back-billing. After the free pilot, cancelling a session does not give the time back. Orgs may later be charged up front at a discounted rate. That billing shape is not in this finish. Proposed sentence is in the stage-1 handoff. Stage 2 still waits for his go. |
 | **Next action(s)** | Stage 2 build waits for Andrew's go. Do not start it. Do not merge to master. Do not touch production Neon. Do not seed Sarah's or Tyson's emails. Proposed strings for his review are in `docs/handoff/org-sales-stage1-handoff.md`. |
 | **Open Andrew-confirms** | Stage 2 go. Proposed strings: fingerprint privacy sentence, consent sentence (parent or self-learner), End-now-no-notes warning, duplicate-claim message, suspension pill. Also still open: prod migration greenlight, Twilio campaign approval, Apple ICS on a real device, billable wording (Sarah). |
 | **MODEL RULE (Andrew 2026-10-06 11:08)** | **Opus does only Opus parts** (oracle design, verification judgment, merge calls). **All other hands work goes to Grok** (`grok-4.7-xhigh-fast`, set explicitly on every dispatch) — not Composer, not Opus. |
