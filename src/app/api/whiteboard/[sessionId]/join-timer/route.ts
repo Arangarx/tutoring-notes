@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
+import { touchOrgForceEndIfDue } from "@/lib/org-force-end-touch";
+import { readOrgForceEndNotice } from "@/lib/org-session-access";
 import { getLearnerSession } from "@/lib/learner-session";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { findSessionParticipantRow } from "@/lib/session-participant-scope";
@@ -83,14 +85,40 @@ export async function GET(
       );
     }
 
+    await touchOrgForceEndIfDue(sessionId);
     const row = await withDbRetry(
       () =>
         db.whiteboardSession.findUnique({
           where: { id: sessionId },
-          select: { activeMs: true, lastActiveAt: true, sessionPhase: true },
+          select: {
+            activeMs: true,
+            lastActiveAt: true,
+            sessionPhase: true,
+            endedAt: true,
+            adminUserId: true,
+            student: { select: { organizationId: true, adminUserId: true } },
+          },
         }),
       { label: "joinTimer.findSession" }
     );
+    if (row?.endedAt) {
+      return NextResponse.json(
+        { live: false as const, reason: "session_ended" as const },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+    const organizationId =
+      row?.student.organizationId != null && row.student.adminUserId == null
+        ? row.student.organizationId
+        : null;
+    const notice = row
+      ? await readOrgForceEndNotice({
+          organizationId,
+          sessionAdminUserId: row.adminUserId,
+          endedAt: row.endedAt,
+          audience: "student",
+        })
+      : null;
 
     return NextResponse.json(
       {
@@ -98,6 +126,8 @@ export async function GET(
         activeMs: row?.activeMs ?? 0,
         lastActiveAt: row?.lastActiveAt?.toISOString() ?? null,
         sessionPhase: (row?.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE",
+        forceEndAt: notice?.forceEndAt ?? null,
+        pillSentence: notice?.pillSentence ?? null,
       },
       { headers: { "Cache-Control": "no-store" } }
     );
@@ -186,11 +216,19 @@ export async function GET(
   // This is the key fix: endWhiteboardSession atomically stamps leftAt on all
   // participant rows AND sets endedAt. We must check endedAt first so that
   // a just-ended session returns session_ended rather than 404 → link_invalid.
+  await touchOrgForceEndIfDue(sessionId);
   const row = await withDbRetry(
     () =>
       db.whiteboardSession.findUnique({
         where: { id: sessionId },
-        select: { activeMs: true, lastActiveAt: true, sessionPhase: true, endedAt: true },
+        select: {
+          activeMs: true,
+          lastActiveAt: true,
+          sessionPhase: true,
+          endedAt: true,
+          adminUserId: true,
+          student: { select: { organizationId: true, adminUserId: true } },
+        },
       }),
     { label: "joinTimer.findSessionLearner" }
   );
@@ -212,12 +250,25 @@ export async function GET(
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
+  const organizationId =
+    row.student.organizationId != null && row.student.adminUserId == null
+      ? row.student.organizationId
+      : null;
+  const notice = await readOrgForceEndNotice({
+    organizationId,
+    sessionAdminUserId: row.adminUserId,
+    endedAt: row.endedAt,
+    audience: "student",
+  });
+
   return NextResponse.json(
     {
       live: true as const,
       activeMs: row.activeMs ?? 0,
       lastActiveAt: row.lastActiveAt?.toISOString() ?? null,
       sessionPhase: (row.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE",
+      forceEndAt: notice?.forceEndAt ?? null,
+      pillSentence: notice?.pillSentence ?? null,
     },
     { headers: { "Cache-Control": "no-store" } }
   );

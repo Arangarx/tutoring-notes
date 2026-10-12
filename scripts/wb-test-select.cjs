@@ -106,6 +106,10 @@ const PATH_RULES = [
     tags: [TAG.WB_PRESENCE, TAG.WB_SYNC, TAG.WB_CHROME, TAG.WB_AV],
   },
   {
+    re: /wb-org-removal|WbOrgForceEndPill|org-force-end-touch|stale-session-stamp/i,
+    tags: [TAG.WB_CHROME, TAG.WB_PRESENCE],
+  },
+  {
     re: /wb-org-booking|org-session-access|OrgSchedulePanel|org-booking-bridge/i,
     tags: [TAG.WB_PRESENCE],
   },

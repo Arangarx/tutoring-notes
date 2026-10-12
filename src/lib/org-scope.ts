@@ -20,6 +20,7 @@ import { normalizeEmail } from "@/lib/normalize-email";
 import { requireOperator, type OperatorIdentity } from "@/lib/operator";
 import { requireStudentScope } from "@/lib/student-scope";
 import { approveTutor, revokeTutorApproval } from "@/lib/tutor-approval-scope";
+import { stampStaleWhiteboardSessionEnd } from "@/lib/whiteboard/stale-session-stamp";
 
 export class OrgMutationError extends Error {
   readonly code:
@@ -567,6 +568,7 @@ export type OrgStaffHomeData = {
     expiresAt: Date;
   }>;
   grantable: OrgRole[];
+  openSessionTutorIds: string[];
 };
 
 export async function loadOrgStaffHome(organizationId: string): Promise<OrgStaffHomeData> {
@@ -583,7 +585,7 @@ export async function loadOrgStaffHome(organizationId: string): Promise<OrgStaff
   });
   if (!org) notFound();
   const now = new Date();
-  const [members, invites] = await Promise.all([
+  const [members, invites, openSessions] = await Promise.all([
     db.organizationMember.findMany({
       where: { organizationId, removedAt: null },
       select: {
@@ -611,6 +613,14 @@ export async function loadOrgStaffHome(organizationId: string): Promise<OrgStaff
       select: { id: true, email: true, roles: true, expiresAt: true },
       orderBy: { createdAt: "desc" },
     }),
+    db.whiteboardSession.findMany({
+      where: {
+        endedAt: null,
+        student: { organizationId, adminUserId: null },
+      },
+      select: { adminUserId: true },
+      distinct: ["adminUserId"],
+    }),
   ]);
   return {
     actor,
@@ -618,17 +628,35 @@ export async function loadOrgStaffHome(organizationId: string): Promise<OrgStaff
     members,
     invites,
     grantable: rolesActorMayGrant(actor.roles),
+    openSessionTutorIds: openSessions.map((row) => row.adminUserId),
   };
 }
 
 export async function setOrganizationStatus(
   organizationId: string,
-  status: "pending" | "active" | "suspended"
+  status: "pending" | "active" | "suspended",
+  choice: "finish" | "now" = "finish"
 ): Promise<void> {
   const operator = await requireOperator();
-  await db.organization.update({
-    where: { id: organizationId },
-    data: { status, statusChangedAt: new Date() },
+  const effectiveChoice = status === "pending" ? "finish" : choice;
+  await withOrgRowLock(organizationId, async (tx) => {
+    const stampedAt = new Date();
+    await tx.organization.update({
+      where: { id: organizationId },
+      data: { status, statusChangedAt: stampedAt },
+    });
+    if (status !== "active" && effectiveChoice === "now") {
+      const open = await tx.whiteboardSession.findMany({
+        where: {
+          endedAt: null,
+          student: { organizationId, adminUserId: null },
+        },
+        select: { id: true },
+      });
+      for (const session of open) {
+        await stampStaleWhiteboardSessionEnd(tx, session.id, stampedAt);
+      }
+    }
   });
   orgLog(organizationId, "status_set", { actor: actorLabel(operator), status });
 }
@@ -980,10 +1008,21 @@ export async function setOrgMemberRoles(
 
 export async function removeOrgMember(
   organizationId: string,
-  targetAdminUserId: string
+  targetAdminUserId: string,
+  choice: "finish" | "now" = "finish"
 ): Promise<void> {
   const actor = await assertOrgRole(organizationId, ["owner", "admin"]);
-  await db.$transaction(async (tx) => {
+  const protectedAppointments = await db.scheduledSession.findMany({
+    where: {
+      adminUserId: targetAdminUserId,
+      student: { organizationId, adminUserId: null },
+      whiteboardSession: { is: { endedAt: null } },
+    },
+    select: { id: true },
+  });
+  const keepAppointmentIds = new Set(protectedAppointments.map((row) => row.id));
+  const now = await withOrgRowLock(organizationId, async (tx) => {
+    const stampedAt = new Date();
     await lockMembers(tx, organizationId);
     const target = await tx.organizationMember.findUnique({
       where: {
@@ -1009,8 +1048,37 @@ export async function removeOrgMember(
     }
     await tx.organizationMember.update({
       where: { id: target.id },
-      data: { removedAt: new Date() },
+      data: { removedAt: stampedAt },
     });
+    if (choice === "now") {
+      const open = await tx.whiteboardSession.findMany({
+        where: {
+          adminUserId: targetAdminUserId,
+          endedAt: null,
+          student: { organizationId, adminUserId: null },
+        },
+        select: { id: true },
+      });
+      for (const session of open) {
+        await stampStaleWhiteboardSessionEnd(tx, session.id, stampedAt);
+      }
+    }
+    return stampedAt;
   });
+  const future = await db.scheduledSession.findMany({
+    where: {
+      adminUserId: targetAdminUserId,
+      startAt: { gt: now },
+      student: { organizationId, adminUserId: null },
+    },
+    select: { id: true },
+  });
+  if (future.some((row) => !keepAppointmentIds.has(row.id))) {
+    const { deleteScheduledSession } = await import("@/app/admin/schedule/actions");
+    for (const row of future) {
+      if (keepAppointmentIds.has(row.id)) continue;
+      await deleteScheduledSession(row.id);
+    }
+  }
   orgLog(organizationId, "member_removed", { actor: actor.adminId, target: targetAdminUserId });
 }

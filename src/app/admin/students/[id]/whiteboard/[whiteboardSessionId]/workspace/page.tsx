@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import { env } from "@/lib/env";
+import { touchOrgForceEndIfDue } from "@/lib/org-force-end-touch";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
 import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persisted-state";
@@ -77,6 +78,7 @@ export default async function WhiteboardWorkspacePage({
   if (session.studentId !== studentId) {
     notFound();
   }
+  await touchOrgForceEndIfDue(whiteboardSessionId);
 
   const detail = await withDbRetry(
     () =>

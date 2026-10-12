@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
+import { orgForcedEndUploadOpen } from "@/lib/org-session-access";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
@@ -64,16 +65,27 @@ function isBatchBody(raw: unknown): boolean {
 async function assertActiveSession(
   sessionId: string,
   rid: string,
-  session: { endedAt: Date | null }
+  session: {
+    endedAt: Date | null;
+    organizationId: string | null;
+    adminUserId: string;
+  }
 ): Promise<Response | null> {
   if (session.endedAt) {
-    console.log(
-      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} ignoring checkpoint for ended session`
-    );
-    return NextResponse.json(
-      { error: "Session already ended." },
-      { status: 409 }
-    );
+    const uploadOpen = await orgForcedEndUploadOpen({
+      organizationId: session.organizationId,
+      sessionAdminUserId: session.adminUserId,
+      endedAt: session.endedAt,
+    });
+    if (!uploadOpen) {
+      console.log(
+        `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} ignoring checkpoint for ended session`
+      );
+      return NextResponse.json(
+        { error: "Session already ended." },
+        { status: 409 }
+      );
+    }
   }
 
   const phaseRow = await withDbRetry(

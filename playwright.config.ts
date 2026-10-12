@@ -223,6 +223,7 @@ export default defineConfig({
         "**/integration/wb-tutor-recenter.spec.ts",
         "**/integration/wb-org-qol-bridge.spec.ts",
         "**/integration/wb-org-booking.spec.ts",
+        "**/integration/wb-org-removal.spec.ts",
         "**/integration/wb-adhoc-session-list.spec.ts",
         "**/integration/wb-graph-ink.spec.ts",
         "**/integration/wb-org-qol-surface.spec.ts",

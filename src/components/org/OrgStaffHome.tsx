@@ -5,6 +5,7 @@ import {
   setStaffRolesAction,
 } from "@/app/admin/organization/actions";
 import { OrgActivationPanel } from "@/components/org/OrgActivationPanel";
+import { OrgSessionEndChoiceDialog } from "@/components/org/OrgSessionEndChoiceDialog";
 import { OrgRolePicker } from "@/components/org/OrgRolePicker";
 import { SectionCard } from "@/components/SectionCard";
 import { Button } from "@/components/ui/button";
@@ -82,13 +83,32 @@ export function OrgStaffHome({
                       Save roles
                     </Button>
                   </form>
-                  <form action={removeStaffMemberAction}>
-                    <input type="hidden" name="organizationId" value={data.org.id} />
-                    <input type="hidden" name="adminUserId" value={member.adminUser.id} />
-                    <Button type="submit" variant="outline" size="sm">
-                      Remove from organization
-                    </Button>
-                  </form>
+                  {data.openSessionTutorIds.includes(member.adminUser.id) ? (
+                    <>
+                      <form
+                        id={`org-remove-${member.adminUser.id}`}
+                        action={removeStaffMemberAction}
+                      >
+                        <input type="hidden" name="organizationId" value={data.org.id} />
+                        <input type="hidden" name="adminUserId" value={member.adminUser.id} />
+                        <input type="hidden" name="choice" value="finish" />
+                      </form>
+                      <OrgSessionEndChoiceDialog
+                        formId={`org-remove-${member.adminUser.id}`}
+                        triggerLabel="Remove from organization"
+                        title="Remove this person"
+                        testId={`org-remove-${member.adminUser.id}`}
+                      />
+                    </>
+                  ) : (
+                    <form action={removeStaffMemberAction}>
+                      <input type="hidden" name="organizationId" value={data.org.id} />
+                      <input type="hidden" name="adminUserId" value={member.adminUser.id} />
+                      <Button type="submit" variant="outline" size="sm">
+                        Remove from organization
+                      </Button>
+                    </form>
+                  )}
                 </div>
               ) : null}
             </li>

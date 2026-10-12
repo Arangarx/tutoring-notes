@@ -1,7 +1,9 @@
 import {
   activateOrganizationAction,
   saveOrganizationCapsAction,
+  suspendOrganizationAction,
 } from "@/app/admin/orgs/actions";
+import { OrgSessionEndChoiceDialog } from "@/components/org/OrgSessionEndChoiceDialog";
 import { TutorWaitlistActions } from "@/app/admin/tutor-approvals/TutorWaitlistActions";
 import { OrgDailyCapFields } from "@/components/org/OrgDailyCapFields";
 import { SectionCard } from "@/components/SectionCard";
@@ -53,7 +55,21 @@ export function OrgActivationPanel({
                 Activate organization
               </Button>
             </form>
-          ) : null}
+          ) : (
+            <>
+              <form id={`org-suspend-${organizationId}`} action={suspendOrganizationAction}>
+                <input type="hidden" name="organizationId" value={organizationId} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+                <input type="hidden" name="choice" value="finish" />
+              </form>
+              <OrgSessionEndChoiceDialog
+                formId={`org-suspend-${organizationId}`}
+                triggerLabel="Suspend organization"
+                title="Suspend this organization"
+                testId="org-suspend"
+              />
+            </>
+          )}
           <form action={saveOrganizationCapsAction} className="flex flex-col gap-3">
             <input type="hidden" name="organizationId" value={organizationId} />
             <input type="hidden" name="maxMembers" value={maxMembers ?? ""} />

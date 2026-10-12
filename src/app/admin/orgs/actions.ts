@@ -67,6 +67,14 @@ export async function createOrganizationByOwnerEmailAction(formData: FormData): 
   redirect(operatorOrgPath(organizationId));
 }
 
+export async function suspendOrganizationAction(formData: FormData): Promise<void> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const choice = formData.get("choice") === "now" ? "now" : "finish";
+  await setOrganizationStatus(organizationId, "suspended", choice);
+  const returnTo = safeRelativeReturnPath(String(formData.get("returnTo") ?? ""));
+  redirect(returnTo ?? operatorOrgPath(organizationId));
+}
+
 export async function activateOrganizationAction(formData: FormData): Promise<void> {
   const organizationId = String(formData.get("organizationId") ?? "");
   await setOrganizationStatus(organizationId, "active");

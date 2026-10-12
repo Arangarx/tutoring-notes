@@ -82,7 +82,8 @@ export async function removeStaffMemberAction(formData: FormData): Promise<void>
   const organizationId = String(formData.get("organizationId") ?? "");
   const adminUserId = String(formData.get("adminUserId") ?? "");
   try {
-    await removeOrgMember(organizationId, adminUserId);
+    const choice = formData.get("choice") === "now" ? "now" : "finish";
+    await removeOrgMember(organizationId, adminUserId, choice);
   } catch (err) {
     if (err instanceof OrgMutationError) staffHome(organizationId, err.code);
     throw err;

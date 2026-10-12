@@ -95,6 +95,7 @@ import {
 import { useInvertWheelZoom } from "@/hooks/useInvertWheelZoom";
 import { useSessionChat } from "@/hooks/useSessionChat";
 import { WbGhostViewportOverlay } from "@/components/whiteboard/chrome/WbGhostViewportOverlay";
+import { WbOrgForceEndPill } from "@/components/whiteboard/chrome/WbOrgForceEndPill";
 import { WbViewLockedIndicator } from "@/components/whiteboard/chrome/WbViewLockedIndicator";
 import { WbRecenterViewButton } from "@/components/whiteboard/chrome/WbRecenterViewButton";
 import { measureVisibleViewport } from "@/lib/whiteboard/measure-visible-viewport";
@@ -1381,6 +1382,23 @@ export function WhiteboardWorkspaceClient({
     return unsub;
   }, [role, studentSyncClient, localPeerId, localJoinedAt, whiteboardSessionId]);
 
+  const [orgForceEnd, setOrgForceEnd] = useState<{ atMs: number; sentence: string } | null>(null);
+  const orgForceEndFiredRef = useRef(false);
+  const readOrgForceEndNotice = (
+    data: { forceEndAt?: string | null; pillSentence?: string | null }
+  ) => {
+    if (!data.forceEndAt || !data.pillSentence) {
+      setOrgForceEnd(null);
+      return;
+    }
+    const atMs = Date.parse(data.forceEndAt);
+    if (!Number.isFinite(atMs)) {
+      setOrgForceEnd(null);
+      return;
+    }
+    setOrgForceEnd({ atMs, sentence: data.pillSentence });
+  };
+
   // Student clock tick (drives student timer display)
   useEffect(() => {
     if (role !== "student") return;
@@ -1416,6 +1434,8 @@ export function WhiteboardWorkspaceClient({
           activeMs?: number;
           lastActiveAt?: string | null;
           sessionPhase?: string;
+          forceEndAt?: string | null;
+          pillSentence?: string | null;
         };
         if (data.live === false) {
           const r = data.reason;
@@ -1431,6 +1451,7 @@ export function WhiteboardWorkspaceClient({
           wjgLog("session_ended", { reason: mapped });
           return;
         }
+        readOrgForceEndNotice(data);
         const treatAsLive =
           data.live === true ||
           (data.live === undefined && typeof data.activeMs === "number");
@@ -1485,6 +1506,8 @@ export function WhiteboardWorkspaceClient({
           activeMs?: number;
           lastActiveAt?: string | null;
           sessionPhase?: string;
+          forceEndAt?: string | null;
+          pillSentence?: string | null;
         };
         if (data.live === false) {
           const r = data.reason;
@@ -1494,6 +1517,7 @@ export function WhiteboardWorkspaceClient({
           wjgLog("session_ended", { reason: mapped });
           return;
         }
+        readOrgForceEndNotice(data);
         const treatAsLive =
           data.live === true ||
           (data.live === undefined && typeof data.activeMs === "number");
@@ -4238,6 +4262,8 @@ export function WhiteboardWorkspaceClient({
         const data = (await res.json()) as {
           activeMs?: number;
           lastActiveAt?: string | null;
+          forceEndAt?: string | null;
+          pillSentence?: string | null;
         };
         if (typeof data.activeMs === "number") setServerActiveMs(data.activeMs);
         if (data.lastActiveAt !== undefined) {
@@ -4245,13 +4271,15 @@ export function WhiteboardWorkspaceClient({
             data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
           );
         }
+        if (role === "tutor") readOrgForceEndNotice(data);
       } catch {
         // ignore — next tick will retry
       }
     };
+    void refresh();
     const id = setInterval(refresh, ANCHOR_REFRESH_MS);
     return () => clearInterval(id);
-  }, [syncUrl, whiteboardSessionId]);
+  }, [syncUrl, whiteboardSessionId, role]);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -4701,6 +4729,14 @@ export function WhiteboardWorkspaceClient({
   const autoEndFiredRef = useRef(false);
   const handleEndSessionRef = useRef(handleEndSession);
   handleEndSessionRef.current = handleEndSession;
+
+  useEffect(() => {
+    if (role !== "tutor" || !orgForceEnd) return;
+    if (orgForceEndFiredRef.current) return;
+    if (now < orgForceEnd.atMs) return;
+    orgForceEndFiredRef.current = true;
+    void handleEndSessionRef.current();
+  }, [role, orgForceEnd, now]);
 
   useEffect(() => {
     if (!LEGACY_INTENT_ENDREVIEW_AUTO_END) return;
@@ -7531,6 +7567,8 @@ export function WhiteboardWorkspaceClient({
           {role === "student" && !independentView ? (
             <WbViewLockedIndicator onUnlock={() => setIndependentView(true)} />
           ) : null}
+
+          {orgForceEnd ? <WbOrgForceEndPill sentence={orgForceEnd.sentence} /> : null}
 
           <WbGhostViewportOverlay
             excalidrawAPI={excalidrawAPI}

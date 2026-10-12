@@ -65,6 +65,7 @@ export function OrgSchedulePanel({
                 >
                   <div className="space-y-1 text-sm text-foreground">
                     <p>{row.whenLabel}</p>
+                    {row.availability === "unavailable" ? <p>Unavailable</p> : null}
                     <p>{row.instructorName}</p>
                     <p>{row.learnerName}</p>
                     <p className="text-muted-foreground">{row.subject}</p>

@@ -7,10 +7,12 @@ import {
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
+import { orgForcedEndUploadOpen } from "@/lib/org-session-access";
 import {
   assertJoinTokenAllowsWhiteboardAssetUpload,
   assertLearnerSessionAllowsWhiteboardAssetUpload,
   assertOwnsWhiteboardSession,
+  type AuthorisedWhiteboardSession,
 } from "@/lib/whiteboard-scope";
 import { getLearnerSession } from "@/lib/learner-session";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
@@ -56,6 +58,18 @@ import {
  *    (PDF page renders, raster images, math-equation SVGs). Owned via
  *    WhiteboardSession because they live in the session's namespace.
  */
+async function rejectOrgReadOnlyUpload(session: AuthorisedWhiteboardSession): Promise<void> {
+  if (session.orgAccess.kind !== "org" || session.orgAccess.mode !== "read-only") return;
+  const open = await orgForcedEndUploadOpen({
+    organizationId: session.organizationId,
+    sessionAdminUserId: session.adminUserId,
+    endedAt: session.endedAt,
+  });
+  if (!open) {
+    throw new Error("This whiteboard session is read-only.");
+  }
+}
+
 const POLICY: Record<
   UploadKind,
   { allowed: string[]; maxBytes: number }
@@ -194,6 +208,7 @@ export async function POST(request: Request): Promise<Response> {
               throw new Error("joinToken is only valid for whiteboard-asset uploads.");
             }
             const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+            await rejectOrgReadOnlyUpload(session);
             studentIdForToken = session.studentId;
             // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
             await assertTutorApproved(session.adminUserId);
@@ -206,6 +221,7 @@ export async function POST(request: Request): Promise<Response> {
             throw new Error("joinToken is only valid for whiteboard-asset uploads.");
           }
           const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+          await rejectOrgReadOnlyUpload(session);
           studentIdForToken = session.studentId;
           // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
           await assertTutorApproved(session.adminUserId);

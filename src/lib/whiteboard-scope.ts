@@ -26,6 +26,12 @@ export type AuthorisedWhiteboardSession = {
   consentAcknowledged: boolean;
   eventsBlobUrl: string;
   endedAt: Date | null;
+  /** Set for an org-owned student. Personal students leave this null. */
+  organizationId: string | null;
+  orgAccess:
+    | { kind: "personal" }
+    | { kind: "org"; mode: "read-write" }
+    | { kind: "org"; mode: "read-only"; notesWritable: boolean };
 };
 
 /**
@@ -56,14 +62,20 @@ export async function assertOwnsWhiteboardSession(
   if (!session) notFound();
   const orgOwned =
     session.student.organizationId != null && session.student.adminUserId == null;
+  let orgAccess: AuthorisedWhiteboardSession["orgAccess"] = { kind: "personal" };
   if (orgOwned) {
     if (scope.kind !== "admin") notFound();
     const access = await resolveOrgSessionAccess({
       callerAdminUserId: scope.adminId,
       sessionAdminUserId: session.adminUserId,
       organizationId: session.student.organizationId as string,
+      endedAt: session.endedAt,
     });
     if (!access.ok) notFound();
+    orgAccess =
+      access.mode === "read-write"
+        ? { kind: "org", mode: "read-write" }
+        : { kind: "org", mode: "read-only", notesWritable: access.notesWritable };
   } else {
     if (!canAccessStudentRow(scope, session.student)) notFound();
     if (scope.kind === "admin" && session.adminUserId !== scope.adminId) notFound();
@@ -75,7 +87,28 @@ export async function assertOwnsWhiteboardSession(
     consentAcknowledged: session.consentAcknowledged,
     eventsBlobUrl: session.eventsBlobUrl,
     endedAt: session.endedAt,
+    organizationId: orgOwned ? (session.student.organizationId as string) : null,
+    orgAccess,
   };
+}
+
+/** Personal sessions and an omitted access (test doubles) stay writable. */
+export function orgBoardEditsAllowed(session: {
+  orgAccess?: AuthorisedWhiteboardSession["orgAccess"];
+}): boolean {
+  const access = session.orgAccess;
+  if (!access || access.kind !== "org") return true;
+  return access.mode === "read-write";
+}
+
+/** Finalize stays open through the seven-day window. A later save does not write. */
+export function orgNotesSaveAllowed(session: {
+  orgAccess?: AuthorisedWhiteboardSession["orgAccess"];
+}): boolean {
+  const access = session.orgAccess;
+  if (!access || access.kind !== "org") return true;
+  if (access.mode === "read-write") return true;
+  return access.notesWritable;
 }
 
 /**

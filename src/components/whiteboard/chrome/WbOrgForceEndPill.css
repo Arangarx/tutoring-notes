@@ -1,0 +1,23 @@
+.wb-org-force-end-pill {
+  position: absolute;
+  z-index: 6;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.wb-org-force-end-pill .wb-org-force-end-pill__badge {
+  height: auto;
+  width: auto;
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
+  text-align: center;
+}
+
+.wb-org-force-end-pill__text {
+  white-space: normal;
+}

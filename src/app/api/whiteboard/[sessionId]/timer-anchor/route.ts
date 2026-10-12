@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
+import { touchOrgForceEndIfDue } from "@/lib/org-force-end-touch";
+import { readOrgForceEndNotice } from "@/lib/org-session-access";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 
 /**
@@ -30,7 +32,8 @@ export async function GET(
 ): Promise<Response> {
   const { sessionId } = await ctx.params;
 
-  await assertOwnsWhiteboardSession(sessionId);
+  const owned = await assertOwnsWhiteboardSession(sessionId);
+  await touchOrgForceEndIfDue(sessionId);
 
   const row = await withDbRetry(
     () =>
@@ -40,16 +43,25 @@ export async function GET(
           bothConnectedAt: true,
           activeMs: true,
           lastActiveAt: true,
+          endedAt: true,
         },
       }),
     { label: "timerAnchor.findUnique" }
   );
+  const notice = await readOrgForceEndNotice({
+    organizationId: owned.organizationId,
+    sessionAdminUserId: owned.adminUserId,
+    endedAt: row?.endedAt ?? owned.endedAt,
+    audience: "tutor",
+  });
 
   return NextResponse.json(
     {
       bothConnectedAt: row?.bothConnectedAt?.toISOString() ?? null,
       activeMs: row?.activeMs ?? 0,
       lastActiveAt: row?.lastActiveAt?.toISOString() ?? null,
+      forceEndAt: notice?.forceEndAt ?? null,
+      pillSentence: notice?.pillSentence ?? null,
     },
     {
       headers: {

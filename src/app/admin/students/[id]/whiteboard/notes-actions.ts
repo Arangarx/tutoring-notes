@@ -23,7 +23,11 @@
 import { revalidatePath } from "next/cache";
 import { db, withDbRetry } from "@/lib/db";
 import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
-import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
+import {
+  assertOwnsWhiteboardSession,
+  orgBoardEditsAllowed,
+  orgNotesSaveAllowed,
+} from "@/lib/whiteboard-scope";
 import { enqueueNotesReduce } from "@/lib/recording/notes-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
@@ -198,6 +202,9 @@ export async function regenerateNotesAction(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const regenSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    if (!orgBoardEditsAllowed(regenSession)) {
+      return { ok: false, error: "This session is read-only." };
+    }
     // B1 cost gate: WAITLISTED tutors cannot regenerate notes (OpenAI spend).
     await assertTutorApproved(regenSession.adminUserId);
 
@@ -284,6 +291,9 @@ export async function saveSessionNotesAction(
 ): Promise<SaveSessionNoteResult> {
   try {
     const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    if (!orgNotesSaveAllowed(session)) {
+      return { ok: false, error: "Notes can no longer be saved for this session." };
+    }
 
     const linksJson = fields.links
       ? JSON.stringify(
@@ -407,6 +417,9 @@ export async function deleteWhiteboardSessionAndDataAction(
 ): Promise<DeleteSessionResult> {
   try {
     const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    if (!orgBoardEditsAllowed(session)) {
+      return { ok: false, error: "This session is read-only." };
+    }
 
     const sessionDetail = await withDbRetry(
       () =>

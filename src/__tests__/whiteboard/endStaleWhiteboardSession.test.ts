@@ -32,6 +32,7 @@
  */
 
 const txWhiteboardUpdateMock = jest.fn();
+const txWhiteboardUpdateManyMock = jest.fn();
 const txTokenUpdateManyMock = jest.fn();
 const txWhiteboardFindUniqueMock = jest.fn();
 const txSessionParticipantUpdateManyMock = jest.fn();
@@ -41,6 +42,7 @@ const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
     whiteboardSession: {
       findUnique: txWhiteboardFindUniqueMock,
       update: txWhiteboardUpdateMock,
+      updateMany: txWhiteboardUpdateManyMock,
     },
     whiteboardJoinToken: {
       updateMany: txTokenUpdateManyMock,
@@ -90,6 +92,7 @@ import { endStaleWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/
 beforeEach(() => {
   mockLogProductEvent.mockReset();
   txWhiteboardUpdateMock.mockReset();
+  txWhiteboardUpdateManyMock.mockReset();
   txTokenUpdateManyMock.mockReset();
   txWhiteboardFindUniqueMock.mockReset();
   txSessionParticipantUpdateManyMock.mockReset();
@@ -109,11 +112,7 @@ function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
   });
   dbWhiteboardFindUniqueMock.mockResolvedValue({ sessionPhase: "PENDING" });
   txWhiteboardFindUniqueMock.mockResolvedValue({ startedAt });
-  txWhiteboardUpdateMock.mockImplementation(async (args: { data: { endedAt: Date } }) => ({
-    id: "wb_42",
-    endedAt: args.data.endedAt,
-    durationSeconds: 1800,
-  }));
+  txWhiteboardUpdateManyMock.mockResolvedValue({ count: 1 });
   txTokenUpdateManyMock.mockResolvedValue({ count: 2 });
   txSessionParticipantUpdateManyMock.mockResolvedValue({ count: 1 });
   return { startedAt };
@@ -147,15 +146,16 @@ describe("endStaleWhiteboardSession", () => {
 
     const result = await endStaleWhiteboardSession("wb_42");
 
-    expect(txWhiteboardUpdateMock).toHaveBeenCalledTimes(1);
-    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
-    expect(updateArgs.where).toEqual({ id: "wb_42" });
+    expect(txWhiteboardUpdateManyMock).toHaveBeenCalledTimes(1);
+    const updateArgs = txWhiteboardUpdateManyMock.mock.calls[0][0];
+    expect(updateArgs.where).toEqual({ id: "wb_42", endedAt: null });
     expect(updateArgs.data.endedAt).toBeInstanceOf(Date);
     expect(typeof updateArgs.data.durationSeconds).toBe("number");
     // ~45 min ± 1s slack for test timing.
     expect(updateArgs.data.durationSeconds).toBeGreaterThanOrEqual(45 * 60 - 2);
     expect(updateArgs.data.durationSeconds).toBeLessThanOrEqual(45 * 60 + 2);
-    expect(result.durationSeconds).toBe(1800);
+    expect(result.durationSeconds).toBeGreaterThanOrEqual(45 * 60 - 2);
+    expect(result.durationSeconds).toBeLessThanOrEqual(45 * 60 + 2);
     expect(mockLogProductEvent).toHaveBeenCalledWith({
       kind: "SESSION_ENDED",
       adminUserId: "admin_1",
@@ -201,7 +201,7 @@ describe("endStaleWhiteboardSession", () => {
 
     await endStaleWhiteboardSession("wb_42");
 
-    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    const updateArgs = txWhiteboardUpdateManyMock.mock.calls[0][0];
     expect(updateArgs.data).not.toHaveProperty("eventsBlobUrl");
     expect(updateArgs.data).not.toHaveProperty("snapshotBlobUrl");
   });

@@ -16,7 +16,10 @@ import { ensureAdHocScheduledSession } from "@/lib/scheduling/ad-hoc-scheduled-s
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { registeredAdminId } from "@/lib/whiteboard/require-registered-admin";
-import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
+import { assertOwnsWhiteboardSession, type AuthorisedWhiteboardSession } from "@/lib/whiteboard-scope";
+import { orgForcedEndUploadOpen } from "@/lib/org-session-access";
+import { stampStaleWhiteboardSessionEnd } from "@/lib/whiteboard/stale-session-stamp";
+import type { Prisma } from "@prisma/client";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { mapWithConcurrency, transcribeAudio } from "@/lib/transcribe";
 import { generateSessionNote, estimateTokens, MAX_INPUT_TOKENS } from "@/lib/ai";
@@ -662,6 +665,131 @@ function validateEndSessionSegments(
   return { ok: true };
 }
 
+async function insertEndSessionSegments(
+  tx: Prisma.TransactionClient,
+  input: {
+    whiteboardSessionId: string;
+    adminUserId: string;
+    studentId: string;
+    segments: ReadonlyArray<EndSessionSegment>;
+  }
+): Promise<number> {
+  const existingRows = await tx.sessionRecording.findMany({
+    where: {
+      whiteboardSessionId: input.whiteboardSessionId,
+      blobUrl: { in: input.segments.map((s) => s.blobUrl) },
+    },
+    select: { blobUrl: true },
+  });
+  const seen = new Set(existingRows.map((r) => r.blobUrl));
+  const maxOrder = await tx.sessionRecording.aggregate({
+    where: { whiteboardSessionId: input.whiteboardSessionId },
+    _max: { orderIndex: true },
+  });
+  let nextOrder = (maxOrder._max.orderIndex ?? -1) + 1;
+  const toInsert = input.segments
+    .filter((s) => !seen.has(s.blobUrl))
+    .slice()
+    .sort((a, b) => {
+      if (a.audioStartedAtMs !== b.audioStartedAtMs) {
+        return a.audioStartedAtMs - b.audioStartedAtMs;
+      }
+      return a.streamId < b.streamId ? -1 : a.streamId > b.streamId ? 1 : 0;
+    });
+  if (toInsert.length === 0) return 0;
+  await tx.sessionRecording.createMany({
+    data: toInsert.map((s) => ({
+      adminUserId: input.adminUserId,
+      studentId: input.studentId,
+      whiteboardSessionId: input.whiteboardSessionId,
+      blobUrl: s.blobUrl,
+      mimeType: s.mimeType.split(";")[0].trim(),
+      sizeBytes: s.sizeBytes,
+      streamId: s.streamId,
+      orderIndex: nextOrder++,
+      ...(typeof s.durationSeconds === "number" &&
+        s.durationSeconds > 0 && {
+          durationSeconds: s.durationSeconds,
+        }),
+    })),
+    skipDuplicates: true,
+  });
+  return toInsert.length;
+}
+
+/**
+ * Org-forced end already stamped endedAt. Accept segments and the events URL
+ * inside the upload window without moving endedAt or re-running the close math.
+ * Returns null when this call is a normal second End.
+ */
+async function acceptOrgForcedEndUpload(
+  session: AuthorisedWhiteboardSession,
+  rid: string,
+  whiteboardSessionId: string,
+  finalEventsBlobUrl: string,
+  segments: ReadonlyArray<EndSessionSegment>
+): Promise<{
+  endedAt: string;
+  durationSeconds: number;
+  registeredSegments: number;
+} | null> {
+  if (!session.endedAt) return null;
+  const open = await orgForcedEndUploadOpen({
+    organizationId: session.organizationId,
+    sessionAdminUserId: session.adminUserId,
+    endedAt: session.endedAt,
+  });
+  if (!open) return null;
+
+  if (!/^https?:\/\//i.test(finalEventsBlobUrl)) {
+    throw new Error("Final events URL must be an absolute http(s) URL.");
+  }
+  if (segments.length > 0) {
+    const valid = validateEndSessionSegments(segments);
+    if (!valid.ok) {
+      throw new Error(`Could not finalize the whiteboard session: ${valid.error}`);
+    }
+  }
+
+  let audioConsentGranted = true;
+  if (segments.length > 0) {
+    const audioConsent = await resolveModeAwareAudioRecordingConsent(whiteboardSessionId);
+    if (!audioConsent.allow) audioConsentGranted = false;
+  }
+  const erasureShortCircuit = await shouldShortCircuitEndSessionForErasure(session.studentId);
+
+  const existing = await db.whiteboardSession.findUnique({
+    where: { id: whiteboardSessionId },
+    select: { endedAt: true, durationSeconds: true, eventsBlobUrl: true },
+  });
+  const endedAt = existing?.endedAt ?? session.endedAt;
+  let registeredSegments = 0;
+  await db.$transaction(async (tx) => {
+    if (!erasureShortCircuit) {
+      await tx.whiteboardSession.update({
+        where: { id: whiteboardSessionId },
+        data: { eventsBlobUrl: finalEventsBlobUrl },
+      });
+    }
+    if (segments.length > 0 && audioConsentGranted && !erasureShortCircuit) {
+      registeredSegments = await insertEndSessionSegments(tx, {
+        whiteboardSessionId,
+        adminUserId: session.adminUserId,
+        studentId: session.studentId,
+        segments,
+      });
+    }
+  });
+  console.log(
+    `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} org_forced_upload endedAt=${endedAt.toISOString()} newSegments=${registeredSegments}`
+  );
+  return {
+    endedAt: endedAt.toISOString(),
+    durationSeconds: existing?.durationSeconds ?? 0,
+    registeredSegments,
+  };
+}
+
 export type FinalizeWhiteboardSessionFromBackendResult =
   | { ok: true; idempotent: true }
   | {
@@ -693,10 +821,41 @@ export async function finalizeWhiteboardSessionFromBackend(
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
   if (session.endedAt) {
-    console.log(
-      `[fzb] fzb=${whiteboardSessionId} action=idempotent_skip batches=0 segments=0`
-    );
-    return { ok: true, idempotent: true };
+    const uploadOpen = await orgForcedEndUploadOpen({
+      organizationId: session.organizationId,
+      sessionAdminUserId: session.adminUserId,
+      endedAt: session.endedAt,
+    });
+    if (!uploadOpen) {
+      console.log(
+        `[fzb] fzb=${whiteboardSessionId} action=idempotent_skip batches=0 segments=0`
+      );
+      return { ok: true, idempotent: true };
+    }
+    const lateEventsUrl = opts?.finalEventsBlobUrl ?? session.eventsBlobUrl;
+    if (!lateEventsUrl || !/^https?:\/\//i.test(lateEventsUrl)) {
+      return { ok: false, error: "No final events URL available for this session." };
+    }
+    try {
+      const lateResult = await endWhiteboardSession(
+        whiteboardSessionId,
+        lateEventsUrl,
+        {
+          snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined,
+          segments: opts?.extraSegments ?? [],
+        }
+      );
+      return {
+        ok: true,
+        idempotent: false,
+        endedAt: lateResult.endedAt,
+        durationSeconds: lateResult.durationSeconds,
+        registeredSegments: lateResult.registeredSegments,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: msg };
+    }
   }
 
   const startedAtRow = await withDbRetry(
@@ -910,6 +1069,14 @@ export async function endWhiteboardSession(
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
   if (session.endedAt) {
+    const late = await acceptOrgForcedEndUpload(
+      session,
+      rid,
+      whiteboardSessionId,
+      finalEventsBlobUrl,
+      opts?.segments ?? []
+    );
+    if (late) return late;
     console.warn(
       `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} REJECTED: already ended at ${session.endedAt.toISOString()}`
     );
@@ -1093,48 +1260,12 @@ export async function endWhiteboardSession(
           // session close + token revocation still proceed.
           let newSegments = 0;
           if (segments.length > 0 && audioConsentGranted && !erasureShortCircuit) {
-            const existingRows = await tx.sessionRecording.findMany({
-              where: {
-                whiteboardSessionId,
-                blobUrl: { in: segments.map((s) => s.blobUrl) },
-              },
-              select: { blobUrl: true, orderIndex: true },
+            newSegments = await insertEndSessionSegments(tx, {
+              whiteboardSessionId,
+              adminUserId: session.adminUserId,
+              studentId: session.studentId,
+              segments,
             });
-            const seen = new Set(existingRows.map((r) => r.blobUrl));
-            const maxOrder = await tx.sessionRecording.aggregate({
-              where: { whiteboardSessionId },
-              _max: { orderIndex: true },
-            });
-            let nextOrder = (maxOrder._max.orderIndex ?? -1) + 1;
-            const toInsert = segments
-              .filter((s) => !seen.has(s.blobUrl))
-              .slice() // copy so we don't mutate caller's array
-              .sort((a, b) => {
-                if (a.audioStartedAtMs !== b.audioStartedAtMs) {
-                  return a.audioStartedAtMs - b.audioStartedAtMs;
-                }
-                return a.streamId < b.streamId ? -1 : a.streamId > b.streamId ? 1 : 0;
-              });
-            if (toInsert.length > 0) {
-              await tx.sessionRecording.createMany({
-                data: toInsert.map((s) => ({
-                  adminUserId: session.adminUserId,
-                  studentId: session.studentId,
-                  whiteboardSessionId,
-                  blobUrl: s.blobUrl,
-                  mimeType: s.mimeType.split(";")[0].trim(),
-                  sizeBytes: s.sizeBytes,
-                  streamId: s.streamId,
-                  orderIndex: nextOrder++,
-                  ...(typeof s.durationSeconds === "number" &&
-                    s.durationSeconds > 0 && {
-                      durationSeconds: s.durationSeconds,
-                    }),
-                })),
-                skipDuplicates: true,
-              });
-              newSegments = toInsert.length;
-            }
           }
 
           await tx.whiteboardJoinToken.updateMany({
@@ -1275,38 +1406,9 @@ export async function endStaleWhiteboardSession(
   try {
     updated = await withDbRetry(
       () =>
-        db.$transaction(async (tx) => {
-          const existing = await tx.whiteboardSession.findUnique({
-            where: { id: whiteboardSessionId },
-            select: { startedAt: true },
-          });
-          const durationSeconds = existing
-            ? Math.max(
-                0,
-                Math.floor((now.getTime() - existing.startedAt.getTime()) / 1000)
-              )
-            : 0;
-          const row = await tx.whiteboardSession.update({
-            where: { id: whiteboardSessionId },
-            data: {
-              endedAt: now,
-              durationSeconds,
-            },
-            select: { id: true, endedAt: true, durationSeconds: true },
-          });
-          await tx.sessionParticipant.updateMany({
-            where: { whiteboardSessionId, leftAt: null },
-            data: { leftAt: now },
-          });
-          await tx.whiteboardJoinToken.updateMany({
-            where: {
-              whiteboardSessionId,
-              revokedAt: null,
-            },
-            data: { revokedAt: now },
-          });
-          return row;
-        }),
+        db.$transaction((tx) =>
+          stampStaleWhiteboardSessionEnd(tx, whiteboardSessionId, now)
+        ),
       { label: "endStaleWhiteboardSession" }
     );
   } catch (err) {
@@ -1314,6 +1416,9 @@ export async function endStaleWhiteboardSession(
       `[endStaleWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} db.transaction failed:`,
       err
     );
+    throw new Error("Could not end the whiteboard session. Please try again.");
+  }
+  if (!updated) {
     throw new Error("Could not end the whiteboard session. Please try again.");
   }
 
@@ -1754,12 +1859,19 @@ export async function registerWhiteboardSessionAudioSegmentAction(
 
     const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
     if (session.endedAt) {
-      return {
-        ok: false,
-        error: "This whiteboard session has already ended.",
-        debugId: rid,
-        sessionEnded: true,
-      };
+      const uploadOpen = await orgForcedEndUploadOpen({
+        organizationId: session.organizationId,
+        sessionAdminUserId: session.adminUserId,
+        endedAt: session.endedAt,
+      });
+      if (!uploadOpen) {
+        return {
+          ok: false,
+          error: "This whiteboard session has already ended.",
+          debugId: rid,
+          sessionEnded: true,
+        };
+      }
     }
 
     // Phase check — audio segments must only be registered during ACTIVE sessions.

@@ -408,6 +408,7 @@ export type OrganizationAppointmentRow = {
   instructorAdminUserId: string;
   whenLabel: string;
   subject: string;
+  availability: "available" | "unavailable";
   view: ScheduledSessionView;
 };
 
@@ -417,7 +418,7 @@ export async function listScheduledSessionsForOrganization(
   await assertOrgRole(organizationId, ["owner", "admin", "scheduler", "instructor"]);
   const org = await db.organization.findUnique({
     where: { id: organizationId },
-    select: { timezone: true },
+    select: { timezone: true, status: true },
   });
   if (!org) notFound();
   const rows = await db.scheduledSession.findMany({
@@ -450,6 +451,7 @@ export async function listScheduledSessionsForOrganization(
       instructorAdminUserId: row.adminUserId,
       whenLabel: `${view.date} ${view.startTime}–${view.endTime}`,
       subject: row.subject,
+      availability: org.status === "active" ? "available" : "unavailable",
       view,
     };
   });

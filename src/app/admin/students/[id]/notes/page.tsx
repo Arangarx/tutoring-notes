@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
+import { resolveOrgSessionAccess } from "@/lib/org-session-access";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { NoteCardActions } from "../NoteCardActions";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
@@ -43,18 +44,22 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
   const orgOwned = student.organizationId != null && student.adminUserId == null;
   if (orgOwned) {
     if (scope.kind !== "admin" || !student.organizationId) notFound();
-    const member = await db.organizationMember.findUnique({
-      where: {
-        organizationId_adminUserId: {
-          organizationId: student.organizationId,
-          adminUserId: scope.adminId,
-        },
-      },
-      select: { removedAt: true, adminUser: { select: { approvalStatus: true } } },
+    const taught = await db.whiteboardSession.findMany({
+      where: { studentId: id, adminUserId: scope.adminId },
+      select: { adminUserId: true, endedAt: true },
     });
-    if (!member || member.removedAt != null || member.adminUser.approvalStatus !== "APPROVED") {
-      notFound();
+    if (taught.length === 0) notFound();
+    let visible = false;
+    for (const taughtSession of taught) {
+      const access = await resolveOrgSessionAccess({
+        callerAdminUserId: scope.adminId,
+        sessionAdminUserId: taughtSession.adminUserId,
+        organizationId: student.organizationId,
+        endedAt: taughtSession.endedAt,
+      });
+      if (access.ok) visible = true;
     }
+    if (!visible) notFound();
   } else if (!canAccessStudentRow(scope, student)) {
     notFound();
   }
