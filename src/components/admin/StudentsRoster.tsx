@@ -69,19 +69,13 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
     return () => window.removeEventListener("keydown", onSlashFocus);
   }, [onSlashFocus]);
 
+  const focusDesktopInvite = useCallback(() => {
+    document.getElementById("add-learner-card")?.scrollIntoView({ block: "start" });
+    document.getElementById("desktop-inviteEmail")?.focus({ preventScroll: true });
+  }, []);
+
   return (
     <div className="relative flex flex-col gap-6">
-      {/* Desktop add card */}
-      <div className="hidden md:block">
-        <SectionCard realm="admin"
-          title={`Add a ${SITE_ROLE_ROSTER_LEARNER.toLowerCase()}`}
-          description="Send an invitation to connect — no separate claim link copy step."
-          className="border-accent/20 bg-accent-soft/60"
-        >
-          <AddStudentForm idPrefix="desktop-" />
-        </SectionCard>
-      </div>
-
       {/* Sticky search toolbar */}
       <div className="sticky top-0 z-10 -mx-4 bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:mx-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -101,6 +95,14 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
               aria-describedby="student-search-hint"
             />
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="hidden min-h-11 shrink-0 md:inline-flex"
+            onClick={focusDesktopInvite}
+          >
+            Add learner
+          </Button>
           <Button asChild variant="outline" className="hidden min-h-11 shrink-0 sm:inline-flex">
             <Link href="/admin/outbox">View outbox</Link>
           </Button>
@@ -168,6 +170,17 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
           ))}
         </ul>
       )}
+
+      {/* Desktop add card — below the roster so current students come first */}
+      <div id="add-learner-card" className="hidden md:block">
+        <SectionCard realm="admin"
+          title={`Add a ${SITE_ROLE_ROSTER_LEARNER.toLowerCase()}`}
+          description="Send an invitation to connect — no separate claim link copy step."
+          className="border-accent/20 bg-accent-soft/60"
+        >
+          <AddStudentForm idPrefix="desktop-" />
+        </SectionCard>
+      </div>
 
       {/* Mobile FAB */}
       <Button
