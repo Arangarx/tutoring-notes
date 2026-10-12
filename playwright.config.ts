@@ -219,6 +219,7 @@ export default defineConfig({
         "**/integration/wb-shift-constrain-shapes.spec.ts",
         "**/integration/wb-org-qol-presence.spec.ts",
         "**/integration/wb-ghost-viewport.spec.ts",
+        "**/integration/wb-student-view-lock.spec.ts",
         "**/integration/wb-tutor-recenter.spec.ts",
         "**/integration/wb-org-qol-bridge.spec.ts",
         "**/integration/wb-adhoc-session-list.spec.ts",

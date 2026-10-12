@@ -1,0 +1,23 @@
+.wb-view-locked-indicator {
+  position: absolute;
+  z-index: 6;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+[data-wb-lock-nudge] .wb-view-locked-indicator {
+  animation: wb-view-locked-nudge 600ms ease-in-out;
+}
+
+@keyframes wb-view-locked-nudge {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}

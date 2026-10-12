@@ -26,6 +26,7 @@ import {
   resolveStudentScrollForFollow,
 } from "@/lib/whiteboard/viewport-align";
 import type { WbFollowDebugTelemetry } from "@/lib/whiteboard/wb-follow-debug-telemetry";
+import { attachLockedViewGestureGuard } from "@/lib/whiteboard/locked-view-gesture-guard";
 
 /** Trailing window after the last wheel/pointer/touch on the canvas. */
 const STUDENT_VIEWPORT_GESTURE_TRAIL_MS = 300;
@@ -267,6 +268,7 @@ export function useStudentWhiteboardCanvas(
   useEffect(() => {
     if (!followTutorView || !followViewLockContainer) return;
     const node = followViewLockContainer;
+    const detachGuard = attachLockedViewGestureGuard(node);
     const passive = { passive: true } as const;
     const onWheel = () => {
       markStudentViewportGesture();
@@ -293,6 +295,7 @@ export function useStudentWhiteboardCanvas(
     node.addEventListener("pointercancel", onPointerUp, passive);
     node.addEventListener("touchstart", onTouchStart, passive);
     return () => {
+      detachGuard();
       node.removeEventListener("wheel", onWheel);
       node.removeEventListener("pointerdown", onPointerDown);
       node.removeEventListener("pointermove", onPointerMove);

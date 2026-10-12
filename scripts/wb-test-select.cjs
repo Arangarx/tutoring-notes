@@ -78,6 +78,10 @@ const PATH_RULES = [
     tags: [TAG.WB_VIEWPORT],
   },
   {
+    re: /locked-view-gesture-guard|WbViewLockedIndicator|wb-student-view-lock/i,
+    tags: [TAG.WB_VIEWPORT],
+  },
+  {
     re: /PdfImage|snapshot-png|ensure-native-image|hydrate-remote/i,
     tags: [TAG.WB_ASSETS],
   },

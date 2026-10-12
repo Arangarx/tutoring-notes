@@ -95,6 +95,7 @@ import {
 import { useInvertWheelZoom } from "@/hooks/useInvertWheelZoom";
 import { useSessionChat } from "@/hooks/useSessionChat";
 import { WbGhostViewportOverlay } from "@/components/whiteboard/chrome/WbGhostViewportOverlay";
+import { WbViewLockedIndicator } from "@/components/whiteboard/chrome/WbViewLockedIndicator";
 import { WbRecenterViewButton } from "@/components/whiteboard/chrome/WbRecenterViewButton";
 import { measureVisibleViewport } from "@/lib/whiteboard/measure-visible-viewport";
 import { visibleViewportWireFields } from "@/lib/whiteboard/visible-viewport";
@@ -7523,6 +7524,10 @@ export function WhiteboardWorkspaceClient({
             telemetry={followDebugTelemetry}
             canvasMountRef={wbCanvasRef}
           />
+
+          {role === "student" && !independentView ? (
+            <WbViewLockedIndicator onUnlock={() => setIndependentView(true)} />
+          ) : null}
 
           <WbGhostViewportOverlay
             excalidrawAPI={excalidrawAPI}

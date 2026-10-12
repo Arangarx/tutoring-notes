@@ -24,6 +24,9 @@ import {
   waitForViewportAligned,
   waitForWbE2eBridge,
   addGraphExpressionViaUI,
+  armScrollChangeCounter,
+  readScrollChangeCount,
+  resetScrollChangeCount,
   type WbViewportSize,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
@@ -377,7 +380,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     }
   });
 
-  test("item 7 — view lock: student wheel pan reverts while follow ON", { tag: [TAG.WB_VIEWPORT] }, async ({
+  test("item 7 — view lock: student wheel does not move the camera while follow ON", { tag: [TAG.WB_VIEWPORT] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -397,6 +400,11 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         12_000
       );
 
+      await armScrollChangeCounter(peers.studentPage, "student");
+      await peers.studentPage.waitForTimeout(250);
+      await resetScrollChangeCount(peers.studentPage);
+      const beforeWheel = await readViewportSnapshot(peers.studentPage, "student");
+
       const canvas = peers.studentPage
         .locator('[data-testid="student-whiteboard-canvas-mount"] .excalidraw')
         .first();
@@ -407,20 +415,36 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         box!.x + box!.width / 2,
         box!.y + box!.height / 2
       );
-      await peers.studentPage.mouse.wheel(0, 240);
-      await peers.studentPage.waitForTimeout(400);
+      await peers.studentPage.keyboard.down("Control");
+      try {
+        await peers.studentPage.mouse.wheel(0, 240);
+      } finally {
+        await peers.studentPage.keyboard.up("Control");
+      }
+      await peers.studentPage.waitForTimeout(450);
 
+      const scrollChanges = await readScrollChangeCount(peers.studentPage);
       const afterWheel = await readViewportSnapshot(peers.studentPage, "student");
-      const tutorAfter = await readViewportSnapshot(peers.tutorPage, "tutor");
-      const oracle = expectedAlignedStudentScroll(tutorAfter, afterWheel);
-      expect(Math.abs(afterWheel.scrollX - oracle.scrollX)).toBeLessThanOrEqual(8);
-      expect(Math.abs(afterWheel.scrollY - oracle.scrollY)).toBeLessThanOrEqual(8);
+      expect(scrollChanges, "follow-on wheel scroll changes").toBe(0);
+      expect(Math.abs(afterWheel.scrollX - beforeWheel.scrollX)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(afterWheel.scrollY - beforeWheel.scrollY)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(afterWheel.zoom - beforeWheel.zoom)).toBeLessThanOrEqual(0.001);
 
       await setStudentFollowTutor(peers.studentPage, false);
-      await setViewportOnRole(peers.studentPage, "student", 50, 50, 1);
-      await peers.studentPage.waitForTimeout(200);
+      await resetScrollChangeCount(peers.studentPage);
+      const independentBefore = await readViewportSnapshot(peers.studentPage, "student");
+      await peers.studentPage.mouse.move(
+        box!.x + box!.width / 2,
+        box!.y + box!.height / 2
+      );
+      await peers.studentPage.mouse.wheel(0, -240);
+      await peers.studentPage.waitForTimeout(300);
       const independent = await readViewportSnapshot(peers.studentPage, "student");
-      expect(Math.abs(independent.scrollX - oracle.scrollX)).toBeGreaterThan(20);
+      const moved =
+        Math.abs(independent.scrollX - independentBefore.scrollX) > 0.5 ||
+        Math.abs(independent.scrollY - independentBefore.scrollY) > 0.5 ||
+        Math.abs(independent.zoom - independentBefore.zoom) > 0.001;
+      expect(moved, "follow off wheel moves the camera").toBe(true);
     } finally {
       await peers.close();
     }

@@ -131,6 +131,35 @@ function sceneCenterAtStudentViewport(
   );
 }
 
+if (typeof PointerEvent === "undefined") {
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    constructor(
+      type: string,
+      init: MouseEventInit & { pointerId?: number; pointerType?: string } = {}
+    ) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? "";
+    }
+  }
+  (globalThis as unknown as { PointerEvent: typeof PointerEventPolyfill }).PointerEvent =
+    PointerEventPolyfill;
+}
+
+function mountLockedCanvasTarget(): { mount: HTMLDivElement; canvas: HTMLCanvasElement } {
+  const mount = document.createElement("div");
+  const scene = document.createElement("div");
+  scene.className = "excalidraw";
+  const canvas = document.createElement("canvas");
+  canvas.className = "interactive";
+  scene.appendChild(canvas);
+  mount.appendChild(scene);
+  document.body.appendChild(mount);
+  return { mount, canvas };
+}
+
 function appStateViewportCalls(updateScene: jest.Mock) {
   return updateScene.mock.calls.filter(
     (c) => (c[0] as { appState?: { scrollX?: number } }).appState
@@ -745,7 +774,7 @@ describe("useStudentWhiteboardCanvas", () => {
       expect(appStateViewportCalls(updateScene)).toHaveLength(1);
     });
 
-    it("with follow ON, user pan/zoom reverts immediately (view lock)", async () => {
+    it("with follow ON, user pan/zoom does not move the camera", async () => {
       const { sync, emitRemote } = makeMockSync();
       const { api, updateScene } = makeApi({
         elements: [],
@@ -772,34 +801,44 @@ describe("useStudentWhiteboardCanvas", () => {
         await new Promise((r) => setTimeout(r, 60));
       });
 
-      const vpCallsBeforeUserPan = appStateViewportCalls(updateScene);
-      expect(vpCallsBeforeUserPan.length).toBeGreaterThan(0);
-      const locked = vpCallsBeforeUserPan[vpCallsBeforeUserPan.length - 1]![0] as {
-        appState: { scrollX: number; scrollY: number; zoom: { value: number } };
+      const vpCallsBeforeGesture = appStateViewportCalls(updateScene);
+      expect(vpCallsBeforeGesture.length).toBeGreaterThan(0);
+      const locked = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        zoom: { value: number };
       };
 
+      const { canvas, mount } = mountLockedCanvasTarget();
       act(() => {
-        result.current.markStudentViewportGesture();
-        result.current.onCanvasChange([], {
-          ...studentViewport,
-          scrollX: locked.appState.scrollX + 50,
-          scrollY: locked.appState.scrollY + 30,
-          zoom: { value: locked.appState.zoom.value + 0.5 },
-        });
+        result.current.followViewLockContainerRef(mount);
       });
 
-      const revertCalls = appStateViewportCalls(updateScene).slice(
-        vpCallsBeforeUserPan.length
+      const wheel = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        deltaY: 240,
+      });
+      act(() => {
+        canvas.dispatchEvent(wheel);
+      });
+
+      const cameraWrites = appStateViewportCalls(updateScene).slice(
+        vpCallsBeforeGesture.length
       );
-      expect(revertCalls).toHaveLength(1);
-      const revert = revertCalls[0]![0] as {
-        appState: { scrollX: number; scrollY: number; zoom: { value: number } };
-        captureUpdate?: string;
+      expect({
+        cameraWrites: cameraWrites.length,
+        gestureBlocked: wheel.defaultPrevented,
+      }).toEqual({ cameraWrites: 0, gestureBlocked: true });
+      const after = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        zoom: { value: number };
       };
-      expect(revert.captureUpdate).toBe("NEVER");
-      expect(revert.appState.scrollX).toBeCloseTo(locked.appState.scrollX, 5);
-      expect(revert.appState.scrollY).toBeCloseTo(locked.appState.scrollY, 5);
-      expect(revert.appState.zoom.value).toBeCloseTo(locked.appState.zoom.value, 5);
+      expect(after.scrollX).toBeCloseTo(locked.scrollX, 5);
+      expect(after.scrollY).toBeCloseTo(locked.scrollY, 5);
+      expect(after.zoom.value).toBeCloseTo(locked.zoom.value, 5);
+      mount.remove();
     });
 
     it("with follow OFF, user pan/zoom is not reverted", async () => {
@@ -1048,7 +1087,7 @@ describe("useStudentWhiteboardCanvas", () => {
   //   (C) A stream of tutor viewport applies with NO student gesture must not
   //       revert — final viewport equals the last tutor position (gesture-gated
   //       view-lock; continuous Excalidraw onChange cadence is hardware-only).
-  //   (D) A student gesture while synced still triggers view-lock revert.
+  //   (D) A student gesture while synced does not move the camera.
   // -----------------------------------------------------------------------
   describe("view-lock sync regression (Wave-5 fix)", () => {
     it("(A) onCanvasChange during rAF window does not revert tutor apply", async () => {
@@ -1202,7 +1241,7 @@ describe("useStudentWhiteboardCanvas", () => {
       expect(st.zoom.value).toBeCloseTo(oracle.zoom, 5);
     });
 
-    it("(D) student gesture while synced still triggers view-lock revert", async () => {
+    it("(D) student gesture while synced does not move the camera", async () => {
       const { sync, emitRemote } = makeMockSync();
       const { api, updateScene } = makeApi({
         elements: [],
@@ -1228,19 +1267,97 @@ describe("useStudentWhiteboardCanvas", () => {
         await new Promise((r) => setTimeout(r, 60));
       });
 
-      const vpCalls = appStateViewportCalls(updateScene);
-      const locked = vpCalls[vpCalls.length - 1]![0] as {
-        appState: { scrollX: number; scrollY: number; zoom: { value: number } };
-      };
-
       const callsBefore = updateScene.mock.calls.length;
+      const locked = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        zoom: { value: number };
+      };
+      const { canvas, mount } = mountLockedCanvasTarget();
+      act(() => {
+        result.current.followViewLockContainerRef(mount);
+      });
+
+      const first = new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        pointerType: "touch",
+      });
+      const second = new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 2,
+        pointerType: "touch",
+      });
+      act(() => {
+        canvas.dispatchEvent(first);
+        canvas.dispatchEvent(second);
+      });
+
+      const cameraWrites = updateScene.mock.calls
+        .slice(callsBefore)
+        .filter((c) => (c[0] as { appState?: unknown }).appState);
+      expect({
+        cameraWrites: cameraWrites.length,
+        secondPointerBlocked: second.defaultPrevented,
+        firstPointerBlocked: first.defaultPrevented,
+      }).toEqual({
+        cameraWrites: 0,
+        secondPointerBlocked: true,
+        firstPointerBlocked: false,
+      });
+      const after = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        zoom: { value: number };
+      };
+      expect(after.scrollX).toBeCloseTo(locked.scrollX, 5);
+      expect(after.scrollY).toBeCloseTo(locked.scrollY, 5);
+      expect(after.zoom.value).toBeCloseTo(locked.zoom.value, 5);
+      mount.remove();
+    });
+
+    it("reverts exactly one camera write when a gesture lands with no guard attached", async () => {
+      const { sync, emitRemote } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: true,
+        })
+      );
+
+      const follow = tutorFollowWire(100, 50, 1.25, 1200, 900);
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow,
+        });
+      });
+      await flushAsyncWork();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+
+      const locked = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        zoom: { value: number };
+      };
+      const callsBefore = updateScene.mock.calls.length;
+      // No followViewLockContainerRef — the gesture guard is not attached.
       act(() => {
         result.current.markStudentViewportGesture();
         result.current.onCanvasChange([], {
           ...studentViewport,
-          scrollX: locked.appState.scrollX + 80,
-          scrollY: locked.appState.scrollY + 40,
-          zoom: { value: locked.appState.zoom.value + 0.25 },
+          scrollX: locked.scrollX + 40,
+          scrollY: locked.scrollY + 25,
+          zoom: { value: locked.zoom.value + 0.2 },
         });
       });
 
@@ -1248,12 +1365,16 @@ describe("useStudentWhiteboardCanvas", () => {
         .slice(callsBefore)
         .filter((c) => (c[0] as { appState?: unknown }).appState);
       expect(revertCalls).toHaveLength(1);
-      const revert = revertCalls[0]![0] as {
+      const patch = revertCalls[0]![0] as {
         appState: { scrollX: number; scrollY: number; zoom: { value: number } };
       };
-      expect(revert.appState.scrollX).toBeCloseTo(locked.appState.scrollX, 5);
-      expect(revert.appState.scrollY).toBeCloseTo(locked.appState.scrollY, 5);
-      expect(revert.appState.zoom.value).toBeCloseTo(locked.appState.zoom.value, 5);
+      expect(patch.appState.scrollX).toBeCloseTo(locked.scrollX, 5);
+      expect(patch.appState.scrollY).toBeCloseTo(locked.scrollY, 5);
+      expect(patch.appState.zoom.value).toBeCloseTo(locked.zoom.value, 5);
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 350));
+      });
     });
 
     it("(B) view-lock uses actual post-clamp appState, not requested scroll", async () => {

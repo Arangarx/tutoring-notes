@@ -707,6 +707,47 @@ export async function readViewportSnapshot(
   }, role);
 }
 
+/** Count Excalidraw onScrollChange calls. Independent of our snap-back code. */
+export async function armScrollChangeCounter(
+  page: Page,
+  role: "tutor" | "student"
+): Promise<void> {
+  await page.evaluate((r) => {
+    const w = window as Window & {
+      __TN_WB_E2E__?: Record<
+        string,
+        {
+          onScrollChange?: (cb: () => void) => () => void;
+        }
+      >;
+      __WB_SCROLL_CHANGES__?: number;
+      __WB_SCROLL_OFF__?: () => void;
+    };
+    w.__WB_SCROLL_OFF__?.();
+    w.__WB_SCROLL_CHANGES__ = 0;
+    const bridge = w.__TN_WB_E2E__?.[r];
+    if (!bridge?.onScrollChange) {
+      throw new Error(`E2E bridge missing onScrollChange for ${r}`);
+    }
+    w.__WB_SCROLL_OFF__ = bridge.onScrollChange(() => {
+      w.__WB_SCROLL_CHANGES__ = (w.__WB_SCROLL_CHANGES__ ?? 0) + 1;
+    });
+  }, role);
+}
+
+export async function readScrollChangeCount(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const w = window as Window & { __WB_SCROLL_CHANGES__?: number };
+    return w.__WB_SCROLL_CHANGES__ ?? 0;
+  });
+}
+
+export async function resetScrollChangeCount(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as Window & { __WB_SCROLL_CHANGES__?: number }).__WB_SCROLL_CHANGES__ = 0;
+  });
+}
+
 /**
  * Distance from element center to viewport center in screen pixels.
  * Uses Excalidraw's sceneCoordsToViewportCoords (offsetLeft/offsetTop included).

@@ -77,6 +77,13 @@ export type WbE2eSceneBridge = {
   } | null;
   /** Trigger Excalidraw's undo via the imperative API (more reliable than Ctrl+Z in Playwright). */
   historyUndo: () => void;
+  /**
+   * Excalidraw's own scroll/zoom listener. A locked-view snap-back fires this;
+   * a gesture that never reaches the camera does not.
+   */
+  onScrollChange: (
+    cb: (scrollX: number, scrollY: number, zoom: { value: number }) => void
+  ) => () => void;
 };
 
 type WbE2eSceneMutationHook = () => void;
@@ -455,6 +462,19 @@ export function registerWbE2eSceneBridge(
         return Array.from(c.keys()).filter((k) => typeof k === "string");
       }
       return [];
+    },
+    onScrollChange(cb) {
+      const subscribe = (
+        api as ExcalidrawApiLike & {
+          onScrollChange?: (
+            cb: (scrollX: number, scrollY: number, zoom: { value: number }) => void
+          ) => () => void;
+        }
+      ).onScrollChange;
+      if (typeof subscribe !== "function") {
+        throw new Error("Excalidraw API has no onScrollChange");
+      }
+      return subscribe(cb);
     },
     historyUndo() {
       // ExcalidrawImperativeAPI 0.18 only exposes history.clear(), not .undo().
