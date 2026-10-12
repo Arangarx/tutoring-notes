@@ -32,7 +32,7 @@ describe("privacy policy copy (SEC-POLICY-TRUTH interim)", () => {
   it("shows updated date and truthful retention/audio wording", () => {
     render(<PrivacyPage />);
 
-    expect(screen.getByText(/Last updated: October 6, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last updated: October 12, 2026/i)).toBeInTheDocument();
     expect(screen.queryByText(/24 months after the account is closed/i)).toBeNull();
     expect(screen.queryByText(/grade level/i)).toBeNull();
     expect(
@@ -43,7 +43,9 @@ describe("privacy policy copy (SEC-POLICY-TRUTH interim)", () => {
         .length
     ).toBeGreaterThanOrEqual(1);
     const tfaBullet = screen.getByText("Two-factor authentication.").closest("li");
-    expect(tfaBullet).toHaveTextContent(/email one-time codes or an authenticator app/i);
+    expect(tfaBullet).toHaveTextContent(/Teaching accounts require two-factor sign-in/);
+    expect(tfaBullet).toHaveTextContent(/The code is emailed by default/);
+    expect(tfaBullet).toHaveTextContent(/An authenticator app or a text message is a choice/);
     expect(tfaBullet).toHaveTextContent(/When SMS two-factor is enabled/);
     expect(tfaBullet).toHaveTextContent(/Twilio/);
     expect(tfaBullet).toHaveTextContent(/does not receive student session data/);

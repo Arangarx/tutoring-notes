@@ -40,7 +40,7 @@ describe("terms calendar title honesty", () => {
     const body = bodyText();
     expect(body).not.toMatch(/opt in per student/i);
     expect(body).toMatch(/first name and last initial/i);
-    expect(screen.getByText(/Last updated: October 6, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last updated: October 12, 2026/i)).toBeInTheDocument();
   });
 
   it("agrees with the privacy policy on calendar titles", () => {

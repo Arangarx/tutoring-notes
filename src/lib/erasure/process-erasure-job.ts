@@ -241,6 +241,19 @@ async function scrubDbContent(
           erasedAt: now,
         },
       });
+
+      await tx.organizationLearner.deleteMany({
+        where: { studentId: { in: studentIds } },
+      });
+
+      await tx.scheduledSession.updateMany({
+        where: { studentId: { in: studentIds } },
+        data: {
+          subject: "",
+          notes: "",
+          location: "",
+        },
+      });
     }
 
     await scrubIdentityPii(tx, scope, jobId);

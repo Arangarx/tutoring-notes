@@ -28,7 +28,7 @@ export default async function SignupPage({
   return (
     <AuthShell
       title="Create your account"
-      description="Sign up with email and password or Google. Each account is separate — your students and notes stay in your workspace."
+      description="Sign up with email and password or Google. Each account is separate — your students and notes stay in your workspace. During the pilot, new teaching accounts are approved by Mynk."
       footer={
         <Link href="/" className="text-brand underline-offset-2 hover:underline">
           ← Home

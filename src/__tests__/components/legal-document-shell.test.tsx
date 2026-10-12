@@ -81,21 +81,21 @@ describe("Privacy page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Privacy Policy"
     );
-    expect(screen.getByText("Last updated: September 21, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: October 12, 2026")).toBeInTheDocument();
 
     // Verbatim body locks (distinctive product / umbrella sentences)
     expect(
       screen.getByText(/This policy applies to/, { exact: false })
     ).toHaveTextContent(
-      "This policy applies to Tutoring Notes, a web application operated by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the umbrella privacy policy at www.mortensenapps.com/privacy with product-specific details. Where this policy is silent, the umbrella policy governs."
+      "This policy applies to Mynk, also titled Tutoring Notes, a web application operated by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the umbrella privacy policy at www.mortensenapps.com/privacy with product-specific details. Where this policy is silent, the umbrella policy governs."
     );
 
     expect(
-      screen.getByRole("heading", { level: 2, name: "What Tutoring Notes is" })
+      screen.getByRole("heading", { level: 2, name: "What Mynk is" })
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Tutoring Notes is a web application that helps private tutors record session audio, draft session notes, run a shared whiteboard during lessons, and share read-only updates with students and their families."
+        "Mynk is the web application these pages describe. It is also titled Tutoring Notes. It helps private tutors run a shared whiteboard session, record it, and draft the notes. When a note is finalized, the parent and student can see the notes and the lesson replay in their account."
       )
     ).toBeInTheDocument();
 
@@ -155,13 +155,13 @@ describe("Terms page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Terms of Use"
     );
-    expect(screen.getByText("Last updated: September 21, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: October 12, 2026")).toBeInTheDocument();
 
     expect(
       screen.getByText(/These terms govern your use of/, { exact: false })
     ).toHaveTextContent(
       // Page uses &ldquo;/&rdquo; — assert the decoded curly-quote form
-      "These terms govern your use of Tutoring Notes, a web application operated by Andrew Mortensen (“Operator,” “we,” “us”) under the Mortensen Apps umbrella. They supplement the umbrella terms of service at www.mortensenapps.com/terms. By using the app, you agree to these terms."
+      "These terms govern your use of Mynk, also titled Tutoring Notes, a web application operated by Andrew Mortensen (“Operator,” “we,” “us”) under the Mortensen Apps umbrella. They supplement the umbrella terms of service at www.mortensenapps.com/terms. By using the app, you agree to these terms."
     );
 
     expect(
@@ -184,7 +184,7 @@ describe("Terms page — shell + verbatim legal copy", () => {
     expect(termsBody).toMatch(/calendar\.events\.owned/);
     expect(
       screen.getByText(
-        /If you connect your Gmail account, the app sends emails on your behalf/
+        /If you connect your Gmail account, the app sends email on your behalf only when you click Email a reminder/
       )
     ).toBeInTheDocument();
 

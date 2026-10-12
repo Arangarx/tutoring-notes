@@ -17,6 +17,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Calendar title first + last initial (product-specific) 2026-10-06.
  * Live session server-held encryption key (product-specific) 2026-10-06.
  * Mynk SMS 2FA opt-in / no marketing share (product-specific) 2026-09-21.
+ * Org honesty copy (product-specific; umbrella SYNCED FROM unchanged) 2026-10-12.
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -46,9 +47,9 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="October 6, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="October 12, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          This policy applies to <strong>Tutoring Notes</strong>, a web application operated
+          This policy applies to <strong>Mynk</strong>, also titled Tutoring Notes, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
           umbrella privacy policy at{" "}
           <a href="https://www.mortensenapps.com/privacy" target="_blank" rel="noreferrer">
@@ -62,11 +63,12 @@ export default function PrivacyPage() {
 
         <section className="grid gap-4">
           <div>
-            <h2 className="heading m-0 text-lg font-normal">What Tutoring Notes is</h2>
+            <h2 className="heading m-0 text-lg font-normal">What Mynk is</h2>
             <p style={{ margin: "8px 0 0" }}>
-              Tutoring Notes is a web application that helps private tutors record session
-              audio, draft session notes, run a shared whiteboard during lessons, and share
-              read-only updates with students and their families.
+              Mynk is the web application these pages describe. It is also titled Tutoring Notes.
+              It helps private tutors run a shared whiteboard session, record it, and draft the
+              notes. When a note is finalized, the parent and student can see the notes and the
+              lesson replay in their account.
             </p>
           </div>
 
@@ -76,9 +78,9 @@ export default function PrivacyPage() {
               <li><strong>Account information:</strong> email address, hashed password, and optional display name when you create a tutor account.</li>
               <li><strong>Optional phone number</strong> (tutor/admin accounts only, collected only if you enable two-factor authentication via text message — never required).</li>
               <li><strong>Session notes:</strong> student names, session dates, topics, homework, assessment, plan, and links you enter.</li>
-              <li><strong>Session audio recordings</strong> when you use the Record or Upload feature (stored in Vercel Blob — see below).</li>
+              <li><strong>Session audio recordings</strong> from a whiteboard session (stored in Vercel Blob — see below).</li>
               <li><strong>Whiteboard session data:</strong> timestamped stroke logs, optional PDF / image inserts, and a session snapshot used for the parent replay surface.</li>
-              <li><strong>Parent / guardian email addresses</strong> you enter when sending updates.</li>
+              <li><strong>Parent or guardian email addresses</strong> you enter for that student, including for an invite or an optional reminder.</li>
               <li><strong>Outbound email logs</strong> (subject, recipient, body text, share link) retained for delivery troubleshooting.</li>
               <li><strong>Feedback submissions</strong> (message, optional contact email, and submitter IP address retained for abuse prevention on the public form).</li>
               <li><strong>Waitlist entries</strong> (email and optional name) submitted through interest forms or contact, retained for outreach.</li>
@@ -128,7 +130,7 @@ export default function PrivacyPage() {
                   <li><strong>Vercel</strong> — application hosting + serverless functions (US region).</li>
                   <li><strong>Neon</strong> — PostgreSQL database (US region).</li>
                   <li><strong>Vercel Blob</strong> — object storage for session audio and whiteboard snapshots (US region).</li>
-                  <li><strong>OpenAI</strong> — AI note generation and audio transcription (Whisper). See AI note generation section below.</li>
+                  <li><strong>OpenAI</strong> — AI note generation and audio transcription. See AI note generation section below.</li>
                 </ul>
               </li>
               <li>
@@ -157,9 +159,10 @@ export default function PrivacyPage() {
               When you click &ldquo;Connect Gmail,&rdquo; the app requests permission to send
               email on your behalf using the <strong>Gmail API</strong>{" "}
               (<code>gmail.send</code> scope) and to read your email address{" "}
-              (<code>userinfo.email</code> scope). These permissions are used exclusively
-              to send session-update emails from your Gmail account when you click
-              &ldquo;Send update&rdquo; in the app. We do <strong>not</strong> read, search,
+              (<code>userinfo.email</code> scope).               These permissions are used exclusively
+              to send an optional reminder from your Gmail account when you click
+              Email a reminder in the app. The parent or student already sees the notes
+              and the lesson replay in their account when you finalize a note. We do <strong>not</strong> read, search,
               index, modify, or delete any of your existing emails. Google user data we
               receive through Gmail APIs is used only to provide the user-facing email-
               sending feature you asked for, consistent with Google&apos;s applicable API
@@ -242,11 +245,8 @@ export default function PrivacyPage() {
           <div>
             <h2 className="heading m-0 text-lg font-normal">AI note generation (OpenAI)</h2>
             <p style={{ margin: "8px 0 0" }}>
-              When you use the <strong>Auto-fill from session</strong> feature, content
-              you provide (typed notes, uploaded audio, or in-browser recording) is sent
-              to <strong>OpenAI</strong> via their API to structure it into session
-              notes. Your student&apos;s name and up to two recent note summaries are
-              included as context.
+              When a session is recorded, the audio is transcribed by OpenAI and the notes
+              are drafted automatically. That is part of the session.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               OpenAI&apos;s API data usage policy states that data submitted through the
@@ -254,23 +254,22 @@ export default function PrivacyPage() {
               <a href="https://openai.com/enterprise-privacy" target="_blank" rel="noreferrer">
                 OpenAI&apos;s API data usage policy
               </a>{" "}
-              for details. If you prefer not to send session content to OpenAI, simply
-              do not use the Auto-fill feature — it is entirely optional.
+              for details.
             </p>
           </div>
 
           <div>
             <h2 className="heading m-0 text-lg font-normal">Session audio recordings (Vercel Blob)</h2>
             <p style={{ margin: "8px 0 0" }}>
-              When you upload or record a session audio file, the recording is stored in{" "}
+              When a whiteboard session is recorded, the audio is stored in{" "}
               <strong>Vercel Blob</strong> (private, US region). Audio is never publicly
-              accessible — playback uses authenticated, session-scoped URLs served through
-              our application (tutor accounts and revocable parent share links), not direct
-              public blob links.
+              accessible. Playback goes through the app for the signed-in tutor, parent, or
+              student, not through a public link. Playback uses authenticated, session-scoped
+              URLs served through our application, not direct public blob links.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               Recordings are sent to <strong>OpenAI</strong> via the{" "}
-              <code>/v1/audio/transcriptions</code> endpoint (<strong>Whisper</strong>) for
+              <code>/v1/audio/transcriptions</code> endpoint for
               transcription as part of the note generation flow. OpenAI acts as a{" "}
               <strong>subprocessor</strong> processing audio on our instructions under a
               data processing agreement; audio data is <strong>not used to train</strong>{" "}
@@ -279,16 +278,21 @@ export default function PrivacyPage() {
             <p style={{ margin: "8px 0 0" }}>
               Audio recordings of tutoring sessions may contain the voices of students,
               including students under 13. Audio of students under 13 is collected only with
-              verifiable parental consent. See the{" "}
+              verifiable parental consent. Online, if audio recording is off, the child&rsquo;s
+              voice is left out of the saved recording. The tutor&rsquo;s microphone can still
+              be saved and transcribed. In person, audio recording off saves nothing, because
+              one microphone would catch everyone in the room. See the{" "}
               <strong>Children&rsquo;s data and parental rights (COPPA)</strong> section
-              below for the applicable retention schedule and how to exercise your rights.
+              below for how long we keep that information and how to exercise your rights.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              The <strong>Include audio recording in parent share link</strong> option
-              is <strong>off by default</strong>. When you enable it, the parent or
-              student can listen to the session recording on their notes page. Obtain
-              appropriate consent before enabling this option, especially for sessions
-              involving minors.
+              A self-learner agrees to session recording when they set up their account, and
+              can turn live sessions, audio recording, whiteboard recording, or notes off later
+              in their settings. Audio recording off works the same way as for a child.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              If a whiteboard session was recorded, the signed-in parent or student can play
+              that audio with the notes. There is no separate switch for including the audio.
             </p>
           </div>
 
@@ -324,6 +328,11 @@ export default function PrivacyPage() {
               promptly. Automated retention schedules may be introduced in the future;
               this policy will be updated when they take effect.
             </p>
+            <p style={{ margin: "8px 0 0" }}>
+              After an account is deleted, we keep a record of the consent choices that were
+              made: which options were on or off, and when. That record does not include the
+              person’s name or email.
+            </p>
           </div>
 
           <div>
@@ -335,9 +344,9 @@ export default function PrivacyPage() {
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
               <li><strong>Encryption in transit.</strong> All connections to the application use HTTPS (TLS).</li>
               <li><strong>Password storage.</strong> Tutor account passwords are hashed with bcrypt before storage; raw passwords are never written to logs or the database.</li>
-              <li><strong>Two-factor authentication.</strong> Tutors and admins may use email one-time codes or an authenticator app for two-factor authentication. <strong>When SMS two-factor is enabled</strong> (the <strong>Mynk</strong> SMS two-factor authentication program), we send one-time codes via <strong>Twilio</strong> (a third-party SMS provider) to the US phone number the tutor confirmed at opt-in. Twilio does not receive student session data. We do not sell or share SMS opt-in data or personal information with third parties for marketing purposes.</li>
+              <li><strong>Two-factor authentication.</strong> Teaching accounts require two-factor sign-in. The code is emailed by default. An authenticator app or a text message is a choice. <strong>When SMS two-factor is enabled</strong> (the <strong>Mynk</strong> SMS two-factor authentication program), we send one-time codes via <strong>Twilio</strong> (a third-party SMS provider) to the US phone number the tutor confirmed at opt-in. Twilio does not receive student session data. We do not sell or share SMS opt-in data or personal information with third parties for marketing purposes.</li>
               <li><strong>Hosting and data stores.</strong> We rely on Vercel and Neon&apos;s protections for servers, databases, and object storage (access controls, network isolation, and encryption at rest where the vendor provides it by default for the tiers we use).</li>
-              <li><strong>Authentication and access.</strong> Every tutor request requires sign-in; application logic enforces ownership boundaries so a tutor only sees their own students and sessions.</li>
+              <li><strong>Authentication and access.</strong> Every tutor request requires sign-in. An organization owner, admin, or scheduler can see learners that organization entered, including learners they did not personally teach. The organization enters the learner. A scheduler sees the name, a short brief, and a short reason when a booking is blocked, and does not see parent email, consent choices, or notes. A private tutor still sees only their own students.</li>
               <li><strong>Secrets and OAuth tokens.</strong> API keys, client secrets, and OAuth refresh tokens are kept in server-side configuration or secure storage — not embedded in web pages or public repositories.</li>
               <li><strong>Limited use of Google data.</strong> Google user data obtained through Google APIs is used only to provide the user-facing features you asked for (for example sending mail you trigger, or a Calendar connection you initiate), consistent with this policy and Google&apos;s applicable Limited Use requirements.</li>
             </ul>
@@ -350,16 +359,19 @@ export default function PrivacyPage() {
           <div>
             <h2 className="heading m-0 text-lg font-normal">Children</h2>
             <p style={{ margin: "8px 0 0" }}>
-              Tutoring Notes is intended for use by <strong>tutors</strong> (adults).
-              Tutors are responsible for obtaining any parent, guardian, or
-              organizational consent required before entering student information,
-              recording sessions, or sending share links — including for sessions
-              involving minors. Minors do not have tutor accounts in the app.
+              Mynk is used by tutors, parents, and students. A session follows the consent
+              recorded for that student. The parent or self-learner records that consent in
+              their account. Minors do not have tutor accounts.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              Parent or student share links are tokenized and revocable; a parent or
-              guardian receives the link from the tutor and can view session content
-              without creating an account. If you believe a tutor has shared a minor&apos;s
+              When a parent or a self-learner has finished account setup, consent is recorded
+              in that Mynk account before a live session. A parent records it for a child. A
+              self-learner records it for themselves. A student who has not finished setup
+              does not have that record yet.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              Parent or student share links are tokenized and revocable. Opening one requires
+              sign-in to the parent or student account. If you believe a tutor has shared a minor&apos;s
               information without appropriate consent, or that a child&apos;s personal
               information has been collected inappropriately, contact us at the email
               below and we will address it.
@@ -381,9 +393,10 @@ export default function PrivacyPage() {
               For a student under 13, personal information we collect and process includes:
             </p>
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
-              <li><strong>Session audio recordings</strong> containing the child&rsquo;s
-                voice — collected to enable transcription and note generation for the
-                tutor&rsquo;s session record.</li>
+              <li><strong>Session audio recordings.</strong> When audio recording is on, this
+                includes the child&rsquo;s voice. Online, if audio recording is off, the
+                child&rsquo;s voice is left out and the tutor&rsquo;s microphone can still be
+                saved. In person, audio recording off saves nothing.</li>
               <li><strong>Session transcripts</strong> automatically derived from audio
                 via OpenAI (subprocessor) for note generation and session history.</li>
               <li><strong>Session notes</strong> created by or for the tutor summarizing
@@ -403,17 +416,19 @@ export default function PrivacyPage() {
               on our instructions; child audio is <strong>not used to train</strong>{" "}
               OpenAI&rsquo;s models. Session data is stored in{" "}
               <strong>Vercel Blob</strong> (audio files) and{" "}
-              <strong>Neon</strong> (database records), both US-region. No children&rsquo;s
-              personal information is shared with any other third party.
+              <strong>Neon</strong> (database records), both US-region. A connected Google
+              Calendar, or a calendar app subscribed to the tutor&rsquo;s feed, receives an
+              event titled with the student&rsquo;s first name and last initial. A subject or
+              note on that appointment is included on the event.
             </p>
 
             <p style={{ margin: "8px 0 0" }}>
               <strong>How we use children&rsquo;s personal information.</strong> Children&rsquo;s
               personal information is used exclusively to: deliver the tutoring session
               recording, transcription, and note-generation service; enable the tutor to
-              review session history and track the student&rsquo;s progress; and (with
-              parental consent) allow the parent or guardian to review session content
-              through a tokenized, revocable share link. We do not use children&rsquo;s
+              review session history and track the student&rsquo;s progress; and, when a note
+              is finalized, let the parent or student see the notes and the lesson replay in
+              their signed-in account. We do not use children&rsquo;s
               personal information for advertising, profiling, or any purpose unrelated
               to the child&rsquo;s tutoring sessions.
             </p>
@@ -440,8 +455,9 @@ export default function PrivacyPage() {
               <li>Review the personal information we have collected from your child.</li>
               <li>Direct us to delete your child&rsquo;s personal information.</li>
               <li>Revoke consent and refuse to permit further collection or use of your
-                child&rsquo;s personal information (consent revocation stops future
-                recording).</li>
+                child&rsquo;s personal information. Turning a consent off stops that new
+                collection. Online, if audio recording is off, the tutor&rsquo;s microphone
+                can still be saved.</li>
             </ul>
             <p style={{ margin: "8px 0 0" }}>
               To exercise any of these rights, contact us at{" "}
@@ -453,8 +469,9 @@ export default function PrivacyPage() {
             <p style={{ margin: "8px 0 0" }}>
               <strong>Consent revocation and data already collected (two tracks).</strong>{" "}
               Session audio recordings, transcripts, and notes are created only with a
-              parent or guardian&rsquo;s consent. Withdrawing consent stops future
-              recording; it does not automatically delete content already created under
+              parent or guardian&rsquo;s consent. Turning a consent off stops that new
+              collection. Online, if audio recording is off, the tutor&rsquo;s microphone can
+              still be saved. It does not automatically delete content already created under
               your prior consent. As a parent or legal guardian, you may request to
               review or delete your child&rsquo;s personal information at any time by
               contacting us at{" "}
@@ -466,13 +483,11 @@ export default function PrivacyPage() {
             <p style={{ margin: "8px 0 0" }}>
               <strong>Educational use by the tutor.</strong> With parental consent, a
               child&rsquo;s session recordings, transcripts, and notes may be used by
-              the tutor for educational purposes directly related to that child&rsquo;s
-              instruction — for example, reviewing past sessions to plan future lessons or
-              identifying recurring learning gaps. This consent is part of the account
-              setup and is revocable going forward: revoking it stops future access for
-              those purposes and the tutor is notified. Content already made available
-              to the tutor under prior consent is not automatically retracted on
-              revocation; you may request deletion of specific content separately.
+              the tutor for that child&rsquo;s instruction — for example, reviewing past
+              sessions to plan future lessons. This consent is part of account setup.
+              Turning a consent off stops that new collection. It does not remove content
+              the tutor already has. A parent can ask Mynk to delete the account and its
+              data. Deleting only some of it is a special request.
             </p>
           </div>
 

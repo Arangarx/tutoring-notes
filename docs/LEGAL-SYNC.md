@@ -151,20 +151,20 @@ first, then re-submit. The consent screen will continue to display
 | Section | Source |
 |---------|--------|
 | Preamble + umbrella reference link | Product (acknowledges sync) |
-| What Tutoring Notes is | Product |
+| What Mynk is | Product |
 | What data we collect | **Hybrid** — umbrella framing, product-specific inventory |
 | How we use your data | **Umbrella** — includes the "do not sell Google user data" and "do not sell personal information to data brokers" language verbatim |
 | Sharing, disclosure, and recipients | **Umbrella** — full bulleted enumeration (Google / Infrastructure / People you direct / Legal / Business transfers). Product-specific subprocessors (Vercel, Neon, Vercel Blob, OpenAI) listed under Infrastructure. |
 | Google account and Gmail | **Hybrid** — umbrella's Limited Use / scope / token-storage / disconnect language + product-specific scope details (`gmail.send`, `userinfo.email`) and Settings → Email instruction. Umbrella heading is now &ldquo;Google account, Gmail, and Calendar&rdquo; (2026-09-10). |
 | Google Calendar (Connect Google Calendar) | **Hybrid** — umbrella Limited Use / token-storage / disconnect framing + product-specific scope (`calendar.events.owned`, `userinfo.email` only), primary-calendar create/update/delete when connected, fail-soft scheduling, disconnect deletes local token only (no Google API calls; does not delete existing Google events), Settings → Calendar integrations |
 | Calendar subscription feed (ICS / webcal) | **Product** — bearer subscription URL, read-only polled feed, continuous third-party polling by whichever calendar client the tutor authorizes (Google, Apple, Outlook), first name + last initial titles, revoke/rotate token |
-| Live whiteboard session encryption key | **Product** — server-held key for sessions created after 2026-10-06 release, encrypted at rest, disclosed only to signed-in tutor and authorized learner/parent for that session |
+| Live whiteboard session encryption key | **Product** — server-held key for sessions created after this release, encrypted at rest, disclosed only to signed-in tutor and authorized learner/parent for that session. Terms has no section for this key. |
 | AI note generation (OpenAI) | Product |
 | Session audio recordings (Vercel Blob) | Product |
 | Where data is stored | Product |
-| Data retention and deletion | **Hybrid** — umbrella framing, product-specific delete-from-app instruction. **Expanded 2026-05-31:** added COPPA §312.10 child-specific retention schedule paragraph (active relationship + 24 months post-closure; no indefinite retention; verified deletion requests honored earlier). Original general-retention and delete-from-app paragraph preserved verbatim. |
-| Security | **Hybrid** — umbrella enumerated list (encryption in transit / hosting / authentication / secrets / Limited Use) + product-specific bcrypt password storage and optional SMS 2FA via Twilio disclosure (2026-09-11). |
-| Children | **Hybrid** — umbrella's framing, product-specific tutor-consent and share-link minor handling. **Expanded 2026-05-31:** added full COPPA §312.10 children's data inventory, subprocessor disclosure, retention schedule (active + 24 months), parental rights bullet list (review/delete/revoke), deletion-request contact path, consent-revocation two-track mechanics, and educational-use consent disclosure. The original tutor-responsibility and share-link paragraphs are preserved verbatim; COPPA disclosures are a separate adjacent `<div>` headed "Children's data and parental rights (COPPA)". |
+| Data retention and deletion | **Hybrid** — umbrella framing, product-specific delete-from-app instruction. Product copy keeps session history for a reasonable period after tutoring ends and says automated retention schedules may be introduced later. |
+| Security | **Hybrid** — umbrella enumerated list (encryption in transit / hosting / authentication / secrets / Limited Use) + product-specific bcrypt password storage. Teaching accounts require two-factor sign-in. Email is the default. An authenticator app or a text message is a choice. SMS codes go through Twilio (2026-09-11). |
+| Children | **Hybrid** — umbrella's framing, plus product-specific consent, share-link sign-in, and COPPA disclosures. **Updated 2026-10-12:** the tutor-responsibility paragraph and the share-link-without-an-account paragraph are no longer the page text. COPPA disclosures stay in the adjacent `<div>` headed "Children's data and parental rights (COPPA)". Retention on the page is a reasonable period. |
 | Changes | **Umbrella** |
 | Contact | Product — uses `arangarx+tutoringnotes@gmail.com` for product-specific addressing, links to mortensenapps.com for general inquiries |
 
@@ -180,8 +180,7 @@ first, then re-submit. The consent screen will continue to display
 | Gmail integration | Product |
 | Google Calendar integration | **Product** — `calendar.events.owned` write to primary calendar; disconnect stops future sync, does not remove existing Google events |
 | Calendar subscription feed | **Product** — ICS/webcal URL, client polling, first name + last initial titles (same sentence as `/privacy`; no per-student full-name opt-in) |
-| Live whiteboard session encryption key | **Product** — see `/privacy` product-specific section (2026-10-06) |
-| Third-party services | **Hybrid** — umbrella's framing, product-specific subprocessor list (incl. Twilio for optional SMS 2FA, 2026-09-11) with link to privacy policy |
+| Third-party services | **Hybrid** — umbrella's framing, product-specific subprocessor list (incl. Twilio for text-message two-factor codes, 2026-09-11) with link to privacy policy |
 | Children and parental consent | **Hybrid** — umbrella now has this section (added 2026-05-31 on `coppa-312-10-disclosure` branch); product facade adds Tutoring-Notes-specific COPPA language (COPPA applicability, representation-of-consent, cross-reference to privacy policy COPPA section). |
 | Availability and changes | Product (combines umbrella's posture with product-specific notification language) |
 | Disclaimers | **Umbrella** — adds product-specific "Educational outcomes are not guaranteed" sentence |
@@ -244,6 +243,8 @@ repo lands a verification-team-driven change before the deploy):
   changes.
 
 ## History
+
+- **2026-10-12** — Org honesty copy (product facades only; umbrella SYNCED FROM date unchanged 2026-09-10). Privacy and terms name Mynk, require teaching-account two-factor with email as the default, require sign-in for share links, and describe organization staff access. Consent rows stay after deletion without a name, email, or email fingerprint. Retention on the pages is a reasonable period. In-UI Last updated: October 12, 2026.
 
 - **2026-10-06** — Calendar titles (product-specific; umbrella SYNCED FROM date unchanged 2026-09-10). Terms no longer say tutors can opt in per student to show full names. The feed and Google Calendar events use the student's first name and last initial (example “Tutoring — Maya R.”), matching `/privacy` and `buildIcsEventSummary`. Terms in-UI Last updated: October 6, 2026. Privacy in-UI Last updated was already October 6, 2026.
 
@@ -317,5 +318,5 @@ repo lands a verification-team-driven change before the deploy):
 
 This is the list to take to legal counsel when Andrew has counsel. Do not start a second list. Add new questions here. These items are not legal advice, and they are not a claim that the product is compliant.
 
-- Keeping consent rows after an account is deleted, and storing a keyed one-way fingerprint of the account email. The fingerprint is a hash. It cannot be turned back into the email. The product decision is in [docs/handoff/org-learner-design.md](handoff/org-learner-design.md) § 2.7 (Andrew 2026-10-11). Counsel reviews it when Andrew has counsel.
-- Copies of personal information outside the database that erasure cannot clear. Stage 7 of the org learner design checks how today's erasure handles outbox emails and Google Calendar events, writes the inventory, and adds each unresolved item to this list. Do not add a guess before that check.
+- Keeping the consent row after an account is deleted. The row records which options were on or off, and when. It does not include the person’s name or email. Counsel reviews that kept row when Andrew has counsel.
+- Copies of personal information outside the database that this erasure job does not clear. Checked against `processErasureJob` on 2026-10-12: Google Calendar events are not deleted. Sent or outbox email is not deleted. Known blobs are purged. Application logs, OpenAI, Neon restore history, and other databases are not cleared by this job.

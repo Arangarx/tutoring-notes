@@ -118,7 +118,7 @@ function StudentLoginForm() {
           <CardHeader className="gap-2 pb-0 text-center">
             <CardTitle className="heading text-2xl font-normal">Student sign in</CardTitle>
             <CardDescription className="text-base text-muted-foreground">
-              {"Sign in with your own username and PIN — this is separate from your parent/guardian's account."}
+              Sign in with your username and PIN. Your parent set this up and manages it.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">

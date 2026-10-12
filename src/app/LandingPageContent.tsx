@@ -60,8 +60,8 @@ export function LandingPageContent() {
           <p className="mx-auto mb-9 max-w-xl text-[clamp(1rem,2vw,1.15rem)] leading-relaxed text-muted-foreground">
             Mynk is the operating layer for your tutoring practice — a durable
             session record, clear parent communication, and AI-drafted notes you
-            review when you&apos;re ready. You bring your students; parents and
-            learners join through your account. Spend less time on after-session
+            review when you&apos;re ready. You bring your students. Parents and
+            students sign in to their own accounts. Spend less time on after-session
             paperwork and more time teaching.
           </p>
 
@@ -118,12 +118,12 @@ export function LandingPageContent() {
             <ValuePropCard
               eyebrow="Sessions captured"
               headline="Write less between sessions"
-              body="Online sessions record automatically while you and your student are connected; in person, one tap to start. Transcription and recap fields draft when you're ready — edit what you want, save, and send."
+              body="Recording starts when you start the session, following the consent recorded for that student. Transcription and recap are ready almost immediately after the session finishes. Edit what you want, save the notes, and you're done! Students can see the notes automatically, and so can a parent when the student is a minor. You can send a reminder email if you like."
             />
             <ValuePropCard
-              eyebrow="Clean parent updates"
-              headline="Parents see updates in their account"
-              body="Families sign in to a secure parent account for a clean, mobile-friendly session summary. Updates arrive by email when you finalize a note. Whiteboard replays with audio so parents can see the actual lesson."
+              eyebrow="Notes in their account"
+              headline="Parents and students see the update"
+              body="When you finalize a note, the parent and student can see the notes and the lesson replay in their account."
             />
             <ValuePropCard
               eyebrow="Your practice, your data"
@@ -154,7 +154,7 @@ export function LandingPageContent() {
                 {
                   step: "01",
                   title: "Start your session",
-                  desc: "Pick your student and go live. Online, recording starts when your student joins; in person, one tap to start.",
+                  desc: "Pick your student and start the session. Recording starts when you do, following the consent recorded for that student.",
                 },
                 {
                   step: "02",
@@ -163,8 +163,8 @@ export function LandingPageContent() {
                 },
                 {
                   step: "03",
-                  title: "Send the recap",
-                  desc: "Mynk drafts the recap. Review it, tweak anything, and share the update with the family when you're ready.",
+                  title: "Save the notes",
+                  desc: "Mynk drafts the recap. Edit what you want, save the notes, and you're done. Students can see them automatically, and so can a parent when the student is a minor.",
                 },
               ].map(({ step, title, desc }) => (
                 <div key={step} className="flex flex-col gap-2.5">
@@ -193,8 +193,9 @@ export function LandingPageContent() {
             </h2>
             <p className="mb-8 text-[15px] leading-relaxed text-muted-foreground">
               Mynk is free during the pilot. No credit card. Mynk doesn&apos;t take
-              a cut of what you charge. Your account is protected by login — parent and
-              student views use secure sign-in through accounts you invite.
+              a cut of what you charge. Your teaching account requires two-factor
+              sign-in. Parents and students sign in to their own accounts. During
+              the pilot, new teaching accounts are approved by Mynk.
             </p>
 
             <div className="mx-auto mb-8 max-w-md rounded-2xl bg-brand px-6 py-5 text-left">

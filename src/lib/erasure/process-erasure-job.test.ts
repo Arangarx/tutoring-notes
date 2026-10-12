@@ -16,6 +16,9 @@
  * Blob: mocked — no real Vercel Blob store calls.
  */
 
+import fs from "fs";
+import path from "path";
+
 const mockList = jest.fn();
 const mockFetchPrivateBlobBytes = jest.fn();
 const mockDeleteBlob = jest.fn();
@@ -702,5 +705,437 @@ describe("cancelErasureJob", () => {
 
     const row = await db.erasureJob.findUnique({ where: { id: job.id } });
     expect(row!.status).toBe("completed");
+  });
+});
+
+/**
+ * Columns on rows scrubDbContent owns for an erased learner.
+ * Personal columns must be cleared by ownership. ConsentRecord stays, and none of
+ * its columns are personal (the kept row is the on/off choices and when).
+ */
+const LEARNER_ROW_COLUMNS: Record<string, { personal: string[]; notPersonal: string[] }> = {
+  Student: {
+    personal: ["name", "parentEmail"],
+    notPersonal: [
+      "id",
+      "createdAt",
+      "adminUserId",
+      "organizationId",
+      "recordingDefaultEnabled",
+      "isTestFixture",
+      "learnerProfileId",
+      "erasedAt",
+      "icsShowFullName",
+    ],
+  },
+  SessionNote: {
+    personal: ["topics", "homework", "assessment", "nextSteps", "linksJson"],
+    notPersonal: [
+      "id",
+      "studentId",
+      "date",
+      "template",
+      "status",
+      "sentAt",
+      "startTime",
+      "endTime",
+      "aiGenerated",
+      "aiPromptVersion",
+      "shareRecordingInEmail",
+      "createdAt",
+      "updatedAt",
+    ],
+  },
+  OrganizationLearner: {
+    personal: ["givenName", "familyName", "brief"],
+    notPersonal: [
+      "id",
+      "studentId",
+      "organizationId",
+      "createdByAdminUserId",
+      "createdAt",
+      "updatedAt",
+    ],
+  },
+  ScheduledSession: {
+    personal: ["subject", "notes", "location"],
+    notPersonal: [
+      "id",
+      "adminUserId",
+      "studentId",
+      "date",
+      "startTime",
+      "endTime",
+      "startAt",
+      "endAt",
+      "plannedDurationMinutes",
+      "googleEventId",
+      "createdAt",
+      "updatedAt",
+    ],
+  },
+  ConsentRecord: {
+    personal: [],
+    notPersonal: [
+      "id",
+      "learnerProfileId",
+      "adminUserId",
+      "organizationId",
+      "version",
+      "allowLiveSession",
+      "allowAudioRecording",
+      "allowWhiteboardRecording",
+      "allowNoteSending",
+      "setByAccountHolderId",
+      "captureMethod",
+      "setAt",
+    ],
+  },
+};
+
+function schemaColumns(modelName: string): string[] {
+  const schema = fs.readFileSync(
+    path.join(process.cwd(), "prisma", "schema.prisma"),
+    "utf8"
+  );
+  const match = schema.match(new RegExp(`model ${modelName} \\{([\\s\\S]*?)\\n\\}`));
+  if (!match) {
+    throw new Error(`model ${modelName} not found in schema`);
+  }
+  const columns: string[] = [];
+  for (const raw of match[1].split("\n")) {
+    const line = raw.replace(/\/\/.*$/, "").trim();
+    if (!line || line.startsWith("@@") || line.startsWith("*") || line.startsWith("/*")) {
+      continue;
+    }
+    if (line.includes("@relation")) continue;
+    const field = line.match(/^(\w+)\s+([\w[\]]+)/);
+    if (!field) continue;
+    const typeName = field[2].replace(/\[\]$/, "");
+    const scalar = new Set([
+      "String",
+      "Int",
+      "Boolean",
+      "DateTime",
+      "Float",
+      "Decimal",
+      "BigInt",
+      "Json",
+      "Bytes",
+    ]);
+    // Relation fields name another model and carry no column attribute.
+    // Enum columns are attributes (@default or similar) and stay in the registry.
+    if (!scalar.has(typeName) && !line.includes("@")) continue;
+    if (field[2].includes("[]")) continue;
+    columns.push(field[1]);
+  }
+  return columns;
+}
+
+describe("learner-row column registry", () => {
+  it("fails when a column on an erased learner's rows is unclassified", () => {
+    for (const [model, classes] of Object.entries(LEARNER_ROW_COLUMNS)) {
+      const classified = new Set([...classes.personal, ...classes.notPersonal]);
+      const columns = schemaColumns(model);
+      const missing = columns.filter((column) => !classified.has(column));
+      expect(missing).toEqual([]);
+      const extra = [...classified].filter((column) => !columns.includes(column));
+      expect(extra).toEqual([]);
+    }
+  });
+});
+
+/**
+ * Values the org-learner test observes on the learner who is not erased.
+ * Every other personal column gets a sentinel from the registry name so a
+ * newly classified column is seeded without a hand-written case.
+ */
+function personalSeedValue(
+  model: string,
+  column: string,
+  marker: string,
+  displayName: string
+): string {
+  const observed: Record<string, string> = {
+    "Student.name": displayName,
+    "Student.parentEmail": `${marker}@example.com`,
+    "SessionNote.topics": `topics ${marker}`,
+    "SessionNote.homework": `homework ${marker}`,
+    "SessionNote.assessment": `assessment ${marker}`,
+    "SessionNote.nextSteps": `next ${marker}`,
+    "OrganizationLearner.givenName": "Jordan",
+    "OrganizationLearner.familyName": "Lee",
+    "OrganizationLearner.brief": `brief ${marker}`,
+    "ScheduledSession.subject": `subject ${marker}`,
+    "ScheduledSession.notes": `notes ${marker}`,
+    "ScheduledSession.location": `location ${marker}`,
+  };
+  return observed[`${model}.${column}`] ?? `${model}.${column} ${marker}`;
+}
+
+function assignPersonal<T extends Record<string, unknown>>(
+  model: string,
+  marker: string,
+  displayName: string,
+  base: T
+): T {
+  const data: Record<string, unknown> = { ...base };
+  for (const column of LEARNER_ROW_COLUMNS[model].personal) {
+    data[column] = personalSeedValue(model, column, marker, displayName);
+  }
+  return data as T;
+}
+
+type SeededLearner = {
+  lp: { id: string };
+  student: { id: string };
+  appointment: { id: string };
+  consent: { id: string };
+  note: { id: string };
+};
+
+async function seedLearner(opts: {
+  marker: string;
+  ownerId: string;
+  organizationId: string;
+  displayName: string;
+}): Promise<SeededLearner> {
+  const { marker, ownerId, organizationId, displayName } = opts;
+  const ah = await createAccountHolder();
+  const lp = await db.learnerProfile.create({
+    data: {
+      accountHolderId: ah.id,
+      displayName,
+      isSelfLearner: false,
+    },
+  });
+  const student = await db.student.create({
+    data: assignPersonal("Student", marker, displayName, {
+      name: displayName,
+      adminUserId: null,
+      organizationId,
+      learnerProfileId: lp.id,
+      parentEmail: `${marker}@example.com`,
+    }),
+  });
+  await db.organizationLearner.create({
+    data: assignPersonal("OrganizationLearner", marker, displayName, {
+      studentId: student.id,
+      organizationId,
+      givenName: "Jordan",
+      familyName: "Lee",
+      brief: `brief ${marker}`,
+      createdByAdminUserId: ownerId,
+    }),
+  });
+  const appointment = await db.scheduledSession.create({
+    data: assignPersonal("ScheduledSession", marker, displayName, {
+      adminUserId: ownerId,
+      studentId: student.id,
+      date: new Date("2026-10-12"),
+      startTime: "09:00",
+      endTime: "10:00",
+      plannedDurationMinutes: 60,
+      subject: `subject ${marker}`,
+      notes: `notes ${marker}`,
+      location: `location ${marker}`,
+    }),
+  });
+  const note = await db.sessionNote.create({
+    data: assignPersonal("SessionNote", marker, displayName, {
+      studentId: student.id,
+      date: new Date("2026-10-12"),
+      topics: `topics ${marker}`,
+      homework: `homework ${marker}`,
+      assessment: `assessment ${marker}`,
+      nextSteps: `next ${marker}`,
+      linksJson: "[]",
+    }),
+  });
+  const consent = await db.consentRecord.create({
+    data: assignPersonal("ConsentRecord", marker, displayName, {
+      learnerProfileId: lp.id,
+      adminUserId: null,
+      organizationId,
+      version: 1,
+      allowLiveSession: true,
+      allowAudioRecording: false,
+      allowWhiteboardRecording: true,
+      allowNoteSending: false,
+      setByAccountHolderId: ah.id,
+    }),
+  });
+  return { lp, student, appointment, consent, note };
+}
+
+/** Personal text is gone: null, empty, the empty links list, the deleted-learner name, or the row removed. */
+const ROW_CLEARED = Symbol("row-cleared");
+
+function isBlankOrCleared(value: unknown): boolean {
+  if (value === ROW_CLEARED || value == null) return true;
+  if (typeof value !== "string") return false;
+  return value === "" || value === "[]" || value === DELETED_LEARNER_NAME;
+}
+
+async function readPersonalColumn(
+  model: string,
+  column: string,
+  seed: SeededLearner
+): Promise<unknown> {
+  switch (model) {
+    case "Student": {
+      const row = await db.student.findUnique({ where: { id: seed.student.id } });
+      if (!row) return ROW_CLEARED;
+      return row[column as keyof typeof row];
+    }
+    case "SessionNote": {
+      const row = await db.sessionNote.findUnique({ where: { id: seed.note.id } });
+      if (!row) return ROW_CLEARED;
+      return row[column as keyof typeof row];
+    }
+    case "OrganizationLearner": {
+      const row = await db.organizationLearner.findUnique({
+        where: { studentId: seed.student.id },
+      });
+      if (!row) return ROW_CLEARED;
+      return row[column as keyof typeof row];
+    }
+    case "ScheduledSession": {
+      const row = await db.scheduledSession.findUnique({ where: { id: seed.appointment.id } });
+      if (!row) return ROW_CLEARED;
+      return row[column as keyof typeof row];
+    }
+    case "ConsentRecord": {
+      const row = await db.consentRecord.findUnique({ where: { id: seed.consent.id } });
+      if (!row) return ROW_CLEARED;
+      return row[column as keyof typeof row];
+    }
+    default:
+      throw new Error(`registry model ${model} is not seeded`);
+  }
+}
+
+describe("processErasureJob — org learner", () => {
+  it("deletes the org learner row, blanks that learner's appointment text, keeps consent, and leaves a same-named learner unchanged", async () => {
+    const owner = await createTutor();
+    const org = await db.organization.create({
+      data: {
+        name: `Org ${uniq("org")}`,
+        createdByOperatorId: "org-operator@example.com",
+      },
+    });
+    const sharedName = "Jordan Lee";
+    const erasedMarker = uniq("eraseA");
+    const otherMarker = uniq("eraseB");
+
+    const erased = await seedLearner({
+      marker: erasedMarker,
+      ownerId: owner.id,
+      organizationId: org.id,
+      displayName: sharedName,
+    });
+    const other = await seedLearner({
+      marker: otherMarker,
+      ownerId: owner.id,
+      organizationId: org.id,
+      displayName: sharedName,
+    });
+    setupBlobMocks("no-session");
+
+    const job = await createErasureJob("learner_profile", erased.lp.id);
+    const result = await processErasureJob(job.id);
+    expect(result.status).toBe("completed");
+
+    expect(
+      await db.organizationLearner.findUnique({ where: { studentId: erased.student.id } })
+    ).toBeNull();
+
+    const erasedAppointment = await db.scheduledSession.findUnique({
+      where: { id: erased.appointment.id },
+    });
+    expect(erasedAppointment!.subject).toBe("");
+    expect(erasedAppointment!.notes).toBe("");
+    expect(erasedAppointment!.location).toBe("");
+    expect(erasedAppointment!.subject).not.toContain(erasedMarker);
+
+    const consent = await db.consentRecord.findUnique({ where: { id: erased.consent.id } });
+    expect(consent).not.toBeNull();
+    expect(consent!.allowLiveSession).toBe(true);
+    expect(consent!.allowAudioRecording).toBe(false);
+    expect(consent!.allowWhiteboardRecording).toBe(true);
+    expect(consent!.allowNoteSending).toBe(false);
+    expect(consent!.learnerProfileId).toBe(erased.lp.id);
+
+    const otherLearner = await db.organizationLearner.findUnique({
+      where: { studentId: other.student.id },
+    });
+    expect(otherLearner).not.toBeNull();
+    expect(otherLearner!.givenName).toBe("Jordan");
+    expect(otherLearner!.familyName).toBe("Lee");
+    expect(otherLearner!.brief).toBe(`brief ${otherMarker}`);
+
+    const otherAppointment = await db.scheduledSession.findUnique({
+      where: { id: other.appointment.id },
+    });
+    expect(otherAppointment!.subject).toBe(`subject ${otherMarker}`);
+    expect(otherAppointment!.notes).toBe(`notes ${otherMarker}`);
+    expect(otherAppointment!.location).toBe(`location ${otherMarker}`);
+
+    const otherStudent = await db.student.findUnique({ where: { id: other.student.id } });
+    expect(otherStudent!.name).toBe(sharedName);
+    expect(otherStudent!.parentEmail).toBe(`${otherMarker}@example.com`);
+  });
+
+  it("clears every personal column the registry lists for the erased learner", async () => {
+    const owner = await createTutor();
+    const org = await db.organization.create({
+      data: {
+        name: `Org ${uniq("org")}`,
+        createdByOperatorId: "org-operator@example.com",
+      },
+    });
+    const marker = uniq("skip");
+    const displayName = `Name ${marker}`;
+    const seeded = await seedLearner({
+      marker,
+      ownerId: owner.id,
+      organizationId: org.id,
+      displayName,
+    });
+
+    const personalColumns: string[] = [];
+    for (const [model, classes] of Object.entries(LEARNER_ROW_COLUMNS)) {
+      for (const column of classes.personal) {
+        personalColumns.push(`${model}.${column}`);
+        const value = await readPersonalColumn(model, column, seeded);
+        expect({
+          column: `${model}.${column}`,
+          seeded: value,
+        }).toEqual({
+          column: `${model}.${column}`,
+          seeded: personalSeedValue(model, column, marker, displayName),
+        });
+      }
+    }
+    expect(personalColumns.length).toBeGreaterThan(0);
+
+    setupBlobMocks("no-session");
+    const job = await createErasureJob("learner_profile", seeded.lp.id);
+    await processErasureJob(job.id);
+
+    for (const [model, classes] of Object.entries(LEARNER_ROW_COLUMNS)) {
+      for (const column of classes.personal) {
+        const value = await readPersonalColumn(model, column, seeded);
+        expect({
+          column: `${model}.${column}`,
+          cleared: isBlankOrCleared(value),
+          value,
+        }).toEqual({
+          column: `${model}.${column}`,
+          cleared: true,
+          value,
+        });
+      }
+    }
   });
 });

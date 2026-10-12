@@ -18,22 +18,27 @@ const PRODUCT_FEATURES = [
   {
     label: "Session recording",
     detail:
-      "Online whiteboard sessions: go live and audio and whiteboard capture run automatically while you and your student are connected — pause anytime; recording ends with the session. In-person audio notes: one tap to start when you're ready.",
+      "Recording starts when you start the session, following the consent recorded for that student. Pause anytime; recording ends with the session.",
   },
   {
     label: "AI-drafted notes",
     detail:
-      "Mynk reads the transcript and drafts your session recap fields — topics, assessment, and plan. You review, edit, and send when you're ready.",
+      "Mynk reads the transcript and drafts your session recap fields — topics, assessment, and plan. You review, edit, and save when you're ready.",
   },
   {
     label: "Live whiteboard",
     detail:
-      "A shared digital canvas that syncs between tutor and student in real time. Replay it later to see exactly how a concept was taught.",
+      "A shared board that stays in sync between you and your student, with live video and audio when you turn them on. Replay the board later to see how a concept was taught. A parent can sign their child into a session with the parent's own account, or the child can use a family login the parent manages.",
   },
   {
-    label: "Parent accounts",
+    label: "Parent and student accounts",
     detail:
-      "Families sign in to a secure parent account to read session summaries on any phone. Whiteboard replay and audio included when you share an update.",
+      "Parents and students sign in to their own accounts. When you finalize a note, they can see the notes and the lesson replay. A student who is a minor can have a family login — a username and PIN — tied to the parent's account and managed by the parent.",
+  },
+  {
+    label: "Scheduling",
+    detail:
+      "Schedule a session with a student. It shows in your upcoming list and in their account. Connect Google Calendar and the event is written there too.",
   },
   {
     label: "Session log",
@@ -43,7 +48,7 @@ const PRODUCT_FEATURES = [
   {
     label: "Privacy-first",
     detail:
-      "Student data stays under your account. No public URLs for sensitive content. Recordings are processed by Whisper and stored securely.",
+      "Student data stays under your account. No public URLs for sensitive content. Recordings are transcribed by OpenAI and stored securely.",
   },
 ] as const;
 
@@ -151,8 +156,9 @@ export default function FeaturesPage() {
             <p className="m-0 max-w-lg text-sm leading-relaxed text-muted-foreground">
               Mynk is in early pilot with professional tutors. Features are
               shipping actively. Free during the pilot — no credit card, no
-              commitment. Session data is processed using Whisper (OpenAI) for
-              transcription and stored securely on your behalf.
+              commitment. During the pilot, new teaching accounts are approved by
+              Mynk. Session audio is transcribed by OpenAI and stored securely on
+              your behalf.
             </p>
             <p className="m-0 text-[13px] text-muted-foreground/80">
               Questions?{" "}

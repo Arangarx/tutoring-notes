@@ -15,6 +15,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Calendar ICS feed + Google write honesty (product-specific) 2026-09-16.
  * Calendar titles are first name + last initial (product-specific) 2026-10-06.
  * Mynk SMS two-factor texts program (product-specific) 2026-09-21.
+ * Org honesty copy (product-specific; umbrella SYNCED FROM unchanged) 2026-10-12.
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
  * the CANONICAL legal source for eligibility / acceptable use /
@@ -43,9 +44,9 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalDocumentShell title="Terms of Use" lastUpdated="October 6, 2026">
+    <LegalDocumentShell title="Terms of Use" lastUpdated="October 12, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          These terms govern your use of <strong>Tutoring Notes</strong>, a web
+          These terms govern your use of <strong>Mynk</strong>, also titled Tutoring Notes, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
           &ldquo;us&rdquo;) under the Mortensen Apps umbrella. They supplement the umbrella
           terms of service at{" "}
@@ -60,9 +61,17 @@ export default function TermsPage() {
           <div>
             <h2 className="heading m-0 text-lg font-normal">The service</h2>
             <p style={{ margin: "8px 0 0" }}>
-              Tutoring Notes is a web application that helps tutors record session
-              audio, draft notes, run a shared whiteboard, and share read-only updates
-              with students and parents.
+              Mynk is the web application these pages describe. It is also titled Tutoring Notes.
+              It helps private tutors run a shared whiteboard session, record it, and draft the
+              notes. When a note is finalized, the parent and student can see the notes and the
+              lesson replay in their account.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              An organization owner, admin, or scheduler can see learners that organization
+              entered, including learners they did not personally teach. The organization enters
+              the learner. A scheduler sees the name, a short brief, and a short reason when a
+              booking is blocked, and does not see parent email, consent choices, or notes. A
+              private tutor still sees only their own students.
             </p>
           </div>
 
@@ -107,9 +116,10 @@ export default function TermsPage() {
           <div>
             <h2 className="heading m-0 text-lg font-normal">Gmail integration</h2>
             <p style={{ margin: "8px 0 0" }}>
-              If you connect your Gmail account, the app sends emails on your behalf
-              only when you explicitly click &ldquo;Send update.&rdquo; You can disconnect
-              at any time from Settings → Email. Your use of Gmail is also subject to
+              If you connect your Gmail account, the app sends email on your behalf only when you click Email a reminder. That email is optional. The parent
+              or student already sees the notes and the lesson replay in their account
+              when you finalize a note. You can disconnect at any time from Settings,
+              then Email. Your use of Gmail is also subject to
               Google&apos;s own terms of service.
             </p>
           </div>
@@ -161,7 +171,7 @@ export default function TermsPage() {
             <p style={{ margin: "8px 0 0" }}>
               The service relies on third parties (for example hosting, database, object
               storage, Google OAuth, Gmail, Google Calendar, OpenAI for transcription and
-              note generation, email delivery, and Twilio for optional SMS two-factor
+              note generation, email delivery, and Twilio for text-message two-factor
               authentication code delivery). Your use of those features is also
               subject to the third party&apos;s terms and policies. We are not responsible
               for outages or changes caused solely by third-party platforms. See Google
@@ -186,12 +196,18 @@ export default function TermsPage() {
             <p style={{ margin: "8px 0 0" }}>
               Tutoring Notes knowingly serves students who may be under 13 and is subject
               to the Children&rsquo;s Online Privacy Protection Act (COPPA),
-              16&nbsp;CFR Part&nbsp;312. By entering a child under 13 into the platform as
-              a student, the account holder (parent or guardian) represents that they are
-              that child&rsquo;s parent or legal guardian and that they have reviewed and
-              consented to the privacy practices described in our{" "}
+              16&nbsp;CFR Part&nbsp;312. When a parent or guardian finishes setup for a
+              child under 13, they represent that they are that child&rsquo;s parent or
+              legal guardian and that they have reviewed and consented to the privacy
+              practices described in our{" "}
               <Link href="/privacy">privacy policy</Link>, including the collection of
               session audio recordings, transcripts, and notes.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              When a parent or a self-learner has finished account setup, consent is recorded
+              in that Mynk account before a live session. A parent records it for a child. A
+              self-learner records it for themselves. A student who has not finished setup
+              does not have that record yet.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               Parents and legal guardians retain the right to review, request deletion of,
@@ -199,9 +215,16 @@ export default function TermsPage() {
               See the <Link href="/privacy">privacy policy</Link> — specifically the{" "}
               &ldquo;Children&rsquo;s data and parental rights (COPPA)&rdquo; section — for
               how to exercise these rights, our retention practices, and the contact address
-              for deletion requests. Withdrawing consent stops future data collection; it
-              does not automatically delete data already collected under prior consent.
-              Deletion requests are honored upon verification.
+              for deletion requests. Turning a consent off stops that new collection. Online,
+              if audio recording is off, the tutor&rsquo;s microphone can still be saved. It
+              does not automatically delete data already collected under prior consent. A
+              parent can ask Mynk to delete the account and its data. Deleting only some of
+              it is a special request.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              After an account is deleted, we keep a record of the consent choices that were
+              made: which options were on or off, and when. That record does not include the
+              person’s name or email.
             </p>
           </div>
 
