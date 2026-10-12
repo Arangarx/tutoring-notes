@@ -1,7 +1,6 @@
 /**
  * Student-detail note form, not whiteboard chrome.
- * note-outbox-share.spec.ts is integration-only, so this file stays out of
- * the wb-regression project.
+ * Enrolled in wb-regression with the other student-notes specs.
  *
  * The disabled check reads the navigation response body (server HTML), not a
  * DOM snapshot, so it is the document from before any client script runs.
@@ -41,14 +40,13 @@ test.describe("new note form hydration", () => {
       await prisma.$disconnect();
     }
 
-    const response = await page.goto(`/admin/students/${studentId}`, {
+    const response = await page.goto(`/admin/students/${studentId}/notes`, {
       waitUntil: "commit",
     });
-    expect(response, "student detail document").not.toBeNull();
+    expect(response, "student notes document").not.toBeNull();
     expect(response!.status()).toBe(200);
     const html = await response!.text();
     const forms = formSlices(html);
-    // Desktop shell and mobile shell each SSR the same form.
     expect(forms.length).toBeGreaterThanOrEqual(1);
     for (const formHtml of forms) {
       // The fields are the hydration lock. The buttons being disabled is incidental.
@@ -58,9 +56,7 @@ test.describe("new note form hydration", () => {
     await expect(page.getByRole("heading", { name: studentName })).toBeVisible({
       timeout: 15_000,
     });
-    const notes = page.locator("#student-section-notes");
-    await notes.scrollIntoViewIfNeeded();
-    const form = notes.getByTestId("new-note-form");
+    const form = page.getByTestId("new-note-form");
     for (const selector of [
       "#note-date",
       "#note-template",

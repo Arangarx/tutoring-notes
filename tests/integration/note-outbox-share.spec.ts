@@ -40,13 +40,11 @@ test("saving a note, sending it, and opening the outbox link shows that note", a
   }
   await seedSelfLearner(studentId);
 
-  await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`/admin/students/${studentId}/notes`, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: studentName })).toBeVisible({
     timeout: 15_000,
   });
-  const notes = page.locator("#student-section-notes");
-  await notes.scrollIntoViewIfNeeded();
-  const form = notes.getByTestId("new-note-form");
+  const form = page.getByTestId("new-note-form");
   const typeInto = async (selector: string, value: string) => {
     const field = form.locator(selector);
     await field.click();
@@ -68,12 +66,15 @@ test("saving a note, sending it, and opening the outbox link shows that note", a
   await page.getByRole("button", { name: "Mark ready" }).click();
   await expect(page.getByText("Status: READY")).toBeVisible({ timeout: 15_000 });
 
-  await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
-  const notesAgain = page.locator("#student-section-notes");
-  await notesAgain.scrollIntoViewIfNeeded();
-  await notesAgain.locator("#toEmail").fill(parentEmail);
-  await notesAgain.getByRole("button", { name: "Send" }).click();
-  await expect(notesAgain.getByRole("status")).toHaveText(
+  const openReminder = page.getByTestId("email-reminder-button");
+  const reminder = page.getByTestId("email-reminder-dialog");
+  await expect(async () => {
+    if (!(await reminder.isVisible())) await openReminder.click();
+    await expect(reminder.locator("#toEmail")).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
+  await reminder.locator("#toEmail").fill(parentEmail);
+  await reminder.getByRole("button", { name: "Send" }).click();
+  await expect(reminder.getByRole("status")).toHaveText(
     /saved to outbox|Sent to .+|Failed to send/i,
     { timeout: 15_000 }
   );

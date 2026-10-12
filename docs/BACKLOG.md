@@ -74,6 +74,8 @@ Direction (Andrew 2026-10-05, supersedes the 2026-09-28 workshop sketch): almost
 
 Related: `ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER` / `MOBILE-ICONS` (merged, verify); “Unclaimed student claim link buried.”
 
+- Stage 6 wrote three sentences the plan described but did not lock word for word (Andrew review, 2026-10-12). Reminder dialog: “The notes and the lesson replay are already in the family's account. This email only reminds them.” Share link: “The family signs in to open this link. You can revoke or regenerate it anytime.” Deletion card: “This student's account is being deleted. Sessions are off.” plus the deletion date.
+
 **Status:** `OPEN` — go over soon.
 
 ## 🎯 Release priorities (Andrew 2026-07-30, option B) — do these first, in order
@@ -1801,6 +1803,9 @@ Lower priority.
 ---
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
+
+**[P2][TEST] PLAYWRIGHT-GAP — on-page Record/Upload resilience**  
+On-page Record/Upload resilience has no surface until that recorder returns. `tests/audio-upload.spec.ts` skips the pending-segment and transcribe cases. The Notes page coming-soon sentence stays a real test.
 
 **[P2][TEST] identity-e2e known-unrelated failures observed on auth ship-ready gate (2026-09-11, WS3 SMS 2FA run; merged [`c8d613ca`](https://github.com/Arangarx/tutoring-notes/commit/c8d613ca))**  
 Full `npm run test:identity-e2e` run (60 passed, 7 failed) surfaced failures unrelated to the SMS 2FA change under test:

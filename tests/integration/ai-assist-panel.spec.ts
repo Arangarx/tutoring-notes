@@ -35,28 +35,30 @@ test("the AI text panel fills the empty note form", async ({ page }) => {
     await prisma.$disconnect();
   }
 
-  await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`/admin/students/${studentId}/notes`, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: studentName })).toBeVisible({
     timeout: 15_000,
   });
-  const notes = page.locator("#student-section-notes");
-  await notes.scrollIntoViewIfNeeded();
-  const panel = notes.getByTestId("ai-assist-panel");
+  const panel = page.getByTestId("ai-assist-panel");
+  const form = page.getByTestId("new-note-form");
   await expect(panel).toBeVisible({ timeout: 15_000 });
-  await expect(notes.getByTestId("new-note-form")).toBeVisible();
-  await expect(notes.locator("#note-topics")).toHaveValue("");
+  await expect(form).toBeVisible();
+  // The note fields start disabled in the server HTML. Enabled means the client is live.
+  await expect(form.locator("#note-topics")).toBeEnabled({ timeout: 15_000 });
+  await expect(form.locator("#note-topics")).toHaveValue("");
 
-  await panel.getByTestId("tab-text").click();
   await panel.getByTestId("ai-session-text").fill(
     "PW_AI_HARNESS We worked on placing fractions on a number line."
   );
-  await panel.getByTestId("ai-generate-btn").click();
+  const generate = panel.getByTestId("ai-generate-btn");
+  await expect(generate).toBeEnabled({ timeout: 15_000 });
+  await generate.click();
 
-  await expect(notes.locator("#note-topics")).toHaveValue(HARNESS_TOPICS, {
+  await expect(form.locator("#note-topics")).toHaveValue(HARNESS_TOPICS, {
     timeout: 15_000,
   });
-  await expect(notes.locator("#note-homework")).toHaveValue(HARNESS_HOMEWORK);
-  await expect(notes.locator("#note-assessment")).toHaveValue(HARNESS_ASSESSMENT);
-  await expect(notes.locator("#note-plan")).toHaveValue(HARNESS_PLAN);
+  await expect(form.locator("#note-homework")).toHaveValue(HARNESS_HOMEWORK);
+  await expect(form.locator("#note-assessment")).toHaveValue(HARNESS_ASSESSMENT);
+  await expect(form.locator("#note-plan")).toHaveValue(HARNESS_PLAN);
   await expect(panel.getByTestId("ai-filled-hint")).toBeVisible();
 });

@@ -20,7 +20,6 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   GenerateNoteResult,
-  TranscribeAndGenerateResult,
 } from "@/app/admin/students/[id]/actions";
 
 // Mock the server-action module. The real implementations talk to OpenAI +
@@ -107,18 +106,6 @@ const TEXT_AI_OK: GenerateNoteResult = {
   assessment: "AI assessment",
   plan: "AI plan",
   links: "https://ai.example.com",
-  promptVersion: "v7-test",
-};
-
-const AUDIO_AI_OK: TranscribeAndGenerateResult = {
-  ok: true,
-  recordingIds: ["rec-1"],
-  transcript: "raw transcript",
-  topics: "AI audio topics",
-  homework: "AI audio homework",
-  assessment: "AI audio assessment",
-  plan: "AI audio plan",
-  links: "",
   promptVersion: "v7-test",
 };
 
@@ -296,35 +283,17 @@ describe("AiAssistPanel — in-flight race (the actual #6 bug)", () => {
     expect(getField("plan").value).toBe("AI plan");
   });
 
-  it("audio path: empty form → click Transcribe → type during wait → populate preserves typing", async () => {
-    const user = userEvent.setup();
-    const dfd = deferred<TranscribeAndGenerateResult>();
-    transcribeAndGenerateActionMock.mockReturnValue(dfd.promise);
+  it("Record and Upload are not a working recorder", () => {
     renderPanel({ blobEnabled: true });
-
-    // Switch to record tab + emit a fake audio via the AudioInputTabs stub.
-    await user.click(screen.getByTestId("stub-set-tab-record"));
-    await user.click(screen.getByTestId("stub-emit-audio"));
-
-    // Click Transcribe & generate.
-    await user.click(screen.getByTestId("ai-transcribe-btn"));
-    expect(transcribeAndGenerateActionMock).toHaveBeenCalledTimes(1);
-
-    // Tutor types during the long transcribe wait.
-    await user.type(getField("plan"), "tutor wrote a plan from memory");
-
-    // Transcribe returns.
-    await act(async () => {
-      dfd.resolve(AUDIO_AI_OK);
-    });
-    await screen.findByTestId("ai-filled-hint");
-
-    // Tutor's typed plan is preserved.
-    expect(getField("plan").value).toBe("tutor wrote a plan from memory");
-    // Other fields filled from AI.
-    expect(getField("topics").value).toBe("AI audio topics");
-    expect(getField("homework").value).toBe("AI audio homework");
-    expect(getField("assessment").value).toBe("AI audio assessment");
+    expect(
+      screen.getByText(
+        "Recording and uploading audio here is coming soon. For now, record during a whiteboard session."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByTestId("tab-record")).toBeNull();
+    expect(screen.queryByTestId("tab-upload")).toBeNull();
+    expect(screen.queryByTestId("ai-transcribe-btn")).toBeNull();
+    expect(screen.queryByTestId("stub-set-tab-record")).toBeNull();
   });
 
   it("multiple wait-time edits all survive populate (every dirty field is preserved)", async () => {

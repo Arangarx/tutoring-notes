@@ -20,6 +20,8 @@ export type StartWhiteboardSessionProps = {
   claimInvitesEnabled?: boolean;
   /** Top-of-page UnclaimedParentClaimBanner is shown — callout references it. */
   hasTopClaimBanner?: boolean;
+  /** Visible label when the session can start. */
+  label?: string;
 };
 
 function canStartSession(props: StartWhiteboardSessionProps): boolean {
@@ -147,7 +149,7 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
         disabled={!actionsEnabled || pending}
         data-testid="start-whiteboard-session-btn"
       >
-        {pending ? "Starting\u2026" : "Start whiteboard session"}
+        {pending ? "Starting\u2026" : (props.label ?? "Start whiteboard session")}
       </Button>
       {error ? (
         <p

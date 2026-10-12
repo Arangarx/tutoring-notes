@@ -1,16 +1,9 @@
 /**
- * Playwright smoke test: Audio upload + transcribe flow
+ * Notes page audio surface.
  *
- * Verifies the full UI flow:
- * 1. Upload tab is visible when blob is configured.
- * 2. After "uploading" a file (stubbed), the transcribe button appears.
- * 3. Clicking Transcribe & generate (stubbed) populates the note form.
- * 4. The recording section + share checkbox appear in the note form.
- *
- * Strategy:
- * - Stub the Vercel Blob upload endpoint (/api/upload/blob) to return a fake blob URL.
- * - Stub the server action POST (transcribeAndGenerateAction) to return fixed note fields.
- * - Avoids real OpenAI/Whisper and Vercel Blob calls.
+ * Record and Upload are not offered. The live test asserts the coming-soon
+ * sentence and that those tabs are absent. The pending-segment / transcribe
+ * case stays in this file as a skip until that recorder returns.
  */
 
 import { test, expect } from "./integration/fixtures";
@@ -23,6 +16,8 @@ import { TAG } from "./test-tags";
 import { PrismaClient } from "@prisma/client";
 
 const SEEDED_STUDENT_NAME = "Playwright Student";
+const COMING_SOON =
+  "Recording and uploading audio here is coming soon. For now, record during a whiteboard session.";
 
 let studentId: string;
 
@@ -73,15 +68,12 @@ test.beforeAll(async () => {
 });
 
 async function gotoSeededStudent(page: import("@playwright/test").Page) {
-  await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`/admin/students/${studentId}/notes`, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: SEEDED_STUDENT_NAME })).toBeVisible({
     timeout: 15_000,
   });
-  // Desktop shell uses scroll-spy section nav — scroll the Notes block into view instead of
-  // relying on aria-selected on the section tab (smooth-scroll + spy can leave it false).
-  const notesSection = page.locator("#student-section-notes");
-  await notesSection.scrollIntoViewIfNeeded();
-  await expect(notesSection.getByTestId("ai-assist-panel")).toBeVisible({ timeout: 15_000 });
+  // Notes live on their own route; the AI assist panel renders directly on the page.
+  await expect(page.getByTestId("ai-assist-panel")).toBeVisible({ timeout: 15_000 });
 }
 
 function notesPanel(page: import("@playwright/test").Page) {
@@ -135,20 +127,25 @@ async function switchToUploadTab(panel: ReturnType<typeof notesPanel>) {
   await expect(panel.getByTestId("audio-tab-upload-pane")).toBeVisible({ timeout: 10_000 });
 }
 
-test("Audio upload: Upload tab is visible and shows dropzone", { tag: [TAG.WB_RECORDING] }, async ({ page }) => {
-  test.setTimeout(60_000);
-  test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
+test(
+  "Notes page shows the coming-soon sentence and no Record or Upload tabs",
+  { tag: [TAG.WB_RECORDING] },
+  async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.goto(`/admin/students/${studentId}/notes`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: SEEDED_STUDENT_NAME })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(COMING_SOON)).toBeVisible();
+    await expect(page.getByTestId("tab-record")).toHaveCount(0);
+    await expect(page.getByTestId("tab-upload")).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Record" })).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Upload audio" })).toHaveCount(0);
+  }
+);
 
-  await gotoSeededStudent(page);
-
-  const panel = notesPanel(page);
-  await expect(panel.getByTestId("ai-assist-panel")).toBeVisible();
-
-  await switchToUploadTab(panel);
-  await expect(panel.getByTestId("audio-upload-dropzone")).toBeVisible();
-});
-
-test("Audio upload: transcribe + generate populates note form", { tag: [TAG.WB_RECORDING] }, async ({ page }) => {
+// PLAYWRIGHT-GAP: on-page Record/Upload resilience (pending segment list, transcribe enabled) has no surface until that recorder returns.
+test.skip("Audio upload: transcribe + generate populates note form", { tag: [TAG.WB_RECORDING] }, async ({ page }) => {
   test.setTimeout(120_000);
   test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
@@ -214,18 +211,3 @@ test("Audio upload: transcribe + generate populates note form", { tag: [TAG.WB_R
   }
 });
 
-test("Record tab: is visible and shows start recording button", { tag: [TAG.WB_RECORDING] }, async ({ page }) => {
-  test.setTimeout(60_000);
-  test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
-
-  await gotoSeededStudent(page);
-
-  const panel = notesPanel(page);
-  await expect(panel.getByTestId("ai-assist-panel")).toBeVisible();
-
-  const recordTab = panel.getByTestId("tab-record");
-  await expect(recordTab).toBeVisible();
-  await recordTab.click();
-  await expect(panel.getByTestId("audio-record-panel")).toBeVisible();
-  await expect(panel.getByTestId("audio-record-start")).toBeVisible();
-});

@@ -143,21 +143,13 @@ test.describe("Admin student detail — Start / claim findability", () => {
         page.getByRole("heading", { name: "Unclaimed Findability Student" })
       ).toBeVisible({ timeout: 15_000 });
 
-      const claimBanner = page.getByTestId("unclaimed-parent-claim-banner");
-      await expect(claimBanner).toBeVisible();
-      await expect(claimBanner.getByTestId("create-claim-link-btn")).toBeVisible();
-
-      const banner = page.getByTestId("student-ready-to-teach-banner");
-      const callout = banner.getByTestId("start-wb-consent-callout");
-      await expect(callout).toBeVisible();
-      await expect(callout).toHaveAttribute("role", "alert");
-      await expect(callout).toContainText(/Start whiteboard session unavailable/i);
-      await expect(callout).toContainText(/parent must claim/i);
-
-      await expect(page.getByTestId("start-whiteboard-session-btn")).toHaveCount(0);
-      await expect(page.getByTestId("student-ready-to-teach-copy")).toContainText(
-        /Before you can start/i
+      const card = page.getByTestId("student-critical-card");
+      await expect(card).toBeVisible();
+      await expect(card).toContainText(
+        "Unclaimed Findability Student needs an account before you can start a session. Send an invite below to Unclaimed Findability Student, or to their parent if Unclaimed Findability Student is a minor."
       );
+      await expect(card.getByTestId("create-claim-link-btn")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Start session" })).toHaveCount(0);
     }
   );
 
@@ -176,15 +168,13 @@ test.describe("Admin student detail — Start / claim findability", () => {
         page.getByRole("heading", { name: "Claimed No Consent Student" })
       ).toBeVisible({ timeout: 15_000 });
 
-      await expect(page.getByTestId("unclaimed-parent-claim-banner")).toHaveCount(0);
-
-      const banner = page.getByTestId("student-ready-to-teach-banner");
-      const callout = banner.getByTestId("start-wb-consent-callout");
-      await expect(callout).toBeVisible();
-      await expect(callout).toContainText(/privacy preferences are not complete/i);
-      await expect(callout).toContainText(/privacy preferences for this learner/i);
-
-      await expect(banner.getByTestId("start-whiteboard-session-btn")).toHaveCount(0);
+      await expect(page.getByTestId("student-critical-card")).toContainText(
+        /privacy preferences are not complete/i
+      );
+      await expect(page.getByTestId("student-critical-card")).toContainText(
+        /privacy preferences for this learner/i
+      );
+      await expect(page.getByRole("button", { name: "Start session" })).toHaveCount(0);
     }
   );
 
@@ -203,19 +193,11 @@ test.describe("Admin student detail — Start / claim findability", () => {
         page.getByRole("heading", { name: "Eligible Start Student" })
       ).toBeVisible({ timeout: 15_000 });
 
-      await expect(page.getByTestId("unclaimed-parent-claim-banner")).toHaveCount(0);
-      await expect(
-        page.getByTestId("student-ready-to-teach-banner").getByTestId("start-wb-consent-callout")
-      ).toHaveCount(0);
+      await expect(page.getByTestId("student-critical-card")).toHaveCount(0);
 
-      const banner = page.getByTestId("student-ready-to-teach-banner");
-      const startBtn = banner.getByTestId("start-whiteboard-session-btn");
+      const startBtn = page.getByTestId("start-whiteboard-session-btn");
       await expect(startBtn).toBeVisible();
-      await expect(startBtn).toHaveText(/Start whiteboard session/i);
-
-      await expect(page.getByTestId("student-ready-to-teach-copy")).toContainText(
-        /Ready to teach/i
-      );
+      await expect(startBtn).toHaveText(/Start session/i);
     }
   );
 });

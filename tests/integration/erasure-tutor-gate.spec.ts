@@ -15,7 +15,7 @@
 
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { TEST_ADMIN } from "../visual/helpers";
+import { seedTestStudent, TEST_ADMIN } from "../visual/helpers";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
@@ -78,7 +78,7 @@ async function seedStudentInErasureGrace(adminId: string): Promise<{
         scopeKind: "learner_profile",
         scopeId: lp.id,
         status: "requested",
-        requestedByAdminId: adminId,
+        requestedByPrincipal: `admin:${adminId}`,
         purgeEligibleAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
@@ -163,9 +163,13 @@ test.describe("SEC-ERASURE-TUTOR-GATE — student detail page UX", () => {
         });
 
         // Banner present — pending-erasure copy
-        const banner = page.getByTestId("student-erasure-banner");
+        const banner = page.getByTestId("student-critical-card");
         await expect(banner).toBeVisible({ timeout: 5_000 });
-        await expect(banner).toContainText(/pending erasure/i);
+        await expect(banner).toContainText("This student's account is being deleted. Sessions are off.");
+        await expect(banner).not.toContainText(/contact your operator/i);
+        await expect(banner.locator("time")).toHaveAttribute("datetime", /.+/);
+        await expect(banner.getByRole("button")).toHaveCount(0);
+        await expect(banner.getByRole("link")).toHaveCount(0);
 
         // Roster link present
         const rosterLink = page.getByRole("link", { name: /back to roster/i });
@@ -249,16 +253,14 @@ test.describe("SEC-ERASURE-TUTOR-GATE — student detail page UX", () => {
     async ({ page }) => {
       test.setTimeout(30_000);
 
-      // Use the pre-seeded TEST_STUDENT from visual helpers to avoid creating
-      // another row. Just visit /admin/students and pick any visible student.
+      const { studentId } = await seedTestStudent(adminId);
       await page.goto("/admin/students", { waitUntil: "domcontentloaded" });
 
-      // Find the first student link (there must be at least one from auth.setup.ts)
-      const firstStudent = page.locator('a[href^="/admin/students/"]').first();
-      await expect(firstStudent).toBeVisible({ timeout: 10_000 });
-      await firstStudent.click();
+      const studentLink = page.locator(`a[href="/admin/students/${studentId}"]`);
+      await expect(studentLink).toBeVisible({ timeout: 10_000 });
+      await studentLink.click();
 
-      await page.waitForURL(/\/admin\/students\/[a-z0-9]+$/, { timeout: 10_000 });
+      await page.waitForURL(new RegExp(`/admin/students/${studentId}$`), { timeout: 10_000 });
 
       // No suspended shell — normal student detail
       await expect(
@@ -266,9 +268,8 @@ test.describe("SEC-ERASURE-TUTOR-GATE — student detail page UX", () => {
       ).not.toBeVisible();
 
       // Notes section should be present
-      await expect(
-        page.getByText(/whiteboard session|notes & email|share link/i).first()
-      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId("student-notes-link")).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId("student-account-link")).toBeVisible();
     }
   );
 });

@@ -5,6 +5,8 @@ import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
 import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
 import { deriveStudentErasureDisplayState, isStudentAccessSuspended } from "@/lib/erasure/student-erasure-display";
 import { StudentErasurePendingBanner } from "@/components/admin/StudentErasureStatus";
+import { StudentCriticalCard } from "@/components/admin/StudentCriticalCard";
+import { studentDetailView } from "@/lib/student-detail-view";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -82,12 +84,34 @@ export default async function StudentDetailLayout({
     `[ers] action=layout_access_suspended studentId=${id} erasureKind=${erasureState.kind}`
   );
 
+  const deletion =
+    erasureState.kind === "pending_grace"
+      ? studentDetailView({
+          studentName: student.name,
+          learnerProfileId: lpId,
+          hasInvite: false,
+          latestInviteTargetKind: null,
+          consentRecordExists: false,
+          pendingErasure: true,
+          purgeEligibleAt: erasureState.purgeEligibleAt,
+          hasOpenWhiteboardSession: false,
+          hasUpcomingAppointment: false,
+        })
+      : null;
+
   return (
     <div
       className="space-y-4"
       data-testid="student-erasure-suspended-shell"
     >
-      <StudentErasurePendingBanner state={erasureState} />
+      {deletion?.criticalCard?.kind === "deletion" ? (
+        <StudentCriticalCard
+          text={deletion.criticalCard.text}
+          purgeEligibleAt={deletion.criticalCard.purgeEligibleAt}
+        />
+      ) : (
+        <StudentErasurePendingBanner state={erasureState} />
+      )}
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
           All content and affordances are unavailable while this student&apos;s

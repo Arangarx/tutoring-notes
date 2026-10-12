@@ -15,7 +15,12 @@ import { formatNoteTime, safeJsonArray } from "@/lib/notes/display-utils";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { env } from "@/lib/env";
+import NoteEntrySection from "../NoteEntrySection";
+import { EmailReminderDialog } from "../EmailReminderDialog";
 export const dynamic = "force-dynamic";
+
+export const maxDuration = 300;
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -37,7 +42,13 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
 
   const student = await db.student.findUnique({
     where: { id },
-    select: { id: true, name: true, adminUserId: true, organizationId: true },
+    select: {
+      id: true,
+      name: true,
+      adminUserId: true,
+      organizationId: true,
+      parentEmail: true,
+    },
   });
 
   if (!student) notFound();
@@ -221,6 +232,16 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
         </Button>
       }
     >
+      {orgOwned ? null : (
+        <div className="mb-8 flex flex-col gap-6">
+          <NoteEntrySection
+            studentId={student.id}
+            aiEnabled={!!env.OPENAI_API_KEY}
+            blobEnabled={!!env.BLOB_READ_WRITE_TOKEN}
+          />
+          <EmailReminderDialog studentId={student.id} defaultToEmail={student.parentEmail} />
+        </div>
+      )}
       <Suspense>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <NotesSearchBar placeholder="Search topics, homework, assessment, plan…" />

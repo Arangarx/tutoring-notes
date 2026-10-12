@@ -121,6 +121,13 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `SelfLearnerAgreement` | `src/components/consent/SelfLearnerAgreement.tsx` | The self-learner agreement checkbox. | `checked`, `onCheckedChange`, `id` | Claim setup and self-learner settings | **canonical** |
 | `SelfLearnerConsentSettings` | `src/components/consent/SelfLearnerConsentSettings.tsx` | Self-learner agreement and the shared switches. | `learnerProfileId`, `tutors`, `organizations`, `showAgreement` | Child consent page | **canonical** |
 
+### Student detail (stage 6)
+
+| Component | File | Purpose | Key Props | Surfaces | Dedup Status |
+|---|---|---|---|---|---|
+| `StudentCriticalCard` | `src/components/admin/StudentCriticalCard.tsx` | One Alert for a step that blocks the next session. The sentence is passed in. Setup passes `ClaimInviteSection` as children under that sentence. Deletion passes `purgeEligibleAt` and shows the date. | `text`, `purgeEligibleAt`, `children` | `/admin/students/[id]`, erasure shell | **canonical** |
+| `StudentAccountSharing` | `src/components/admin/StudentAccountSharing.tsx` | Account & sharing for one personal student. Composes `ConnectedParentSection` or `ClaimInviteSection`, plus `ShareLinkRow` and `ShareLinkControls`. | `studentId`, `studentName`, `needsInviteEmail`, `connected`, `shareUrl`, `shareAction`, `revokeAction` | `/admin/students/[id]/account` | **canonical — composition, not a second student page** |
+
 ### Shared layout (cross-realm)
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |

@@ -1,9 +1,9 @@
 /**
  * Admin student detail — Ready to teach banner layout at mid vs wide viewports.
  *
- * Mid-width (sidebar + in-banner CTA, below lg): banner stacks so copy is not
- * crushed and the consent callout stays within banner bounds.
- * Wide (lg+): copy and CTA sit side-by-side.
+ * The blocked card stays inside the page column at mid and wide widths, stacked
+ * under the header rather than beside another column. Light and dark text
+ * stays readable.
  *
  * Run:
  *   npx playwright test tests/integration/admin-student-detail-ready-to-teach-banner.spec.ts --project=integration
@@ -53,36 +53,33 @@ test.describe("Admin student detail — Ready to teach banner", () => {
         timeout: 15_000,
       });
 
-      const banner = page.getByTestId("student-ready-to-teach-banner");
-      const copy = page.getByTestId("student-ready-to-teach-copy");
-      const callout = banner.getByTestId("start-wb-consent-callout");
+      const column = page.getByTestId("student-detail-column");
+      const card = page.getByTestId("student-critical-card");
+      const session = page.getByTestId("student-session-card");
 
-      await expect(banner).toBeVisible();
-      await expect(callout).toBeVisible();
+      await expect(column).toBeVisible();
+      await expect(card).toBeVisible();
 
-      const bannerBox = await banner.boundingBox();
-      const copyBox = await copy.boundingBox();
-      const calloutBox = await callout.boundingBox();
+      const columnBox = await column.boundingBox();
+      const cardBox = await card.boundingBox();
+      const sessionBox = await session.boundingBox();
 
-      expect(bannerBox).not.toBeNull();
-      expect(copyBox).not.toBeNull();
-      expect(calloutBox).not.toBeNull();
+      expect(columnBox).not.toBeNull();
+      expect(cardBox).not.toBeNull();
+      expect(sessionBox).not.toBeNull();
 
-      const b = bannerBox!;
-      const c = copyBox!;
-      const k = calloutBox!;
+      const columnBounds = columnBox!;
+      const blocked = cardBox!;
+      const below = sessionBox!;
 
-      // Stacked layout: callout sits below copy (not crushed side-by-side).
-      expect(k.y).toBeGreaterThanOrEqual(c.y + c.height - GEOMETRY_TOLERANCE_PX);
-
-      // Copy uses most of the banner width when stacked (not a narrow crushed column).
-      expect(c.width).toBeGreaterThanOrEqual(b.width * 0.55);
-
-      // Callout fully within banner — no horizontal overflow past banner edges.
-      expect(k.x).toBeGreaterThanOrEqual(b.x - GEOMETRY_TOLERANCE_PX);
-      expect(k.x + k.width).toBeLessThanOrEqual(b.x + b.width + GEOMETRY_TOLERANCE_PX);
-      expect(k.y).toBeGreaterThanOrEqual(b.y - GEOMETRY_TOLERANCE_PX);
-      expect(k.y + k.height).toBeLessThanOrEqual(b.y + b.height + GEOMETRY_TOLERANCE_PX);
+      // The card is inside the page column.
+      expect(blocked.x).toBeGreaterThanOrEqual(columnBounds.x - GEOMETRY_TOLERANCE_PX);
+      expect(blocked.x + blocked.width).toBeLessThanOrEqual(
+        columnBounds.x + columnBounds.width + GEOMETRY_TOLERANCE_PX
+      );
+      // Stacked: the session card sits below the blocked card, sharing its left edge.
+      expect(below.y).toBeGreaterThanOrEqual(blocked.y + blocked.height - GEOMETRY_TOLERANCE_PX);
+      expect(Math.abs(below.x - blocked.x)).toBeLessThanOrEqual(GEOMETRY_TOLERANCE_PX);
     }
   );
 
@@ -103,28 +100,28 @@ test.describe("Admin student detail — Ready to teach banner", () => {
         timeout: 15_000,
       });
 
-      const banner = page.getByTestId("student-ready-to-teach-banner");
-      const copy = page.getByTestId("student-ready-to-teach-copy");
-      const callout = banner.getByTestId("start-wb-consent-callout");
+      const column = page.getByTestId("student-detail-column");
+      const card = page.getByTestId("student-critical-card");
+      const session = page.getByTestId("student-session-card");
+      await expect(card).toBeVisible();
 
-      await expect(callout).toBeVisible();
+      const columnBox = await column.boundingBox();
+      const cardBox = await card.boundingBox();
+      const sessionBox = await session.boundingBox();
+      expect(columnBox).not.toBeNull();
+      expect(cardBox).not.toBeNull();
+      expect(sessionBox).not.toBeNull();
 
-      const copyBox = await copy.boundingBox();
-      const calloutBox = await callout.boundingBox();
+      const columnBounds = columnBox!;
+      const blocked = cardBox!;
+      const below = sessionBox!;
 
-      expect(copyBox).not.toBeNull();
-      expect(calloutBox).not.toBeNull();
-
-      const c = copyBox!;
-      const k = calloutBox!;
-
-      // Side-by-side: callout starts to the right of copy.
-      expect(k.x).toBeGreaterThanOrEqual(c.x + c.width - GEOMETRY_TOLERANCE_PX);
-
-      // Vertically centered in row: midlines approximately aligned.
-      const copyMidY = c.y + c.height / 2;
-      const calloutMidY = k.y + k.height / 2;
-      expect(Math.abs(copyMidY - calloutMidY)).toBeLessThanOrEqual(24);
+      expect(blocked.x).toBeGreaterThanOrEqual(columnBounds.x - GEOMETRY_TOLERANCE_PX);
+      expect(blocked.x + blocked.width).toBeLessThanOrEqual(
+        columnBounds.x + columnBounds.width + GEOMETRY_TOLERANCE_PX
+      );
+      expect(below.y).toBeGreaterThanOrEqual(blocked.y + blocked.height - GEOMETRY_TOLERANCE_PX);
+      expect(Math.abs(below.x - blocked.x)).toBeLessThanOrEqual(GEOMETRY_TOLERANCE_PX);
     }
   );
 
@@ -144,9 +141,7 @@ test.describe("Admin student detail — Ready to teach banner", () => {
           waitUntil: "networkidle",
         });
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-        await expect(
-          page.getByTestId("student-ready-to-teach-banner").getByTestId("start-wb-consent-callout")
-        ).toBeVisible();
+        await expect(page.getByTestId("student-critical-card")).toBeVisible();
 
         const ratios = await page.evaluate(() => {
           function parseRgb(value: string) {
@@ -196,24 +191,13 @@ test.describe("Admin student detail — Ready to teach banner", () => {
             const lo = Math.min(lum(paint), lum(bg));
             return (hi + 0.05) / (lo + 0.05);
           }
-          const callout = document
-            .querySelector("[data-testid='student-ready-to-teach-banner']")
-            ?.querySelector("[data-testid='start-wb-consent-callout']");
-          const copy = document.querySelector("[data-testid='student-ready-to-teach-copy']");
+          const card = document.querySelector("[data-testid='student-critical-card']");
+          const body = card?.querySelector("p");
           const mark = document.querySelector("[data-testid='admin-sidebar-user-mark']");
-          const title = callout?.querySelector("[data-slot='alert-title']");
-          const description = callout?.querySelector("[data-slot='alert-description']");
-          const link = callout?.querySelector("a");
-          const eyebrow = copy?.querySelector("p");
-          const body = copy?.querySelectorAll("p")[1];
-          if (!title || !description || !link || !eyebrow || !body || !mark) {
+          if (!body || !mark) {
             return null;
           }
           return {
-            title: contrast(title),
-            description: contrast(description),
-            link: contrast(link),
-            eyebrow: contrast(eyebrow),
             body: contrast(body),
             initials: contrast(mark),
           };

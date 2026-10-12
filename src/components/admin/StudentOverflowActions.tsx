@@ -1,38 +1,25 @@
 "use client";
 
 import Link from "next/link";
-
+import { Button } from "@/components/ui/button";
 import { StudentActions } from "@/app/admin/students/[id]/StudentActions";
 
 type StudentOverflowActionsProps = {
   studentId: string;
   studentName: string;
-  onClose?: () => void;
 };
 
-/** Mobile overflow sheet rows + inline header actions on desktop. */
+/** Rename, Delete, and Outbox. Same menu on phone and desktop. */
 export function StudentOverflowActions({
   studentId,
   studentName,
-  onClose,
 }: StudentOverflowActionsProps) {
   return (
     <>
-      <div className="hidden md:contents">
-        <StudentActions studentId={studentId} currentName={studentName} />
-      </div>
-      <div className="contents md:hidden">
-        <Link
-          href="/admin/outbox"
-          className="flex min-h-[52px] w-full items-center justify-between py-3.5 text-[15px] text-foreground"
-          onClick={onClose}
-        >
-          View outbox
-        </Link>
-        <div className="py-2">
-          <StudentActions studentId={studentId} currentName={studentName} />
-        </div>
-      </div>
+      <Button asChild variant="outline" className="min-h-11 w-full justify-start">
+        <Link href="/admin/outbox">Outbox</Link>
+      </Button>
+      <StudentActions studentId={studentId} currentName={studentName} />
     </>
   );
 }

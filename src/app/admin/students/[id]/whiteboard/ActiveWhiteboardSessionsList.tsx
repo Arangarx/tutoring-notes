@@ -19,6 +19,25 @@ export type ActiveWbListItem = {
  * full end-session pipeline), or **Cancel and delete** (destructive,
  * confirm-guarded).
  */
+export function ResumeWhiteboardSessionLink({
+  studentId,
+  sessionId,
+}: {
+  studentId: string;
+  sessionId: string;
+}) {
+  return (
+    <Button asChild variant="accent" className="min-h-11 whitespace-nowrap">
+      <Link
+        href={`/admin/students/${studentId}/whiteboard/${sessionId}/workspace`}
+        data-testid="roster-resume-session"
+      >
+        Resume
+      </Link>
+    </Button>
+  );
+}
+
 export function ActiveWhiteboardSessionsList({
   studentId,
   sessions,
@@ -103,15 +122,7 @@ function RosterRow({
 
       <div className="flex shrink-0 flex-col gap-2 sm:items-end">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Resume — existing continue nav, relabeled */}
-          <Button asChild variant="accent" className="min-h-11 whitespace-nowrap">
-            <Link
-              href={`/admin/students/${studentId}/whiteboard/${session.id}/workspace`}
-              data-testid="roster-resume-session"
-            >
-              Resume
-            </Link>
-          </Button>
+          <ResumeWhiteboardSessionLink studentId={studentId} sessionId={session.id} />
 
           {/* End and review — WS-C server finalize, then straight to review overlay */}
           <Button

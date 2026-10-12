@@ -60,9 +60,7 @@ test.describe("self-learner audio recording off", { tag: [TAG.WB_RECORDING] }, (
       });
 
       await page.goto(`/admin/students/${student.id}`, { waitUntil: "domcontentloaded" });
-      const start = page
-        .getByTestId("student-ready-to-teach-banner")
-        .getByTestId("start-whiteboard-session-btn");
+      const start = page.getByTestId("start-whiteboard-session-btn");
       await expect(start).toBeVisible({ timeout: 20_000 });
       await expect(start).toBeEnabled({ timeout: 20_000 });
       await start.click();

@@ -101,9 +101,7 @@ test.describe("ad-hoc session on family lists", { tag: [TAG.WB_PRESENCE] }, () =
       await tutorPage.goto(`/admin/students/${studentId}`, {
         waitUntil: "domcontentloaded",
       });
-      const startBtn = tutorPage
-        .getByTestId("student-ready-to-teach-banner")
-        .getByTestId("start-whiteboard-session-btn");
+      const startBtn = tutorPage.getByTestId("start-whiteboard-session-btn");
       await expect(startBtn).toBeVisible();
       await expect(startBtn).toBeEnabled();
       await startBtn.click();

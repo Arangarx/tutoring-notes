@@ -1,6 +1,5 @@
 /**
- * ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER — phone bottom tabs must be discoverable;
- * Notes tab reveals the notes panel (relational visibility oracles).
+ * Phone student page: Notes leaves the page and stays inside the column.
  *
  * Run:
  *   npx playwright test tests/integration/admin-student-detail-mobile-tabs.spec.ts --project=integration
@@ -12,11 +11,11 @@ import { seedTestAdmin, seedTestStudent } from "../visual/helpers";
 
 const PHONE_VIEWPORT = { width: 390, height: 844 };
 
-test.describe("Admin student detail — mobile tabs", () => {
+test.describe("Admin student detail — mobile notes", () => {
   test.use({ viewport: PHONE_VIEWPORT });
 
   test(
-    "phone Notes tab reveals notes panel and bottom nav stays in viewport",
+    "phone Notes link stays inside the page column and opens the paste-a-note form",
     { tag: [TAG.WB_CHROME] },
     async ({ page }) => {
       const adminUserId = await seedTestAdmin();
@@ -30,46 +29,31 @@ test.describe("Admin student detail — mobile tabs", () => {
         timeout: 15_000,
       });
 
-      const mobileTabs = page.getByTestId("student-detail-mobile-tabs");
-      await expect(mobileTabs).toBeVisible();
+      const column = page.getByTestId("student-detail-column");
+      const notes = page.getByTestId("student-notes-link");
+      await expect(notes).toBeVisible();
+      await notes.scrollIntoViewIfNeeded();
 
-      // Bottom tab bar anchored in viewport — not clipped off-screen.
-      const navMetrics = await mobileTabs.evaluate((nav) => {
-        const rect = nav.getBoundingClientRect();
-        return {
-          top: rect.top,
-          bottom: rect.bottom,
-          viewportHeight: window.innerHeight,
-        };
-      });
-      expect(navMetrics.bottom).toBeLessThanOrEqual(navMetrics.viewportHeight + 2);
-      expect(navMetrics.top).toBeGreaterThan(navMetrics.viewportHeight * 0.82);
+      const columnBox = await column.boundingBox();
+      const notesBox = await notes.boundingBox();
+      const viewport = page.viewportSize();
+      expect(columnBox).not.toBeNull();
+      expect(notesBox).not.toBeNull();
+      expect(viewport).not.toBeNull();
 
-      await expect(page.getByTestId("student-detail-tab-parent")).toHaveText(/Parent/i);
+      // Inside the column, and not clipped by the viewport after scrolling it into view.
+      expect(notesBox!.x).toBeGreaterThanOrEqual(columnBox!.x - 4);
+      expect(notesBox!.x + notesBox!.width).toBeLessThanOrEqual(columnBox!.x + columnBox!.width + 4);
+      expect(notesBox!.y).toBeGreaterThanOrEqual(-4);
+      expect(notesBox!.y + notesBox!.height).toBeLessThanOrEqual(viewport!.height + 4);
 
-      // Each bottom tab shows a visible icon (same slot as Parent Users icon).
-      for (const tabId of ["session", "share", "notes", "parent"] as const) {
-        const tab = page.getByTestId(`student-detail-tab-${tabId}`);
-        const icon = tab.locator("svg").first();
-        await expect(icon).toBeVisible();
-        const iconBox = await icon.boundingBox();
-        expect(iconBox?.width ?? 0).toBeGreaterThan(12);
-        expect(iconBox?.height ?? 0).toBeGreaterThan(12);
-      }
-
-      await expect(page.getByTestId("student-detail-panel-session")).toBeVisible();
-      await expect(page.getByTestId("student-detail-panel-notes")).toBeHidden();
-
-      await page.getByTestId("student-detail-tab-notes").click();
-      const notesPanel = page.getByTestId("student-detail-panel-notes");
-      await expect(notesPanel).toBeVisible();
-      await expect(notesPanel.getByTestId("new-note-form")).toBeVisible();
-      await expect(page.getByTestId("student-detail-panel-session")).toBeHidden();
+      await notes.click();
+      await expect(page.getByTestId("new-note-form")).toBeVisible();
     }
   );
 
   test(
-    "phone session escape hatch opens notes panel",
+    "phone session column leaves the page to open notes",
     { tag: [TAG.WB_CHROME] },
     async ({ page }) => {
       const adminUserId = await seedTestAdmin();
@@ -82,22 +66,22 @@ test.describe("Admin student detail — mobile tabs", () => {
       await expect(page.getByRole("heading", { name: "Playwright Student" })).toBeVisible({
         timeout: 15_000,
       });
-      await expect(page.getByTestId("student-detail-tab-session")).toHaveAttribute(
-        "aria-selected",
-        "true"
-      );
+      await expect(page.getByTestId("new-note-form")).toHaveCount(0);
 
-      const sessionPanel = page.getByTestId("student-detail-panel-session");
-      await expect(sessionPanel.getByTestId("session-tab-escape-hatches")).toBeVisible();
-      await sessionPanel.getByTestId("session-escape-view-notes").click();
+      const column = page.getByTestId("student-detail-column");
+      const session = page.getByTestId("student-session-card");
+      const notes = column.getByTestId("student-notes-link");
+      await notes.scrollIntoViewIfNeeded();
+      const sessionBox = await session.boundingBox();
+      const notesBox = await notes.boundingBox();
+      expect(sessionBox).not.toBeNull();
+      expect(notesBox).not.toBeNull();
+      // Notes sits below the session card in the same column.
+      expect(notesBox!.y).toBeGreaterThanOrEqual(sessionBox!.y + sessionBox!.height - 4);
+      expect(Math.abs(notesBox!.x - sessionBox!.x)).toBeLessThanOrEqual(8);
 
-      await expect(page.getByTestId("student-detail-tab-notes")).toHaveAttribute(
-        "aria-selected",
-        "true"
-      );
-      const notesPanel = page.getByTestId("student-detail-panel-notes");
-      await expect(notesPanel).toBeVisible();
-      await expect(notesPanel.getByTestId("new-note-form")).toBeVisible();
+      await notes.click();
+      await expect(page.getByTestId("new-note-form")).toBeVisible();
     }
   );
 });

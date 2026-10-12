@@ -232,11 +232,9 @@ test.describe(
             '[data-testid="start-whiteboard-session-btn"]:visible'
           );
           await expect(visibleStarts).toHaveCount(1);
-          const newSessionBtn = tutorPage
-            .getByTestId("student-ready-to-teach-banner")
-            .getByTestId("start-whiteboard-session-btn");
+          const newSessionBtn = tutorPage.getByTestId("start-whiteboard-session-btn");
           await expect(newSessionBtn).toBeVisible();
-          await expect(newSessionBtn).toHaveText("Start whiteboard session");
+          await expect(newSessionBtn).toHaveText("Start session");
           await expect(newSessionBtn).toBeEnabled();
           await newSessionBtn.click();
 

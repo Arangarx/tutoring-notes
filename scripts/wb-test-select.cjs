@@ -66,6 +66,10 @@ const PATH_RULES = [
     tags: [TAG.WB_CHROME],
   },
   {
+    re: /student-detail-view|StudentCriticalCard|StudentAccountSharing|StudentDetailShell|admin-student-detail-stage6|admin\/students\/\[id\]\/(?:page|account|notes)/,
+    tags: [TAG.WB_CHROME],
+  },
+  {
     re: /calendar-sync-badge|calendar-oauth-connect|CalendarIntegrationsPanel|calendar-oauth-return|scheduled-session-utc/i,
     tags: [TAG.WB_CHROME],
   },
