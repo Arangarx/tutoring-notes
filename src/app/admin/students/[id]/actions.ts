@@ -23,6 +23,7 @@ import { createActionCorrelationId } from "@/lib/action-correlation";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import { orgNotesSaveAllowed } from "@/lib/whiteboard-scope";
 
 const HALLUCINATION_MIC_MESSAGE =
   "We couldn't detect clear speech in this recording. Whisper sometimes invents text when the mic picks up silence or the wrong device. Check the browser's microphone permission, choose the correct input, speak for at least 15–20 seconds, then try again. You can also use Upload and pick a file from another recorder.";
@@ -810,6 +811,13 @@ export async function setNoteStatus(noteId: string, studentId: string, status: "
   await assertOwnsMutableStudent(studentId);
   const row = await db.sessionNote.findFirst({ where: { id: noteId, studentId } });
   if (!row) return;
+  if (status === "READY") {
+    const forbiddenSession = await db.whiteboardSession.findFirst({
+      where: { noteId, notesForbidden: true },
+      select: { notesForbidden: true },
+    });
+    if (forbiddenSession && !orgNotesSaveAllowed(forbiddenSession)) return;
+  }
   await db.sessionNote.update({ where: { id: noteId }, data: { status } });
   revalidatePath(`/admin/students/${studentId}`);
   revalidatePath(`/admin/students/${studentId}/notes`);

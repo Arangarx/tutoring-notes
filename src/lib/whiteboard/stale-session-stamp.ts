@@ -3,11 +3,14 @@ import type { Prisma } from "@prisma/client";
 /**
  * The stale end stamp: set endedAt, participant leftAt, revoke join tokens.
  * Leaves eventsBlobUrl. A second call does not move endedAt.
+ * `notesForbidden` is the org "End it now, and no notes" flag, written in
+ * the same update as endedAt. Callers that omit it leave the column false.
  */
 export async function stampStaleWhiteboardSessionEnd(
   tx: Prisma.TransactionClient,
   whiteboardSessionId: string,
-  now: Date
+  now: Date,
+  notesForbidden = false
 ): Promise<{ endedAt: Date; durationSeconds: number } | null> {
   const existing = await tx.whiteboardSession.findUnique({
     where: { id: whiteboardSessionId },
@@ -26,7 +29,11 @@ export async function stampStaleWhiteboardSessionEnd(
   );
   const updated = await tx.whiteboardSession.updateMany({
     where: { id: whiteboardSessionId, endedAt: null },
-    data: { endedAt: now, durationSeconds },
+    data: {
+      endedAt: now,
+      durationSeconds,
+      ...(notesForbidden ? { notesForbidden: true } : {}),
+    },
   });
   if (updated.count === 0) {
     const raced = await tx.whiteboardSession.findUnique({

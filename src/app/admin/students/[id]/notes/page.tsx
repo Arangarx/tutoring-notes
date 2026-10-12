@@ -127,7 +127,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
         },
         whiteboardSessions: {
           orderBy: { startedAt: "desc" },
-          select: { id: true },
+          select: { id: true, notesForbidden: true },
         },
       },
     }),
@@ -289,6 +289,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
                     noteId={n.id}
                     studentId={student.id}
                     status={n.status}
+                    notesForbidden={n.whiteboardSessions.some((session) => session.notesForbidden)}
                     sentAt={n.sentAt ? n.sentAt.toISOString() : null}
                     defaultValues={{
                       date: formatDateOnlyInput(n.date),

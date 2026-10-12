@@ -291,6 +291,7 @@ export async function saveSessionNotesAction(
 ): Promise<SaveSessionNoteResult> {
   try {
     const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    // notesForbidden leaves SessionNote.status unchanged, even inside 7 days.
     if (!orgNotesSaveAllowed(session)) {
       return { ok: false, error: "Notes can no longer be saved for this session." };
     }

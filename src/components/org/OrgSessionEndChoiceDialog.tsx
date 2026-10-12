@@ -14,12 +14,16 @@ import {
 export const ORG_END_CHOICE_WARNING =
   "Let it finish, or end it now. Ending it now still lets the tutor finalize notes inside the seven-day window.";
 
+/** Proposed. Andrew has not accepted this sentence. */
+export const ORG_END_NO_NOTES_WARNING =
+  "No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used.";
+
 /**
  * The dialog portals outside the form. A submit button with the HTML form
  * attribute does not carry a Next.js server action, so the choice is written
  * onto a submitter inside the form and that form is submitted.
  */
-function submitOrgEndChoice(formId: string, choice: "finish" | "now") {
+function submitOrgEndChoice(formId: string, choice: "finish" | "now" | "no-notes") {
   const form = document.getElementById(formId);
   if (!(form instanceof HTMLFormElement)) return;
   const choiceInput = form.querySelector('input[name="choice"]');
@@ -52,6 +56,9 @@ export function OrgSessionEndChoiceDialog({
             {ORG_END_CHOICE_WARNING}
           </DialogDescription>
         </DialogHeader>
+        <p className="text-sm text-muted-foreground" data-testid="org-end-no-notes-warning">
+          {ORG_END_NO_NOTES_WARNING}
+        </p>
         <DialogFooter>
           <Button
             type="button"
@@ -66,7 +73,15 @@ export function OrgSessionEndChoiceDialog({
             data-testid="org-end-it-now"
             onClick={() => submitOrgEndChoice(formId, "now")}
           >
-            End it now
+            End it now (notes still allowed for 7 days)
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            data-testid="org-end-no-notes"
+            onClick={() => submitOrgEndChoice(formId, "no-notes")}
+          >
+            End it now, and no notes
           </Button>
         </DialogFooter>
       </DialogContent>

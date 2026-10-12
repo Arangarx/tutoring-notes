@@ -1,5 +1,5 @@
 /**
- * Org sales stage 5 — removal and suspension pills, the two-choice warning,
+ * Org sales stage 5 — removal and suspension pills, the three end choices,
  * notes after removal, and a late segment after End it now.
  * Tags: @wb-chrome @wb-presence
  */
@@ -26,6 +26,8 @@ const STUDENT_SENTENCE =
   "This session will end soon. The organization that set up this tutoring has changed who teaches it.";
 const SUSPENSION_SENTENCE =
   "This session will end soon because the organization that set up this tutoring has had its account suspended.";
+const NO_NOTES_WARNING =
+  "No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used.";
 
 function uniq(label: string): string {
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -382,7 +384,10 @@ test.describe("org removal and suspension", { tag: [TAG.WB_CHROME, TAG.WB_PRESEN
     await operatorSession.page.goto(`/admin/orgs/${org.id}`);
     await operatorSession.page.getByTestId("org-suspend").click();
     await expect(operatorSession.page.getByTestId("org-session-end-warning")).toBeVisible();
-    await expect(operatorSession.page.getByRole("button", { name: "no notes" })).toHaveCount(0);
+    await expect(
+      operatorSession.page.getByRole("button", { name: "End it now, and no notes", exact: true })
+    ).toBeVisible();
+    await expect(operatorSession.page.getByText(NO_NOTES_WARNING)).toBeVisible();
     await operatorSession.page.getByTestId("org-let-it-finish").click();
     await expect
       .poll(async () => {
@@ -556,6 +561,58 @@ test.describe("org removal and suspension", { tag: [TAG.WB_CHROME, TAG.WB_PRESEN
 
     const after = await prisma.whiteboardSession.findUniqueOrThrow({ where: { id: session.id } });
     expect(after.endedAt!.toISOString()).toBe(endedAt);
+    await tutor.context.close();
+  });
+
+  test("End it now, and no notes shows the proposed warning and finalize leaves DRAFT", async ({
+    browser,
+  }) => {
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id);
+    const learner = await seedLearner(org.id, owner.id);
+    const { session, note } = await seedLiveSession({
+      adminUserId: instructor.id,
+      studentId: learner.student.id,
+      learnerProfileId: learner.profile.id,
+      topics: "No notes from this session",
+    });
+
+    const ownerSession = await signIn(browser, owner);
+    await ownerSession.page.goto(`/admin/organization/${org.id}`);
+    await ownerSession.page.getByTestId(`org-remove-${instructor.id}`).click();
+    await expect(
+      ownerSession.page.getByRole("button", { name: "End it now, and no notes", exact: true })
+    ).toBeVisible();
+    await expect(ownerSession.page.getByText(NO_NOTES_WARNING)).toBeVisible();
+    await ownerSession.page
+      .getByRole("button", { name: "End it now, and no notes", exact: true })
+      .click();
+    await expect
+      .poll(async () => {
+        const row = await prisma.whiteboardSession.findUnique({
+          where: { id: session.id },
+          select: { endedAt: true, notesForbidden: true },
+        });
+        return row?.notesForbidden === true && row.endedAt != null;
+      })
+      .toBe(true);
+    await ownerSession.context.close();
+
+    const tutor = await signIn(browser, instructor);
+    const notes = await tutor.page.goto(`/admin/students/${learner.student.id}/notes`);
+    expect(notes?.status()).not.toBe(404);
+    await expect(tutor.page.getByText("No notes from this session")).toBeVisible();
+    await expect(tutor.page.getByRole("button", { name: "Mark ready" })).toHaveCount(0);
+    await tutor.page.goto(
+      `/admin/students/${learner.student.id}/whiteboard/${session.id}/workspace`
+    );
+    await expect(tutor.page.getByTestId("wb-session-review-mode")).toBeVisible();
+    await tutor.page.getByTestId("wb-save-note").click();
+    await tutor.page.goto(`/admin/students/${learner.student.id}/notes`);
+    await expect(tutor.page.getByText("No notes from this session")).toBeVisible();
+    await expect(tutor.page.getByText("Status: DRAFT")).toBeVisible();
+    const stored = await prisma.sessionNote.findUniqueOrThrow({ where: { id: note.id } });
+    expect(stored.status).toBe("DRAFT");
     await tutor.context.close();
   });
 });

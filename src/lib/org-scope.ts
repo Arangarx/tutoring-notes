@@ -22,6 +22,16 @@ import { requireStudentScope } from "@/lib/student-scope";
 import { approveTutor, revokeTutorApproval } from "@/lib/tutor-approval-scope";
 import { stampStaleWhiteboardSessionEnd } from "@/lib/whiteboard/stale-session-stamp";
 
+export type OrgLiveSessionEndChoice = "finish" | "now" | "no-notes";
+
+/** Form value for the removal and suspension dialogs. Anything else is Let it finish. */
+export function readOrgLiveSessionEndChoice(
+  value: FormDataEntryValue | null
+): OrgLiveSessionEndChoice {
+  if (value === "now" || value === "no-notes") return value;
+  return "finish";
+}
+
 export class OrgMutationError extends Error {
   readonly code:
     | "empty_roles"
@@ -635,7 +645,7 @@ export async function loadOrgStaffHome(organizationId: string): Promise<OrgStaff
 export async function setOrganizationStatus(
   organizationId: string,
   status: "pending" | "active" | "suspended",
-  choice: "finish" | "now" = "finish"
+  choice: OrgLiveSessionEndChoice = "finish"
 ): Promise<void> {
   const operator = await requireOperator();
   const effectiveChoice = status === "pending" ? "finish" : choice;
@@ -645,7 +655,10 @@ export async function setOrganizationStatus(
       where: { id: organizationId },
       data: { status, statusChangedAt: stampedAt },
     });
-    if (status !== "active" && effectiveChoice === "now") {
+    if (
+      status !== "active" &&
+      (effectiveChoice === "now" || effectiveChoice === "no-notes")
+    ) {
       const open = await tx.whiteboardSession.findMany({
         where: {
           endedAt: null,
@@ -654,7 +667,12 @@ export async function setOrganizationStatus(
         select: { id: true },
       });
       for (const session of open) {
-        await stampStaleWhiteboardSessionEnd(tx, session.id, stampedAt);
+        await stampStaleWhiteboardSessionEnd(
+          tx,
+          session.id,
+          stampedAt,
+          effectiveChoice === "no-notes"
+        );
       }
     }
   });
@@ -1009,7 +1027,7 @@ export async function setOrgMemberRoles(
 export async function removeOrgMember(
   organizationId: string,
   targetAdminUserId: string,
-  choice: "finish" | "now" = "finish"
+  choice: OrgLiveSessionEndChoice = "finish"
 ): Promise<void> {
   const actor = await assertOrgRole(organizationId, ["owner", "admin"]);
   const protectedAppointments = await db.scheduledSession.findMany({
@@ -1050,7 +1068,7 @@ export async function removeOrgMember(
       where: { id: target.id },
       data: { removedAt: stampedAt },
     });
-    if (choice === "now") {
+    if (choice === "now" || choice === "no-notes") {
       const open = await tx.whiteboardSession.findMany({
         where: {
           adminUserId: targetAdminUserId,
@@ -1060,7 +1078,12 @@ export async function removeOrgMember(
         select: { id: true },
       });
       for (const session of open) {
-        await stampStaleWhiteboardSessionEnd(tx, session.id, stampedAt);
+        await stampStaleWhiteboardSessionEnd(
+          tx,
+          session.id,
+          stampedAt,
+          choice === "no-notes"
+        );
       }
     }
     return stampedAt;

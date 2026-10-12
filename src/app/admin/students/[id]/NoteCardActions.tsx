@@ -24,6 +24,8 @@ interface NoteCardActionsProps {
   };
   status: string;
   sentAt: string | null;
+  /** Linked whiteboard session was ended with "End it now, and no notes". */
+  notesForbidden: boolean;
 }
 
 export function NoteCardActions({
@@ -32,6 +34,7 @@ export function NoteCardActions({
   defaultValues,
   status,
   sentAt,
+  notesForbidden,
 }: NoteCardActionsProps) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -127,15 +130,15 @@ export function NoteCardActions({
 
   return (
     <div className="row" style={{ flexWrap: "wrap" }}>
-      {status !== "READY" ? (
+      {status !== "READY" && !notesForbidden ? (
         <form action={setNoteStatus.bind(null, noteId, studentId, "READY")}>
           <button className="btn" type="submit">Mark ready</button>
         </form>
-      ) : (
+      ) : status === "READY" ? (
         <form action={setNoteStatus.bind(null, noteId, studentId, "DRAFT")}>
           <button className="btn" type="submit">Mark draft</button>
         </form>
-      )}
+      ) : null}
       <button className="btn" type="button" onClick={() => setEditing(true)}>Edit</button>
       <button
         className="btn"

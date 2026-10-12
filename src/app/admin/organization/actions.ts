@@ -8,6 +8,7 @@ import { sendOrgInviteEmail } from "@/lib/org-invite-mail";
 import {
   OrgMutationError,
   createOrgInvite,
+  readOrgLiveSessionEndChoice,
   removeOrgMember,
   revokeOrgInvite,
   setOrgMemberRoles,
@@ -82,7 +83,7 @@ export async function removeStaffMemberAction(formData: FormData): Promise<void>
   const organizationId = String(formData.get("organizationId") ?? "");
   const adminUserId = String(formData.get("adminUserId") ?? "");
   try {
-    const choice = formData.get("choice") === "now" ? "now" : "finish";
+    const choice = readOrgLiveSessionEndChoice(formData.get("choice"));
     await removeOrgMember(organizationId, adminUserId, choice);
   } catch (err) {
     if (err instanceof OrgMutationError) staffHome(organizationId, err.code);

@@ -6,6 +6,7 @@ import { safeRelativeReturnPath } from "@/lib/safe-return-path";
 import {
   OrgMutationError,
   createOrganization,
+  readOrgLiveSessionEndChoice,
   resolveVerifiedOrgOwner,
   revokeOrgGrantedApprovals,
   setOrganizationCaps,
@@ -69,7 +70,7 @@ export async function createOrganizationByOwnerEmailAction(formData: FormData): 
 
 export async function suspendOrganizationAction(formData: FormData): Promise<void> {
   const organizationId = String(formData.get("organizationId") ?? "");
-  const choice = formData.get("choice") === "now" ? "now" : "finish";
+  const choice = readOrgLiveSessionEndChoice(formData.get("choice"));
   await setOrganizationStatus(organizationId, "suspended", choice);
   const returnTo = safeRelativeReturnPath(String(formData.get("returnTo") ?? ""));
   redirect(returnTo ?? operatorOrgPath(organizationId));

@@ -46,10 +46,12 @@ jest.mock("@/lib/calendar/google-calendar-write", () => ({
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { db } from "@/lib/db";
-import { removeOrgMember } from "@/lib/org-scope";
+import { env } from "@/lib/env";
+import { removeOrgMember, setOrganizationStatus } from "@/lib/org-scope";
 import { orgForceEndDeadline } from "@/lib/org-session-access";
 import { endWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
 import { saveSessionNotesAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { setNoteStatus } from "@/app/admin/students/[id]/actions";
 import { startWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
 import { getOrCreateWhiteboardForSchedule } from "@/lib/whiteboard/schedule-bridge";
 import { listScheduledSessionsForOrganization } from "@/app/admin/schedule/actions";
@@ -177,6 +179,7 @@ async function seedTaughtSession(input: {
   topics?: string;
   phase?: "PENDING" | "ACTIVE";
   scheduledSessionId?: string;
+  notesForbidden?: boolean;
 }) {
   const note = await db.sessionNote.create({
     data: {
@@ -198,6 +201,7 @@ async function seedTaughtSession(input: {
       eventsBlobUrl: "https://blob.vercel-storage.com/events.json",
       sessionPhase: input.phase ?? "ACTIVE",
       endedAt: input.endedAt,
+      ...(input.notesForbidden ? { notesForbidden: true } : {}),
       noteId: note.id,
       scheduledSessionId: input.scheduledSessionId,
       activatedAt: input.phase === "PENDING" ? null : new Date(),
@@ -272,6 +276,28 @@ async function expectSecondEndRejected(sessionId: string, noteId: string) {
   });
   expect(afterSession.endedAt?.toISOString()).toBe(beforeSession.endedAt?.toISOString());
   expect(afterSession.eventsBlobUrl).toBe(beforeSession.eventsBlobUrl);
+}
+
+function mockOperator() {
+  const email = env.ADMIN_EMAIL;
+  if (!email) throw new Error("ADMIN_EMAIL is required to suspend an organization");
+  mockSession(email, "operator-session");
+}
+
+async function reviewPageResult(studentId: string, sessionId: string): Promise<string> {
+  const { default: WhiteboardReviewPage } = await import(
+    "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/page"
+  );
+  try {
+    await WhiteboardReviewPage({
+      params: Promise.resolve({ id: studentId, whiteboardSessionId: sessionId }),
+    });
+    return "RENDERED";
+  } catch (err) {
+    if (err instanceof Error && err.message === "NEXT_NOT_FOUND") return "NOT_FOUND";
+    if (err instanceof Error && err.message.startsWith("NEXT_REDIRECT:")) return "REDIRECT";
+    throw err;
+  }
 }
 
 async function notesPageHtml(studentId: string): Promise<string> {
@@ -908,5 +934,149 @@ describe("a normal end inside Let it finish does not accept a second End", () =>
     });
     mockSession(instructor.email, instructor.id);
     await expectSecondEndRejected(session.id, note.id);
+  });
+});
+
+describe("End it now, and no notes", () => {
+  it("notesForbidden true and endedAt one minute ago keeps the notes page and the review page, and save leaves DRAFT", async () => {
+    const { org, owner } = await seedOrg("active");
+    const instructor = await seedMember(org.id, ["instructor"], { removedAt: new Date() });
+    const { student } = await seedOrgLearner(org.id, owner.id);
+    const endedAt = new Date(Date.now() - MINUTE_MS);
+    const { session, note } = await seedTaughtSession({
+      adminUserId: instructor.id,
+      studentId: student.id,
+      endedAt,
+      topics: "No notes from this session",
+      notesForbidden: true,
+    });
+    mockSession(instructor.email, instructor.id);
+
+    const html = await notesPageHtml(student.id);
+    expect(html).not.toBe("NOT_FOUND");
+    expect(html).toContain("No notes from this session");
+    expect(await reviewPageResult(student.id, session.id)).not.toBe("NOT_FOUND");
+
+    await saveSessionNotesAction(session.id, {
+      topics: "No notes from this session",
+      assessment: "Changed",
+      nextSteps: "Nope",
+      links: "",
+    });
+    const row = await db.sessionNote.findUniqueOrThrow({ where: { id: note.id } });
+    expect(row.status).toBe("DRAFT");
+  });
+
+  it("setNoteStatus READY on a notesForbidden session leaves status DRAFT", async () => {
+    const tutor = await seedAdmin("notes-forbidden-tutor");
+    const student = await db.student.create({
+      data: { name: "Notes forbidden learner", adminUserId: tutor.id },
+    });
+    const { note } = await seedTaughtSession({
+      adminUserId: tutor.id,
+      studentId: student.id,
+      endedAt: new Date(Date.now() - MINUTE_MS),
+      notesForbidden: true,
+    });
+    mockSession(tutor.email, tutor.id);
+
+    await setNoteStatus(note.id, student.id, "READY");
+    const row = await db.sessionNote.findUniqueOrThrow({ where: { id: note.id } });
+    expect(row.status).toBe("DRAFT");
+  });
+
+  it("End it now with notes leaves notesForbidden false and moves DRAFT to READY inside 7 days", async () => {
+    const { org, owner } = await seedOrg("active");
+    const instructor = await seedMember(org.id, ["instructor"]);
+    const { student } = await seedOrgLearner(org.id, owner.id);
+    const { session, note } = await seedTaughtSession({
+      adminUserId: instructor.id,
+      studentId: student.id,
+      endedAt: null,
+      topics: "Notes still allowed",
+    });
+    mockSession(owner.email, owner.id);
+    await removeOrgMember(org.id, instructor.id, "now");
+    const member = await db.organizationMember.findUniqueOrThrow({
+      where: {
+        organizationId_adminUserId: { organizationId: org.id, adminUserId: instructor.id },
+      },
+    });
+    const stamped = await db.whiteboardSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(stamped.notesForbidden).toBe(false);
+    expect(stamped.endedAt).not.toBeNull();
+    expect(stamped.endedAt!.getTime()).toBe(member.removedAt!.getTime());
+    expect(Date.now() - stamped.endedAt!.getTime()).toBeLessThan(SEVEN_DAYS_MS);
+
+    mockSession(instructor.email, instructor.id);
+    const saved = await saveSessionNotesAction(session.id, {
+      topics: "Notes still allowed",
+      assessment: "Steady",
+      nextSteps: "Practice",
+      links: "",
+    });
+    expect(saved.ok).toBe(true);
+    const row = await db.sessionNote.findUniqueOrThrow({ where: { id: note.id } });
+    expect(row.status).toBe("READY");
+  });
+
+  it("choice 3 sets notesForbidden and endedAt to the removal instant, and a later activation does not clear it", async () => {
+    const { org, owner } = await seedOrg("active");
+    const instructor = await seedMember(org.id, ["instructor"]);
+    const { student } = await seedOrgLearner(org.id, owner.id);
+    const removed = await seedTaughtSession({
+      adminUserId: instructor.id,
+      studentId: student.id,
+      endedAt: null,
+      topics: "Removed with no notes",
+    });
+    mockSession(owner.email, owner.id);
+    await removeOrgMember(org.id, instructor.id, "no-notes");
+    const member = await db.organizationMember.findUniqueOrThrow({
+      where: {
+        organizationId_adminUserId: { organizationId: org.id, adminUserId: instructor.id },
+      },
+    });
+    const afterRemoval = await db.whiteboardSession.findUniqueOrThrow({
+      where: { id: removed.session.id },
+    });
+    expect(afterRemoval.notesForbidden).toBe(true);
+    expect(member.removedAt).not.toBeNull();
+    expect(afterRemoval.endedAt).not.toBeNull();
+    expect(afterRemoval.endedAt!.getTime()).toBe(member.removedAt!.getTime());
+
+    const { org: suspendedOrg, owner: suspendedOwner } = await seedOrg("active");
+    const suspendedInstructor = await seedMember(suspendedOrg.id, ["instructor"]);
+    const suspendedLearner = await seedOrgLearner(suspendedOrg.id, suspendedOwner.id);
+    const suspended = await seedTaughtSession({
+      adminUserId: suspendedInstructor.id,
+      studentId: suspendedLearner.student.id,
+      endedAt: null,
+      topics: "Suspended with no notes",
+    });
+    mockOperator();
+    await setOrganizationStatus(suspendedOrg.id, "suspended", "no-notes");
+    const orgRow = await db.organization.findUniqueOrThrow({ where: { id: suspendedOrg.id } });
+    const afterSuspend = await db.whiteboardSession.findUniqueOrThrow({
+      where: { id: suspended.session.id },
+    });
+    expect(afterSuspend.notesForbidden).toBe(true);
+    expect(afterSuspend.endedAt).not.toBeNull();
+    expect(afterSuspend.endedAt!.getTime()).toBe(orgRow.statusChangedAt.getTime());
+
+    await setOrganizationStatus(suspendedOrg.id, "active");
+    const afterActive = await db.whiteboardSession.findUniqueOrThrow({
+      where: { id: suspended.session.id },
+    });
+    expect(afterActive.notesForbidden).toBe(true);
+    mockSession(suspendedInstructor.email, suspendedInstructor.id);
+    await saveSessionNotesAction(suspended.session.id, {
+      topics: "Suspended with no notes",
+      assessment: "Changed",
+      nextSteps: "Nope",
+      links: "",
+    });
+    const note = await db.sessionNote.findUniqueOrThrow({ where: { id: suspended.note.id } });
+    expect(note.status).toBe("DRAFT");
   });
 });

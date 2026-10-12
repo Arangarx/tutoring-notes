@@ -26,6 +26,8 @@ export type AuthorisedWhiteboardSession = {
   consentAcknowledged: boolean;
   eventsBlobUrl: string;
   endedAt: Date | null;
+  /** Org "End it now, and no notes". Personal sessions stay false. */
+  notesForbidden: boolean;
   /** Set for an org-owned student. Personal students leave this null. */
   organizationId: string | null;
   orgAccess:
@@ -54,6 +56,7 @@ export async function assertOwnsWhiteboardSession(
           consentAcknowledged: true,
           eventsBlobUrl: true,
           endedAt: true,
+          notesForbidden: true,
           student: { select: { adminUserId: true, organizationId: true } },
         },
       }),
@@ -87,6 +90,7 @@ export async function assertOwnsWhiteboardSession(
     consentAcknowledged: session.consentAcknowledged,
     eventsBlobUrl: session.eventsBlobUrl,
     endedAt: session.endedAt,
+    notesForbidden: session.notesForbidden,
     organizationId: orgOwned ? (session.student.organizationId as string) : null,
     orgAccess,
   };
@@ -101,10 +105,16 @@ export function orgBoardEditsAllowed(session: {
   return access.mode === "read-write";
 }
 
-/** Finalize stays open through the seven-day window. A later save does not write. */
+/**
+ * Finalize stays open through the seven-day window. A later save does not write.
+ * notesForbidden blocks the status change even inside that window, including
+ * after the organization is set back to active.
+ */
 export function orgNotesSaveAllowed(session: {
+  notesForbidden?: boolean;
   orgAccess?: AuthorisedWhiteboardSession["orgAccess"];
 }): boolean {
+  if (session.notesForbidden) return false;
   const access = session.orgAccess;
   if (!access || access.kind !== "org") return true;
   if (access.mode === "read-write") return true;

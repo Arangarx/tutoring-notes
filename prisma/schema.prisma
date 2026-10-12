@@ -392,6 +392,8 @@ model WhiteboardSession {
 
   startedAt       DateTime  @default(now())
   endedAt         DateTime?
+  /// Org "End it now, and no notes". Stays true if the organization is later set back to active.
+  notesForbidden  Boolean   @default(false)
   durationSeconds Int?
 
   sessionPhase SessionPhase @default(PENDING)
