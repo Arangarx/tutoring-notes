@@ -62,15 +62,27 @@ export function ParentShareNoteCard(props: {
   dateLabel: string;
   note: ParentShareNoteModel;
   isNew: boolean;
+  /**
+   * When set, these are the only whiteboard replays to link. The parent notes
+   * page passes ended, consent-allowed session ids. Omit on the share page,
+   * which keeps deriving ids from the note.
+   */
+  replaySessionIds?: string[];
 }) {
   const { token, dateLabel, note, isNew } = props;
   const links = safeJsonArray(note.linksJson);
 
-  const whiteboardReplayIds = orderedUnique([
+  const linkedWhiteboardIds = orderedUnique([
     ...note.whiteboardSessions.map((w) => w.id),
     ...note.recordings.map((r) => r.whiteboardSessionId ?? null),
   ]);
-  const hasLinkedWhiteboard = whiteboardReplayIds.length > 0;
+  const whiteboardReplayIds =
+    props.replaySessionIds !== undefined
+      ? orderedUnique(props.replaySessionIds)
+      : linkedWhiteboardIds;
+  const tokenOk = token.trim().length > 0;
+  const showWhiteboardLinks = tokenOk && whiteboardReplayIds.length > 0;
+  const hasLinkedWhiteboard = linkedWhiteboardIds.length > 0;
   const exposeRecordingToParent =
     note.shareRecordingInEmail || hasLinkedWhiteboard;
   const audioUrls =
@@ -78,7 +90,7 @@ export function ParentShareNoteCard(props: {
       ? note.recordings.map((r) => `/api/audio/${r.id}?token=${token}`)
       : [];
 
-  const hasActions = hasLinkedWhiteboard || audioUrls.length > 0;
+  const hasActions = showWhiteboardLinks || audioUrls.length > 0;
 
   return (
     <article
@@ -142,7 +154,7 @@ export function ParentShareNoteCard(props: {
       {hasActions ? (
         <div className="mt-3.5 flex flex-col gap-3 border-t border-border/60 pt-3">
           <div className="flex flex-wrap gap-2">
-            {hasLinkedWhiteboard ? (
+            {showWhiteboardLinks ? (
               <div
                 className="flex flex-wrap gap-2"
                 data-testid="share-wb-replay-links"

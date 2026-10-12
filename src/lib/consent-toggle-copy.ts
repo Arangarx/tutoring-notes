@@ -75,8 +75,8 @@ export const CONSENT_DECLINE_WARNING = {
     "Until you set preferences, your child cannot participate in live tutoring sessions with this tutor. You can update preferences any time from your account dashboard.",
   /** Pending-invite warning for the person whose own sessions these are. */
   selfLearnerPending:
-    "If you continue without enabling any options, you will not be able to join the live tutoring session you have already been invited to. You can turn each part on later in Settings.",
+    "Consent has not been given yet. You cannot join a session until you give consent, including the live tutoring session you have already been invited to. Open Manage, then Privacy.",
   /** No consent yet. Does not address a parent. */
   selfLearner:
-    "No consent is recorded yet. You will not be able to join a session until you record it. You can turn each part on later in Settings.",
+    "Consent has not been given yet. You cannot join a session until you give consent. Open Manage, then Privacy.",
 } as const;

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { test as setup, request } from "@playwright/test";
+import { test as setup, request, expect } from "@playwright/test";
 import { TEST_ADMIN, TEST_LEARNER, seedTestAdmin, seedTestStudent, seedTestLearner } from "../visual/helpers";
 import {
   TEST_PARENT,
@@ -34,13 +34,16 @@ setup("authenticate tutor storageState + seed learner credentials", async ({
   await page.getByLabel(/email/i).fill(TEST_ADMIN.email);
   await page.getByLabel(/password/i).fill(TEST_ADMIN.password);
   await page.getByRole("button", { name: /^(sign in|log in)$/i }).click();
-  await page.waitForURL(
-    (url) =>
-      url.pathname.startsWith("/admin") &&
-      !url.pathname.startsWith("/admin/settings/2fa") &&
-      url.pathname !== "/admin/pending-approval",
-    { timeout: 15_000 }
-  );
+  const onAdmin = (url: URL) =>
+    url.pathname.startsWith("/admin") &&
+    !url.pathname.startsWith("/admin/settings/2fa") &&
+    url.pathname !== "/admin/pending-approval";
+  if (!onAdmin(new URL(page.url()))) {
+    await page.waitForURL(onAdmin, { timeout: 60_000, waitUntil: "commit" });
+  }
+  await expect(page.locator("[data-admin-scroll-region]")).toBeVisible({
+    timeout: 30_000,
+  });
 
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
   await page.context().storageState({ path: authFile });

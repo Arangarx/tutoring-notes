@@ -251,8 +251,8 @@ Accepted, used as written:
 
 New, for Andrew to review:
 
-- No consent is recorded yet. You will not be able to join a session until you record it. You can turn each part on later in Settings.
-- If you continue without enabling any options, you will not be able to join the live tutoring session you have already been invited to. You can turn each part on later in Settings.
+- Consent has not been given yet. You cannot join a session until you give consent. Open Manage, then Privacy.
+- Consent has not been given yet. You cannot join a session until you give consent, including the live tutoring session you have already been invited to. Open Manage, then Privacy.
 - {organization} invited you to connect {child}'s tutoring account.
 - Choose who to connect as a learner for {organization}.
 - What each organization may do

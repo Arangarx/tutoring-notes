@@ -163,6 +163,48 @@ describe("ParentShareNoteCard (Phase 0d)", () => {
     ).toBeNull();
   });
 
+  it("hides the whiteboard link when replaySessionIds is empty", () => {
+    const { container } = render(
+      <ParentShareNoteCard
+        token="tok-xyz"
+        dateLabel="May 9, 2026"
+        replaySessionIds={[]}
+        note={{
+          ...baseNote,
+          whiteboardSessions: [{ id: "wb-99" }],
+        }}
+        isNew={false}
+      />
+    );
+
+    expect(
+      screen.queryByRole("link", { name: /watch the whiteboard recording/i })
+    ).toBeNull();
+    expect(screen.queryByTestId("share-wb-replay-links")).toBeNull();
+    expect(container.innerHTML).not.toContain("/s//");
+  });
+
+  it("does not build an empty /s// href when the token is blank", () => {
+    const { container } = render(
+      <ParentShareNoteCard
+        token=""
+        dateLabel="May 9, 2026"
+        replaySessionIds={["wb-99"]}
+        note={{
+          ...baseNote,
+          whiteboardSessions: [{ id: "wb-99" }],
+        }}
+        isNew={false}
+      />
+    );
+
+    expect(
+      screen.queryByRole("link", { name: /watch the whiteboard recording/i })
+    ).toBeNull();
+    expect(screen.queryByTestId("share-wb-replay-links")).toBeNull();
+    expect(container.innerHTML).not.toContain("/s//");
+  });
+
   it("plain note: no audio section and no whiteboard section", () => {
     render(
       <ParentShareNoteCard

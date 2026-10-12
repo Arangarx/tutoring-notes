@@ -50,6 +50,14 @@ const PATH_RULES = [
     tags: [TAG.WB_RECORDING],
   },
   {
+    re: /src\/lib\/consent-scope\.ts|src\/lib\/share\/loadWhiteboardReplayIdsForNotes\.ts|src\/components\/notes\/ParentShareNoteCard\.tsx|src\/app\/account\/children\/.*\/notes\//,
+    tags: [TAG.WB_RECORDING],
+  },
+  {
+    re: /src\/components\/whiteboard\/chrome\/WbModifierHints\./,
+    tags: [TAG.WB_CHROME],
+  },
+  {
     re: /useLiveAV|peer-mesh|mic-recorder|WbAVCluster|AVTile/i,
     tags: [TAG.WB_AV, TAG.WB_PRESENCE],
   },

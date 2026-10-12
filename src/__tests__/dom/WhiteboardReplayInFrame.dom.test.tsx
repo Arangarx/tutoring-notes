@@ -5,8 +5,34 @@
 import React from "react";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
+import { RETIRED_REPLAY_BANNER_HOOKS } from "@/__tests__/helpers/retired-replay-banner-needles";
 
 const MEASURED_END_SEC = 10;
+
+/** Retired banner copy, including a rewording. Independent of source shape. */
+const RETIRED_BANNER_COPY =
+  /multi[-\s\u00a0]?part|multi[-\s\u00a0]?segment|drift|out\s+of\s+sync/i;
+
+function retiredBannerRenderHits(root: HTMLElement): string[] {
+  const hits: string[] = [];
+  const text = root.textContent ?? "";
+  if (RETIRED_BANNER_COPY.test(text)) {
+    hits.push(`textContent ${JSON.stringify(text)}`);
+  }
+  const nodes: Element[] = [root, ...root.querySelectorAll("*")];
+  for (const el of nodes) {
+    for (const name of el.getAttributeNames()) {
+      const value = el.getAttribute(name) ?? "";
+      if (!RETIRED_BANNER_COPY.test(value)) continue;
+      const testId = el.getAttribute("data-testid");
+      const where = testId
+        ? `${el.tagName.toLowerCase()}[data-testid=${testId}]`
+        : el.tagName.toLowerCase();
+      hits.push(`${where} @${name}=${JSON.stringify(value)}`);
+    }
+  }
+  return hits;
+}
 
 /**
  * WS-W: entry auto-play waits for WebM 1e101 duration scan. jsdom never
@@ -300,5 +326,47 @@ describe("WhiteboardReplayInFrame", () => {
         "Pause"
       );
     });
+  });
+
+  it("does not render a multi-part, drift, or out-of-sync banner for two segments and no concat URL", async () => {
+    const { container } = render(
+      <WhiteboardReplayInFrame
+        eventsBlobUrl="/api/whiteboard/wbs-test/events"
+        audioSegments={[
+          {
+            url: "/api/audio/admin/tutor-mic",
+            mimeType: "audio/webm",
+            durationSeconds: 4,
+          },
+          {
+            url: "/api/audio/admin/student-peer-mic",
+            mimeType: "audio/webm",
+            durationSeconds: 4,
+          },
+        ]}
+        whiteboardSessionId="wbs-test"
+        studentName="Test Student"
+        onHideReplay={() => undefined}
+      />
+    );
+
+    expect(await screen.findByTestId("wb-replay-in-frame")).toBeInTheDocument();
+    expect(screen.getByTestId("mynk-wb-chrome-replay")).toHaveAttribute(
+      "data-mode",
+      "replay"
+    );
+    const audio = screen.getByTestId("wb-replay-audio");
+    expect(audio.getAttribute("src") ?? "").toContain("/api/audio/admin/tutor-mic");
+    expect(audio.getAttribute("src") ?? "").not.toMatch(/concat/i);
+
+    expect(
+      container.querySelector(
+        `[data-testid="${RETIRED_REPLAY_BANNER_HOOKS.testId}"]`
+      )
+    ).toBeNull();
+    expect(
+      container.querySelector(`.${RETIRED_REPLAY_BANNER_HOOKS.className}`)
+    ).toBeNull();
+    expect(retiredBannerRenderHits(container)).toEqual([]);
   });
 });

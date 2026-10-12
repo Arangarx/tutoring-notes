@@ -30,6 +30,7 @@ import {
   assertEffectiveConsent,
   assertConsentFromLiveRecord,
   createSessionConsentSnapshot,
+  effectiveConsentToggles,
   ConsentError,
 } from "@/lib/consent-scope";
 
@@ -310,6 +311,109 @@ describe("createSessionConsentSnapshot", () => {
     });
     expect(snapshot!.allowAudioRecording).toBe(false);
     expect(snapshot!.allowNoteSending).toBe(true);
+  });
+
+  it("snapshot toggles equal effectiveConsentToggles for allow/deny, restriction on/off, and a null restriction", async () => {
+    const ceilings = [
+      {
+        name: "record allow",
+        record: {
+          allowLiveSession: true,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+        },
+      },
+      {
+        name: "record deny",
+        record: {
+          allowLiveSession: false,
+          allowAudioRecording: false,
+          allowWhiteboardRecording: false,
+          allowNoteSending: false,
+        },
+      },
+      {
+        name: "record mixed",
+        record: {
+          allowLiveSession: true,
+          allowAudioRecording: false,
+          allowWhiteboardRecording: true,
+          allowNoteSending: false,
+        },
+      },
+    ];
+    const restrictions: {
+      name: string;
+      row: {
+        restrictAudioRecording: boolean;
+        restrictWhiteboardRecording: boolean;
+        restrictNoteSending: boolean;
+      } | null;
+    }[] = [
+      { name: "null record", row: null },
+      {
+        name: "restriction off",
+        row: {
+          restrictAudioRecording: false,
+          restrictWhiteboardRecording: false,
+          restrictNoteSending: false,
+        },
+      },
+      {
+        name: "restriction on",
+        row: {
+          restrictAudioRecording: true,
+          restrictWhiteboardRecording: true,
+          restrictNoteSending: true,
+        },
+      },
+      {
+        name: "restriction mixed",
+        row: {
+          restrictAudioRecording: true,
+          restrictWhiteboardRecording: false,
+          restrictNoteSending: true,
+        },
+      },
+    ];
+
+    for (const ceiling of ceilings) {
+      for (const restriction of restrictions) {
+        const tutor = await createTutor();
+        const ah = await createAccountHolder();
+        const profile = await createLearnerProfile(ah.id);
+        const student = await createStudent(tutor.id, profile.id);
+        const session = await createWhiteboardSessionRow(tutor.id, student.id);
+        await createConsentRecord(profile.id, tutor.id, 1, ceiling.record);
+        if (restriction.row) {
+          await db.consentRestriction.create({
+            data: { learnerProfileId: profile.id, ...restriction.row },
+          });
+        }
+
+        await db.$transaction(async (tx) => {
+          await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+        });
+
+        const snapshot = await db.sessionConsentSnapshot.findUnique({
+          where: { whiteboardSessionId: session.id },
+        });
+        const caseName = `${ceiling.name} × ${restriction.name}`;
+        expect(snapshot).not.toBeNull();
+        const actual = {
+          case: caseName,
+          allowLiveSession: snapshot!.allowLiveSession,
+          allowAudioRecording: snapshot!.allowAudioRecording,
+          allowWhiteboardRecording: snapshot!.allowWhiteboardRecording,
+          allowNoteSending: snapshot!.allowNoteSending,
+        };
+        expect(actual).toEqual({
+          case: caseName,
+          ...effectiveConsentToggles(ceiling.record, restriction.row),
+        });
+      }
+    }
   });
 
   it("D-5: self-learner snapshot has all effective=true regardless of record values", async () => {

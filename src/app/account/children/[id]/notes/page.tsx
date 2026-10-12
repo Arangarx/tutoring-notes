@@ -18,6 +18,7 @@ import { db } from "@/lib/db";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import {
+  loadParentVisibleWhiteboardReplayIds,
   loadWhiteboardReplayIdsByNoteIds,
   mergeWhiteboardStubsForShareCard,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
@@ -65,7 +66,7 @@ export default async function LearnerNotesPage({
 
   const students = await db.student.findMany({
     where: { learnerProfileId: learnerId },
-    select: { id: true, adminUserId: true },
+    select: { id: true, adminUserId: true, organizationId: true },
   });
 
   const studentIds = students.map((s) => s.id);
@@ -95,9 +96,13 @@ export default async function LearnerNotesPage({
     },
   });
 
-  const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(
-    notes.map((n) => n.id)
-  );
+  const noteIds = notes.map((n) => n.id);
+  const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(noteIds);
+  const parentReplayIdsByNote = await loadParentVisibleWhiteboardReplayIds({
+    noteIds,
+    learnerProfileId: learnerId,
+    students,
+  });
 
   const learnerName = learnerProfile.displayName;
 
@@ -158,6 +163,7 @@ export default async function LearnerNotesPage({
                 <ParentShareNoteCard
                   key={note.id}
                   token={shareToken ?? ""}
+                  replaySessionIds={parentReplayIdsByNote.get(note.id) ?? []}
                   dateLabel={formatDateOnlyDisplay(note.date)}
                   note={{
                     id: note.id,

@@ -3,7 +3,7 @@
   /* Lower-left of the board. The chat toggle owns the bottom-right corner;
      a right anchor paints Shift/Space across that button. */
   left: 64px;
-  bottom: 72px;
+  bottom: 8px;
   z-index: 4;
   display: flex;
   flex-wrap: wrap;
@@ -19,12 +19,12 @@
   pointer-events: none;
 }
 
-/* Phone layouts put the drawing tools in the bottom bar. Keep hints above it. */
+/* Phone layouts put the drawing tools in the bottom bar. The component
+   measures that bar (or the open styles sheet) and sets `bottom`. */
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-modifier-hints,
 .mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-modifier-hints,
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-modifier-hints {
   left: 8px;
-  bottom: 112px;
 }
 
 .mynk-wb-modifier-hints__item {
@@ -60,9 +60,6 @@
 }
 
 .mynk-wb-shortcut-help {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 6px);
   width: min(280px, calc(100vw - 24px));
   max-height: min(50dvh, 320px);
   overflow: auto;

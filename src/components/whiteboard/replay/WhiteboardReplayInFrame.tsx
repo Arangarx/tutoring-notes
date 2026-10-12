@@ -216,7 +216,6 @@ export function WhiteboardReplayInFrame({
   }
 
   const needsReplayExcalCanvas = log.events.length > 0 || hasAudio;
-  const multiSegment = effectiveSegments.length > 1;
 
   const timelineStrip = (
     <ReplayTimelineScrubber
@@ -287,20 +286,6 @@ export function WhiteboardReplayInFrame({
       data-testid="wb-replay-in-frame"
       className={`mynk-wb-replay-root${embedded ? " mynk-wb-replay-root--embedded" : ""}`}
     >
-      {multiSegment && (
-        <div
-          className="mynk-wb-replay-multi-segment-chip"
-          data-testid="wb-replay-multi-segment-notice"
-          style={{
-            fontSize: 11,
-            padding: "4px 8px",
-            background: "var(--warning-soft)",
-            borderBottom: "1px solid var(--warning-border)",
-          }}
-        >
-          Multi-part recording — timing may drift at part boundaries
-        </div>
-      )}
       <WbRoleProvider role="tutor">
         <LiveBoardChrome
           chromeMode="replay"

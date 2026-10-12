@@ -260,6 +260,47 @@ export async function resolveModeAwareAudioRecordingConsent(
 }
 
 // ---------------------------------------------------------------------------
+// effectiveConsentToggles
+// ---------------------------------------------------------------------------
+
+/** Parent or self-learner ceiling. Live session has no child restriction. */
+export type ConsentToggleCeiling = {
+  allowLiveSession: boolean;
+  allowAudioRecording: boolean;
+  allowWhiteboardRecording: boolean;
+  allowNoteSending: boolean;
+};
+
+/** Child floor. A missing field is not a restriction. */
+export type ConsentToggleRestriction = {
+  restrictAudioRecording?: boolean | null;
+  restrictWhiteboardRecording?: boolean | null;
+  restrictNoteSending?: boolean | null;
+};
+
+/**
+ * effective = ceiling AND NOT restriction.
+ * Same combination createSessionConsentSnapshot freezes for a non-self-learner,
+ * in the four assignments after it loads ConsentRestriction.
+ * Does not apply the D-5 self-learner skip.
+ */
+export function effectiveConsentToggles(
+  record: ConsentToggleCeiling,
+  restriction: ConsentToggleRestriction | null | undefined
+): ConsentToggleCeiling {
+  return {
+    allowLiveSession: record.allowLiveSession,
+    allowAudioRecording:
+      record.allowAudioRecording && !(restriction?.restrictAudioRecording ?? false),
+    allowWhiteboardRecording:
+      record.allowWhiteboardRecording &&
+      !(restriction?.restrictWhiteboardRecording ?? false),
+    allowNoteSending:
+      record.allowNoteSending && !(restriction?.restrictNoteSending ?? false),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // createSessionConsentSnapshot
 // ---------------------------------------------------------------------------
 
@@ -328,31 +369,22 @@ export async function createSessionConsentSnapshot(
   });
 
   // effective = parent AND NOT child_restriction
-  const allowLiveSession = latestRecord.allowLiveSession;
-  const allowAudioRecording =
-    latestRecord.allowAudioRecording &&
-    !(restriction?.restrictAudioRecording ?? false);
-  const allowWhiteboardRecording =
-    latestRecord.allowWhiteboardRecording &&
-    !(restriction?.restrictWhiteboardRecording ?? false);
-  const allowNoteSending =
-    latestRecord.allowNoteSending &&
-    !(restriction?.restrictNoteSending ?? false);
+  const effective = effectiveConsentToggles(latestRecord, restriction);
 
   await tx.sessionConsentSnapshot.create({
     data: {
       whiteboardSessionId,
-      allowLiveSession,
-      allowAudioRecording,
-      allowWhiteboardRecording,
-      allowNoteSending,
+      allowLiveSession: effective.allowLiveSession,
+      allowAudioRecording: effective.allowAudioRecording,
+      allowWhiteboardRecording: effective.allowWhiteboardRecording,
+      allowNoteSending: effective.allowNoteSending,
       consentRecordId: latestRecord.id,
       consentRecordVersion: latestRecord.version,
     },
   });
 
   console.log(
-    `[cns] wbsid=${whiteboardSessionId} action=consent_frozen consentRecordId=${latestRecord.id} version=${latestRecord.version} learnerProfileId=${learnerProfileId} allowLiveSession=${allowLiveSession} allowAudio=${allowAudioRecording} allowWB=${allowWhiteboardRecording} allowNotes=${allowNoteSending}`
+    `[cns] wbsid=${whiteboardSessionId} action=consent_frozen consentRecordId=${latestRecord.id} version=${latestRecord.version} learnerProfileId=${learnerProfileId} allowLiveSession=${effective.allowLiveSession} allowAudio=${effective.allowAudioRecording} allowWB=${effective.allowWhiteboardRecording} allowNotes=${effective.allowNoteSending}`
   );
 }
 

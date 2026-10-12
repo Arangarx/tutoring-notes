@@ -156,8 +156,9 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
 
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(
-      "No consent is recorded yet. You will not be able to join a session until you record it. You can turn each part on later in Settings."
+      "Consent has not been given yet. You cannot join a session until you give consent. Open Manage, then Privacy."
     );
+    expect(dialog.textContent ?? "").not.toMatch(/record/i);
     expect(dialog).not.toHaveTextContent(/your child/i);
   });
 
@@ -178,8 +179,9 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
 
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(
-      "If you continue without enabling any options, you will not be able to join the live tutoring session you have already been invited to. You can turn each part on later in Settings."
+      "Consent has not been given yet. You cannot join a session until you give consent, including the live tutoring session you have already been invited to. Open Manage, then Privacy."
     );
+    expect(dialog.textContent ?? "").not.toMatch(/record/i);
     expect(dialog).not.toHaveTextContent(/your child/i);
   });
 

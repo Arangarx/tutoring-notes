@@ -346,7 +346,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Local dev join URL parity** —  (§4)
 - **MathInsertButton first-open white-box** —  (§4)
 - **Mobile AV pip** — SR-16 (§4)
-- **Multi-part recording warning banner stale on replay** —  (§4)
+- **Multi-part recording warning banner stale on replay** — removed (§4)
 - **Native image insert broken on drag/drop** —  (§4)
 - **NR-07** — transform handles with native chrome hidden (§4)
 - **p3-video-seam** —  (§4)
@@ -1183,7 +1183,7 @@ Remainder: verify share path. Merged [`8a6ab878`](https://github.com/Arangarx/tu
 Should resume scrub position.
 
 **[P2][WB] Multi-part recording warning banner stale on replay**  
-Remove when N/A.
+Removed. By replay time the audio is one stream, including a tutor-plus-student recording that still has two segments and no canonical URL. Covered by `tests/integration/wb-replay-no-multipart-banner.spec.ts` and `src/__tests__/regressions/multipart-replay-banner-retired.test.ts`.
 
 **[P2][WB] Replay audio loading CLS**  
 Layout jump below scrubber.
