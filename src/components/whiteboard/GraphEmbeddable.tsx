@@ -67,7 +67,8 @@ type JxgBoard = {
   removeObject: (obj: { id?: string }) => void;
   objects?: Record<string, JxgElement>;
   getBoundingBox: () => GraphBbox;
-  getUsrCoordsOfMouse?: (evt: Event) => [number, number];
+  /** Screen position with cssTransMat applied (ancestor scale and rotation). */
+  getMousePosition: (evt: Event, index?: number) => [number, number];
   attr?: {
     pan?: { enabled?: boolean };
     zoom?: { wheel?: boolean };
@@ -202,6 +203,26 @@ function plotExpressions(
     }
   }
   return errors;
+}
+
+type JxgCoordsCtor = new (
+  method: number,
+  coordinates: [number, number],
+  board: JxgBoard
+) => { usrCoords: number[] };
+
+/** Library screen-to-user step: Coords(COORDS_BY_SCREEN) after getMousePosition. */
+function userFromScreen(
+  Coords: JxgCoordsCtor,
+  method: number,
+  board: JxgBoard,
+  screen: [number, number]
+): [number, number] | null {
+  const coords = new Coords(method, screen, board);
+  const x = coords.usrCoords[1];
+  const y = coords.usrCoords[2];
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return [x, y];
 }
 
 function mountGraphBoard(
@@ -361,6 +382,13 @@ export function GraphEmbeddable({
   const { resolvedTheme } = useTheme();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<JxgBoard | null>(null);
+  /**
+   * Built from the same async jsxgraph import as the board. Pointer mapping
+   * calls JXG.Coords(COORDS_BY_SCREEN) instead of copying that conversion.
+   */
+  const screenToUserRef = useRef<
+    ((board: JxgBoard, screen: [number, number]) => [number, number] | null) | null
+  >(null);
   const plotRefsRef = useRef<Array<{ id?: string }>>([]);
   const graphStateRef = useRef<GraphState>(
     parseGraphStateJson(
@@ -430,11 +458,19 @@ export function GraphEmbeddable({
   const userPointFromPointer = useCallback(
     (event: React.PointerEvent): [number, number] | null => {
       const board = boardRef.current;
-      if (!board?.getUsrCoordsOfMouse) return null;
+      const toUser = screenToUserRef.current;
+      if (!board?.getMousePosition || !toUser) return null;
       try {
-        const [x, y] = board.getUsrCoordsOfMouse(event.nativeEvent);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-        return [x, y];
+        const screen = board.getMousePosition(event.nativeEvent);
+        if (
+          !Array.isArray(screen) ||
+          screen.length < 2 ||
+          !Number.isFinite(screen[0]) ||
+          !Number.isFinite(screen[1])
+        ) {
+          return null;
+        }
+        return toUser(board, [screen[0], screen[1]]);
       } catch {
         return null;
       }
@@ -730,11 +766,19 @@ export function GraphEmbeddable({
             initBoard: (...args: unknown[]) => JxgBoard;
             freeBoard: (board: JxgBoard) => void;
           };
+          Coords?: JxgCoordsCtor;
+          COORDS_BY_SCREEN?: number;
         };
         board = mountGraphBoard(hostRef.current, initialState, JXG, {
           interactive: !readOnly,
         });
         boardRef.current = board;
+        if (typeof JXG.Coords === "function" && typeof JXG.COORDS_BY_SCREEN === "number") {
+          const Coords = JXG.Coords;
+          const method = JXG.COORDS_BY_SCREEN;
+          screenToUserRef.current = (activeBoard, screen) =>
+            userFromScreen(Coords, method, activeBoard, screen);
+        }
 
         const initialExprs = initialState.expressions ?? [];
         const errors = plotExpressions(board, initialExprs, plotRefsRef.current);
@@ -823,6 +867,7 @@ export function GraphEmbeddable({
         });
       }
       boardRef.current = null;
+      screenToUserRef.current = null;
       plotRefsRef.current = [];
     };
     // Board lifecycle keys on element.id only — intentional for tutor (interactive):

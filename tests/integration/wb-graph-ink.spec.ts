@@ -8,6 +8,7 @@
  */
 import { expect, test, type Page } from "./fixtures";
 import { TAG } from "../test-tags";
+import { scrollForViewportSceneCenter } from "../../src/lib/whiteboard/viewport-align";
 import {
   insertGraphOnRole,
   openTutorAndStudent,
@@ -15,6 +16,7 @@ import {
   readElementVersion,
   readMountedGraphInk,
   seedWbLiveSyncSession,
+  setViewportOnRole,
   waitForElementOnPeer,
   waitForWbE2eBridge,
   type MountedGraphInk,
@@ -219,8 +221,8 @@ test.describe("graph points and free draw", () => {
         await tutorPage.waitForTimeout(50);
 
         // In-progress curve is on the tutor board, in user coords, before release.
-        const startUser = await graphUserAt(tutorPage, strokeStart.x, strokeStart.y);
-        const endUser = await graphUserAt(tutorPage, strokeEnd.x, strokeEnd.y);
+        const startUser = await graphUserFromHostRect(tutorPage, strokeStart.x, strokeStart.y);
+        const endUser = await graphUserFromHostRect(tutorPage, strokeEnd.x, strokeEnd.y);
         const midDrag = await readMountedGraphInk(tutorPage);
         expect(midDrag.strokes).toHaveLength(0);
         expect(midDrag.previews).toHaveLength(1);
@@ -299,43 +301,114 @@ test.describe("graph points and free draw", () => {
     }
   );
 
-async function graphUserAt(
+/**
+ * Click fraction of `.wb-graph-board-host` getBoundingClientRect, mapped across
+ * board.getBoundingBox() `[xmin, ymax, xmax, ymin]`. Independent of
+ * getUsrCoordsOfMouse and userPointFromPointer.
+ */
+async function graphUserFromHostRect(
   page: Page,
   clientX: number,
   clientY: number
 ): Promise<[number, number]> {
-  return page.evaluate(
-    ({ x, y }) => {
-      const host = document.querySelector(
-        '[data-testid="wb-graph-embed-host"] .wb-graph-board-host'
-      );
-      const JXG = (
-        window as unknown as {
-          JXG?: {
-            boards: Record<
-              string,
-              {
-                containerObj?: Element | null;
-                getUsrCoordsOfMouse?: (evt: MouseEvent) => number[];
-              }
-            >;
-          };
-        }
-      ).JXG;
-      if (!JXG || !host) return [Number.NaN, Number.NaN];
-      const board = Object.values(JXG.boards).find(
-        (candidate) =>
-          candidate.containerObj === host ||
-          (candidate.containerObj != null && host.contains(candidate.containerObj))
-      );
-      const coords = board?.getUsrCoordsOfMouse?.(
-        new MouseEvent("mousemove", { clientX: x, clientY: y, bubbles: true })
-      );
-      if (!coords || coords.length < 2) return [Number.NaN, Number.NaN];
-      return [coords[0], coords[1]] as [number, number];
-    },
-    { x: clientX, y: clientY }
-  );
+  const point = await page.evaluate(({ x, y }) => {
+    const host = document.querySelector(
+      '[data-testid="wb-graph-embed-host"] .wb-graph-board-host'
+    );
+    if (!(host instanceof HTMLElement)) return null;
+    const rect = host.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const fx = (x - rect.left) / rect.width;
+    const fy = (y - rect.top) / rect.height;
+    const JXG = (
+      window as unknown as {
+        JXG?: {
+          boards: Record<
+            string,
+            {
+              containerObj?: Element | null;
+              getBoundingBox: () => number[];
+            }
+          >;
+        };
+      }
+    ).JXG;
+    if (!JXG) return null;
+    const board = Object.values(JXG.boards).find(
+      (candidate) =>
+        candidate.containerObj === host ||
+        (candidate.containerObj != null && host.contains(candidate.containerObj))
+    );
+    const bbox = board?.getBoundingBox();
+    if (!bbox || bbox.length < 4) return null;
+    const userX = bbox[0] + fx * (bbox[2] - bbox[0]);
+    const userY = bbox[1] + fy * (bbox[3] - bbox[1]);
+    if (!Number.isFinite(userX) || !Number.isFinite(userY)) return null;
+    return [userX, userY] as [number, number];
+  }, { x: clientX, y: clientY });
+  expect(point, "host-rect bounding-box oracle").not.toBeNull();
+  return point as [number, number];
+}
+
+type TutorEmbedFrame = {
+  canvasWidth: number;
+  canvasHeight: number;
+  x: number;
+  y: number;
+  angle: number;
+  appWidth: number;
+  appHeight: number;
+  zoom: number;
+};
+
+async function readTutorEmbedFrame(page: Page, elementId: string): Promise<TutorEmbedFrame> {
+  return page.evaluate((id) => {
+    const bridge = (
+      window as Window & {
+        __TN_WB_E2E__?: Record<
+          string,
+          {
+            getElements: () => Array<{
+              id: string;
+              x?: number;
+              y?: number;
+              width?: number;
+              height?: number;
+              angle?: number;
+            }>;
+            getAppState: () => {
+              width?: number;
+              height?: number;
+              zoom?: number | { value?: number };
+            };
+          }
+        >;
+      }
+    ).__TN_WB_E2E__?.tutor;
+    if (!bridge?.getElements || !bridge.getAppState) {
+      throw new Error("E2E bridge missing tutor scene reads");
+    }
+    const el = bridge.getElements().find((candidate) => candidate.id === id);
+    if (!el || typeof el.width !== "number" || typeof el.height !== "number") {
+      throw new Error("graph element missing canvas size");
+    }
+    const st = bridge.getAppState();
+    return {
+      canvasWidth: el.width,
+      canvasHeight: el.height,
+      x: el.x ?? 0,
+      y: el.y ?? 0,
+      angle: typeof el.angle === "number" ? el.angle : 0,
+      appWidth: typeof st.width === "number" ? st.width : 0,
+      appHeight: typeof st.height === "number" ? st.height : 0,
+      zoom:
+        typeof st.zoom === "number"
+          ? st.zoom
+          : typeof st.zoom?.value === "number"
+            ? st.zoom.value
+            : 1,
+    };
+  }, elementId);
 }
 
 function nearestGraphDistance(
@@ -349,6 +422,154 @@ function nearestGraphDistance(
   }
   return best;
 }
+
+function userDistance(actual: [number, number], expected: [number, number]): number {
+  return Math.hypot(actual[0] - expected[0], actual[1] - expected[1]);
+}
+
+  test(
+    "zoomed camera maps a far-corner click and a short stroke through the board host box",
+    { tag: [TAG.WB_GRAPH] },
+    async ({ browser }) => {
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session);
+      try {
+        const { tutorPage } = peers;
+        // Zoom 2 makes the 720×540 embed about 1440×1080. The default tutor
+        // viewport cannot hold that, so enlarge before centering the camera.
+        await tutorPage.setViewportSize({ width: 2200, height: 1700 });
+        const graphId = await insertGraphOnRole(tutorPage, "tutor", session, []);
+        await expect(tutorPage.getByTestId("wb-graph-embed-host").first()).toBeVisible({
+          timeout: 30_000,
+        });
+        await expect
+          .poll(async () => (await readTutorEmbedFrame(tutorPage, graphId)).appWidth, {
+            timeout: 15_000,
+          })
+          .toBeGreaterThan(1500);
+
+        const frame = await readTutorEmbedFrame(tutorPage, graphId);
+        expect(frame.angle).toBe(0);
+        const zoom = 2;
+        // insertGraph animates scrollToContent and can clobber a camera set
+        // during that animation. Let it finish, then re-apply until the host
+        // is actually drawn at canvasWidth * zoom.
+        await tutorPage.waitForTimeout(800);
+        const placeZoomedCamera = async () => {
+          const current = await readTutorEmbedFrame(tutorPage, graphId);
+          const scroll = scrollForViewportSceneCenter(
+            current.x + current.canvasWidth / 2,
+            current.y + current.canvasHeight / 2,
+            zoom,
+            current.appWidth,
+            current.appHeight
+          );
+          await setViewportOnRole(tutorPage, "tutor", scroll.scrollX, scroll.scrollY, zoom);
+        };
+        await placeZoomedCamera();
+
+        const host = tutorPage.locator(".wb-graph-board-host").first();
+        const hostWidthRatio = async (reapply: boolean) => {
+          const current = await readTutorEmbedFrame(tutorPage, graphId);
+          if (reapply && Math.abs(current.zoom - zoom) > 0.05) await placeZoomedCamera();
+          const box = await host.boundingBox();
+          if (!box || frame.canvasWidth <= 0) return 0;
+          return box.width / (frame.canvasWidth * zoom);
+        };
+        await expect.poll(() => hostWidthRatio(true), { timeout: 15_000 }).toBeCloseTo(1, 1);
+
+        // getCoordsTopLeftCorner caches cPos for up to 1s. A click inside that
+        // window after the camera move is flaky.
+        await tutorPage.waitForTimeout(1200);
+        await expect.poll(() => hostWidthRatio(false), { timeout: 5_000 }).toBeCloseTo(1, 1);
+
+        const placed = await tutorPage.evaluate(() => {
+          const node = document.querySelector(
+            '[data-testid="wb-graph-embed-host"] .wb-graph-board-host'
+          );
+          if (!(node instanceof HTMLElement)) return null;
+          const rect = node.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            innerWidth: window.innerWidth,
+            innerHeight: window.innerHeight,
+          };
+        });
+        expect(placed, "board host rect").not.toBeNull();
+        expect(placed!.left).toBeGreaterThanOrEqual(-2);
+        expect(placed!.top).toBeGreaterThanOrEqual(-2);
+        expect(placed!.right).toBeLessThanOrEqual(placed!.innerWidth + 2);
+        expect(placed!.bottom).toBeLessThanOrEqual(placed!.innerHeight + 2);
+        expect((await readTutorEmbedFrame(tutorPage, graphId)).angle).toBe(0);
+
+        await activateTutorGraph(tutorPage);
+        await expect(tutorPage.getByText("Click to interact")).toHaveCount(0);
+
+        await tutorPage.getByTestId("wb-graph-mode-point").click();
+        const box = await host.boundingBox();
+        expect(box, "graph board box").not.toBeNull();
+        const pointAt = {
+          x: box!.x + box!.width * 0.78,
+          y: box!.y + box!.height * 0.78,
+        };
+        expect(await pointerReachesGraphHost(tutorPage, pointAt.x, pointAt.y)).toBe(true);
+        const hitsBoard = await tutorPage.evaluate(
+          ({ x, y }) =>
+            !!document.elementFromPoint(x, y)?.closest(".wb-graph-board-host"),
+          pointAt
+        );
+        expect(hitsBoard, "point click lands on the board host").toBe(true);
+        await tutorPage.mouse.click(pointAt.x, pointAt.y);
+        await expect
+          .poll(async () => (await readMountedGraphInk(tutorPage)).points.length, {
+            timeout: 15_000,
+          })
+          .toBe(1);
+        const plotted = (await readMountedGraphInk(tutorPage)).points[0];
+        const pointOracle = await graphUserFromHostRect(tutorPage, pointAt.x, pointAt.y);
+        expect(
+          userDistance([plotted.x, plotted.y], pointOracle)
+        ).toBeLessThan(0.6);
+
+        await tutorPage.getByTestId("wb-graph-mode-draw").click();
+        const strokeStart = {
+          x: box!.x + box!.width * 0.62,
+          y: box!.y + box!.height * 0.62,
+        };
+        const strokeEnd = {
+          x: box!.x + box!.width * 0.74,
+          y: box!.y + box!.height * 0.7,
+        };
+        await tutorPage.mouse.move(strokeStart.x, strokeStart.y);
+        await tutorPage.mouse.down();
+        await tutorPage.mouse.move(strokeEnd.x, strokeEnd.y, { steps: 4 });
+        await tutorPage.waitForTimeout(40);
+        await tutorPage.mouse.up();
+        await expect
+          .poll(async () => (await readMountedGraphInk(tutorPage)).strokes.length, {
+            timeout: 15_000,
+          })
+          .toBe(1);
+        const stroke = (await readMountedGraphInk(tutorPage)).strokes[0];
+        expect(stroke.pts.length).toBeGreaterThanOrEqual(2);
+        const startOracle = await graphUserFromHostRect(
+          tutorPage,
+          strokeStart.x,
+          strokeStart.y
+        );
+        const endOracle = await graphUserFromHostRect(tutorPage, strokeEnd.x, strokeEnd.y);
+        const first = stroke.pts[0];
+        const last = stroke.pts[stroke.pts.length - 1];
+        expect(userDistance(first, startOracle)).toBeLessThan(0.6);
+        expect(userDistance(last, endOracle)).toBeLessThan(0.6);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
 
   test(
     "a graph with no points or strokes still plots its expression",
