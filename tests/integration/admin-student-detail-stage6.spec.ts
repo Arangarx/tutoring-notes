@@ -460,6 +460,16 @@ test.describe("Admin student detail — stage 6", () => {
     }
   );
 
+  test("the personal owner can go back from Account to the student", async ({ page }) => {
+    const adminUserId = await seedTestAdmin();
+    const studentId = await seedReadyStudent(adminUserId, "Account Back Student");
+    await page.goto(`/admin/students/${studentId}/account`, { waitUntil: "domcontentloaded" });
+    const back = page.getByRole("link", { name: "← Back to student" });
+    await expect(back).toBeVisible();
+    await back.click();
+    await expect(page).toHaveURL(new RegExp(`/admin/students/${studentId}$`));
+  });
+
   test(
     "an organization instructor gets not found on the student page, Account & sharing, and the reminder dialog",
     { tag: [TAG.WB_CHROME] },
