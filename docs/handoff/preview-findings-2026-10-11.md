@@ -92,4 +92,6 @@ PLAN READY (Sonnet, readonly). Order: (a) item 3 wire change (send `visualViewpo
 
 Nothing on this list is fixed yet. The consent wording is changed but uncommitted ("Consent has not been given yet. You cannot join a session until you give consent. Open Manage, then Privacy."). Quick fixes 10, 5, 4, 9 are in progress. Fragile surfaces (viewport follow and sync, replay and recording) get a plan-mode step-back and a Sonnet review before any edit.
 
-Step 1 sends `viewLocked` on the student page-view wire. Step 2 consumes it (the lock indicator and blocking pan/zoom). Nothing reads it yet.
+Step 1 sends `viewLocked` on the student page-view wire. Step 2 consumes it for the freeze hold.
+
+**Andrew, 2026-10-12, on the post-pan wait:** updates already go out about every 100ms, so a 1500ms wait is too long. The box moves as soon as the viewer has stopped (about 250ms of stillness, so it does not flicker mid-pan). The only extra wait is when a locked student is still catching up to the tutor's pan: release on the student's next view message after the tutor stops, and give up by about 500ms. If the other person is not chasing the viewer's camera (independent student, or the student is the one panning), there is no extra wait.
