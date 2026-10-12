@@ -218,6 +218,8 @@ export default defineConfig({
         "**/integration/wb-roughness-style.spec.ts",
         "**/integration/wb-shift-constrain-shapes.spec.ts",
         "**/integration/wb-org-qol-presence.spec.ts",
+        "**/integration/wb-ghost-viewport.spec.ts",
+        "**/integration/wb-tutor-recenter.spec.ts",
         "**/integration/wb-org-qol-bridge.spec.ts",
         "**/integration/wb-adhoc-session-list.spec.ts",
         "**/integration/wb-graph-ink.spec.ts",

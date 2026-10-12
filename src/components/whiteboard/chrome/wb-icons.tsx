@@ -129,6 +129,16 @@ export function WbIconFollowSync({ size = 16, className }: IconProps) {
   );
 }
 
+/** Tutor recenter — frame around the content center. */
+export function WbIconRecenter({ size = 16, className }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /** One-time snap to tutor viewport — crosshair target. */
 export function WbIconMatchView({ size = 16, className }: IconProps) {
   return (

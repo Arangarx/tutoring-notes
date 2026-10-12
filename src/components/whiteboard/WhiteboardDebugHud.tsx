@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
 import {
   viewportSceneCenterFromScroll,
@@ -24,6 +24,7 @@ export type WhiteboardDebugHudProps = {
   activePageId: string;
   excalidrawAPI: ExcalidrawApiLike | null;
   telemetry: WbFollowDebugTelemetry;
+  canvasMountRef?: RefObject<HTMLElement | null>;
 };
 
 type AppStateSlice = {
@@ -91,6 +92,11 @@ function followCenter(f: WhiteboardWireFollow | null): { x: number; y: number } 
   return { x: f.centerSceneX, y: f.centerSceneY };
 }
 
+function formatBox(box: { left: number; top: number; width: number; height: number } | null): string {
+  if (!box) return "n/a";
+  return `${box.left.toFixed(1)},${box.top.toFixed(1)} ${box.width.toFixed(1)}x${box.height.toFixed(1)}`;
+}
+
 function HudLines({
   role,
   syncOn,
@@ -98,6 +104,7 @@ function HudLines({
   st,
   myCenter,
   telemetry,
+  canvasMountRef,
 }: {
   role: "tutor" | "student";
   syncOn: boolean;
@@ -105,8 +112,11 @@ function HudLines({
   st: AppStateSlice | null;
   myCenter: { x: number; y: number } | null;
   telemetry: WbFollowDebugTelemetry;
+  canvasMountRef?: RefObject<HTMLElement | null>;
 }) {
   const zoom = zoomValue(st);
+  const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  const mount = canvasMountRef?.current?.getBoundingClientRect() ?? null;
   const sent = telemetry.lastSentFollow.current;
   const recv = telemetry.lastRecvFollow.current;
   const applied = telemetry.lastAppliedCenter.current;
@@ -126,6 +136,18 @@ function HudLines({
       <div>
         offsetL={st?.offsetLeft ?? 0} offsetT={st?.offsetTop ?? 0}
       </div>
+      <div>
+        visualViewport=
+        {vv
+          ? formatBox({
+              left: vv.offsetLeft,
+              top: vv.offsetTop,
+              width: vv.width,
+              height: vv.height,
+            })
+          : "n/a"}
+      </div>
+      <div>container={formatBox(mount)}</div>
       <div>
         myCenter=
         {myCenter ? formatSceneCenter(myCenter.x, myCenter.y) : "n/a"}
@@ -212,6 +234,7 @@ export function WhiteboardDebugHud(props: WhiteboardDebugHudProps) {
         st={st}
         myCenter={myCenter}
         telemetry={props.telemetry}
+        canvasMountRef={props.canvasMountRef}
       />
     </div>
   );

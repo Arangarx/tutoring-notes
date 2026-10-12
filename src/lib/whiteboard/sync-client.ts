@@ -355,6 +355,11 @@ export type WhiteboardWirePageViewStateMsg = {
   /** Optional — VP-01 ghost bounds; omitted by legacy senders. */
   viewportWidth?: number;
   viewportHeight?: number;
+  /** CSS px from the sender container's top-left. Omitted by legacy senders. */
+  visibleLeft?: number;
+  visibleTop?: number;
+  /** Student follow lock. Omitted by legacy senders and by the tutor. */
+  viewLocked?: boolean;
 };
 
 /**
@@ -603,6 +608,9 @@ export type WhiteboardSyncClient = {
     zoom: number;
     viewportWidth?: number;
     viewportHeight?: number;
+    visibleLeft?: number;
+    visibleTop?: number;
+    viewLocked?: boolean;
   }) => void;
   /**
    * Phase 4a — subscribe to inbound signals. Fires for EVERY non-self
@@ -975,6 +983,27 @@ function validateWirePageViewState(parsed: unknown): WhiteboardWirePageViewState
     }
     viewportHeight = p.viewportHeight;
   }
+  let visibleLeft: number | undefined;
+  let visibleTop: number | undefined;
+  if (p.visibleLeft !== undefined) {
+    if (typeof p.visibleLeft !== "number" || !Number.isFinite(p.visibleLeft)) {
+      throw new Error("[sync-client] pageViewState envelope: bad visibleLeft");
+    }
+    visibleLeft = p.visibleLeft;
+  }
+  if (p.visibleTop !== undefined) {
+    if (typeof p.visibleTop !== "number" || !Number.isFinite(p.visibleTop)) {
+      throw new Error("[sync-client] pageViewState envelope: bad visibleTop");
+    }
+    visibleTop = p.visibleTop;
+  }
+  let viewLocked: boolean | undefined;
+  if (p.viewLocked !== undefined) {
+    if (typeof p.viewLocked !== "boolean") {
+      throw new Error("[sync-client] pageViewState envelope: bad viewLocked");
+    }
+    viewLocked = p.viewLocked;
+  }
   return {
     v: 1,
     kind: "pageViewState",
@@ -986,6 +1015,9 @@ function validateWirePageViewState(parsed: unknown): WhiteboardWirePageViewState
     zoom: p.zoom,
     ...(viewportWidth !== undefined ? { viewportWidth } : {}),
     ...(viewportHeight !== undefined ? { viewportHeight } : {}),
+    ...(visibleLeft !== undefined ? { visibleLeft } : {}),
+    ...(visibleTop !== undefined ? { visibleTop } : {}),
+    ...(viewLocked !== undefined ? { viewLocked } : {}),
   };
 }
 
@@ -2389,6 +2421,9 @@ export function createWhiteboardSyncClient(
     zoom: number;
     viewportWidth?: number;
     viewportHeight?: number;
+    visibleLeft?: number;
+    visibleTop?: number;
+    viewLocked?: boolean;
   }): void {
     if (disposed) return;
     if (aesKeyError) return;
@@ -2407,6 +2442,13 @@ export function createWhiteboardSyncClient(
       ...(patch.viewportHeight !== undefined && patch.viewportHeight > 0
         ? { viewportHeight: patch.viewportHeight }
         : {}),
+      ...(typeof patch.visibleLeft === "number" && Number.isFinite(patch.visibleLeft)
+        ? { visibleLeft: patch.visibleLeft }
+        : {}),
+      ...(typeof patch.visibleTop === "number" && Number.isFinite(patch.visibleTop)
+        ? { visibleTop: patch.visibleTop }
+        : {}),
+      ...(typeof patch.viewLocked === "boolean" ? { viewLocked: patch.viewLocked } : {}),
     };
     log.log(
       `kind=pageViewState send pageId=${patch.pageId} panX=${patch.panX} panY=${patch.panY} zoom=${patch.zoom}`

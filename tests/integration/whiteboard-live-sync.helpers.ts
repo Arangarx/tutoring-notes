@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { devices, expect, webkit, type Browser, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -644,10 +644,13 @@ async function locateStudentFollowCheckbox(page: Page) {
 
 async function closeStudentOverflowIfOpen(page: Page): Promise<void> {
   const dropdown = page.getByTestId("wb-topbar-overflow-dropdown");
+  if (!(await dropdown.isVisible())) return;
+  await page.keyboard.press("Escape");
+  // WebKit iPhone does not deliver Escape to the menu. Toggle it closed.
   if (await dropdown.isVisible()) {
-    await page.keyboard.press("Escape");
-    await expect(dropdown).not.toBeVisible({ timeout: 3_000 });
+    await page.getByTestId("wb-student-topbar-overflow").click();
   }
+  await expect(dropdown).not.toBeVisible({ timeout: 3_000 });
 }
 
 export async function ensureStudentFollowsTutor(page: Page): Promise<void> {
@@ -1300,6 +1303,12 @@ export async function openTutorAndStudent(
     studentHasTouch?: boolean;
     studentIsMobile?: boolean;
     /**
+     * Launch the student in WebKit with the iPhone 13 device profile.
+     * The tutor stays on the caller’s Chromium browser. WebKit has no
+     * fake microphone; the student A/V picker must stay inert.
+     */
+    studentBrowser?: "chromium" | "webkit";
+    /**
      * When true (default false): after both parties connect in a PENDING session,
      * click the tutor's "Start session" button and wait for the overlay to dismiss.
      * Set to true for tests that need an ACTIVE session but seed a PENDING one.
@@ -1341,12 +1350,26 @@ export async function openTutorAndStudent(
     ? learnerAuthFile
     : undefined;
 
-  const studentContext = await browser.newContext({
-    viewport: studentViewport,
-    ...(options?.studentHasTouch ? { hasTouch: true } : {}),
-    ...(options?.studentIsMobile ? { isMobile: true } : {}),
-    ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
-  });
+  let webkitBrowser: Browser | null = null;
+  const studentContext =
+    options?.studentBrowser === "webkit"
+      ? await (async () => {
+          webkitBrowser = await webkit.launch();
+          const iphone = devices["iPhone 13"];
+          return webkitBrowser.newContext({
+            ...iphone,
+            // Project use.permissions grants microphone. WebKit rejects that
+            // grant ("Unknown permission: microphone") and has no fake mic.
+            permissions: [],
+            ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
+          });
+        })()
+      : await browser.newContext({
+          viewport: studentViewport,
+          ...(options?.studentHasTouch ? { hasTouch: true } : {}),
+          ...(options?.studentIsMobile ? { isMobile: true } : {}),
+          ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
+        });
 
   // If no pre-created learner state is available, fall back to a fresh login.
   if (!learnerStorageState) {
@@ -1401,6 +1424,7 @@ export async function openTutorAndStudent(
     async close() {
       await tutorContext.close();
       await studentContext.close();
+      await webkitBrowser?.close();
     },
   };
 }
@@ -1628,6 +1652,133 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
     }
     return { points, strokes, previews, bbox, functionGraphCount };
   });
+}
+
+export type VisibleSceneRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  appWidth: number;
+  appHeight: number;
+  visibleWidth: number;
+  visibleHeight: number;
+};
+
+/**
+ * Item-3 oracle. Plain edges: top bar bottom, expanded strip's right,
+ * permanent bottom toolbar's top (or a phone-landscape left rail's right),
+ * canvas right, then ∩ visualViewport.
+ * Mapped through the page's real Excalidraw transform.
+ */
+export async function readVisibleScene(
+  page: Page,
+  role: "tutor" | "student"
+): Promise<VisibleSceneRect> {
+  return page.evaluate((r) => {
+    const mountId = r === "tutor" ? "tutor-whiteboard-canvas-mount" : "student-whiteboard-canvas-mount";
+    const mount = document.querySelector(`[data-testid='${mountId}']`);
+    if (!mount) throw new Error(`missing canvas mount for ${r}`);
+    const container = mount.getBoundingClientRect();
+    if (!(container.width > 0 && container.height > 0)) {
+      throw new Error(`canvas mount has no box for ${r}`);
+    }
+    let left = container.left;
+    let top = container.top;
+    let right = container.right;
+    let bottom = container.bottom;
+    const topbar = document.querySelector("header.mynk-wb-topbar")?.getBoundingClientRect();
+    if (topbar && topbar.height > 0) top = Math.max(top, topbar.bottom);
+    const strip = document.querySelector("nav.mynk-wb-strip");
+    const stripExpanded = !!strip && !strip.classList.contains("mynk-wb-strip--collapsed");
+    if (stripExpanded) {
+      const stripBox = strip.getBoundingClientRect();
+      if (stripBox.width > 0 && stripBox.height > 0) left = Math.max(left, stripBox.right);
+    }
+    const bottomBar = document.querySelector("nav.mynk-wb-bottom-toolbar")?.getBoundingClientRect();
+    if (bottomBar && bottomBar.width > 0 && bottomBar.height > 0) {
+      const midX = (container.left + container.right) / 2;
+      const leftRail = bottomBar.height > bottomBar.width && bottomBar.right <= midX;
+      if (leftRail) left = Math.max(left, bottomBar.right);
+      else bottom = Math.min(bottom, bottomBar.top);
+    }
+    const vv = window.visualViewport;
+    if (vv && vv.width > 0 && vv.height > 0) {
+      left = Math.max(left, vv.offsetLeft);
+      top = Math.max(top, vv.offsetTop);
+      right = Math.min(right, vv.offsetLeft + vv.width);
+      bottom = Math.min(bottom, vv.offsetTop + vv.height);
+    }
+    if (!(right > left && bottom > top)) throw new Error("visible rect is empty");
+    const visible = { left, top, right, bottom };
+    const bridge = (
+      window as Window & {
+        __TN_WB_E2E__?: Record<string, { getAppState: () => Record<string, unknown> }>;
+      }
+    ).__TN_WB_E2E__?.[r];
+    if (!bridge?.getAppState) throw new Error(`missing getAppState for ${r}`);
+    const st = bridge.getAppState();
+    const zoomObj = st.zoom as { value?: number } | undefined;
+    const zoom = zoomObj && typeof zoomObj.value === "number" && zoomObj.value > 0 ? zoomObj.value : 1;
+    const scrollX = Number(st.scrollX) || 0;
+    const scrollY = Number(st.scrollY) || 0;
+    const offsetLeft = Number(st.offsetLeft) || 0;
+    const offsetTop = Number(st.offsetTop) || 0;
+    const toScene = (clientX: number, clientY: number) => ({
+      x: (clientX - offsetLeft) / zoom - scrollX,
+      y: (clientY - offsetTop) / zoom - scrollY,
+    });
+    const tl = toScene(visible.left, visible.top);
+    const br = toScene(visible.right, visible.bottom);
+    return {
+      x: Math.min(tl.x, br.x),
+      y: Math.min(tl.y, br.y),
+      width: Math.abs(br.x - tl.x),
+      height: Math.abs(br.y - tl.y),
+      appWidth: Number(st.width) || 0,
+      appHeight: Number(st.height) || 0,
+      visibleWidth: visible.right - visible.left,
+      visibleHeight: visible.bottom - visible.top,
+    };
+  }, role);
+}
+
+/** Project a scene rectangle through the viewer's real transform to screen CSS px. */
+export async function projectSceneRectToScreen(
+  page: Page,
+  role: "tutor" | "student",
+  scene: { x: number; y: number; width: number; height: number }
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  return page.evaluate(
+    ({ r, scene: rect }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<string, { getAppState: () => Record<string, unknown> }>;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.getAppState) throw new Error(`missing getAppState for ${r}`);
+      const st = bridge.getAppState();
+      const zoomObj = st.zoom as { value?: number } | undefined;
+      const zoom = zoomObj && typeof zoomObj.value === "number" && zoomObj.value > 0 ? zoomObj.value : 1;
+      const scrollX = Number(st.scrollX) || 0;
+      const scrollY = Number(st.scrollY) || 0;
+      const offsetLeft = Number(st.offsetLeft) || 0;
+      const offsetTop = Number(st.offsetTop) || 0;
+      const toClient = (sceneX: number, sceneY: number) => ({
+        x: (sceneX + scrollX) * zoom + offsetLeft,
+        y: (sceneY + scrollY) * zoom + offsetTop,
+      });
+      const tl = toClient(rect.x, rect.y);
+      const br = toClient(rect.x + rect.width, rect.y + rect.height);
+      return {
+        x: Math.min(tl.x, br.x),
+        y: Math.min(tl.y, br.y),
+        width: Math.abs(br.x - tl.x),
+        height: Math.abs(br.y - tl.y),
+      };
+    },
+    { r: role, scene }
+  );
 }
 
 export async function readElementVersion(

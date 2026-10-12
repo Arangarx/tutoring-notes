@@ -124,6 +124,12 @@ export function useStudentWhiteboardCanvas(
     onTutorPageMeta?: (page: WhiteboardWirePage) => void;
     /** Observability only — HUD reads these refs; does not affect apply path. */
     followDebugTelemetry?: WbFollowDebugTelemetry;
+    /** Fired from the existing viewport onApplied. Does not change follow lock. */
+    onViewportApplied?: (camera: {
+      scrollX: number;
+      scrollY: number;
+      zoom: number;
+    }) => void;
   }
 ) {
   const joinToken = options?.joinToken ?? "";
@@ -131,6 +137,8 @@ export function useStudentWhiteboardCanvas(
   const wbsidTag = wbsid ? `wbsid=${wbsid} ` : "";
   const followTutorView = options?.followTutorView === true;
   const followTutorViewRef = useRef(followTutorView);
+  const onViewportAppliedRef = useRef(options?.onViewportApplied);
+  onViewportAppliedRef.current = options?.onViewportApplied;
   useEffect(() => {
     followTutorViewRef.current = followTutorView;
     if (!followTutorView) {
@@ -381,6 +389,7 @@ export function useStudentWhiteboardCanvas(
             }
           }
           releaseApplyingRemote();
+          onViewportAppliedRef.current?.({ scrollX, scrollY, zoom });
         },
         onHold: (reason) => {
           console.info(

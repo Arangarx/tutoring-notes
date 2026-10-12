@@ -91,3 +91,5 @@ PLAN READY (Sonnet, readonly). Order: (a) item 3 wire change (send `visualViewpo
 ## Status
 
 Nothing on this list is fixed yet. The consent wording is changed but uncommitted ("Consent has not been given yet. You cannot join a session until you give consent. Open Manage, then Privacy."). Quick fixes 10, 5, 4, 9 are in progress. Fragile surfaces (viewport follow and sync, replay and recording) get a plan-mode step-back and a Sonnet review before any edit.
+
+Step 1 sends `viewLocked` on the student page-view wire. Step 2 consumes it (the lock indicator and blocking pan/zoom). Nothing reads it yet.

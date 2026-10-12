@@ -13,7 +13,9 @@ import {
   waitForTutorStudentConnected,
   readEncryptionKeyFromHash,
   loginLearnerInContext,
-  readViewportSnapshot,
+  openTutorAndStudent as openSharedPeers,
+  projectSceneRectToScreen,
+  readVisibleScene,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 
@@ -163,86 +165,71 @@ test.describe("org QoL presence", { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] }, () =>
     async ({ browser }) => {
       test.setTimeout(180_000);
       const session = await seedWbLiveSyncSession();
-      const tutorContext = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
-        viewport: { width: 1280, height: 900 },
+      const peers = await openSharedPeers(browser, session, {
+        studentViewport: { width: 390, height: 700 },
+        studentHasTouch: true,
+        studentIsMobile: true,
       });
-      const learnerAuthFile = path.join(
-        process.cwd(),
-        "tests",
-        "integration",
-        ".auth",
-        "learner.json"
-      );
-      const studentContext = await browser.newContext({
-        viewport: { width: 390, height: 700 },
-        ...(fs.existsSync(learnerAuthFile)
-          ? { storageState: learnerAuthFile }
-          : {}),
-      });
-      if (!fs.existsSync(learnerAuthFile)) {
-        await loginLearnerInContext(
-          studentContext,
-          session.learnerHandle,
-          session.learnerPin
-        );
-      }
-      const tutorPage = await tutorContext.newPage();
-      const studentPage = await studentContext.newPage();
       try {
-        await tutorPage.goto(
-          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
-          { waitUntil: "domcontentloaded" }
-        );
-        await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
-          timeout: 90_000,
-        });
-        await waitForWbE2eBridge(tutorPage, "tutor");
-        const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
-        await studentPage.goto(
-          `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
-          { waitUntil: "domcontentloaded" }
-        );
-        await expect(
-          studentPage.getByTestId("student-whiteboard-canvas-mount")
-        ).toBeVisible({ timeout: 90_000 });
-        await waitForWbE2eBridge(studentPage, "student");
-        await waitForTutorStudentConnected(tutorPage);
-
-        await expect(studentPage.getByTestId("wb-ghost-viewport-rect")).toBeVisible({
-          timeout: 20_000,
-        });
-
-        const tutorGhost = tutorPage.getByTestId("wb-ghost-viewport-rect");
+        const cdp = await peers.studentPage.context().newCDPSession(peers.studentPage);
+        await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+        const tutorGhost = peers.tutorPage.getByTestId("wb-ghost-viewport-rect");
         await expect(tutorGhost).toBeVisible({ timeout: 20_000 });
-
-        const studentView = await readViewportSnapshot(studentPage, "student");
-        const tutorView = await readViewportSnapshot(tutorPage, "tutor");
-        const studentSceneW = studentView.width / studentView.zoom;
-        const studentSceneH = studentView.height / studentView.zoom;
-        const tutorSceneW = tutorView.width / tutorView.zoom;
-        const tutorSceneH = tutorView.height / tutorView.zoom;
-        expect(studentSceneW).toBeGreaterThan(40);
-        expect(studentSceneH).toBeGreaterThan(40);
-        // The two canvases must actually differ, or a tutor-sized ghost would pass.
-        expect(Math.abs(studentSceneW - tutorSceneW)).toBeGreaterThan(80);
-        expect(Math.abs(studentSceneH - tutorSceneH)).toBeGreaterThan(40);
-
-        const box = await tutorGhost.boundingBox();
-        expect(box).not.toBeNull();
-        // Screen px / viewer zoom = scene units (Excalidraw). Independent of the overlay's placement formula.
-        const ghostSceneW = box!.width / tutorView.zoom;
-        const ghostSceneH = box!.height / tutorView.zoom;
-        expect(Math.abs(ghostSceneW - studentSceneW)).toBeLessThanOrEqual(
-          Math.max(24, studentSceneW * 0.12)
-        );
-        expect(Math.abs(ghostSceneH - studentSceneH)).toBeLessThanOrEqual(
-          Math.max(24, studentSceneH * 0.12)
-        );
-        expect(Math.abs(ghostSceneW - tutorSceneW)).toBeGreaterThan(80);
+        await expect
+          .poll(async () => {
+            const scene = await readVisibleScene(peers.studentPage, "student");
+            return (
+              Math.abs(scene.visibleWidth - scene.appWidth) > 8 ||
+              Math.abs(scene.visibleHeight - scene.appHeight) > 8
+            );
+          }, { timeout: 10_000 })
+          .toBe(true);
+        await expect
+          .poll(async () => {
+            const scene = await readVisibleScene(peers.studentPage, "student");
+            const expected = await projectSceneRectToScreen(peers.tutorPage, "tutor", scene);
+            const box = await tutorGhost.boundingBox();
+            if (!box) return false;
+            return (
+              Math.abs(box.x - expected.x) <= 4 &&
+              Math.abs(box.y - expected.y) <= 4 &&
+              Math.abs(box.width - expected.width) <= 4 &&
+              Math.abs(box.height - expected.height) <= 4
+            );
+          }, { timeout: 15_000 })
+          .toBe(true);
       } finally {
-        await tutorContext.close();
-        await studentContext.close();
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "tutor ghost matches a WebKit iPhone student's visible area",
+    { tag: [TAG.WB_CHROME, TAG.WB_VIEWPORT] },
+    async ({ browser }) => {
+      test.setTimeout(180_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openSharedPeers(browser, session, { studentBrowser: "webkit" });
+      try {
+        const tutorGhost = peers.tutorPage.getByTestId("wb-ghost-viewport-rect");
+        await expect(tutorGhost).toBeVisible({ timeout: 20_000 });
+        await expect
+          .poll(async () => {
+            const scene = await readVisibleScene(peers.studentPage, "student");
+            const expected = await projectSceneRectToScreen(peers.tutorPage, "tutor", scene);
+            const box = await tutorGhost.boundingBox();
+            if (!box || !(scene.width > 40 && scene.height > 40)) return false;
+            return (
+              Math.abs(box.x - expected.x) <= 4 &&
+              Math.abs(box.y - expected.y) <= 4 &&
+              Math.abs(box.width - expected.width) <= 4 &&
+              Math.abs(box.height - expected.height) <= 4
+            );
+          }, { timeout: 15_000 })
+          .toBe(true);
+      } finally {
+        await peers.close();
       }
     }
   );

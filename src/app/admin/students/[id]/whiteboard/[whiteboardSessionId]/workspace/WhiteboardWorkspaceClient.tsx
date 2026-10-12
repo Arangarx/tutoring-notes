@@ -88,10 +88,21 @@ import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorLiveCursors } from "@/hooks/useCollaboratorLiveCursors";
 import { useActiveEmbeddableRebind } from "@/lib/whiteboard/active-embeddable-rebind";
 import { usePeerPageViewState } from "@/hooks/usePeerPageViewState";
-import { useViewportWireBroadcast } from "@/hooks/useViewportWireBroadcast";
+import {
+  useViewportWireBroadcast,
+  type ViewportWireCamera,
+} from "@/hooks/useViewportWireBroadcast";
 import { useInvertWheelZoom } from "@/hooks/useInvertWheelZoom";
 import { useSessionChat } from "@/hooks/useSessionChat";
 import { WbGhostViewportOverlay } from "@/components/whiteboard/chrome/WbGhostViewportOverlay";
+import { WbRecenterViewButton } from "@/components/whiteboard/chrome/WbRecenterViewButton";
+import { measureVisibleViewport } from "@/lib/whiteboard/measure-visible-viewport";
+import { visibleViewportWireFields } from "@/lib/whiteboard/visible-viewport";
+import { tutorRecenterScroll } from "@/lib/whiteboard/content-view-center";
+import {
+  emitBoardSwitchCamera as commitBoardSwitchCamera,
+  type BoardSwitchEmitCamera,
+} from "@/lib/whiteboard/emit-board-switch-camera";
 import { WbSessionChat } from "@/components/whiteboard/chrome/WbSessionChat";
 import { useLiveAV, type AvParticipant } from "@/hooks/useLiveAV";
 import { useLiveAvCoordinator } from "@/hooks/useLiveAvCoordinator";
@@ -257,10 +268,7 @@ import {
   registerWbE2eSceneMutationHook,
 } from "@/lib/whiteboard/wb-e2e-scene-bridge";
 import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
-import {
-  followWireFromTutorAppState,
-  readViewportSizeFromAppState,
-} from "@/lib/whiteboard/viewport-align";
+import { followWireFromTutorAppState } from "@/lib/whiteboard/viewport-align";
 import {
   createWbFollowDebugTelemetry,
   inferBroadcastTrigger,
@@ -638,8 +646,9 @@ export function WhiteboardWorkspaceClient({
    * resize ResizeObserver. Additive — no existing logic uses this ref.
    */
   const wbCanvasRef = useRef<HTMLDivElement | null>(null);
-  /** Student desktop top bar — clip-driven compaction (Wave 4 round 3). */
-  const studentTopbarRef = useRef<HTMLElement | null>(null);
+  const viewportFlushNowRef = useRef<((camera?: ViewportWireCamera) => void) | null>(
+    null
+  );
   /**
    * Frame-to-frame container dimensions tracked by the resize ResizeObserver.
    * See the resize useEffect below (search "Center-preserving viewport resize").
@@ -658,6 +667,11 @@ export function WhiteboardWorkspaceClient({
    * timeout runs.
    */
   const pageSwitchProgrammaticRef = useRef(0);
+  /**
+   * Pan/zoom just written by a board switch. Excalidraw's getAppState can
+   * still report the previous board until it commits, so the wire reads this.
+   */
+  const boardSwitchEmitCameraRef = useRef<BoardSwitchEmitCamera | null>(null);
   const tutorApplyIdRef = useRef(0);
   /** Skips debounced viewport flush while applying stored/programmatic camera. */
   const isApplyingViewportProgrammaticRef = useRef(false);
@@ -1700,6 +1714,9 @@ export function WhiteboardWorkspaceClient({
           whiteboardSessionId,
           followTutorView: !independentView,
           followDebugTelemetry,
+          onViewportApplied: (camera) => {
+            viewportFlushNowRef.current?.(camera);
+          },
         }
       : undefined
   );
@@ -1801,6 +1818,8 @@ export function WhiteboardWorkspaceClient({
     excalidrawAPI,
     activePageIdRef: studentActivePageIdRef,
     canvasMountRef: wbCanvasRef,
+    flushNowRef: viewportFlushNowRef,
+    viewLocked: role === "student" ? !independentView : undefined,
   });
   useInvertWheelZoom({ canvasMountRef: wbCanvasRef });
   const sessionChat = useSessionChat(
@@ -3090,6 +3109,31 @@ export function WhiteboardWorkspaceClient({
     }
   }, []);
 
+  const emitTutorPageViewState = useCallback((
+    pageId: string,
+    camera?: { panX: number; panY: number; zoom: number }
+  ) => {
+    const api = excalidrawAPIRef.current;
+    if (!api || !sync || !syncUrl) return;
+    const st = api.getAppState() as {
+      scrollX: number;
+      scrollY: number;
+      zoom: { value: number };
+      width?: number;
+      height?: number;
+    };
+    const visible = wbCanvasRef.current
+      ? measureVisibleViewport(wbCanvasRef.current)
+      : null;
+    sync.broadcastPageViewState({
+      pageId,
+      panX: camera?.panX ?? st.scrollX,
+      panY: camera?.panY ?? st.scrollY,
+      zoom: camera?.zoom ?? st.zoom.value,
+      ...visibleViewportWireFields(visible, { width: st.width, height: st.height }),
+    });
+  }, [sync, syncUrl]);
+
   const flushViewportPersistNow = useCallback(
     (source: "debounced" | "page-switch-preflush" | "visibility") => {
       clearViewportPersistTimer();
@@ -3102,6 +3146,8 @@ export function WhiteboardWorkspaceClient({
         scrollX: number;
         scrollY: number;
         zoom: { value: number };
+        width?: number;
+        height?: number;
       };
       const vs: PageViewState = {
         panX: st.scrollX,
@@ -3123,19 +3169,7 @@ export function WhiteboardWorkspaceClient({
         );
       }
       if (sync && syncUrl) {
-        const vpSize = readViewportSizeFromAppState(st);
-        sync.broadcastPageViewState({
-          pageId: pid,
-          panX: vs.panX,
-          panY: vs.panY,
-          zoom: vs.zoom,
-          ...(vpSize
-            ? {
-                viewportWidth: vpSize.viewportWidth,
-                viewportHeight: vpSize.viewportHeight,
-              }
-            : {}),
-        });
+        emitTutorPageViewState(pid);
         if (role !== "student") {
           console.info(
             `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
@@ -3153,12 +3187,18 @@ export function WhiteboardWorkspaceClient({
     },
     [
       clearViewportPersistTimer,
+      emitTutorPageViewState,
       flushSessionBoardDocumentNow,
       role,
       sync,
       syncUrl,
     ]
   );
+
+  const broadcastActivePageViewNow = useCallback((camera?: BoardSwitchEmitCamera) => {
+    if (role === "student") return;
+    emitTutorPageViewState(camera?.pageId ?? activePageIdRef.current, camera);
+  }, [emitTutorPageViewState, role]);
 
   const scheduleViewportPersist = useCallback(() => {
     if (isApplyingViewportProgrammaticRef.current) return;
@@ -3171,6 +3211,54 @@ export function WhiteboardWorkspaceClient({
       flushViewportPersistNow("debounced");
     }, 200);
   }, [flushViewportPersistNow]);
+
+  const recenterTutorView = useCallback(() => {
+    if (role === "student") return;
+    const api = excalidrawAPIRef.current;
+    if (!api) return;
+    const st = api.getAppState() as {
+      zoom?: { value?: number };
+      width?: number;
+      height?: number;
+    };
+    const zoom =
+      typeof st.zoom?.value === "number" && st.zoom.value > 0 ? st.zoom.value : 1;
+    const visible = wbCanvasRef.current
+      ? measureVisibleViewport(wbCanvasRef.current)
+      : null;
+    const size = visibleViewportWireFields(visible, {
+      width: st.width,
+      height: st.height,
+    });
+    const next = tutorRecenterScroll({
+      elements: api.getSceneElements() as Array<{
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+        isDeleted?: boolean;
+      }>,
+      zoom,
+      viewportWidth: size.viewportWidth ?? 0,
+      viewportHeight: size.viewportHeight ?? 0,
+      visibleLeft: visible?.left ?? 0,
+      visibleTop: visible?.top ?? 0,
+    });
+    const prev = api.getAppState() as Record<string, unknown>;
+    const writer = api as ExcalidrawApiLike & {
+      updateScene: (s: { appState?: unknown; captureUpdate?: string }) => void;
+    };
+    writer.updateScene({
+      appState: {
+        ...prev,
+        scrollX: next.scrollX,
+        scrollY: next.scrollY,
+        zoom: { value: next.zoom },
+      },
+      captureUpdate: "NEVER",
+    });
+    scheduleViewportPersist();
+  }, [role, scheduleViewportPersist]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -3217,13 +3305,23 @@ export function WhiteboardWorkspaceClient({
       offsetLeft?: number;
       offsetTop?: number;
     };
+    const override = boardSwitchEmitCameraRef.current;
+    const scrollX = override ? override.panX : st.scrollX;
+    const scrollY = override ? override.panY : st.scrollY;
+    const zoomValue = override ? override.zoom : st.zoom.value;
+    const cameraSt = {
+      ...st,
+      scrollX,
+      scrollY,
+      zoom: { value: zoomValue },
+    };
     return (
-      followWireFromTutorAppState(st) ?? {
+      followWireFromTutorAppState(cameraSt) ?? {
         centerSceneX: 0,
         centerSceneY: 0,
-        zoom: st.zoom.value,
-        scrollX: st.scrollX,
-        scrollY: st.scrollY,
+        zoom: zoomValue,
+        scrollX,
+        scrollY,
       }
     );
   }, []);
@@ -3458,6 +3556,15 @@ export function WhiteboardWorkspaceClient({
     );
   };
 
+  const emitBoardSwitchCamera = useCallback((camera: BoardSwitchEmitCamera | null) => {
+    commitBoardSwitchCamera({
+      cameraRef: boardSwitchEmitCameraRef,
+      camera,
+      flushDocument: flushDocumentBroadcastNow,
+      broadcastPageView: broadcastActivePageViewNow,
+    });
+  }, [broadcastActivePageViewNow, flushDocumentBroadcastNow]);
+
   const selectTutorPage = useCallback(
     async (nextId: string) => {
       // Bump the token FIRST so any in-flight switch abandons even when
@@ -3670,9 +3777,13 @@ export function WhiteboardWorkspaceClient({
         pageMeta?.title ?? `Page ${pageListRef.current.findIndex((p) => p.id === nextId) + 1}`
       );
       setActivePageId(nextId);
-      flushDocumentBroadcastNow();
+      const restored = pageListRef.current.find((p) => p.id === nextId)?.viewState;
+      const emitCamera = restored
+        ? { pageId: nextId, panX: restored.panX, panY: restored.panY, zoom: restored.zoom }
+        : null;
+      emitBoardSwitchCamera(emitCamera);
     },
-    [flushDocumentBroadcastNow, flushThrottledFrameNow, flushViewportPersistNow, whiteboardSessionId]
+    [emitBoardSwitchCamera, flushThrottledFrameNow, flushViewportPersistNow, whiteboardSessionId]
   );
 
   const renameTutorPage = useCallback((id: string, title: string) => {
@@ -3702,6 +3813,7 @@ export function WhiteboardWorkspaceClient({
     flushThrottledFrameNow();
     flushViewportPersistNow("page-switch-preflush");
     let frozenFromElements: ReadonlyArray<ExcalidrawLikeElement> = [];
+    let inheritedCamera: PageViewState | null = null;
     if (api) {
       const st = api.getAppState() as {
         scrollX: number;
@@ -3713,6 +3825,7 @@ export function WhiteboardWorkspaceClient({
         panY: st.scrollY,
         zoom: st.zoom.value,
       };
+      inheritedCamera = vs;
       console.info(
         `[pvs] pvs=${from} action=capture source=page-switch panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
       );
@@ -3781,9 +3894,17 @@ export function WhiteboardWorkspaceClient({
     setActivePageId(newId);
     recorderRecordPageSwitchRef.current?.(newId, `Page ${nextN}`);
     if (api) {
-      flushDocumentBroadcastNow();
+      const emitCamera = inheritedCamera
+        ? {
+            pageId: newId,
+            panX: inheritedCamera.panX,
+            panY: inheritedCamera.panY,
+            zoom: inheritedCamera.zoom,
+          }
+        : { pageId: newId, panX: 0, panY: 0, zoom: 1 };
+      emitBoardSwitchCamera(emitCamera);
     }
-  }, [flushDocumentBroadcastNow, flushThrottledFrameNow, flushViewportPersistNow]);
+  }, [emitBoardSwitchCamera, flushThrottledFrameNow, flushViewportPersistNow]);
 
   const removeTutorPage = useCallback(
     (pageId: string) => {
@@ -5912,6 +6033,9 @@ export function WhiteboardWorkspaceClient({
       )}
       <div className="mynk-wb-popover-sep" />
       {renderGridOverflowMenuItem()}
+      {role === "tutor" ? (
+        <WbRecenterViewButton variant="menu" onRecenter={recenterTutorView} />
+      ) : null}
       <div className="mynk-wb-popover-sep" />
       <div className="mynk-wb-topbar-overflow-theme" role="group" aria-label="Theme">
         {(
@@ -6605,7 +6729,6 @@ export function WhiteboardWorkspaceClient({
       topBar={
       role === "student" ? (
       <header
-        ref={studentTopbarRef}
         className="mynk-wb-topbar bg-card border-b border-border"
         role="toolbar"
         aria-label="Session controls"
@@ -6958,6 +7081,7 @@ export function WhiteboardWorkspaceClient({
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
           {renderGridToggleButton()}
+          <WbRecenterViewButton onRecenter={recenterTutorView} />
 
           <div className="mynk-wb-topbar__desktop-only">
             <WbThemeToggle
@@ -7397,6 +7521,7 @@ export function WhiteboardWorkspaceClient({
             activePageId={role === "student" ? studentActivePageId : activePageId}
             excalidrawAPI={excalidrawAPI}
             telemetry={followDebugTelemetry}
+            canvasMountRef={wbCanvasRef}
           />
 
           <WbGhostViewportOverlay

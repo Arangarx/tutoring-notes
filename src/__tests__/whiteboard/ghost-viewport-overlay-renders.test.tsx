@@ -58,3 +58,60 @@ it("a still view stays quiet across frames once the box is shown; a pan commits 
   runFrames(30);
   expect(commits).toBeLessThanOrEqual(afterPan + 1);
 });
+
+it("places the ghost inside the overlay when Excalidraw's offset is the page offset", () => {
+  const appState = {
+    scrollX: 0,
+    scrollY: 0,
+    zoom: { value: 1 },
+    offsetLeft: 120,
+    offsetTop: 80,
+  };
+  const api = { getAppState: () => appState } as never;
+  const orig = HTMLElement.prototype.getBoundingClientRect;
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if ((this as HTMLElement).classList?.contains("mynk-wb-ghost-viewport")) {
+      return {
+        x: 120,
+        y: 80,
+        left: 120,
+        top: 80,
+        right: 520,
+        bottom: 380,
+        width: 400,
+        height: 300,
+        toJSON() {
+          return {};
+        },
+      } as DOMRect;
+    }
+    return orig.call(this);
+  };
+  try {
+    render(
+      <WbGhostViewportOverlay
+        excalidrawAPI={api}
+        activePageId="p1"
+        peerView={
+          {
+            pageId: "p1",
+            panX: 0,
+            panY: 0,
+            zoom: 1,
+            viewportWidth: 200,
+            viewportHeight: 100,
+          } as never
+        }
+        label="Student view"
+      />
+    );
+    runFrames(2);
+    const rect = screen.getByTestId("wb-ghost-viewport-rect");
+    expect(rect.style.left).toBe("0px");
+    expect(rect.style.top).toBe("0px");
+    expect(parseFloat(rect.style.width)).toBeCloseTo(200, 0);
+    expect(parseFloat(rect.style.height)).toBeCloseTo(100, 0);
+  } finally {
+    HTMLElement.prototype.getBoundingClientRect = orig;
+  }
+});

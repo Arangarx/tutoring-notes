@@ -3,14 +3,21 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
-import { readViewportSizeFromAppState } from "@/lib/whiteboard/viewport-align";
+import { measureVisibleViewport } from "@/lib/whiteboard/measure-visible-viewport";
+import { visibleViewportWireFields } from "@/lib/whiteboard/visible-viewport";
 
-const DEBOUNCE_MS = 200;
+const DEBOUNCE_MS = 100;
 const UNCHANGED_RESEND_MS = 5_000;
 const MOUNT_RETRY_MS = 50;
 const API_RETRY_MS = 200;
 /** Catches programmatic follow updates that never fire wheel/pointer. */
-const SAMPLE_MS = 500;
+const SAMPLE_MS = 100;
+
+export type ViewportWireCamera = {
+  scrollX: number;
+  scrollY: number;
+  zoom: number;
+};
 
 /**
  * Student-side pageViewState wire (tutor already emits via flushViewportPersist).
@@ -31,6 +38,10 @@ export function useViewportWireBroadcast(args: {
   excalidrawAPI: ExcalidrawApiLike | null;
   activePageIdRef: React.MutableRefObject<string>;
   canvasMountRef: RefObject<HTMLElement | null>;
+  /** Immediate flush for page-apply and board switches. */
+  flushNowRef?: React.MutableRefObject<((camera?: ViewportWireCamera) => void) | null>;
+  /** Student follow lock. Omitted by the tutor (tutor does not use this hook). */
+  viewLocked?: boolean;
 }): void {
   const { enabled, canvasMountRef } = args;
   const latestRef = useRef(args);
@@ -52,27 +63,42 @@ export function useViewportWireBroadcast(args: {
       }
     };
 
-    const flush = () => {
+    const flush = (opts?: { retry?: boolean; camera?: ViewportWireCamera }) => {
       if (cancelled) return;
       const { sync, excalidrawAPI: api, activePageIdRef } = latestRef.current;
       if (!sync || !api) {
-        retryTimer = setTimeout(flush, API_RETRY_MS);
+        // The 100ms sample calls flush again on its own. A retry from that
+        // path, plus one from every tick, chains timeouts that never die.
+        if (opts?.retry === false) return;
+        if (retryTimer !== null) return;
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          flush();
+        }, API_RETRY_MS);
         return;
+      }
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
       }
       const st = api.getAppState() as {
         scrollX: number;
         scrollY: number;
         zoom: { value: number };
+        width?: number;
+        height?: number;
       };
-      const size = readViewportSizeFromAppState(st);
+      const applied = opts?.camera;
+      const mount = latestRef.current.canvasMountRef.current;
+      const visible = mount ? measureVisibleViewport(mount) : null;
+      const viewLocked = latestRef.current.viewLocked;
       const msg = {
         pageId: activePageIdRef.current,
-        panX: st.scrollX,
-        panY: st.scrollY,
-        zoom: st.zoom.value,
-        ...(size
-          ? { viewportWidth: size.viewportWidth, viewportHeight: size.viewportHeight }
-          : {}),
+        panX: applied ? applied.scrollX : st.scrollX,
+        panY: applied ? applied.scrollY : st.scrollY,
+        zoom: applied ? applied.zoom : st.zoom.value,
+        ...visibleViewportWireFields(visible, { width: st.width, height: st.height }),
+        ...(typeof viewLocked === "boolean" ? { viewLocked } : {}),
       };
       const fingerprint = JSON.stringify(msg);
       const now = Date.now();
@@ -94,6 +120,8 @@ export function useViewportWireBroadcast(args: {
       }, DEBOUNCE_MS);
     };
 
+    const onVisualViewport = () => scheduleFlush();
+
     const attach = (el: HTMLElement) => {
       if (attached === el) return;
       detach?.();
@@ -101,13 +129,24 @@ export function useViewportWireBroadcast(args: {
       el.addEventListener("wheel", scheduleFlush, { passive: true });
       el.addEventListener("pointermove", scheduleFlush, { passive: true });
       window.addEventListener("resize", scheduleFlush);
+      window.visualViewport?.addEventListener("resize", onVisualViewport);
+      window.visualViewport?.addEventListener("scroll", onVisualViewport);
       detach = () => {
         el.removeEventListener("wheel", scheduleFlush);
         el.removeEventListener("pointermove", scheduleFlush);
         window.removeEventListener("resize", scheduleFlush);
+        window.visualViewport?.removeEventListener("resize", onVisualViewport);
+        window.visualViewport?.removeEventListener("scroll", onVisualViewport);
       };
       scheduleFlush();
     };
+
+    if (latestRef.current.flushNowRef) {
+      latestRef.current.flushNowRef.current = (camera) => {
+        clearDebounce();
+        flush(camera ? { camera } : undefined);
+      };
+    }
 
     const watchMount = () => {
       if (cancelled) return;
@@ -128,7 +167,7 @@ export function useViewportWireBroadcast(args: {
         return;
       }
       if (attached !== el) attach(el);
-      else scheduleFlush();
+      else flush({ retry: false });
     }, SAMPLE_MS);
 
     return () => {
@@ -137,6 +176,7 @@ export function useViewportWireBroadcast(args: {
       clearInterval(sample);
       if (retryTimer !== null) clearTimeout(retryTimer);
       clearDebounce();
+      if (latestRef.current.flushNowRef) latestRef.current.flushNowRef.current = null;
     };
   }, [enabled, canvasMountRef]);
 }

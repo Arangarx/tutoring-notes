@@ -521,7 +521,7 @@
 ### 8.0 Pilot device matrix (recalibrated 2026-06-18)
 
 - **Tutor (Sarah, pilot):** primary device assumed **Windows desktop** running **Chromium/Blink** (same engine as Andrew's dev env). **Zero tutor-side WebKit risk** for the pilot norm (desktop tutor + mobile student).
-- **Student (test-student / Andrew's wife):** **mobile-web generally** — currently validated on **Android / Chrome-Blink** via wb-unify hardware smoke. **iOS Safari / WebKit student coverage = ZERO** — a real gap; see [`BACKLOG.md`](BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**.
+- **Student (test-student / Andrew's wife):** **mobile-web generally** — currently validated on **Android / Chrome-Blink** via wb-unify hardware smoke. **Playwright WebKit (Andrew approved 2026-10-11, dev and CI):** `npx playwright install webkit`. Student sessions in the live-sync harness can launch WebKit with Playwright's iPhone 13 device profile (`studentBrowser: "webkit"` on `openTutorAndStudent`); the tutor stays Chromium. WebKit has no fake microphone, so the student A/V picker must stay inert. Playwright WebKit is not iOS Safari — hardware rows remain for what it cannot reproduce (see [`BACKLOG.md`](BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**).
 - **Implication:** iOS-specific quirks below (§8.1+) still matter for **student-side** mobile-web and for any future tutor-on-iOS scenario, but are **not** the primary pilot tutor risk vector.
 
 ### 8.1 iOS Safari / mobile-web MediaRecorder quirks

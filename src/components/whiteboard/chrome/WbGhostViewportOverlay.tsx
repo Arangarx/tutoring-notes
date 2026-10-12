@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
 import type { PeerPageViewState } from "@/hooks/usePeerPageViewState";
 import { peerVisibleSceneRect } from "@/lib/whiteboard/peer-viewport-scene-rect";
@@ -20,6 +20,7 @@ export function WbGhostViewportOverlay({
   peerView,
   label,
 }: WbGhostViewportOverlayProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{
     left: number;
     top: number;
@@ -58,14 +59,26 @@ export function WbGhostViewportOverlay({
         zoom: peerView.zoom,
         viewportWidth: vw,
         viewportHeight: vh,
+        visibleLeft: peerView.visibleLeft,
+        visibleTop: peerView.visibleTop,
       });
-      const next = sceneRectToOverlayBox(sceneRect, {
+      const clientBox = sceneRectToOverlayBox(sceneRect, {
         scrollX: st.scrollX,
         scrollY: st.scrollY,
         zoom: st.zoom,
         offsetLeft: typeof st.offsetLeft === "number" ? st.offsetLeft : 0,
         offsetTop: typeof st.offsetTop === "number" ? st.offsetTop : 0,
       });
+      const origin = hostRef.current?.getBoundingClientRect();
+      const next =
+        clientBox && origin
+          ? {
+              left: clientBox.left - origin.left,
+              top: clientBox.top - origin.top,
+              width: clientBox.width,
+              height: clientBox.height,
+            }
+          : clientBox;
       // Re-render only when the box moves; the loop itself runs every frame.
       setBox((prev) =>
         prev &&
@@ -88,10 +101,10 @@ export function WbGhostViewportOverlay({
     peerView.pageId === activePageId &&
     !(peerView.viewportWidth && peerView.viewportHeight);
 
-  if (!box && !labelOnly) return null;
+  if (!peerView || peerView.pageId !== activePageId) return null;
 
   return (
-    <div className="mynk-wb-ghost-viewport" aria-hidden>
+    <div ref={hostRef} className="mynk-wb-ghost-viewport" aria-hidden>
       {box ? (
         <div
           className="mynk-wb-ghost-viewport__rect"
@@ -110,7 +123,7 @@ export function WbGhostViewportOverlay({
             {label}
           </span>
         </div>
-      ) : (
+      ) : labelOnly ? (
         <span
           className="mynk-wb-ghost-viewport__label mynk-wb-ghost-label--visible"
           data-testid="wb-ghost-viewport-label"
@@ -118,7 +131,7 @@ export function WbGhostViewportOverlay({
         >
           {label}
         </span>
-      )}
+      ) : null}
     </div>
   );
 }

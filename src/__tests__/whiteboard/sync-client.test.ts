@@ -2638,6 +2638,46 @@ describe("sync-client pageViewState envelope (Phase 5 task 8)", () => {
     expect(recv).toHaveBeenCalledWith("tutor-remote", payload);
     client.disconnect();
   });
+
+  test("keeps the visible-rect fields and still accepts a legacy pageViewState", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const modern = {
+      v: 1 as const,
+      kind: "pageViewState" as const,
+      peerId: "student-vis",
+      role: "student" as const,
+      pageId: "p1",
+      panX: 1,
+      panY: 2,
+      zoom: 1.25,
+      viewportWidth: 390,
+      viewportHeight: 500,
+      visibleLeft: 12.5,
+      visibleTop: 44,
+      viewLocked: true,
+    };
+    const modernPacked = await _testing.encryptMessage(aes, modern);
+    const modernOut = await _testing.decryptMessage(aes, modernPacked.data, modernPacked.iv);
+    expect(modernOut).toEqual(modern);
+
+    const legacy = {
+      v: 1 as const,
+      kind: "pageViewState" as const,
+      peerId: "tutor-old",
+      role: "tutor" as const,
+      pageId: "p1",
+      panX: 3,
+      panY: 4,
+      zoom: 1,
+    };
+    const legacyPacked = await _testing.encryptMessage(aes, legacy);
+    const legacyOut = await _testing.decryptMessage(aes, legacyPacked.data, legacyPacked.iv);
+    expect(legacyOut).toEqual(legacy);
+    expect(legacyOut).not.toHaveProperty("visibleLeft");
+    expect(legacyOut).not.toHaveProperty("visibleTop");
+    expect(legacyOut).not.toHaveProperty("viewLocked");
+  });
 });
 
 describe("sync-client pointer envelope (B9 laser sync)", () => {
