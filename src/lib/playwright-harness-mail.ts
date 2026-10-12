@@ -6,7 +6,7 @@ import path from "node:path";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { isPlaywrightHarnessActive } from "@/lib/playwright-harness";
 
-export type HarnessMailKind = "tutor-verify" | "org-invite";
+export type HarnessMailKind = "tutor-verify" | "org-invite" | "account-holder";
 
 function harnessMailFile(kind: HarnessMailKind, email: string): string {
   const key = createHash("sha256").update(normalizeEmail(email)).digest("hex").slice(0, 32);

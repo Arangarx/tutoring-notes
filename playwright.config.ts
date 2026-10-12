@@ -243,6 +243,7 @@ export default defineConfig({
         "**/integration/wb-shortcut-help-dismiss.spec.ts",
         "**/integration/wb-modifier-hints-placement.spec.ts",
         "**/integration/parent-child-notes-whiteboard-replay.spec.ts",
+        "**/integration/wb-child-home.spec.ts",
         "**/audio-upload.spec.ts",
         "**/smoke/whiteboard-workspace.spec.ts",
       ],

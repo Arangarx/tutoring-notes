@@ -34,6 +34,22 @@ export type ConsentRestrictionState = {
   restrictWhiteboardRecording: boolean;
   /** Dormant — paired with allowNoteSending; hidden pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
   restrictNoteSending: boolean;
+  /** Set when live sessions are blocked below the parent ceiling. */
+  restrictLiveSession?: boolean;
+};
+
+export type ChildSetConsentState = {
+  childSetLiveSession: boolean;
+  childSetAudioRecording: boolean;
+  childSetWhiteboardRecording: boolean;
+  childSetNoteSending: boolean;
+};
+
+const NO_CHILD_SET: ChildSetConsentState = {
+  childSetLiveSession: false,
+  childSetAudioRecording: false,
+  childSetWhiteboardRecording: false,
+  childSetNoteSending: false,
 };
 
 export type OrgConsentState = {
@@ -65,12 +81,44 @@ const RESTRICTION_TOGGLES = [
   description: string;
 }>;
 
+const CHILD_OFF_SWITCHES = [
+  {
+    restrict: "restrictLiveSession" as const,
+    childSet: "childSetLiveSession" as const,
+    key: "allowLiveSession" as const,
+    label: "Live tutoring sessions",
+    description: "Your child turned this off. Turn it back on to allow it again.",
+  },
+  {
+    restrict: "restrictAudioRecording" as const,
+    childSet: "childSetAudioRecording" as const,
+    key: "allowAudioRecording" as const,
+    label: "Session audio recording",
+    description: "Your child turned this off. Turn it back on to allow it again.",
+  },
+  {
+    restrict: "restrictWhiteboardRecording" as const,
+    childSet: "childSetWhiteboardRecording" as const,
+    key: "allowWhiteboardRecording" as const,
+    label: "Whiteboard recording",
+    description: "Your child turned this off. Turn it back on to allow it again.",
+  },
+  {
+    restrict: "restrictNoteSending" as const,
+    childSet: "childSetNoteSending" as const,
+    key: "allowNoteSending" as const,
+    label: "Session notes",
+    description: "Your child turned this off. Turn it back on to allow it again.",
+  },
+];
+
 type ParentConsentEditorProps = {
   learnerProfileId: string;
   learnerName: string;
   tutors: TutorConsentState[];
   organizations?: OrgConsentState[];
   restrictions: ConsentRestrictionState;
+  childSet?: ChildSetConsentState;
 };
 
 export function ParentConsentEditor({
@@ -79,10 +127,16 @@ export function ParentConsentEditor({
   tutors,
   organizations = [],
   restrictions: initialRestrictions,
+  childSet = NO_CHILD_SET,
 }: ParentConsentEditorProps) {
   const [tutorStates, setTutorStates] = useState(tutors);
   const [orgStates, setOrgStates] = useState(organizations);
-  const [restrictions, setRestrictions] = useState(initialRestrictions);
+  const [restrictions, setRestrictions] = useState({
+    restrictAudioRecording: initialRestrictions.restrictAudioRecording,
+    restrictWhiteboardRecording: initialRestrictions.restrictWhiteboardRecording,
+    restrictNoteSending: initialRestrictions.restrictNoteSending,
+    restrictLiveSession: initialRestrictions.restrictLiveSession ?? false,
+  });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +165,12 @@ export function ParentConsentEditor({
   ) {
     setRestrictions((prev) => ({ ...prev, [key]: checked }));
     setSaved(false);
+  }
+
+  function turnChildSwitchBackOn(key: ConsentSwitchKey, checked: boolean) {
+    const match = CHILD_OFF_SWITCHES.find((item) => item.key === key);
+    if (!match) return;
+    updateRestriction(match.restrict, !checked);
   }
 
   async function handleSave() {
@@ -297,6 +357,32 @@ export function ParentConsentEditor({
             ))}
           </Accordion>
         </div>
+      ) : null}
+
+      {CHILD_OFF_SWITCHES.some((item) => childSet[item.childSet]) ? (
+        <SectionCard realm="account" title={`${learnerName} turned these off`}>
+          <p className="mb-4 text-sm text-muted-foreground">
+            These are off because {learnerName} made them stricter. Turn a switch back on to allow it again.
+          </p>
+          <ConsentSwitches
+            idPrefix="child-off"
+            testIdPrefix="parent-restore-consent"
+            switches={CHILD_OFF_SWITCHES.filter((item) => childSet[item.childSet]).map(
+              (item) => ({
+                key: item.key,
+                label: item.label,
+                description: item.description,
+              })
+            )}
+            values={{
+              allowLiveSession: !restrictions.restrictLiveSession,
+              allowAudioRecording: !restrictions.restrictAudioRecording,
+              allowWhiteboardRecording: !restrictions.restrictWhiteboardRecording,
+              allowNoteSending: !restrictions.restrictNoteSending,
+            }}
+            onToggle={turnChildSwitchBackOn}
+          />
+        </SectionCard>
       ) : null}
 
       <SectionCard realm="account" title={`Always-off limits for ${learnerName}`}>

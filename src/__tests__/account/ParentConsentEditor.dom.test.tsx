@@ -104,7 +104,10 @@ describe("ParentConsentEditor — consent switches", () => {
         },
       ],
       organizations: [],
-      restrictions: defaultProps.restrictions,
+      restrictions: {
+        ...defaultProps.restrictions,
+        restrictLiveSession: false,
+      },
     });
 
     expect(screen.getByText(/preferences saved/i)).toBeInTheDocument();
@@ -138,7 +141,10 @@ describe("ParentConsentEditor — consent switches", () => {
         },
       ],
       organizations: [],
-      restrictions: defaultProps.restrictions,
+      restrictions: {
+        ...defaultProps.restrictions,
+        restrictLiveSession: false,
+      },
     });
   });
 
@@ -202,7 +208,10 @@ describe("ParentConsentEditor — organization rows", () => {
           allowNoteSending: false,
         },
       ],
-      restrictions: defaultProps.restrictions,
+      restrictions: {
+        ...defaultProps.restrictions,
+        restrictLiveSession: false,
+      },
     });
   });
 

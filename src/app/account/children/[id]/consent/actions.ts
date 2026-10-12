@@ -8,6 +8,7 @@ import {
   createVersionedConsentRecord,
   type ConsentFlags,
 } from "@/lib/consent-write";
+import { restoredFlagsAfterParentSave } from "@/lib/child-consent";
 
 export type SaveTutorConsentInput = {
   adminUserId: string;
@@ -21,6 +22,8 @@ export type SaveConsentRestrictionInput = {
   restrictAudioRecording: boolean;
   restrictWhiteboardRecording: boolean;
   restrictNoteSending: boolean;
+  /** Omitted means leave the stored live-session restriction as it is. */
+  restrictLiveSession?: boolean;
 };
 
 export type SaveOrgConsentInput = {
@@ -134,18 +137,27 @@ async function saveConsentForActor(
       }
 
       if (actor === "parent") {
+        const prev = await tx.consentRestriction.findUnique({
+          where: { learnerProfileId },
+        });
+        const nextRestrict = {
+          restrictLiveSession:
+            input.restrictions.restrictLiveSession ?? prev?.restrictLiveSession ?? false,
+          restrictAudioRecording: input.restrictions.restrictAudioRecording,
+          restrictWhiteboardRecording: input.restrictions.restrictWhiteboardRecording,
+          restrictNoteSending: input.restrictions.restrictNoteSending,
+        };
+        const restored = restoredFlagsAfterParentSave(prev, nextRestrict);
         await tx.consentRestriction.upsert({
           where: { learnerProfileId },
           create: {
             learnerProfileId,
-            restrictAudioRecording: input.restrictions.restrictAudioRecording,
-            restrictWhiteboardRecording: input.restrictions.restrictWhiteboardRecording,
-            restrictNoteSending: input.restrictions.restrictNoteSending,
+            ...nextRestrict,
+            ...restored,
           },
           update: {
-            restrictAudioRecording: input.restrictions.restrictAudioRecording,
-            restrictWhiteboardRecording: input.restrictions.restrictWhiteboardRecording,
-            restrictNoteSending: input.restrictions.restrictNoteSending,
+            ...nextRestrict,
+            ...restored,
           },
         });
       }

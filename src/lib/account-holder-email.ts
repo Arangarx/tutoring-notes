@@ -12,6 +12,7 @@ import {
   EMAIL_TOKEN_TTL_MS_24H,
 } from "@/lib/crypto/session-tokens";
 import { isPlaywrightHarnessActive } from "@/lib/playwright-harness";
+import { writeHarnessMailUrl } from "@/lib/playwright-harness-mail";
 import { sanitizeClaimDisplayName } from "@/lib/claim-display-name";
 import { normalizeEmail } from "@/lib/normalize-email";
 
@@ -48,6 +49,7 @@ export async function sendAccountHolderEmail(
   }
 
   if (isPlaywrightHarnessActive()) {
+    writeHarnessMailUrl("account-holder", to, payload.actionUrl);
     ahxLog(logContext?.accountHolderId, "sent");
     return { sent: true };
   }

@@ -248,7 +248,7 @@ export async function resolveModeAwareAudioRecordingConsent(
 // effectiveConsentToggles
 // ---------------------------------------------------------------------------
 
-/** Parent or self-learner ceiling. Live session has no child restriction. */
+/** Parent or self-learner ceiling. */
 export type ConsentToggleCeiling = {
   allowLiveSession: boolean;
   allowAudioRecording: boolean;
@@ -258,6 +258,7 @@ export type ConsentToggleCeiling = {
 
 /** Child floor. A missing field is not a restriction. */
 export type ConsentToggleRestriction = {
+  restrictLiveSession?: boolean | null;
   restrictAudioRecording?: boolean | null;
   restrictWhiteboardRecording?: boolean | null;
   restrictNoteSending?: boolean | null;
@@ -273,7 +274,8 @@ export function effectiveConsentToggles(
   restriction: ConsentToggleRestriction | null | undefined
 ): ConsentToggleCeiling {
   return {
-    allowLiveSession: record.allowLiveSession,
+    allowLiveSession:
+      record.allowLiveSession && !(restriction?.restrictLiveSession ?? false),
     allowAudioRecording:
       record.allowAudioRecording && !(restriction?.restrictAudioRecording ?? false),
     allowWhiteboardRecording:

@@ -1538,18 +1538,30 @@ model ConsentRecord {
 }
 
 /// Child-narrowing restrictions (floor) set on a LearnerProfile.
-/// In V1 all default to false (no restrictions from child side).
-/// No child-facing UI ships in V1; reserved for future phase.
+/// A true restrict* flag turns that switch off even when the parent's ConsentRecord allows it.
+/// restrict* is shared with the parent's always-off limit. childSet* is true only when the child
+/// turned that switch off. parentRestored* is set only when a parent clears a childSet* switch.
 /// Cascade: deleting a LearnerProfile removes its restrictions.
 model ConsentRestriction {
-  id                          String         @id @default(uuid())
-  learnerProfileId            String         @unique
-  learnerProfile              LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
-  restrictAudioRecording      Boolean        @default(false)
-  restrictWhiteboardRecording Boolean        @default(false)
-  restrictNoteSending         Boolean        @default(false)
-  createdAt                   DateTime       @default(now())
-  updatedAt                   DateTime       @updatedAt
+  id                                String         @id @default(uuid())
+  learnerProfileId                  String         @unique
+  learnerProfile                    LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  restrictLiveSession               Boolean        @default(false)
+  restrictAudioRecording            Boolean        @default(false)
+  restrictWhiteboardRecording       Boolean        @default(false)
+  restrictNoteSending               Boolean        @default(false)
+  /// Parent cleared a switch the child had turned off. Cleared again when the child turns it off.
+  parentRestoredLiveSession         Boolean        @default(false)
+  parentRestoredAudioRecording      Boolean        @default(false)
+  parentRestoredWhiteboardRecording Boolean        @default(false)
+  parentRestoredNoteSending         Boolean        @default(false)
+  /// The child turned this switch off. A parent-only always-off limit leaves this false.
+  childSetLiveSession               Boolean        @default(false)
+  childSetAudioRecording            Boolean        @default(false)
+  childSetWhiteboardRecording       Boolean        @default(false)
+  childSetNoteSending               Boolean        @default(false)
+  createdAt                         DateTime       @default(now())
+  updatedAt                         DateTime       @updatedAt
 }
 
 /// Frozen consent state at the moment a WhiteboardSession was created.

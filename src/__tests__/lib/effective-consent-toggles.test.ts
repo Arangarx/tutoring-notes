@@ -65,7 +65,7 @@ describe("effectiveConsentToggles", () => {
     ).toEqual(ALL_ON);
   });
 
-  test("live session follows the ceiling and ignores every restriction", () => {
+  test("live session follows the ceiling and the live-session restriction only", () => {
     expect(
       effectiveConsentToggles(
         { ...ALL_ON, allowLiveSession: false },
@@ -83,6 +83,15 @@ describe("effectiveConsentToggles", () => {
         restrictNoteSending: true,
       }).allowLiveSession
     ).toBe(true);
+    expect(
+      effectiveConsentToggles(ALL_ON, { restrictLiveSession: true }).allowLiveSession
+    ).toBe(false);
+    expect(
+      effectiveConsentToggles(
+        { ...ALL_ON, allowLiveSession: false },
+        { restrictLiveSession: true }
+      ).allowLiveSession
+    ).toBe(false);
   });
 
   test("whiteboard denial from the record survives an explicit false restriction", () => {

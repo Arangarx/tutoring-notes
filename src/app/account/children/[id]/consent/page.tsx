@@ -57,9 +57,14 @@ export default async function LearnerConsentPage({
       isSelfLearner: true,
       consentRestriction: {
         select: {
+          restrictLiveSession: true,
           restrictAudioRecording: true,
           restrictWhiteboardRecording: true,
           restrictNoteSending: true,
+          childSetLiveSession: true,
+          childSetAudioRecording: true,
+          childSetWhiteboardRecording: true,
+          childSetNoteSending: true,
         },
       },
       students: {
@@ -173,12 +178,22 @@ export default async function LearnerConsentPage({
   });
 
   const restrictions: ConsentRestrictionState = {
+    restrictLiveSession:
+      learnerProfile.consentRestriction?.restrictLiveSession ?? false,
     restrictAudioRecording:
       learnerProfile.consentRestriction?.restrictAudioRecording ?? false,
     restrictWhiteboardRecording:
       learnerProfile.consentRestriction?.restrictWhiteboardRecording ?? false,
     restrictNoteSending:
       learnerProfile.consentRestriction?.restrictNoteSending ?? false,
+  };
+
+  const childSet = {
+    childSetLiveSession: learnerProfile.consentRestriction?.childSetLiveSession ?? false,
+    childSetAudioRecording: learnerProfile.consentRestriction?.childSetAudioRecording ?? false,
+    childSetWhiteboardRecording:
+      learnerProfile.consentRestriction?.childSetWhiteboardRecording ?? false,
+    childSetNoteSending: learnerProfile.consentRestriction?.childSetNoteSending ?? false,
   };
 
   const learnerName = learnerProfile.displayName;
@@ -224,6 +239,7 @@ export default async function LearnerConsentPage({
             tutors={tutors}
             organizations={organizations}
             restrictions={restrictions}
+            childSet={childSet}
           />
         </SectionCard>
       )}
