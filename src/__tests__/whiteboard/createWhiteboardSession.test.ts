@@ -5,9 +5,9 @@
 /**
  * Unit coverage for `createWhiteboardSession`.
  *
- * CC-1 gates session create on ConsentRecord existence (claimed minors).
- * Self-learners (D-5) and unclaimed rejection are covered here; snapshot
- * freeze logic is in consent-b2.test.ts / consent-cc1.test.ts.
+ * CC-1 gates session create on ConsentRecord existence. A self-learner
+ * with no record is denied the same way as a child. Snapshot freeze
+ * logic is in consent-b2.test.ts / consent-cc1.test.ts.
  */
 
 jest.mock("next/navigation", () => ({
@@ -33,7 +33,10 @@ const dbSessionParticipantCreateManyMock = jest.fn();
 const dbSessionConsentSnapshotCreateMock = jest.fn();
 const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
   const tx = {
-    whiteboardSession: { create: (...args: unknown[]) => dbCreateMock(...args) },
+    whiteboardSession: {
+      create: (...args: unknown[]) => dbCreateMock(...args),
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     consentRecord: { findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args) },
     consentRestriction: { findUnique: jest.fn().mockResolvedValue(null) },
     sessionConsentSnapshot: {
@@ -54,6 +57,9 @@ jest.mock("@/lib/db", () => ({
     },
     consentRecord: {
       findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args),
+    },
+    consentRestriction: {
+      findUnique: jest.fn().mockResolvedValue(null),
     },
     learnerProfile: {
       findUnique: (...args: unknown[]) => dbLearnerProfileFindUniqueMock(...args),
@@ -233,17 +239,18 @@ describe("createWhiteboardSession — CC-1 consent record gate", () => {
     });
   });
 
-  test("T9: self-learner without ConsentRecord → passes", async () => {
+  test("self-learner without ConsentRecord → ConsentError, no Blob, no row", async () => {
     requireStudentScopeMock.mockResolvedValue(defaultAdminScope);
     dbConsentRecordFindFirstMock.mockResolvedValue(null);
     dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: true });
-    putMock.mockResolvedValue(defaultBlobResult);
-    dbCreateMock.mockResolvedValue({ id: "wb-self", studentId: "student-1" });
+    dbStudentFindUniqueMock.mockResolvedValue({
+      ...erasureClearStudent,
+      learnerProfile: { ...erasureClearStudent.learnerProfile, isSelfLearner: true },
+    });
 
-    await expect(createWhiteboardSession("student-1")).rejects.toThrow(/NEXT_REDIRECT/);
-
-    expect(putMock).toHaveBeenCalledTimes(1);
-    expect(dbCreateMock).toHaveBeenCalledTimes(1);
+    await expect(createWhiteboardSession("student-1")).rejects.toThrow(ConsentError);
+    expect(putMock).not.toHaveBeenCalled();
+    expect(dbCreateMock).not.toHaveBeenCalled();
   });
 
   test("rejects an env-only admin (no AdminUser row)", async () => {

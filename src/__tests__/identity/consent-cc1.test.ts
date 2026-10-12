@@ -105,13 +105,80 @@ describe("assertConsentRecordExists", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("self-learner + no ConsentRecord → passes (T9 / D-5)", async () => {
+  it("self-learner + no ConsentRecord → throws the consent-required error", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder({ isSelfLearner: true });
     const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
 
+    await expect(assertConsentRecordExists(profile.id, tutor.id)).rejects.toThrow(
+      "Parent privacy preferences must be set before starting a session."
+    );
+    await expect(assertConsentRecordExists(profile.id, tutor.id)).rejects.toMatchObject({
+      permission: "consentRecord",
+    });
+  });
+
+  it("self-learner with a record, even when audio is off, passes existence", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder({ isSelfLearner: true });
+    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
+    const ahId = ah.id;
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId: profile.id,
+        adminUserId: tutor.id,
+        version: 1,
+        allowLiveSession: true,
+        allowAudioRecording: false,
+        allowWhiteboardRecording: true,
+        allowNoteSending: true,
+        setByAccountHolderId: ahId,
+        captureMethod: "electronic",
+      },
+    });
+    const log = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await expect(assertConsentRecordExists(profile.id, tutor.id)).resolves.toBeUndefined();
+      const lines = log.mock.calls.map((call) => call.map(String).join(" "));
+      expect(lines.some((line) => line.includes("result=self_learner"))).toBe(false);
+      expect(lines.some((line) => line.includes("result=granted"))).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("org-owned self-learner is read from the organization consent row", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder({ isSelfLearner: true });
+    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
+    const org = await db.organization.create({
+      data: { name: uniq("org-exists"), createdByOperatorId: tutor.id },
+    });
+    const student = await db.student.create({
+      data: {
+        name: "Org exists",
+        adminUserId: null,
+        organizationId: org.id,
+        learnerProfileId: profile.id,
+      },
+    });
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId: profile.id,
+        adminUserId: null,
+        organizationId: org.id,
+        version: 1,
+        allowLiveSession: true,
+        allowAudioRecording: false,
+        allowWhiteboardRecording: true,
+        allowNoteSending: true,
+        setByAccountHolderId: ah.id,
+        captureMethod: "electronic",
+      },
+    });
+
     await expect(
-      assertConsentRecordExists(profile.id, tutor.id)
+      assertConsentRecordExists(profile.id, tutor.id, { studentId: student.id })
     ).resolves.toBeUndefined();
   });
 });

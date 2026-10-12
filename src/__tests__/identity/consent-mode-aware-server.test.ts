@@ -198,6 +198,8 @@ type SessionSetupOpts = {
   sessionMode: "LIVE" | "IN_PERSON";
   allowAudioRecording: boolean;
   withSnapshot: boolean;
+  /** Latest ConsentRecord without a session snapshot. */
+  consentRecordWithoutSnapshot?: boolean;
   isSelfLearner?: boolean;
   claimed?: boolean;
 };
@@ -213,7 +215,7 @@ async function setupActiveSession(opts: SessionSetupOpts) {
       isSelfLearner: opts.isSelfLearner,
     });
     profileId = profile.id;
-    if (opts.withSnapshot) {
+    if (opts.withSnapshot || opts.consentRecordWithoutSnapshot) {
       await createConsentRecord(profile.id, tutor.id, 1, {
         allowAudioRecording: opts.allowAudioRecording,
       });
@@ -328,7 +330,7 @@ describe("resolveModeAwareAudioRecordingConsent", () => {
     });
   });
 
-  it("no snapshot + self-learner → allow", async () => {
+  it("no snapshot + self-learner with no ConsentRecord → deny", async () => {
     const { session } = await setupActiveSession({
       sessionMode: "LIVE",
       allowAudioRecording: true,
@@ -336,7 +338,76 @@ describe("resolveModeAwareAudioRecordingConsent", () => {
       isSelfLearner: true,
     });
     const decision = await resolveModeAwareAudioRecordingConsent(session.id);
+    expect(decision).toEqual({
+      allow: false,
+      reason: "no_snapshot_fail_closed",
+    });
+  });
+
+  it("no snapshot + self-learner record with audio off, in person → deny", async () => {
+    const { session } = await setupActiveSession({
+      sessionMode: "IN_PERSON",
+      allowAudioRecording: false,
+      withSnapshot: false,
+      consentRecordWithoutSnapshot: true,
+      isSelfLearner: true,
+    });
+    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
+    expect(decision).toEqual({
+      allow: false,
+      reason: "consent_denied_inperson",
+    });
+  });
+
+  it("no snapshot + self-learner record with audio on is allowed", async () => {
+    const { session } = await setupActiveSession({
+      sessionMode: "IN_PERSON",
+      allowAudioRecording: true,
+      withSnapshot: false,
+      consentRecordWithoutSnapshot: true,
+      isSelfLearner: true,
+    });
+    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
     expect(decision).toEqual({ allow: true });
+  });
+
+  it("snapshot present + self-learner audio off, in person → deny", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder({ isSelfLearner: true });
+    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
+    const record = await createConsentRecord(profile.id, tutor.id, 1, {
+      allowAudioRecording: false,
+    });
+    const student = await createStudent(tutor.id, profile.id);
+    const session = await db.whiteboardSession.create({
+      data: {
+        adminUserId: tutor.id,
+        studentId: student.id,
+        consentAcknowledged: true,
+        eventsBlobUrl: `https://abc.blob.vercel-storage.com/test-${uniq()}.json`,
+        eventsSchemaVersion: 1,
+        sessionMode: "IN_PERSON",
+        sessionPhase: "ACTIVE",
+        startedAt: new Date(),
+      },
+    });
+    await db.sessionConsentSnapshot.create({
+      data: {
+        whiteboardSessionId: session.id,
+        allowLiveSession: true,
+        allowAudioRecording: false,
+        allowWhiteboardRecording: true,
+        allowNoteSending: true,
+        consentRecordId: record.id,
+        consentRecordVersion: record.version,
+      },
+    });
+
+    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
+    expect(decision).toEqual({
+      allow: false,
+      reason: "consent_denied_inperson",
+    });
   });
 });
 
@@ -488,9 +559,9 @@ describe("T-new-E — endWhiteboardSession mode-aware segment registration", () 
     expect(result.registeredSegments).toBe(0);
   });
 
-  it("M-6 positive: self-learner with snapshot → segments REGISTERED", async () => {
+  it("self-learner in person with audio off → segments SKIPPED", async () => {
     const { session, eventsUrl } = await setupActiveSession({
-      sessionMode: "LIVE",
+      sessionMode: "IN_PERSON",
       allowAudioRecording: false,
       withSnapshot: true,
       isSelfLearner: true,
@@ -501,7 +572,12 @@ describe("T-new-E — endWhiteboardSession mode-aware segment registration", () 
       segments: [segment],
     });
 
-    expect(result.registeredSegments).toBe(1);
+    expect(result.registeredSegments).toBe(0);
+
+    const rows = await db.sessionRecording.findMany({
+      where: { whiteboardSessionId: session.id },
+    });
+    expect(rows).toHaveLength(0);
   });
 });
 

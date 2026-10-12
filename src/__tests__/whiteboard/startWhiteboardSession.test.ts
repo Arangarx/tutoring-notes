@@ -21,6 +21,9 @@ jest.mock("@/lib/db", () => ({
     consentRecord: {
       findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args),
     },
+    consentRestriction: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     learnerProfile: {
       findUnique: (...args: unknown[]) => dbLearnerProfileFindUniqueMock(...args),
     },

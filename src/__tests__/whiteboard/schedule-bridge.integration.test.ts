@@ -237,7 +237,7 @@ describe("getOrCreateWhiteboardForSchedule", () => {
     }
   );
 
-  it("a self learner is not held back by the live-session flag", async () => {
+  it("a self learner with live sessions off is refused and no room is created", async () => {
     const s = await seed({ isSelfLearner: true, allowLiveSession: false });
     const r = await getOrCreateWhiteboardForSchedule(
       s.sched.id,
@@ -245,7 +245,8 @@ describe("getOrCreateWhiteboardForSchedule", () => {
       "r",
       DURING
     );
-    expect(r.ok).toBe(true);
+    expect(r).toEqual({ ok: false, reason: "not_available" });
+    expect(await db.whiteboardSession.count({ where: { scheduledSessionId: s.sched.id } })).toBe(0);
   });
 
   it("losing a create race returns the winner and drops the loser's empty storage", async () => {

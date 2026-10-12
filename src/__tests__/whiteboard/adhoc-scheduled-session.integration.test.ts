@@ -98,8 +98,10 @@ async function seedTutor() {
 async function seedClaimedChild(input: {
   adminUserId: string | null;
   organizationId?: string;
-  /** Acting tutor the start gate looks up. Null leaves no consent row. */
+  /** Acting tutor the start gate looks up. Null leaves no tutor consent row. */
   consentForAdminUserId: string | null;
+  /** Organization consent row. Used when the student is organization-owned. */
+  consentForOrganizationId?: string | null;
 }) {
   const ah = await db.accountHolder.create({
     data: {
@@ -122,7 +124,22 @@ async function seedClaimedChild(input: {
       learnerProfileId: profile.id,
     },
   });
-  if (input.consentForAdminUserId) {
+  if (input.consentForOrganizationId) {
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId: profile.id,
+        adminUserId: null,
+        organizationId: input.consentForOrganizationId,
+        version: 1,
+        allowLiveSession: true,
+        allowAudioRecording: true,
+        allowWhiteboardRecording: true,
+        allowNoteSending: true,
+        setByAccountHolderId: ah.id,
+        captureMethod: "electronic",
+      },
+    });
+  } else if (input.consentForAdminUserId) {
     await db.consentRecord.create({
       data: {
         learnerProfileId: profile.id,
@@ -151,8 +168,8 @@ async function seedPersonalStudent(consent: boolean) {
 
 /**
  * Organization owns the student (`organizationId` set, `adminUserId` null).
- * The consent row is still the acting tutor's: that is what the start gate
- * reads, so a whiteboard row exists and its `scheduledSessionId` can be checked.
+ * Consent is the organization row, which is what the start gate reads, so a
+ * whiteboard row exists and its `scheduledSessionId` can be checked.
  */
 async function seedOrgOwnedStudent() {
   const tutor = await seedTutor();
@@ -165,7 +182,8 @@ async function seedOrgOwnedStudent() {
   const student = await seedClaimedChild({
     adminUserId: null,
     organizationId: org.id,
-    consentForAdminUserId: tutor.id,
+    consentForAdminUserId: null,
+    consentForOrganizationId: org.id,
   });
   return { tutor, student, org };
 }

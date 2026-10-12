@@ -237,6 +237,7 @@ export default defineConfig({
         "**/integration/calendar-oauth-connect.spec.ts",
         "**/integration/recording-resilience.spec.ts",
         "**/integration/recording-end-to-end.spec.ts",
+        "**/integration/wb-self-learner-audio-off.spec.ts",
         "**/integration/wb-end-winddown.spec.ts",
         "**/integration/wb-replay-no-multipart-banner.spec.ts",
         "**/integration/wb-shortcut-help-dismiss.spec.ts",

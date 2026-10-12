@@ -1329,6 +1329,12 @@ Read-only `ConsentRecord` on student detail + scheduler chip.
 **[P2][CONSENT] assertEffectiveConsent legacy no_snapshot → pass**  
 Pre-CC-1 sessions; verify end-path fail-closed.
 
+**[P2][CONSENT] Self-learner audio-off banner still says a parent refused**  
+The tutor in-person banner (`wb-audio-consent-banner`) says "this student's parent has not allowed session audio" even when a self-learner turned audio off themselves. The banner still appears. Copy only — leave `WhiteboardWorkspaceClient` until the wording is decided.
+
+**[P2][CONSENT] Self-learner Start stays enabled with no consent record**  
+`canStartSession` returns true for every self-learner, so the student-detail Start button stays enabled with no ConsentRecord. The click then hits the consent-required error. `assertEffectiveConsent` still returns on a missing snapshot without reading the live record, and it has no production caller. `resolveRecordedConsent` also has no production caller; stage 4 should use `resolveEffectiveConsentForStudent` or delete the raw helper.
+
 **[P2][CONSENT] LIVE-SESSION-CONSENT-COPY**  
 Remainder: verify on hardware if needed. Copy module shipped.
 

@@ -50,7 +50,7 @@ const PATH_RULES = [
     tags: [TAG.WB_RECORDING],
   },
   {
-    re: /src\/lib\/consent-scope\.ts|src\/lib\/share\/loadWhiteboardReplayIdsForNotes\.ts|src\/components\/notes\/ParentShareNoteCard\.tsx|src\/app\/account\/children\/.*\/notes\//,
+    re: /src\/lib\/consent-scope\.ts|src\/lib\/share\/loadWhiteboardReplayIdsForNotes\.ts|src\/components\/notes\/ParentShareNoteCard\.tsx|src\/app\/account\/children\/.*\/notes\/|wb-self-learner-audio-off/,
     tags: [TAG.WB_RECORDING],
   },
   {
