@@ -1557,6 +1557,8 @@ Defense in depth.
 **[P2][AUTH] In-memory rate limiters → Neon**  
 Remainder: `api:<ip>` and `setup:<ip>`. Learner PIN/auth/2FA durable limiters shipped.
 
+**[P2][SEC] createStudent burst bucket** — 10 attempts per 15 minutes per tutor. Andrew can change those two numbers. This bucket does not survive a cold start.
+
 **[P2][SEC] SEC — /api/test/whiteboard/* gate hardening**  
 Core shipped [`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095). Remainder: pin empty `PLAYWRIGHT_TEST_SECRET` in prod env.
 

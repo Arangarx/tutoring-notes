@@ -5,13 +5,14 @@ import { db } from "@/lib/db";
 import { sanitizeClaimDisplayName } from "@/lib/claim-display-name";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { requireStudentScope, studentsWhereForScope } from "@/lib/student-scope";
-import { parseChildRosterHandle } from "@/lib/parse-child-roster-handle";
 import {
   countPendingClaimInvites,
   MAX_PENDING_CLAIM_INVITES,
   mintStudentClaimInvite,
   reinviteTargetKind,
+  startOfTutorDay,
 } from "@/lib/claim-invite-service";
+import { rateLimit } from "@/lib/rate-limit";
 import { isSelfLearnerPendingInvite } from "@/lib/roster-invite-target";
 import {
   assertTutorApproved,
@@ -32,45 +33,41 @@ function invalidChildIdentifierMessage(): string {
   return "Enter a child identifier or a login handle in the form username@familyid.";
 }
 
-/**
- * Resolve child identifier: plain id or username@familyid (anti-enumeration on miss).
- */
-async function resolveChildRosterIdentifier(raw: string): Promise<
+/** Tutor-owned students since the start of that tutor's day. An org learner does not count. */
+const TUTOR_DAILY_STUDENT_CAP = 20;
+
+const TUTOR_DAILY_STUDENT_CAP_MESSAGE =
+  "You have reached today's limit for new students. Try again tomorrow.";
+
+const CREATE_STUDENT_BURST_MESSAGE = "Too many attempts. Try again later.";
+
+const TUTOR_DAILY_CLAIM_CAP_MESSAGE =
+  "You have reached today's limit for claim emails. Try again tomorrow.";
+
+class TutorDailyStudentCapError extends Error {
+  constructor() {
+    super("tutor_daily_student_cap");
+    this.name = "TutorDailyStudentCapError";
+  }
+}
+
+/** Child name or username@familyid, stored as the roster label. Not a family lookup. */
+function resolveChildRosterIdentifier(raw: string):
   | { ok: true; childLabel: string }
-  | { ok: false; message: string }
-> {
+  | { ok: false; message: string } {
   const trimmed = raw.trim();
   if (!trimmed) {
     return { ok: false, message: invalidChildIdentifierMessage() };
   }
+  return { ok: true, childLabel: trimmed };
+}
 
-  const parsed = parseChildRosterHandle(trimmed);
-  if (!parsed) {
-    return { ok: true, childLabel: trimmed };
-  }
-
-  const ah = await db.accountHolder.findUnique({
-    where: { familyId: parsed.familyId },
-    select: { id: true },
-  });
-  if (!ah) {
-    return { ok: false, message: invalidChildIdentifierMessage() };
-  }
-
-  const cred = await db.learnerCredential.findUnique({
-    where: {
-      accountHolderId_username: {
-        accountHolderId: ah.id,
-        username: parsed.username,
-      },
-    },
-    select: { id: true },
-  });
-  if (!cred) {
-    return { ok: false, message: invalidChildIdentifierMessage() };
-  }
-
-  return { ok: true, childLabel: trimmed.toLowerCase() };
+function tutorOwnedSince(adminUserId: string, start: Date) {
+  return {
+    adminUserId,
+    organizationId: null as null,
+    createdAt: { gte: start },
+  };
 }
 
 export async function createStudent(
@@ -115,7 +112,7 @@ export async function createStudent(
     rosterName = inviteEmail;
   } else {
     parentEmail = inviteEmail;
-    const resolved = await resolveChildRosterIdentifier(childIdentifier);
+    const resolved = resolveChildRosterIdentifier(childIdentifier);
     if (!resolved.ok) {
       return { status: "error", message: resolved.message };
     }
@@ -127,14 +124,50 @@ export async function createStudent(
   }
 
   const where = studentsWhereForScope(scope);
-
-  const student = await db.student.create({
-    data: {
-      name: rosterName,
-      parentEmail,
-      ...where,
-    },
+  const dayStart = await startOfTutorDay(scope.adminId, new Date());
+  const createdToday = await db.student.count({
+    where: tutorOwnedSince(scope.adminId, dayStart),
   });
+  if (createdToday >= TUTOR_DAILY_STUDENT_CAP) {
+    return { status: "error", message: TUTOR_DAILY_STUDENT_CAP_MESSAGE };
+  }
+
+  // 10 attempts per 15 minutes, keyed by tutor. Distinct from auth/ip buckets.
+  const createStudentBurstAttempts = 10;
+  const createStudentBurstWindowMs = 15 * 60 * 1000;
+  const burst = rateLimit(
+    `create-student:${scope.adminId}`,
+    createStudentBurstAttempts,
+    createStudentBurstWindowMs
+  );
+  if (!burst.allowed) {
+    return { status: "error", message: CREATE_STUDENT_BURST_MESSAGE };
+  }
+
+  let student;
+  try {
+    student = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "AdminUser" WHERE id = ${scope.adminId} FOR UPDATE`;
+      const lockedCount = await tx.student.count({
+        where: tutorOwnedSince(scope.adminId, dayStart),
+      });
+      if (lockedCount >= TUTOR_DAILY_STUDENT_CAP) {
+        throw new TutorDailyStudentCapError();
+      }
+      return tx.student.create({
+        data: {
+          name: rosterName,
+          parentEmail,
+          ...where,
+        },
+      });
+    });
+  } catch (err) {
+    if (err instanceof TutorDailyStudentCapError) {
+      return { status: "error", message: TUTOR_DAILY_STUDENT_CAP_MESSAGE };
+    }
+    throw err;
+  }
 
   const pendingBeforeMint = await countPendingClaimInvites(student.id);
   if (pendingBeforeMint >= MAX_PENDING_CLAIM_INVITES) {
@@ -185,6 +218,10 @@ export async function createStudent(
         status: "error",
         message: "Too many pending invites for this learner. Retry later from the learner profile.",
       };
+    }
+    if (message === "tutor_daily_claim_cap") {
+      await db.student.delete({ where: { id: student.id } }).catch(() => undefined);
+      return { status: "error", message: TUTOR_DAILY_CLAIM_CAP_MESSAGE };
     }
     throw err;
   }
@@ -255,6 +292,9 @@ export async function retryStudentClaimInvite(
         status: "error",
         message: "Too many pending invites. Wait for an existing invite to expire.",
       };
+    }
+    if (message === "tutor_daily_claim_cap") {
+      return { status: "error", message: TUTOR_DAILY_CLAIM_CAP_MESSAGE };
     }
     throw err;
   }

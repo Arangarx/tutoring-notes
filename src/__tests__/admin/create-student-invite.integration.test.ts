@@ -123,26 +123,63 @@ describe("createStudent — invite on add", () => {
     expect(retry).toEqual({ status: "success" });
   });
 
-  it("child family handle lookup failure uses generic message (anti-enumeration)", async () => {
+  it("a handle that exists and a handle that does not return the same status and each create a student", async () => {
     const tutor = await seedTutor();
     mockSessionAsTutor(tutor);
 
-    const result = await createStudent(
+    const familyId = uniq("fam").replace(/[^a-z0-9]/gi, "").slice(0, 16);
+    const username = "kid";
+    const familyEmail = `${uniq("family")}@example.com`;
+    const holder = await db.accountHolder.create({
+      data: { email: familyEmail, familyId, displayName: "Other Family" },
+    });
+    const profile = await db.learnerProfile.create({
+      data: {
+        accountHolderId: holder.id,
+        displayName: "Their Child",
+        accessMode: "child_pin_required",
+      },
+    });
+    const credential = await db.learnerCredential.create({
+      data: {
+        learnerProfileId: profile.id,
+        accountHolderId: holder.id,
+        username,
+        secretHash: "not-a-real-pin-hash",
+      },
+    });
+
+    const hit = await createStudent(
       null,
       form({
         learnerKind: "child_learner",
-        inviteEmail: `${uniq("parent")}@example.com`,
-        childIdentifier: "nobody@not-a-real-family-id",
+        inviteEmail: `${uniq("hitparent")}@example.com`,
+        childIdentifier: `${username}@${familyId}`,
+      })
+    );
+    const miss = await createStudent(
+      null,
+      form({
+        learnerKind: "child_learner",
+        inviteEmail: `${uniq("missparent")}@example.com`,
+        childIdentifier: `nobody@${uniq("nofam").replace(/[^a-z0-9]/gi, "").slice(0, 16)}`,
       })
     );
 
-    expect(result.status).toBe("error");
-    if (result.status === "error") {
-      expect(result.message).toMatch(/username@familyid/i);
+    expect(hit.status).toBe(miss.status);
+    expect(hit).toEqual({ status: "success" });
+    expect(miss).toEqual({ status: "success" });
+    for (const result of [hit, miss]) {
+      const text = JSON.stringify(result);
+      expect(text).not.toMatch(/\b(found|missing)\b/i);
+      expect(text).not.toContain(familyEmail);
+      expect(text).not.toContain(credential.id);
     }
-    expect(
-      await db.student.count({ where: { adminUserId: tutor.id } })
-    ).toBe(0);
+
+    const rows = await db.student.findMany({ where: { adminUserId: tutor.id } });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.learnerProfileId == null)).toBe(true);
+    expect(await db.student.count({ where: { learnerProfileId: profile.id } })).toBe(0);
   });
 
   it("stores a capped child name with control characters and HTML removed", async () => {

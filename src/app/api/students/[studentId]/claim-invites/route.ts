@@ -97,6 +97,9 @@ export async function POST(
         { status: 429 }
       );
     }
+    if (message === "tutor_daily_claim_cap") {
+      return NextResponse.json({ error: "tutor_daily_claim_cap" }, { status: 429 });
+    }
     throw err;
   }
 }

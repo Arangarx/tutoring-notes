@@ -8,6 +8,8 @@ import {
 import { sendClaimInviteEmail } from "@/lib/account-holder-email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { normalizeEmail } from "@/lib/normalize-email";
+import { DEFAULT_TUTOR_TIMEZONE } from "@/lib/billing/defaults";
+import { startOfZonedDay } from "@/lib/org-scope";
 import {
   inviteTargetKind,
   type RosterInviteTargetKind,
@@ -23,6 +25,46 @@ export type MintClaimInviteResult = {
 
 /** Per-student cap on unclaimed, unexpired invites. Shared by mint and createStudent. */
 export const MAX_PENDING_CLAIM_INVITES = 3;
+
+/** Tutor-owned claim invites since the start of that tutor's day. Org invites are not counted. */
+const TUTOR_DAILY_CLAIM_EMAIL_CAP = 30;
+
+type ClaimWriteClient = Prisma.TransactionClient;
+
+/**
+ * Midnight that opened `now`'s calendar day in the tutor's zone.
+ * Calls startOfZonedDay. Falls back to DEFAULT_TUTOR_TIMEZONE when tutorTimezone is null.
+ */
+export async function startOfTutorDay(
+  adminUserId: string,
+  now: Date,
+  client: ClaimWriteClient | typeof db = db
+): Promise<Date> {
+  const admin = await client.adminUser.findUnique({
+    where: { id: adminUserId },
+    select: { tutorTimezone: true },
+  });
+  const timeZone = admin?.tutorTimezone || DEFAULT_TUTOR_TIMEZONE;
+  return startOfZonedDay(now, timeZone);
+}
+
+async function assertTutorOwnedClaimEmailCap(
+  client: ClaimWriteClient,
+  adminUserId: string,
+  now: Date
+): Promise<void> {
+  const start = await startOfTutorDay(adminUserId, now, client);
+  const sentToday = await client.studentClaimInvite.count({
+    where: {
+      adminUserId,
+      createdAt: { gte: start },
+      student: { organizationId: null },
+    },
+  });
+  if (sentToday >= TUTOR_DAILY_CLAIM_EMAIL_CAP) {
+    throw new Error("tutor_daily_claim_cap");
+  }
+}
 
 export async function countPendingClaimInvites(
   studentId: string,
@@ -75,28 +117,41 @@ export async function mintStudentClaimInvite(params: {
   client?: Prisma.TransactionClient;
 }): Promise<MintClaimInviteResult> {
   const now = new Date();
-  const client = params.client ?? db;
-
-  const pendingCount = await countPendingClaimInvites(params.studentId, now, client);
-
-  if (pendingCount >= MAX_PENDING_CLAIM_INVITES) {
-    throw new Error("too_many_pending_invites");
-  }
-
   const rawToken = generateRawToken();
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + CLAIM_INVITE_TTL_MS);
 
-  const invite = await client.studentClaimInvite.create({
-    data: {
-      studentId: params.studentId,
-      adminUserId: params.adminUserId,
-      tokenHash,
-      expiresAt,
-      intendedEmail: normalizeEmail(params.recipientEmail),
-      inviteTargetKind: params.targetKind,
-    },
-  });
+  const writeInvite = async (client: ClaimWriteClient) => {
+    const pendingCount = await countPendingClaimInvites(params.studentId, now, client);
+    if (pendingCount >= MAX_PENDING_CLAIM_INVITES) {
+      throw new Error("too_many_pending_invites");
+    }
+
+    const rosterStudent = await client.student.findUnique({
+      where: { id: params.studentId },
+      select: { organizationId: true },
+    });
+    // Org learners stay on assertCanSendOrgClaimEmail. This personal cap does not run for them.
+    if (rosterStudent && rosterStudent.organizationId == null) {
+      await client.$queryRaw`SELECT id FROM "AdminUser" WHERE id = ${params.adminUserId} FOR UPDATE`;
+      await assertTutorOwnedClaimEmailCap(client, params.adminUserId, now);
+    }
+
+    return client.studentClaimInvite.create({
+      data: {
+        studentId: params.studentId,
+        adminUserId: params.adminUserId,
+        tokenHash,
+        expiresAt,
+        intendedEmail: normalizeEmail(params.recipientEmail),
+        inviteTargetKind: params.targetKind,
+      },
+    });
+  };
+
+  const invite = params.client
+    ? await writeInvite(params.client)
+    : await db.$transaction((tx) => writeInvite(tx));
 
   console.log(
     `[clm] clm=${invite.id} action=invited studentId=${params.studentId} adminUserId=${params.adminUserId}`

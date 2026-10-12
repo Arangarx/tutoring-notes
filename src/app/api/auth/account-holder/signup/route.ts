@@ -108,7 +108,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          mailed.error ??
           "We couldn't send a confirmation email. Try again later, or contact support if this keeps happening.",
       },
       { status: 503 }

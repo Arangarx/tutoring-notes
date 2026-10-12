@@ -366,7 +366,7 @@ describe("account-holder platform mail", () => {
     const email = uniqueEmail("signup-rollback");
     setPlatformMailSenderForTests(async () => ({
       sent: false,
-      error: "Platform SMTP is not configured.",
+      error: "Platform SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS.",
     }));
 
     const req = new NextRequest("https://app.example.com/api/auth/account-holder/signup", {
@@ -378,7 +378,12 @@ describe("account-holder platform mail", () => {
     const res = await signupPOST(req);
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error?: string };
-    expect(body.error).toMatch(/confirmation email|SMTP/i);
+    expect(body.error).toBe(
+      "We couldn't send a confirmation email. Try again later, or contact support if this keeps happening."
+    );
+    expect(body.error ?? "").not.toMatch(/SMTP_HOST/);
+    expect(body.error ?? "").not.toMatch(/SMTP_USER/);
+    expect(body.error ?? "").not.toMatch(/SMTP_PASS/);
     expect(await db.accountHolder.count({ where: { email } })).toBe(0);
   });
 });

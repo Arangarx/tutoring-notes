@@ -521,6 +521,7 @@ describe("signup server action — operator notification", () => {
       adminUserId: "u1",
       email: "brand-new@example.com",
       baseUrl: "https://app.example.com",
+      returnTo: null,
     });
     expect(notify).toHaveBeenCalledWith({
       email: "brand-new@example.com",
@@ -586,7 +587,12 @@ describe("signup server action — operator notification", () => {
     form.set("passwordConfirm", "StrongPassphrase!99");
 
     const result = await signup(null, form);
-    expect(result?.error).toMatch(/couldn't send a confirmation email|SMTP is not configured/i);
+    expect(result?.error).toBe(
+      "We couldn't send a confirmation email. Try again later, or contact support if this keeps happening."
+    );
+    expect(result?.error ?? "").not.toMatch(/SMTP_HOST/);
+    expect(result?.error ?? "").not.toMatch(/SMTP_USER/);
+    expect(result?.error ?? "").not.toMatch(/SMTP_PASS/);
     expect(deleteAdmin).toHaveBeenCalledWith({ where: { id: "u-rollback" } });
     expect(notify).not.toHaveBeenCalled();
     expect(logProductEvent).not.toHaveBeenCalled();

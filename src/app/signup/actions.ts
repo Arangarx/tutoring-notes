@@ -80,7 +80,6 @@ export async function signup(
     await db.adminUser.delete({ where: { id: created.id } });
     return {
       error:
-        mailed.error ??
         "We couldn't send a confirmation email. Try again later, or contact support if this keeps happening.",
     };
   }
