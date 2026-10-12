@@ -90,7 +90,7 @@ PLAN READY (Sonnet, readonly). Order: (a) item 3 wire change (send `visualViewpo
 
 ## Status
 
-Nothing on this list is fixed yet. The consent wording is changed but uncommitted ("Consent has not been given yet. You cannot join a session until you give consent. Open Manage, then Privacy."). Quick fixes 10, 5, 4, 9 are in progress. Fragile surfaces (viewport follow and sync, replay and recording) get a plan-mode step-back and a Sonnet review before any edit.
+Quick fixes 10, 5, 4, 9 are committed (`87a3e948`), including the decline copy "Open Manage, then Privacy." The agreement closing clause matches that path (this commit). Viewport step 1 (view box, board-switch speed, tutor Recenter) is `15075f76`. Step 2 (ghost stays still while panning) is `04de4504`. The top bar, left nav, and bottom bar do not overlap the canvas, so Andrew's occlusion rule is already met by layout. Step 3 (lock guard and pill) is next. Items 7, 8, and 11 are not started.
 
 Step 1 sends `viewLocked` on the student page-view wire. Step 2 consumes it for the freeze hold.
 

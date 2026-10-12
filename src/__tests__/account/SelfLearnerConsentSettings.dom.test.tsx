@@ -13,6 +13,11 @@ jest.mock("@/app/account/children/[id]/consent/actions", () => ({
 
 import { SelfLearnerConsentSettings } from "@/components/consent/SelfLearnerConsentSettings";
 import { saveSelfLearnerConsentAction } from "@/app/account/children/[id]/consent/actions";
+import { SELF_LEARNER_AGREEMENT } from "@/lib/consent-toggle-copy";
+
+/** Reader-facing agreement. Closing clause names Manage, then Privacy. */
+const SELF_LEARNER_AGREEMENT_COPY =
+  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk drafts session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
 
 const saveMock = saveSelfLearnerConsentAction as jest.MockedFunction<
   typeof saveSelfLearnerConsentAction
@@ -95,6 +100,24 @@ describe("SelfLearnerConsentSettings", () => {
     await user.click(screen.getByTestId("self-learner-agreement"));
     await user.click(screen.getByRole("button", { name: /save preferences/i }));
     await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
+  });
+
+  test("agreement names Manage, then Privacy as where consent can be changed", () => {
+    expect(SELF_LEARNER_AGREEMENT).toBe(SELF_LEARNER_AGREEMENT_COPY);
+
+    render(
+      <SelfLearnerConsentSettings
+        learnerProfileId="learner-1"
+        tutors={tutors}
+        organizations={[]}
+        showAgreement
+      />
+    );
+
+    const shown = screen.getByText(/I agree that my tutoring sessions may be recorded/).textContent;
+    expect(shown).toBe(SELF_LEARNER_AGREEMENT_COPY);
+    // The agreement does not tell the reader to open Settings.
+    expect(shown ?? "").not.toMatch(/\bSettings\b/);
   });
 
   test("shows the live-session sentence when live sessions are off", () => {

@@ -21,7 +21,7 @@ export const SELF_LEARNER_AUDIO_HELP =
 
 /** Accepted self-learner agreement. Andrew 2026-10-11. */
 export const SELF_LEARNER_AGREEMENT =
-  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk drafts session notes from them. I can turn any of this off later in Settings.";
+  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk drafts session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
 
 export const WHITEBOARD_RECORDING_CONSENT_COPY = {
   label: "Allow whiteboard recording",
