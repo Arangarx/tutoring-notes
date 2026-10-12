@@ -38,10 +38,14 @@ export async function POST(
 
   let chunkCount = 5;
   let pruneNonHarnessChunks = false;
+  let noteStatus: "pending" | "generating" = "pending";
+  let noteContent: string | null = DEFAULT_NOTE_CONTENT;
   try {
     const body = (await req.json()) as {
       chunkCount?: number;
       pruneNonHarnessChunks?: boolean;
+      noteStatus?: unknown;
+      noteContent?: unknown;
     };
     if (
       typeof body.chunkCount === "number" &&
@@ -53,6 +57,27 @@ export async function POST(
     }
     if (body.pruneNonHarnessChunks === true) {
       pruneNonHarnessChunks = true;
+    }
+    if ("noteStatus" in body && body.noteStatus !== undefined) {
+      if (body.noteStatus !== "pending" && body.noteStatus !== "generating") {
+        return NextResponse.json(
+          { error: "noteStatus must be pending or generating." },
+          { status: 400 }
+        );
+      }
+      noteStatus = body.noteStatus;
+    }
+    if ("noteContent" in body) {
+      if (body.noteContent === null) {
+        noteContent = null;
+      } else if (typeof body.noteContent === "string") {
+        noteContent = body.noteContent;
+      } else {
+        return NextResponse.json(
+          { error: "noteContent must be a string or null." },
+          { status: 400 }
+        );
+      }
     }
   } catch {
     // empty body → defaults
@@ -117,14 +142,14 @@ export async function POST(
     where: { sessionId },
     create: {
       sessionId,
-      status: "pending",
-      content: DEFAULT_NOTE_CONTENT,
+      status: noteStatus,
+      content: noteContent,
       lastReducedChunkCount: chunkCount,
       lastLiveReduceAt: now,
     },
     update: {
-      status: "pending",
-      content: DEFAULT_NOTE_CONTENT,
+      status: noteStatus,
+      content: noteContent,
       lastReducedChunkCount: chunkCount,
       lastLiveReduceAt: now,
       isPartial: false,
@@ -159,5 +184,7 @@ export async function POST(
     chunkIds,
     tutorNoteId: note.id,
     lastReducedChunkCount: note.lastReducedChunkCount,
+    noteStatus: note.status,
+    noteContent: note.content,
   });
 }

@@ -31,7 +31,7 @@ export async function GET(
 
   const tutorNote = await db.tutorNote.findUnique({
     where: { sessionId },
-    select: { status: true, lastReducedChunkCount: true },
+    select: { status: true, lastReducedChunkCount: true, content: true },
   });
 
   const doneChunkCount = rows.filter((r) => r.status === "done").length;
@@ -68,6 +68,7 @@ export async function GET(
     byStream,
     rows,
     tutorNoteStatus: tutorNote?.status ?? null,
+    tutorNoteContent: tutorNote?.content ?? null,
     tutorNoteLastReducedChunkCount: tutorNote?.lastReducedChunkCount ?? 0,
     doneChunkCount,
     finalizeReduceCostEventCount,

@@ -13,6 +13,7 @@ const NOTES_DONE_POLL_BUDGET_MS = 3_000;
 
 type NotesPipelineState = {
   tutorNoteStatus: string | null;
+  tutorNoteContent: string | null;
   tutorNoteLastReducedChunkCount: number;
   doneChunkCount: number;
   finalizeReduceCostEventCount: number;
@@ -81,61 +82,38 @@ async function assertWatermarkCurrentPrecondition(
   return s;
 }
 
-type ShimmerOverlayState = {
-  content: string;
-  backgroundPosition: string;
+type SkeletonMotion = {
   animationName: string;
   opacity: string;
-  zIndex: string;
 };
 
-async function readShimmerOverlayState(
-  page: import("@playwright/test").Page,
-  generatingWrap: import("@playwright/test").Locator
-): Promise<ShimmerOverlayState> {
-  return generatingWrap.evaluate((el) => {
-    const after = getComputedStyle(el, "::after");
+function topicsSkeletonBar(page: import("@playwright/test").Page) {
+  return page
+    .locator("#wb-note-topics")
+    .locator("xpath=..")
+    .locator("[data-slot='skeleton']")
+    .first();
+}
+
+async function readSkeletonMotion(
+  bar: import("@playwright/test").Locator
+): Promise<SkeletonMotion> {
+  return bar.evaluate((el) => {
+    const style = getComputedStyle(el);
     return {
-      content: after.content,
-      backgroundPosition: after.backgroundPosition,
-      animationName: after.animationName,
-      opacity: after.opacity,
-      zIndex: after.zIndex,
+      animationName: style.animationName,
+      opacity: style.opacity,
     };
   });
 }
 
-async function waitForNotesPipelineActiveState(
-  page: import("@playwright/test").Page,
-  sessionId: string,
-  timeoutMs = 120_000
-): Promise<{ noteStatus: string | null; generatingVisible: boolean }> {
-  const deadline = Date.now() + timeoutMs;
-  const seenStatuses = new Set<string>();
-
-  while (Date.now() < deadline) {
-    const noteStatus = await fetchTutorNoteStatus(page, sessionId);
-    if (noteStatus) {
-      seenStatuses.add(noteStatus);
-    }
-    const generatingVisible = await page
-      .getByTestId("tutor-notes-generating")
-      .isVisible()
-      .catch(() => false);
-
-    if (generatingVisible) {
-      return { noteStatus, generatingVisible: true };
-    }
-    if (noteStatus === "pending" || noteStatus === "generating") {
-      return { noteStatus, generatingVisible: false };
-    }
-
-    await page.waitForTimeout(100);
+async function visibleNoteFieldsAreEmpty(page: import("@playwright/test").Page) {
+  const ids = ["#wb-note-topics", "#wb-note-assessment", "#wb-note-nextsteps", "#wb-note-links"];
+  for (const id of ids) {
+    const value = await page.locator(id).inputValue();
+    if (value.trim()) return false;
   }
-
-  throw new Error(
-    `Timed out waiting for tutor-notes-generating UI (statuses seen: ${[...seenStatuses].join(", ") || "none"}) for session ${sessionId}`
-  );
+  return true;
 }
 
 async function fetchRecordingCount(
@@ -202,14 +180,10 @@ async function recordShortSoloSession(
   });
 }
 
-async function waitForNotesGeneratingUiWithShimmer(
+async function waitForInFlightNotesUi(
   page: import("@playwright/test").Page,
   timeoutMs = 90_000
-): Promise<{
-  generatingWrap: import("@playwright/test").Locator;
-  overlay0: ShimmerOverlayState;
-  overlay1: ShimmerOverlayState;
-}> {
+): Promise<{ phase: "pending" | "generating" }> {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -228,30 +202,21 @@ async function waitForNotesGeneratingUiWithShimmer(
     const copyOk =
       phase === "generating"
         ? text === "Writing notes…"
-        : text === "Preparing your notes...";
-    if (!copyOk) {
+        : phase === "pending" && text === "Preparing your notes...";
+    if (!copyOk || (phase !== "pending" && phase !== "generating")) {
       await page.waitForTimeout(100);
       continue;
     }
-
-    // WS-K fast-finalize: capture shimmer in the same turn as copy validation.
-    const overlay0 = await readShimmerOverlayState(page, generatingWrap);
-    await page.waitForTimeout(800);
-    if (!(await generatingWrap.isVisible().catch(() => false))) {
-      await page.waitForTimeout(100);
-      continue;
-    }
-    const overlay1 = await readShimmerOverlayState(page, generatingWrap);
-    return { generatingWrap, overlay0, overlay1 };
+    return { phase };
   }
 
   throw new Error(
-    "Timed out waiting for notes generating UI with WS-K status copy + shimmer overlay"
+    "Timed out waiting for in-flight notes UI with status copy"
   );
 }
 
 test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_RECORDING] }, () => {
-  test("end session → pending/generating: overlay visible, animating, status copy", async ({
+  test("end session → pending/generating: in-box placeholder when empty, status copy", async ({
     page,
   }) => {
     test.setTimeout(360_000);
@@ -261,59 +226,71 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await recordShortSoloSession(page, studentId, whiteboardSessionId);
 
-    const { generatingWrap, overlay0, overlay1 } =
-      await waitForNotesGeneratingUiWithShimmer(page, 90_000);
+    const { phase } = await waitForInFlightNotesUi(page, 90_000);
 
     const recordings = await fetchRecordingCount(page, whiteboardSessionId);
     expect(recordings.count).toBeGreaterThanOrEqual(1);
 
-    // Form fields stay visible underneath the overlay affordance.
     const topicsField = page.locator("#wb-note-topics");
     await expect(topicsField).toBeVisible();
     await expect(topicsField).toBeEditable({ editable: false });
-
-    // Shimmer is a wrapper ::after ON TOP of fields — not an invisible div behind textareas.
-    expect(overlay0.content, "wrapper ::after shimmer overlay is present").not.toBe("none");
-    expect(Number.parseInt(overlay0.zIndex, 10)).toBeGreaterThanOrEqual(2);
-    expect(Number.parseFloat(overlay0.opacity)).toBeGreaterThan(0.4);
-
-    expect(
-      overlay1.backgroundPosition,
-      "shimmer background-position moves over ~800ms (real animation, not static paint)"
-    ).not.toBe(overlay0.backgroundPosition);
-
+    await expect(page.locator(".tn-notes-generating-wrap")).toHaveCount(0);
     await expect(page.getByTestId("tutor-notes-content")).not.toBeVisible();
     await expect(page.getByTestId("wb-save-note")).not.toBeVisible();
+
+    const empty = await visibleNoteFieldsAreEmpty(page);
+    if (phase === "generating" || empty) {
+      if (phase === "generating") {
+        await expect(topicsField).toHaveValue("");
+      }
+      await expectInBoxSkeleton(page, "#wb-note-topics");
+      const bar = topicsSkeletonBar(page);
+      const motion0 = await readSkeletonMotion(bar);
+      expect(motion0.animationName, "in-box skeleton is painted").not.toBe("none");
+      expect(Number.parseFloat(motion0.opacity)).toBeGreaterThan(0.4);
+      await page.waitForTimeout(800);
+      const motion1 = await readSkeletonMotion(bar);
+      expect(
+        motion1.opacity,
+        "skeleton opacity moves over ~800ms (real animation, not static paint)"
+      ).not.toBe(motion0.opacity);
+    } else {
+      expect(phase).toBe("pending");
+      await expect(page.getByTestId("tn-note-field-skeleton")).toHaveCount(0);
+    }
   });
 
-  test("prefers-reduced-motion: static loading overlay, no animation", async ({
+  test("prefers-reduced-motion: static in-box skeleton, no animation", async ({
     page,
   }) => {
-    test.setTimeout(360_000);
-
-    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
+    test.setTimeout(180_000);
 
     await page.emulateMedia({ reducedMotion: "reduce" });
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
-    await recordShortSoloSession(page, studentId, whiteboardSessionId);
-    await waitForNotesPipelineActiveState(page, whiteboardSessionId, 90_000);
+    await seedBlurNote(page, whiteboardSessionId, {
+      noteStatus: "pending",
+      noteContent: null,
+    });
+    await sealWithoutEnqueue(page, whiteboardSessionId);
+    await openSealedReview(page, studentId, whiteboardSessionId, "pending");
 
-    const generatingWrap = page.getByTestId("tutor-notes-generating");
-    await expect(generatingWrap).toBeVisible();
+    await expect(page.locator(".tn-notes-generating-wrap")).toHaveCount(0);
+    await expectInBoxSkeleton(page, "#wb-note-topics");
 
-    const overlay0 = await readShimmerOverlayState(page, generatingWrap);
-    expect(overlay0.content).not.toBe("none");
-    expect(overlay0.animationName).toBe("none");
-    expect(Number.parseFloat(overlay0.opacity)).toBeGreaterThan(0.5);
+    const bar = topicsSkeletonBar(page);
+    const motion0 = await readSkeletonMotion(bar);
+    expect(motion0.animationName).toBe("none");
+    expect(Number.parseFloat(motion0.opacity)).toBeGreaterThan(0.5);
 
     await page.waitForTimeout(800);
 
-    const overlay1 = await readShimmerOverlayState(page, generatingWrap);
+    const motion1 = await readSkeletonMotion(bar);
     expect(
-      overlay1.backgroundPosition,
-      "reduced-motion uses a static high-contrast loading state"
-    ).toBe(overlay0.backgroundPosition);
+      motion1.opacity,
+      "reduced-motion uses a static in-box skeleton"
+    ).toBe(motion0.opacity);
+    expect(motion1.animationName).toBe("none");
 
     await expect(page.getByTestId("tutor-notes-status")).toBeVisible();
   });
@@ -377,3 +354,205 @@ test.describe(
     });
   }
 );
+
+const DRAFT_TOPICS = "Algebra factoring";
+
+/**
+ * First-paint bound. Playwright treats `timeout: FIRST_PAINT_MS` as no timeout, so a
+ * failing count would wait until the test dies. 500ms is shorter than the
+ * 3s notes poll, so a visible form-wide wrap fails instead of disappearing.
+ */
+const FIRST_PAINT_MS = 500;
+
+async function seedBlurNote(
+  page: import("@playwright/test").Page,
+  sessionId: string,
+  note: { noteStatus: "pending" | "generating"; noteContent: string | null }
+) {
+  const res = await page.request.post(
+    `/api/test/whiteboard/${sessionId}/seed-wsk-watermark`,
+    {
+      headers: { Authorization: `Bearer ${TEST_SECRET}` },
+      data: { chunkCount: 5, ...note },
+    }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+}
+
+async function sealWithoutEnqueue(
+  page: import("@playwright/test").Page,
+  sessionId: string
+) {
+  const res = await page.request.post(
+    `/api/test/whiteboard/${sessionId}/seal-and-enqueue-notes`,
+    {
+      headers: { Authorization: `Bearer ${TEST_SECRET}` },
+      data: { enqueue: false },
+    }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  const body = (await res.json()) as { enqueued?: boolean };
+  expect(body.enqueued).toBe(false);
+}
+
+async function openSealedReview(
+  page: import("@playwright/test").Page,
+  studentId: string,
+  whiteboardSessionId: string,
+  phase: "pending" | "generating"
+) {
+  await page.goto(
+    `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
+    { waitUntil: "domcontentloaded" }
+  );
+  await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
+    timeout: 90_000,
+  });
+  const topics = page.locator("#wb-note-topics");
+  await expect(topics).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("tutor-notes-generating")).toHaveAttribute(
+    "data-note-phase",
+    phase
+  );
+  return topics;
+}
+
+function formWideWrap(page: import("@playwright/test").Page) {
+  return page.locator(".tn-notes-generating-wrap");
+}
+
+test.describe(
+  "notes blur — in-box placeholder (Andrew 2026-10-12)",
+  { tag: [TAG.WB_RECORDING] },
+  () => {
+    test("pending note with topics text: first paint shows the draft, no form-wide blur, no in-box skeleton", async ({
+      page,
+    }) => {
+      test.setTimeout(180_000);
+
+      const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+      await seedBlurNote(page, whiteboardSessionId, {
+        noteStatus: "pending",
+        noteContent: JSON.stringify({
+          topics: DRAFT_TOPICS,
+          assessment: "Solid grasp of basics",
+          nextSteps: "Practice mixed problems",
+          links: "",
+        }),
+      });
+      await sealWithoutEnqueue(page, whiteboardSessionId);
+
+      const topics = await openSealedReview(
+        page,
+        studentId,
+        whiteboardSessionId,
+        "pending"
+      );
+
+      // First paint. Do not wait for a wrapper to disappear.
+      await expect(topics).toHaveValue(DRAFT_TOPICS, { timeout: FIRST_PAINT_MS });
+      await expect(formWideWrap(page)).toHaveCount(0, { timeout: FIRST_PAINT_MS });
+      await expect(page.getByTestId("tn-note-field-skeleton")).toHaveCount(0, {
+        timeout: FIRST_PAINT_MS,
+      });
+      await expect(topics).toBeEditable({ editable: false, timeout: FIRST_PAINT_MS });
+      await expect(page.getByTestId("wb-save-note")).toHaveCount(0, { timeout: FIRST_PAINT_MS });
+      await expect(page.getByTestId("tutor-notes-status")).toHaveText(
+        "Preparing your notes...",
+        { timeout: FIRST_PAINT_MS }
+      );
+    });
+
+    test("generating note keeps stored topics in the database and clears the box", async ({
+      page,
+    }) => {
+      test.setTimeout(180_000);
+
+      const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+      const stored = JSON.stringify({
+        topics: DRAFT_TOPICS,
+        assessment: "Solid grasp of basics",
+        nextSteps: "Practice mixed problems",
+        links: "",
+      });
+      await seedBlurNote(page, whiteboardSessionId, {
+        noteStatus: "generating",
+        noteContent: stored,
+      });
+      await sealWithoutEnqueue(page, whiteboardSessionId);
+
+      const topics = await openSealedReview(
+        page,
+        studentId,
+        whiteboardSessionId,
+        "generating"
+      );
+
+      const storedRow = await fetchNotesPipelineState(page, whiteboardSessionId);
+      expect(storedRow.tutorNoteStatus).toBe("generating");
+      expect(storedRow.tutorNoteContent).toContain(DRAFT_TOPICS);
+
+      // Immediate: today's code still shows the previous topics under the form-wide wrap.
+      await expect(topics).toHaveValue("", { timeout: FIRST_PAINT_MS });
+      await expect(formWideWrap(page)).toHaveCount(0, { timeout: FIRST_PAINT_MS });
+      await expectInBoxSkeleton(page, "#wb-note-topics");
+      await expect(topics).toBeEditable({ editable: false, timeout: FIRST_PAINT_MS });
+      await expect(page.getByTestId("wb-save-note")).toHaveCount(0, { timeout: FIRST_PAINT_MS });
+      await expect(page.getByTestId("tutor-notes-status")).toHaveText("Writing notes…", {
+        timeout: FIRST_PAINT_MS,
+      });
+    });
+
+    test("pending and generating with empty content show the in-box skeleton only", async ({
+      page,
+    }) => {
+      test.setTimeout(180_000);
+
+      for (const noteStatus of ["pending", "generating"] as const) {
+        const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+        await seedBlurNote(page, whiteboardSessionId, {
+          noteStatus,
+          noteContent: null,
+        });
+        await sealWithoutEnqueue(page, whiteboardSessionId);
+
+        const topics = await openSealedReview(
+          page,
+          studentId,
+          whiteboardSessionId,
+          noteStatus
+        );
+        await expect(topics).toHaveValue("", { timeout: FIRST_PAINT_MS });
+        await expect(page.getByTestId("tn-note-field-skeleton").first()).toBeVisible({
+          timeout: FIRST_PAINT_MS,
+        });
+        await expect(formWideWrap(page)).toHaveCount(0, { timeout: FIRST_PAINT_MS });
+        await expectInBoxSkeleton(page, "#wb-note-topics");
+        await expect(topics).toBeEditable({ editable: false, timeout: FIRST_PAINT_MS });
+        await expect(page.getByTestId("wb-save-note")).toHaveCount(0, { timeout: FIRST_PAINT_MS });
+      }
+    });
+  }
+);
+
+/** Skeleton bars sit inside the entry box, not over the rest of the form. */
+async function expectInBoxSkeleton(
+  page: import("@playwright/test").Page,
+  fieldSelector: string
+) {
+  const field = page.locator(fieldSelector);
+  const skeleton = field.locator("xpath=..").getByTestId("tn-note-field-skeleton");
+  await expect(skeleton).toBeVisible({ timeout: FIRST_PAINT_MS });
+  const fieldBox = await field.boundingBox();
+  const skeletonBox = await skeleton.boundingBox();
+  expect(fieldBox, `${fieldSelector} has a box`).not.toBeNull();
+  expect(skeletonBox, `${fieldSelector} skeleton has a box`).not.toBeNull();
+  expect(skeletonBox!.x).toBeGreaterThanOrEqual(fieldBox!.x - 2);
+  expect(skeletonBox!.y).toBeGreaterThanOrEqual(fieldBox!.y - 2);
+  expect(skeletonBox!.x + skeletonBox!.width).toBeLessThanOrEqual(
+    fieldBox!.x + fieldBox!.width + 2
+  );
+  expect(skeletonBox!.y + skeletonBox!.height).toBeLessThanOrEqual(
+    fieldBox!.y + fieldBox!.height + 2
+  );
+}

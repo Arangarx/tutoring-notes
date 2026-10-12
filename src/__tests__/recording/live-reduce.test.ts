@@ -459,43 +459,39 @@ describe("(c) processNotesReduceJob tail case — one un-reduced chunk → one r
 });
 
 // ---------------------------------------------------------------------------
-// (d) Shimmer CSS — gradient uses DEFINED vars (not transparent)
+// (d) In-box placeholder — no form-wide overlay, no undefined gradient tokens
 // ---------------------------------------------------------------------------
 
-describe("(d) Shimmer CSS — gradient vars are defined (not --surface-muted/hover)", () => {
+describe("(d) In-box placeholder — Skeleton, not a form-wide shimmer overlay", () => {
+  const sectionPath = path.resolve(
+    __dirname,
+    "../../components/whiteboard/TutorNotesSection.tsx"
+  );
   const cssPath = path.resolve(
     __dirname,
     "../../styles/tutor-notes-shimmer.css"
   );
 
-  it("CSS file exists", () => {
-    expect(fs.existsSync(cssPath)).toBe(true);
+  it("composes the shared Skeleton and does not keep the form-wide overlay", () => {
+    const src = fs.readFileSync(sectionPath, "utf8");
+    expect(src).toContain('from "@/components/ui/skeleton"');
+    expect(src).not.toContain("tn-notes-generating-wrap");
+    expect(fs.existsSync(cssPath)).toBe(false);
   });
 
   it("does NOT use undefined --surface-muted (resolves to transparent)", () => {
-    const css = fs.readFileSync(cssPath, "utf8");
-    expect(css).not.toContain("--surface-muted");
+    const src = fs.readFileSync(sectionPath, "utf8");
+    expect(src).not.toContain("--surface-muted");
   });
 
   it("does NOT use undefined --surface-hover (resolves to transparent)", () => {
-    const css = fs.readFileSync(cssPath, "utf8");
-    expect(css).not.toContain("--surface-hover");
-  });
-
-  it("uses --surface-2 instead (guaranteed non-transparent in both themes)", () => {
-    const css = fs.readFileSync(cssPath, "utf8");
-    expect(css).toContain("--surface-2");
-  });
-
-  it("uses --surface-3 instead (guaranteed non-transparent in both themes)", () => {
-    const css = fs.readFileSync(cssPath, "utf8");
-    expect(css).toContain("--surface-3");
+    const src = fs.readFileSync(sectionPath, "utf8");
+    expect(src).not.toContain("--surface-hover");
   });
 
   it("preserves reduced-motion branch (animation: none)", () => {
-    const css = fs.readFileSync(cssPath, "utf8");
-    expect(css).toContain("prefers-reduced-motion");
-    expect(css).toContain("animation: none");
+    const src = fs.readFileSync(sectionPath, "utf8");
+    expect(src).toContain("motion-reduce:animate-none");
   });
 });
 

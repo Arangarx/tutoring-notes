@@ -1804,6 +1804,9 @@ Lower priority.
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
+**[P2][TEST] PLAYWRIGHT-GAP — long End wait before review (2026-10-12)**  
+The long End wait (upload drain and the caller in front of endWhiteboardSession) is a PLAYWRIGHT-GAP and is not measured by the notes-blur tests. Do not add timing logs for it.
+
 **[P2][TEST] PLAYWRIGHT-GAP — on-page Record/Upload resilience**  
 On-page Record/Upload resilience has no surface until that recorder returns. `tests/audio-upload.spec.ts` skips the pending-segment and transcribe cases. The Notes page coming-soon sentence stays a real test.
 

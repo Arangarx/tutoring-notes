@@ -10,6 +10,10 @@ import { guardPlaywrightTestRoute } from "@/lib/playwright-test-route";
  * the WS-K finalize fast-path (isPartial). This route mirrors the notes
  * pipeline trigger End would fire once chunks are settled, without polluting
  * TranscriptChunk rows.
+ *
+ * `{ enqueue: false }` seals endedAt and leaves the TutorNote row alone.
+ * The notes-blur tests need a pending or generating note that stays that way;
+ * enqueueNotesReduce can fast-path the row to done and hide the blur.
  */
 export async function POST(
   req: NextRequest,
@@ -19,6 +23,14 @@ export async function POST(
   if (denied) return denied;
 
   const { sessionId } = await ctx.params;
+
+  let enqueue = true;
+  try {
+    const body = (await req.json()) as { enqueue?: unknown };
+    if (body?.enqueue === false) enqueue = false;
+  } catch {
+    // empty body → enqueue, matching the original seal-and-enqueue callers
+  }
 
   const session = await db.whiteboardSession.findUnique({
     where: { id: sessionId },
@@ -36,10 +48,13 @@ export async function POST(
     });
   }
 
-  await enqueueNotesReduce(sessionId);
+  if (enqueue) {
+    await enqueueNotesReduce(sessionId);
+  }
 
   return NextResponse.json({
     ok: true,
     sealedAt: sealedAt.toISOString(),
+    enqueued: enqueue,
   });
 }

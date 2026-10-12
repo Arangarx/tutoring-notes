@@ -5,7 +5,10 @@
  *
  * After session end, TutorNote is auto-generated as structured JSON; this component:
  *
- *   1. Shows a skeleton/loading state while TutorNote.status = pending | generating
+ *   1. While status is pending or generating and the visible fields are empty,
+ *      each entry box shows the shared Skeleton. A pending draft with text
+ *      stays readable. A generating replacement clears the boxes on screen
+ *      without blanking the stored TutorNote.content.
  *   2. Polls every 3s until done, partial, or failed
  *   3. When done: shows an editable structured form (Topics / Assessment / Plan / Links)
  *      with Save (DRAFT → READY) and Cancel+delete session data buttons
@@ -37,8 +40,7 @@ import {
   deleteWhiteboardSessionAndDataAction,
   type TutorNoteStatusResult,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
-
-import "@/styles/tutor-notes-shimmer.css";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -201,10 +203,19 @@ export default function TutorNotesSection({
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
+  const hasStoredContent = note.found && Boolean(note.content);
   // The editable form (and the Finish review control nested in it) is only
-  // mounted while generation is in flight or a note with content is ready.
+  // mounted while generation is in flight, a note with content is ready, or
+  // a failed replacement still has the previous draft to show.
   const notesFormOpen =
-    (isActive || (isDone && Boolean(note.found && note.content))) && !timedOut;
+    (isActive || ((isDone || isFailed) && hasStoredContent)) && !timedOut;
+  // Generating replaces the whole note. Hide the previous draft on screen.
+  // The stored row stays until the worker saves the new text.
+  const visibleFields: StructuredFields = isGeneratingPhase
+    ? { topics: "", assessment: "", nextSteps: "", links: "" }
+    : fields;
+  const showInBoxSkeleton =
+    (isPendingPhase || isGeneratingPhase) && noteFieldsAreEmpty(visibleFields);
 
   useEffect(() => {
     if (isFailed && note.found && note.error) {
@@ -424,15 +435,13 @@ export default function TutorNotesSection({
         </div>
       )}
 
-      {/* Notes form — visible during generating (shimmer overlay) and done states.
-          During generating: form fields are shown with a semi-transparent shimmer wave
-          overlay and read-only textareas; empty-field placeholders appear at reduced
-          opacity. During done: overlay is gone and generated content fills the fields. */}
-      {(isActive || (isDone && note.content)) && !timedOut && (
+      {/* Notes form. In-flight empty boxes carry an in-box Skeleton.
+          A pending draft with text is shown as-is. Generating clears the
+          boxes on screen. Done and partial show the text and Save. */}
+      {notesFormOpen && (
         <div
           data-testid={isActive ? "tutor-notes-generating" : "tutor-notes-content"}
           aria-busy={isActive || undefined}
-          className={isActive ? "tn-notes-generating-wrap" : undefined}
           data-note-phase={
             isGeneratingPhase ? "generating" : isPendingPhase ? "pending" : undefined
           }
@@ -463,35 +472,39 @@ export default function TutorNotesSection({
             <NoteField
               label="Topics covered"
               id="wb-note-topics"
-              value={fields.topics}
+              value={visibleFields.topics}
               onChange={(v) => updateFields((f) => ({ ...f, topics: v }))}
               placeholder="e.g. Quadratics, factoring, FOIL method"
               isGenerating={isActive}
+              showInBoxSkeleton={showInBoxSkeleton}
             />
             <NoteField
               label="Assessment"
               id="wb-note-assessment"
-              value={fields.assessment}
+              value={visibleFields.assessment}
               onChange={(v) => updateFields((f) => ({ ...f, assessment: v }))}
               placeholder="Where the student stands — strengths, struggles, mastery level"
               isGenerating={isActive}
+              showInBoxSkeleton={showInBoxSkeleton}
             />
             <NoteField
               label="Plan / Next steps"
               id="wb-note-nextsteps"
-              value={fields.nextSteps}
+              value={visibleFields.nextSteps}
               onChange={(v) => updateFields((f) => ({ ...f, nextSteps: v }))}
               placeholder="What to do next, including any homework"
               hint="Covers both plan and homework"
               isGenerating={isActive}
+              showInBoxSkeleton={showInBoxSkeleton}
             />
             <NoteField
               label="Links"
               id="wb-note-links"
-              value={fields.links}
+              value={visibleFields.links}
               onChange={(v) => updateFields((f) => ({ ...f, links: v }))}
               placeholder="URLs mentioned (one per line)"
               isGenerating={isActive}
+              showInBoxSkeleton={showInBoxSkeleton}
             />
           </div>
 
@@ -499,7 +512,7 @@ export default function TutorNotesSection({
           {isActive && (
             <div
               className="muted tn-notes-status-footer"
-              style={{ fontSize: 11, marginTop: 2, position: "relative", zIndex: 11 }}
+              style={{ fontSize: 11, marginTop: 2 }}
               data-testid="tutor-notes-status"
             >
               {activeStatusCopy}
@@ -722,6 +735,7 @@ function NoteField({
   placeholder,
   hint,
   isGenerating,
+  showInBoxSkeleton = false,
 }: {
   label: string;
   id: string;
@@ -729,8 +743,10 @@ function NoteField({
   onChange: (v: string) => void;
   placeholder?: string;
   hint?: string;
-  /** When true: textarea is read-only with the shimmer placeholder class applied. */
+  /** In-flight status: the textarea stays read-only even when no skeleton shows. */
   isGenerating?: boolean;
+  /** Empty visible field during pending or generating. */
+  showInBoxSkeleton?: boolean;
 }) {
   return (
     <div style={{ display: "grid", gap: 4 }}>
@@ -747,28 +763,56 @@ function NoteField({
           </span>
         )}
       </label>
-      <textarea
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        readOnly={isGenerating}
-        placeholder={placeholder}
-        rows={value.split("\n").length > 2 ? value.split("\n").length + 1 : 3}
-        className={isGenerating ? "tn-notes-generating-field" : undefined}
-        style={{
-          width: "100%",
-          padding: "8px 10px",
-          fontSize: 13,
-          lineHeight: 1.5,
-          borderRadius: 6,
-          border: "1px solid var(--border)",
-          background: "var(--surface)",
-          color: "var(--text)",
-          resize: isGenerating ? "none" : "vertical",
-          fontFamily: "inherit",
-          boxSizing: "border-box",
-        }}
-      />
+      <div style={{ position: "relative", lineHeight: 0 }}>
+        <textarea
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          readOnly={isGenerating}
+          placeholder={showInBoxSkeleton ? "" : placeholder}
+          rows={value.split("\n").length > 2 ? value.split("\n").length + 1 : 3}
+          style={{
+            display: "block",
+            width: "100%",
+            margin: 0,
+            padding: "8px 10px",
+            fontSize: 13,
+            lineHeight: 1.5,
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
+            color: "var(--text)",
+            resize: isGenerating ? "none" : "vertical",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
+          }}
+        />
+        {showInBoxSkeleton ? (
+          <div
+            data-testid="tn-note-field-skeleton"
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: 1,
+              right: 1,
+              bottom: 1,
+              left: 1,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              gap: 8,
+              padding: "8px 10px",
+              pointerEvents: "none",
+              borderRadius: 5,
+              background: "var(--surface)",
+              overflow: "hidden",
+            }}
+          >
+            <Skeleton className="h-3 w-3/4 motion-reduce:animate-none" />
+            <Skeleton className="h-3 w-1/2 motion-reduce:animate-none" />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
