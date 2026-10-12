@@ -70,7 +70,7 @@ const PATH_RULES = [
     tags: [TAG.WB_CHROME],
   },
   {
-    re: /visible-viewport|measure-visible-viewport|content-view-center|peer-viewport-scene-rect|ghost-viewport|useViewportWireBroadcast|WbGhostViewportOverlay|WbRecenterViewButton|wb-tutor-recenter|wb-ghost-viewport/i,
+    re: /visible-viewport|measure-visible-viewport|content-view-center|peer-viewport-scene-rect|ghost-viewport|ghost-freeze|useViewportWireBroadcast|WbGhostViewportOverlay|WbRecenterViewButton|wb-tutor-recenter|wb-ghost-viewport/i,
     tags: [TAG.WB_VIEWPORT, TAG.WB_PRESENCE, TAG.WB_CHROME],
   },
   {
