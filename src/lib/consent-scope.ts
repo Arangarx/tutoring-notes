@@ -609,7 +609,7 @@ async function findLatestConsentRecord(
  * Then the latest effective consent for that owner.
  * Pass `client` inside a transaction. Otherwise the read is retried.
  */
-async function resolveEffectiveConsentForStudent(
+export async function resolveEffectiveConsentForStudent(
   learnerProfileId: string,
   student: {
     adminUserId: string | null;

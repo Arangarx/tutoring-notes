@@ -509,6 +509,8 @@ export type SessionReviewPayload = {
   canonicalAudioMimeType: string | null;
   canonicalDurationSeconds: number | null;
   initialNote: TutorNoteStatusResult;
+  /** Joined transcript text for this session. Empty when none was stored. */
+  transcriptText?: string;
 };
 
 /**
@@ -563,7 +565,14 @@ export async function loadSessionReviewPayload(
     throw new Error(`Session ${whiteboardSessionId} not found`);
   }
 
-  const note = await getTutorNoteBySessionId(whiteboardSessionId);
+  const [note, transcriptChunks] = await Promise.all([
+    getTutorNoteBySessionId(whiteboardSessionId),
+    db.transcriptChunk.findMany({
+      where: { sessionId: whiteboardSessionId, transcript: { not: "" } },
+      orderBy: { recordingTimeOffsetMs: "asc" },
+      select: { transcript: true },
+    }),
+  ]);
   const initialNote: TutorNoteStatusResult = note
     ? {
         found: true,
@@ -627,5 +636,9 @@ export async function loadSessionReviewPayload(
     canonicalAudioMimeType: replayAudio.canonicalAudioMimeType,
     canonicalDurationSeconds: replayAudio.canonicalDurationSeconds,
     initialNote,
+    transcriptText: transcriptChunks
+      .map((chunk) => chunk.transcript.trim())
+      .filter((text) => text.length > 0)
+      .join("\n"),
   };
 }

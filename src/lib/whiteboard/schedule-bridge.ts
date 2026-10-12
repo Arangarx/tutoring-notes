@@ -18,6 +18,7 @@
 
 import { assertConsentFromLiveRecord, ConsentError } from "@/lib/consent-scope";
 import { db, withDbRetry } from "@/lib/db";
+import { orgInstructorAdmitted } from "@/lib/org-scope";
 import { decideAhJoin } from "@/lib/join-scope";
 import { isWithinJoinWindow } from "@/lib/scheduling/join-window";
 import { createWhiteboardSessionCore } from "@/lib/whiteboard/create-session-core";
@@ -50,6 +51,7 @@ export async function getOrCreateWhiteboardForSchedule(
           student: {
             select: {
               adminUserId: true,
+              organizationId: true,
               learnerProfile: {
                 select: {
                   id: true,
@@ -73,8 +75,16 @@ export async function getOrCreateWhiteboardForSchedule(
   };
 
   if (!sched) return deny("not_found", "no_schedule");
-  // The appointment's tutor must still own the student row.
-  if (sched.student.adminUserId !== sched.adminUserId) {
+  const orgOwned =
+    sched.student.organizationId != null && sched.student.adminUserId == null;
+  if (orgOwned) {
+    const admitted = await orgInstructorAdmitted(
+      db,
+      sched.student.organizationId as string,
+      sched.adminUserId
+    );
+    if (!admitted) return deny("not_found", "org_admission");
+  } else if (sched.student.adminUserId !== sched.adminUserId) {
     return deny("not_found", "student_owner_mismatch");
   }
 

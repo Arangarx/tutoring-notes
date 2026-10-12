@@ -106,6 +106,10 @@ const PATH_RULES = [
     tags: [TAG.WB_PRESENCE, TAG.WB_SYNC, TAG.WB_CHROME, TAG.WB_AV],
   },
   {
+    re: /wb-org-booking|org-session-access|OrgSchedulePanel|org-booking-bridge/i,
+    tags: [TAG.WB_PRESENCE],
+  },
+  {
     re: /wb-org-qol-bridge|wb-adhoc-session-list|schedule-bridge|upcoming-sessions|JoinScheduledSession|openScheduledWhiteboardSession/i,
     tags: [TAG.WB_SYNC, TAG.WB_PRESENCE, TAG.WB_CHROME],
   },

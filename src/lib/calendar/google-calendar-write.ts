@@ -40,6 +40,7 @@ export type ScheduledSessionGoogleSyncInput = {
   student: {
     name: string;
     icsShowFullName: boolean;
+    organizationLearner?: { givenName: string; familyName: string } | null;
   };
 };
 
@@ -424,7 +425,13 @@ const googleSyncSelect = {
   notes: true,
   location: true,
   googleEventId: true,
-  student: { select: { name: true, icsShowFullName: true } },
+  student: {
+    select: {
+      name: true,
+      icsShowFullName: true,
+      organizationLearner: { select: { givenName: true, familyName: true } },
+    },
+  },
 } as const;
 
 export async function loadScheduledSessionForGoogleSync(

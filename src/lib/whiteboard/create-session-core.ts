@@ -24,6 +24,7 @@
  */
 
 import { put } from "@vercel/blob";
+import { orgInstructorAdmitted } from "@/lib/org-scope";
 import { Prisma } from "@prisma/client";
 import {
   harnessRequestOrigin,
@@ -91,6 +92,18 @@ function isScheduledUniqueCollision(err: unknown): boolean {
   return fields.some((f) => String(f).includes("scheduledSessionId"));
 }
 
+async function recheckOrgAdmission(studentId: string, adminUserId: string): Promise<void> {
+  const student = await db.student.findUnique({
+    where: { id: studentId },
+    select: { adminUserId: true, organizationId: true },
+  });
+  if (!student?.organizationId || student.adminUserId != null) return;
+  const admitted = await orgInstructorAdmitted(db, student.organizationId, adminUserId);
+  if (!admitted) {
+    throw new Error("ORG_ADMISSION_DENIED");
+  }
+}
+
 export async function createWhiteboardSessionCore({
   adminUserId,
   studentId,
@@ -100,6 +113,7 @@ export async function createWhiteboardSessionCore({
   const schedSuffix = scheduledSessionId ? ` scheduledSessionId=${scheduledSessionId}` : "";
 
   if (scheduledSessionId) {
+    await recheckOrgAdmission(studentId, adminUserId);
     const existing = await findForSchedule(scheduledSessionId);
     if (existing) {
       console.info(
@@ -144,6 +158,8 @@ export async function createWhiteboardSessionCore({
     }
     throw err;
   }
+
+  await recheckOrgAdmission(studentId, adminUserId);
 
   const startedAtIso = new Date().toISOString();
   let eventsBlobUrl: string;

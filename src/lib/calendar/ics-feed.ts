@@ -22,6 +22,7 @@ export type IcsFeedSessionInput = {
     name: string;
     /** Legacy column — read path ignores; titles always use first + last initial. */
     icsShowFullName?: boolean;
+    organizationLearner?: { givenName: string; familyName: string } | null;
   };
 };
 
@@ -63,19 +64,33 @@ function tutoringEventTitle(displayName: string): string {
   return `Tutoring — ${displayName.trim()}`;
 }
 
-function calendarDisplayName(name: string): string {
-  const trimmed = name.trim();
+function orgLearnerCalendarName(
+  learner: { givenName: string; familyName: string } | null | undefined
+): string | null {
+  if (!learner) return null;
+  const given = learner.givenName.trim();
+  if (!given || given.includes("@")) return null;
+  const initial = learner.familyName.trim().charAt(0).toUpperCase();
+  const display = initial ? `${given} ${initial}.` : given;
+  if (display.includes("@")) return null;
+  return display;
+}
+
+function calendarDisplayName(student: IcsFeedSessionInput["student"]): string {
+  const orgName = orgLearnerCalendarName(student.organizationLearner);
+  if (orgName) return orgName;
+  const trimmed = student.name.trim();
   // Any "@" is a login handle or email, not a name to publish on a calendar.
   if (!trimmed || trimmed.includes("@")) return SITE_ROLE_ROSTER_LEARNER;
   return firstNameLastInitial(trimmed) || SITE_ROLE_ROSTER_LEARNER;
 }
 
 function buildSummary(student: IcsFeedSessionInput["student"]): string {
-  return tutoringEventTitle(calendarDisplayName(student.name));
+  return tutoringEventTitle(calendarDisplayName(student));
 }
 
 /** Shared ICS + Google Calendar event title (B6 / WS2). */
-export function buildIcsEventSummary(student: { name: string }): string {
+export function buildIcsEventSummary(student: IcsFeedSessionInput["student"]): string {
   return buildSummary(student);
 }
 

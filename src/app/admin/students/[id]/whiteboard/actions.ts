@@ -36,8 +36,10 @@ import {
   assertEffectiveConsent,
   assertConsentRecordExists,
   ConsentError,
+  resolveEffectiveConsentForStudent,
   resolveModeAwareAudioRecordingConsent,
 } from "@/lib/consent-scope";
+import { orgInstructorAdmitted, withOrgRowLock } from "@/lib/org-scope";
 import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
 import {
   ErasureAccessSuspendedError,
@@ -155,12 +157,30 @@ export async function openScheduledWhiteboardSession(
     () =>
       db.scheduledSession.findFirst({
         where: { id: scheduledSessionId, adminUserId },
-        select: { studentId: true },
+        select: {
+          studentId: true,
+          adminUserId: true,
+          student: { select: { adminUserId: true, organizationId: true } },
+        },
       }),
     { label: "openScheduledWhiteboardSession.owned" }
   );
   if (!owned) throw new Error("Scheduled session not found.");
-  await assertOwnsStudent(owned.studentId);
+  const orgOwned =
+    owned.student.organizationId != null && owned.student.adminUserId == null;
+  if (orgOwned) {
+    if (adminUserId !== owned.adminUserId) {
+      throw new Error("Scheduled session not found.");
+    }
+    const admitted = await orgInstructorAdmitted(
+      db,
+      owned.student.organizationId as string,
+      adminUserId
+    );
+    if (!admitted) throw new Error("Scheduled session not found.");
+  } else {
+    await assertOwnsStudent(owned.studentId);
+  }
 
   const result = await getOrCreateWhiteboardForSchedule(
     scheduledSessionId,
@@ -209,7 +229,7 @@ export async function startWhiteboardSession(
     () =>
       db.student.findUnique({
         where: { id: session.studentId },
-        select: { learnerProfileId: true },
+        select: { learnerProfileId: true, adminUserId: true, organizationId: true },
       }),
     { label: "startWhiteboardSession.studentForConsent" }
   );
@@ -241,29 +261,78 @@ export async function startWhiteboardSession(
     { label: "startWhiteboardSession.adminBillingDefaults" }
   );
 
-  const result = await withDbRetry(
-    () =>
-      db.whiteboardSession.updateMany({
-        where: {
-          id: whiteboardSessionId,
-          adminUserId: session.adminUserId,
-          sessionPhase: "PENDING",
-          endedAt: null,
-        },
-        data: {
-          sessionPhase: "ACTIVE",
-          activatedAt: new Date(),
-          ...(sessionMode ? { sessionMode } : {}),
-          roundingIncrementMin:
-            adminBillingDefaults?.defaultRoundingIncrementMin ??
-            DEFAULT_ROUNDING_INCREMENT_MIN,
-          roundingMode:
-            adminBillingDefaults?.defaultRoundingMode ?? DEFAULT_ROUNDING_MODE,
-          tutorTimezone: adminBillingDefaults?.tutorTimezone ?? null,
-        },
-      }),
-    { label: "startWhiteboardSession" }
-  );
+  const effective =
+    learnerProfileId != null
+      ? await resolveEffectiveConsentForStudent(
+          learnerProfileId,
+          studentForConsent,
+          session.adminUserId
+        )
+      : null;
+  const requestedMode = sessionMode ?? "LIVE";
+  const orgOwned =
+    studentForConsent?.organizationId != null && studentForConsent.adminUserId == null;
+  const pendingUpdate = {
+    where: {
+      id: whiteboardSessionId,
+      adminUserId: session.adminUserId,
+      sessionPhase: "PENDING" as const,
+      endedAt: null,
+    },
+    data: {
+      sessionPhase: "ACTIVE" as const,
+      activatedAt: new Date(),
+      ...(sessionMode ? { sessionMode } : {}),
+      roundingIncrementMin:
+        adminBillingDefaults?.defaultRoundingIncrementMin ??
+        DEFAULT_ROUNDING_INCREMENT_MIN,
+      roundingMode:
+        adminBillingDefaults?.defaultRoundingMode ?? DEFAULT_ROUNDING_MODE,
+      tutorTimezone: adminBillingDefaults?.tutorTimezone ?? null,
+    },
+  };
+  const refuseLive =
+    requestedMode !== "IN_PERSON" && effective?.allowLiveSession === false;
+
+  const result = orgOwned
+    ? await withOrgRowLock(studentForConsent.organizationId as string, async (tx) => {
+        const admitted = await orgInstructorAdmitted(
+          tx,
+          studentForConsent.organizationId as string,
+          session.adminUserId
+        );
+        if (!admitted) return { count: 0 };
+        if (refuseLive) {
+          const phase = await tx.whiteboardSession.findUnique({
+            where: { id: whiteboardSessionId },
+            select: { sessionPhase: true },
+          });
+          if (phase?.sessionPhase === "PENDING") {
+            throw new ConsentError(
+              "allowLiveSession",
+              "Parental consent for live sessions has not been granted."
+            );
+          }
+        }
+        return tx.whiteboardSession.updateMany(pendingUpdate);
+      })
+    : await (async () => {
+        if (refuseLive) {
+          const phase = await db.whiteboardSession.findUnique({
+            where: { id: whiteboardSessionId },
+            select: { sessionPhase: true },
+          });
+          if (phase?.sessionPhase === "PENDING") {
+            throw new ConsentError(
+              "allowLiveSession",
+              "Parental consent for live sessions has not been granted."
+            );
+          }
+        }
+        return withDbRetry(() => db.whiteboardSession.updateMany(pendingUpdate), {
+          label: "startWhiteboardSession",
+        });
+      })();
 
   if (result.count > 0) {
     console.info(

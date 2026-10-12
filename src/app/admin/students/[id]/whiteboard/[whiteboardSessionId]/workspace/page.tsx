@@ -105,6 +105,7 @@ export default async function WhiteboardWorkspacePage({
           consentSnapshot: {
             select: {
               allowAudioRecording: true,
+              allowLiveSession: true,
               consentRecordId: true,
             },
           },
@@ -157,6 +158,7 @@ export default async function WhiteboardWorkspacePage({
       syncEnabled={syncEnabled}
       initialMode={detail.endedAt ? "review" : "live"}
       initialAllowAudioRecording={initialAllowAudioRecording}
+      allowLiveSession={detail.consentSnapshot?.allowLiveSession ?? null}
       initialHasConsentSnapshot={initialHasConsentSnapshot}
       studentLearnerProfileId={detail.student.learnerProfileId}
       initialIntent={initialIntent}

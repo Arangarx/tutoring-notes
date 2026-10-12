@@ -20,7 +20,7 @@
  */
 
 import "./waiting-room-overlay.css";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { WbIconShare } from "./wb-icons";
 
 export type WtrSessionMode = "LIVE" | "IN_PERSON";
@@ -57,6 +57,11 @@ export type WaitingRoomOverlayProps = {
   onStart: () => void | Promise<void>;
   /** Called when the tutor changes the LIVE ↔ IN_PERSON toggle. */
   onSessionModeChange: (mode: WtrSessionMode) => void;
+  /**
+   * Effective consent for a live (online) session. False hides the online
+   * control. Null or omitted still shows it.
+   */
+  allowLiveSession?: boolean | null;
   /**
    * Pre-built mic control node (both roles: WbTopBarMicControlLive with
    * cloned-stream inline meter). Already wired to liveAv in the workspace —
@@ -140,6 +145,7 @@ export function WaitingRoomOverlay({
   startError,
   onStart,
   onSessionModeChange,
+  allowLiveSession = null,
   micControlNode,
   camControlNode,
   micPickerNode,
@@ -158,7 +164,13 @@ export function WaitingRoomOverlay({
   onShowCancelConfirmChange,
 }: WaitingRoomOverlayProps) {
   const isTutor = role === "tutor";
+  const liveAllowed = allowLiveSession !== false;
   const inPerson = sessionMode === "IN_PERSON";
+  useEffect(() => {
+    if (isTutor && !liveAllowed && sessionMode === "LIVE") {
+      onSessionModeChange("IN_PERSON");
+    }
+  }, [isTutor, liveAllowed, sessionMode, onSessionModeChange]);
   const [uncontrolledCancelConfirm, setUncontrolledCancelConfirm] = useState(false);
   const showCancelConfirm = showCancelConfirmProp ?? uncontrolledCancelConfirm;
   const setShowCancelConfirm = (show: boolean) => {
@@ -246,6 +258,7 @@ export function WaitingRoomOverlay({
                 aria-label="Session type"
                 data-testid="wb-session-mode-toggle"
               >
+                {liveAllowed ? (
                 <button
                   type="button"
                   className={`mynk-wtr-mode-btn${sessionMode === "LIVE" ? " mynk-wtr-mode-btn--active" : ""}`}
@@ -255,6 +268,7 @@ export function WaitingRoomOverlay({
                 >
                   Online
                 </button>
+                ) : null}
                 <button
                   type="button"
                   className={`mynk-wtr-mode-btn${sessionMode === "IN_PERSON" ? " mynk-wtr-mode-btn--active" : ""}`}

@@ -23,6 +23,7 @@ export async function loadIcsFeedSessionsForAdmin(
         select: {
           name: true,
           icsShowFullName: true,
+          organizationLearner: { select: { givenName: true, familyName: true } },
         },
       },
     },

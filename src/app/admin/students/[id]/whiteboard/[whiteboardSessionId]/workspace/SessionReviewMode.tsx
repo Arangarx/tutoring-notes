@@ -228,6 +228,11 @@ export function SessionReviewMode({
         >
           {!isReplay && <ReviewConfirmSlot />}
           {notesSurface}
+          {payload?.transcriptText ? (
+            <p data-testid="wb-review-transcript" className="text-sm text-foreground">
+              {payload.transcriptText}
+            </p>
+          ) : null}
         </aside>
 
         <main className="wb-review-main-frame" data-testid="wb-review-main-frame">

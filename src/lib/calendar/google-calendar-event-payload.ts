@@ -25,6 +25,7 @@ export type GoogleEventSessionInput = {
   student: {
     name: string;
     icsShowFullName: boolean;
+    organizationLearner?: { givenName: string; familyName: string } | null;
   };
 };
 

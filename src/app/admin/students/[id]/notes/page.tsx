@@ -40,7 +40,24 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
   });
 
   if (!student) notFound();
-  if (!canAccessStudentRow(scope, student)) notFound();
+  const orgOwned = student.organizationId != null && student.adminUserId == null;
+  if (orgOwned) {
+    if (scope.kind !== "admin" || !student.organizationId) notFound();
+    const member = await db.organizationMember.findUnique({
+      where: {
+        organizationId_adminUserId: {
+          organizationId: student.organizationId,
+          adminUserId: scope.adminId,
+        },
+      },
+      select: { removedAt: true, adminUser: { select: { approvalStatus: true } } },
+    });
+    if (!member || member.removedAt != null || member.adminUser.approvalStatus !== "APPROVED") {
+      notFound();
+    }
+  } else if (!canAccessStudentRow(scope, student)) {
+    notFound();
+  }
   await assertStudentNotErased(id);
 
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -60,7 +77,13 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
 
   const [notes, totalCount] = await Promise.all([
     db.sessionNote.findMany({
-      where: { studentId: id, ...searchFilter },
+      where: {
+        studentId: id,
+        ...searchFilter,
+        ...(orgOwned && scope.kind === "admin"
+          ? { whiteboardSessions: { some: { adminUserId: scope.adminId } } }
+          : {}),
+      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       skip,
       take: pageSize,
@@ -92,7 +115,15 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
         },
       },
     }),
-    db.sessionNote.count({ where: { studentId: id, ...searchFilter } }),
+    db.sessionNote.count({
+      where: {
+        studentId: id,
+        ...searchFilter,
+        ...(orgOwned && scope.kind === "admin"
+          ? { whiteboardSessions: { some: { adminUserId: scope.adminId } } }
+          : {}),
+      },
+    }),
   ]);
 
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -164,16 +195,24 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
             Students
           </Link>
           {" / "}
-          <Link href={`/admin/students/${id}`} className="hover:text-foreground">
-            {student.name}
-          </Link>
+          {orgOwned && student.organizationId ? (
+            <Link href={`/admin/organization/${student.organizationId}`} className="hover:text-foreground">
+              {student.name}
+            </Link>
+          ) : (
+            <Link href={`/admin/students/${id}`} className="hover:text-foreground">
+              {student.name}
+            </Link>
+          )}
           {" / "}
           <span className="text-foreground">Notes</span>
         </nav>
       }
       actions={
         <Button asChild variant="outline" className="min-h-11">
-          <Link href={`/admin/students/${id}`}>← Back to student</Link>
+          <Link href={orgOwned && student.organizationId ? `/admin/organization/${student.organizationId}` : `/admin/students/${id}`}>
+            {orgOwned ? "← Back to organization" : "← Back to student"}
+          </Link>
         </Button>
       }
     >

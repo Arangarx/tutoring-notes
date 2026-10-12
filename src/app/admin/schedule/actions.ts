@@ -7,6 +7,8 @@ import { seedTutorTimezoneIfUnset } from "@/lib/billing/seed-tutor-timezone";
 import { DEFAULT_TUTOR_TIMEZONE } from "@/lib/billing/defaults";
 import { getGoogleCalendarConnectionForTutor } from "@/lib/calendar-oauth";
 import { utcBoundsFromWallClock } from "@/lib/calendar/scheduled-session-datetime";
+import { scheduledSessionsOverlap } from "@/lib/calendar/scheduled-session-overlap";
+import { assertOrgRole, orgInstructorAdmitted, orgLog } from "@/lib/org-scope";
 import {
   afterScheduledSessionCreated,
   afterScheduledSessionUpdated,
@@ -32,9 +34,24 @@ export type ScheduledSessionInput = {
   notes?: string;
   /** Browser IANA zone — seeds AdminUser.tutorTimezone when still unset. */
   clientTimeZone?: string | null;
+  /** Org booking only. The appointment's tutor, not the scheduler. */
+  instructorAdminUserId?: string;
+};
+
+const ORG_INSTRUCTOR_REFUSAL = "That instructor cannot take this appointment.";
+
+export type ScheduledSessionWriteResult = {
+  id: string;
+  adminUserId: string;
+  overlapWarning: string | null;
+  refusal?: string;
 };
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function clockMinutes(value: string): number {
+  return Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+}
 
 function parseScheduledSessionInput(input: ScheduledSessionInput) {
   const date = parseDateOnlyInput(input.date);
@@ -42,6 +59,9 @@ function parseScheduledSessionInput(input: ScheduledSessionInput) {
   const subject = input.subject.trim();
   if (!subject) return null;
   if (!TIME_PATTERN.test(input.startTime) || !TIME_PATTERN.test(input.endTime)) return null;
+  const startMinutes = clockMinutes(input.startTime);
+  const endMinutes = clockMinutes(input.endTime);
+  if (endMinutes <= startMinutes) return null;
   const plannedDurationMinutes = Number(input.plannedDurationMinutes);
   if (![45, 60, 90].includes(plannedDurationMinutes)) return null;
   return {
@@ -96,6 +116,51 @@ async function utcFieldsForWrite(
   return { startAt: bounds.startAt, endAt: bounds.endAt };
 }
 
+function utcFieldsForZone(
+  parsed: { date: Date; startTime: string; endTime: string },
+  timeZone: string
+) {
+  const bounds = utcBoundsFromWallClock(
+    parsed.date,
+    parsed.startTime,
+    parsed.endTime,
+    null,
+    timeZone
+  );
+  return { startAt: bounds.startAt, endAt: bounds.endAt };
+}
+
+async function overlapWarningFor(
+  adminUserId: string,
+  startAt: Date,
+  endAt: Date,
+  excludeId?: string
+): Promise<string | null> {
+  const others = await db.scheduledSession.findMany({
+    where: {
+      adminUserId,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      startAt: { not: null },
+      endAt: { not: null },
+    },
+    select: { startAt: true, endAt: true },
+  });
+  const overlaps = others.some(
+    (row) =>
+      row.startAt != null &&
+      row.endAt != null &&
+      scheduledSessionsOverlap({ startAt, endAt }, { startAt: row.startAt, endAt: row.endAt })
+  );
+  return overlaps ? "This overlaps another appointment." : null;
+}
+
+function isOrgStudent(student: {
+  adminUserId: string | null;
+  organizationId: string | null;
+}): student is { adminUserId: null; organizationId: string } {
+  return student.organizationId != null && student.adminUserId == null;
+}
+
 /** Lists sessions for the authenticated tutor only (`adminUserId` = scope.adminId). */
 export async function listScheduledSessionsForTutor(
   googleState: GoogleCalendarUiState
@@ -105,7 +170,10 @@ export async function listScheduledSessionsForTutor(
     withDbRetry(
       () =>
         db.scheduledSession.findMany({
-          where: { adminUserId: scope.adminId },
+          where: {
+            adminUserId: scope.adminId,
+            student: { adminUserId: scope.adminId },
+          },
           include: { student: { select: { name: true } } },
           orderBy: [{ date: "asc" }, { startTime: "asc" }],
         }),
@@ -139,18 +207,51 @@ export async function listScheduleStudentOptions(): Promise<ScheduleStudentOptio
 
 export async function createScheduledSession(
   input: ScheduledSessionInput
-): Promise<{ id: string }> {
+): Promise<ScheduledSessionWriteResult> {
   const scope = await requireAdminScope();
-  await assertOwnsStudent(input.studentId);
   const parsed = parseScheduledSessionInput(input);
   if (!parsed) notFound();
-  const utc = await utcFieldsForWrite(scope.adminId, parsed, input.clientTimeZone);
+  const student = await db.student.findUnique({
+    where: { id: input.studentId },
+    select: { adminUserId: true, organizationId: true },
+  });
+  if (!student) notFound();
 
+  let appointmentAdminId = scope.adminId;
+  let utc: { startAt: Date; endAt: Date };
+  let organizationId: string | null = null;
+  if (isOrgStudent(student)) {
+    organizationId = student.organizationId;
+    await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+    const instructorId = input.instructorAdminUserId;
+    if (!instructorId) notFound();
+    const admitted = await orgInstructorAdmitted(db, organizationId, instructorId);
+    if (!admitted) {
+      return {
+        id: "",
+        adminUserId: instructorId,
+        overlapWarning: null,
+        refusal: ORG_INSTRUCTOR_REFUSAL,
+      };
+    }
+    const org = await db.organization.findUnique({
+      where: { id: organizationId },
+      select: { timezone: true },
+    });
+    if (!org) notFound();
+    appointmentAdminId = instructorId;
+    utc = utcFieldsForZone(parsed, org.timezone);
+  } else {
+    await assertOwnsStudent(input.studentId);
+    utc = await utcFieldsForWrite(scope.adminId, parsed, input.clientTimeZone);
+  }
+
+  const overlapWarning = await overlapWarningFor(appointmentAdminId, utc.startAt, utc.endAt);
   const row = await withDbRetry(
     () =>
       db.scheduledSession.create({
         data: {
-          adminUserId: scope.adminId,
+          adminUserId: appointmentAdminId,
           studentId: input.studentId,
           ...parsed,
           ...utc,
@@ -160,28 +261,82 @@ export async function createScheduledSession(
   );
 
   revalidatePath("/admin/schedule");
+  if (organizationId) revalidatePath(`/admin/organization/${organizationId}`);
 
-  const refreshToken = await calendarRefreshTokenForAdmin(scope.adminId);
-  await afterScheduledSessionCreated(scope.adminId, row.id, refreshToken);
+  const refreshToken = await calendarRefreshTokenForAdmin(appointmentAdminId);
+  await afterScheduledSessionCreated(appointmentAdminId, row.id, refreshToken);
+  if (organizationId) {
+    orgLog(organizationId, "appointment_created", {
+      scheduledSessionId: row.id,
+      studentId: input.studentId,
+      adminUserId: appointmentAdminId,
+    });
+  }
 
-  return { id: row.id };
+  return { id: row.id, adminUserId: appointmentAdminId, overlapWarning };
 }
 
 export async function updateScheduledSession(
   sessionId: string,
   input: ScheduledSessionInput
-): Promise<void> {
-  const owned = await assertOwnsScheduledSession(sessionId);
-  await assertOwnsStudent(input.studentId);
+): Promise<{ overlapWarning: string | null; refusal?: string }> {
   const parsed = parseScheduledSessionInput(input);
   if (!parsed) notFound();
-  const utc = await utcFieldsForWrite(owned.adminUserId, parsed, input.clientTimeZone);
+  const existing = await db.scheduledSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      adminUserId: true,
+      studentId: true,
+      student: { select: { adminUserId: true, organizationId: true } },
+    },
+  });
+  if (!existing) notFound();
 
+  let appointmentAdminId = existing.adminUserId;
+  let utc: { startAt: Date; endAt: Date };
+  let organizationId: string | null = null;
+  if (isOrgStudent(existing.student)) {
+    organizationId = existing.student.organizationId;
+    await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+    const nextStudent = await db.student.findUnique({
+      where: { id: input.studentId },
+      select: { adminUserId: true, organizationId: true },
+    });
+    if (!nextStudent || !isOrgStudent(nextStudent) || nextStudent.organizationId !== organizationId) {
+      notFound();
+    }
+    const instructorId = input.instructorAdminUserId;
+    if (!instructorId) notFound();
+    const admitted = await orgInstructorAdmitted(db, organizationId, instructorId);
+    if (!admitted) {
+      return { overlapWarning: null, refusal: ORG_INSTRUCTOR_REFUSAL };
+    }
+    const org = await db.organization.findUnique({
+      where: { id: organizationId },
+      select: { timezone: true },
+    });
+    if (!org) notFound();
+    appointmentAdminId = instructorId;
+    utc = utcFieldsForZone(parsed, org.timezone);
+  } else {
+    if (existing.adminUserId !== (await requireAdminScope()).adminId) notFound();
+    await assertOwnsStudent(existing.studentId);
+    await assertOwnsStudent(input.studentId);
+    utc = await utcFieldsForWrite(existing.adminUserId, parsed, input.clientTimeZone);
+  }
+
+  const overlapWarning = await overlapWarningFor(
+    appointmentAdminId,
+    utc.startAt,
+    utc.endAt,
+    sessionId
+  );
   await withDbRetry(
     () =>
       db.scheduledSession.update({
         where: { id: sessionId },
         data: {
+          adminUserId: appointmentAdminId,
           studentId: input.studentId,
           ...parsed,
           ...utc,
@@ -191,18 +346,44 @@ export async function updateScheduledSession(
   );
 
   revalidatePath("/admin/schedule");
+  if (organizationId) revalidatePath(`/admin/organization/${organizationId}`);
 
-  const refreshToken = await calendarRefreshTokenForAdmin(owned.adminUserId);
-  await afterScheduledSessionUpdated(owned.adminUserId, sessionId, refreshToken);
+  const refreshToken = await calendarRefreshTokenForAdmin(appointmentAdminId);
+  await afterScheduledSessionUpdated(appointmentAdminId, sessionId, refreshToken);
+  if (organizationId) {
+    orgLog(organizationId, "appointment_changed", {
+      scheduledSessionId: sessionId,
+      studentId: input.studentId,
+      adminUserId: appointmentAdminId,
+    });
+  }
+  return { overlapWarning };
 }
 
 export async function deleteScheduledSession(sessionId: string): Promise<void> {
-  const owned = await assertOwnsScheduledSession(sessionId);
-  const refreshToken = await calendarRefreshTokenForAdmin(owned.adminUserId);
+  const existing = await db.scheduledSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      adminUserId: true,
+      studentId: true,
+      googleEventId: true,
+      student: { select: { adminUserId: true, organizationId: true } },
+    },
+  });
+  if (!existing) notFound();
+  let organizationId: string | null = null;
+  if (isOrgStudent(existing.student)) {
+    organizationId = existing.student.organizationId;
+    await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+  } else {
+    const owned = await assertOwnsScheduledSession(sessionId);
+    existing.adminUserId = owned.adminUserId;
+  }
+  const refreshToken = await calendarRefreshTokenForAdmin(existing.adminUserId);
   await beforeScheduledSessionDeleted(
-    owned.adminUserId,
+    existing.adminUserId,
     sessionId,
-    owned.googleEventId,
+    existing.googleEventId,
     refreshToken
   );
   await withDbRetry(
@@ -210,4 +391,107 @@ export async function deleteScheduledSession(sessionId: string): Promise<void> {
     { label: "deleteScheduledSession" }
   );
   revalidatePath("/admin/schedule");
+  if (organizationId) {
+    revalidatePath(`/admin/organization/${organizationId}`);
+    orgLog(organizationId, "appointment_cancelled", {
+      scheduledSessionId: sessionId,
+      studentId: existing.studentId,
+      adminUserId: existing.adminUserId,
+    });
+  }
+}
+
+export type OrganizationAppointmentRow = {
+  id: string;
+  learnerName: string;
+  instructorName: string;
+  instructorAdminUserId: string;
+  whenLabel: string;
+  subject: string;
+  view: ScheduledSessionView;
+};
+
+export async function listScheduledSessionsForOrganization(
+  organizationId: string
+): Promise<OrganizationAppointmentRow[]> {
+  await assertOrgRole(organizationId, ["owner", "admin", "scheduler", "instructor"]);
+  const org = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: { timezone: true },
+  });
+  if (!org) notFound();
+  const rows = await db.scheduledSession.findMany({
+    where: { student: { organizationId, adminUserId: null } },
+    orderBy: [{ startAt: "asc" }, { date: "asc" }, { startTime: "asc" }],
+    include: {
+      student: {
+        select: {
+          name: true,
+          organizationLearner: { select: { givenName: true, familyName: true } },
+        },
+      },
+      adminUser: { select: { displayName: true, email: true } },
+    },
+  });
+  const googleState: GoogleCalendarUiState = { connected: false, reconnectRequired: false };
+  return rows.map((row) => {
+    const learner = row.student.organizationLearner;
+    const learnerName = learner
+      ? `${learner.givenName.trim()} ${learner.familyName.trim()}`.trim()
+      : row.student.name;
+    const view = {
+      ...toScheduledSessionView(row, googleState, org.timezone),
+      instructorAdminUserId: row.adminUserId,
+    };
+    return {
+      id: row.id,
+      learnerName,
+      instructorName: row.adminUser.displayName?.trim() || row.adminUser.email,
+      instructorAdminUserId: row.adminUserId,
+      whenLabel: `${view.date} ${view.startTime}–${view.endTime}`,
+      subject: row.subject,
+      view,
+    };
+  });
+}
+
+export async function listOrganizationBookingChoices(organizationId: string): Promise<{
+  students: ScheduleStudentOption[];
+  instructors: Array<{ id: string; name: string }>;
+  timeZone: string;
+}> {
+  await assertOrgRole(organizationId, ["owner", "admin", "scheduler", "instructor"]);
+  const org = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: { timezone: true },
+  });
+  if (!org) notFound();
+  const [learners, members] = await Promise.all([
+    db.organizationLearner.findMany({
+      where: { organizationId, student: { adminUserId: null } },
+      select: { studentId: true, givenName: true, familyName: true },
+      orderBy: [{ givenName: "asc" }, { familyName: "asc" }],
+    }),
+    db.organizationMember.findMany({
+      where: {
+        organizationId,
+        removedAt: null,
+        roles: { has: "instructor" },
+        adminUser: { approvalStatus: "APPROVED", isTestAccount: false },
+      },
+      select: { adminUser: { select: { id: true, displayName: true, email: true } } },
+      orderBy: { adminUser: { displayName: "asc" } },
+    }),
+  ]);
+  return {
+    timeZone: org.timezone,
+    students: learners.map((learner) => ({
+      id: learner.studentId,
+      name: `${learner.givenName.trim()} ${learner.familyName.trim()}`.trim(),
+    })),
+    instructors: members.map((member) => ({
+      id: member.adminUser.id,
+      name: member.adminUser.displayName?.trim() || member.adminUser.email,
+    })),
+  };
 }

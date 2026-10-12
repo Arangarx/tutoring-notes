@@ -160,6 +160,46 @@ async function lockOrg(tx: Prisma.TransactionClient, organizationId: string): Pr
   await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${organizationId} FOR UPDATE`;
 }
 
+type OrgAdmissionClient = Pick<Prisma.TransactionClient, "organization" | "organizationMember">;
+
+/**
+ * Booking and opening a new room. Passes only for an active organization,
+ * a member with removedAt null, APPROVED, whose roles include instructor.
+ */
+export async function orgInstructorAdmitted(
+  client: OrgAdmissionClient,
+  organizationId: string,
+  adminUserId: string
+): Promise<boolean> {
+  const org = await client.organization.findUnique({
+    where: { id: organizationId },
+    select: { status: true },
+  });
+  if (!org || org.status !== "active") return false;
+  const member = await client.organizationMember.findUnique({
+    where: { organizationId_adminUserId: { organizationId, adminUserId } },
+    select: {
+      removedAt: true,
+      roles: true,
+      adminUser: { select: { approvalStatus: true } },
+    },
+  });
+  if (!member || member.removedAt != null) return false;
+  if (member.adminUser.approvalStatus !== "APPROVED") return false;
+  return member.roles.includes("instructor");
+}
+
+/** Row lock around the existing Organization SELECT … FOR UPDATE. */
+export async function withOrgRowLock<T>(
+  organizationId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  return db.$transaction(async (tx) => {
+    await lockOrg(tx, organizationId);
+    return fn(tx);
+  });
+}
+
 async function lockMembers(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {
   await tx.$queryRaw`SELECT id FROM "OrganizationMember" WHERE "organizationId" = ${organizationId} FOR UPDATE`;
 }

@@ -38,6 +38,7 @@ jest.mock("@/lib/erasure/active-erasure-scope", () => ({
 jest.mock("@/lib/consent-scope", () => ({
   __esModule: true,
   assertConsentRecordExists: jest.fn().mockResolvedValue(undefined),
+  resolveEffectiveConsentForStudent: jest.fn(async () => ({ allowLiveSession: true })),
   ConsentError: class ConsentError extends Error {
     permission = "consentRecord";
   },

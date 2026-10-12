@@ -37,6 +37,8 @@ import { readBrowserTimeZone } from "@/lib/time/system-timezone";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
 import { CalendarPlusIcon } from "lucide-react";
 
+type InstructorOption = { id: string; name: string };
+
 type CreateSessionDialogProps = {
   studentOptions: ScheduleStudentOption[];
   googleConnected: boolean;
@@ -46,6 +48,8 @@ type CreateSessionDialogProps = {
   session?: ScheduledSessionView;
   trigger?: React.ReactNode;
   onSaved?: () => void;
+  /** When set, this is an organization booking dialog. Absent keeps the personal tutor dialog. */
+  instructorOptions?: InstructorOption[];
 };
 
 function buildDefaultDate(defaultDate?: string): string {
@@ -60,10 +64,12 @@ export function CreateSessionDialog({
   session,
   trigger,
   onSaved,
+  instructorOptions,
 }: CreateSessionDialogProps) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const router = useRouter();
   const isEdit = !!session;
 
@@ -76,6 +82,9 @@ export function CreateSessionDialog({
   const initialNotes = session?.notes ?? "";
 
   const [studentId, setStudentId] = useState(initialStudentId);
+  const [instructorId, setInstructorId] = useState(
+    session?.instructorAdminUserId ?? instructorOptions?.[0]?.id ?? ""
+  );
   const [plannedDurationMinutes, setPlannedDurationMinutes] = useState(initialDuration);
   const [startTime, setStartTime] = useState(initialStart);
   const [endTime, setEndTime] = useState(initialEnd);
@@ -86,6 +95,7 @@ export function CreateSessionDialog({
   useEffect(() => {
     if (!open) return;
     setStudentId(initialStudentId);
+    setInstructorId(session?.instructorAdminUserId ?? instructorOptions?.[0]?.id ?? "");
     setPlannedDurationMinutes(initialDuration);
     setStartTime(initialStart);
     setEndTime(initialEnd);
@@ -93,7 +103,9 @@ export function CreateSessionDialog({
       !endMatchesPlannedLength(initialStart, initialEnd, Number(initialDuration))
     );
     setError(null);
-  }, [open, initialStudentId, initialDuration, initialStart, initialEnd]);
+    // Reset only when the dialog opens. A server refresh must not wipe a refusal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function syncEndToPlannedLength(nextStart: string, nextMinutes: string, edited: boolean) {
     if (edited) return;
@@ -105,6 +117,7 @@ export function CreateSessionDialog({
     event.preventDefault();
     if (pending) return;
     setError(null);
+    setWarning(null);
     const formData = new FormData(event.currentTarget);
     const input: ScheduledSessionInput = {
       studentId,
@@ -115,20 +128,36 @@ export function CreateSessionDialog({
       endTime,
       notes: String(formData.get("notes") ?? ""),
       clientTimeZone: readBrowserTimeZone(),
+      ...(instructorOptions ? { instructorAdminUserId: instructorId } : {}),
     };
 
     startTransition(async () => {
       try {
-        if (isEdit && session) {
-          await updateScheduledSession(session.id, input);
-        } else {
-          await createScheduledSession(input);
+        const saved =
+          isEdit && session
+            ? await updateScheduledSession(session.id, input)
+            : await createScheduledSession(input);
+        if (saved.refusal) {
+          setError(saved.refusal);
+          return;
         }
+        if (saved.overlapWarning) {
+          setWarning(saved.overlapWarning);
+          router.refresh();
+          onSaved?.();
+          return;
+        }
+        setWarning(null);
         setOpen(false);
         router.refresh();
         onSaved?.();
-      } catch {
-        setError("Could not save session. Check the form and try again.");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        setError(
+          message.includes("cannot take this appointment")
+            ? "That instructor cannot take this appointment."
+            : "Could not save session. Check the form and try again."
+        );
       }
     });
   }
@@ -160,7 +189,14 @@ export function CreateSessionDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setWarning(null);
+      }}
+      modal={!warning}
+    >
       <DialogTrigger asChild>
         {trigger ?? (
           <Button type="button" variant="accent" className="min-h-11" data-testid="schedule-new-session">
@@ -176,9 +212,11 @@ export function CreateSessionDialog({
           </DialogTitle>
           <DialogDescription>
             Session length is soft planning metadata; recording ends when you end the session.
-            {googleConnected
-              ? " Google Calendar is connected — saving creates or updates the event on your primary Google Calendar."
-              : " Sessions are saved in Mynk. Connect Google Calendar in Settings for Google sync, or subscribe to the ICS feed for Apple Calendar and other apps."}
+            {instructorOptions
+              ? " Saving writes the event on the instructor's Google Calendar when they have one connected."
+              : googleConnected
+                ? " Google Calendar is connected — saving creates or updates the event on your primary Google Calendar."
+                : " Sessions are saved in Mynk. Connect Google Calendar in Settings for Google sync, or subscribe to the ICS feed for Apple Calendar and other apps."}
           </DialogDescription>
         </DialogHeader>
 
@@ -202,6 +240,24 @@ export function CreateSessionDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {instructorOptions ? (
+            <div className="space-y-2">
+              <Label htmlFor="schedule-instructor">Instructor</Label>
+              <Select value={instructorId} onValueChange={setInstructorId} required>
+                <SelectTrigger id="schedule-instructor" className="min-h-11 w-full" data-testid="schedule-instructor">
+                  <SelectValue placeholder="Select instructor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {instructorOptions.map((instructor) => (
+                    <SelectItem key={instructor.id} value={instructor.id}>
+                      {instructor.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor="schedule-subject">Subject</Label>
@@ -293,7 +349,16 @@ export function CreateSessionDialog({
             />
           </div>
 
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="text-sm text-destructive" role="alert" data-testid="schedule-save-error">
+              {error}
+            </p>
+          ) : null}
+          {warning ? (
+            <p className="text-sm text-foreground" role="status" data-testid="schedule-overlap-warning">
+              {warning}
+            </p>
+          ) : null}
 
           <DialogFooter className="gap-2 sm:gap-0">
             {isEdit ? (

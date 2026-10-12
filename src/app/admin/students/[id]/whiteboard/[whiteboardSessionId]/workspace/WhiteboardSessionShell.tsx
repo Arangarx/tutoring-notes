@@ -40,6 +40,7 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   activatedAt?: string | null;
   /** Frozen session consent: null = no snapshot (unclaimed / no ConsentRecord). */
   initialAllowAudioRecording?: boolean | null;
+  allowLiveSession?: boolean | null;
   /** True when SessionConsentSnapshot exists for this session. */
   initialHasConsentSnapshot?: boolean;
   /** Claimed student's LearnerProfile id — per-speaker lane attribution. */
@@ -131,6 +132,7 @@ function TutorWhiteboardSessionShell({
   sessionMode,
   activatedAt,
   initialAllowAudioRecording,
+  allowLiveSession = null,
   initialHasConsentSnapshot,
   studentLearnerProfileId,
   initialIntent,
@@ -180,6 +182,7 @@ function TutorWhiteboardSessionShell({
         sessionMode={sessionMode}
         activatedAt={activatedAt}
         initialAllowAudioRecording={initialAllowAudioRecording}
+        allowLiveSession={allowLiveSession}
         initialHasConsentSnapshot={initialHasConsentSnapshot}
         studentLearnerProfileId={studentLearnerProfileId}
         initialIntent={initialIntent}

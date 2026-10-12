@@ -333,6 +333,8 @@ type Props = {
    * null = no snapshot (unclaimed / no ConsentRecord). Consumed in Block B Commit 2+.
    */
   initialAllowAudioRecording?: boolean | null;
+  /** Effective allowLiveSession from the session consent snapshot. Null shows Online. */
+  allowLiveSession?: boolean | null;
   /** True when SessionConsentSnapshot exists for this session. Consumed in Block B Commit 2+. */
   initialHasConsentSnapshot?: boolean;
   /**
@@ -506,6 +508,7 @@ export function WhiteboardWorkspaceClient({
   sessionMode: initialSessionMode,
   activatedAt: _activatedAt,
   initialAllowAudioRecording = null,
+  allowLiveSession = null,
   initialHasConsentSnapshot = false,
   studentLearnerProfileId = null,
   identityKey,
@@ -7733,6 +7736,7 @@ export function WhiteboardWorkspaceClient({
         startError={sessionStartError}
         onStart={() => void activateSessionLive(sessionMode)}
         onSessionModeChange={(m) => setSessionMode(m)}
+        allowLiveSession={allowLiveSession}
         micControlNode={overlayMicNode}
         camControlNode={overlayCamNode}
         micPickerNode={overlayMicPickerNode}

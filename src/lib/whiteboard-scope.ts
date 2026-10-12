@@ -15,6 +15,7 @@
 
 import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
+import { resolveOrgSessionAccess } from "@/lib/org-session-access";
 import { canAccessStudentRow, requireStudentScope } from "@/lib/student-scope";
 import { verifyIsSessionParticipant } from "@/lib/session-participant-scope";
 
@@ -53,8 +54,20 @@ export async function assertOwnsWhiteboardSession(
     { label: "assertOwnsWhiteboardSession" }
   );
   if (!session) notFound();
-  if (!canAccessStudentRow(scope, session.student)) notFound();
-  if (scope.kind === "admin" && session.adminUserId !== scope.adminId) notFound();
+  const orgOwned =
+    session.student.organizationId != null && session.student.adminUserId == null;
+  if (orgOwned) {
+    if (scope.kind !== "admin") notFound();
+    const access = await resolveOrgSessionAccess({
+      callerAdminUserId: scope.adminId,
+      sessionAdminUserId: session.adminUserId,
+      organizationId: session.student.organizationId as string,
+    });
+    if (!access.ok) notFound();
+  } else {
+    if (!canAccessStudentRow(scope, session.student)) notFound();
+    if (scope.kind === "admin" && session.adminUserId !== scope.adminId) notFound();
+  }
   return {
     id: session.id,
     adminUserId: session.adminUserId,

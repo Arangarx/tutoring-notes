@@ -40,4 +40,6 @@ export type ScheduledSessionView = {
   startTimeInput: string;
   endTimeInput: string;
   plannedDurationMinutes: number;
+  /** Set on organization appointments. Absent on the personal tutor schedule. */
+  instructorAdminUserId?: string;
 };
