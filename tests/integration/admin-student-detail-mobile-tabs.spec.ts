@@ -7,6 +7,7 @@
 
 import { test, expect } from "@playwright/test";
 import { TAG } from "../test-tags";
+import { openManualNoteForm } from "./open-manual-note-form";
 import { seedTestAdmin, seedTestStudent } from "../visual/helpers";
 
 const PHONE_VIEWPORT = { width: 390, height: 844 };
@@ -48,6 +49,7 @@ test.describe("Admin student detail — mobile notes", () => {
       expect(notesBox!.y + notesBox!.height).toBeLessThanOrEqual(viewport!.height + 4);
 
       await notes.click();
+      await openManualNoteForm(page);
       await expect(page.getByTestId("new-note-form")).toBeVisible();
     }
   );
@@ -81,6 +83,7 @@ test.describe("Admin student detail — mobile notes", () => {
       expect(Math.abs(notesBox!.x - sessionBox!.x)).toBeLessThanOrEqual(8);
 
       await notes.click();
+      await openManualNoteForm(page);
       await expect(page.getByTestId("new-note-form")).toBeVisible();
     }
   );

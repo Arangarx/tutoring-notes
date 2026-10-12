@@ -16,6 +16,8 @@ type Props = {
   enabled: boolean;
   /** Kept so callers stay the same. Record and Upload are not offered. */
   blobEnabled: boolean;
+  /** Runs after the panel fills or clears the form, so a closed form can open. */
+  onFormChanged?: () => void;
 };
 
 type PanelState = "idle" | "filled";
@@ -23,7 +25,7 @@ type PanelState = "idle" | "filled";
 const COMING_SOON =
   "Recording and uploading audio here is coming soon. For now, record during a whiteboard session.";
 
-export default function AiAssistPanel({ studentId, formRef, enabled }: Props) {
+export default function AiAssistPanel({ studentId, formRef, enabled, onFormChanged }: Props) {
   const [sessionText, setSessionText] = useState("");
   const [panelState, setPanelState] = useState<PanelState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +42,7 @@ export default function AiAssistPanel({ studentId, formRef, enabled }: Props) {
       );
       if (!ok) return false;
       formRef.current?.clear();
+      onFormChanged?.();
     }
     return true;
   }
@@ -66,6 +69,7 @@ export default function AiAssistPanel({ studentId, formRef, enabled }: Props) {
           promptVersion: result.promptVersion,
           recordingIds: [],
         });
+        onFormChanged?.();
         setPanelState("filled");
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -84,6 +88,7 @@ export default function AiAssistPanel({ studentId, formRef, enabled }: Props) {
     setWarning(null);
     setWarningKind(null);
     formRef.current?.clear();
+    onFormChanged?.();
     setTimeout(() => textareaRef.current?.focus(), 0);
   }
 

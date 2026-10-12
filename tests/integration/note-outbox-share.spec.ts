@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 
 import { expect, test } from "./fixtures";
 import { loginAccountHolderInContext } from "./whiteboard-live-sync.helpers";
+import { openManualNoteForm } from "./open-manual-note-form";
 import { seedTestAdmin, seedSelfLearner, TEST_SELF_LEARNER } from "../visual/helpers";
 
 test("saving a note, sending it, and opening the outbox link shows that note", async ({
@@ -44,6 +45,7 @@ test("saving a note, sending it, and opening the outbox link shows that note", a
   await expect(page.getByRole("heading", { name: studentName })).toBeVisible({
     timeout: 15_000,
   });
+  await openManualNoteForm(page);
   const form = page.getByTestId("new-note-form");
   const typeInto = async (selector: string, value: string) => {
     const field = form.locator(selector);

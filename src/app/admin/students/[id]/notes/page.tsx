@@ -16,8 +16,8 @@ import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { env } from "@/lib/env";
-import NoteEntrySection from "../NoteEntrySection";
 import { EmailReminderDialog } from "../EmailReminderDialog";
+import { NotesPageBody } from "./NotesPageBody";
 export const dynamic = "force-dynamic";
 
 export const maxDuration = 300;
@@ -232,23 +232,25 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
         </Button>
       }
     >
-      {orgOwned ? null : (
-        <div className="mb-8 flex flex-col gap-6">
-          <NoteEntrySection
-            studentId={student.id}
-            aiEnabled={!!env.OPENAI_API_KEY}
-            blobEnabled={!!env.BLOB_READ_WRITE_TOKEN}
-          />
-          <EmailReminderDialog studentId={student.id} defaultToEmail={student.parentEmail} />
-        </div>
-      )}
-      <Suspense>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <NotesSearchBar placeholder="Search topics, homework, assessment, plan…" />
-          <PageSizeSelect defaultSize={DEFAULT_PAGE_SIZE} />
-        </div>
-      </Suspense>
-
+      <NotesPageBody
+        search={
+          <Suspense>
+            <>
+              <NotesSearchBar placeholder="Search topics, homework, assessment, plan…" />
+              <PageSizeSelect defaultSize={DEFAULT_PAGE_SIZE} />
+            </>
+          </Suspense>
+        }
+        entry={
+          orgOwned
+            ? null
+            : {
+                studentId: student.id,
+                aiEnabled: !!env.OPENAI_API_KEY,
+                blobEnabled: !!env.BLOB_READ_WRITE_TOKEN,
+              }
+        }
+      >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {q
@@ -323,9 +325,16 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
         </div>
       )}
 
+      {orgOwned ? null : (
+        <div className="mt-4">
+          <EmailReminderDialog studentId={student.id} defaultToEmail={student.parentEmail} />
+        </div>
+      )}
+
       <div className="mt-6">
         <PaginationNav label="Note pages (bottom)" />
       </div>
+      </NotesPageBody>
     </PageShell>
   );
 }

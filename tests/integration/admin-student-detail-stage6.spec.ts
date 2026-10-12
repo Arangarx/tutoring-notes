@@ -13,6 +13,7 @@ import { PrismaClient } from "@prisma/client";
 import { encode } from "next-auth/jwt";
 import { TAG } from "../test-tags";
 import { seedTestAdmin } from "../visual/helpers";
+import { openManualNoteForm } from "./open-manual-note-form";
 
 const COMING_SOON =
   "Recording and uploading audio here is coming soon. For now, record during a whiteboard session.";
@@ -389,6 +390,7 @@ test.describe("Admin student detail — stage 6", () => {
       const adminUserId = await seedTestAdmin();
       const studentId = await seedReadyStudent(adminUserId, "Notes Coming Soon Student");
       await page.goto(`/admin/students/${studentId}/notes`, { waitUntil: "domcontentloaded" });
+      await openManualNoteForm(page);
       await expect(page.getByText(COMING_SOON)).toBeVisible();
       await expect(page.getByRole("tab", { name: "Record" })).toHaveCount(0);
       await expect(page.getByRole("tab", { name: "Upload audio" })).toHaveCount(0);

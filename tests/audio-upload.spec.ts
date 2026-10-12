@@ -7,6 +7,7 @@
  */
 
 import { test, expect } from "./integration/fixtures";
+import { openManualNoteForm } from "./integration/open-manual-note-form";
 import { seedTestAdmin, seedTestStudent, seedTestLearner } from "./visual/helpers";
 import {
   blobIntegrationEnabled,
@@ -72,7 +73,7 @@ async function gotoSeededStudent(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: SEEDED_STUDENT_NAME })).toBeVisible({
     timeout: 15_000,
   });
-  // Notes live on their own route; the AI assist panel renders directly on the page.
+  await openManualNoteForm(page);
   await expect(page.getByTestId("ai-assist-panel")).toBeVisible({ timeout: 15_000 });
 }
 
@@ -136,6 +137,7 @@ test(
     await expect(page.getByRole("heading", { name: SEEDED_STUDENT_NAME })).toBeVisible({
       timeout: 15_000,
     });
+    await openManualNoteForm(page);
     await expect(page.getByText(COMING_SOON)).toBeVisible();
     await expect(page.getByTestId("tab-record")).toHaveCount(0);
     await expect(page.getByTestId("tab-upload")).toHaveCount(0);

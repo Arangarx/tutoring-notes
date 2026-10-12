@@ -9,6 +9,7 @@ import { PrismaClient } from "@prisma/client";
 
 import { expect, test } from "./fixtures";
 import { seedTestAdmin } from "../visual/helpers";
+import { openManualNoteForm } from "./open-manual-note-form";
 import {
   expectControlsDisabled,
   formSlices,
@@ -56,6 +57,7 @@ test.describe("new note form hydration", () => {
     await expect(page.getByRole("heading", { name: studentName })).toBeVisible({
       timeout: 15_000,
     });
+    await openManualNoteForm(page);
     const form = page.getByTestId("new-note-form");
     for (const selector of [
       "#note-date",

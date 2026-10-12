@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 
 import { expect, test } from "./fixtures";
 import { seedTestAdmin } from "../visual/helpers";
+import { openManualNoteForm } from "./open-manual-note-form";
 
 const HARNESS_TOPICS = "Fractions on a number line";
 const HARNESS_HOMEWORK = "Worksheet pages 4-6";
@@ -39,6 +40,7 @@ test("the AI text panel fills the empty note form", async ({ page }) => {
   await expect(page.getByRole("heading", { name: studentName })).toBeVisible({
     timeout: 15_000,
   });
+  await openManualNoteForm(page);
   const panel = page.getByTestId("ai-assist-panel");
   const form = page.getByTestId("new-note-form");
   await expect(panel).toBeVisible({ timeout: 15_000 });
@@ -61,4 +63,62 @@ test("the AI text panel fills the empty note form", async ({ page }) => {
   await expect(form.locator("#note-assessment")).toHaveValue(HARNESS_ASSESSMENT);
   await expect(form.locator("#note-plan")).toHaveValue(HARNESS_PLAN);
   await expect(panel.getByTestId("ai-filled-hint")).toBeVisible();
+});
+
+test("generating from the panel reveals the closed manual form with the fields filled", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const suffix = `${Date.now()}`;
+  const studentName = `AI Panel Closed ${suffix}`;
+  const adminUserId = await seedTestAdmin();
+  const prisma = new PrismaClient();
+  let studentId = "";
+  try {
+    const student = await prisma.student.create({
+      data: {
+        name: studentName,
+        adminUserId,
+        parentEmail: `ai-panel-closed-${suffix}@test.local`,
+      },
+      select: { id: true },
+    });
+    studentId = student.id;
+  } finally {
+    await prisma.$disconnect();
+  }
+
+  await page.goto(`/admin/students/${studentId}/notes`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: studentName })).toBeVisible({
+    timeout: 15_000,
+  });
+  const panel = page.getByTestId("ai-assist-panel");
+  const form = page.getByTestId("new-note-form");
+  const addNote = page.getByRole("button", { name: "Add note" });
+  await expect(panel).toBeVisible({ timeout: 15_000 });
+  await expect(form).toBeHidden();
+
+  // The note fields start disabled in the server HTML. Enabled means the client is live.
+  await expect(form.locator("#note-topics")).toBeEnabled({ timeout: 15_000 });
+
+  await panel.getByTestId("ai-session-text").fill(
+    "PW_AI_HARNESS We worked on placing fractions on a number line."
+  );
+  const generate = panel.getByTestId("ai-generate-btn");
+  await expect(generate).toBeEnabled({ timeout: 15_000 });
+  await generate.click();
+
+  await expect(panel.getByTestId("ai-filled-hint")).toBeVisible({ timeout: 15_000 });
+  await expect(form).toBeVisible();
+  await expect(form.locator("#note-topics")).toHaveValue(HARNESS_TOPICS);
+  await expect(form.locator("#note-plan")).toHaveValue(HARNESS_PLAN);
+  await expect(addNote).toHaveAttribute("aria-expanded", "true");
+
+  // Start over clears the form. A closed form must open so the tutor sees it emptied.
+  await addNote.click();
+  await expect(form).toBeHidden();
+  await panel.getByTestId("ai-generated-note-review-dismiss").click();
+  await expect(form).toBeVisible();
+  await expect(form.locator("#note-topics")).toHaveValue("");
+  await expect(addNote).toHaveAttribute("aria-expanded", "true");
 });
