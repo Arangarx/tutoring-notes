@@ -428,6 +428,50 @@ test.describe("org booking calls the bridge @wb-presence", () => {
     }
   });
 
+  test("the assigned instructor sees their taught session on the organization home, and another instructor does not @wb-presence", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedMember(org.id, "Ida Instructor", ["instructor"]);
+    const other = await seedMember(org.id, "Otto Instructor", ["instructor"]);
+    const { student, parentEmail } = await seedLearner(org.id, owner.id);
+    const session = await prisma.whiteboardSession.create({
+      data: {
+        adminUserId: instructor.id,
+        studentId: student.id,
+        consentAcknowledged: true,
+        eventsBlobUrl: "https://blob.example.com/org-taught-list-events.json",
+        sessionPhase: "ACTIVE",
+        endedAt: new Date(),
+        durationSeconds: 120,
+      },
+    });
+
+    const instructorSession = await signIn(browser, instructor);
+    try {
+      await instructorSession.page.goto(`/admin/organization/${org.id}`);
+      expect(instructorSession.page.url(), "session cookie was rejected").not.toContain("/login");
+      const link = instructorSession.page.getByTestId(`org-taught-session-${session.id}`);
+      await expect(link).toBeVisible();
+      await expect(link).toHaveText("Mary Ann Lee");
+      await expect(link).not.toContainText(parentEmail);
+      await expect(instructorSession.page.getByText(parentEmail)).toHaveCount(0);
+    } finally {
+      await instructorSession.context.close();
+    }
+
+    const otherSession = await signIn(browser, other);
+    try {
+      await otherSession.page.goto(`/admin/organization/${org.id}`);
+      expect(otherSession.page.url(), "session cookie was rejected").not.toContain("/login");
+      await expect(otherSession.page.getByTestId(`org-taught-session-${session.id}`)).toHaveCount(0);
+      await expect(otherSession.page.getByText(parentEmail)).toHaveCount(0);
+    } finally {
+      await otherSession.context.close();
+    }
+  });
+
   test("live start is refused when consent is off, and in-person start activates", async ({
     browser,
   }) => {

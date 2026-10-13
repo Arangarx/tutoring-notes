@@ -26,7 +26,7 @@ export type StartWhiteboardSessionProps = {
 
 function canStartSession(props: StartWhiteboardSessionProps): boolean {
   if (props.accessSuspended) return false;
-  if (props.isSelfLearner) return true;
+  // Same gate as the student page: missing consent hides Start, including for a self-learner.
   return props.studentClaimed && props.consentRecordExists;
 }
 

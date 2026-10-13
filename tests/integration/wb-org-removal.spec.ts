@@ -615,4 +615,48 @@ test.describe("org removal and suspension", { tag: [TAG.WB_CHROME, TAG.WB_PRESEN
     expect(stored.status).toBe("DRAFT");
     await tutor.context.close();
   });
+
+  test("each instructor sees only the note from the session they taught", async ({ browser }) => {
+    const { org, owner } = await seedOrg();
+    const instructorA = await seedInstructor(org.id);
+    const instructorB = await seedInstructor(org.id);
+    const learner = await seedLearner(org.id, owner.id);
+    const endedAt = new Date();
+    const adaTopics = "Only Ada taught quadratic factoring";
+    const beaTopics = "Only Bea taught linear graphs";
+    await seedLiveSession({
+      adminUserId: instructorA.id,
+      studentId: learner.student.id,
+      learnerProfileId: learner.profile.id,
+      endedAt,
+      topics: adaTopics,
+    });
+    await seedLiveSession({
+      adminUserId: instructorB.id,
+      studentId: learner.student.id,
+      learnerProfileId: learner.profile.id,
+      endedAt,
+      topics: beaTopics,
+    });
+
+    const ada = await signIn(browser, instructorA);
+    try {
+      const notes = await ada.page.goto(`/admin/students/${learner.student.id}/notes`);
+      expect(notes?.status()).not.toBe(404);
+      await expect(ada.page.getByText(adaTopics)).toBeVisible();
+      await expect(ada.page.getByText(beaTopics)).toHaveCount(0);
+    } finally {
+      await ada.context.close();
+    }
+
+    const bea = await signIn(browser, instructorB);
+    try {
+      const notes = await bea.page.goto(`/admin/students/${learner.student.id}/notes`);
+      expect(notes?.status()).not.toBe(404);
+      await expect(bea.page.getByText(beaTopics)).toBeVisible();
+      await expect(bea.page.getByText(adaTopics)).toHaveCount(0);
+    } finally {
+      await bea.context.close();
+    }
+  });
 });

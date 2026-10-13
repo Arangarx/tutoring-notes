@@ -385,6 +385,56 @@ describe("organization and self-learner consent writes", () => {
     ).toBe(0);
   });
 
+  it("saveSelfLearnerConsentAction writes an organization-owned record for one linked organization", async () => {
+    const ah = await createAccountHolder({ isSelfLearner: true });
+    const self = await createLearnerProfile(ah.id, { isSelfLearner: true });
+    const org = await db.organization.create({
+      data: {
+        name: `Self consent org ${uniq("org")}`,
+        createdByOperatorId: "consent-op@test.local",
+      },
+      select: { id: true },
+    });
+    await db.student.create({
+      data: {
+        name: "Self org learner",
+        adminUserId: null,
+        organizationId: org.id,
+        learnerProfileId: self.id,
+      },
+    });
+    (getAccountHolderSessionFromHeaders as jest.Mock).mockResolvedValue({
+      accountHolderId: ah.id,
+    });
+
+    const flags = {
+      allowLiveSession: false,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: false,
+      allowNoteSending: true,
+    };
+    const saved = await saveSelfLearnerConsentAction(self.id, {
+      tutors: [],
+      organizations: [{ organizationId: org.id, ...flags }],
+      restrictions: defaultRestrictions,
+    });
+    expect(saved.ok).toBe(true);
+
+    const rows = await db.consentRecord.findMany({
+      where: { learnerProfileId: self.id },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      organizationId: org.id,
+      adminUserId: null,
+      ...flags,
+      setByAccountHolderId: ah.id,
+    });
+    expect(
+      await db.consentRestriction.count({ where: { learnerProfileId: self.id } })
+    ).toBe(0);
+  });
+
   it("saveSelfLearnerConsentAction writes the tutor row and refuses a child profile", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder({ isSelfLearner: true });

@@ -648,6 +648,68 @@ describe("scheduler and instructor loaders", () => {
     expect(JSON.stringify(card)).not.toContain("parentEmail");
   });
 
+  test("a claimed learner is blocked only when the latest organization consent turns live sessions off", async () => {
+    const { org, owner } = await seedOrg();
+    mockSession(owner.email, owner.id);
+
+    async function seedClaimed(givenName: string, familyName: string) {
+      const profile = await seedLearnerProfile(`${givenName} ${familyName}`);
+      const student = await db.student.create({
+        data: {
+          name: "Not the card name",
+          adminUserId: null,
+          organizationId: org.id,
+          learnerProfileId: profile.id,
+          parentEmail: `secret-${suffix()}@test.local`,
+          organizationLearner: {
+            create: {
+              organizationId: org.id,
+              givenName,
+              familyName,
+              brief: "Keeps the card loadable",
+              createdByAdminUserId: owner.id,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      return { studentId: student.id, profile };
+    }
+
+    async function writeConsent(
+      profile: { id: string; accountHolderId: string },
+      version: number,
+      allowLiveSession: boolean
+    ) {
+      await db.consentRecord.create({
+        data: {
+          learnerProfileId: profile.id,
+          adminUserId: null,
+          organizationId: org.id,
+          version,
+          allowLiveSession,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+          setByAccountHolderId: profile.accountHolderId,
+          captureMethod: "electronic",
+        },
+      });
+    }
+
+    const liveOff = await seedClaimed("Nora", "Keene");
+    await writeConsent(liveOff.profile, 1, true);
+    await writeConsent(liveOff.profile, 2, false);
+    const offCard = await loadSchedulerLearner(org.id, liveOff.studentId);
+    expect(offCard.blockedReason).toBe("Live sessions are off");
+
+    const liveOn = await seedClaimed("Owen", "Park");
+    await writeConsent(liveOn.profile, 1, false);
+    await writeConsent(liveOn.profile, 2, true);
+    const onCard = await loadSchedulerLearner(org.id, liveOn.studentId);
+    expect(onCard.blockedReason).toBeNull();
+  });
+
   test("instructor result has no parent email", async () => {
     const { org, admin } = await seedOrg();
     await db.organizationMember.update({

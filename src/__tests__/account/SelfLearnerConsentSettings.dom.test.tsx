@@ -81,6 +81,47 @@ describe("SelfLearnerConsentSettings", () => {
     });
   });
 
+  test("sends the organization flags on Save", async () => {
+    const user = userEvent.setup();
+    saveMock.mockResolvedValue({ ok: true });
+    const organization = {
+      organizationId: "org-north",
+      organizationName: "North Tutoring",
+      allowLiveSession: false,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: false,
+      allowNoteSending: true,
+    };
+    render(
+      <SelfLearnerConsentSettings
+        learnerProfileId="learner-1"
+        tutors={[]}
+        organizations={[organization]}
+      />
+    );
+
+    expect(screen.getByText("North Tutoring")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /save preferences/i }));
+    await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
+    expect(saveMock).toHaveBeenCalledWith("learner-1", {
+      tutors: [],
+      organizations: [
+        {
+          organizationId: "org-north",
+          allowLiveSession: false,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: false,
+          allowNoteSending: true,
+        },
+      ],
+      restrictions: {
+        restrictAudioRecording: false,
+        restrictWhiteboardRecording: false,
+        restrictNoteSending: false,
+      },
+    });
+  });
+
   test("blocks save until the agreement is checked", async () => {
     const user = userEvent.setup();
     saveMock.mockResolvedValue({ ok: true });

@@ -99,11 +99,30 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders normal Start for self-learner without consent record", () => {
+  it("hides Start for a self-learner when consent is missing", () => {
     render(
       <StartWhiteboardSession
         {...baseProps}
         consentRecordExists={false}
+        isSelfLearner={true}
+        studentClaimed={true}
+      />
+    );
+
+    expect(
+      screen.queryByTestId("start-whiteboard-session-btn")
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("start-wb-consent-callout")).toBeInTheDocument();
+    expect(
+      screen.getByText(/privacy preferences are not complete/i)
+    ).toBeInTheDocument();
+  });
+
+  it("renders Start for a self-learner once a consent record exists", () => {
+    render(
+      <StartWhiteboardSession
+        {...baseProps}
+        consentRecordExists={true}
         isSelfLearner={true}
         studentClaimed={true}
       />
