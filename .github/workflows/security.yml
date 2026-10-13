@@ -1,0 +1,93 @@
+# Standing security checks: static analysis, dependency audit, secret scan,
+# and the existing Jest security tests. Nothing here calls a deployed site.
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - sec/audit-pipeline
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Semgrep
+        run: pip install semgrep
+      # Report-only. Findings (and a non-zero scan exit) do not fail this job.
+      # After the baseline is triaged, remove continue-on-error and add --error
+      # to the semgrep command to block on findings.
+      - name: Scan
+        continue-on-error: true
+        env:
+          SEMGREP_SEND_METRICS: "off"
+        run: >-
+          semgrep scan
+          --config p/owasp-top-ten
+          --config p/typescript
+          --config p/react
+          --config p/nextjs
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          version=8.30.1
+          curl -sSfL -o "gitleaks_${version}_linux_x64.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"
+          curl -sSfL -o "gitleaks_${version}_checksums.txt" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_checksums.txt"
+          sha256sum --ignore-missing -c "gitleaks_${version}_checksums.txt"
+          tar -xzf "gitleaks_${version}_linux_x64.tar.gz" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+      - name: Detect secrets
+        run: gitleaks detect --source . --redact --verbose
+
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # Blocks on high and critical production advisories.
+      # Checked 2026-10-13: 2 critical and 22 high, every one with a fix
+      # (npm audit fix, or a semver-major upgrade for the 8 that need it).
+      # None are unfixed, so this step fails the job instead of reporting only.
+      # Path: upgrade the affected production dependencies.
+      - name: Audit production dependencies
+        run: npm audit --audit-level=high --omit=dev
+
+  jest-security:
+    name: Jest security tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # Only src/__tests__/security. Those tests mock the database and do not
+      # need a live database. Do not widen this to the full Jest suite or
+      # Playwright: Jest global setup resets the shared test database.
+      - name: Run security tests
+        run: npx jest src/__tests__/security
