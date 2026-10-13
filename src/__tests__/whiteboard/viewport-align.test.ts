@@ -498,3 +498,161 @@ describe("replayScrollFromRecordedViewport (replay center-match)", () => {
     }
   );
 });
+
+describe("replay camera fit view", () => {
+  const recordedZoom = 0.51;
+  const recordW = 1800;
+  const recordH = 1049;
+  const record = {
+    panX: 40,
+    panY: -80,
+    zoom: recordedZoom,
+    viewportWidth: recordW,
+    viewportHeight: recordH,
+  };
+
+  /** Record-time scene center via the vendored Excalidraw transform. */
+  function recordTimeSceneCenter(): { x: number; y: number } {
+    return viewportCoordsToSceneCoords(
+      { clientX: recordW / 2, clientY: recordH / 2 },
+      {
+        zoom: { value: recordedZoom },
+        offsetLeft: 0,
+        offsetTop: 0,
+        scrollX: record.panX,
+        scrollY: record.panY,
+      }
+    );
+  }
+
+  /** Scene point at the replay window center after the aligned camera. */
+  function replayCenterFromAligned(
+    aligned: { scrollX: number; scrollY: number; zoom: number },
+    replayW: number,
+    replayH: number
+  ): { x: number; y: number } {
+    return viewportCoordsToSceneCoords(
+      { clientX: replayW / 2, clientY: replayH / 2 },
+      {
+        zoom: { value: aligned.zoom },
+        offsetLeft: 0,
+        offsetTop: 0,
+        scrollX: aligned.scrollX,
+        scrollY: aligned.scrollY,
+      }
+    );
+  }
+
+  it("default mode unchanged: zoom equals recorded zoom and replay center equals record-time scene center for unequal sizes", () => {
+    const replayW = 390;
+    const replayH = 700;
+    const aligned = replayScrollFromRecordedViewport(record, replayW, replayH);
+    expect(aligned).not.toBeNull();
+    expect(aligned!.zoom).toBe(recordedZoom);
+    const replayCenter = replayCenterFromAligned(aligned!, replayW, replayH);
+    const recordCenter = recordTimeSceneCenter();
+    expect(replayCenter.x).toBeCloseTo(recordCenter.x, 8);
+    expect(replayCenter.y).toBeCloseTo(recordCenter.y, 8);
+  });
+
+  it("fit, replay relatively taller: zoom is recordedZoom * min(width ratio, height ratio), center matches, width matches tutor and height shows more", () => {
+    const replayW = 390;
+    const replayH = 700;
+    const expectedZoom =
+      recordedZoom * Math.min(replayW / recordW, replayH / recordH);
+    const aligned = replayScrollFromRecordedViewport(record, replayW, replayH, 0, 0, {
+      mode: "fit",
+    });
+    expect(aligned).not.toBeNull();
+    expect(aligned!.zoom).toBeCloseTo(expectedZoom, 10);
+    const replayCenter = replayCenterFromAligned(aligned!, replayW, replayH);
+    const recordCenter = recordTimeSceneCenter();
+    expect(replayCenter.x).toBeCloseTo(recordCenter.x, 8);
+    expect(replayCenter.y).toBeCloseTo(recordCenter.y, 8);
+    const tutorVisibleW = recordW / recordedZoom;
+    const tutorVisibleH = recordH / recordedZoom;
+    expect(replayW / aligned!.zoom).toBeCloseTo(tutorVisibleW, 6);
+    expect(replayH / aligned!.zoom).toBeGreaterThan(tutorVisibleH);
+  });
+
+  it("fit, replay relatively wider: height matches the tutor and width shows more scene", () => {
+    const replayW = 1400;
+    const replayH = 400;
+    const expectedZoom =
+      recordedZoom * Math.min(replayW / recordW, replayH / recordH);
+    const aligned = replayScrollFromRecordedViewport(record, replayW, replayH, 0, 0, {
+      mode: "fit",
+    });
+    expect(aligned).not.toBeNull();
+    expect(aligned!.zoom).toBeCloseTo(expectedZoom, 10);
+    const replayCenter = replayCenterFromAligned(aligned!, replayW, replayH);
+    const recordCenter = recordTimeSceneCenter();
+    expect(replayCenter.x).toBeCloseTo(recordCenter.x, 8);
+    expect(replayCenter.y).toBeCloseTo(recordCenter.y, 8);
+    const tutorVisibleW = recordW / recordedZoom;
+    const tutorVisibleH = recordH / recordedZoom;
+    expect(replayH / aligned!.zoom).toBeCloseTo(tutorVisibleH, 6);
+    expect(replayW / aligned!.zoom).toBeGreaterThan(tutorVisibleW);
+  });
+
+  it("equal aspect, replay half as wide and half as tall: zoom is half the tutor zoom and both visible scene dimensions match", () => {
+    const replayW = recordW / 2;
+    const replayH = recordH / 2;
+    const aligned = replayScrollFromRecordedViewport(record, replayW, replayH, 0, 0, {
+      mode: "fit",
+    });
+    expect(aligned).not.toBeNull();
+    expect(aligned!.zoom).toBeCloseTo(recordedZoom / 2, 10);
+    expect(replayW / aligned!.zoom).toBeCloseTo(recordW / recordedZoom, 6);
+    expect(replayH / aligned!.zoom).toBeCloseTo(recordH / recordedZoom, 6);
+    const replayCenter = replayCenterFromAligned(aligned!, replayW, replayH);
+    const recordCenter = recordTimeSceneCenter();
+    expect(replayCenter.x).toBeCloseTo(recordCenter.x, 8);
+    expect(replayCenter.y).toBeCloseTo(recordCenter.y, 8);
+  });
+
+  it("fit with no positive record size uses the same legacy window size the default path uses", () => {
+    const prev = (global as { window?: unknown }).window;
+    Object.defineProperty(global, "window", {
+      configurable: true,
+      value: { innerWidth: recordW, innerHeight: recordH },
+    });
+    try {
+      const base = { panX: record.panX, panY: record.panY, zoom: recordedZoom };
+      const replayW = 390;
+      const replayH = 700;
+      const expectedZoom =
+        recordedZoom * Math.min(replayW / recordW, replayH / recordH);
+      const fromWindow = replayScrollFromRecordedViewport(
+        base,
+        replayW,
+        replayH,
+        0,
+        0,
+        { allowLegacyRecordSizeFallback: true, mode: "fit" }
+      );
+      const fromExplicit = replayScrollFromRecordedViewport(
+        record,
+        replayW,
+        replayH,
+        0,
+        0,
+        { mode: "fit" }
+      );
+      expect(fromWindow).not.toBeNull();
+      expect(fromWindow!.zoom).toBeCloseTo(expectedZoom, 10);
+      expect(fromWindow!.zoom).toBeCloseTo(fromExplicit!.zoom, 10);
+      expect(fromWindow!.scrollX).toBeCloseTo(fromExplicit!.scrollX, 8);
+      expect(fromWindow!.scrollY).toBeCloseTo(fromExplicit!.scrollY, 8);
+    } finally {
+      if (prev === undefined) {
+        delete (global as { window?: unknown }).window;
+      } else {
+        Object.defineProperty(global, "window", {
+          configurable: true,
+          value: prev,
+        });
+      }
+    }
+  });
+});

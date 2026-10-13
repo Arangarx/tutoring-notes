@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
+import { ReplayCameraFitButton } from "@/components/whiteboard/replay/ReplayCameraFitButton";
 import {
   WbIconArrow,
   WbIconEraser,
@@ -91,6 +92,9 @@ export type ReplayReadOnlyChromeSlotsProps = {
   activeReplayPageId?: string | null;
   drawerSlot?: ReactNode;
   nonVisualMounts?: ReactNode;
+  /** Fit view is on. Session-local; the parent owns the state. */
+  cameraFit?: boolean;
+  onToggleCameraFit?: () => void;
 };
 
 /** Read-only live chrome slots for in-frame replay (visual reuse only). */
@@ -104,6 +108,8 @@ export function buildReplayReadOnlyChromeSlots({
   replayPageList,
   activeReplayPageId,
   nonVisualMounts,
+  cameraFit = false,
+  onToggleCameraFit,
 }: Omit<ReplayReadOnlyChromeSlotsProps, "drawerSlot">) {
   const topBar = (
     <header
@@ -152,6 +158,9 @@ export function buildReplayReadOnlyChromeSlots({
       </div>
 
       <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
+        {onToggleCameraFit ? (
+          <ReplayCameraFitButton pressed={cameraFit} onToggle={onToggleCameraFit} />
+        ) : null}
         {onHideReplay ? (
           <button
             type="button"

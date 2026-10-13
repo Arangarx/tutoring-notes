@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
 import { useReplayTimelineController } from "@/hooks/useReplayTimelineController";
 import type { ReplayAudioSegment } from "@/lib/whiteboard/replay-helpers";
@@ -56,6 +56,7 @@ export function WhiteboardReplayInFrame({
 }: WhiteboardReplayInFrameProps) {
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const [cameraFit, setCameraFit] = useState(false);
   const entryPaintDoneRef = useRef(false);
   /**
    * Guard for FIX 2: prevents `onHideReplay` from being called before the
@@ -75,6 +76,7 @@ export function WhiteboardReplayInFrame({
   useEffect(() => {
     entryPaintDoneRef.current = false;
     replaySettledRef.current = false;
+    setCameraFit(false);
   }, [eventsBlobUrl]);
   const { layoutMode, orientation } = useWbLayoutMode();
 
@@ -246,6 +248,7 @@ export function WhiteboardReplayInFrame({
       applySceneAtRef={applySceneAtRef}
       containerRef={canvasContainerRef}
       gateVisibility
+      cameraMode={cameraFit ? "fit" : "preserve"}
       className="wb-replay-canvas-host"
     />
   ) : (
@@ -267,6 +270,8 @@ export function WhiteboardReplayInFrame({
     timelineStrip,
     replayPageList,
     activeReplayPageId,
+    cameraFit,
+    onToggleCameraFit: () => setCameraFit((on) => !on),
     nonVisualMounts:
       hasAudio ? (
         <audio

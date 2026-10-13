@@ -68,6 +68,9 @@ import {
   type ScenePainter,
   type ScenePaintApi,
 } from "@/lib/whiteboard/scene-paint";
+import { type ReplayCameraMode } from "@/lib/whiteboard/viewport-align";
+import { useReplayRecordedCamera } from "@/hooks/useReplayRecordedCamera";
+import { ReplayCameraFitButton } from "@/components/whiteboard/replay/ReplayCameraFitButton";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
 import {
@@ -314,9 +317,18 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const replayCameraReadyRef = useRef(false);
   /** Bumps after initial fit so the theme-only effect can merge without clobbering early. */
   const [replayViewportSeq, setReplayViewportSeq] = useState(0);
+  /** Fit view is session-local. Default keeps the tutor zoom. */
+  const [cameraFit, setCameraFit] = useState(false);
+  const cameraMode: ReplayCameraMode = cameraFit ? "fit" : "preserve";
   /** Image URLs already passed to Excalidraw `addFiles` for this loaded log. */
   const registeredAssetUrlsRef = useRef<Set<string>>(new Set());
   const excalCanvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
+  const { alignRecordedViewport } = useReplayRecordedCamera({
+    cameraMode,
+    containerRef: excalCanvasContainerRef,
+    applySceneAtRef,
+  });
   /**
    * Pillar-4 scene-paint engine instance for the current `(api, log)` pair.
    * Recreated when either changes; encapsulates the canonical scene
@@ -538,17 +550,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       if (loadState.kind !== "ready" || !api) return;
       const painter = scenePainterRef.current;
       if (!painter) return;
-      // Phase 5 task 8 (replay viewport tier-c-lite): find the most recent
-      // `viewport` event ≤ timeMs. When present, the painter pushes it
-      // atomically with the scene elements so the camera moves in lockstep
-      // with strokes. When absent (pre-feature logs, or the first frames
-      // of a recording before the anchor `viewport` event lands), we fall
-      // back to the engine's `preserveScroll` behaviour — which keeps
-      // whatever scroll the camera-fitter set on first paint.
       const vp = findLatestViewportAt(loadState.log, timeMs);
+      const viewportOverride = alignRecordedViewport(timeMs, vp, api);
       const result = painter.applyAt(timeMs, {
         preserveScroll: vp ? false : replayCameraReadyRef.current,
-        viewportOverride: vp ?? undefined,
+        viewportOverride,
       });
       lastSceneElementsRef.current = result.paintedElements;
       // Once a viewport event has driven the camera, treat the camera as
@@ -574,8 +580,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         );
       }
     },
-    [api, loadState, resolveAssetUrl]
+    [alignRecordedViewport, api, loadState, resolveAssetUrl]
   );
+  applySceneAtRef.current = applySceneAt;
 
   // First paint after Excalidraw mount **for this API instance**.
   //
@@ -650,7 +657,6 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     };
   }, [api, hasAudio, loadState, applySceneAt]);
 
-  const applySceneAtRef = useRef(applySceneAt);
   useEffect(() => {
     applySceneAtRef.current = applySceneAt;
   }, [applySceneAt]);
@@ -1224,6 +1230,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
             >
               {playing ? "Pause" : "Play"}
             </button>
+            <ReplayCameraFitButton
+              pressed={cameraFit}
+              onToggle={() => setCameraFit((on) => !on)}
+            />
             <input
               type="range"
               min={0}

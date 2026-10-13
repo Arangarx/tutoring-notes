@@ -37,6 +37,8 @@ export async function uploadReplayEvents(args: {
   adminUserId: string;
   studentId: string;
   whiteboardSessionId: string;
+  /** Override the default one-rectangle fixture. */
+  eventsJson?: string;
 }): Promise<string> {
   const mintRes = await args.request.post("/api/upload/blob", {
     data: {
@@ -66,7 +68,7 @@ export async function uploadReplayEvents(args: {
     throw new Error("Harness mint response missing putUrl, blobUrl, or putToken");
   }
   const putRes = await args.request.put(mint.putUrl, {
-    data: replayEventsFixture(),
+    data: args.eventsJson ?? replayEventsFixture(),
     headers: {
       "content-type": "application/json",
       "x-blob-harness-put-token": mint.putToken,

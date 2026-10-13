@@ -330,6 +330,9 @@ export type RecordedReplayViewportCamera = {
   viewportHeight?: number;
 };
 
+/** Replay camera. `preserve` keeps the tutor zoom. `fit` uses one uniform zoom. */
+export type ReplayCameraMode = "preserve" | "fit";
+
 /**
  * Best-effort record-time viewport for legacy logs that predate
  * `viewportWidth`/`viewportHeight` on viewport events. Tutor sessions
@@ -349,9 +352,15 @@ export function inferLegacyRecordViewportSize(): ViewportSize | null {
 /**
  * Replay-only: convert a recorded tutor camera (raw scroll + zoom at record
  * time) into scroll for the current replay container — same center-match as
- * student follow mode B. Zoom is preserved exactly; scroll is re-derived so
- * the scene point that was at the record-time viewport center sits at the
- * replay viewport center.
+ * student follow mode B. Default (`preserve`) keeps the tutor zoom and
+ * re-derives scroll so the record-time viewport center sits at the replay
+ * viewport center.
+ *
+ * `fit` uses one uniform zoom,
+ * `recordedZoom * min(replayWidth / recordedWidth, replayHeight / recordedHeight)`,
+ * then the same center-match. The side that would spill matches the replay
+ * window; the other side shows more of the board. Missing record size uses
+ * the same legacy window fallback as preserve — no second size guess.
  */
 export function replayScrollFromRecordedViewport(
   recorded: RecordedReplayViewportCamera,
@@ -359,7 +368,10 @@ export function replayScrollFromRecordedViewport(
   replayViewportHeight: number,
   offsetLeft = 0,
   offsetTop = 0,
-  options?: { allowLegacyRecordSizeFallback?: boolean }
+  options?: {
+    allowLegacyRecordSizeFallback?: boolean;
+    mode?: ReplayCameraMode;
+  }
 ): { scrollX: number; scrollY: number; zoom: number } | null {
   const legacy =
     options?.allowLegacyRecordSizeFallback === true
@@ -380,6 +392,14 @@ export function replayScrollFromRecordedViewport(
     return null;
   }
 
+  const mode: ReplayCameraMode = options?.mode === "fit" ? "fit" : "preserve";
+  const zoom =
+    mode === "fit"
+      ? recorded.zoom *
+        Math.min(replayViewportWidth / recordW, replayViewportHeight / recordH)
+      : recorded.zoom;
+  if (!Number.isFinite(zoom) || zoom <= 0) return null;
+
   const center = viewportSceneCenterFromScroll(
     recorded.panX,
     recorded.panY,
@@ -391,7 +411,7 @@ export function replayScrollFromRecordedViewport(
     {
       centerSceneX: center.x,
       centerSceneY: center.y,
-      zoom: recorded.zoom,
+      zoom,
     },
     replayViewportWidth,
     replayViewportHeight,

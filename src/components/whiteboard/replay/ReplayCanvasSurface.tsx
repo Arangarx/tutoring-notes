@@ -15,9 +15,8 @@ import {
   type ScenePaintApi,
   type ScenePainter,
 } from "@/lib/whiteboard/scene-paint";
-import {
-  replayScrollFromRecordedViewport,
-} from "@/lib/whiteboard/viewport-align";
+import { type ReplayCameraMode } from "@/lib/whiteboard/viewport-align";
+import { useReplayRecordedCamera } from "@/hooks/useReplayRecordedCamera";
 import { useTheme } from "@/components/ThemeProvider";
 import { getReplayCachedRestoreElements } from "@/lib/whiteboard/replay-restore-elements";
 import {
@@ -61,6 +60,11 @@ export type ReplayCanvasSurfaceProps = {
   onApiReady?: (api: ReplayApi) => void;
   /** When true, gate canvas visibility until paintReady (B2). */
   gateVisibility?: boolean;
+  /**
+   * `preserve` keeps the tutor zoom (default). `fit` uses one uniform zoom
+   * so the recorded view fits the replay window. Session-local; not persisted.
+   */
+  cameraMode?: ReplayCameraMode;
 };
 
 
@@ -77,6 +81,7 @@ export function ReplayCanvasSurface({
   style,
   onApiReady,
   gateVisibility = false,
+  cameraMode = "preserve",
 }: ReplayCanvasSurfaceProps) {
   const internalContainerRef = useRef<HTMLDivElement | null>(null);
   const containerRef = externalContainerRef ?? internalContainerRef;
@@ -100,6 +105,12 @@ export function ReplayCanvasSurface({
    */
   const prevResizeWidthRef = useRef<number | null>(null);
   const prevResizeHeightRef = useRef<number | null>(null);
+  const { lastAppliedTimeRef, alignRecordedViewport } = useReplayRecordedCamera({
+    cameraMode,
+    containerRef,
+    applySceneAtRef,
+  });
+  const usingRecordedViewportRef = useRef(false);
 
   const jsxGraphWarmedRef = useRef(false);
   useEffect(() => {
@@ -147,60 +158,8 @@ export function ReplayCanvasSurface({
       const painter = scenePainterRef.current;
       if (!painter) return;
       const vp = findLatestViewportAt(log, timeMs);
-      let viewportOverride = vp ?? undefined;
-      if (vp) {
-        const container = containerRef.current;
-        const rect = container?.getBoundingClientRect();
-        if (rect && rect.width > 0 && rect.height > 0) {
-          let offsetLeft = 0;
-          let offsetTop = 0;
-          try {
-            const st = api.getAppState?.();
-            if (st && typeof st === "object") {
-              const o = st as { offsetLeft?: unknown; offsetTop?: unknown };
-              if (typeof o.offsetLeft === "number" && Number.isFinite(o.offsetLeft)) {
-                offsetLeft = o.offsetLeft;
-              }
-              if (typeof o.offsetTop === "number" && Number.isFinite(o.offsetTop)) {
-                offsetTop = o.offsetTop;
-              }
-            }
-          } catch {
-            // best-effort — offsets only affect center-match when non-zero
-          }
-          const aligned = replayScrollFromRecordedViewport(
-            vp,
-            rect.width,
-            rect.height,
-            offsetLeft,
-            offsetTop,
-            { allowLegacyRecordSizeFallback: true }
-          );
-          if (aligned) {
-            viewportOverride = {
-              panX: aligned.scrollX,
-              panY: aligned.scrollY,
-              zoom: aligned.zoom,
-            };
-          }
-        } else if (container && typeof window !== "undefined") {
-          // Share replay shell layout race: rect can be 0×0 on the first paint
-          // before flex height chain resolves — retry on rAF (same pattern as
-          // createCameraFitter in scene-paint.ts).
-          let retriesLeft = 4;
-          const retryAlign = () => {
-            if (retriesLeft <= 0) return;
-            retriesLeft -= 1;
-            const retryRect = container.getBoundingClientRect();
-            if (!(retryRect.width > 0 && retryRect.height > 0)) {
-              window.requestAnimationFrame(retryAlign);
-              return;
-            }
-            applySceneAtRef.current?.(timeMs);
-          };
-          window.requestAnimationFrame(retryAlign);
-        }
-      }
+      usingRecordedViewportRef.current = vp != null;
+      const viewportOverride = alignRecordedViewport(timeMs, vp, api);
       const result = painter.applyAt(timeMs, {
         preserveScroll: vp ? false : replayCameraReadyRef.current,
         viewportOverride,
@@ -221,8 +180,9 @@ export function ReplayCanvasSurface({
         );
       }
     },
-    [api, containerRef, log, resolveAssetUrl]
+    [alignRecordedViewport, api, log, resolveAssetUrl]
   );
+  applySceneAtRef.current = applySceneAt;
 
   useEffect(() => {
     applySceneAtRef.current = applySceneAt;
@@ -323,6 +283,15 @@ export function ReplayCanvasSurface({
         prevH > 0 &&
         (rect.width !== prevW || rect.height !== prevH)
       ) {
+        if (
+          usingRecordedViewportRef.current &&
+          lastAppliedTimeRef.current != null
+        ) {
+          prevResizeWidthRef.current = rect.width;
+          prevResizeHeightRef.current = rect.height;
+          applySceneAtRef.current(lastAppliedTimeRef.current);
+          return;
+        }
         try {
           const st = api.getAppState?.();
           if (st) {

@@ -78,7 +78,7 @@ const PATH_RULES = [
     tags: [TAG.WB_VIEWPORT, TAG.WB_PRESENCE, TAG.WB_CHROME],
   },
   {
-    re: /viewport-align|pageViewState|followTutor|useStudentWhiteboardCanvas|useCollaboratorLiveCursors/i,
+    re: /viewport-align|pageViewState|followTutor|useStudentWhiteboardCanvas|useCollaboratorLiveCursors|wb-replay-camera-fit|ReplayCameraFit/i,
     tags: [TAG.WB_VIEWPORT],
   },
   {
