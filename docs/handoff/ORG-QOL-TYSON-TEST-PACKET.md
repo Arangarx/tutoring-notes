@@ -1,20 +1,26 @@
-# Session joining and whiteboard quality — Tyson test packet
+# Session joining, organization accounts, and whiteboard quality — Tyson test packet
 
 **Branch:** `feat/org-qol`
-**Tip commit:** [`a0ff5d63`](https://github.com/Arangarx/tutoring-notes/commit/a0ff5d63)
+**Tip commit:** [`c2e97afb`](https://github.com/Arangarx/tutoring-notes/commit/c2e97afb)
 **Preview:** [preview.usemynk.com](https://preview.usemynk.com)
 
-This packet is for the tutoring app **Mynk**. It covers joining a scheduled session, who is allowed to claim a learner, and a set of whiteboard changes. School / organization accounts are **not** in this build.
+This packet is for the tutoring app **Mynk**. It covers joining a scheduled session, who is allowed to claim a learner, whiteboard changes, and organization staff. Organization accounts are in this build. Items **50–70** are the new ones.
 
 ## Run these again
 
-The preview changed on 7 Oct after this packet was first sent. If you already scored one of these, clear that box and run it again. Each changed item is also marked **Re-test**.
+If you already scored one of these, clear that box and run it again. Each changed item is also marked **Re-test**. Nothing in this packet is already passed.
 
+- **1** — the student page is one column; Upcoming sessions is under the Session card
+- **3** — the child's home has more cards; this item is still the upcoming Join
+- **9** — current learners are listed above Add a learner
+- **11** — claim links moved to Account & sharing
 - **23** — hints depend on the tool, and they are not in the phone's bottom bar
 - **24** — the other person's cursor circle is a bit smaller
-- **25** — both directions, including the tutor seeing the phone's view
+- **25** — both directions, and the other person's view box stays put while you pan
 - **26** — chat uses the video-tile names, and a closed chat shows a count
-- **47, 48, 49** — new: wheel zoom, the two menus, and the homepage Sign in menu
+- **34** — the student-page button says Start session
+- **38** — Share link is on Account & sharing
+- **47, 48, 49** — wheel zoom, the two menus, and the homepage Sign in menu
 
 Item 8 is unchanged. The join page still says **Child sign in** and **Parent sign in**. The renamed words are on the homepage **Sign in** menu (item 49), not on that join page.
 
@@ -32,8 +38,10 @@ You set these up yourself on the preview. This is a test database, so new learne
 - Item 15: connect Google Calendar on your tutor account only if you want the event on your own calendar. Otherwise mark that part N/A with notes.
 - Items 33 and 44: try text-message setup. If the card says **SMS not available**, mark those items N/A with notes and tell Andrew.
 - Item 10: sign up a second tutor with a plus-address and leave it unapproved. Do not ask for that address to be pre-approved.
+- Items 50–55: ask Andrew to create an organization with your tutor email as the owner, and to activate it. You cannot create that organization yourself. When it is ready, the tutor menu has **Organization**, and the page says "This organization is active." If you do not see that, stop those items and tell Andrew.
+- Item 61: use a wide computer window. On a phone the **Add learner** button next to search is hidden.
 
-Text Andrew only if an invitation email never arrives, or if you need a brand-new tutor address to be **approved**.
+Text Andrew only if an invitation email never arrives, if you need a brand-new tutor address to be **approved**, or if the organization is missing or not active.
 
 ---
 
@@ -70,17 +78,18 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 ### 1. Upcoming sessions, and Open room (tutor)
 
+**Re-test:** Yes. Clear any earlier box. The student page is one column now.
+
 **Action:**
 
 1. On Device A, sign in as the tutor at `/login`.
 2. Open **Students** and open a learner you have already connected. If the roster is empty, do item 9 first and come back.
-3. Open the **Whiteboard** / session area on that student's page.
-4. Find the card titled **Upcoming sessions**. Its line under the title says "Open the live room when it is time for the appointment."
-5. On the row for the session that starts soon, press **Open room**. While it works the button may say **Opening…**.
+3. On that student's page, read top to bottom. A **Session** card is first. **Upcoming sessions** is under it. Its line under the title says "Open the live room when it is time for the appointment."
+4. On the row for the session that starts soon, press **Open room**. While it works the button may say **Opening…**.
 
 **Expect:** The upcoming appointment is listed with its subject and a date and time. **Open room** opens the whiteboard waiting room ("Ready to start?"), not an error page. You can press **Open room** again later on the same row and land in the same room, not a second unrelated room.
 
-**Ignore this run:** School or organization pages. The separate **Start whiteboard session** button (that one is item 34).
+**Ignore this run:** The organization home (items 50–55). The **Start session** button on the Session card (item 34).
 
 - [ ] PASS
 - [ ] FAIL
@@ -118,6 +127,8 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 ### 3. The child's own home also lists the session
 
+**Re-test:** Yes. Clear any earlier box. The home has more cards now. This item is still the upcoming Join. The PIN, privacy switches, notes, and the empty-list sentence are items 57, 59, and 60.
+
 **Action:**
 
 1. On Device B, sign out of the parent account.
@@ -125,9 +136,9 @@ Run top to bottom. Later items reuse the learner you create earlier.
 3. You should see "Hi, …" and "No active session. Open the link your tutor shared to join, or use Join below when your appointment window opens."
 4. If the appointment is inside the 15-minute window, the same **Upcoming sessions** card is on this page. Press **Join** only if you did not already join in item 2. If you already proved Join, you can stop after you see the card.
 
-**Expect:** The child sees the upcoming appointment and a **Join** button without asking a parent to paste a link. **Join** reaches the same kind of waiting room as item 2.
+**Expect:** The child sees the upcoming appointment and a **Join** button without asking a parent to paste a link. **Join** reaches the same kind of waiting room as item 2. The greeting line is still "No active session. Open the link your tutor shared to join, or use Join below when your appointment window opens."
 
-**Ignore this run:** Nothing.
+**Ignore this run:** The PIN card, the Privacy card, Session notes, and an empty "No upcoming sessions scheduled." line. Those are later items. Use a child who actually has an appointment for this one.
 
 - [ ] PASS
 - [ ] FAIL
@@ -261,10 +272,12 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 ### 9. Adding a learner sends an invite, with the new role labels
 
+**Re-test:** Yes. Clear any earlier box. People you already have are listed above the add card. Item 61 grades that order. This item is still the invite.
+
 **Action:**
 
-1. On Device A, as the tutor, open **Students**.
-2. On the card **Add a learner**, look at **Learner type**.
+1. On Device A, as the tutor, open **Students** in a wide window.
+2. Scroll to the card **Add a learner** (it is under the list). Look at **Learner type**.
 3. Leave **Child learner** selected. The email field is labeled **Parent / guardian email**. Fill it with a parent plus-address you can open. Fill **Child identifier** with a first name, for example `Maya`.
 4. Read the small print under the identifier.
 5. Press **Add learner & send invite**. The button may say **Sending invite…**.
@@ -308,10 +321,12 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 ### 11. Invite cap
 
+**Re-test:** Yes. Clear any earlier box. The claim links are on **Account & sharing**, not on the main student page.
+
 **Action:**
 
 1. On Device A, open the **child** learner from item 9, before anyone claims them.
-2. Find the parent section. If it says "Parent account linking is not enabled," mark N/A with notes and stop.
+2. Press **Account & sharing**. On the **Account** card, find **Create claim link**. If that button is not there, mark N/A with notes and stop.
 3. Press **Create claim link**. Then press **Generate new link** until you have done this enough times to pass three pending links (the add in item 9 already created one).
 4. Try once more.
 
@@ -643,7 +658,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 ### 25. A ghost rectangle shows the other person's view
 
-**Re-test:** Yes. Clear any earlier box. The first preview showed the tutor's view on the phone and did not show the phone's view on the tutor's screen.
+**Re-test:** Yes. Clear any earlier box. The first preview showed the tutor's view on the phone and did not show the phone's view on the tutor's screen. While you pan, the other person's rectangle now stays on their area. It moves when they pan.
 
 **Action:**
 
@@ -653,7 +668,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 4. On Device B, pan to a different area of the board than Device A.
 5. On Device A, look for a rectangle and a label.
 
-**Expect:** Device B shows a rectangle labeled **Tutor view** around the area the tutor is looking at. Device A shows a rectangle labeled **Student view** around the area the phone is looking at. The phone's rectangle is the smaller view, not a copy of the tutor's whole screen. Both track further pans. Neither rectangle is a second copy of the ink.
+**Expect:** Device B shows a rectangle labeled **Tutor view** around the area the tutor is looking at. Device A shows a rectangle labeled **Student view** around the area the phone is looking at. The phone's rectangle is the smaller view, not a copy of the tutor's whole screen. When the other person pans, their rectangle moves to the new area. When you pan, their rectangle stays on their area. It does not slide along with your drag. Neither rectangle is a second copy of the ink.
 
 **Ignore this run:** Nothing.
 
@@ -988,9 +1003,11 @@ These are checks that the changes above did not break the paths you already know
 
 ### 34. Start and end a live session on two devices
 
+**Re-test:** Yes. Clear any earlier box. On the student page the button says **Start session**.
+
 **Action:**
 
-1. Device A, tutor. Open a student and press **Start whiteboard session** (the button on the student page, not **Open room**). If you are already in a room from earlier, you may use that room instead and say so in Notes.
+1. Device A, tutor. Open a student. On the **Session** card, press **Start session** (not **Open room**). If it cannot start, the message title is **Start whiteboard session unavailable** — that wording is item 58 when the learner is a self-learner with no privacy record yet. If you are already in a room from earlier, you may use that room instead and say so in Notes.
 2. **Copy student link** and open it on Device B as the parent or the child.
 3. Wait until Device A is no longer stuck on "Waiting for … to connect…". Leave the mode on **Online**. Press **Start session**.
 4. Draw a short stroke on Device A. Confirm Device B sees it. Draw a short stroke on Device B. Confirm Device A sees it.
@@ -998,7 +1015,7 @@ These are checks that the changes above did not break the paths you already know
 
 **Expect:** Both people get into the room, **Start session** waits for the other person in **Online**, strokes go both ways, and **End session** leaves the live room for the review screen without an error toast that traps you there.
 
-**Ignore this run:** Note quality (item 30 and item 36).
+**Ignore this run:** Note quality (item 30 and item 36). The look of the boxes while notes are still generating (item 64).
 
 - [ ] PASS
 - [ ] FAIL
@@ -1043,7 +1060,7 @@ These are checks that the changes above did not break the paths you already know
 
 **Expect:** The session ends. You get a review screen with the board you just used, not a blank error. Notes either appear, or you get a clear failure / "taking longer" message **and** **Finish review** is still there (item 30). Recording started on its own when the session started. You should not have had to press a separate "start recording" button.
 
-**Ignore this run:** Whether the note text is good. Replay scrubbing that jumps to the end is a known issue — if that is all that is wrong, say so and do not fail this item for it.
+**Ignore this run:** Whether the note text is good. The empty boxes and the skeleton inside them while you wait are item 64. Replay scrubbing that jumps to the end is a known issue — if that is all that is wrong, say so and do not fail this item for it. Fit view is item 65.
 
 - [ ] PASS
 - [ ] FAIL
@@ -1080,16 +1097,18 @@ These are checks that the changes above did not break the paths you already know
 
 ### 38. Replay from notes, and from a parent share link
 
+**Re-test:** Yes. Clear any earlier box. **Share link** is on **Account & sharing**.
+
 **Action:**
 
 1. After item 36, on the review screen or the student's notes, open the whiteboard replay (a play control on the review screen, or **View whiteboard** if you see it on a note).
-2. Let it play for a few seconds. You should see the board from that session, not an empty canvas and not a login wall.
-3. On the student page, open **Share link**. Copy the parent link.
+2. Let it play for a few seconds. You should see the board from that session, not an empty canvas and not a login wall. Do not grade Fit view here.
+3. On the student page, press **Account & sharing**. Copy the share link.
 4. On Device B, open that link **signed out** (private window). Find the note and press **View whiteboard**.
 
 **Expect:** The tutor can replay the session from the notes / review screen. The parent share link opens without a tutor login, and **View whiteboard** shows that session's board. A live session that has not ended does not appear on the share link.
 
-**Ignore this run:** Replay that always jumps to the end of the timeline — known, write it in Notes, and do not fail the item if the board itself shows. PDF pages may show as placeholders.
+**Ignore this run:** Replay that always jumps to the end of the timeline — known, write it in Notes, and do not fail the item if the board itself shows. PDF pages may show as placeholders. Fit view is item 65. Do not re-prove the play button if the board already shows; the new check is the share-link path on Account & sharing.
 
 - [ ] PASS
 - [ ] FAIL
@@ -1231,6 +1250,507 @@ These are checks that the changes above did not break the paths you already know
 - [ ] SKIP
 
 **Coverage:** `[human-only: the disabled button; sending a real text is optional]`
+
+**Notes:**
+
+---
+
+## Organization staff
+
+Andrew creates the organization and activates it. You do the rest. Use plus-addresses. Do not use the normal Mynk site.
+
+### 50. Owner, admin, and scheduler home
+
+**Action:**
+
+1. On Device A, sign in as the tutor who owns the organization. Open **Organization** in the menu.
+2. Read the status line, the **Members** list, **Invitations**, **Learners**, and **Appointments**.
+3. Sign out. Sign in as a scheduler you invite in item 51 (you can do this step after item 51). Open **Organization** again.
+4. Sign in as an instructor from item 51. Look at the menu. If you can open **Organization**, read the page. If the menu has no **Organization**, that is the result to grade.
+
+**Expect:** The owner sees "This organization is active." Members are listed with roles such as **Owner**. Invitations says "Owner and admin can invite. Scheduler and instructor cannot." The owner sees a form to send an invitation. A scheduler can open **Organization** and sees learners as short cards, not the add-learner form. An instructor does not get **Organization** in the menu. After that instructor signs in, they land on **Students**.
+
+**Ignore this run:** Creating the organization yourself. If the page says it is pending or suspended, mark N/A with notes and tell Andrew. Booking is item 54. The remove dialog is item 55.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/identity/org-staff-invite.spec.ts › sign-in from /login lands a scheduler on the organization and an instructor on the student list]` — `[human-only: the menu and the words on a real sign-in]`
+
+**Notes:**
+
+### 51. Inviting staff
+
+**Action:**
+
+1. As the owner, on **Organization**, in **Invitations**, type a plus-address you can open. Leave the role as instructor, or also check **Scheduler** for a second address. Press **Send invitation**.
+2. Open that inbox. Open the invitation. Read the organization name, the role, and the invited email.
+3. If you are signed in as someone else, read the wrong-account line. Sign out, sign in as the invited email (or create that tutor account and confirm the email), and press **Accept invitation**.
+4. Sign in as that new person and open **Organization** if their role is scheduler or admin. An instructor uses the check in item 50.
+5. As a scheduler, confirm you do not see **Send invitation**.
+
+**Expect:** The email arrives. The page is titled **Organization invitation** and says you are invited to join that organization. The wrong account is told to sign out and use the invited email. **Accept invitation** adds them to **Members**. A scheduler cannot send an invitation.
+
+**Ignore this run:** Approving a brand-new tutor if the site puts them on a waitlist. Tell Andrew, and mark PARTIAL if the invitation itself was fine but approval blocked the rest.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/identity/org-staff-invite.spec.ts › a brand-new teacher confirms email and accepts the invitation]` — `[automated: tests/integration/identity/org-staff-invite.spec.ts › an existing teacher sees both doors, the wrong-account message, then the staff home without an invite form]` — `[human-only: a real invitation email]`
+
+**Notes:**
+
+### 52. Adding an organization learner
+
+**Action:**
+
+1. As the owner or an admin, on **Organization**, find **Learners**. The line under the title says "Add a learner and send the claim email."
+2. Fill **Given name** and **Family name**. Add a short **Brief**, for example `Algebra, evenings`.
+3. Put a parent plus-address in **Email**. Under **Send the claim email to**, choose **Their parent**. Press **Add learner**.
+4. Open that inbox and finish connecting the way items 12–14 do, including privacy if the setup asks for it.
+5. Back on **Learners**, read the new row.
+
+**Expect:** The learner appears with the full name, the brief, and the parent email. You can press **Send the claim email again** until they have connected. After they connect, that button is gone. The claim email arrives.
+
+**Ignore this run:** What a scheduler sees (item 53). A personal **Add a learner** on Students (item 9) is a different form.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/identity/org-learner-panel.spec.ts › owner sees the parent email, the learner cap sentence, and a scheduler does not]` — `[human-only: the claim email in your inbox]`
+
+**Notes:**
+
+### 53. What a scheduler is allowed to see
+
+**Action:**
+
+1. Sign in as the scheduler. Open **Organization**, then **Learners**.
+2. Read one card for a learner who has not connected yet, and one whose family has turned **Allow live tutoring sessions** off (item 5 or item 57, on a learner you can spare).
+3. Look for a parent email, a consent switch, and session notes on this page. Open the learner if a link is offered.
+
+**Expect:** Each card shows the name and the brief. A learner who has not connected says **Waiting on the family**. A learner whose live sessions are off says **Live sessions are off**. You do not see the parent email, the consent switches, or the notes.
+
+**Ignore this run:** The owner's view, which does show the email (item 52).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/identity/org-learner-panel.spec.ts › owner sees the parent email, the learner cap sentence, and a scheduler does not]` — `[human-only: whether notes or an email are visible anywhere on that scheduler page]`
+
+**Notes:**
+
+### 54. Book an instructor for an organization learner
+
+**Action:**
+
+1. As the owner or the scheduler, on **Organization**, find **Appointments**. Press **New session**.
+2. Pick the organization learner from item 52 and the instructor from item 51. Set a time about an hour from now. Save.
+3. Read the new row: when, instructor, learner, subject.
+4. Sign in as that instructor. Look for that appointment on **Organization** if they can open it, or on their schedule.
+
+**Expect:** The appointment is listed with the instructor and the learner. **No appointments yet** is gone once it is saved. The assigned instructor can see the session they were booked for. Another instructor does not need to see it.
+
+**Ignore this run:** Google Calendar. Personal **Schedule** on your own tutor account (items 15, 16, and 42).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-org-booking.spec.ts › a scheduler books, changes, and cancels an org appointment without a parent email]` — `[human-only: the appointment row on the organization page]`
+
+**Notes:**
+
+### 55. End it now, and no notes
+
+**Action:**
+
+1. Have the instructor from item 51 in a live session with an organization learner (consent already saved, **Start session**, other person joined, session started).
+2. As the owner, on **Organization**, on that instructor's member row, press **Remove from organization**. This button opens a dialog only when they have a session still open. If the button removes them immediately with no dialog, they did not have an open session — start the session and try again before you mark this.
+3. Read every button and both warning paragraphs. Do not press anything yet.
+4. Press **End it now, and no notes**.
+5. On the instructor's device, see whether the live room is over.
+
+**Expect:** The dialog title is **Remove this person**. One line says "Let it finish, or end it now. Ending it now still lets the tutor finalize notes inside the seven-day window." Another says "No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used." The buttons are **Let it finish**, **End it now (notes still allowed for 7 days)**, and **End it now, and no notes**. After the last one, that live session is over. You do not get a normal notes review you can mark ready from it.
+
+**Ignore this run:** The ordinary **End session** button inside a personal tutoring room. That button does not offer "no notes." Do not go looking for it there. **Suspend organization** is for Andrew, not for you. The on-screen "this session will end soon" sentences after **Let it finish** are already checked by the automated test — do not start a second live room only to read them.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-org-removal.spec.ts › End it now, and no notes shows the proposed warning and finalize leaves DRAFT]` — `[human-only: the warning words, and that the live room actually ends]`
+
+**Notes:**
+
+---
+
+## Consent, the child home, and Start
+
+### 56. A parent or self-learner records consent before a live session
+
+**Action:**
+
+1. Use a learner whose privacy has not been saved yet. During claim setup, stop on the privacy step. Or, after they are connected, open the learner from the family page and press **Manage privacy**.
+2. For a child, read **Allow live tutoring sessions** and press **Save preferences** on setup, or **Save privacy preferences** on the privacy page. Leave live sessions on if you still need this child for earlier items.
+3. For the self-learner from item 14, open **Manage**, then **Privacy**. The card is **Session recording**. Check the agreement, then press **Save preferences**. If you save without the check, it says "Check the agreement before saving." Leave live sessions on.
+4. On Device A, refresh that student's page and look at the **Session** card.
+
+**Expect:** The self-learner agreement says sessions may be recorded and that they can turn any of it off later, and it says "Open Manage, then Privacy." Saving writes the choice. After a record exists, **Start session** is on the Session card. The description under **Allow live tutoring sessions** for a parent still says the child can join live video and audio and that you can join as your child.
+
+**Ignore this run:** Item 32, which is only that parent sentence. Item 58 is the case with no record yet. Do not turn live sessions off on a learner you still need.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/identity/consent-save.spec.ts › Save privacy preferences persists toggles (DB + reload UI)]` — `[automated: src/__tests__/account/SelfLearnerConsentSettings.dom.test.tsx › agreement names Manage, then Privacy as where consent can be changed]` — `[human-only: finding Manage, then Privacy, on your own account]`
+
+**Notes:**
+
+### 57. A child can turn a privacy switch off, and the parent can turn it back on
+
+**Action:**
+
+1. On Device B, sign in as the child at `/students/login`. On the "Hi, …" page, open the **Privacy** card.
+2. Read the line above the switches. Turn **Allow session audio recording** off. Do not turn off **Allow live tutoring sessions**.
+3. Try to turn that same switch back on yourself.
+4. Sign in as the parent. Open that child and press **Manage privacy**. Turn **Allow session audio recording** back on and press **Save privacy preferences**.
+5. Sign in as the child again and read the note under that switch.
+
+**Expect:** The child sees "You can turn any of these off. A parent can turn one back on." The switch turns off. The child cannot turn it back on. The page says only a parent can turn it back on, or that a parent has it off and the child can only make a switch stricter. After the parent saves, the child sees "Your parent turned this back on."
+
+**Ignore this run:** Turning off live sessions. That blocks join (item 5). Use audio recording for this check.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-child-home.spec.ts › child audio stays off until a parent restores it, and a parent-only limit does not say the parent turned it back on]` — `[human-only: the switch on the child's own home]`
+
+**Notes:**
+
+### 58. A self-learner with no consent record does not get Start
+
+**Action:**
+
+1. Add a self-learner (item 14) and connect them, but do not press **Save preferences** or **Decline** on the privacy step yet.
+2. On Device A, open that student. Look at the **Session** card.
+3. Then, as that self-learner, open **Manage**, then **Privacy**, and save. Refresh the tutor's student page.
+
+**Expect:** Before any privacy record exists, **Start session** is not there. You see **Start whiteboard session unavailable** and a line that privacy preferences are not complete. After a record has been saved, **Start session** is there. A record still counts if they later turn a switch off. Missing the button only happens when privacy has never been saved.
+
+**Ignore this run:** A child whose parent has not finished privacy. This item is the self-learner. If setup will not let you leave the person half-finished, mark the "no button" half N/A with notes and still grade the half after a record exists.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: src/__tests__/dom/StartWhiteboardSession.dom.test.tsx › hides Start for a self-learner when consent is missing]` — `[automated: src/__tests__/dom/StartWhiteboardSession.dom.test.tsx › renders Start for a self-learner once a consent record exists]` — `[human-only: the Session card before and after you save privacy]`
+
+**Notes:**
+
+### 59. The child changes their own PIN
+
+**Action:**
+
+1. On the child's "Hi, …" page, press **Change PIN**.
+2. Type a wrong current PIN and a new 6-digit PIN, and try to save.
+3. Type the real current PIN, a new 6-digit PIN (not 123456), confirm it, and save.
+4. Sign in at `/students/login` with the new PIN. Try the old PIN once.
+5. As the parent, open that child and press **Change PIN**. See whether it asks for the current PIN. You can set a new one if you want the parent path; if you do, write the new PIN down.
+
+**Expect:** A wrong current PIN is refused and the old PIN still works. The right current PIN shows "PIN updated. All devices have been signed out and will need to log in again." The new PIN signs in. The old PIN does not. The parent's **Change PIN** does not ask for the current PIN. The child's form says a parent can still set a new PIN if the child forgets it.
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-child-home.spec.ts › PIN change requires the current PIN, rejects a wrong one, and the parent can still reset]` — `[human-only: signing in with the new PIN on a real device]`
+
+**Notes:**
+
+### 60. The child's home lists notes and replays, and keeps an empty upcoming list
+
+**Action:**
+
+1. Sign in as a child who has no appointment coming up. On the "Hi, …" page, find **Upcoming sessions**.
+2. Sign in as a child who has finished a session that produced a note (item 36). Find **Session notes**.
+3. Press **View whiteboard** on that note if it is there.
+
+**Expect:** When nothing is scheduled, the **Upcoming sessions** card stays on the page and says "No upcoming sessions scheduled." It does not disappear. **Session notes** lists the past note. **View whiteboard** opens that session's replay. If there are no notes yet, the card says "No session notes yet" and still stays on the page.
+
+**Ignore this run:** Fit view (item 65). Replay that jumps to the end of the timeline. Note quality.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-child-home.spec.ts › shows the child's ended note and replay, and says nothing is scheduled when upcoming is empty]` — `[human-only: the replay on the child's own home]`
+
+**Notes:**
+
+---
+
+## Student list, account, and notes
+
+The automated tests already check the order and the links. You are judging whether the page is obvious.
+
+### 61. Current learners first, then Add learner
+
+**Action:**
+
+1. On Device A, in a wide window, open **Students**.
+2. Read the page from top to bottom. Find the people you already have, then the **Add a learner** card.
+3. Press **Add learner** next to the search box.
+4. On a phone, look for that same button. A round **+** may open **Add a student** instead. Grade the wide window. Mention the phone in Notes if you try it.
+
+**Expect:** The learners you already have are above **Add a learner**. **Add learner** scrolls the page to that card. The email field is ready to type in. On a phone, the missing button next to search is not a failure.
+
+**Ignore this run:** The invitation email (item 9). Organization learners (item 52).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[human-only: whether the list is obviously first and the button actually scrolls you to the card]`
+
+**Notes:**
+
+### 62. Account has the same way back as notes
+
+**Action:**
+
+1. Open a personal learner (not an organization learner). Press **Notes**. Find the way back: the button **← Back to student**, and the learner's name in the breadcrumb.
+2. Go back. Press **Account & sharing**. Find the way back there too.
+3. Press **← Back to student** on the account page. Then press the learner's name in the breadcrumb on the way in again, if you want both.
+
+**Expect:** Notes and Account use the same way back. Both show **← Back to student**, and the learner's name in the breadcrumb returns to that student. You land on the student page, not on the students list.
+
+**Ignore this run:** An organization learner. That button says **← Back to organization** and goes to the organization. That is correct for them. Grade a personal learner here.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/admin-student-detail-stage6.spec.ts › the personal owner can go back from Account to the student]` — `[human-only: the two pages feel like the same way back]`
+
+**Notes:**
+
+### 63. Notes lead the page, and Add note opens the form
+
+**Action:**
+
+1. Open a personal learner who already has at least one note. Press **Notes**.
+2. Before you press anything, see what is on the page first, and what sits under the list.
+3. Press **Add note**.
+4. Read the card under the list. Look for a paste box. Look for separate **Upload** and **Live record** buttons.
+
+**Expect:** Existing notes are first. **Add note** opens a **New session note** form under the list. The list stays above that form. Under the list, **Auto-fill from session** stays visible, with a box for pasting notes and **Generate notes**. That card also says "Recording and uploading audio here is coming soon. For now, record during a whiteboard session." There are no separate Upload or Live record buttons.
+
+**Ignore this run:** Whether the generated note text is good. The skeleton while a live session's notes generate is item 64.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/admin-student-notes-list-first.spec.ts › existing notes lead the page until Add note opens the manual form]` — `[human-only: the page reads notes-first, and you can see that upload and live record are the coming-soon sentence rather than buttons]`
+
+**Notes:**
+
+### 64. Empty note boxes use a skeleton, with no blur over the form
+
+**Action:**
+
+1. End a short live session the way item 36 does, and stay on the review screen while notes are still being written.
+2. Look at **Topics covered**, **Assessment**, **Plan / Next steps**, and the links box before any words appear.
+3. Look at the rest of the form: buttons, labels, the area around the boxes.
+4. Wait until words show up in a box. Look at that box again.
+
+**Expect:** While a box is empty and notes are still generating, the box is empty and a skeleton (a shimmer or gray bar) sits inside that box. There is no blur over the whole form. When a box has text, the skeleton in that box is gone.
+
+**Ignore this run:** Whether the words are right (item 30 and item 36). If notes appear so fast that you never see the empty boxes, mark N/A with notes and say so. Do not fail the item for speed.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: src/__tests__/dom/TutorNotesSection.dom.test.tsx › empty pending and generating fields show an in-box skeleton, not a form-wide wrap]` — `[automated: src/__tests__/dom/TutorNotesSection.dom.test.tsx › generating with stored text clears the box and shows the in-box skeleton]` — `[human-only: the skeleton looks like it is inside each box, and the rest of the form is not blurred]`
+
+**Notes:**
+
+---
+
+## Replay camera, lock, and a zoomed graph
+
+### 65. Replay Fit view
+
+**Action:**
+
+1. Use a finished session where you zoomed in and panned so the tutor was not looking at the whole board (item 36 or item 38).
+2. Open the replay. Before you press anything, look at the zoom and at what sits in the middle of the replay.
+3. Press **Fit view**. Look at the edges of the board. Look for black bars.
+4. Let the replay play through a part where the tutor panned or zoomed. Watch whether the framing follows.
+5. Press **Fit view** again.
+
+**Expect:** At first, the replay keeps the tutor's zoom, and the middle of the window is what the tutor was looking at. **Fit view** uses one zoom. The side that would have spilled out of the window lines up with the tutor's view. The other side shows more of the board. There are no black bars. As the replay plays, the view follows the tutor's camera. Pressing **Fit view** again returns to the tutor's zoom. The button stays labeled **Fit view**.
+
+**Ignore this run:** Replay that jumps to the end of the timeline. Whether the ink looks pretty. The automated check already measures the zoom on a sample replay. You are judging a real session: no black bars, and the camera following along.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-replay-camera-fit.spec.ts › in-frame replay keeps tutor zoom, then Fit view scales uniformly]` — `[automated: tests/integration/wb-replay-camera-fit.spec.ts › full-page replay keeps tutor zoom, then Fit view scales uniformly]` — `[human-only: no black bars, and the view follows the tutor through a real replay]`
+
+**Notes:**
+
+### 66. A zoomed graph click lands where you clicked
+
+**Action:**
+
+1. In a live room, zoom the board in (a plain mouse wheel, item 47) and pan so the graph will not sit at the top-left of the window.
+2. Press **Insert graph**, choose **New blank graph**, and press **Insert**. Click once in the graph so it takes the pointer (item 27).
+3. Press **Point**. Click a spot in the open part of the graph, not on an axis label.
+4. Look at where the point appeared, compared with where you clicked.
+
+**Expect:** The point sits on the spot you clicked. It is not shifted up, down, or to the side of the cursor. A short stroke with **Draw**, if you try one, also starts where you put the cursor.
+
+**Ignore this run:** Exact grid numbers. Do not measure pixels. The automated test already checks that a zoomed click lands on the board point. You are judging whether it feels like the point landed under the cursor.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-graph-ink.spec.ts › zoomed camera maps a far-corner click and a short stroke through the board host box]` — `[human-only: the point feels like it landed where you clicked]`
+
+**Notes:**
+
+### 67. A locked student view does not pan or zoom
+
+**Action:**
+
+1. In a live session, on Device B, leave **Follow tutor view** on.
+2. Find the pill **Locked to tutor's view**. Try the mouse wheel, and on a phone try a two-finger pinch or pan.
+3. Draw a short stroke with one finger or the pencil.
+4. Tap the pill. Read the question. Press **Cancel**. Try to pan again. Then tap the pill and press **Unlock**.
+
+**Expect:** While the pill is showing, the wheel and a pinch do not move or zoom the board. A stroke still appears. **Cancel** leaves it locked. **Unlock** asks "Unlock your view?" and then you can pan. Follow stays off until you turn **Follow tutor view** back on.
+
+**Ignore this run:** The ghost rectangle (item 25). The automated test already checks that the locked camera does not move. You are judging whether the pill is obvious and a blocked pinch feels clear on a real phone.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-student-view-lock.spec.ts › wheel, ctrl-wheel, gesture, and keyboard do not move a locked camera]` — `[automated: tests/integration/wb-student-view-lock.spec.ts › tapping the pill confirms unlock; cancel leaves the camera locked]` — `[human-only: the pill and a blocked pinch on a real phone]`
+
+**Notes:**
+
+### 68. Recenter view
+
+**Action:**
+
+1. On Device A, in a live room, draw something, then pan away so it is off to the side.
+2. Press **Recenter view**. It may also be inside **More session options**.
+3. Look at where the drawing sits, and whether the zoom jumped to tiny or huge.
+
+**Expect:** The drawing comes back to the middle of the board. The zoom stays a similar size to what you had. You do not have to hunt for the ink.
+
+**Ignore this run:** An empty board. The automated test already checks the center math, including an empty board. You are judging a board that has ink.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-tutor-recenter.spec.ts › recenter puts the content center on the visible canvas center]` — `[automated: tests/integration/wb-tutor-recenter.spec.ts › recenter uses the bounding box of unequal elements and keeps zoom]` — `[human-only: it feels like the drawing came back without a weird zoom]`
+
+**Notes:**
+
+### 69. A session you start without scheduling shows on the family lists
+
+**Action:**
+
+1. On a connected learner who is allowed to join, press **Start session** on the student page. Do not create a **Schedule** appointment first. You can stop in the waiting room.
+2. On Device B, as that parent, refresh the family page and read **Upcoming sessions**.
+3. Sign in as the child and read **Upcoming sessions** on the "Hi, …" page.
+
+**Expect:** Both lists show a row for that session. The subject is **Tutoring session.** **Join** is available because the session is already in the window. You did not have to put it on the schedule first.
+
+**Ignore this run:** A session you created from **Schedule** (items 2 and 42). This item is only the one that began from **Start session**.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-adhoc-session-list.spec.ts › tutor Start shows the same upcoming row on the parent dashboard and the child join list]` — `[human-only: the row on the parent page and the child home]`
+
+**Notes:**
+
+### 70. Privacy and terms say what an organization can see
+
+**Action:**
+
+1. Open `/privacy` (signed out is fine). Find **Authentication and access**.
+2. Open `/terms`. Under **The service**, read the paragraph about an organization.
+
+**Expect:** Both pages say an organization owner, admin, or scheduler can see learners that organization entered, including learners they did not personally teach. A scheduler sees the name, a short brief, and a short reason when a booking is blocked, and does not see parent email, consent choices, or notes. A private tutor still sees only their own students.
+
+**Ignore this run:** The calendar title and the encryption-key paragraphs (item 31). The umbrella policy on mortensenapps.com.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[human-only: reading the two pages on the preview]`
 
 **Notes:**
 
