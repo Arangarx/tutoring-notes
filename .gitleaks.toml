@@ -1,0 +1,17 @@
+# Test fixtures the generic-api-key rule mislabels. Not production secrets.
+# Exact file paths only — other files under src/__tests__ and tests/ stay scanned.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixtures the generic-api-key rule mislabels"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^tests/integration/identity/tutor-2fa-login\.helpers\.ts$''',
+  '''^src/__tests__/whiteboard/local-peer-id\.test\.ts$''',
+  '''^src/__tests__/identity/two-factor-step-up\.test\.ts$''',
+  '''^src/__tests__/share-access-scope\.test\.ts$''',
+  '''^src/__tests__/identity-2fa\.test\.ts$''',
+  '''^src/__tests__/dom/student-wbdebug-join\.dom\.test\.tsx$''',
+]
