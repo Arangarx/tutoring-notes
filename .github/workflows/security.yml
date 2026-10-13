@@ -68,22 +68,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
       # Blocks on high and critical production advisories.
-      # Rechecked 2026-10-13 after npm audit fix (no --force) plus same-major
-      # overrides. Critical is clear. The job still fails. What remains:
-      # - prisma, @prisma/config, deepmerge-ts: advisory range
-      #   6.13.0-dev.1 - 8.1.0-dev.4. No forward release is outside it.
-      #   npm's only fix is prisma@6.12.0, a downgrade. We will not downgrade.
-      #   prisma and @prisma/client stay on ^6.16.1.
-      # - nanoid 4.0.2 under @excalidraw/excalidraw (mermaid-to-excalidraw).
-      #   No 4.x patch (fixes are 3.3.20 and 5.1.16). npm's fix downgrades
-      #   excalidraw to 0.17.6. We will not downgrade. The 3.3.3 pin is
-      #   overridden to 3.3.20.
-      # - nodemailer 7.0.13, which also flags next-auth. 10.1.0 dropped the
-      #   nodemailer.Transporter namespace and next build failed. Bump reverted.
-      # - pdfjs-dist 5.7.284. 6.4.299 removed PDFDocumentProxy.destroy and
-      #   next build failed. Bump reverted. The PDF path was not reworked.
+      # scripts/check-npm-audit.mjs runs
+      # `npm audit --omit=dev --audit-level=high --json` and exits 0 only
+      # when that set equals scripts/audit-allow.json. An unlisted high or
+      # critical fails. A listed package that is no longer high or critical
+      # fails too. continue-on-error is not set, and --audit-level stays high.
+      # Rechecked 2026-10-13: 0 critical, 0 high. The allowlist is empty.
+      # Cleared by the nodemailer 10 Transporter type import, the pdfjs 6
+      # loadingTask.destroy() cleanup, deepmerge-ts 8.0.2, and a scoped
+      # nanoid 5.1.16 override for @excalidraw/mermaid-to-excalidraw.
+      # prisma and @excalidraw/excalidraw were not downgraded.
       - name: Audit production dependencies
-        run: npm audit --audit-level=high --omit=dev
+        run: node scripts/check-npm-audit.mjs
 
   jest-security:
     name: Jest security tests

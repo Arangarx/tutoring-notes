@@ -57,10 +57,10 @@
     "next": "^15.5.2",
     "next-auth": "^4.24.11",
     "next-themes": "^0.4.6",
-    "nodemailer": "^7.0.7",
+    "nodemailer": "^10.1.0",
     "openai": "^6.34.0",
     "otpauth": "^9.5.1",
-    "pdfjs-dist": "^5.6.205",
+    "pdfjs-dist": "^6.4.299",
     "prisma": "^6.16.1",
     "qrcode": "^1.5.4",
     "radix-ui": "^1.5.0",
@@ -105,6 +105,11 @@
     "@xmldom/xmldom": "0.9.12",
     "postcss@8.4.31": "8.5.30",
     "nanoid@3.3.3": "3.3.20",
-    "sass@1.51.0": "1.105.1"
+    "sass@1.51.0": "1.105.1",
+    "nodemailer": "$nodemailer",
+    "deepmerge-ts": "8.0.2",
+    "@excalidraw/mermaid-to-excalidraw": {
+      "nanoid": "5.1.16"
+    }
   }
 }

@@ -37,6 +37,7 @@
  */
 
 import type {
+  PDFDocumentLoadingTask,
   PDFDocumentProxy,
   PDFPageProxy,
   RenderTask,
@@ -183,8 +184,9 @@ export async function readPdfFilePageCount(
   }
   const arrayBuffer = await file.arrayBuffer();
   let doc: PDFDocumentProxy;
+  let loadingTask: PDFDocumentLoadingTask;
   try {
-    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+    loadingTask = pdfjs.getDocument({ data: arrayBuffer });
     doc = await loadingTask.promise;
   } catch (err) {
     return {
@@ -196,7 +198,7 @@ export async function readPdfFilePageCount(
   const totalPages = doc.numPages;
   try {
     await doc.cleanup();
-    doc.destroy();
+    await loadingTask.destroy();
   } catch {
     // best-effort
   }
@@ -340,8 +342,9 @@ export async function renderPdfFileToPngs(
 
   const arrayBuffer = await file.arrayBuffer();
   let doc: PDFDocumentProxy;
+  let loadingTask: PDFDocumentLoadingTask;
   try {
-    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+    loadingTask = pdfjs.getDocument({ data: arrayBuffer });
     doc = await loadingTask.promise;
   } catch (err) {
     return {
@@ -430,7 +433,7 @@ export async function renderPdfFileToPngs(
   } finally {
     try {
       await doc.cleanup();
-      doc.destroy();
+      await loadingTask.destroy();
     } catch {
       // Cleanup failures are best-effort.
     }
