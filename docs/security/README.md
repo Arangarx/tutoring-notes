@@ -30,4 +30,12 @@ The 2026-10-13 highs (0 critical, 7 high) were cleared without downgrading Prism
 
 `effect` 3.21.0, pulled in by `@prisma/config`, is already outside GHSA-38f7-945m-qr2g (`< 3.20.0`). It was not overridden.
 
+## Local scan preflight
+
+`npm run scan:preflight` runs `scripts/local-scan-preflight.mjs`. It reads the repo `.env` and exits 0 only when that file cannot point a local scan at the shared preview database or at shared credentials. `DATABASE_URL` must be localhost or a Neon pooler host, and must not be the shared preview pooler. `DIRECT_URL` must be localhost or a Neon direct host (the host name must not contain `-pooler`), and must not be the shared preview direct host. `BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `WHITEBOARD_SYNC_URL`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, and `PLAYWRIGHT_TEST_SECRET` must be empty. If `NEXTAUTH_URL` is set, its host must be localhost.
+
+ZAP is the bounded local scanner (`scripts/run-local-zap.mjs`). It runs the preflight first. The only origin it will use is `http://127.0.0.1:3000`. It does not start the dev server and it does not pull images. The docker command it prints does not firewall the container.
+
+Strix and Shannon are not run until outbound network is limited to the app plus one model provider. `STRIX_TELEMETRY=0` is required before any future Strix run.
+
 Autonomous assessment is deferred until Andrew can supervise.

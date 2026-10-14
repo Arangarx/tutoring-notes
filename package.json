@@ -13,6 +13,7 @@
     "db:studio": "prisma studio",
     "db:create-admin": "node scripts/create-admin.mjs",
     "ensure:docker": "node scripts/ensure-docker.mjs",
+    "scan:preflight": "node scripts/local-scan-preflight.mjs",
     "db:up": "npm run ensure:docker && docker compose up -d",
     "db:down": "docker compose down",
     "test": "jest",
