@@ -26,14 +26,18 @@ function parseRunLocalZapArgs(argv) {
 }
 
 /**
- * zap-baseline.py -t is the scan origin. -n loads scripts/zap/local-only.context
- * before the spider; the baseline spider then stays in that context, which
- * includes only http://host.docker.internal:3000.
+ * zap-baseline.py -t is the docker target (host.docker.internal). The only
+ * permitted app origin is http://127.0.0.1:3000; any other requested origin
+ * is rejected. -n loads scripts/zap/local-only.context before the spider.
  *
  * @param {string} contextDir absolute directory mounted at /zap/wrk
+ * @param {string} [requestedOrigin]
  * @returns {string[]}
  */
-function buildLocalZapDockerArgs(contextDir) {
+function buildLocalZapDockerArgs(contextDir, requestedOrigin = APP_ORIGIN) {
+  if (requestedOrigin !== APP_ORIGIN) {
+    throw new Error("The only origin is http://127.0.0.1:3000.");
+  }
   const volume = `${String(contextDir).replace(/\\/g, "/")}:/zap/wrk:ro`;
   return [
     "docker",
@@ -62,6 +66,29 @@ function formatLocalZapDockerCommand(contextDir) {
     .join(" ");
 }
 
+/**
+ * Addresses listening on `port` that are not loopback. `0.0.0.0` and `::`
+ * count as non-loopback. The input is netstat text; this function does not
+ * inspect the machine.
+ *
+ * @param {string} netstatText
+ * @param {number} [port]
+ * @returns {string[]}
+ */
+function nonLoopbackPortListeners(netstatText, port = 3000) {
+  const wanted = String(port);
+  const offenders = [];
+  for (const line of String(netstatText).split(/\r?\n/)) {
+    if (!/\bLISTENING\b/i.test(line)) continue;
+    const match = line.match(/TCP\s+(\[[^\]]+\]|\d{1,3}(?:\.\d{1,3}){3}):(\d+)\b/i);
+    if (!match || match[2] !== wanted) continue;
+    const address = match[1].replace(/^\[|\]$/g, "").toLowerCase();
+    if (address === "127.0.0.1" || address === "::1") continue;
+    offenders.push(address);
+  }
+  return offenders;
+}
+
 module.exports = {
   APP_ORIGIN,
   DOCKER_TARGET,
@@ -70,4 +97,5 @@ module.exports = {
   parseRunLocalZapArgs,
   buildLocalZapDockerArgs,
   formatLocalZapDockerCommand,
+  nonLoopbackPortListeners,
 };

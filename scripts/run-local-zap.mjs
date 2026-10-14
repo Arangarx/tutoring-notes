@@ -22,6 +22,7 @@ const {
   parseRunLocalZapArgs,
   buildLocalZapDockerArgs,
   formatLocalZapDockerCommand,
+  nonLoopbackPortListeners,
 } = require("./local-zap-command.cjs");
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,8 +45,8 @@ if (preflight.status !== 0) {
 
 const dockerArgs = buildLocalZapDockerArgs(contextDir);
 const targetArgs = dockerArgs.filter((arg) => arg.startsWith("http://") || arg.startsWith("https://"));
-if (targetArgs.length !== 1 || targetArgs[0] !== DOCKER_TARGET || APP_ORIGIN !== "http://127.0.0.1:3000") {
-  console.error("Refusing to run ZAP: the command is not limited to one local origin.");
+if (targetArgs.length !== 1 || targetArgs[0] !== DOCKER_TARGET || dockerArgs.includes(APP_ORIGIN)) {
+  console.error("Refusing to run ZAP: the command is not limited to the docker target.");
   process.exit(1);
 }
 
@@ -54,9 +55,26 @@ if (parsed.printOnly) {
   process.exit(0);
 }
 
+const netstat = spawnSync("netstat", ["-ano", "-p", "tcp"], {
+  encoding: "utf8",
+  windowsHide: true,
+});
+if (netstat.status !== 0) {
+  console.error(
+    "Could not check whether port 3000 is loopback-only. Start the app with npx next dev -H 127.0.0.1"
+  );
+  process.exit(1);
+}
+if (nonLoopbackPortListeners(netstat.stdout || "", 3000).length > 0) {
+  console.error(
+    "Port 3000 is listening on a non-loopback address. Start the app with npx next dev -H 127.0.0.1"
+  );
+  process.exit(1);
+}
+
 const listening = await devServerListening();
 if (!listening) {
-  console.error("127.0.0.1:3000 is not listening. Start the app with npm run dev, then re-run this script.");
+  console.error("127.0.0.1:3000 is not listening. Start the app with npx next dev -H 127.0.0.1");
   process.exit(1);
 }
 

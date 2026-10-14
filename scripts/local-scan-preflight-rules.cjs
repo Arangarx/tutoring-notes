@@ -3,16 +3,20 @@
 /**
  * Fail-closed rules for a local security scan.
  *
- * parseDotenv follows dotenv's line rules: a '#' starts a comment, '//' does
- * not, and one matching pair of quotes is stripped. The first assignment of a
- * key wins so a later line cannot replace a host that was already set.
- * evaluateLocalScanPreflight takes that key map and never returns secret values.
+ * parseDotenv is dotenv's own parser (already installed; Next uses it too):
+ * '#' starts a comment, '//' does not, and the last assignment of a key wins.
+ * mergeNextDevEnv applies the next dev file order without reading the disk.
+ * evaluateLocalScanPreflight never returns secret values.
  */
 
-const PREVIEW_POOLED_HOST =
-  "ep-bold-feather-amv9wmao-pooler.c-5.us-east-1.aws.neon.tech";
-const PREVIEW_DIRECT_HOST =
-  "ep-bold-feather-amv9wmao.c-5.us-east-1.aws.neon.tech";
+const { parse } = require("dotenv");
+
+const NEXT_DEV_ENV_FILES = [
+  ".env",
+  ".env.development",
+  ".env.local",
+  ".env.development.local",
+];
 
 const MUST_BE_EMPTY = [
   "BLOB_READ_WRITE_TOKEN",
@@ -21,68 +25,91 @@ const MUST_BE_EMPTY = [
   "SMTP_HOST",
   "SMTP_USER",
   "SMTP_PASS",
+  "CRON_SECRET",
+  "SETUP_SECRET",
   "PLAYWRIGHT_TEST_SECRET",
 ];
+
+const HOST_REASON = "host is not localhost, 127.0.0.1, or an ep-icy-flower Neon host";
+const QUERY_REASON = "query host names a different host";
 
 /**
  * @param {string} text
  * @returns {Record<string, string>}
  */
 function parseDotenv(text) {
-  const out = Object.create(null);
   const src = String(text).replace(/^\uFEFF/, "");
-  for (const line of src.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    let body = trimmed;
-    if (body.startsWith("export ")) {
-      body = body.slice("export ".length).trim();
-    }
-    const eq = body.indexOf("=");
-    if (eq <= 0) continue;
-    const key = body.slice(0, eq).trim();
-    if (!/^[\w.-]+$/.test(key)) continue;
-    if (Object.prototype.hasOwnProperty.call(out, key)) continue;
-    out[key] = unquoteEnvValue(body.slice(eq + 1).trim());
+  const parsed = parse(src);
+  const out = Object.create(null);
+  for (const key of Object.keys(parsed)) {
+    out[key] = parsed[key];
   }
   return out;
 }
 
 /**
- * @param {string} raw
- * @returns {string}
+ * Merge the sources `next dev` would load. Highest precedence last:
+ * process env already set, then .env.development.local, .env.local,
+ * .env.development, .env. Missing files are skipped. .env.production.local
+ * is never read.
+ *
+ * @param {{
+ *   files?: Record<string, string | null | undefined>,
+ *   processEnv?: Record<string, string | undefined> | null,
+ * }} [input]
+ * @returns {Record<string, string>}
  */
-function unquoteEnvValue(raw) {
-  if (raw.startsWith('"') || raw.startsWith("'")) {
-    const quote = raw[0];
-    const end = raw.indexOf(quote, 1);
-    if (end !== -1) return raw.slice(1, end);
-    return raw;
+function mergeNextDevEnv(input) {
+  const files = input && input.files && typeof input.files === "object" ? input.files : {};
+  const processEnv =
+    input && input.processEnv && typeof input.processEnv === "object" ? input.processEnv : {};
+  const merged = Object.create(null);
+  for (const name of NEXT_DEV_ENV_FILES) {
+    if (!Object.prototype.hasOwnProperty.call(files, name)) continue;
+    const text = files[name];
+    if (typeof text !== "string") continue;
+    const parsed = parseDotenv(text);
+    for (const key of Object.keys(parsed)) {
+      merged[key] = parsed[key];
+    }
   }
-  const hash = raw.indexOf("#");
-  if (hash !== -1) return raw.slice(0, hash).trim();
-  return raw;
+  for (const key of Object.keys(processEnv)) {
+    const value = processEnv[key];
+    if (typeof value !== "string") continue;
+    merged[key] = value;
+  }
+  return merged;
 }
 
 /**
  * @param {string} value
- * @returns {string | null}
+ * @returns {{ hostname: string, queryHostOverrides: boolean } | null}
  */
-function hostnameOf(value) {
+function inspectDatabaseUrl(value) {
   try {
     const normalized = String(value).trim().replace(/^postgres:\/\//i, "postgresql://");
-    return new URL(normalized).hostname.toLowerCase();
+    const url = new URL(normalized);
+    const hostname = url.hostname.toLowerCase();
+    if (!hostname) return null;
+    let queryHostOverrides = false;
+    for (const raw of url.searchParams.getAll("host")) {
+      const override = raw.trim().toLowerCase();
+      if (!override) continue;
+      if (override !== hostname) queryHostOverrides = true;
+    }
+    return { hostname, queryHostOverrides };
   } catch {
     return null;
   }
 }
 
-function isLocalHost(host) {
-  return host === "localhost" || host === "127.0.0.1";
+function isAllowedDbHost(host) {
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  return host.startsWith("ep-icy-flower") && host.endsWith(".neon.tech");
 }
 
-function isNeonHost(host) {
-  return host === "neon.tech" || host.endsWith(".neon.tech");
+function isLocalHost(host) {
+  return host === "localhost" || host === "127.0.0.1";
 }
 
 function isBlank(value) {
@@ -97,8 +124,8 @@ function evaluateLocalScanPreflight(env) {
   const source = env && typeof env === "object" ? env : {};
   const failures = [];
 
-  checkDatabaseUrl(source, failures);
-  checkDirectUrl(source, failures);
+  checkDbUrl("DATABASE_URL", source.DATABASE_URL, failures);
+  checkDbUrl("DIRECT_URL", source.DIRECT_URL, failures);
   for (const key of MUST_BE_EMPTY) {
     if (!isBlank(source[key])) {
       failures.push({ key, reason: "must be empty" });
@@ -110,57 +137,27 @@ function evaluateLocalScanPreflight(env) {
 }
 
 /**
- * @param {Record<string, string | undefined>} env
+ * @param {string} key
+ * @param {string | undefined} value
  * @param {Array<{ key: string, reason: string }>} failures
  */
-function checkDatabaseUrl(env, failures) {
-  const value = env.DATABASE_URL;
+function checkDbUrl(key, value, failures) {
   if (isBlank(value)) {
-    failures.push({ key: "DATABASE_URL", reason: "is not set" });
+    failures.push({ key, reason: "is not set" });
     return;
   }
-  const host = hostnameOf(value);
-  if (!host) {
-    failures.push({ key: "DATABASE_URL", reason: "is not a valid URL" });
+  const inspected = inspectDatabaseUrl(value);
+  if (!inspected) {
+    failures.push({ key, reason: "is not a valid URL" });
     return;
   }
-  if (host === PREVIEW_POOLED_HOST) {
-    failures.push({ key: "DATABASE_URL", reason: "host is the shared preview database" });
+  if (!isAllowedDbHost(inspected.hostname)) {
+    failures.push({ key, reason: HOST_REASON });
     return;
   }
-  if (isLocalHost(host)) return;
-  if (isNeonHost(host) && host.includes("-pooler")) return;
-  failures.push({
-    key: "DATABASE_URL",
-    reason: "host must be localhost or a Neon pooler host",
-  });
-}
-
-/**
- * @param {Record<string, string | undefined>} env
- * @param {Array<{ key: string, reason: string }>} failures
- */
-function checkDirectUrl(env, failures) {
-  const value = env.DIRECT_URL;
-  if (isBlank(value)) {
-    failures.push({ key: "DIRECT_URL", reason: "is not set" });
-    return;
+  if (inspected.queryHostOverrides) {
+    failures.push({ key, reason: QUERY_REASON });
   }
-  const host = hostnameOf(value);
-  if (!host) {
-    failures.push({ key: "DIRECT_URL", reason: "is not a valid URL" });
-    return;
-  }
-  if (host === PREVIEW_DIRECT_HOST) {
-    failures.push({ key: "DIRECT_URL", reason: "host is the shared preview database" });
-    return;
-  }
-  if (isLocalHost(host)) return;
-  if (isNeonHost(host) && !host.includes("-pooler")) return;
-  failures.push({
-    key: "DIRECT_URL",
-    reason: "host must be localhost or a Neon direct host",
-  });
 }
 
 /**
@@ -170,7 +167,12 @@ function checkDirectUrl(env, failures) {
 function checkNextAuthUrl(env, failures) {
   const value = env.NEXTAUTH_URL;
   if (isBlank(value)) return;
-  const host = hostnameOf(value);
+  let host = null;
+  try {
+    host = new URL(String(value).trim()).hostname.toLowerCase();
+  } catch {
+    host = null;
+  }
   if (!host || !isLocalHost(host)) {
     failures.push({
       key: "NEXTAUTH_URL",
@@ -180,9 +182,9 @@ function checkNextAuthUrl(env, failures) {
 }
 
 module.exports = {
-  PREVIEW_POOLED_HOST,
-  PREVIEW_DIRECT_HOST,
+  NEXT_DEV_ENV_FILES,
   MUST_BE_EMPTY,
   parseDotenv,
+  mergeNextDevEnv,
   evaluateLocalScanPreflight,
 };

@@ -32,10 +32,14 @@ The 2026-10-13 highs (0 critical, 7 high) were cleared without downgrading Prism
 
 ## Local scan preflight
 
-`npm run scan:preflight` runs `scripts/local-scan-preflight.mjs`. It reads the repo `.env` and exits 0 only when that file cannot point a local scan at the shared preview database or at shared credentials. `DATABASE_URL` must be localhost or a Neon pooler host, and must not be the shared preview pooler. `DIRECT_URL` must be localhost or a Neon direct host (the host name must not contain `-pooler`), and must not be the shared preview direct host. `BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `WHITEBOARD_SYNC_URL`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, and `PLAYWRIGHT_TEST_SECRET` must be empty. If `NEXTAUTH_URL` is set, its host must be localhost.
+`npm run scan:preflight` runs `scripts/local-scan-preflight.mjs`. It judges the environment `next dev` would load, highest precedence first: values already in the process environment, then `.env.development.local`, `.env.local`, `.env.development`, and `.env`. Missing files are skipped. It does not read `.env.production.local`. Within one file, the last assignment of a key wins. It exits 0 only when that merged environment cannot point a local scan at another database or at shared credentials.
 
-ZAP is the bounded local scanner (`scripts/run-local-zap.mjs`). It runs the preflight first. The only origin it will use is `http://127.0.0.1:3000`. It does not start the dev server and it does not pull images. The docker command it prints does not firewall the container.
+`DATABASE_URL` and `DIRECT_URL` pass only when the hostname is `localhost`, `127.0.0.1`, or a Neon hostname that starts with `ep-icy-flower` (both `ep-icy-flower-amjka8db` and `ep-icy-flower-amjka8db-pooler`). Every other host fails, including other `*.neon.tech` hosts and `ep-bold-feather` in any region. A `host` query parameter that names a different host fails even when the URL hostname is allowed.
 
-Strix and Shannon are not run until outbound network is limited to the app plus one model provider. `STRIX_TELEMETRY=0` is required before any future Strix run.
+`BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `WHITEBOARD_SYNC_URL`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `CRON_SECRET`, `SETUP_SECRET`, and `PLAYWRIGHT_TEST_SECRET` must be empty. If `NEXTAUTH_URL` is set, its host must be localhost.
+
+ZAP is the bounded scanner (`scripts/run-local-zap.mjs`). Docker is not a firewall. The container reaches the host app at `http://host.docker.internal:3000`. The only permitted app origin is `http://127.0.0.1:3000`. Preflight runs first, including for `--print-only`. `--print-only` does not require port 3000. A real scan exits 1 if port 3000 is down, and exits 1 if something is listening on port 3000 on a non-loopback address. Start the app with `npx next dev -H 127.0.0.1`. The script does not start the server and it does not pull images.
+
+Strix and Shannon stay unused until outbound network is limited to the app plus one model provider. `STRIX_TELEMETRY=0` is required before any future Strix run.
 
 Autonomous assessment is deferred until Andrew can supervise.

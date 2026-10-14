@@ -1,8 +1,8 @@
 /**
  * Fail closed before a local security scan.
  *
- * Reads the repo-root .env only. Prints key names and short reasons.
- * Never prints a value.
+ * Judges the environment `next dev` would load. Prints key names and short
+ * reasons. Never prints a value. Does not open .env.production.local.
  */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -10,21 +10,24 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { parseDotenv, evaluateLocalScanPreflight } = require("./local-scan-preflight-rules.cjs");
+const { NEXT_DEV_ENV_FILES, mergeNextDevEnv, evaluateLocalScanPreflight } = require(
+  "./local-scan-preflight-rules.cjs"
+);
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const envPath = join(root, ".env");
+const files = {};
 
-let text;
-try {
-  text = readFileSync(envPath, "utf8");
-} catch {
-  console.error("DATABASE_URL: is not set");
-  console.error("DIRECT_URL: is not set");
-  process.exit(1);
+for (const name of NEXT_DEV_ENV_FILES) {
+  try {
+    files[name] = readFileSync(join(root, name), "utf8");
+  } catch (err) {
+    if (err && err.code === "ENOENT") continue;
+    console.error(`${name}: could not be read`);
+    process.exit(1);
+  }
 }
 
-const result = evaluateLocalScanPreflight(parseDotenv(text));
+const result = evaluateLocalScanPreflight(mergeNextDevEnv({ files, processEnv: process.env }));
 if (!result.ok) {
   for (const failure of result.failures) {
     console.error(`${failure.key}: ${failure.reason}`);
