@@ -11,7 +11,6 @@ import {
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/SectionCard";
-import { ClaimInviteSection } from "./ClaimInviteSection";
 import { StudentDetailShell } from "@/components/admin/StudentDetailShell";
 import { StudentCriticalCard } from "@/components/admin/StudentCriticalCard";
 import { StudentOverflowActions } from "@/components/admin/StudentOverflowActions";
@@ -157,17 +156,7 @@ export default async function StudentDetailPage({
           purgeEligibleAt={
             view.criticalCard.kind === "deletion" ? view.criticalCard.purgeEligibleAt : null
           }
-        >
-          {view.criticalCard.kind === "setup" ? (
-            <ClaimInviteSection
-              studentId={student.id}
-              studentName={student.name}
-              alreadyClaimed={false}
-              needsInviteEmail={!student.parentEmail}
-              prominent
-            />
-          ) : null}
-        </StudentCriticalCard>
+        />
       ) : null}
 
       <SectionCard realm="admin" title="Session" data-testid="student-session-card">

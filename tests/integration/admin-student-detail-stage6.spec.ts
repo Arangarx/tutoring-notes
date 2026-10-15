@@ -24,15 +24,15 @@ const REMINDER =
 const DELETION = "This student's account is being deleted. Sessions are off.";
 
 function beforeInvite(name: string): string {
-  return `${name} needs an account before you can start a session. Send an invite below to ${name}, or to their parent if ${name} is a minor.`;
+  return `${name} needs an account before you can start a session. Open Account & sharing to send an invite to ${name}, or to their parent if ${name} is a minor.`;
 }
 
 function selfLearner(name: string): string {
-  return `${name} needs to set up their account before you can start a session. Send the invite below. Once they accept and finish privacy preferences, Start session turns on.`;
+  return `${name} needs to set up their account before you can start a session. Open Account & sharing and send the invite. Once they accept and finish privacy preferences, Start session turns on.`;
 }
 
 function parentSentence(name: string): string {
-  return `Parent must claim this student before sessions can start. Create a claim link and share it with ${name}'s parent. After they claim the account and set privacy preferences, you can start whiteboard sessions.`;
+  return `Parent must claim this student before sessions can start. Open Account & sharing, create a claim link, and share it with ${name}'s parent. After they claim the account and set privacy preferences, you can start whiteboard sessions.`;
 }
 
 async function withPrisma<T>(run: (prisma: PrismaClient) => Promise<T>): Promise<T> {
@@ -321,6 +321,8 @@ test.describe("Admin student detail — stage 6", () => {
 
       await page.goto(`/admin/students/${noneId}`, { waitUntil: "domcontentloaded" });
       await expect(page.getByTestId("student-critical-card")).toContainText(beforeInvite("No Invite Yet"));
+      await expect(page.getByTestId("create-claim-link-btn")).toHaveCount(0);
+      await page.getByTestId("student-account-link").click();
       await expect(page.getByTestId("create-claim-link-btn")).toBeVisible();
       await expect(page.getByRole("button", { name: "Start session" })).toHaveCount(0);
     }

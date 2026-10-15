@@ -146,9 +146,11 @@ test.describe("Admin student detail — Start / claim findability", () => {
       const card = page.getByTestId("student-critical-card");
       await expect(card).toBeVisible();
       await expect(card).toContainText(
-        "Unclaimed Findability Student needs an account before you can start a session. Send an invite below to Unclaimed Findability Student, or to their parent if Unclaimed Findability Student is a minor."
+        "Unclaimed Findability Student needs an account before you can start a session. Open Account & sharing to send an invite to Unclaimed Findability Student, or to their parent if Unclaimed Findability Student is a minor."
       );
-      await expect(card.getByTestId("create-claim-link-btn")).toBeVisible();
+      await expect(card.getByTestId("create-claim-link-btn")).toHaveCount(0);
+      await page.getByTestId("student-account-link").click();
+      await expect(page.getByTestId("create-claim-link-btn")).toBeVisible();
       await expect(page.getByRole("button", { name: "Start session" })).toHaveCount(0);
     }
   );

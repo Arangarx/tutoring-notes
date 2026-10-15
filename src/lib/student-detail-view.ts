@@ -48,7 +48,7 @@ function criticalCard(input: StudentDetailViewInput): StudentDetailCriticalCard 
     return {
       kind: "setup",
       text: withName(
-        "{name} needs an account before you can start a session. Send an invite below to {name}, or to their parent if {name} is a minor.",
+        "{name} needs an account before you can start a session. Open Account & sharing to send an invite to {name}, or to their parent if {name} is a minor.",
         input.studentName
       ),
     };
@@ -58,7 +58,7 @@ function criticalCard(input: StudentDetailViewInput): StudentDetailCriticalCard 
     return {
       kind: "setup",
       text: withName(
-        "{name} needs to set up their account before you can start a session. Send the invite below. Once they accept and finish privacy preferences, Start session turns on.",
+        "{name} needs to set up their account before you can start a session. Open Account & sharing and send the invite. Once they accept and finish privacy preferences, Start session turns on.",
         input.studentName
       ),
     };
@@ -67,7 +67,7 @@ function criticalCard(input: StudentDetailViewInput): StudentDetailCriticalCard 
   if (!input.learnerProfileId) {
     return {
       kind: "setup",
-      text: `Parent must claim this student before sessions can start. Create a claim link and share it with ${input.studentName}'s parent. After they claim the account and set privacy preferences, you can start whiteboard sessions.`,
+      text: `Parent must claim this student before sessions can start. Open Account & sharing, create a claim link, and share it with ${input.studentName}'s parent. After they claim the account and set privacy preferences, you can start whiteboard sessions.`,
     };
   }
 

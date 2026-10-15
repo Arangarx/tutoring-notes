@@ -26,7 +26,7 @@ test("a learner with no email can be invited after the tutor sets one", async ({
     });
     studentId = student.id;
 
-    await page.goto(`/admin/students/${studentId}`);
+    await page.goto(`/admin/students/${studentId}/account`);
     const prompt = page.getByTestId("claim-missing-email-prompt").first();
     await expect(prompt).toBeVisible({ timeout: 20_000 });
     await expect(prompt).toContainText("no invitation email");

@@ -5,8 +5,8 @@ import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 /**
- * One critical-step card. The sentence is passed in. A setup card passes
- * ClaimInviteSection as children, under the sentence.
+ * One critical-step card. The sentence is passed in. Claim links live on
+ * Account & sharing, not under this sentence.
  */
 export function StudentCriticalCard({
   text,

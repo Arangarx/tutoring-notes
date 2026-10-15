@@ -7,13 +7,13 @@ import { studentDetailView } from "@/lib/student-detail-view";
 const NAME = "Ada";
 
 const BEFORE_INVITE =
-  "Ada needs an account before you can start a session. Send an invite below to Ada, or to their parent if Ada is a minor.";
+  "Ada needs an account before you can start a session. Open Account & sharing to send an invite to Ada, or to their parent if Ada is a minor.";
 
 const SELF_LEARNER =
-  "Ada needs to set up their account before you can start a session. Send the invite below. Once they accept and finish privacy preferences, Start session turns on.";
+  "Ada needs to set up their account before you can start a session. Open Account & sharing and send the invite. Once they accept and finish privacy preferences, Start session turns on.";
 
 const PARENT =
-  "Parent must claim this student before sessions can start. Create a claim link and share it with Ada's parent. After they claim the account and set privacy preferences, you can start whiteboard sessions.";
+  "Parent must claim this student before sessions can start. Open Account & sharing, create a claim link, and share it with Ada's parent. After they claim the account and set privacy preferences, you can start whiteboard sessions.";
 
 const PRIVACY =
   "A parent account is connected, but privacy preferences are not complete. You cannot start a session until the parent finishes them. Ask the parent to sign in to their Mynk account and complete privacy preferences for this learner. They can find this under their child's profile in Account.";
