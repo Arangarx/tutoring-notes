@@ -366,12 +366,12 @@ test.describe("org QoL schedule bridge", () => {
     }
   );
 
-  test.describe("Join refused when live consent is off", () => {
+  test.describe("Join inactive when live consent is off", () => {
     test.use({ storageState: PARENT_STATE });
     test(
-      "Parent Join shows refusal when live session consent is off",
+      "Join and Open room stay inactive when live session consent is off",
       { tag: [TAG.WB_CHROME] },
-      async ({ page }) => {
+      async ({ page, browser }) => {
         await seedParentAccountHolder();
         const adminUserId = await seedTestAdmin();
         const fx = await seedParentConsentFixture({ adminUserId });
@@ -404,13 +404,33 @@ test.describe("org QoL schedule bridge", () => {
         const row = page.getByTestId(`upcoming-session-row-${sched.scheduledSessionId}`);
         const joinBtn = row.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`);
         await expect(joinBtn).toBeVisible({ timeout: 15_000 });
-        await expect(joinBtn).toBeEnabled();
-        await joinBtn.click();
-        await expect(row.getByRole("status")).toHaveText(
-          "This session is not available to join right now.",
-          { timeout: 15_000 }
-        );
+        await expect(joinBtn).toBeDisabled();
+        await expect(joinBtn).toHaveAttribute("type", "button");
+        await expect(row.getByRole("status")).toHaveCount(0);
         await expect(page).toHaveURL(/\/account\/dashboard/);
+
+        const tutorContext = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 1200 },
+        });
+        const tutorPage = await tutorContext.newPage();
+        try {
+          await tutorPage.goto(`/admin/students/${fx.studentId}`, {
+            waitUntil: "domcontentloaded",
+          });
+          const openBtns = tutorPage.getByTestId(
+            `open-scheduled-room-${sched.scheduledSessionId}`
+          );
+          await expect(openBtns.first()).toBeVisible({ timeout: 15_000 });
+          const openCount = await openBtns.count();
+          expect(openCount).toBeGreaterThan(0);
+          for (let i = 0; i < openCount; i++) {
+            await expect(openBtns.nth(i)).toBeDisabled();
+            await expect(openBtns.nth(i)).toHaveAttribute("type", "button");
+          }
+        } finally {
+          await tutorContext.close();
+        }
       }
     );
   });

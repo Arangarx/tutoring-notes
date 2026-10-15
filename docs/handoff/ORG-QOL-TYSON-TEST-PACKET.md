@@ -178,11 +178,11 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 1. Use a learner whose parent account you control. On that child's privacy page (item 32), turn **Allow live tutoring sessions** off. Schedule a session that starts within 15 minutes (item 2, step 5). Do this on a learner you can spare — leave the learner from items 1–3 allowed to join.
 2. On Device B, sign in as **that** parent.
-3. On the upcoming row, press **Join** (this time the button should be pressable, because you are inside the window).
+3. On the upcoming row, look at **Join**. Do not expect it to press. On Device A, open that same student and look at **Open room** on the upcoming row, and at **Start session** if that button is the one on the Session card.
 
-**Expect:** You stay on the family page. Under the row you see "This session is not available to join right now." You do not enter a whiteboard.
+**Expect:** **Join** is visible and cannot be pressed. You stay on the family page. There is no line under the row that says "This session is not available to join right now." **Open room** cannot be pressed. If **Start session** is showing, it cannot be pressed either. You do not enter a whiteboard. A session that is inside the window and still has **Allow live tutoring sessions** on keeps a pressable **Join** and **Open room**.
 
-**Ignore this run:** The too-early disabled button (item 4). A different refusal, "Sign in to join this session," means you were signed out — sign in and try again before you mark this.
+**Ignore this run:** The too-early disabled button (item 4). That one is about the clock, not about consent.
 
 - [ ] PASS
 - [ ] FAIL
@@ -190,7 +190,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-bridge.spec.ts › Parent Join shows refusal when live session consent is off]`
+**Coverage:** `[automated: tests/integration/wb-org-qol-bridge.spec.ts › Join and Open room stay inactive when live session consent is off]`
 
 **Notes:**
 

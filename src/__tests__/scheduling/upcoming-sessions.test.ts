@@ -43,6 +43,7 @@ describe("listUpcomingForStudent / listUpcomingForLearnerProfiles", () => {
     expect(rows[0]!.joinWindowOpen).toBe(
       now >= startAt.getTime() - JOIN_WINDOW_OPENS_BEFORE_MS
     );
+    expect(rows[0]!.liveEntryAllowed).toBe(false);
 
     await db.scheduledSession.delete({ where: { id: sched.id } });
     await db.student.delete({ where: { id: student.id } });
@@ -85,11 +86,83 @@ describe("listUpcomingForStudent / listUpcomingForLearnerProfiles", () => {
     const rows = await listUpcomingForLearnerProfiles([profile.id]);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.joinWindowOpen).toBe(false);
+    expect(rows[0]!.liveEntryAllowed).toBe(false);
 
     await db.scheduledSession.deleteMany({ where: { studentId: student.id } });
     await db.student.delete({ where: { id: student.id } });
     await db.learnerProfile.delete({ where: { id: profile.id } });
     await db.accountHolder.delete({ where: { id: ah.id } });
     await db.adminUser.delete({ where: { id: tutor.id } });
+  });
+
+  it("allows live entry only when the latest consent allows live sessions", async () => {
+    const tutor = await db.adminUser.create({
+      data: {
+        email: `${uniq("live-up")}@example.com`,
+        role: "TUTOR",
+        approvalStatus: "APPROVED",
+      },
+    });
+    const ah = await db.accountHolder.create({
+      data: { email: `${uniq("live-ah")}@example.com`, emailVerifiedAt: new Date() },
+    });
+    const allowed = await db.learnerProfile.create({
+      data: { accountHolderId: ah.id, displayName: "Allowed", isSelfLearner: false },
+    });
+    const blocked = await db.learnerProfile.create({
+      data: { accountHolderId: ah.id, displayName: "Blocked", isSelfLearner: false },
+    });
+    const allowedStudent = await db.student.create({
+      data: { name: "Allowed", adminUserId: tutor.id, learnerProfileId: allowed.id },
+    });
+    const blockedStudent = await db.student.create({
+      data: { name: "Blocked", adminUserId: tutor.id, learnerProfileId: blocked.id },
+    });
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId: allowed.id,
+        adminUserId: tutor.id,
+        version: 1,
+        allowLiveSession: true,
+        allowAudioRecording: false,
+        allowWhiteboardRecording: false,
+        allowNoteSending: true,
+        setByAccountHolderId: ah.id,
+      },
+    });
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId: blocked.id,
+        adminUserId: tutor.id,
+        version: 1,
+        allowLiveSession: false,
+        allowAudioRecording: false,
+        allowWhiteboardRecording: false,
+        allowNoteSending: true,
+        setByAccountHolderId: ah.id,
+      },
+    });
+    const startAt = new Date(Date.now() + 5 * 60_000);
+    const endAt = new Date(startAt.getTime() + 60 * 60_000);
+    for (const studentId of [allowedStudent.id, blockedStudent.id]) {
+      await db.scheduledSession.create({
+        data: {
+          adminUserId: tutor.id,
+          studentId,
+          date: new Date(Date.UTC(2026, 9, 6)),
+          startTime: "10:00",
+          endTime: "11:00",
+          startAt,
+          endAt,
+          plannedDurationMinutes: 60,
+          subject: "Live gate",
+        },
+      });
+    }
+
+    const allowedRows = await listUpcomingForStudent(tutor.id, allowedStudent.id);
+    const blockedRows = await listUpcomingForLearnerProfiles([blocked.id]);
+    expect(allowedRows[0]!.liveEntryAllowed).toBe(true);
+    expect(blockedRows[0]!.liveEntryAllowed).toBe(false);
   });
 });

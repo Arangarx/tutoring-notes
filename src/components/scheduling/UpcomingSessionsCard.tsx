@@ -53,12 +53,16 @@ export function UpcomingSessionsCard({
                 }
                 action={
                   mode === "tutor" ? (
-                    <OpenScheduledRoomButton scheduledSessionId={session.id} />
+                    <OpenScheduledRoomButton
+                      scheduledSessionId={session.id}
+                      liveEntryAllowed={session.liveEntryAllowed}
+                    />
                   ) : (
                     <JoinScheduledSessionButton
                       scheduledSessionId={session.id}
                       startAtIso={session.startAt.toISOString()}
                       endAtIso={session.endAt.toISOString()}
+                      liveEntryAllowed={session.liveEntryAllowed}
                     />
                   )
                 }

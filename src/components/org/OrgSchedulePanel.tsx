@@ -90,7 +90,10 @@ export function OrgSchedulePanel({
                       />
                     ) : null}
                     {viewerIsInstructor && row.instructorAdminUserId === viewerId ? (
-                      <OpenScheduledRoomButton scheduledSessionId={row.id} />
+                      <OpenScheduledRoomButton
+                        scheduledSessionId={row.id}
+                        liveEntryAllowed={row.liveEntryAllowed}
+                      />
                     ) : null}
                   </div>
                 </CardContent>

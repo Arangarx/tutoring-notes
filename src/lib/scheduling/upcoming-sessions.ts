@@ -1,10 +1,12 @@
 /**
  * Upcoming scheduled appointments — shared read paths for tutor student detail
- * and family dashboards. Join-window eligibility uses `isWithinJoinWindow` only.
+ * and family dashboards. The join window uses `isWithinJoinWindow`.
+ * `liveEntryAllowed` matches whether the tutor can start a live session.
  *
  * SERVER-ONLY.
  */
 
+import { resolveEffectiveConsentForStudent } from "@/lib/consent-scope";
 import { db, withDbRetry } from "@/lib/db";
 import { isWithinJoinWindow } from "@/lib/scheduling/join-window";
 
@@ -16,6 +18,8 @@ export type UpcomingScheduledSessionRow = {
   studentId: string;
   learnerDisplayName: string | null;
   joinWindowOpen: boolean;
+  /** True only when the tutor can start a live session for this appointment. */
+  liveEntryAllowed: boolean;
 };
 
 const upcomingSelect = {
@@ -24,28 +28,35 @@ const upcomingSelect = {
   endAt: true,
   subject: true,
   studentId: true,
+  adminUserId: true,
   student: {
     select: {
       name: true,
+      adminUserId: true,
+      organizationId: true,
+      learnerProfileId: true,
       learnerProfile: { select: { displayName: true } },
     },
   },
 } as const;
 
-function toRow(
-  row: {
-    id: string;
-    startAt: Date | null;
-    endAt: Date | null;
-    subject: string;
-    studentId: string;
-    student: {
-      name: string;
-      learnerProfile: { displayName: string } | null;
-    };
-  },
-  now: Date
-): UpcomingScheduledSessionRow | null {
+type UpcomingSource = {
+  id: string;
+  startAt: Date | null;
+  endAt: Date | null;
+  subject: string;
+  studentId: string;
+  adminUserId: string;
+  student: {
+    name: string;
+    adminUserId: string | null;
+    organizationId: string | null;
+    learnerProfileId: string | null;
+    learnerProfile: { displayName: string } | null;
+  };
+};
+
+function toRow(row: UpcomingSource, now: Date): UpcomingScheduledSessionRow | null {
   if (!row.startAt || !row.endAt) return null;
   if (row.endAt.getTime() <= now.getTime()) return null;
   return {
@@ -60,7 +71,63 @@ function toRow(
       { startAt: row.startAt, endAt: row.endAt },
       now
     ),
+    liveEntryAllowed: false,
   };
+}
+
+export async function appointmentLiveEntryAllowed(input: {
+  learnerProfileId: string | null;
+  studentAdminUserId: string | null;
+  organizationId: string | null;
+  appointmentAdminUserId: string;
+}): Promise<boolean> {
+  if (!input.learnerProfileId) return false;
+  const effective = await resolveEffectiveConsentForStudent(
+    input.learnerProfileId,
+    {
+      adminUserId: input.studentAdminUserId,
+      organizationId: input.organizationId,
+    },
+    input.appointmentAdminUserId,
+    undefined,
+    "appointmentLiveEntry"
+  );
+  return effective?.allowLiveSession === true;
+}
+
+async function liveEntryAllowedFor(row: UpcomingSource): Promise<boolean> {
+  return appointmentLiveEntryAllowed({
+    learnerProfileId: row.student.learnerProfileId,
+    studentAdminUserId: row.student.adminUserId,
+    organizationId: row.student.organizationId,
+    appointmentAdminUserId: row.adminUserId,
+  });
+}
+
+async function withLiveEntry(
+  sources: UpcomingSource[],
+  now: Date
+): Promise<UpcomingScheduledSessionRow[]> {
+  const kept = sources.flatMap((source) => {
+    const row = toRow(source, now);
+    return row ? [{ source, row }] : [];
+  });
+  const cache = new Map<string, Promise<boolean>>();
+  const flags = await Promise.all(
+    kept.map(({ source }) => {
+      const key = `${source.studentId}:${source.adminUserId}`;
+      let pending = cache.get(key);
+      if (!pending) {
+        pending = liveEntryAllowedFor(source);
+        cache.set(key, pending);
+      }
+      return pending;
+    })
+  );
+  return kept.map(({ row }, index) => ({
+    ...row,
+    liveEntryAllowed: flags[index] === true,
+  }));
 }
 
 /** Tutor student detail — future appointments for one student. */
@@ -82,9 +149,7 @@ export async function listUpcomingForStudent(
       }),
     { label: "listUpcomingForStudent" }
   );
-  return rows
-    .map((r) => toRow(r, now))
-    .filter((r): r is UpcomingScheduledSessionRow => r !== null);
+  return withLiveEntry(rows, now);
 }
 
 /** Family dashboards — appointments for learners this account can act for. */
@@ -108,7 +173,5 @@ export async function listUpcomingForLearnerProfiles(
       }),
     { label: "listUpcomingForLearnerProfiles" }
   );
-  return rows
-    .map((r) => toRow(r, now))
-    .filter((r): r is UpcomingScheduledSessionRow => r !== null);
+  return withLiveEntry(rows, now);
 }

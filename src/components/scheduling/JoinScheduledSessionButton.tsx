@@ -62,15 +62,17 @@ export function JoinScheduledSessionButton({
   scheduledSessionId,
   startAtIso,
   endAtIso,
+  liveEntryAllowed,
 }: {
   scheduledSessionId: string;
   startAtIso: string;
   endAtIso: string;
+  liveEntryAllowed: boolean;
 }) {
   const joinWindowOpen = useJoinWindowOpen(startAtIso, endAtIso);
   const [state, formAction] = useActionState(joinScheduledSessionFromForm, null);
 
-  if (!joinWindowOpen) {
+  if (!joinWindowOpen || !liveEntryAllowed) {
     return (
       <Button
         type="button"

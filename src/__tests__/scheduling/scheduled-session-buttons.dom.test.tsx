@@ -40,6 +40,7 @@ describe("scheduled session buttons", () => {
     render(
       <JoinScheduledSessionButton
         scheduledSessionId="sched-1"
+        liveEntryAllowed
         {...hoursFromNow(2 * 60 * 60 * 1000, 60 * 60 * 1000)}
       />
     );
@@ -56,6 +57,7 @@ describe("scheduled session buttons", () => {
     render(
       <JoinScheduledSessionButton
         scheduledSessionId="sched-2"
+        liveEntryAllowed
         {...hoursFromNow(5 * 60 * 1000, 60 * 60 * 1000)}
       />
     );
@@ -82,6 +84,7 @@ describe("scheduled session buttons", () => {
       render(
         <JoinScheduledSessionButton
           scheduledSessionId="sched-timer"
+          liveEntryAllowed
           startAtIso={start.toISOString()}
           endAtIso={end.toISOString()}
         />
@@ -96,11 +99,37 @@ describe("scheduled session buttons", () => {
     }
   });
 
+  it("keeps Join inactive inside the window when live entry is not allowed", () => {
+    render(
+      <JoinScheduledSessionButton
+        scheduledSessionId="sched-blocked"
+        liveEntryAllowed={false}
+        {...hoursFromNow(5 * 60 * 1000, 60 * 60 * 1000)}
+      />
+    );
+    const button = screen.getByTestId("join-scheduled-session-sched-blocked");
+    expect(button).toHaveTextContent("Join");
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("type", "button");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("renders Open room as a submit control with the scheduled-session test id", () => {
-    render(<OpenScheduledRoomButton scheduledSessionId="sched-3" />);
+    render(<OpenScheduledRoomButton scheduledSessionId="sched-3" liveEntryAllowed />);
     const button = screen.getByTestId("open-scheduled-room-sched-3");
     expect(button).toHaveTextContent("Open room");
     expect(button).toHaveAttribute("type", "submit");
     expect(button).toBeEnabled();
+  });
+
+  it("keeps Open room inactive when live entry is not allowed", () => {
+    render(
+      <OpenScheduledRoomButton scheduledSessionId="sched-4" liveEntryAllowed={false} />
+    );
+    const button = screen.getByTestId("open-scheduled-room-sched-4");
+    expect(button).toHaveTextContent("Open room");
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("type", "button");
+    expect(mockOpenRoom).not.toHaveBeenCalled();
   });
 });

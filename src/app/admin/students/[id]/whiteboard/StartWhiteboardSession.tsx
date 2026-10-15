@@ -22,6 +22,11 @@ export type StartWhiteboardSessionProps = {
   hasTopClaimBanner?: boolean;
   /** Visible label when the session can start. */
   label?: string;
+  /**
+   * False when live sessions are not allowed. The button stays on the page
+   * and cannot be pressed. Omitted means the caller has not checked yet.
+   */
+  liveSessionsAllowed?: boolean;
 };
 
 function canStartSession(props: StartWhiteboardSessionProps): boolean {
@@ -64,6 +69,20 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
   const [error, setError] = useState<string | null>(null);
   // SSR HTML is clickable before hydration; that click never runs handleStart.
   const actionsEnabled = useHydrated();
+
+  if (props.liveSessionsAllowed === false && canStartSession(props)) {
+    return (
+      <Button
+        type="button"
+        variant="accent"
+        className="min-h-11 whitespace-nowrap"
+        disabled
+        data-testid="start-whiteboard-session-btn"
+      >
+        {props.label ?? "Start whiteboard session"}
+      </Button>
+    );
+  }
 
   if (!canStartSession(props)) {
     if (props.accessSuspended) {

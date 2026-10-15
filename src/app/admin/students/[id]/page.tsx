@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
 import { UpcomingSessionsCard } from "@/components/scheduling/UpcomingSessionsCard";
 import { OpenScheduledRoomButton } from "@/components/scheduling/OpenScheduledRoomButton";
-import { listUpcomingForStudent } from "@/lib/scheduling/upcoming-sessions";
+import {
+  appointmentLiveEntryAllowed,
+  listUpcomingForStudent,
+} from "@/lib/scheduling/upcoming-sessions";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/SectionCard";
@@ -97,6 +100,15 @@ export default async function StudentDetailPage({
     scopedAdminUserId !== null
       ? await listUpcomingForStudent(scopedAdminUserId, id)
       : [];
+  const liveSessionsAllowed =
+    learnerProfileId !== null && scopedAdminUserId !== null
+      ? await appointmentLiveEntryAllowed({
+          learnerProfileId,
+          studentAdminUserId: student.adminUserId,
+          organizationId: student.organizationId,
+          appointmentAdminUserId: scopedAdminUserId,
+        })
+      : false;
 
   const latestInvite = student.claimInvites[0] ?? null;
   const view = studentDetailView({
@@ -166,7 +178,10 @@ export default async function StudentDetailPage({
         ) : null}
         {view.mainButton === "open_room" && nextAppointmentId ? (
           <div data-testid="student-main-control">
-            <OpenScheduledRoomButton scheduledSessionId={nextAppointmentId} />
+            <OpenScheduledRoomButton
+              scheduledSessionId={nextAppointmentId}
+              liveEntryAllowed={upcomingScheduledSessions[0]?.liveEntryAllowed === true}
+            />
           </div>
         ) : null}
         {view.mainButton === "start_session" ? (
@@ -177,6 +192,7 @@ export default async function StudentDetailPage({
               isSelfLearner={student.learnerProfile?.isSelfLearner ?? false}
               studentClaimed={!!student.learnerProfileId}
               label="Start session"
+              liveSessionsAllowed={liveSessionsAllowed}
             />
           </div>
         ) : null}

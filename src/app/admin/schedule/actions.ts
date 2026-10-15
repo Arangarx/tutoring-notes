@@ -18,6 +18,7 @@ import { db, withDbRetry } from "@/lib/db";
 import type { GoogleCalendarUiState } from "@/lib/schedule/google-calendar-ui-state";
 import { toScheduledSessionView } from "@/lib/schedule/scheduled-session-mapper";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
+import { appointmentLiveEntryAllowed } from "@/lib/scheduling/upcoming-sessions";
 import {
   assertOwnsStudent,
   requireStudentScope,
@@ -409,6 +410,7 @@ export type OrganizationAppointmentRow = {
   whenLabel: string;
   subject: string;
   availability: "available" | "unavailable";
+  liveEntryAllowed: boolean;
   view: ScheduledSessionView;
 };
 
@@ -428,6 +430,9 @@ export async function listScheduledSessionsForOrganization(
       student: {
         select: {
           name: true,
+          adminUserId: true,
+          organizationId: true,
+          learnerProfileId: true,
           organizationLearner: { select: { givenName: true, familyName: true } },
         },
       },
@@ -435,26 +440,34 @@ export async function listScheduledSessionsForOrganization(
     },
   });
   const googleState: GoogleCalendarUiState = { connected: false, reconnectRequired: false };
-  return rows.map((row) => {
-    const learner = row.student.organizationLearner;
-    const learnerName = learner
-      ? `${learner.givenName.trim()} ${learner.familyName.trim()}`.trim()
-      : row.student.name;
-    const view = {
-      ...toScheduledSessionView(row, googleState, org.timezone),
-      instructorAdminUserId: row.adminUserId,
-    };
-    return {
-      id: row.id,
-      learnerName,
-      instructorName: row.adminUser.displayName?.trim() || row.adminUser.email,
-      instructorAdminUserId: row.adminUserId,
-      whenLabel: `${view.date} ${view.startTime}–${view.endTime}`,
-      subject: row.subject,
-      availability: org.status === "active" ? "available" : "unavailable",
-      view,
-    };
-  });
+  return Promise.all(
+    rows.map(async (row) => {
+      const learner = row.student.organizationLearner;
+      const learnerName = learner
+        ? `${learner.givenName.trim()} ${learner.familyName.trim()}`.trim()
+        : row.student.name;
+      const view = {
+        ...toScheduledSessionView(row, googleState, org.timezone),
+        instructorAdminUserId: row.adminUserId,
+      };
+      return {
+        id: row.id,
+        learnerName,
+        instructorName: row.adminUser.displayName?.trim() || row.adminUser.email,
+        instructorAdminUserId: row.adminUserId,
+        whenLabel: `${view.date} ${view.startTime}–${view.endTime}`,
+        subject: row.subject,
+        availability: org.status === "active" ? ("available" as const) : ("unavailable" as const),
+        liveEntryAllowed: await appointmentLiveEntryAllowed({
+          learnerProfileId: row.student.learnerProfileId,
+          studentAdminUserId: row.student.adminUserId,
+          organizationId: row.student.organizationId,
+          appointmentAdminUserId: row.adminUserId,
+        }),
+        view,
+      };
+    })
+  );
 }
 
 export async function listOrganizationBookingChoices(organizationId: string): Promise<{
