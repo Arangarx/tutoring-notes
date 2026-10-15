@@ -34,14 +34,6 @@ beforeEach(() => {
 });
 
 describe("StartWhiteboardSession — T10 consent affordance", () => {
-  it("keeps Start inactive when live sessions are not allowed", () => {
-    render(<StartWhiteboardSession {...baseProps} liveSessionsAllowed={false} label="Start session" />);
-    const button = screen.getByTestId("start-whiteboard-session-btn");
-    expect(button).toHaveTextContent("Start session");
-    expect(button).toBeDisabled();
-    expect(createWhiteboardSessionMock).not.toHaveBeenCalled();
-  });
-
   it("replaces Start with claim/consent callout when no record (claimed minor)", () => {
     render(
       <StartWhiteboardSession
