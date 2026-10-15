@@ -302,10 +302,10 @@ Run top to bottom. Later items reuse the learner you create earlier.
 **Action:**
 
 1. Sign up a second tutor with a plus-address you can open. Leave it unapproved.
-2. Sign in as that tutor. You may land on a waitlist, or you may be able to open Students — follow whatever the site actually lets you do.
-3. Try **Add learner & send invite** with any email.
+2. Sign in as that tutor.
+3. Try to open **Students** (the menu, or the address `/admin/students`).
 
-**Expect:** The form does not create the learner. You see "Your account is not approved to add learners yet."
+**Expect:** You land on a page titled **Account pending approval**. It says your tutor account has been created and is pending operator approval. You do not reach the add-learner form, and you do not see "Your account is not approved to add learners yet." Opening Students sends you back to the same pending page. The learner is not created.
 
 **Ignore this run:** Your normal pre-approved tutor account. That one must be allowed to add learners (item 9).
 
@@ -315,7 +315,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[human-only: a tutor account that was never pre-approved]`
+**Coverage:** `[automated: tests/integration/identity/tutor-signup-waitlisted.spec.ts › WAITLISTED tutor cannot open /admin/students (redirect pending-approval)]` — `[human-only: the words on a real unapproved signup]`
 
 **Notes:**
 
@@ -330,7 +330,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 3. Press **Create claim link**. Then press **Generate new link** until you have done this enough times to pass three pending links (the add in item 9 already created one).
 4. Try once more.
 
-**Expect:** The extra attempt is refused. You see "Too many pending invites (max 3). Wait for existing links to be used or expire." Older links are not silently replaced by a fourth one.
+**Expect:** The extra attempt is refused. You see "Too many pending invites (max 3). Wait for existing links to be used or expire." Older links are not silently replaced by a fourth one. The main student page does not have **Create claim link**. That button and this cap message are only on **Account & sharing**.
 
 **Ignore this run:** Nothing.
 

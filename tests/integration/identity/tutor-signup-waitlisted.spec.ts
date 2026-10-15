@@ -124,6 +124,10 @@ test.describe("P1-ID-SIGNUP — tutor signup WAITLISTED gate", () => {
     await page.goto("/admin/students");
     await page.waitForURL(/\/admin\/pending-approval/, { timeout: 30_000 });
     await expect(page.getByText("Account pending approval")).toBeVisible();
+    await expect(page.getByText(/pending operator approval/i)).toBeVisible();
+    await expect(
+      page.getByText("Your account is not approved to add learners yet.")
+    ).toHaveCount(0);
   });
 
   test("REJECTED tutor login shows Account not approved copy", async ({
