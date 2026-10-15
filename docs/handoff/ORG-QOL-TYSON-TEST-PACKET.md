@@ -113,7 +113,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 **Expect:** **Join** opens the whiteboard on Device B and you reach the waiting room (a heading like "Connecting…" or "You're in—… will start the session shortly"). You do **not** type the child's PIN for this step. Device A and Device B are in the same session: on Device A, press **Start session** once Device B has connected. A line you draw on Device A shows up on Device B.
 
-**Ignore this run:** A notice that says "Live sessions need the child's own login (for now)" is recorded in item 7, not here. Sessions that are still too early are item 4.
+**Ignore this run:** The family notice that a parent can join without the child's PIN is item 7. Sessions that are still too early are item 4.
 
 - [ ] PASS
 - [ ] FAIL
@@ -223,11 +223,11 @@ Run top to bottom. Later items reuse the learner you create earlier.
 **Action:**
 
 1. With the parent from item 2 still able to open the room, confirm you never typed the child's PIN and you are still on the parent account (family page, not `/students/login`).
-2. If the family page shows a notice titled "Live sessions need the child's own login (for now)" that says signing in as the parent does not open the session, try **Join** anyway and write down whether the notice and the button disagree.
+2. If that child has no username and PIN yet, the family page may show a notice titled "You can join live sessions for your child." It says you do not need their PIN. That notice is not a block. Do not look for "Live sessions need the child's own login (for now)." That sentence is not on the page.
 3. Sign out on Device B. Sign in as a **different** parent (a plus-address that was not invited for this learner).
 4. Paste the same `/join/…` address from item 6 (still with no `#k=`).
 
-**Expect:** The correct parent reaches the waiting room as that child. The other parent does **not** get a board. They land on a page titled "Session not linked to your account" (this session link isn't associated with your account). If the correct parent got in while the "child's own login" notice was still showing, that notice is wrong — mark **PARTIAL** and describe both.
+**Expect:** The correct parent reaches the waiting room as that child. The other parent does **not** get a board. They land on a page titled "Session not linked to your account" (this session link isn't associated with your account). The family page does not say a parent cannot open the session without the child's login.
 
 **Ignore this run:** Nothing.
 

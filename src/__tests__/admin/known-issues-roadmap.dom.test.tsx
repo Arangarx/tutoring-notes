@@ -46,7 +46,7 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
     const list = screen.getByTestId("known-issues-list");
     expect(within(list).getByText(/PDF boards — occasional stray mark/)).toBeInTheDocument();
     expect(
-      within(list).getByText(/Children without their own login can't join live sessions yet/)
+      within(list).getByText(/A child does not need their own login for a parent to join/)
     ).toBeInTheDocument();
     expect(within(list).getByText(/Empty review screen/)).toBeInTheDocument();
     expect(within(list).getByText(/Student microphone boost — final check/)).toBeInTheDocument();
@@ -57,6 +57,9 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
     expect(within(list).queryByText(/Status badge during a session/)).not.toBeInTheDocument();
     expect(within(list).queryByText(/Connection status visibility/)).not.toBeInTheDocument();
     expect(within(list).queryByText(/In-person sessions — waiting message/)).not.toBeInTheDocument();
+    expect(
+      within(list).queryByText(/can't join live sessions yet/)
+    ).not.toBeInTheDocument();
   });
 
   it("section headings are more prominent than body bullets", () => {

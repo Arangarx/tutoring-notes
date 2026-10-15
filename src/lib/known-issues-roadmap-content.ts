@@ -86,8 +86,8 @@ export const knownIssuesItems: readonly KnownIssueItem[] = [
     body: "Very rarely, after importing a PDF onto the whiteboard, a pen stroke from another board can appear on the new page. It's intermittent and we're working on a fix; refreshing or undoing usually clears it for now.",
   },
   {
-    title: "Children without their own login can't join live sessions yet",
-    body: "If a learner doesn't have their own username + PIN, a parent signed in on the family account can't open the session join link as that child yet (a learner picker is coming). For live sessions today, set up the child's own login under Manage, or have the child sign in on the student login page. Parents can still view notes and share links.",
+    title: "A child does not need their own login for a parent to join",
+    body: "A parent signed in on the family account can open that child's live session from Upcoming sessions when the appointment window is open. They do not need the child's username or PIN. Set up the child's login under Manage only if the child will sign in on their own device.",
   },
   {
     title: "Student microphone boost — final check",
