@@ -10,10 +10,14 @@ export function DisplayNameSetupForm({
   rawToken,
   prompt,
   initialDisplayName,
+  saveDisplayName,
 }: {
-  rawToken: string;
+  rawToken?: string;
   prompt: string;
   initialDisplayName: string;
+  saveDisplayName?: (
+    displayName: string
+  ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [busy, setBusy] = useState(false);
@@ -25,16 +29,28 @@ export function DisplayNameSetupForm({
     setBusy(true);
     setError(null);
 
+    const trimmed = displayName.trim();
     try {
-      const res = await fetch(`/api/claim/${rawToken}/setup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "display_name", displayName: displayName.trim() }),
-      });
-      const data = (await res.json()) as { error?: string; ok?: boolean };
+      if (saveDisplayName) {
+        const result = await saveDisplayName(trimmed);
+        if (!result.ok) {
+          setError(result.error ?? "server");
+          return;
+        }
+      } else if (rawToken) {
+        const res = await fetch(`/api/claim/${rawToken}/setup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "display_name", displayName: trimmed }),
+        });
+        const data = (await res.json()) as { error?: string; ok?: boolean };
 
-      if (!res.ok) {
-        setError(data.error ?? "server");
+        if (!res.ok) {
+          setError(data.error ?? "server");
+          return;
+        }
+      } else {
+        setError("server");
         return;
       }
 
@@ -44,14 +60,6 @@ export function DisplayNameSetupForm({
     } finally {
       setBusy(false);
     }
-  }
-
-  if (saved) {
-    return (
-      <p className="text-sm text-muted-foreground" data-testid="display-name-saved">
-        ✓ Saved how you&apos;ll appear to this tutor.
-      </p>
-    );
   }
 
   return (
@@ -70,6 +78,11 @@ export function DisplayNameSetupForm({
           autoComplete="name"
         />
       </div>
+      {saved ? (
+        <p className="text-sm text-muted-foreground" data-testid="display-name-saved">
+          ✓ Saved how you&apos;ll appear to this tutor.
+        </p>
+      ) : null}
       {error ? (
         <AuthFieldError
           id="claim-display-name-error"

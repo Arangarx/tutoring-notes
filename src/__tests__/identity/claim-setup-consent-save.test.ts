@@ -179,6 +179,27 @@ describe("CC-2 consent API — happy path", () => {
     expect(record!.setByAccountHolderId).toBe(fx.ah.id);
   });
 
+  it("replaces the tutor roster name when the display name is saved again", async () => {
+    const fx = await createClaimedInviteFixture();
+    const first = await postSetup(fx.rawToken, fx.ahSessionToken, {
+      action: "display_name",
+      displayName: "Maya Rodriguez",
+    });
+    expect(first.status).toBe(200);
+    const second = await postSetup(fx.rawToken, fx.ahSessionToken, {
+      action: "display_name",
+      displayName: "Maya R. Lopez",
+    });
+    expect(second.status).toBe(200);
+
+    const profile = await db.learnerProfile.findUniqueOrThrow({
+      where: { id: fx.learnerProfileId },
+    });
+    const student = await db.student.findUniqueOrThrow({ where: { id: fx.student.id } });
+    expect(profile.displayName).toBe("Maya R. Lopez");
+    expect(student.name).toBe("Maya R. Lopez");
+  });
+
   it("stores a display name capped at 80 characters", async () => {
     const fx = await createClaimedInviteFixture();
     const raw = "A".repeat(100);

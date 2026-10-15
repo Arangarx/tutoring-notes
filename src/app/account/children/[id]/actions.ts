@@ -1,10 +1,14 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import { db } from "@/lib/db";
+
 import { getAccountHolderSession } from "@/lib/account-holder-session";
+import { db } from "@/lib/db";
+import { saveOwnedLearnerDisplayName } from "@/lib/learner-display-name";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { clearCredentialHardLock } from "@/lib/learner-pin-rate-limit";
+import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
 
 /**
  * IAC-10: Parent/guardian action to clear the hard lock on a child's PIN login.
@@ -53,5 +57,25 @@ export async function unlockChildPinAction(
   // trigger an immediate server re-render which unmounts <UnlockPinButton> (because
   // isPinHardLocked becomes false), destroying the client-side success message before
   // the parent can read it. The success state persists until navigation.
+  return { ok: true };
+}
+
+/** Change the name this learner's tutors see. The account holder must own the profile. */
+export async function updateLearnerDisplayNameAction(
+  learnerProfileId: string,
+  displayName: string
+): Promise<{ ok: boolean; error?: string }> {
+  const ahSession = await getAccountHolderSessionFromHeaders();
+  if (!ahSession) return { ok: false, error: "unauthorized" };
+
+  const saved = await saveOwnedLearnerDisplayName({
+    accountHolderId: ahSession.accountHolderId,
+    learnerProfileId,
+    rawDisplayName: displayName,
+  });
+  if (!saved.ok) return saved;
+
+  revalidatePath(`/account/children/${learnerProfileId}`);
+  revalidatePath("/account/dashboard");
   return { ok: true };
 }

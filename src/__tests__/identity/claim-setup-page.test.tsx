@@ -220,6 +220,31 @@ beforeAll(async () => {
     "test-ah-session-secret-minimum-32-bytes-xxxx";
 });
 
+describe("Claim setup page — display name card", () => {
+  it("shows the child prompt and keeps the field on a child claim", async () => {
+    const fx = await createClaimedSetupFixture({ isSelfLearner: false });
+    await renderSetupPage(fx.rawToken, fx.ah.id);
+
+    expect(
+      screen.getByText("How do you want your child to be seen by this tutor?")
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Display name")).toHaveValue("Test Student");
+    expect(screen.getByRole("button", { name: "Save display name" })).toBeInTheDocument();
+  });
+
+  it("shows the self-learner prompt on a self-learner claim", async () => {
+    const fx = await createClaimedSetupFixture({ isSelfLearner: true });
+    await renderSetupPage(fx.rawToken, fx.ah.id);
+
+    expect(
+      screen.getByText("How do you want to be seen by this tutor?")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("How do you want your child to be seen by this tutor?")
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("Claim setup page — T-new-C dashboard gate (B-3)", () => {
   it("does not render Go to dashboard when credential set but consent unsaved", async () => {
     const fx = await createClaimedSetupFixture({

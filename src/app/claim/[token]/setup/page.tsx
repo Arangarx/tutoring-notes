@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { CredentialSetupForm } from "./CredentialSetupForm";
 import { ConsentSetupForm } from "./ConsentSetupForm";
 import { DisplayNameSetupForm } from "./DisplayNameSetupForm";
-import { firstNameLastInitial } from "@/lib/display-name-prefill";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +45,6 @@ export default async function ClaimSetupPage({
       },
       adminUser: { select: { displayName: true, id: true } },
     },
-  });
-
-  const accountHolderForPrefill = await db.accountHolder.findUnique({
-    where: { id: ahSession.accountHolderId },
-    select: { displayName: true },
   });
 
   // Only the AccountHolder who claimed it may see this page
@@ -97,9 +91,7 @@ export default async function ClaimSetupPage({
   });
   const hasPendingSessionInvite = pendingInviteCount > 0;
 
-  const prefillSource =
-    accountHolderForPrefill?.displayName?.trim() || profile.displayName;
-  const displayNamePrefill = firstNameLastInitial(prefillSource);
+  const displayNamePrefill = profile.displayName;
   const displayNamePrompt = isSelfLearner
     ? "How do you want to be seen by this tutor?"
     : "How do you want your child to be seen by this tutor?";

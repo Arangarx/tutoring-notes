@@ -15,6 +15,8 @@ import { isCredentialHardLocked } from "@/lib/learner-pin-rate-limit";
 import { requireAccountHolderSession } from "@/lib/server-session";
 
 import { SubNav } from "@/components/SubNav";
+import { DisplayNameSetupForm } from "@/app/claim/[token]/setup/DisplayNameSetupForm";
+import { updateLearnerDisplayNameAction } from "./actions";
 import { ChangePinForm } from "./ChangePinForm";
 import { SetupLoginForm } from "./SetupLoginForm";
 import { UnlockPinButton } from "./UnlockPinButton";
@@ -141,6 +143,22 @@ export default async function ChildDetailPage({
           </div>
         </div>
       </div>
+
+      <SectionCard realm="account"
+        title="Display name"
+        description="This is what your tutor sees on their roster — not your login email or family id."
+        className="rounded-[10px] border-border shadow-sm"
+      >
+        <DisplayNameSetupForm
+          prompt={
+            fullProfile.isSelfLearner
+              ? "How do you want to be seen by this tutor?"
+              : "How do you want your child to be seen by this tutor?"
+          }
+          initialDisplayName={fullProfile.displayName}
+          saveDisplayName={updateLearnerDisplayNameAction.bind(null, id)}
+        />
+      </SectionCard>
 
       <SectionCard realm="account"
         title="Learner details"

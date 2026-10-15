@@ -21,7 +21,7 @@ import {
   validateLearnerUsername,
 } from "@/lib/learner-credential-validation";
 import { ensureFamilyId, formatLearnerLoginHandle } from "@/lib/family-id";
-import { sanitizeClaimDisplayName } from "@/lib/claim-display-name";
+import { saveOwnedLearnerDisplayName } from "@/lib/learner-display-name";
 import {
   ALL_OFF_CONSENT_FLAGS,
   ConsentAlreadySavedError,
@@ -172,47 +172,15 @@ export async function POST(
   }
 
   if (action === "display_name") {
-    const displayName = sanitizeClaimDisplayName(
-      String((bodyObj as { displayName?: string }).displayName ?? "")
-    );
-    if (!displayName) {
-      return NextResponse.json({ error: "missing_display_name" }, { status: 400 });
-    }
-
-    const learnerProfile = await db.learnerProfile.findUnique({
-      where: { id: learnerProfileId },
-      select: {
-        accountHolderId: true,
-        isSelfLearner: true,
-        accountHolder: { select: { displayName: true } },
-      },
+    const saved = await saveOwnedLearnerDisplayName({
+      accountHolderId: ahSession.accountHolderId,
+      learnerProfileId,
+      rawDisplayName: String((bodyObj as { displayName?: string }).displayName ?? ""),
     });
-    if (!learnerProfile || learnerProfile.accountHolderId !== ahSession.accountHolderId) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (!saved.ok) {
+      const status = saved.error === "missing_display_name" ? 400 : 403;
+      return NextResponse.json({ error: saved.error }, { status });
     }
-
-    await db.$transaction(async (tx) => {
-      await tx.learnerProfile.update({
-        where: { id: learnerProfileId },
-        data: { displayName },
-      });
-      if (!invite.student.organizationId) {
-        await tx.student.update({
-          where: { id: invite.studentId },
-          data: { name: displayName },
-        });
-      }
-      if (learnerProfile.isSelfLearner) {
-        const ahDisplay = learnerProfile.accountHolder.displayName?.trim();
-        if (!ahDisplay) {
-          await tx.accountHolder.update({
-            where: { id: ahSession.accountHolderId },
-            data: { displayName },
-          });
-        }
-      }
-    });
-
     return NextResponse.json({ ok: true });
   }
 

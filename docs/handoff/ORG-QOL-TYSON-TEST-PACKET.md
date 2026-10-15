@@ -375,9 +375,11 @@ Run top to bottom. Later items reuse the learner you create earlier.
 2. Read the prompt under it.
 3. Try to type more than 80 characters into **Display name**.
 4. Put in a normal name (for example `Maya Rodriguez`) and press **Save display name**.
-5. On Device A, refresh **Students** and find this learner.
+5. The display name field stays on the page. Change it (for example `Maya R. Lopez`) and press **Save display name** again.
+6. On Device A, refresh **Students** and find this learner.
+7. On Device B, open the family dashboard and press **Manage** for this learner. The same display name field is there, still showing the latest saved name. Change it once more and save.
 
-**Expect:** The prompt for a child is "How do you want your child to be seen by this tutor?" The box stops accepting characters at 80. Saving shows "Saved how you'll appear to this tutor." The tutor's list shows the name you saved, not the parent's email address.
+**Expect:** The prompt for a child is "How do you want your child to be seen by this tutor?" The box stops accepting characters at 80. Saving shows "Saved how you'll appear to this tutor." The field stays so you can change the name and save again. The tutor's list shows the latest name you saved, not the parent's email address. **Manage** on the family dashboard opens that same field for a child and for a self-learner.
 
 **Ignore this run:** The self-learner prompt is item 14.
 
@@ -387,7 +389,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[human-only: what the roster shows after a real save]`
+**Coverage:** `[automated: src/__tests__/account/DisplayNameSetupForm.dom.test.tsx › sends a second, different name after the first save]` — `[automated: src/__tests__/identity/claim-setup-consent-save.test.ts › replaces the tutor roster name when the display name is saved again]` — `[human-only: the tutor's Students list after a real save]`
 
 **Notes:**
 
