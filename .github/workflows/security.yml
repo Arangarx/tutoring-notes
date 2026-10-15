@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - sec/audit-pipeline
+      - master
 
 permissions:
   contents: read
@@ -16,17 +17,14 @@ jobs:
     name: Semgrep
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
       - name: Install Semgrep
         run: pip install semgrep
-      # Report-only. Findings (and a non-zero scan exit) do not fail this job.
-      # After the baseline is triaged, remove continue-on-error and add --error
-      # to the semgrep command to block on findings.
+      # Blocks on findings. A non-zero scan exit fails this job.
       - name: Scan
-        continue-on-error: true
         env:
           SEMGREP_SEND_METRICS: "off"
         run: >-
@@ -35,12 +33,13 @@ jobs:
           --config p/typescript
           --config p/react
           --config p/nextjs
+          --error
 
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
       - name: Install gitleaks
@@ -60,8 +59,8 @@ jobs:
     name: npm audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "20"
           cache: npm
@@ -85,8 +84,8 @@ jobs:
     name: Jest security tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "20"
           cache: npm

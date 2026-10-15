@@ -6,16 +6,16 @@ Work happens on branch `sec/audit-pipeline`, which uses its own preview database
 
 ## Standing CI checks
 
-[`.github/workflows/security.yml`](../../.github/workflows/security.yml) runs on pull requests and on pushes to `sec/audit-pipeline`. It is static analysis, dependency audit, secret scanning, and the existing Jest security tests. It does not call any deployed site, and it does not run an autonomous assessment.
+[`.github/workflows/security.yml`](../../.github/workflows/security.yml) runs on pull requests and on pushes to `sec/audit-pipeline` and `master`. It is static analysis, dependency audit, secret scanning, and the existing Jest security tests. It does not call any deployed site, and it does not run an autonomous assessment.
 
 | Job | What it runs | Result |
 | --- | --- | --- |
-| Semgrep | OSS CLI with `p/owasp-top-ten`, `p/typescript`, `p/react`, `p/nextjs` | Report-only until the baseline is triaged |
+| Semgrep | OSS CLI with `p/owasp-top-ten`, `p/typescript`, `p/react`, `p/nextjs`, and `--error` | Fails the job on a finding. The earlier `yaml.github-actions.security.github-actions-mutable-action-tag` findings were in this workflow; pinning those actions cleared them. A local scan after the pin reported 0 findings |
 | gitleaks | `gitleaks detect` on the repository | Fails if a secret is found |
 | npm audit | `node scripts/check-npm-audit.mjs` (runs `npm audit --audit-level=high --omit=dev`) | Fails when a high or critical production advisory is not listed in [`scripts/audit-allow.json`](../../scripts/audit-allow.json). Also fails when a listed package is no longer high or critical. Rechecked 2026-10-13: 0 critical, 0 high. The allowlist is empty |
 | Jest security | `npx jest src/__tests__/security` only | Fails if those tests fail. The four files mock the database and do not need a live database. This job does not run the full Jest suite or Playwright |
 
-Local lint loads `eslint-plugin-security`'s recommended rules as warnings so existing code does not fail `next lint` or `next build`. Those warnings can be promoted to errors after triage.
+Local lint loads `eslint-plugin-security`'s recommended rules as warnings so existing code does not fail `next lint` or `next build`. A promotion to errors is a separate triage because the existing warning count would fail next lint.
 
 ## Accepted production highs
 
@@ -40,6 +40,4 @@ The 2026-10-13 highs (0 critical, 7 high) were cleared without downgrading Prism
 
 ZAP is the bounded scanner (`scripts/run-local-zap.mjs`). Docker is not a firewall. The container reaches the host app at `http://host.docker.internal:3000`. The only permitted app origin is `http://127.0.0.1:3000`. Preflight runs first, including for `--print-only`. `--print-only` does not require port 3000. A real scan exits 1 if port 3000 is down, and exits 1 if something is listening on port 3000 on a non-loopback address. Start the app with `npx next dev -H 127.0.0.1`. The script does not start the server and it does not pull images.
 
-Strix and Shannon stay unused until outbound network is limited to the app plus one model provider. `STRIX_TELEMETRY=0` is required before any future Strix run.
-
-Autonomous assessment is deferred until Andrew can supervise.
+Autonomous assessment is parked until Andrew decides. Strix and Shannon are not installed. `STRIX_TELEMETRY=0` stays required before any future Strix run, and outbound network for that run must stay limited to the app plus one model provider.
