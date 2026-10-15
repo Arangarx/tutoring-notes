@@ -195,7 +195,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Map/reduce accuracy + abstain-on-low-content + eval harness** —  (§5)
 - **SMOKE-NOTES-1** — post-End shimmer; form must stay visible (§1)
 - **SMOKE-NOTES-3** — notes fabricate on non-teaching talk (§1)
-- **WS-K** — incremental reduce; End ≤2–3s notes ready (§3)
+- **WS-K** — fold the running note during the session; End only adds the tail (§3)
 
 #### Whiteboard, sync & replay
 
@@ -676,6 +676,8 @@ Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
 
 **[P1][WB] AV-CAM-BUTTON-ACQUIRING (2026-10-06):** the camera button reads Off while the student camera is still starting (`isCamMuted` starts true); clicking it then means turn on, and the in-flight acquire sets `isCamMuted(false)` regardless (`useLiveAV.ts` ~1378/~1505). Consider an explicit starting state on the button. The contract comment at `useLiveAV.ts` ~347–351 does not match :1378. Opus-owned.
 
+**[P1][WB] TYSON-CAM-NO-KEY (2026-10-15, packet item 6, not fixed):** Tyson joined with no `#k=` in the address. The student saw their own camera. The tutor’s student tile stayed empty. Not reproduced on this pass. `#k=` is the whiteboard encryption fragment. Middleware never reads it. `ServerLiveKeySeeder` writes it and `JoinHashRestorer` puts it back from sessionStorage. `useLiveAV` does not read it, so a missing key does not explain a missing camera. Do not change the mesh on a guess. Next step is one captured session where the tutor tile is empty and the student tile is not, with the `[avx]` log.
+
 **[P2][WB] WB-REPLAY-PDF-PLACEHOLDER** — parent share PDF boards show placeholders. Asset hydrate / share proxy.
 
 **[P2][WB] WB-REPLAY-REOPEN-START-AT-0** — pause/hide then Replay starts at 0. Non-blocking for Sarah; REAL-FAIL waived.
@@ -841,8 +843,23 @@ Session-level idle auto-end / cost guard.
 **[P2][REC] WS-K prod migration apply**  
 `20260705000000_wsk_live_reduce_watermark`.
 
-**[P1][NOTES] WS-K — incremental reduce; End ≤2–3s notes ready**  
-`notes-worker.ts` live reduce landed partially; **OPEN:** End fast-path invariant ≤2–3s not dedicated backlog row until now. Worker + watermark migration exist; verify End latency on hardware.
+**[P1][NOTES] WS-K — fold the running note during the session; End only adds the tail (Andrew 2026-10-15)**  
+Andrew: the tutor stays on this session until the notes are filled. Do not send them to the next student while finalize runs. The wait itself has to get short.
+
+What already runs while the session is live (`transcription-worker.ts` → `extract-chunk.ts` → `enqueueLiveReduce`):
+
+- Each finished audio chunk is transcribed, then mapped into topics, student questions, corrections, and follow-ups.
+- A live reduce rewrites `TutorNote.content` and a chunk watermark. Note status stays `pending`. It fires only after 5 new done chunks or 2 minutes (`LIVE_REDUCE_CHUNK_THRESHOLD`, `LIVE_REDUCE_TIME_MS` in `notes-enqueue.ts`).
+- `processLiveReduceJob` and the End job both call `buildReducePrompt` on **every** extraction so far. The End fast path (`finalize_fast_path` in `notes-worker.ts`) skips that call only when the watermark already covers every done chunk and nothing is still transcribing.
+
+Why End is still long:
+
+1. `handleEndSession` does not show review until the last segment has uploaded, the outbox drain finishes (15s budget; timeout copy is “Still saving audio”), `events.json` uploads, the snapshot PNG is attempted, and `finalizeWhiteboardSessionFromBackend` returns. Notes are started inside that finalize, so they cannot appear before it.
+2. End usually lands between live reduces (up to 4 chunks, or up to 2 minutes of audio) or while the tail chunk is still in Whisper. The fast path misses, and the worker sends every extraction to the model again. That prompt grows with the session. If chunks are still `pending` or `transcribing`, the `after()` poll waits up to 4.5 minutes (`NOTES_COMPLETION_TIMEOUT_MS` is 5 minutes).
+
+The work that belongs during the session: keep the map. Change the live reduce from “rewrite the whole hour” to “fold the new maps into the note already stored.” The prompt is the previous structured note plus only the chunks past the watermark. Same fields: topics, assessment, plan, links. On End, one fold of the tail, started as soon as that tail transcript exists, while events and the snapshot upload. Do not re-read the hour. Do not drop audio, the upload, or the note. Do not rewrite `lifecycle-machine.ts`, `upload-outbox.ts`, or `endWhiteboardSession` to leave early. Read `docs/RECORDER-LIFECYCLE.md` before any change to the await chain in `handleEndSession`.
+
+Quality bar: a fold must not drop a fact that one full reduce of the same extractions would keep. The test is that fixture, red before the fold exists. A timer-only test does not count. The long End wait stays a Playwright gap until that behavior exists (§9).
 
 **[P1][REC] WS-G — server-side tutor:mic concat replay master**  
 `concatBlobUrl` / `buildReplayAudioPayload` partial; formal `tutor:mic:concat` replay master per plan not complete.
@@ -1220,7 +1237,7 @@ Perceived perf.
 **[P1][NOTES] Map/reduce accuracy + abstain-on-low-content + eval harness**  
 Remainder: formal eval harness and abstain bar. Prompts/models exist.
 
-**[P1][NOTES] WS-K — see §3** (incremental reduce + End latency).
+**[P1][NOTES] WS-K — see §3** (fold the running note; End only adds the tail).
 
 **[P2][NOTES] SMOKE-NOTES-2 — live/progressive notes during session**  
 DEFERRED post-Sarah. Incremental reduce + live surface; distinct from WS-K End fast-path.
@@ -1804,8 +1821,8 @@ Lower priority.
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
-**[P2][TEST] PLAYWRIGHT-GAP — long End wait before review (2026-10-12)**  
-The long End wait (upload drain and the caller in front of endWhiteboardSession) is a PLAYWRIGHT-GAP and is not measured by the notes-blur tests. Do not add timing logs for it.
+**[P2][TEST] PLAYWRIGHT-GAP — long End wait before review (2026-10-12; goal corrected 2026-10-15)**  
+The tutor still waits on the upload drain and the caller in front of `endWhiteboardSession` before review. Notes-blur tests do not measure it. Do not add timing logs. The product goal is WS-K in §3: a running note during the session, and End only folds the tail. The tutor does not leave for the next student while that runs. A timer-only test does not count.
 
 **[P2][TEST] PLAYWRIGHT-GAP — on-page Record/Upload resilience**  
 On-page Record/Upload resilience has no surface until that recorder returns. `tests/audio-upload.spec.ts` skips the pending-segment and transcribe cases. The Notes page coming-soon sentence stays a real test.
