@@ -34,6 +34,7 @@ import { db } from "@/lib/db";
 import {
   createScheduledSession,
   deleteScheduledSession,
+  listScheduleStudentOptions,
   listScheduledSessionsForTutor,
   updateScheduledSession,
 } from "@/app/admin/schedule/actions";
@@ -62,6 +63,88 @@ describe("scheduled session actions", () => {
     requireStudentScopeMock.mockReset();
     assertOwnsStudentMock.mockReset();
     assertOwnsStudentMock.mockResolvedValue(undefined);
+  });
+
+  it("schedules a claimed child with no username or PIN, and a child who has a login", async () => {
+    const tutor = await createTutor();
+    const ah = await db.accountHolder.create({
+      data: {
+        email: `${uniq("schedule-ah")}@example.com`,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const noLogin = await db.learnerProfile.create({
+      data: {
+        accountHolderId: ah.id,
+        displayName: "No Login Child",
+        isSelfLearner: false,
+      },
+    });
+    const withLogin = await db.learnerProfile.create({
+      data: {
+        accountHolderId: ah.id,
+        displayName: "Has Login Child",
+        isSelfLearner: false,
+      },
+    });
+    await db.learnerCredential.create({
+      data: {
+        learnerProfileId: withLogin.id,
+        accountHolderId: ah.id,
+        username: uniq("kid"),
+        secretHash: "test-hash-not-used",
+      },
+    });
+    const studentNo = await db.student.create({
+      data: {
+        name: "No Login Child",
+        adminUserId: tutor.id,
+        learnerProfileId: noLogin.id,
+      },
+    });
+    const studentYes = await db.student.create({
+      data: {
+        name: "Has Login Child",
+        adminUserId: tutor.id,
+        learnerProfileId: withLogin.id,
+      },
+    });
+    requireStudentScopeMock.mockResolvedValue({
+      kind: "admin",
+      adminId: tutor.id,
+      email: tutor.email,
+    });
+
+    const options = await listScheduleStudentOptions();
+    expect(options.map((row) => row.id).sort()).toEqual(
+      [studentNo.id, studentYes.id].sort()
+    );
+    expect(await db.learnerCredential.count({ where: { learnerProfileId: noLogin.id } })).toBe(0);
+
+    const noLoginSession = await createScheduledSession({
+      studentId: studentNo.id,
+      date: "2026-08-21",
+      startTime: "16:00",
+      endTime: "17:00",
+      plannedDurationMinutes: 60,
+      subject: "No login",
+    });
+    const withLoginSession = await createScheduledSession({
+      studentId: studentYes.id,
+      date: "2026-08-22",
+      startTime: "16:00",
+      endTime: "17:00",
+      plannedDurationMinutes: 60,
+      subject: "Has login",
+    });
+
+    expect(noLoginSession.refusal).toBeUndefined();
+    expect(noLoginSession.id.length).toBeGreaterThan(0);
+    expect(withLoginSession.refusal).toBeUndefined();
+    expect(withLoginSession.id.length).toBeGreaterThan(0);
+
+    const saved = await db.scheduledSession.findUnique({ where: { id: noLoginSession.id } });
+    expect(saved?.studentId).toBe(studentNo.id);
   });
 
   it("creates, lists, updates, and deletes a session for the owning tutor", async () => {

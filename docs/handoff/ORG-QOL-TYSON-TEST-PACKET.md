@@ -109,7 +109,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 2. On Device B, sign in as the **parent** for that same learner at `/account/login`. You should land on a page with the small label **Family account**.
 3. Find **Upcoming sessions**. The line under the title says "Join opens shortly before each scheduled start." The row shows the learner's name.
 4. If the appointment starts in **less than 15 minutes**, press **Join**. It may say **Joining…**.
-5. If every appointment is more than 15 minutes away, on Device A go to **Schedule**, press **New session**, pick that student, set **Start time** to about 10 minutes from now, press **Save session**, then refresh Device B and press **Join**.
+5. If every appointment is more than 15 minutes away, on Device A go to **Schedule**, press **New session**, pick that student, set **Start time** to about 10 minutes from now, press **Save session**, then refresh Device B and press **Join**. This works when the child has no username and no PIN. Do not set up their login first. A child who already has a login is scheduled the same way.
 
 **Expect:** **Join** opens the whiteboard on Device B and you reach the waiting room (a heading like "Connecting…" or "You're in—… will start the session shortly"). You do **not** type the child's PIN for this step. Device A and Device B are in the same session: on Device A, press **Start session** once Device B has connected. A line you draw on Device A shows up on Device B.
 
@@ -121,7 +121,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-bridge.spec.ts › Dashboard Join opens the room]` — `[human-only: two real devices, drawing shows up on the other screen]`
+**Coverage:** `[automated: src/__tests__/schedule/scheduled-session-actions.test.ts › schedules a claimed child with no username or PIN, and a child who has a login]` — `[automated: tests/integration/wb-org-qol-bridge.spec.ts › Dashboard Join opens the room]` — `[human-only: two real devices, drawing shows up on the other screen]`
 
 **Notes:**
 
