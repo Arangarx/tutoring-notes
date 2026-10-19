@@ -735,14 +735,23 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       if (payload.type === "offer") {
         const offerCollision =
           entry.makingOffer || pc.signalingState !== "stable";
-        entry.ignoreOffer = !entry.polite && offerCollision;
+        // A live glare stays impolite-ignores. A link that has already
+        // failed or dropped is not a live glare: the PC is often stuck
+        // in have-local-offer because the first answer never arrived.
+        // Ignoring the other side's Retry / polite auto-restart there
+        // leaves one tile on "Connection failed" and the other on
+        // "Connecting…" forever.
+        const iceDead =
+          pc.iceConnectionState === "failed" ||
+          pc.iceConnectionState === "disconnected";
+        entry.ignoreOffer = !entry.polite && offerCollision && !iceDead;
         if (entry.ignoreOffer) {
           log.log(
             `peer=${remotePeerId} event=offer-ignore reason=glare-impolite signalingState=${pc.signalingState}`
           );
           return;
         }
-        if (offerCollision && entry.polite) {
+        if (offerCollision && (entry.polite || iceDead)) {
           // Polite peer rolls back its own offer before accepting.
           log.log(
             `peer=${remotePeerId} event=glare-rollback signalingState=${pc.signalingState}`

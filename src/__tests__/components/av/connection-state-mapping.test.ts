@@ -60,6 +60,20 @@ describe("getConnectionStatePill — Phase 4d polish mapping", () => {
     expect(shouldHidePill(pill)).toBe(false);
   });
 
+  test("phone still reporting Connecting while ICE has failed shows Connection failed with retry", () => {
+    // Mobile browsers often leave connectionState at "connecting" or
+    // "new" after ICE has already failed. The tile must not stay on
+    // "Connecting…" with no Retry, or the waiting room looks alive
+    // while the other side is already on Connection failed.
+    for (const pc of ["connecting", "new"] as const) {
+      const pill = getConnectionStatePill(pc, "failed");
+      expect(pill.label).toBe("Connection failed");
+      expect(pill.color).toBe("red");
+      expect(pill.showRetry).toBe(true);
+      expect(pill.kind).toBe("failed");
+    }
+  });
+
   test("closed → red 'Disconnected', no retry (peer left; restart can't bring them back)", () => {
     const pill = getConnectionStatePill("closed", "closed");
     expect(pill.label).toBe("Disconnected");
