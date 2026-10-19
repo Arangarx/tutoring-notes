@@ -362,8 +362,13 @@ Three real causes from the pilot:
   add now cover both halves. If this regresses, look first at
   `sync-client.ts` `lastSignalsByTopic` / `onRemoteSignal` and
   `peer-mesh.ts` line ~422.
-- TURN not deployed → mobile-cellular peer fails symmetric-NAT
-  traversal. Open backlog ticket.
+- No relay path → phone and laptop on one home Wi‑Fi (router without NAT
+  hairpinning) or a symmetric-NAT cellular peer never connect: tutor tile
+  "Connection failed", student "Connecting…", Start disabled (Tyson
+  2026-10-19). TURN now comes from Cloudflare per page load
+  (`turn-ice-servers.ts` → `LiveIceServersProvider` → `useLiveAV`). Check
+  the server log for `[avx] action=turn_credentials result=` and the
+  peer-mesh `event=add ... iceServers=N` count (STUN only = the default count).
 - Camera grant arrived after mesh built → was tearing down the
   mesh until 4c. `addLocalTrackToAllPeers` is the fix.
 

@@ -863,8 +863,7 @@ Pair with IDB persistence.
 **[P1][REC] rid= / lifecycle log coverage (reliability #13, #14)**  
 Partial `rid=` on actions; recording lifecycle log format incomplete.
 
-**[P2][REC] TURN (A4 Slice-C)**  
-STUN-only; slow first peer connect.
+**[P2][REC] TURN (A4 Slice-C)** — built 2026-10-19 (Cloudflare TURN, `src/lib/av/turn-ice-servers.ts`) after Tyson's same-Wi‑Fi remote session never connected. Live once `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN` are set in Vercel. Open: Privacy subprocessor line for Cloudflare (relays encrypted media; follow `docs/LEGAL-SYNC.md`).
 
 **[P2][AV] Slow first peer connect**  
 Instrumentation + optional TURN; camera-grant-before-join UX.

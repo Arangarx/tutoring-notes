@@ -35,6 +35,19 @@ describe("getIceServersForBrowser", () => {
     });
   });
 
+  test("server-issued TURN servers are appended after STUN", () => {
+    delete process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS_JSON;
+    const turn = { urls: ["turns:turn.example:443?transport=tcp"], username: "u", credential: "c" };
+    const s = getIceServersForBrowser([turn]);
+    expect(s.slice(0, DEFAULT_ICE_SERVERS.length)).toEqual(DEFAULT_ICE_SERVERS);
+    expect(s[s.length - 1]).toEqual(turn);
+  });
+
+  test("null server-issued list keeps the STUN defaults", () => {
+    delete process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS_JSON;
+    expect(getIceServersForBrowser(null)).toEqual(DEFAULT_ICE_SERVERS);
+  });
+
   test("invalid JSON falls back to defaults", () => {
     process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS_JSON = "not-json";
     expect(getIceServersForBrowser()).toEqual(DEFAULT_ICE_SERVERS);

@@ -27,6 +27,8 @@ import {
   getAccountHolderSessionFromHeaders,
 } from "@/lib/server-session";
 import { redirectJoinWrongPrincipal } from "@/lib/join-scope";
+import { LiveIceServersProvider } from "@/components/av/LiveIceServersProvider";
+import { getTurnIceServers } from "@/lib/av/turn-ice-servers";
 import {
   assertIsSessionParticipant,
   verifyIsSessionParticipant,
@@ -307,9 +309,12 @@ export default async function JoinSessionPage({
     );
   }
 
+  const turnIceServers = await getTurnIceServers(`wbsid=${session.id} role=student`);
+
   // JoinHashRestorer runs before the student shell so the #k= fragment is
   // in place when the shell's key-read effect fires.
   return (
+    <LiveIceServersProvider iceServers={turnIceServers}>
     <JoinHashRestorer sessionId={sessionId}>
       <WhiteboardSessionShell
         role="student"
@@ -326,5 +331,6 @@ export default async function JoinSessionPage({
         learnerProfileId={effectiveLearnerProfileId}
       />
     </JoinHashRestorer>
+    </LiveIceServersProvider>
   );
 }

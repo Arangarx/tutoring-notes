@@ -334,6 +334,16 @@
   - International numbers submitted: rejected before send (validation returns null / false).
 - **Migration check**: to move off Twilio, replace `sendViaTwilioHttp()` in `src/lib/sms.ts` with an equivalent HTTP sender (or SDK) for the new provider; update `TWILIO_*` env vars to the new provider's credentials; re-validate US E.164 assumptions if the new provider supports international; update Privacy/Terms subprocessor disclosures and `docs/LEGAL-SYNC.md`; confirm `setSmsSenderForTests` seam still works for CI.
 
+### 4.6 Cloudflare TURN (live A/V relay)
+
+- **Assumption**: live video/audio is peer-to-peer WebRTC. When no direct path exists (same home Wi‑Fi on a router without NAT hairpinning, symmetric/carrier NAT, school firewalls), media relays through Cloudflare TURN. Media stays DTLS-SRTP encrypted end to end; Cloudflare sees peer IPs and ciphertext only.
+- **Integration**: the tutor workspace page and the learner `/join` page call `getTurnIceServers` (`src/lib/av/turn-ice-servers.ts`) at render: `POST https://rtc.live.cloudflare.com/v1/turn/keys/{KEY_ID}/credentials/generate-ice-servers` with a bearer token, `ttl` 86400s. Servers reach `useLiveAV` through `LiveIceServersProvider`. Port-53 URLs are dropped (browsers refuse them). Server-to-server fetch, so no CSP change; WebRTC ICE is not governed by `connect-src`.
+- **Env**: `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN` (server-only). Unset → STUN only, logged `[avx] action=turn_credentials result=unconfigured`.
+- **Failure mode**: Cloudflare error or >2.5s → page renders with STUN only (never blocks entering the room). Peers that need a relay then fail as before.
+- **Cost**: billed per GB relayed, only for connections that need the relay; 1 TB/month free, then about $0.05/GB.
+- **Test seam**: with `PLAYWRIGHT_TEST=1` the `pw_turn_ice_servers` cookie supplies the list; `tests/integration/wb-av-mesh.spec.ts` › "relay-only peers connect through the server-issued TURN servers" runs a local `coturn/coturn:4.6` container.
+- **Migration check**: any TURN provider works if `getTurnIceServers` returns `RTCIceServer[]` with short-lived credentials. Static credentials can also go in `NEXT_PUBLIC_WEBRTC_ICE_SERVERS_JSON` (visible in the page).
+
 ---
 
 ## 5. Networking, security, real-time

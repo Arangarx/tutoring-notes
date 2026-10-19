@@ -6,6 +6,8 @@ import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
 import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persisted-state";
 import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
+import { LiveIceServersProvider } from "@/components/av/LiveIceServersProvider";
+import { getTurnIceServers } from "@/lib/av/turn-ice-servers";
 
 /**
  * Tutor-side live whiteboard workspace.
@@ -122,7 +124,13 @@ export default async function WhiteboardWorkspacePage({
         )
       : null;
 
+  const turnIceServers =
+    detail.endedAt || !syncEnabled
+      ? null
+      : await getTurnIceServers(`wbsid=${detail.id} role=tutor`);
+
   return (
+    <LiveIceServersProvider iceServers={turnIceServers}>
     <WhiteboardSessionShell
       role="tutor"
       whiteboardSessionId={detail.id}
@@ -147,5 +155,6 @@ export default async function WhiteboardWorkspacePage({
       initialReviewSurface={initialReviewSurface}
       initialPersistedState={initialPersistedState}
     />
+    </LiveIceServersProvider>
   );
 }
