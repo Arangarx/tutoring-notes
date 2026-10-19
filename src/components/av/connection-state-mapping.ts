@@ -14,6 +14,9 @@
  *                            "things are working" state; avoids the
  *                            "green badge fatigue" UX).
  *   connecting/new → "Connecting…" (blue), no retry.
+ *                    Exception: ICE already "failed" → same pill as
+ *                    pc "failed" (phones that never update
+ *                    connectionState).
  *   disconnected   → "Reconnecting…" (amber), no retry. ICE will
  *                    self-heal via the polite-side auto-restart;
  *                    surfacing a retry button here would race the
@@ -117,6 +120,17 @@ export function getConnectionStatePill(
     };
   }
   if (pc === "connecting" || pc === "new") {
+    // Some phones leave connectionState here after ICE has already
+    // failed. Treat that as the failed pill so Retry is available
+    // and the tile does not keep saying Connecting.
+    if (ice === "failed") {
+      return {
+        label: "Connection failed",
+        color: "red",
+        showRetry: true,
+        kind: "failed",
+      };
+    }
     return {
       label: "Connecting…",
       color: "blue",

@@ -910,6 +910,39 @@ describe("createPeerMesh — restart on iceConnectionState 'failed'", () => {
     m.dispose();
   });
 
+  test("impolite side accepts a restart offer when its own ICE has already failed", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    // Local "A" is impolite vs remote "B".
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+    });
+    m.addPeer("B");
+    const pc = instances[0]!;
+
+    // A offered and never got an answer, so the PC stays in
+    // have-local-offer. That is the glare-impolite ignore path.
+    pc.triggerNegotiationNeeded();
+    await flush();
+    expect(pc.signalingState).toBe("have-local-offer");
+
+    pc.setIceConnectionState("failed");
+    await flush();
+
+    // The other side's Retry / polite auto-restart arrives as a new offer.
+    sig.inject("B", { type: "offer", sdp: "restart-offer" });
+    await flush();
+
+    const types = pc.history.map((h) => h.type);
+    expect(types).toContain("setLocalDescription:rollback");
+    expect(types).toContain("setRemoteDescription:offer");
+    expect(types).toContain("createAnswer");
+    expect(sig.sends.filter((s) => s.kind === "answer")).toHaveLength(1);
+    m.dispose();
+  });
+
   test("manual restart(peerId) fires an iceRestart offer regardless of polite role", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
