@@ -9,6 +9,8 @@ import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persist
 import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
 import { readServerLiveKey } from "@/lib/whiteboard/live-key";
 import { ServerLiveKeySeeder } from "@/components/whiteboard/ServerLiveKeySeeder";
+import { LiveIceServersProvider } from "@/components/av/LiveIceServersProvider";
+import { getTurnIceServers } from "@/lib/av/turn-ice-servers";
 
 /**
  * Tutor-side live whiteboard workspace.
@@ -134,8 +136,13 @@ export default async function WhiteboardWorkspacePage({
   const liveKey = detail.endedAt
     ? null
     : readServerLiveKey(detail.id, detail.liveKeyEnc);
+  const turnIceServers =
+    detail.endedAt || !syncEnabled
+      ? null
+      : await getTurnIceServers(`wbsid=${detail.id} role=tutor`);
 
   return (
+    <LiveIceServersProvider iceServers={turnIceServers}>
     <ServerLiveKeySeeder sessionId={detail.id} liveKey={liveKey} role="tutor">
     <WhiteboardSessionShell
       role="tutor"
@@ -168,5 +175,6 @@ export default async function WhiteboardWorkspacePage({
       initialPersistedState={initialPersistedState}
     />
     </ServerLiveKeySeeder>
+    </LiveIceServersProvider>
   );
 }

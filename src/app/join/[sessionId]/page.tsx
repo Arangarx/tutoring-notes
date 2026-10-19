@@ -35,6 +35,8 @@ import {
 } from "@/lib/join-scope";
 import { readServerLiveKey } from "@/lib/whiteboard/live-key";
 import { ServerLiveKeySeeder } from "@/components/whiteboard/ServerLiveKeySeeder";
+import { LiveIceServersProvider } from "@/components/av/LiveIceServersProvider";
+import { getTurnIceServers } from "@/lib/av/turn-ice-servers";
 import {
   assertIsSessionParticipant,
   verifyIsSessionParticipant,
@@ -293,10 +295,12 @@ export default async function JoinSessionPage({
   // into #k= during first client render, so no join link is needed. Legacy
   // sessions return null and keep the link-fragment path.
   const liveKey = readServerLiveKey(session.id, session.liveKeyEnc);
+  const turnIceServers = await getTurnIceServers(`wbsid=${session.id} role=student`);
 
   // JoinHashRestorer runs before the student shell so the #k= fragment is
   // in place when the shell's key-read effect fires.
   return (
+    <LiveIceServersProvider iceServers={turnIceServers}>
     <JoinHashRestorer sessionId={sessionId}>
       <ServerLiveKeySeeder sessionId={session.id} liveKey={liveKey} role="learner">
       <WhiteboardSessionShell
@@ -316,5 +320,6 @@ export default async function JoinSessionPage({
       />
       </ServerLiveKeySeeder>
     </JoinHashRestorer>
+    </LiveIceServersProvider>
   );
 }

@@ -37,7 +37,7 @@ async function clickOpenScheduledRoom(
   scheduledSessionId: string
 ) {
   await tutorPage
-    .getByRole("tabpanel", { name: "Whiteboard" })
+    .getByTestId(`upcoming-session-row-${scheduledSessionId}`)
     .getByTestId(`open-scheduled-room-${scheduledSessionId}`)
     .click();
 }

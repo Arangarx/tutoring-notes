@@ -79,6 +79,7 @@ import {
   type PeerMeshOptions,
 } from "@/lib/av/peer-mesh";
 import { getIceServersForBrowser } from "@/lib/av/webrtc-ice-from-env";
+import { useLiveIceServers } from "@/components/av/LiveIceServersProvider";
 import {
   createSignaling,
   type Signaling,
@@ -807,6 +808,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       },
     [optsLog, sid]
   );
+
+  // Fixed for the page load; a ref so the mesh effect never rebuilds on it.
+  const serverIceServers = useLiveIceServers();
+  const serverIceServersRef = useRef(serverIceServers);
+  serverIceServersRef.current = serverIceServers;
 
   const [localAudioStream, setLocalAudioStream] =
     useState<MediaStream | null>(null);
@@ -1857,7 +1863,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       signaling,
       localPeerId,
       sessionId,
-      iceServers: getIceServersForBrowser(),
+      iceServers: getIceServersForBrowser(serverIceServersRef.current),
       getLocalTracks: () => {
         const tracks: MediaStreamTrack[] = [];
         const aud = localAudioStreamRef.current;
