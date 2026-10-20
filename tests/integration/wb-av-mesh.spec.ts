@@ -213,6 +213,15 @@ const LOCAL_TURN_ICE: RTCIceServer[] = [
     credential: COTURN_PASS,
   },
 ];
+/**
+ * Optional: `PW_REAL_TURN_ICE_JSON` = a provider's ICE server list (e.g.
+ * Cloudflare `generate-ice-servers` output) runs the same test against the
+ * real relay instead of local coturn. Never commit the value.
+ */
+const REAL_TURN_ICE: RTCIceServer[] | null = process.env.PW_REAL_TURN_ICE_JSON
+  ? (JSON.parse(process.env.PW_REAL_TURN_ICE_JSON) as RTCIceServer[])
+  : null;
+const TURN_ICE = REAL_TURN_ICE ?? LOCAL_TURN_ICE;
 
 function docker(args: string): string {
   return execSync(`docker ${args}`, { stdio: ["ignore", "pipe", "pipe"] }).toString();
@@ -253,6 +262,7 @@ async function selectedLocalCandidateTypes(page: Page): Promise<string[]> {
 
 test.describe("live A/V over a TURN relay", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] }, () => {
   test.beforeAll(() => {
+    if (REAL_TURN_ICE) return;
     try {
       docker(`rm -f ${COTURN_CONTAINER}`);
     } catch {
@@ -272,6 +282,7 @@ test.describe("live A/V over a TURN relay", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] 
   });
 
   test.afterAll(() => {
+    if (REAL_TURN_ICE) return;
     try {
       docker(`rm -f ${COTURN_CONTAINER}`);
     } catch {
@@ -287,7 +298,7 @@ test.describe("live A/V over a TURN relay", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] 
     const baseURL = testInfo.project.use.baseURL ?? "http://localhost:3100";
     const turnCookie = {
       name: "pw_turn_ice_servers",
-      value: encodeURIComponent(JSON.stringify(LOCAL_TURN_ICE)),
+      value: encodeURIComponent(JSON.stringify(TURN_ICE)),
       url: baseURL,
     };
     const learnerAuthFile = path.join(process.cwd(), "tests", "integration", ".auth", "learner.json");
