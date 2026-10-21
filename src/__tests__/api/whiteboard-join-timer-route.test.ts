@@ -126,6 +126,9 @@ describe("GET /api/whiteboard/[sessionId]/join-timer — token branch", () => {
       activeMs: 42,
       lastActiveAt: new Date("2026-05-06T12:00:00Z"),
       sessionPhase: "ACTIVE",
+      endedAt: null,
+      adminUserId: "admin_1",
+      student: { organizationId: null, adminUserId: "admin_1" },
     });
     const res = await GET(makeTokenReq(sessionId, token), {
       params: Promise.resolve({ sessionId }),
@@ -198,6 +201,8 @@ describe("GET /api/whiteboard/[sessionId]/join-timer — learner-session branch"
       lastActiveAt: new Date("2026-06-01T10:59:00Z"),
       sessionPhase: "ACTIVE",
       endedAt: new Date("2026-06-01T11:00:00Z"),
+      adminUserId: "admin_1",
+      student: { organizationId: null, adminUserId: "admin_1" },
     });
 
     const res = await GET(makeLearnerReq(sessionId), {
@@ -224,6 +229,8 @@ describe("GET /api/whiteboard/[sessionId]/join-timer — learner-session branch"
       lastActiveAt: new Date("2026-06-01T10:29:00Z"),
       sessionPhase: "ACTIVE",
       endedAt: null,
+      adminUserId: "admin_1",
+      student: { organizationId: null, adminUserId: "admin_1" },
     });
 
     const res = await GET(makeLearnerReq(sessionId), {
@@ -246,6 +253,8 @@ describe("GET /api/whiteboard/[sessionId]/join-timer — learner-session branch"
       lastActiveAt: new Date("2026-06-01T10:14:00Z"),
       sessionPhase: "ACTIVE",
       endedAt: null,
+      adminUserId: "admin_1",
+      student: { organizationId: null, adminUserId: "admin_1" },
     });
 
     const res = await GET(makeLearnerReq(sessionId), {
@@ -304,6 +313,8 @@ describe("GET /api/whiteboard/[sessionId]/join-timer — learner-session branch"
       lastActiveAt: new Date("2026-06-01T10:02:00Z"),
       sessionPhase: "ACTIVE",
       endedAt: null,
+      adminUserId: "admin_1",
+      student: { organizationId: null, adminUserId: "admin_1" },
     });
 
     const res = await GET(makeLearnerReq(sessionId), {
@@ -328,5 +339,75 @@ describe("GET /api/whiteboard/[sessionId]/join-timer — learner-session branch"
       params: Promise.resolve({ sessionId }),
     });
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ACCOUNT-HOLDER BRANCH — cancel deletes the row; the waiting parent/self-
+// learner has only mynk_ah_session (no learner cookie). A missing row must
+// 404 so the overlay can show "Session was canceled". A row that exists but
+// this account holder cannot join stays a refusal (not 404).
+// ---------------------------------------------------------------------------
+
+describe("GET /api/whiteboard/[sessionId]/join-timer — account-holder cookie", () => {
+  const sessionId = "wb_sess_ah_cancel";
+  const accountHolderId = "ah_parent_1";
+
+  function makeAhReq() {
+    return new Request(`http://localhost/api/whiteboard/${sessionId}/join-timer`, {
+      headers: { Cookie: "mynk_ah_session=fake-ah-cookie" },
+    });
+  }
+
+  beforeEach(() => {
+    getLearnerSessionMock.mockResolvedValue(null);
+    getAccountHolderSessionMock.mockResolvedValue({ accountHolderId });
+    resolveAhJoinLearnerProfileIdMock.mockResolvedValue(null);
+  });
+
+  it("404 when the account-holder cookie is valid, the session row is gone, and there is no learner cookie", async () => {
+    findUniqueSessionMock.mockResolvedValue(null);
+
+    const res = await GET(makeAhReq(), {
+      params: Promise.resolve({ sessionId }),
+    });
+
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toBe("Not found.");
+  });
+
+  it("refuses when the account-holder cookie is valid but the session belongs to someone else", async () => {
+    // Row is present. Resolver denies (not the owner). Must not become 404 —
+    // that status is what the waiting overlay treats as "canceled".
+    findUniqueSessionMock.mockResolvedValue({
+      id: sessionId,
+      activeMs: 0,
+      lastActiveAt: null,
+      sessionPhase: "PENDING",
+      endedAt: null,
+      adminUserId: "admin_other",
+      student: { organizationId: null, adminUserId: "admin_other" },
+    });
+
+    const res = await GET(makeAhReq(), {
+      params: Promise.resolve({ sessionId }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).not.toBe("Not found.");
+  });
+
+  it("400 when the request has no cookies and no token", async () => {
+    getLearnerSessionMock.mockResolvedValue(null);
+    getAccountHolderSessionMock.mockResolvedValue(null);
+
+    const res = await GET(
+      new Request(`http://localhost/api/whiteboard/${sessionId}/join-timer`),
+      { params: Promise.resolve({ sessionId }) }
+    );
+
+    expect(res.status).toBe(400);
   });
 });

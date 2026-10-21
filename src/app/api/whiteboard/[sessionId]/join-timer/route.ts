@@ -181,7 +181,29 @@ export async function GET(
         sessionId,
         ahSession.accountHolderId
       );
-      if (resolved) effectiveLearnerProfileId = resolved.learnerProfileId;
+      if (resolved) {
+        effectiveLearnerProfileId = resolved.learnerProfileId;
+      } else {
+        // Cancel deletes the WhiteboardSession row. The resolver returns null
+        // both when that row is gone and when the row exists but this account
+        // holder does not own it. Only a missing row is the cancel signal
+        // (404, same body as the learner-cookie path). An existing row stays
+        // the refusal below — 404 is what the waiting overlay treats as canceled.
+        const stillThere = await withDbRetry(
+          () =>
+            db.whiteboardSession.findUnique({
+              where: { id: sessionId },
+              select: { id: true },
+            }),
+          { label: "joinTimer.ahSessionExists" }
+        );
+        if (!stillThere) {
+          console.info(
+            `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId} action=ah_join_session_missing accountHolderId=${ahSession.accountHolderId}`
+          );
+          return NextResponse.json({ error: "Not found." }, { status: 404 });
+        }
+      }
     }
   }
 

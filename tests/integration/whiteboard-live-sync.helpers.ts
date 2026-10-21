@@ -12,6 +12,11 @@ import {
   TEST_SELF_LEARNER,
 } from "../visual/helpers";
 import {
+  seedParentAccountHolder,
+  seedParentConsentFixture,
+  TEST_PARENT,
+} from "./identity/identity.helpers";
+import {
   followWireFromTutorAppState,
   studentScrollFromFollowCenter,
   viewportSceneCenterFromScroll,
@@ -1323,6 +1328,60 @@ export async function seedSelfLearnerWbSession(opts?: {
     accountHolderId,
     ahEmail: TEST_SELF_LEARNER.email,
     ahPassword: TEST_SELF_LEARNER.password,
+  };
+}
+
+/**
+ * PENDING session whose child learner is owned by a password account holder.
+ * The parent joins as that child (mynk_ah_session only): SessionParticipant
+ * plus a consent snapshot, which /join/[sessionId] requires for a minor.
+ */
+export async function seedParentJoinPendingSession(): Promise<{
+  adminUserId: string;
+  studentId: string;
+  whiteboardSessionId: string;
+  learnerProfileId: string;
+  accountHolderId: string;
+  ahEmail: string;
+  ahPassword: string;
+}> {
+  const adminUserId = await seedTestAdmin();
+  const accountHolderId = await seedParentAccountHolder();
+  const fixture = await seedParentConsentFixture({
+    adminUserId,
+    accountHolderId,
+  });
+  const whiteboardSessionId = await seedOpenWhiteboardSession({
+    adminUserId,
+    studentId: fixture.studentId,
+    sessionPhase: "PENDING",
+  });
+
+  const prisma = new PrismaClient();
+  try {
+    await prisma.sessionParticipant.create({
+      data: {
+        whiteboardSessionId,
+        learnerProfileId: fixture.learnerProfileId,
+      },
+    });
+    await seedHarnessConsentForJoin(prisma, {
+      learnerProfileId: fixture.learnerProfileId,
+      adminUserId,
+      whiteboardSessionId,
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+
+  return {
+    adminUserId,
+    studentId: fixture.studentId,
+    whiteboardSessionId,
+    learnerProfileId: fixture.learnerProfileId,
+    accountHolderId,
+    ahEmail: TEST_PARENT.email,
+    ahPassword: TEST_PARENT.password,
   };
 }
 

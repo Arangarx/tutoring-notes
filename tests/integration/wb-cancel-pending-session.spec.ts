@@ -26,9 +26,11 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   seedWbPendingLiveSyncSession,
+  seedParentJoinPendingSession,
   openTutorAndStudent,
   readEncryptionKeyFromHash,
   loginLearnerInContext,
+  loginAccountHolderInContext,
 } from "./whiteboard-live-sync.helpers";
 import { seedOpenWhiteboardSession, seedTestAdmin, seedTestStudent, TEST_LEARNER } from "../visual/helpers";
 import { TAG } from "../test-tags";
@@ -119,6 +121,76 @@ test.describe(
           await expect(studentPage.getByTestId("wb-waiting-overlay")).not.toBeVisible();
         } finally {
           await close();
+        }
+      }
+    );
+
+    test(
+      "account-holder join: tutor cancel clears the waiting overlay with canceled",
+      async ({ browser }) => {
+        test.setTimeout(150_000);
+
+        const session = await seedParentJoinPendingSession();
+
+        const tutorContext = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 800 },
+        });
+        // Parent / account-holder only. No learner.json cookie.
+        const studentContext = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+        });
+
+        try {
+          await loginAccountHolderInContext(
+            studentContext,
+            session.ahEmail,
+            session.ahPassword
+          );
+
+          const tutorPage = await tutorContext.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+            timeout: 30_000,
+          });
+          await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+          // The workspace writes #k= after hydration; the canvas can paint first.
+          await expect
+            .poll(async () => tutorPage.evaluate(() => window.location.hash), {
+              timeout: 30_000,
+            })
+            .toMatch(/[#&]k=[^&]{16,}/);
+
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+          const studentPage = await studentContext.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(studentPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+            timeout: 90_000,
+          });
+
+          await confirmCancelSession(tutorPage);
+
+          // Poll is 3.5s. A deleted session must surface as canceled, and the
+          // waiting overlay must leave, within a few cycles.
+          const unavailableCard = studentPage.locator('[role="status"]');
+          await expect(unavailableCard).toContainText("canceled", {
+            ignoreCase: true,
+            timeout: 15_000,
+          });
+          await expect(studentPage.getByTestId("wb-waiting-overlay")).not.toBeVisible({
+            timeout: 15_000,
+          });
+        } finally {
+          await tutorContext.close();
+          await studentContext.close();
         }
       }
     );
