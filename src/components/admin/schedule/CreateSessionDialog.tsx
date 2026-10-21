@@ -2,6 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,6 +42,8 @@ import { localDateToInputValue } from "@/lib/schedule/mock-data";
 import {
   endMatchesPlannedLength,
   endTimeForPlannedLength,
+  isLongSessionSpan,
+  sessionSpanMinutes,
 } from "@/lib/schedule/planned-end-time";
 import { readBrowserTimeZone } from "@/lib/time/system-timezone";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
@@ -52,6 +64,14 @@ type CreateSessionDialogProps = {
   instructorOptions?: InstructorOption[];
 };
 
+function describeSpan(startHhmm: string, endHhmm: string): string {
+  const span = sessionSpanMinutes(startHhmm, endHhmm) ?? 0;
+  const hours = Math.floor(span / 60);
+  const minutes = span % 60;
+  const length = minutes ? `${hours} hours ${minutes} min` : `${hours} hours`;
+  return endHhmm < startHhmm ? `${length}, ending the next day` : length;
+}
+
 function buildDefaultDate(defaultDate?: string): string {
   if (defaultDate) return defaultDate;
   return localDateToInputValue(new Date());
@@ -70,6 +90,7 @@ export function CreateSessionDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [longSessionInput, setLongSessionInput] = useState<ScheduledSessionInput | null>(null);
   const router = useRouter();
   const isEdit = !!session;
 
@@ -103,6 +124,7 @@ export function CreateSessionDialog({
       !endMatchesPlannedLength(initialStart, initialEnd, Number(initialDuration))
     );
     setError(null);
+    setLongSessionInput(null);
     // Reset only when the dialog opens. A server refresh must not wipe a refusal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -130,7 +152,14 @@ export function CreateSessionDialog({
       clientTimeZone: readBrowserTimeZone(),
       ...(instructorOptions ? { instructorAdminUserId: instructorId } : {}),
     };
+    if (isLongSessionSpan(input.startTime, input.endTime)) {
+      setLongSessionInput(input);
+      return;
+    }
+    save(input);
+  }
 
+  function save(input: ScheduledSessionInput) {
     startTransition(async () => {
       try {
         const saved =
@@ -381,6 +410,35 @@ export function CreateSessionDialog({
             </Button>
           </DialogFooter>
         </form>
+        <AlertDialog
+          open={longSessionInput !== null}
+          onOpenChange={(next) => {
+            if (!next) setLongSessionInput(null);
+          }}
+        >
+          <AlertDialogContent data-testid="schedule-long-session-confirm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Schedule a long session?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {longSessionInput
+                  ? `This session runs ${describeSpan(longSessionInput.startTime, longSessionInput.endTime)}. Check the start and end times.`
+                  : null}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="schedule-long-session-back">Go back</AlertDialogCancel>
+              <AlertDialogAction
+                data-testid="schedule-long-session-save"
+                onClick={() => {
+                  if (longSessionInput) save(longSessionInput);
+                  setLongSessionInput(null);
+                }}
+              >
+                Save anyway
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

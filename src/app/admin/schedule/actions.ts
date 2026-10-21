@@ -16,6 +16,7 @@ import {
 } from "@/lib/calendar/google-calendar-write";
 import { db, withDbRetry } from "@/lib/db";
 import type { GoogleCalendarUiState } from "@/lib/schedule/google-calendar-ui-state";
+import { sessionSpanMinutes } from "@/lib/schedule/planned-end-time";
 import { toScheduledSessionView } from "@/lib/schedule/scheduled-session-mapper";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
 import { appointmentLiveEntryAllowed } from "@/lib/scheduling/upcoming-sessions";
@@ -48,21 +49,14 @@ export type ScheduledSessionWriteResult = {
   refusal?: string;
 };
 
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-function clockMinutes(value: string): number {
-  return Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-}
-
 function parseScheduledSessionInput(input: ScheduledSessionInput) {
   const date = parseDateOnlyInput(input.date);
   if (!date) return null;
   const subject = input.subject.trim();
   if (!subject) return null;
-  if (!TIME_PATTERN.test(input.startTime) || !TIME_PATTERN.test(input.endTime)) return null;
   // An end clock before the start crosses midnight (utcBoundsFromWallClock
-  // puts the end on the next day); only a zero-length session is invalid.
-  if (clockMinutes(input.endTime) === clockMinutes(input.startTime)) return null;
+  // puts the end on the next day). Null is malformed; 0 is zero-length.
+  if (!sessionSpanMinutes(input.startTime, input.endTime)) return null;
   const plannedDurationMinutes = Number(input.plannedDurationMinutes);
   if (![45, 60, 90].includes(plannedDurationMinutes)) return null;
   return {

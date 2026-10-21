@@ -587,6 +587,59 @@ test.describe("org QoL schedule bridge", () => {
   );
 
   test(
+    "Long session confirm — a span over four hours asks before saving",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      test.setTimeout(120_000);
+      const adminUserId = await seedTestAdmin();
+      const studentName = `LongSpan ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const prisma = new PrismaClient();
+      try {
+        const { id: studentId } = await prisma.student.create({
+          data: { name: studentName, adminUserId, parentEmail: "parent@test.local" },
+          select: { id: true },
+        });
+        const subject = `Long span PW ${Date.now()}`;
+        await page.goto("/admin/schedule");
+        await page.getByTestId("schedule-new-session").first().click();
+        await page.locator("#schedule-student").click();
+        await page.getByRole("option", { name: studentName, exact: true }).click();
+        await page.locator("#schedule-start").fill("10:00");
+        await page.locator("#schedule-end").fill("09:00");
+        await page.locator("#schedule-subject").fill(subject);
+
+        const confirm = page.getByTestId("schedule-long-session-confirm");
+        await page.getByTestId("schedule-save-session").click();
+        await expect(confirm).toBeVisible();
+        await expect(confirm).toContainText("23 hours, ending the next day");
+
+        await page.getByTestId("schedule-long-session-back").click();
+        await expect(confirm).toBeHidden();
+        await expect(page.getByTestId("schedule-create-form")).toBeVisible();
+        expect(
+          await prisma.scheduledSession.count({ where: { adminUserId, studentId, subject } })
+        ).toBe(0);
+
+        await page.getByTestId("schedule-save-session").click();
+        await page.getByTestId("schedule-long-session-save").click();
+        await expect
+          .poll(async () => {
+            const row = await prisma.scheduledSession.findFirst({
+              where: { adminUserId, studentId, subject },
+              select: { startAt: true, endAt: true },
+            });
+            return row?.startAt && row.endAt
+              ? row.endAt.getTime() - row.startAt.getTime()
+              : null;
+          })
+          .toBe(23 * 60 * 60_000);
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
+  );
+
+  test(
     "Midnight schedule edit — a saved same-day session can be edited to cross midnight",
     { tag: [TAG.WB_CHROME] },
     async ({ page }) => {
