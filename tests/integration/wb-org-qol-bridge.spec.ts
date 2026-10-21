@@ -43,6 +43,31 @@ async function clickOpenScheduledRoom(
 }
 
 /**
+ * Saves the schedule dialog and closes it. The shared test admin may hold
+ * other late sessions, so a successful save can leave the dialog open with
+ * the overlap warning instead of closing it.
+ */
+async function saveScheduleDialog(page: import("@playwright/test").Page) {
+  const dialog = page.getByRole("dialog");
+  const saveError = page.getByTestId("schedule-save-error");
+  await page.getByTestId("schedule-save-session").click();
+  await expect
+    .poll(
+      async () =>
+        (await dialog.isHidden()) ||
+        (await page.getByTestId("schedule-overlap-warning").isVisible()) ||
+        (await saveError.isVisible()),
+      { timeout: 30_000 }
+    )
+    .toBe(true);
+  await expect(saveError).toHaveCount(0);
+  if (await dialog.isVisible()) {
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  }
+}
+
+/**
  * Camera + mic permission for contexts opened beside the project browser.
  * Fake media devices are launch args on the wb-regression project, not
  * fields of BrowserContextOptions (those are ignored).
@@ -541,8 +566,7 @@ test.describe("org QoL schedule bridge", () => {
       await expect(page.locator("#schedule-end")).toHaveValue("01:00");
       const subject = `Midnight PW ${Date.now()}`;
       await page.locator("#schedule-subject").fill(subject);
-      await page.getByTestId("schedule-save-session").click();
-      await expect(page.getByRole("dialog")).toBeHidden({ timeout: 30_000 });
+      await saveScheduleDialog(page);
 
       const prisma = new PrismaClient();
       let row = null as Awaited<
@@ -559,6 +583,64 @@ test.describe("org QoL schedule bridge", () => {
       await prisma.$disconnect();
       expect(row?.startAt && row.endAt).toBeTruthy();
       expect(row!.endAt!.getTime() - row!.startAt!.getTime()).toBe(90 * 60_000);
+    }
+  );
+
+  test(
+    "Midnight schedule edit — a saved same-day session can be edited to cross midnight",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      test.setTimeout(120_000);
+      const adminUserId = await seedTestAdmin();
+      const studentName = `MidnightEdit ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const seedPrisma = new PrismaClient();
+      let studentId: string;
+      try {
+        const student = await seedPrisma.student.create({
+          data: { name: studentName, adminUserId, parentEmail: "parent@test.local" },
+          select: { id: true },
+        });
+        studentId = student.id;
+      } finally {
+        await seedPrisma.$disconnect();
+      }
+      const subject = `Midnight edit PW ${Date.now()}`;
+      await page.goto("/admin/schedule");
+      await page.getByTestId("schedule-new-session").first().click();
+      await page.locator("#schedule-student").click();
+      await page.getByRole("option", { name: studentName, exact: true }).click();
+      await page.locator("#schedule-duration").click();
+      await page.getByRole("option", { name: /60 min/ }).click();
+      await page.locator("#schedule-start").fill("22:00");
+      await expect(page.locator("#schedule-end")).toHaveValue("23:00");
+      await page.locator("#schedule-subject").fill(subject);
+      await saveScheduleDialog(page);
+
+      const item = page.getByTestId("schedule-session-item").filter({ hasText: subject });
+      await item.getByTestId("schedule-edit-session").click();
+      await expect(page.getByTestId("schedule-edit-form")).toBeVisible();
+      await page.locator("#schedule-duration").click();
+      await page.getByRole("option", { name: /90 min/ }).click();
+      await page.locator("#schedule-start").fill("23:00");
+      await expect(page.locator("#schedule-end")).toHaveValue("00:30");
+      await saveScheduleDialog(page);
+
+      const prisma = new PrismaClient();
+      try {
+        await expect
+          .poll(async () => {
+            const row = await prisma.scheduledSession.findFirst({
+              where: { adminUserId, studentId, subject },
+              select: { startAt: true, endAt: true },
+            });
+            return row?.startAt && row.endAt
+              ? row.endAt.getTime() - row.startAt.getTime()
+              : null;
+          })
+          .toBe(90 * 60_000);
+      } finally {
+        await prisma.$disconnect();
+      }
     }
   );
 });

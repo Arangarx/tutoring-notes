@@ -303,7 +303,7 @@ describe("org schedule bridge", () => {
 });
 
 describe("org appointment writes", () => {
-  it("rejects an end clock at or before the start and inserts nothing", async () => {
+  it("rejects a zero-length session (end clock equal to start) and inserts nothing", async () => {
     const tutor = await seedAdmin("clock-tutor");
     const student = await db.student.create({
       data: { name: "Clock Student", adminUserId: tutor.id },
@@ -320,6 +320,55 @@ describe("org appointment writes", () => {
       })
     ).rejects.toThrow("NEXT_NOT_FOUND");
     expect(await db.scheduledSession.count({ where: { studentId: student.id } })).toBe(0);
+  });
+
+  it("saves a session that crosses midnight, ending on the next day (Tyson packet item 16)", async () => {
+    const tutor = await seedAdmin("midnight-tutor");
+    const student = await db.student.create({
+      data: { name: "Midnight Student", adminUserId: tutor.id },
+    });
+    mockSession(tutor.email, tutor.id);
+    const created = await createScheduledSession({
+      studentId: student.id,
+      date: "2026-10-20",
+      startTime: "23:30",
+      endTime: "01:00",
+      plannedDurationMinutes: 90,
+      subject: "Late",
+      clientTimeZone: "UTC",
+    });
+    const row = await db.scheduledSession.findUniqueOrThrow({ where: { id: created.id } });
+    expect(row.startAt!.toISOString()).toBe("2026-10-20T23:30:00.000Z");
+    expect(row.endAt!.toISOString()).toBe("2026-10-21T01:00:00.000Z");
+  });
+
+  it("edits an existing same-day session to cross midnight", async () => {
+    const tutor = await seedAdmin("midnight-edit-tutor");
+    const student = await db.student.create({
+      data: { name: "Midnight Edit Student", adminUserId: tutor.id },
+    });
+    mockSession(tutor.email, tutor.id);
+    const created = await createScheduledSession({
+      studentId: student.id,
+      date: "2026-10-20",
+      startTime: "22:00",
+      endTime: "23:00",
+      plannedDurationMinutes: 60,
+      subject: "Late",
+      clientTimeZone: "UTC",
+    });
+    await updateScheduledSession(created.id, {
+      studentId: student.id,
+      date: "2026-10-20",
+      startTime: "23:00",
+      endTime: "00:30",
+      plannedDurationMinutes: 90,
+      subject: "Late",
+      clientTimeZone: "UTC",
+    });
+    const row = await db.scheduledSession.findUniqueOrThrow({ where: { id: created.id } });
+    expect(row.startAt!.toISOString()).toBe("2026-10-20T23:00:00.000Z");
+    expect(row.endAt!.toISOString()).toBe("2026-10-21T00:30:00.000Z");
   });
 
   it("warns on overlapping instants, still inserts, and does not warn when the next start equals the previous end", async () => {

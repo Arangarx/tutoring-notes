@@ -60,9 +60,9 @@ function parseScheduledSessionInput(input: ScheduledSessionInput) {
   const subject = input.subject.trim();
   if (!subject) return null;
   if (!TIME_PATTERN.test(input.startTime) || !TIME_PATTERN.test(input.endTime)) return null;
-  const startMinutes = clockMinutes(input.startTime);
-  const endMinutes = clockMinutes(input.endTime);
-  if (endMinutes <= startMinutes) return null;
+  // An end clock before the start crosses midnight (utcBoundsFromWallClock
+  // puts the end on the next day); only a zero-length session is invalid.
+  if (clockMinutes(input.endTime) === clockMinutes(input.startTime)) return null;
   const plannedDurationMinutes = Number(input.plannedDurationMinutes);
   if (![45, 60, 90].includes(plannedDurationMinutes)) return null;
   return {
