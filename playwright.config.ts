@@ -235,6 +235,8 @@ export default defineConfig({
         "**/integration/wb-share-replay-viewport-phone.spec.ts",
         "**/integration/wb-board-tab-overflow.spec.ts",
         "**/integration/admin-student-detail-stage6.spec.ts",
+        "**/integration/admin-student-detail-start-claim-findability.spec.ts",
+        "**/integration/identity/parent-dashboard-notes-scope.spec.ts",
         "**/integration/ai-assist-panel.spec.ts",
         "**/integration/note-form-hydration.spec.ts",
         "**/integration/note-outbox-share.spec.ts",
