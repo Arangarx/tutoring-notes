@@ -844,8 +844,18 @@ test.describe("whiteboard QoL surfaces", () => {
     async ({ page }) => {
       test.setTimeout(120_000);
       await openTutorBoard(page);
-      await page.setViewportSize({ width: 1000, height: 800 });
+
+      // Wide desktop: session controls stay on the bar. The overflow button
+      // (sliders) is only for the narrower bar.
+      await page.setViewportSize({ width: 1280, height: 900 });
       const sessionBtn = page.getByRole("button", { name: "More session options" });
+      await expect(sessionBtn).not.toBeVisible();
+      await expect(page.getByTestId("wb-copy-student-link")).toBeVisible();
+      await expect(page.getByTestId("wb-topbar-mic")).toBeVisible();
+      await expect(page.getByTestId("wb-grid-toggle")).toBeVisible();
+      await expect(page.getByTestId("wb-recenter-view")).toBeVisible();
+
+      await page.setViewportSize({ width: 1000, height: 800 });
       const drawBtn = page.getByRole("button", { name: "More — z-order, delete, hand" });
       await expect(sessionBtn).toBeVisible();
       await expect(drawBtn).toBeVisible();
