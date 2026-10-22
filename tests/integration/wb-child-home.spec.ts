@@ -10,7 +10,9 @@ import bcrypt from "bcryptjs";
 import { TAG } from "../test-tags";
 import { TEST_PARENT, seedParentAccountHolder } from "./identity/identity.helpers";
 import { loginLearnerInContext } from "./whiteboard-live-sync.helpers";
+import { uploadReplayEvents } from "./wb-replay-harness.helpers";
 import { readHarnessMailUrl } from "@/lib/playwright-harness-mail";
+import { seedTestAdmin } from "../visual/helpers";
 
 const CURRENT_PIN = "482916";
 const NEXT_PIN = "159357";
@@ -26,20 +28,34 @@ async function seedChildLogin(opts: {
   familyId: string;
   displayName: string;
   withEndedNote?: { topics: string };
+  /**
+   * Default true. A real Save to notes does not create a ShareLink;
+   * only an explicit false reproduces that shape.
+   */
+  withShareLink?: boolean;
+  /**
+   * When false, the session snapshot freezes whiteboard recording off.
+   * Omit to leave the record's allowWhiteboardRecording true and no snapshot.
+   */
+  allowWhiteboardRecording?: boolean;
+  /** Use this tutor so the Playwright tutor session can upload the event log. */
+  tutorAdminUserId?: string;
 }) {
   const prisma = new PrismaClient();
   const id = suffix();
   const username = `ch${id}`.replace(/[^a-z0-9]/g, "").slice(0, 12);
   try {
-    const tutor = await prisma.adminUser.create({
-      data: {
-        email: `pw-child-home-tutor-${id}@test.local`,
-        role: "TUTOR",
-        approvalStatus: "APPROVED",
-        emailVerifiedAt: new Date("2026-01-01"),
-      },
-      select: { id: true },
-    });
+    const tutor = opts.tutorAdminUserId
+      ? { id: opts.tutorAdminUserId }
+      : await prisma.adminUser.create({
+          data: {
+            email: `pw-child-home-tutor-${id}@test.local`,
+            role: "TUTOR",
+            approvalStatus: "APPROVED",
+            emailVerifiedAt: new Date("2026-01-01"),
+          },
+          select: { id: true },
+        });
     const profile = await prisma.learnerProfile.create({
       data: {
         accountHolderId: opts.accountHolderId,
@@ -107,16 +123,30 @@ async function seedChildLogin(opts: {
         select: { id: true },
       });
       whiteboardSessionId = session.id;
-      await prisma.shareLink.create({
-        data: {
-          studentId: student.id,
-          token: `child-home-${id}`,
-        },
-      });
+      if (opts.withShareLink !== false) {
+        await prisma.shareLink.create({
+          data: {
+            studentId: student.id,
+            token: `child-home-${id}`,
+          },
+        });
+      }
+      if (opts.allowWhiteboardRecording === false) {
+        await prisma.sessionConsentSnapshot.create({
+          data: {
+            whiteboardSessionId: session.id,
+            allowLiveSession: true,
+            allowAudioRecording: true,
+            allowWhiteboardRecording: false,
+            allowNoteSending: true,
+          },
+        });
+      }
     }
 
     return {
       learnerProfileId: profile.id,
+      studentId: student.id,
       handle: `${username}@${opts.familyId}`,
       noteTopics,
       whiteboardSessionId,
@@ -188,7 +218,7 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
       await expect(replay).toBeVisible();
       await expect(replay).toHaveAttribute(
         "href",
-        new RegExp(`/whiteboard/${own.whiteboardSessionId}$`)
+        `/join/notes/${own.whiteboardSessionId}/whiteboard`
       );
       await expect(page.getByTestId("upcoming-sessions-card")).toBeVisible();
       await expect(page.getByTestId("upcoming-sessions-empty")).toHaveText(
@@ -208,6 +238,131 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
       await expect(page.getByText(ownTopics)).toHaveCount(0);
     } finally {
       await otherContext.close();
+    }
+  });
+
+  test("shows Watch the whiteboard recording for a saved note with no share link", {
+    tag: [TAG.WB_RECORDING],
+  }, async ({ browser, page }) => {
+    test.setTimeout(180_000);
+    const accountHolderId = await seedParentAccountHolder();
+    const familyId = await familyIdFor(accountHolderId);
+    const adminUserId = await seedTestAdmin();
+    const id = suffix();
+    const topics = `Saved note no share ${id}`;
+    const child = await seedChildLogin({
+      accountHolderId,
+      familyId,
+      displayName: `No share child ${id}`,
+      withEndedNote: { topics },
+      withShareLink: false,
+      tutorAdminUserId: adminUserId,
+    });
+    if (!child.whiteboardSessionId) throw new Error("expected an ended session");
+
+    await uploadReplayEvents({
+      request: page.request,
+      adminUserId,
+      studentId: child.studentId,
+      whiteboardSessionId: child.whiteboardSessionId,
+    });
+
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    try {
+      await loginLearnerInContext(context, child.handle, CURRENT_PIN);
+      const childPage = await context.newPage();
+      await childPage.goto("/join", { waitUntil: "domcontentloaded" });
+      await expect(childPage.getByText(topics)).toBeVisible({ timeout: 15_000 });
+      const replay = childPage.getByRole("link", { name: "Watch the whiteboard recording" });
+      await expect(replay).toBeVisible();
+      await expect(replay).toHaveAttribute(
+        "href",
+        `/join/notes/${child.whiteboardSessionId}/whiteboard`
+      );
+      await replay.click();
+      await expect(childPage).toHaveURL(
+        new RegExp(`/join/notes/${child.whiteboardSessionId}/whiteboard$`)
+      );
+      await expect(childPage.getByTestId("wb-replay-in-frame")).toBeVisible({
+        timeout: 60_000,
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("learner replay is limited to that child and to sessions that allow whiteboard recording", {
+    tag: [TAG.WB_RECORDING],
+  }, async ({ browser }) => {
+    test.setTimeout(180_000);
+    const accountHolderId = await seedParentAccountHolder();
+    const familyId = await familyIdFor(accountHolderId);
+    const id = suffix();
+    const topics = `Owner replay ${id}`;
+    const owner = await seedChildLogin({
+      accountHolderId,
+      familyId,
+      displayName: `Replay owner ${id}`,
+      withEndedNote: { topics },
+      withShareLink: false,
+    });
+    const other = await seedChildLogin({
+      accountHolderId,
+      familyId,
+      displayName: `Replay other ${id}`,
+    });
+    const deniedTopics = `Recording off ${id}`;
+    const denied = await seedChildLogin({
+      accountHolderId,
+      familyId,
+      displayName: `Denied child ${id}`,
+      withEndedNote: { topics: deniedTopics },
+      withShareLink: false,
+      allowWhiteboardRecording: false,
+    });
+    if (!owner.whiteboardSessionId || !denied.whiteboardSessionId) {
+      throw new Error("expected ended sessions");
+    }
+    const ownerUrl = `/join/notes/${owner.whiteboardSessionId}/whiteboard`;
+    const deniedUrl = `/join/notes/${denied.whiteboardSessionId}/whiteboard`;
+
+    const signedOut = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    try {
+      const page = await signedOut.newPage();
+      await page.goto(ownerUrl, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/students\/login/);
+      await expect(page.getByTestId("wb-replay-in-frame")).toHaveCount(0);
+    } finally {
+      await signedOut.close();
+    }
+
+    const otherContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    try {
+      await loginLearnerInContext(otherContext, other.handle, CURRENT_PIN);
+      const page = await otherContext.newPage();
+      const response = await page.goto(ownerUrl, { waitUntil: "domcontentloaded" });
+      expect(response?.status()).toBe(404);
+      await expect(page.getByTestId("wb-replay-in-frame")).toHaveCount(0);
+    } finally {
+      await otherContext.close();
+    }
+
+    const deniedContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    try {
+      await loginLearnerInContext(deniedContext, denied.handle, CURRENT_PIN);
+      const page = await deniedContext.newPage();
+      await page.goto("/join", { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByTestId("child-session-notes").getByText(deniedTopics)
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page.getByRole("link", { name: "Watch the whiteboard recording" })
+      ).toHaveCount(0);
+      const response = await page.goto(deniedUrl, { waitUntil: "domcontentloaded" });
+      expect(response?.status()).toBe(404);
+      await expect(page.getByTestId("wb-replay-in-frame")).toHaveCount(0);
+    } finally {
+      await deniedContext.close();
     }
   });
 

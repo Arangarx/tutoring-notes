@@ -1,7 +1,7 @@
 import { db, withDbRetry } from "@/lib/db";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import {
-  assertShareProxyAccess,
+  assertWhiteboardReplayRequestAccess,
   fetchShareBlobWithBearer,
   gatePublicWbSessionBlob,
 } from "@/lib/share/proxy-share-resource";
@@ -11,9 +11,9 @@ import {
  *
  * GET /api/whiteboard/[sessionId]/public-events?token=<shareToken>
  *
- * Auth: the caller must hold a valid, non-revoked `ShareLink` token
- * whose `studentId` matches the `WhiteboardSession.studentId`.
- * Same trust pattern as `/api/audio/[recordingId]?token=`.
+ * Auth: a valid, non-revoked ShareLink token whose student matches the
+ * session, or a learner session that may view this replay (same ended /
+ * note-linked / consent rules as the parent share card).
  *
  * Only ended sessions are accessible — we never expose a live in-
  * progress session's event stream on the public share surface.
@@ -33,10 +33,13 @@ export async function GET(
     `[wbPublicEvents.route] GET wbsid=${sessionId} rid=${rid}`
   );
 
-  const access = await assertShareProxyAccess(
+  const access = await assertWhiteboardReplayRequestAccess(
     req,
+    sessionId,
     shareToken,
-    `/api/whiteboard/${sessionId}/public-events?token=${shareToken}`
+    shareToken
+      ? `/api/whiteboard/${sessionId}/public-events?token=${shareToken}`
+      : `/api/whiteboard/${sessionId}/public-events`
   );
   if (!access.ok) return access.response;
 

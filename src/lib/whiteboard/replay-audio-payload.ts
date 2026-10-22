@@ -11,7 +11,7 @@ export type BuildReplayAudioPayloadArgs = {
   concatBlobUrl: string | null;
   concatDurationSeconds: number | null;
   audioRecordings: readonly SessionRecordingReplayRow[];
-  audience: "admin" | "share";
+  audience: "admin" | "share" | "learner";
   shareToken?: string;
 };
 
@@ -34,11 +34,21 @@ export function buildReplayAudioPayload(
   const { whiteboardSessionId, concatBlobUrl, concatDurationSeconds, audioRecordings } =
     args;
 
-  if (concatBlobUrl) {
-    const canonicalUrl =
-      args.audience === "share"
-        ? `/api/whiteboard/${whiteboardSessionId}/public-concat-audio?token=${encodeURIComponent(args.shareToken ?? "")}`
+  const concatUrl =
+    args.audience === "share"
+      ? `/api/whiteboard/${whiteboardSessionId}/public-concat-audio?token=${encodeURIComponent(args.shareToken ?? "")}`
+      : args.audience === "learner"
+        ? `/api/whiteboard/${whiteboardSessionId}/public-concat-audio`
         : `/api/whiteboard/${whiteboardSessionId}/concat-audio`;
+  const recordingUrl = (recordingId: string) =>
+    args.audience === "share"
+      ? `/api/audio/${recordingId}?token=${encodeURIComponent(args.shareToken ?? "")}`
+      : args.audience === "learner"
+        ? `/api/audio/${recordingId}`
+        : `/api/audio/admin/${recordingId}`;
+
+  if (concatBlobUrl) {
+    const canonicalUrl = concatUrl;
 
     return {
       hasAudio: true,
@@ -56,10 +66,7 @@ export function buildReplayAudioPayload(
   }
 
   const audioSegments: ReplayAudioSegment[] = audioRecordings.map((rec) => ({
-    url:
-      args.audience === "share"
-        ? `/api/audio/${rec.id}?token=${encodeURIComponent(args.shareToken ?? "")}`
-        : `/api/audio/admin/${rec.id}`,
+    url: recordingUrl(rec.id),
     mimeType: rec.mimeType,
     durationSeconds: rec.durationSeconds,
   }));

@@ -68,6 +68,14 @@ export function ParentShareNoteCard(props: {
    * which keeps deriving ids from the note.
    */
   replaySessionIds?: string[];
+  /**
+   * When set, replay links use this href and show whenever
+   * `replaySessionIds` is non-empty, even if `token` is blank.
+   * The child home passes the learner-session route. Share pages omit
+   * it and keep `/s/{token}/whiteboard/{id}`, which stays hidden when
+   * the token is blank so the card never emits `/s//`.
+   */
+  replayHref?: (whiteboardSessionId: string) => string;
 }) {
   const { token, dateLabel, note, isNew } = props;
   const links = safeJsonArray(note.linksJson);
@@ -81,7 +89,8 @@ export function ParentShareNoteCard(props: {
       ? orderedUnique(props.replaySessionIds)
       : linkedWhiteboardIds;
   const tokenOk = token.trim().length > 0;
-  const showWhiteboardLinks = tokenOk && whiteboardReplayIds.length > 0;
+  const showWhiteboardLinks =
+    whiteboardReplayIds.length > 0 && (props.replayHref != null || tokenOk);
   const hasLinkedWhiteboard = linkedWhiteboardIds.length > 0;
   const exposeRecordingToParent =
     note.shareRecordingInEmail || hasLinkedWhiteboard;
@@ -162,7 +171,9 @@ export function ParentShareNoteCard(props: {
                 {whiteboardReplayIds.map((wbId) => (
                   <Link
                     key={wbId}
-                    href={`/s/${token}/whiteboard/${wbId}`}
+                    href={
+                      props.replayHref?.(wbId) ?? `/s/${token}/whiteboard/${wbId}`
+                    }
                     aria-label="Watch the whiteboard recording"
                     className={cn(
                       chipClass,

@@ -8,7 +8,9 @@
 import { NextResponse } from "next/server";
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
+import { getLearnerSession } from "@/lib/learner-session";
 import { checkApiShareAccess } from "@/lib/share-access-scope";
+import { resolveLearnerWhiteboardReplay } from "@/lib/share/learner-replay-access";
 
 export type ShareProxyAccess =
   | { ok: true; studentId: string }
@@ -45,6 +47,49 @@ export async function assertShareProxyAccess(
     return { ok: false, response: erasureBlocked };
   }
 
+  return { ok: true, studentId: access.studentId };
+}
+
+/**
+ * Share-token access, or a signed-in learner who may view this ended replay.
+ * No token and no learner session stays a 401. A learner who does not own
+ * the session, or whose consent hides it, is a 404. Blob bytes stay behind
+ * this check — callers still proxy with the server token.
+ */
+export async function assertWhiteboardReplayRequestAccess(
+  req: Request,
+  whiteboardSessionId: string,
+  shareToken: string | null,
+  apiPath: string
+): Promise<ShareProxyAccess> {
+  if (shareToken) {
+    return assertShareProxyAccess(req, shareToken, apiPath);
+  }
+
+  const learner = await getLearnerSession(req);
+  if (!learner) {
+    console.error(
+      `[lpr] lpr=unknown wbsid=${whiteboardSessionId} action=replay_denied reason=no_session`
+    );
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Missing token." }, { status: 401 }),
+    };
+  }
+
+  const access = await resolveLearnerWhiteboardReplay(
+    learner.learnerProfileId,
+    whiteboardSessionId
+  );
+  if (!access.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Not found." }, { status: 404 }),
+    };
+  }
+
+  const erasureBlocked = await assertStudentNotErasedApi(access.studentId);
+  if (erasureBlocked) return { ok: false, response: erasureBlocked };
   return { ok: true, studentId: access.studentId };
 }
 

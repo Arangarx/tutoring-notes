@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
+import { getLearnerSession } from "@/lib/learner-session";
 import { logBlobEgressEvent } from "@/lib/observability/cost-events";
+import { resolveLearnerWhiteboardReplay } from "@/lib/share/learner-replay-access";
 import { assertShareProxyAccess, streamShareBlobWithRange } from "@/lib/share/proxy-share-resource";
 
 /**
@@ -8,6 +11,9 @@ import { assertShareProxyAccess, streamShareBlobWithRange } from "@/lib/share/pr
  * Private blobs require a Bearer token — browsers can't fetch them directly.
  *
  * GET /api/audio/[recordingId]?token=<shareToken>
+ * GET /api/audio/[recordingId] — learner session for a whiteboard replay
+ *   the learner may view (same consent rules as the parent share). No token
+ *   and no learner session is still 401.
  *
  * Validates:
  *   1. The share link exists and is not revoked.
@@ -32,7 +38,7 @@ export async function GET(
   const shareToken = url.searchParams.get("token");
 
   if (!shareToken) {
-    return NextResponse.json({ error: "Missing token" }, { status: 401 });
+    return serveLearnerWhiteboardRecording(req, recordingId);
   }
 
   const access = await assertShareProxyAccess(
@@ -73,11 +79,26 @@ export async function GET(
     return NextResponse.json({ error: "Recording not found" }, { status: 404 });
   }
 
-  const { blobUrl, mimeType } = recording;
+  return streamRecording(req, recordingId, recording);
+}
+
+type StreamableRecording = {
+  blobUrl: string;
+  mimeType: string | null;
+  adminUserId: string | null;
+  studentId: string;
+  whiteboardSessionId: string | null;
+};
+
+async function streamRecording(
+  req: Request,
+  recordingId: string,
+  recording: StreamableRecording
+): Promise<Response> {
   const response = await streamShareBlobWithRange(
     req,
-    blobUrl,
-    mimeType || "audio/mpeg"
+    recording.blobUrl,
+    recording.mimeType || "audio/mpeg"
   );
 
   const contentLength = response.headers.get("content-length");
@@ -97,4 +118,48 @@ export async function GET(
   }
 
   return response;
+}
+
+/** Learner-session audio for a whiteboard replay. Blobs stay private. */
+async function serveLearnerWhiteboardRecording(
+  req: Request,
+  recordingId: string
+): Promise<Response> {
+  const learner = await getLearnerSession(req);
+  if (!learner) {
+    console.error(
+      `[lpr] lpr=unknown action=replay_denied reason=no_session recordingId=${recordingId}`
+    );
+    return NextResponse.json({ error: "Missing token" }, { status: 401 });
+  }
+
+  const recording = await db.sessionRecording.findUnique({
+    where: { id: recordingId },
+    select: {
+      blobUrl: true,
+      mimeType: true,
+      adminUserId: true,
+      studentId: true,
+      whiteboardSessionId: true,
+    },
+  });
+  if (!recording?.whiteboardSessionId) {
+    console.error(
+      `[lpr] lpr=${learner.learnerProfileId} action=replay_denied reason=not_visible recordingId=${recordingId}`
+    );
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+
+  const access = await resolveLearnerWhiteboardReplay(
+    learner.learnerProfileId,
+    recording.whiteboardSessionId
+  );
+  if (!access.ok || access.studentId !== recording.studentId) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+
+  const erasureBlocked = await assertStudentNotErasedApi(recording.studentId);
+  if (erasureBlocked) return erasureBlocked;
+
+  return streamRecording(req, recordingId, recording);
 }

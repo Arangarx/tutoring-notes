@@ -184,6 +184,29 @@ describe("ParentShareNoteCard (Phase 0d)", () => {
     expect(container.innerHTML).not.toContain("/s//");
   });
 
+  it("uses a learner replay href when the share token is blank", () => {
+    const { container } = render(
+      <ParentShareNoteCard
+        token=""
+        dateLabel="May 9, 2026"
+        replaySessionIds={["wb-99"]}
+        replayHref={(whiteboardSessionId) =>
+          `/join/notes/${whiteboardSessionId}/whiteboard`
+        }
+        note={{
+          ...baseNote,
+          whiteboardSessions: [{ id: "wb-99" }],
+        }}
+        isNew={false}
+      />
+    );
+
+    expect(
+      screen.getByRole("link", { name: /watch the whiteboard recording/i })
+    ).toHaveAttribute("href", "/join/notes/wb-99/whiteboard");
+    expect(container.innerHTML).not.toContain("/s//");
+  });
+
   it("does not build an empty /s// href when the token is blank", () => {
     const { container } = render(
       <ParentShareNoteCard

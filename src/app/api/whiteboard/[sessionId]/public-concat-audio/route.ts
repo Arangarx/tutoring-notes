@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { isBlobHarnessActive } from "@/lib/blob-harness";
 import { env } from "@/lib/env";
 import {
-  assertShareProxyAccess,
+  assertWhiteboardReplayRequestAccess,
   gatePublicWbSessionBlob,
   streamShareBlobWithRange,
 } from "@/lib/share/proxy-share-resource";
@@ -27,10 +27,13 @@ export async function GET(
 
   const shareToken = new URL(req.url).searchParams.get("token");
 
-  const access = await assertShareProxyAccess(
+  const access = await assertWhiteboardReplayRequestAccess(
     req,
+    sessionId,
     shareToken,
-    `/api/whiteboard/${sessionId}/public-concat-audio?token=${shareToken}`
+    shareToken
+      ? `/api/whiteboard/${sessionId}/public-concat-audio?token=${shareToken}`
+      : `/api/whiteboard/${sessionId}/public-concat-audio`
   );
   if (!access.ok) return access.response;
 

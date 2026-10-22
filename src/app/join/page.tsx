@@ -168,6 +168,9 @@ function JoinNoSessionCard({
                       key={note.id}
                       token={note.token}
                       replaySessionIds={note.replaySessionIds}
+                      replayHref={(whiteboardSessionId) =>
+                        `/join/notes/${whiteboardSessionId}/whiteboard`
+                      }
                       dateLabel={note.dateLabel}
                       note={note.note}
                       isNew={false}
