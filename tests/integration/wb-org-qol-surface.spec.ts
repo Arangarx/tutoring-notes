@@ -14,6 +14,7 @@ import {
   readActiveWhiteboardPageId,
   addGraphExpressionViaUI,
   readGraphElementState,
+  readMountedGraphInk,
   readImageElementState,
   readPageDataBucketIds,
   readSceneElementIds,
@@ -72,6 +73,20 @@ async function expectChatToggleClearOfModifierHints(
   expect(topId, "chat toggle is the element under the pointer").toBe(
     "wb-session-chat-toggle"
   );
+}
+
+/** Nearest finite curve sample to targetX. The oracle for y is Math, not the preprocessor. */
+function nearestFiniteSample(
+  pts: [number, number][],
+  targetX: number
+): { x: number; y: number } | null {
+  let best: { x: number; y: number; dx: number } | null = null;
+  for (const [x, y] of pts) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const dx = Math.abs(x - targetX);
+    if (!best || dx < best.dx) best = { x, y, dx };
+  }
+  return best ? { x: best.x, y: best.y } : null;
 }
 
 async function openTutorBoard(page: import("@playwright/test").Page) {
@@ -656,6 +671,50 @@ test.describe("whiteboard QoL surfaces", () => {
       const displayed = page.getByTestId("wb-graph-expr-display-0");
       await expect(displayed).toContainText("y=");
       await expect(displayed).toContainText("2*x+1");
+    }
+  );
+
+  test(
+    "plotted log and trig expressions match Math at a sampled x",
+    { tag: [TAG.WB_GRAPH] },
+    async ({ page }) => {
+      test.setTimeout(180_000);
+      await openTutorBoard(page);
+      await page.getByTestId("wb-insert-graph").click();
+      await page.getByTestId("wb-graph-insert").click();
+      const host = page.getByTestId("wb-graph-embed-host").first();
+      await expect(host).toBeVisible({ timeout: 30_000 });
+      await host.scrollIntoViewIfNeeded();
+
+      const samples = [
+        { expr: "2sin(x)", x: 1, y: 2 * Math.sin(1) },
+        { expr: "log10(x)", x: 10, y: Math.log10(10) },
+        { expr: "sin x", x: Math.PI / 2, y: Math.sin(Math.PI / 2) },
+        { expr: "ln x", x: Math.E, y: Math.log(Math.E) },
+        { expr: "sinx", x: 1, y: Math.sin(1) },
+      ];
+
+      let plotted = 0;
+      for (const sample of samples) {
+        plotted += 1;
+        await addGraphExpressionViaUI(page, sample.expr);
+        await expect(page.locator("[data-testid^='wb-graph-expr-error-']")).toHaveCount(0);
+        let nearest: { x: number; y: number } | null = null;
+        await expect
+          .poll(async () => {
+            // replot recreates every curve, so the expression just added is the last one.
+            const curves = (await readMountedGraphInk(page)).functionGraphs;
+            if (curves.length !== plotted) return Number.POSITIVE_INFINITY;
+            nearest = nearestFiniteSample(curves[curves.length - 1]!.pts, sample.x);
+            return nearest ? Math.abs(nearest.x - sample.x) : Number.POSITIVE_INFINITY;
+          }, { timeout: 15_000 })
+          .toBeLessThanOrEqual(0.25);
+        expect(nearest, sample.expr).not.toBeNull();
+        expect(
+          Math.abs(nearest!.y - sample.y),
+          `${sample.expr} nearest sample (${nearest!.x}, ${nearest!.y}) vs Math y=${sample.y}`
+        ).toBeLessThanOrEqual(0.05);
+      }
     }
   );
 

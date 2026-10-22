@@ -50,22 +50,29 @@ export const MIN_GRAPH_CONTAINER_PX = 8;
 /** Minimum axis span in math units — keeps bbox non-degenerate. */
 export const MIN_GRAPH_BBOX_SPAN = 1e-6;
 
-/** Function tokens that must not receive implicit `*` before `(`. */
+/**
+ * Names JessieCode can call. Longest first: `log10` must win over `log`,
+ * and `(?<![A-Za-z_])` is required because `\b` is false between a digit and a letter (`2sin`).
+ */
 export const GRAPH_FUNCTION_TOKENS = [
+  "log10",
+  "log2",
+  "sqrt",
+  "asin",
+  "acos",
+  "atan",
+  "abs",
+  "exp",
   "sin",
   "cos",
   "tan",
-  "log",
   "ln",
-  "sqrt",
-  "abs",
-  "exp",
-  "pi",
-  "e",
+  "log",
 ] as const;
 
-const IMPLICIT_MULT_FN_RE =
-  /\b(sin|cos|tan|log|ln|sqrt|abs|exp)\s*\(/gi;
+const GRAPH_FN_SRC = GRAPH_FUNCTION_TOKENS.join("|");
+
+const FN_CALL_RE = new RegExp(`(?<![A-Za-z_])(?:${GRAPH_FN_SRC})\\s*\\(`, "gi");
 
 export function clampGraphContainerPx(px: number): number {
   if (!Number.isFinite(px) || px <= 0) return MIN_GRAPH_CONTAINER_PX;
@@ -171,10 +178,13 @@ export function preprocessGraphExpression(expr: string): string {
   const trimmed = expr.trim();
   if (!trimmed) return trimmed;
 
+  // Before `5x` → `5*x`, so the `0` in `log10x` is not treated as a coefficient.
+  let s = splitGluedFunctionOperands(trimmed);
+
   const fnPlaceholders: string[] = [];
-  let s = trimmed.replace(IMPLICIT_MULT_FN_RE, (match) => {
+  s = s.replace(FN_CALL_RE, (match) => {
     const key = `@@FN${fnPlaceholders.length}@@`;
-    fnPlaceholders.push(match);
+    fnPlaceholders.push(match.replace(/\s+(?=\()/, ""));
     return key;
   });
 
@@ -187,7 +197,101 @@ export function preprocessGraphExpression(expr: string): string {
     s = s.replace(`@@FN${index}@@`, fn);
   });
 
+  s = insertStarBeforeFunction(s);
+  s = rewriteJuxtaposedCalls(s);
+  // JessieCode's constant is `PI`, not `pi` or `Math.PI`.
+  s = s.replace(/(?<![A-Za-z_])pi(?![A-Za-z_\d])/gi, "PI");
   return s;
+}
+
+function insertStarBeforeFunction(input: string): string {
+  const re = new RegExp(`(\\d|\\))\\s*(?<![A-Za-z_])(${GRAPH_FN_SRC})`, "gi");
+  return input.replace(re, "$1*$2");
+}
+
+function readBalancedParen(input: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < input.length; i++) {
+    if (input[i] === "(") depth += 1;
+    else if (input[i] === ")") {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function readSimpleOperand(
+  input: string,
+  at: number
+): { text: string; end: number } | null {
+  if (at >= input.length) return null;
+  const rest = input.slice(at);
+  if (/^x(?![A-Za-z_\d])/.test(rest)) return { text: "x", end: at + 1 };
+  if (/^pi(?![A-Za-z_\d])/i.test(rest)) {
+    return { text: rest.slice(0, 2), end: at + 2 };
+  }
+  const num = /^\d+(?:\.\d+)?/.exec(rest);
+  if (num && !/[A-Za-z_\d]/.test(input[at + num[0].length] ?? "")) {
+    return { text: num[0], end: at + num[0].length };
+  }
+  if (input[at] === "(") {
+    const close = readBalancedParen(input, at);
+    if (close > at) return { text: input.slice(at, close + 1), end: close + 1 };
+  }
+  return null;
+}
+
+/** `sin x` → `sin(x)`, `sin (x+1)` → `sin(x+1)`. Already-parenthesized calls are left alone. */
+function rewriteJuxtaposedCalls(input: string): string {
+  const nameRe = new RegExp(`(?<![A-Za-z_])(?:${GRAPH_FN_SRC})`, "gi");
+  let out = "";
+  let i = 0;
+  while (i < input.length) {
+    nameRe.lastIndex = i;
+    const found = nameRe.exec(input);
+    if (!found || found.index < i) {
+      out += input.slice(i);
+      break;
+    }
+    const start = found.index;
+    const fn = found[0];
+    out += input.slice(i, start);
+    const after = start + fn.length;
+    if (after >= input.length || input[after] === "(" || !/\s/.test(input[after] ?? "")) {
+      out += fn;
+      i = after;
+      continue;
+    }
+    let j = after;
+    while (j < input.length && /\s/.test(input[j] ?? "")) j += 1;
+    const operand = readSimpleOperand(input, j);
+    if (!operand) {
+      out += fn;
+      i = after;
+      continue;
+    }
+    const wrapped = operand.text.startsWith("(") ? operand.text : `(${operand.text})`;
+    out += fn + wrapped;
+    i = operand.end;
+  }
+  return out;
+}
+
+/** `sinx` → `sin(x)`. A longer name (`log10`) is not split into `log(10)`. */
+function splitGluedFunctionOperands(input: string): string {
+  const re = new RegExp(
+    `(?<![A-Za-z_])(${GRAPH_FN_SRC})(x|\\d+(?:\\.\\d+)?)(?![A-Za-z_\\d])`,
+    "gi"
+  );
+  return input.replace(re, (match, fn: string, operand: string, offset: number, whole: string) => {
+    const slice = whole.slice(offset).toLowerCase();
+    const splitsLongerName = GRAPH_FUNCTION_TOKENS.some(
+      (name) => name.length > fn.length && slice.startsWith(name)
+    );
+    if (splitsLongerName) return match;
+    return `${fn}(${operand})`;
+  });
 }
 
 export function serializeGraphStateJson(state: GraphState): string {

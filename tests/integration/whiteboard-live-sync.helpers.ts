@@ -1646,6 +1646,8 @@ export type MountedGraphInk = {
   previews: { id: string; pts: [number, number][] }[];
   bbox: [number, number, number, number] | null;
   functionGraphCount: number;
+  /** Plotted y= curves. pts are the library's dataX/dataY samples. */
+  functionGraphs: { id: string; pts: [number, number][] }[];
 };
 
 /**
@@ -1660,6 +1662,7 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
       previews: [] as { id: string; pts: [number, number][] }[],
       bbox: null as [number, number, number, number] | null,
       functionGraphCount: 0,
+      functionGraphs: [] as { id: string; pts: [number, number][] }[],
     };
     const JXG = (
       window as unknown as {
@@ -1704,6 +1707,7 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
     const strokes: { id: string; pts: [number, number][] }[] = [];
     const previews: { id: string; pts: [number, number][] }[] = [];
     let functionGraphCount = 0;
+    const functionGraphs: { id: string; pts: [number, number][] }[] = [];
     const readCurvePts = (obj: {
       dataX?: number[];
       dataY?: number[];
@@ -1724,7 +1728,13 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
       return [];
     };
     for (const obj of Object.values(board.objects)) {
-      if (obj.visProp?.curvetype === "functiongraph") functionGraphCount += 1;
+      if (obj.visProp?.curvetype === "functiongraph") {
+        functionGraphCount += 1;
+        functionGraphs.push({
+          id: String(obj.id ?? functionGraphs.length),
+          pts: readCurvePts(obj),
+        });
+      }
       if (obj.wbInk === "point" && typeof obj.X === "function" && typeof obj.Y === "function") {
         points.push({
           id: String(obj.wbInkId ?? obj.id ?? ""),
@@ -1750,7 +1760,7 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
     } catch {
       bbox = null;
     }
-    return { points, strokes, previews, bbox, functionGraphCount };
+    return { points, strokes, previews, bbox, functionGraphCount, functionGraphs };
   });
 }
 

@@ -121,6 +121,55 @@ describe("graph-state", () => {
       );
       expect(preprocessGraphExpression("tan(2x)")).toBe("tan(2*x)");
     });
+
+    it("turns tutor-style trig and log writing into calls JessieCode can plot", () => {
+      // Expectations are the math the tutor wrote, not the rewriter's current output.
+      expect(preprocessGraphExpression("2sin(x)")).toBe("2*sin(x)");
+      expect(preprocessGraphExpression("2 sin(x)")).toBe("2*sin(x)");
+      expect(preprocessGraphExpression("2 sin x")).toBe("2*sin(x)");
+      expect(preprocessGraphExpression("log10(x)")).toBe("log10(x)");
+      expect(preprocessGraphExpression("log2(x)")).toBe("log2(x)");
+      expect(preprocessGraphExpression("sin x")).toBe("sin(x)");
+      expect(preprocessGraphExpression("log x")).toBe("log(x)");
+      expect(preprocessGraphExpression("ln x")).toBe("ln(x)");
+      expect(preprocessGraphExpression("cos x")).toBe("cos(x)");
+      expect(preprocessGraphExpression("tan x")).toBe("tan(x)");
+      expect(preprocessGraphExpression("sinx")).toBe("sin(x)");
+      expect(preprocessGraphExpression("logx")).toBe("log(x)");
+      expect(preprocessGraphExpression("lnx")).toBe("ln(x)");
+      expect(preprocessGraphExpression("sin2")).toBe("sin(2)");
+      expect(preprocessGraphExpression("log10x")).toBe("log10(x)");
+      expect(preprocessGraphExpression("log10")).toBe("log10");
+      expect(preprocessGraphExpression("sinxy")).toBe("sinxy");
+      expect(preprocessGraphExpression("sinx^2")).toBe("sin(x)^2");
+    });
+
+    it("keeps expressions that already parse", () => {
+      expect(preprocessGraphExpression("x^2")).toBe("x^2");
+      expect(preprocessGraphExpression("5x")).toBe("5*x");
+      expect(preprocessGraphExpression("2(x+1)")).toBe("2*(x+1)");
+      expect(preprocessGraphExpression("(x+1)(x-1)")).toBe("(x+1)*(x-1)");
+      expect(preprocessGraphExpression("sin(x)+cos(x)")).toBe("sin(x)+cos(x)");
+      expect(preprocessGraphExpression("log(x)+ln(x)")).toBe("log(x)+ln(x)");
+      expect(preprocessGraphExpression("tan(2x)")).toBe("tan(2*x)");
+      expect(preprocessGraphExpression("sqrt(x)")).toBe("sqrt(x)");
+      expect(preprocessGraphExpression("abs(x)")).toBe("abs(x)");
+      expect(preprocessGraphExpression("exp(x)")).toBe("exp(x)");
+      expect(preprocessGraphExpression("log(x,10)")).toBe("log(x,10)");
+    });
+
+    it("accepts inverse trig and pi the way JessieCode spells them", () => {
+      expect(preprocessGraphExpression("asin(x)")).toBe("asin(x)");
+      expect(preprocessGraphExpression("acos(x)")).toBe("acos(x)");
+      expect(preprocessGraphExpression("atan(x)")).toBe("atan(x)");
+      expect(preprocessGraphExpression("2asin(x)")).toBe("2*asin(x)");
+      expect(preprocessGraphExpression("asin x")).toBe("asin(x)");
+      expect(preprocessGraphExpression("asinx")).toBe("asin(x)");
+      expect(preprocessGraphExpression("pi")).toBe("PI");
+      expect(preprocessGraphExpression("2pi")).toBe("2*PI");
+      expect(preprocessGraphExpression("sin(pi)")).toBe("sin(PI)");
+      expect(preprocessGraphExpression("sin pi")).toBe("sin(PI)");
+    });
   });
 
   it("round-trips points and strokes in graph user coordinates", () => {
