@@ -15,9 +15,6 @@ const SELF_LEARNER =
 const PARENT =
   "Parent must claim this student before sessions can start. Open Account & sharing, create a claim link, and share it with Ada's parent. After they claim the account and set privacy preferences, you can start whiteboard sessions.";
 
-const PRIVACY =
-  "A parent account is connected, but privacy preferences are not complete. You cannot start a session until the parent finishes them. Ask the parent to sign in to their Mynk account and complete privacy preferences for this learner. They can find this under their child's profile in Account.";
-
 const DELETION = "This student's account is being deleted. Sessions are off.";
 
 const READY = {
@@ -60,11 +57,6 @@ describe("studentDetailView", () => {
         learnerProfileId: null,
         hasInvite: false,
         latestInviteTargetKind: null,
-        consentRecordExists: false,
-      }),
-      studentDetailView({
-        ...READY,
-        learnerProfileId: "lp-1",
         consentRecordExists: false,
       }),
       studentDetailView({
@@ -131,13 +123,15 @@ describe("studentDetailView", () => {
     ).toEqual({ kind: "setup", text: PARENT });
   });
 
-  test("a profile with no consent record shows the privacy-preferences text and hides Start", () => {
+  test("a claimed profile with no consent record does not repeat a privacy card", () => {
     const view = studentDetailView({
       ...READY,
       consentRecordExists: false,
     });
-    expect(view.criticalCard).toEqual({ kind: "privacy", text: PRIVACY });
-    expect(view.mainButton).not.toBe("start_session");
+    // The Session card owns this message (blocked callout). A second card would
+    // say it twice.
+    expect(view.criticalCard).toBeNull();
+    expect(view.mainButton).toBe("start_session");
   });
 
   test("pending erasure wins over a missing account", () => {

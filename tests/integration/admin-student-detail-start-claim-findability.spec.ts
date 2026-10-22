@@ -14,17 +14,20 @@ const VIEWPORT = { width: 1280, height: 800 };
 
 async function linkStudentToFreshLearnerProfile(
   studentId: string,
-  studentName: string
+  studentName: string,
+  kind: "child" | "self_learner" = "child"
 ): Promise<string> {
   const prisma = new PrismaClient();
   try {
     const suffix = studentId.replace(/-/g, "").slice(0, 12);
+    const self = kind === "self_learner";
     const accountHolder = await prisma.accountHolder.create({
       data: {
-        email: `pw-parent-${suffix}@test.local`,
-        displayName: "Test Parent",
+        email: `pw-${self ? "self" : "parent"}-${suffix}@test.local`,
+        displayName: self ? studentName : "Test Parent",
         familyId: `pwfam${suffix}`,
         emailVerifiedAt: new Date("2026-01-01"),
+        isSelfLearner: self,
       },
       select: { id: true },
     });
@@ -32,7 +35,8 @@ async function linkStudentToFreshLearnerProfile(
       data: {
         accountHolderId: accountHolder.id,
         displayName: studentName,
-        accessMode: "child_pin_required",
+        accessMode: self ? "account_holder_session" : "child_pin_required",
+        isSelfLearner: self,
       },
       select: { id: true },
     });
@@ -75,6 +79,26 @@ async function seedClaimedWithoutConsent(adminUserId: string): Promise<string> {
       select: { id: true, name: true },
     });
     await linkStudentToFreshLearnerProfile(student.id, student.name);
+    return student.id;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function seedClaimedSelfLearnerWithoutConsent(
+  adminUserId: string
+): Promise<string> {
+  const prisma = new PrismaClient();
+  try {
+    const student = await prisma.student.create({
+      data: {
+        name: "Claimed Self-Learner No Consent",
+        adminUserId,
+        parentEmail: "self-learner-no-consent@test.local",
+      },
+      select: { id: true, name: true },
+    });
+    await linkStudentToFreshLearnerProfile(student.id, student.name, "self_learner");
     return student.id;
   } finally {
     await prisma.$disconnect();
@@ -170,13 +194,38 @@ test.describe("Admin student detail — Start / claim findability", () => {
         page.getByRole("heading", { name: "Claimed No Consent Student" })
       ).toBeVisible({ timeout: 15_000 });
 
-      await expect(page.getByTestId("student-critical-card")).toContainText(
-        /privacy preferences are not complete/i
-      );
-      await expect(page.getByTestId("student-critical-card")).toContainText(
-        /privacy preferences for this learner/i
-      );
+      const card = page.getByTestId("student-session-card");
+      await expect(card).toContainText("Start whiteboard session unavailable");
+      await expect(card).toContainText(/privacy preferences are not complete/i);
+      await expect(card).toContainText(/privacy preferences for this learner/i);
+      await expect(card).toContainText(/Ask the parent/i);
+      await expect(card).toContainText(/parent account/i);
+      await expect(page.getByTestId("student-critical-card")).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Start session" })).toHaveCount(0);
+    }
+  );
+
+  test(
+    "claimed self-learner without consent shows unavailable start in the session card",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      const adminUserId = await seedTestAdmin();
+      const studentId = await seedClaimedSelfLearnerWithoutConsent(adminUserId);
+
+      await page.goto(`/admin/students/${studentId}`, {
+        waitUntil: "networkidle",
+      });
+
+      await expect(
+        page.getByRole("heading", { name: "Claimed Self-Learner No Consent" })
+      ).toBeVisible({ timeout: 15_000 });
+
+      const card = page.getByTestId("student-session-card");
+      await expect(card).toContainText("Start whiteboard session unavailable");
+      await expect(card).toContainText(/privacy preferences are not complete/i);
+      await expect(card).toContainText(/Manage → Privacy/i);
+      await expect(card).not.toContainText(/Ask the parent/i);
+      await expect(card).not.toContainText(/parent account/i);
     }
   );
 

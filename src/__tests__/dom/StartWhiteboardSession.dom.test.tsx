@@ -112,10 +112,12 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
     expect(
       screen.queryByTestId("start-whiteboard-session-btn")
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("start-wb-consent-callout")).toBeInTheDocument();
-    expect(
-      screen.getByText(/privacy preferences are not complete/i)
-    ).toBeInTheDocument();
+    const callout = screen.getByTestId("start-wb-consent-callout");
+    expect(callout).toBeInTheDocument();
+    expect(callout).toHaveTextContent(/privacy preferences are not complete/i);
+    expect(callout).toHaveTextContent(/Manage → Privacy/);
+    expect(callout).not.toHaveTextContent(/Ask the parent/i);
+    expect(callout).not.toHaveTextContent(/parent account/i);
   });
 
   it("renders Start for a self-learner once a consent record exists", () => {

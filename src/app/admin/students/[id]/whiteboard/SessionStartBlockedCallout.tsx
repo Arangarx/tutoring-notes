@@ -7,6 +7,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 type SessionStartBlockedCalloutProps = {
   studentId: string;
   studentClaimed: boolean;
+  /** Claimed self-learner finishes privacy preferences themselves. */
+  isSelfLearner: boolean;
   claimInvitesEnabled: boolean;
   hasTopClaimBanner: boolean;
 };
@@ -17,6 +19,7 @@ type SessionStartBlockedCalloutProps = {
 export function SessionStartBlockedCallout({
   studentId,
   studentClaimed,
+  isSelfLearner,
   claimInvitesEnabled,
   hasTopClaimBanner,
 }: SessionStartBlockedCalloutProps) {
@@ -33,18 +36,31 @@ export function SessionStartBlockedCallout({
       </AlertTitle>
       <AlertDescription className="text-muted-foreground">
         {studentClaimed ? (
-          <>
-            <p>
-              A parent account is connected, but privacy preferences are not
-              complete. You cannot start a session until the parent finishes
-              them.
-            </p>
-            <p className="mt-2">
-              Ask the parent to sign in to their Mynk account and complete
-              privacy preferences for this learner. They can find this under
-              their child&apos;s profile in Account.
-            </p>
-          </>
+          isSelfLearner ? (
+            <>
+              <p>
+                This learner&apos;s privacy preferences are not complete. You
+                cannot start a session until they finish them.
+              </p>
+              <p className="mt-2">
+                They finish privacy preferences under Manage → Privacy in
+                their Mynk account.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                A parent account is connected, but privacy preferences are not
+                complete. You cannot start a session until the parent finishes
+                them.
+              </p>
+              <p className="mt-2">
+                Ask the parent to sign in to their Mynk account and complete
+                privacy preferences for this learner. They can find this under
+                their child&apos;s profile in Account.
+              </p>
+            </>
+          )
         ) : (
           <>
             <p>

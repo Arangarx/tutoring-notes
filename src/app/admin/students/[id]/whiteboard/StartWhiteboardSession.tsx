@@ -73,6 +73,7 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
       <SessionStartBlockedCallout
         studentId={studentId}
         studentClaimed={props.studentClaimed}
+        isSelfLearner={props.isSelfLearner}
         claimInvitesEnabled={props.claimInvitesEnabled ?? false}
         hasTopClaimBanner={props.hasTopClaimBanner ?? false}
       />

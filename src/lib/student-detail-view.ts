@@ -3,6 +3,9 @@
  * Invite kind is the latest invite's stored inviteTargetKind. A null kind stays
  * the parent sentence. This does not read LearnerProfile.isSelfLearner and does
  * not guess from a name that equals an email.
+ *
+ * A claimed learner with no consent record is not a critical card. The Session
+ * card's blocked callout owns that sentence, so it is not said twice.
  */
 
 export type StudentDetailInviteKind = "self_learner" | "child_learner" | null;
@@ -11,8 +14,7 @@ export type StudentDetailMainButton = "resume" | "open_room" | "start_session";
 
 export type StudentDetailCriticalCard =
   | { kind: "deletion"; text: string; purgeEligibleAt: string | null }
-  | { kind: "setup"; text: string }
-  | { kind: "privacy"; text: string };
+  | { kind: "setup"; text: string };
 
 export type StudentDetailView = {
   mainButton: StudentDetailMainButton | null;
@@ -71,13 +73,8 @@ function criticalCard(input: StudentDetailViewInput): StudentDetailCriticalCard 
     };
   }
 
-  if (!input.consentRecordExists) {
-    return {
-      kind: "privacy",
-      text: "A parent account is connected, but privacy preferences are not complete. You cannot start a session until the parent finishes them. Ask the parent to sign in to their Mynk account and complete privacy preferences for this learner. They can find this under their child's profile in Account.",
-    };
-  }
-
+  // Claimed learners, with or without a consent record, get no card here.
+  // The Session card callout says the privacy sentence once.
   return null;
 }
 
