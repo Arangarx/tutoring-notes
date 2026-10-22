@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import {
   addGraphExpression,
   clampGraphContainerPx,
@@ -6,6 +8,8 @@ import {
   fitGraphBboxToSquareUnits,
   normalizeGraphBbox,
   parseGraphStateJson,
+  GRAPH_FUNCTION_TOKENS,
+  GraphExpressionError,
   preprocessGraphExpression,
   recomputeBboxForResize,
   removeGraphExpression,
@@ -110,7 +114,8 @@ describe("graph-state", () => {
       expect(preprocessGraphExpression("x^3+5x^2-2")).toBe("x^3+5*x^2-2");
       expect(preprocessGraphExpression("2(x+1)")).toBe("2*(x+1)");
       expect(preprocessGraphExpression("x(x+1)")).toBe("x*(x+1)");
-      expect(preprocessGraphExpression("2)(x+1)")).toBe("2)*(x+1)");
+      // A stray `)` is unbalanced input, not something to pass through (2026-10-22).
+      expect(() => preprocessGraphExpression("2)(x+1)")).toThrow(GraphExpressionError);
     });
 
     it("does not corrupt known function calls", () => {
@@ -139,8 +144,10 @@ describe("graph-state", () => {
       expect(preprocessGraphExpression("lnx")).toBe("ln(x)");
       expect(preprocessGraphExpression("sin2")).toBe("sin(2)");
       expect(preprocessGraphExpression("log10x")).toBe("log10(x)");
-      expect(preprocessGraphExpression("log10")).toBe("log10");
-      expect(preprocessGraphExpression("sinxy")).toBe("sinxy");
+      // A function name with no argument, or a word that is not a known name, throws
+      // (2026-10-22). It used to pass through and plot nothing or the wrong curve.
+      expect(() => preprocessGraphExpression("log10")).toThrow(GraphExpressionError);
+      expect(() => preprocessGraphExpression("sinxy")).toThrow(GraphExpressionError);
       // Desmos: the exponent binds inside the call. sinx^2 is sin(x^2), not sin(x)^2.
       expect(preprocessGraphExpression("sinx^2")).toBe("sin(x^2)");
     });
@@ -242,6 +249,275 @@ describe("graph-state", () => {
       expect(preprocessGraphExpression("2pi")).toBe("2*PI");
       expect(preprocessGraphExpression("sin(pi)")).toBe("sin(PI)");
       expect(preprocessGraphExpression("sin pi")).toBe("sin(PI)");
+    });
+  });
+
+  describe("preprocessGraphExpression hardening (review blockers, 2026-10-22)", () => {
+    const fail = (input: string) => () => preprocessGraphExpression(input);
+
+    // Independent oracle for blocker 1: sin^(E) x is sin(x)^(E) by Desmos.
+    function nestedExponentInput(levels: number): { input: string; expected: string } {
+      let input = "x";
+      let expected = "x";
+      for (let n = 0; n < levels; n += 1) {
+        input = `sin^(${input}) x`;
+        expected = `sin(x)^(${expected})`;
+      }
+      return { input, expected };
+    }
+
+    function timed<T>(fn: () => T): { ms: number; result?: T; error?: unknown } {
+      const t0 = performance.now();
+      try {
+        const result = fn();
+        return { ms: performance.now() - t0, result };
+      } catch (error) {
+        return { ms: performance.now() - t0, error };
+      }
+    }
+
+    describe("1. no exponential-time parse", () => {
+      it("parses sin^(sin^(...)) nesting once, within the 200 character cap", () => {
+        const { input, expected } = nestedExponentInput(24);
+        expect(input.length).toBeLessThanOrEqual(200);
+        const run = timed(() => preprocessGraphExpression(input));
+        expect(run.ms).toBeLessThan(50);
+        if (run.error) expect(run.error).toBeInstanceOf(GraphExpressionError);
+        else expect(run.result).toBe(expected);
+      });
+
+      it("fails fast on the argument-less sin^(sin^(...x...)) nest that made the old parser re-parse", () => {
+        // Review repro: 24 levels / 145 chars took 2.6s because the exponent was parsed,
+        // rewound, and parsed again at every level.
+        const input = `${"sin^(".repeat(24)}x${")".repeat(24)}`;
+        expect(input.length).toBeLessThanOrEqual(200);
+        const run = timed(() => preprocessGraphExpression(input));
+        expect(run.ms).toBeLessThan(50);
+        expect(run.error).toBeInstanceOf(GraphExpressionError);
+      });
+
+      it("keeps a shallow exponent nest correct", () => {
+        const { input, expected } = nestedExponentInput(3);
+        expect(preprocessGraphExpression(input)).toBe(expected);
+        expect(preprocessGraphExpression("sin^(x) x")).toBe("sin(x)^(x)");
+      });
+
+      it("rejects parens nested deeper than 32 quickly", () => {
+        const input = `${"(".repeat(90)}x${")".repeat(90)}`;
+        const run = timed(() => preprocessGraphExpression(input));
+        expect(run.ms).toBeLessThan(50);
+        expect(run.error).toBeInstanceOf(GraphExpressionError);
+        expect((run.error as Error).message).toMatch(/nested/i);
+      });
+
+      it("rejects calls, bare function chains and unary minus nested deeper than 32", () => {
+        const calls = `${"sin(".repeat(36)}x${")".repeat(36)}`;
+        const chain = `${"sin ".repeat(45)}x`;
+        const minus = `${"-".repeat(60)}x`;
+        for (const input of [calls, chain, minus]) {
+          expect(input.length).toBeLessThanOrEqual(200);
+          const run = timed(() => preprocessGraphExpression(input));
+          expect(run.ms).toBeLessThan(50);
+          expect(run.error).toBeInstanceOf(GraphExpressionError);
+          expect((run.error as Error).message).toMatch(/nested/i);
+        }
+      });
+
+      it("accepts ordinary nesting well under the cap", () => {
+        expect(preprocessGraphExpression("((((((((((x))))))))))")).toBe("((((((((((x))))))))))");
+        expect(preprocessGraphExpression("sin(cos(tan(sin(cos(x)))))")).toBe(
+          "sin(cos(tan(sin(cos(x)))))"
+        );
+      });
+    });
+
+    describe("2. unknown words and glued names never pass through", () => {
+      const mustThrow = [
+        "atan2x",
+        "atan2 x",
+        "sin2pix",
+        "sin2πx",
+        "sinpix",
+        "sec x",
+        "sec(x)",
+        "csc x",
+        "arcsin x",
+        "arcsin(x)",
+        "log_2 x",
+        "sinxy",
+        "sin xy",
+        "x2",
+        "pi2",
+        "foo",
+        "y",
+        "eval(x)",
+        "use(x)",
+        "import(x)",
+        "xsin x",
+        "e2",
+        "1.2.3",
+        "x.5",
+        "sin2.5x",
+      ];
+      it.each(mustThrow)("throws on %s", (input) => {
+        expect(fail(input)).toThrow(GraphExpressionError);
+      });
+
+      it("keeps a recognized name glued to its operand", () => {
+        const cases: Array<[string, string]> = [
+          ["sin2", "sin(2)"],
+          ["sin2x", "sin(2*x)"],
+          ["sinpi", "sin(PI)"],
+          ["sinx", "sin(x)"],
+          ["log10x", "log10(x)"],
+          ["log2x", "log2(x)"],
+          ["atan2(x,1)", "atan2(x,1)"],
+          ["atan2(x, 1)", "atan2(x,1)"],
+          ["2atan2(x,1)", "2*atan2(x,1)"],
+          ["Atan2(X,1)", "atan2(x,1)"],
+        ];
+        for (const [input, output] of cases) {
+          expect(preprocessGraphExpression(input)).toBe(output);
+        }
+      });
+
+      it("never turns atan2(x,1) into atan(2*(x,1))", () => {
+        expect(preprocessGraphExpression("atan2(x,1)")).not.toContain("atan(");
+      });
+    });
+
+    describe("3. names stored boards could call before the rewriter existed", () => {
+      const cases: Array<[string, string]> = [
+        ["floor(x)", "floor(x)"],
+        ["ceil(x)", "ceil(x)"],
+        ["round(x)", "round(x)"],
+        ["sign(x)", "sign(x)"],
+        ["trunc(x)", "trunc(x)"],
+        ["min(x,2)", "min(x,2)"],
+        ["max(x, 2)", "max(x,2)"],
+        ["max(x,2,3)", "max(x,2,3)"],
+        ["pow(x,2)", "pow(x,2)"],
+        ["hypot(x,1)", "hypot(x,1)"],
+        ["atan2(x,1)", "atan2(x,1)"],
+        ["expm1(x)", "expm1(x)"],
+        ["log1p(x)", "log1p(x)"],
+        ["factorial(x)", "factorial(x)"],
+        ["gcd(x,4)", "gcd(x,4)"],
+        ["lcm(x,4)", "lcm(x,4)"],
+        ["lg(x)", "lg(x)"],
+        ["lb(x)", "lb(x)"],
+        ["ld(x)", "ld(x)"],
+        ["binomial(5,x)", "binomial(5,x)"],
+        ["nthroot(x,3)", "nthroot(x,3)"],
+        ["erf(x)", "erf(x)"],
+        ["floor x", "floor(x)"],
+        ["2floor(x)", "2*floor(x)"],
+        ["x floor(x)", "x*floor(x)"],
+        ["floor(x)+ceil(x)", "floor(x)+ceil(x)"],
+      ];
+      it.each(cases)("rewrites %s", (input, output) => {
+        expect(preprocessGraphExpression(input)).toBe(output);
+      });
+
+      it("rejects wrong argument counts instead of plotting NaN", () => {
+        for (const input of ["pow(x)", "pow(x,2,3)", "atan2(x)", "sin(x,1)", "floor(x,2)", "min()", "gcd(x)"]) {
+          expect(fail(input)).toThrow(GraphExpressionError);
+        }
+      });
+
+      it("only allowlists names JessieCode can actually call", () => {
+        // Independent oracle: read the names straight from the installed jsxgraph source.
+        const src = readFileSync(
+          join(process.cwd(), "node_modules/jsxgraph/src/parser/jessiecode.js"),
+          "utf8"
+        );
+        const region = src.slice(
+          src.indexOf("defineBuiltIn: function"),
+          src.indexOf("// special scopes for factorial")
+        );
+        const builtIns = new Set(
+          [...region.matchAll(/^\s+['"]?([\w$]+)['"]?:\s/gm)].map((m) => m[1])
+        );
+        expect(builtIns.has("factorial")).toBe(true);
+        const mathBag = Math as unknown as Record<string, unknown>;
+        for (const name of GRAPH_FUNCTION_TOKENS) {
+          const viaMath = typeof mathBag[name] === "function";
+          expect({ name, callable: viaMath || builtIns.has(name) }).toEqual({
+            name,
+            callable: true,
+          });
+        }
+        // Names that let a board run arbitrary JessieCode or touch the board are never allowed.
+        for (const name of ["eval", "use", "import", "remove", "$", "$board", "$log", "random", "randint"]) {
+          expect(GRAPH_FUNCTION_TOKENS).not.toContain(name);
+        }
+        // JessieCode has no sec/csc anywhere.
+        expect(GRAPH_FUNCTION_TOKENS).not.toContain("sec");
+        expect(GRAPH_FUNCTION_TOKENS).not.toContain("csc");
+      });
+    });
+
+    describe("non-blocking cleanups", () => {
+      it.each(["sin", "sin^2", "sin()", "sin^(2)", "sin^-1 x", "sin^-1(x)", "cos^-1 x", "log10", "x+sin", "sin+x", "sin)"])(
+        "throws on a function with no usable argument: %s",
+        (input) => {
+          expect(fail(input)).toThrow(GraphExpressionError);
+        }
+      );
+
+      it("says why sin^-1 is not supported, and does not guess arcsin", () => {
+        expect(fail("sin^-1 x")).toThrow(/inverse|asin/i);
+        expect(() => preprocessGraphExpression("sin^-1 x")).toThrow();
+        let out: string | null = null;
+        try {
+          out = preprocessGraphExpression("sin^-1 x");
+        } catch {
+          out = null;
+        }
+        expect(out).toBeNull();
+      });
+
+      it("normalizes leading and trailing dot numbers", () => {
+        const cases: Array<[string, string]> = [
+          [".5x", "0.5*x"],
+          [".5", "0.5"],
+          ["x+.5", "x+0.5"],
+          ["2*.25", "2*0.25"],
+          ["5.", "5"],
+          ["5.x", "5*x"],
+          ["5.+x", "5+x"],
+          ["x^.5", "x^0.5"],
+          ["1.5x", "1.5*x"],
+        ];
+        for (const [input, output] of cases) {
+          expect(preprocessGraphExpression(input)).toBe(output);
+        }
+        expect(fail(".")).toThrow(GraphExpressionError);
+        expect(fail("..5")).toThrow(GraphExpressionError);
+      });
+
+      it("rejects top level commas and unbalanced parens", () => {
+        for (const input of ["x,1", "(x,1)", "2(x,1)", ",x", "x,", "(x,)", "(,x)", "x)", ")x", "(x", "((x)", "(x))", "2)(x+1)", "()", "sin(x))"]) {
+          expect(fail(input)).toThrow(GraphExpressionError);
+        }
+      });
+
+      it("accepts π as pi", () => {
+        const cases: Array<[string, string]> = [
+          ["π", "PI"],
+          ["2π", "2*PI"],
+          ["2πx", "2*PI*x"],
+          ["2 π x", "2*PI*x"],
+          ["sin(πx)", "sin(PI*x)"],
+          ["sin π", "sin(PI)"],
+          ["sinπ", "sin(PI)"],
+          ["x π", "x*PI"],
+          ["xπ", "x*PI"],
+        ];
+        for (const [input, output] of cases) {
+          expect(preprocessGraphExpression(input)).toBe(output);
+        }
+      });
     });
   });
 

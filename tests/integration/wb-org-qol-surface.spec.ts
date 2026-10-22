@@ -84,12 +84,15 @@ function expectCurveMatchesMath(
   pts: [number, number][],
   oracleAt: (x: number) => number,
   label: string,
-  domain?: readonly [number, number]
+  domain?: readonly [number, number],
+  skipAt?: (x: number) => boolean
 ) {
   let compared = 0;
   for (const [x, y] of pts) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     if (domain && (x < domain[0] || x > domain[1])) continue;
+    // Step functions: a sample on a jump is not a stable oracle comparison.
+    if (skipAt?.(x)) continue;
     const oracle = oracleAt(x);
     if (!Number.isFinite(oracle) || Math.abs(oracle) > 1e6) continue;
     compared += 1;
@@ -720,6 +723,7 @@ test.describe("whiteboard QoL surfaces", () => {
         expr: string;
         oracleAt: (x: number) => number;
         domain?: readonly [number, number];
+        skipAt?: (x: number) => boolean;
       }> = [
         { expr: "2sin(x)", oracleAt: (x) => 2 * Math.sin(x) },
         { expr: "log10(x)", oracleAt: (x) => Math.log10(x) },
@@ -734,6 +738,17 @@ test.describe("whiteboard QoL surfaces", () => {
         { expr: "e^x", oracleAt: (x) => Math.exp(x) },
         { expr: "sinh(x)", oracleAt: (x) => Math.sinh(x) },
         { expr: "asin(x)", oracleAt: (x) => Math.asin(x), domain: [-1, 1] },
+        // Names stored boards could call before the rewriter existed.
+        {
+          expr: "floor(x)",
+          oracleAt: (x) => Math.floor(x),
+          skipAt: (x) => Math.abs(x - Math.round(x)) < 1e-6,
+        },
+        // Two-argument call: must stay atan2(x, 1), not become atan(2*(x,1)).
+        { expr: "atan2(x,1)", oracleAt: (x) => Math.atan2(x, 1) },
+        { expr: "min(x,2)", oracleAt: (x) => Math.min(x, 2) },
+        { expr: ".5x", oracleAt: (x) => 0.5 * x },
+        { expr: "2πx", oracleAt: (x) => 2 * Math.PI * x },
       ];
 
       let plotted = 0;
@@ -750,8 +765,42 @@ test.describe("whiteboard QoL surfaces", () => {
             return pts.length;
           }, { timeout: 15_000 })
           .toBeGreaterThan(0);
-        expectCurveMatchesMath(pts, sample.oracleAt, sample.expr, sample.domain);
+        expectCurveMatchesMath(pts, sample.oracleAt, sample.expr, sample.domain, sample.skipAt);
       }
+    }
+  );
+
+  test(
+    "unreadable expressions show the error state and draw no curve",
+    { tag: [TAG.WB_GRAPH] },
+    async ({ page }) => {
+      test.setTimeout(180_000);
+      await openTutorBoard(page);
+      await page.getByTestId("wb-insert-graph").click();
+      await page.getByTestId("wb-graph-insert").click();
+      const host = page.getByTestId("wb-graph-embed-host").first();
+      await expect(host).toBeVisible({ timeout: 30_000 });
+      await host.scrollIntoViewIfNeeded();
+
+      // Each of these used to reach JessieCode as a bare identifier or a wrong call
+      // and plot nothing or the wrong curve with no message.
+      const unreadable = ["sec x", "atan2x", "sin2pix", "arcsin x", "(x,1)"];
+      for (let index = 0; index < unreadable.length; index += 1) {
+        await addGraphExpressionViaUI(page, unreadable[index]!);
+        await expect(page.getByTestId(`wb-graph-expr-error-${index}`)).toBeVisible();
+      }
+      await expect
+        .poll(async () => (await readMountedGraphInk(page)).functionGraphs.length)
+        .toBe(0);
+
+      // Control: the harness does see a curve when the expression is readable.
+      await addGraphExpressionViaUI(page, "atan2(x,1)");
+      await expect
+        .poll(async () => (await readMountedGraphInk(page)).functionGraphs.length, {
+          timeout: 15_000,
+        })
+        .toBe(1);
+      await expect(page.getByTestId(`wb-graph-expr-error-${unreadable.length}`)).toHaveCount(0);
     }
   );
 
