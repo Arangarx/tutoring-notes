@@ -367,6 +367,13 @@ export function createScenePainter(deps: ScenePainterDeps): ScenePainter {
         scrollX: viewportOverride.panX,
         scrollY: viewportOverride.panY,
         zoom: { value: viewportOverride.zoom },
+        // Excalidraw 0.18 starts isLoading:true and shallow-merges
+        // updateScene, so echoing getAppState() pins the "Loading scene…"
+        // spinner for every later paint. A real log has a viewport at t≈0,
+        // so this branch runs on the first paint and every tick after it.
+        // Only the two replay players pass viewportOverride; the live board
+        // does not use createScenePainter.
+        isLoading: false,
       };
     } else if (preserveScroll) {
       const merged = readScrollOnly(api);
