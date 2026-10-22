@@ -75,18 +75,31 @@ async function expectChatToggleClearOfModifierHints(
   );
 }
 
-/** Nearest finite curve sample to targetX. The oracle for y is Math, not the preprocessor. */
-function nearestFiniteSample(
+/**
+ * Every finite sample of the plotted curve vs Math at that sample's own x.
+ * Tolerance scales with |Math y|. Samples near a vertical asymptote (huge Math y)
+ * are skipped — tan spikes there and the library's finite sample is not the oracle.
+ */
+function expectCurveMatchesMath(
   pts: [number, number][],
-  targetX: number
-): { x: number; y: number } | null {
-  let best: { x: number; y: number; dx: number } | null = null;
+  oracleAt: (x: number) => number,
+  label: string,
+  domain?: readonly [number, number]
+) {
+  let compared = 0;
   for (const [x, y] of pts) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    const dx = Math.abs(x - targetX);
-    if (!best || dx < best.dx) best = { x, y, dx };
+    if (domain && (x < domain[0] || x > domain[1])) continue;
+    const oracle = oracleAt(x);
+    if (!Number.isFinite(oracle) || Math.abs(oracle) > 1e6) continue;
+    compared += 1;
+    const scale = Math.max(1, Math.abs(oracle));
+    expect(
+      Math.abs(y - oracle),
+      `${label} at x=${x}: curve y=${y}, Math y=${oracle}`
+    ).toBeLessThanOrEqual(1e-4 * scale);
   }
-  return best ? { x: best.x, y: best.y } : null;
+  expect(compared, `${label} has a finite sample inside its domain`).toBeGreaterThan(0);
 }
 
 async function openTutorBoard(page: import("@playwright/test").Page) {
@@ -623,6 +636,15 @@ test.describe("whiteboard QoL surfaces", () => {
       test.setTimeout(180_000);
       await openTutorBoard(page);
       await page.getByTestId("wb-insert-graph").click();
+      await page.getByRole("button", { name: "Plot expression" }).click();
+      const dialogInput = page.getByTestId("wb-graph-expr-input");
+      await expect(dialogInput).toHaveAttribute("aria-label", "Expression, y equals");
+      const dialogFontPx = await dialogInput.evaluate((el) =>
+        parseFloat(getComputedStyle(el).fontSize)
+      );
+      await page.getByRole("button", { name: "Cancel" }).click();
+
+      await page.getByTestId("wb-insert-graph").click();
       await page.getByTestId("wb-graph-insert").click();
       const host = page.getByTestId("wb-graph-embed-host").first();
       await expect(host).toBeVisible({ timeout: 30_000 });
@@ -632,6 +654,14 @@ test.describe("whiteboard QoL surfaces", () => {
       const input = page.getByTestId("wb-graph-expr-new");
       const prefix = page.getByTestId("wb-graph-expr-new-prefix");
       await expect(panel).toBeVisible();
+      await expect(input).toHaveAttribute("aria-label", "Expression, y equals");
+      const onGraphFontPx = await input.evaluate((el) =>
+        parseFloat(getComputedStyle(el).fontSize)
+      );
+      expect(
+        dialogFontPx,
+        "insert-dialog expression text is larger than the on-graph entry"
+      ).toBeGreaterThan(onGraphFontPx);
       await expect(prefix).toHaveText("y=");
       await expect(input).toHaveAttribute("placeholder", "2x+1");
       const help = "Uses standard function notation (x as the variable).";
@@ -686,12 +716,24 @@ test.describe("whiteboard QoL surfaces", () => {
       await expect(host).toBeVisible({ timeout: 30_000 });
       await host.scrollIntoViewIfNeeded();
 
-      const samples = [
-        { expr: "2sin(x)", x: 1, y: 2 * Math.sin(1) },
-        { expr: "log10(x)", x: 10, y: Math.log10(10) },
-        { expr: "sin x", x: Math.PI / 2, y: Math.sin(Math.PI / 2) },
-        { expr: "ln x", x: Math.E, y: Math.log(Math.E) },
-        { expr: "sinx", x: 1, y: Math.sin(1) },
+      const samples: Array<{
+        expr: string;
+        oracleAt: (x: number) => number;
+        domain?: readonly [number, number];
+      }> = [
+        { expr: "2sin(x)", oracleAt: (x) => 2 * Math.sin(x) },
+        { expr: "log10(x)", oracleAt: (x) => Math.log10(x) },
+        { expr: "sin x", oracleAt: (x) => Math.sin(x) },
+        { expr: "ln x", oracleAt: (x) => Math.log(x) },
+        { expr: "sinx", oracleAt: (x) => Math.sin(x) },
+        { expr: "sin 2x", oracleAt: (x) => Math.sin(2 * x) },
+        { expr: "3 sin 2x", oracleAt: (x) => 3 * Math.sin(2 * x) },
+        { expr: "sin x^2", oracleAt: (x) => Math.sin(x * x) },
+        { expr: "sin^2 x", oracleAt: (x) => Math.sin(x) ** 2 },
+        { expr: "pi x", oracleAt: (x) => Math.PI * x },
+        { expr: "e^x", oracleAt: (x) => Math.exp(x) },
+        { expr: "sinh(x)", oracleAt: (x) => Math.sinh(x) },
+        { expr: "asin(x)", oracleAt: (x) => Math.asin(x), domain: [-1, 1] },
       ];
 
       let plotted = 0;
@@ -699,21 +741,16 @@ test.describe("whiteboard QoL surfaces", () => {
         plotted += 1;
         await addGraphExpressionViaUI(page, sample.expr);
         await expect(page.locator("[data-testid^='wb-graph-expr-error-']")).toHaveCount(0);
-        let nearest: { x: number; y: number } | null = null;
+        let pts: [number, number][] = [];
         await expect
           .poll(async () => {
-            // replot recreates every curve, so the expression just added is the last one.
             const curves = (await readMountedGraphInk(page)).functionGraphs;
-            if (curves.length !== plotted) return Number.POSITIVE_INFINITY;
-            nearest = nearestFiniteSample(curves[curves.length - 1]!.pts, sample.x);
-            return nearest ? Math.abs(nearest.x - sample.x) : Number.POSITIVE_INFINITY;
+            if (curves.length !== plotted) return 0;
+            pts = curves[curves.length - 1]!.pts;
+            return pts.length;
           }, { timeout: 15_000 })
-          .toBeLessThanOrEqual(0.25);
-        expect(nearest, sample.expr).not.toBeNull();
-        expect(
-          Math.abs(nearest!.y - sample.y),
-          `${sample.expr} nearest sample (${nearest!.x}, ${nearest!.y}) vs Math y=${sample.y}`
-        ).toBeLessThanOrEqual(0.05);
+          .toBeGreaterThan(0);
+        expectCurveMatchesMath(pts, sample.oracleAt, sample.expr, sample.domain);
       }
     }
   );

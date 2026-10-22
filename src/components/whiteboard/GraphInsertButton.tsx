@@ -184,6 +184,7 @@ export function GraphInsertButton({
                     Expression
                   </label>
                   <GraphExpressionEntry
+                    size="dialog"
                     inputRef={inputRef}
                     inputId="wb-graph-expr"
                     value={state.expression}

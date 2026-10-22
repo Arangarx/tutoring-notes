@@ -40,7 +40,10 @@ import {
   GraphInkModeControl,
   type GraphInkMode,
 } from "@/components/whiteboard/GraphInkModeControl";
-import { GraphExpressionEntry } from "@/components/whiteboard/GraphExpressionEntry";
+import {
+  GraphExpressionEntry,
+  GraphExpressionPrefix,
+} from "@/components/whiteboard/GraphExpressionEntry";
 import "./graph-embeddable.css";
 
 type EmbeddableElementLike = {
@@ -191,8 +194,8 @@ function plotExpressions(
       errors.push("");
       continue;
     }
-    const parsed = preprocessGraphExpression(trimmed);
     try {
+      const parsed = preprocessGraphExpression(trimmed);
       const obj = board.create("functiongraph", [parsed], {
         strokeColor: "var(--accent)",
         strokeWidth: 2,
@@ -1056,9 +1059,7 @@ export function GraphEmbeddable({
                       }}
                       data-testid={`wb-graph-expr-display-${index}`}
                     >
-                      <span aria-hidden="true" className="wb-graph-expr-entry-prefix">
-                        y=
-                      </span>
+                      <GraphExpressionPrefix />
                       <span>{expr || "(empty)"}</span>
                     </button>
                     <button

@@ -196,6 +196,20 @@
   color: var(--text-muted);
 }
 
+/* Insert-graph dialog. The on-graph panel keeps the compact input above. */
+.wb-graph-expr-entry--dialog .wb-graph-expr-input {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.wb-graph-expr-entry--dialog .wb-graph-expr-entry-prefix {
+  font-size: 13px;
+}
+
+.wb-graph-expr-entry--dialog .wb-graph-expr-entry-help {
+  font-size: 12px;
+}
+
 .wb-graph-expr-display {
   display: flex;
   align-items: center;

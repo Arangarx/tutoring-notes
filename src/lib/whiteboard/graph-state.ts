@@ -50,29 +50,51 @@ export const MIN_GRAPH_CONTAINER_PX = 8;
 /** Minimum axis span in math units — keeps bbox non-degenerate. */
 export const MIN_GRAPH_BBOX_SPAN = 1e-6;
 
+/** Tutors paste long text by accident. Longer than this is rejected, not plotted. */
+export const GRAPH_EXPRESSION_MAX_LENGTH = 200;
+
 /**
- * Names JessieCode can call. Longest first: `log10` must win over `log`,
- * and `(?<![A-Za-z_])` is required because `\b` is false between a digit and a letter (`2sin`).
+ * Names JessieCode can call (built-in or `Math.*`). Longest first so `log10`
+ * wins over `log` and `asinh` wins over `asin`. `sec` / `csc` are omitted —
+ * JessieCode has neither a built-in nor a `Math` method for them.
+ * Checked against jsxgraph `src/parser/jessiecode.js` `defineBuiltIn` and
+ * `isMathMethod` (`Math.*` except `E`).
  */
 export const GRAPH_FUNCTION_TOKENS = [
   "log10",
+  "asinh",
+  "acosh",
+  "atanh",
   "log2",
-  "sqrt",
   "asin",
   "acos",
   "atan",
+  "sinh",
+  "cosh",
+  "tanh",
+  "sqrt",
+  "cbrt",
+  "acot",
   "abs",
   "exp",
   "sin",
   "cos",
   "tan",
-  "ln",
+  "cot",
   "log",
+  "ln",
 ] as const;
 
-const GRAPH_FN_SRC = GRAPH_FUNCTION_TOKENS.join("|");
+const GRAPH_FUNCTIONS_LONGEST_FIRST = [...GRAPH_FUNCTION_TOKENS].sort(
+  (a, b) => b.length - a.length || a.localeCompare(b)
+);
 
-const FN_CALL_RE = new RegExp(`(?<![A-Za-z_])(?:${GRAPH_FN_SRC})\\s*\\(`, "gi");
+export class GraphExpressionError extends Error {
+  constructor(message = "Couldn't understand this expression.") {
+    super(message);
+    this.name = "GraphExpressionError";
+  }
+}
 
 export function clampGraphContainerPx(px: number): number {
   if (!Number.isFinite(px) || px <= 0) return MIN_GRAPH_CONTAINER_PX;
@@ -171,127 +193,391 @@ export function recomputeBboxForResize(args: {
 }
 
 /**
- * Insert implicit multiplication for tutor-style expressions (e.g. `5x` → `5*x`).
- * Known function names are protected from `*` insertion before `(`.
+ * Rewrite tutor-style expressions into JessieCode.
+ * Function application runs before implicit `*`, so `sin 2x` stays one call
+ * (`sin(2*x)`) instead of `sin(2)*x`. Calls are tokens, not placeholder
+ * strings, so there is no multi-pass restore.
+ * Render-time only — the stored expression is the tutor's text.
  */
 export function preprocessGraphExpression(expr: string): string {
   const trimmed = expr.trim();
   if (!trimmed) return trimmed;
-
-  // Before `5x` → `5*x`, so the `0` in `log10x` is not treated as a coefficient.
-  let s = splitGluedFunctionOperands(trimmed);
-
-  const fnPlaceholders: string[] = [];
-  s = s.replace(FN_CALL_RE, (match) => {
-    const key = `@@FN${fnPlaceholders.length}@@`;
-    fnPlaceholders.push(match.replace(/\s+(?=\()/, ""));
-    return key;
-  });
-
-  s = s.replace(/(\d)\s*([a-zA-Z])/g, "$1*$2");
-  s = s.replace(/(\d)\s*\(/g, "$1*(");
-  s = s.replace(/(\))\s*([a-zA-Z\d(])/g, "$1*$2");
-  s = s.replace(/([a-zA-Z])\s*\(/g, "$1*(");
-
-  fnPlaceholders.forEach((fn, index) => {
-    s = s.replace(`@@FN${index}@@`, fn);
-  });
-
-  s = insertStarBeforeFunction(s);
-  s = rewriteJuxtaposedCalls(s);
-  // JessieCode's constant is `PI`, not `pi` or `Math.PI`.
-  s = s.replace(/(?<![A-Za-z_])pi(?![A-Za-z_\d])/gi, "PI");
-  return s;
-}
-
-function insertStarBeforeFunction(input: string): string {
-  const re = new RegExp(`(\\d|\\))\\s*(?<![A-Za-z_])(${GRAPH_FN_SRC})`, "gi");
-  return input.replace(re, "$1*$2");
-}
-
-function readBalancedParen(input: string, open: number): number {
-  let depth = 0;
-  for (let i = open; i < input.length; i++) {
-    if (input[i] === "(") depth += 1;
-    else if (input[i] === ")") {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
+  if (trimmed.length > GRAPH_EXPRESSION_MAX_LENGTH) {
+    throw new GraphExpressionError("Expression is too long.");
   }
-  return -1;
+  return parseTop(tokenize(trimmed));
 }
 
-function readSimpleOperand(
-  input: string,
-  at: number
-): { text: string; end: number } | null {
-  if (at >= input.length) return null;
+type Tok =
+  | { k: "num"; v: string }
+  | { k: "var" }
+  | { k: "pi" }
+  | { k: "e" }
+  | { k: "fn"; name: string }
+  | { k: "ident"; v: string }
+  | { k: "op"; v: "+" | "-" | "*" | "/" | "^" | "," }
+  | { k: "lp" }
+  | { k: "rp" };
+
+type Ctx = { toks: Tok[]; i: number };
+
+function peek(ctx: Ctx): Tok | undefined {
+  return ctx.toks[ctx.i];
+}
+
+function eat(ctx: Ctx): Tok {
+  const tok = ctx.toks[ctx.i];
+  if (!tok) throw new GraphExpressionError();
+  ctx.i += 1;
+  return tok;
+}
+
+function isOp(tok: Tok | undefined, op: string): boolean {
+  return tok?.k === "op" && tok.v === op;
+}
+
+/** `x`, `pi`, a number, or a number glued to `x` / `pi`. Not bare `e` (`sine` is a word). */
+function isGluedOperand(rest: string): boolean {
+  return /^(?:x|pi|\d+(?:\.\d+)?(?:x|pi)?)$/i.test(rest);
+}
+
+function scanIdentEnd(input: string, at: number): number {
+  let j = at;
+  while (j < input.length && /[A-Za-z0-9_]/.test(input[j] ?? "")) j += 1;
+  return j;
+}
+
+function classifyIdent(raw: string): Tok {
+  const lower = raw.toLowerCase();
+  if (lower === "x") return { k: "var" };
+  if (lower === "pi") return { k: "pi" };
+  if (lower === "e") return { k: "e" };
+  return { k: "ident", v: raw };
+}
+
+function readName(input: string, at: number): { tok: Tok; next: number } {
   const rest = input.slice(at);
-  if (/^x(?![A-Za-z_\d])/.test(rest)) return { text: "x", end: at + 1 };
-  if (/^pi(?![A-Za-z_\d])/i.test(rest)) {
-    return { text: rest.slice(0, 2), end: at + 2 };
+  for (const name of GRAPH_FUNCTIONS_LONGEST_FIRST) {
+    if (!rest.toLowerCase().startsWith(name)) continue;
+    const after = at + name.length;
+    const continues = after < input.length && /[A-Za-z0-9_]/.test(input[after] ?? "");
+    if (!continues) return { tok: { k: "fn", name }, next: after };
+    const identEnd = scanIdentEnd(input, after);
+    if (isGluedOperand(input.slice(after, identEnd))) {
+      return { tok: { k: "fn", name }, next: after };
+    }
+    const wholeEnd = scanIdentEnd(input, at);
+    return { tok: classifyIdent(input.slice(at, wholeEnd)), next: wholeEnd };
   }
-  const num = /^\d+(?:\.\d+)?/.exec(rest);
-  if (num && !/[A-Za-z_\d]/.test(input[at + num[0].length] ?? "")) {
-    return { text: num[0], end: at + num[0].length };
-  }
-  if (input[at] === "(") {
-    const close = readBalancedParen(input, at);
-    if (close > at) return { text: input.slice(at, close + 1), end: close + 1 };
-  }
-  return null;
+  const wholeEnd = scanIdentEnd(input, at);
+  return { tok: classifyIdent(input.slice(at, wholeEnd)), next: wholeEnd };
 }
 
-/** `sin x` → `sin(x)`, `sin (x+1)` → `sin(x+1)`. Already-parenthesized calls are left alone. */
-function rewriteJuxtaposedCalls(input: string): string {
-  const nameRe = new RegExp(`(?<![A-Za-z_])(?:${GRAPH_FN_SRC})`, "gi");
-  let out = "";
+function tokenize(input: string): Tok[] {
+  const tokens: Tok[] = [];
   let i = 0;
   while (i < input.length) {
-    nameRe.lastIndex = i;
-    const found = nameRe.exec(input);
-    if (!found || found.index < i) {
-      out += input.slice(i);
-      break;
-    }
-    const start = found.index;
-    const fn = found[0];
-    out += input.slice(i, start);
-    const after = start + fn.length;
-    if (after >= input.length || input[after] === "(" || !/\s/.test(input[after] ?? "")) {
-      out += fn;
-      i = after;
+    const ch = input[i] ?? "";
+    if (/\s/.test(ch)) {
+      i += 1;
       continue;
     }
-    let j = after;
-    while (j < input.length && /\s/.test(input[j] ?? "")) j += 1;
-    const operand = readSimpleOperand(input, j);
-    if (!operand) {
-      out += fn;
-      i = after;
+    if (/[0-9.]/.test(ch)) {
+      const match = /^(?:\d+\.\d+|\d+)/.exec(input.slice(i));
+      if (!match) throw new GraphExpressionError();
+      i += match[0].length;
+      // `2e3` / `2e-3` is scientific notation, not `2*EULER`. Don't guess.
+      if (i < input.length && /e/i.test(input[i] ?? "")) {
+        const after = input[i + 1];
+        const signThenDigit =
+          (after === "+" || after === "-") && /[0-9]/.test(input[i + 2] ?? "");
+        if ((after !== undefined && /[0-9]/.test(after)) || signThenDigit) {
+          throw new GraphExpressionError();
+        }
+      }
+      tokens.push({ k: "num", v: match[0] });
       continue;
     }
-    const wrapped = operand.text.startsWith("(") ? operand.text : `(${operand.text})`;
-    out += fn + wrapped;
-    i = operand.end;
+    if (/[A-Za-z_]/.test(ch)) {
+      const read = readName(input, i);
+      tokens.push(read.tok);
+      i = read.next;
+      continue;
+    }
+    if (ch === "(") {
+      tokens.push({ k: "lp" });
+      i += 1;
+      continue;
+    }
+    if (ch === ")") {
+      tokens.push({ k: "rp" });
+      i += 1;
+      continue;
+    }
+    if (ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "^" || ch === ",") {
+      tokens.push({ k: "op", v: ch });
+      i += 1;
+      continue;
+    }
+    throw new GraphExpressionError();
+  }
+  return tokens;
+}
+
+function needsStar(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  const end = left[left.length - 1] ?? "";
+  const start = right[0] ?? "";
+  return /[0-9A-Za-z_)]/.test(end) && /[0-9A-Za-z_(]/.test(start);
+}
+
+function startsFactor(tok: Tok | undefined): boolean {
+  if (!tok) return false;
+  return (
+    tok.k === "num" ||
+    tok.k === "var" ||
+    tok.k === "pi" ||
+    tok.k === "e" ||
+    tok.k === "fn" ||
+    tok.k === "ident" ||
+    tok.k === "lp" ||
+    isOp(tok, "-")
+  );
+}
+
+function canStartCallArgument(tok: Tok | undefined): boolean {
+  return startsFactor(tok);
+}
+
+function renderAtom(tok: Tok): string {
+  if (tok.k === "num") return tok.v;
+  if (tok.k === "var") return "x";
+  if (tok.k === "pi") return "PI";
+  if (tok.k === "e") return "EULER";
+  if (tok.k === "ident") return tok.v;
+  throw new GraphExpressionError();
+}
+
+function parseTop(tokens: Tok[]): string {
+  const ctx: Ctx = { toks: tokens, i: 0 };
+  let out = "";
+  while (ctx.i < ctx.toks.length) {
+    if (peek(ctx)?.k === "rp") {
+      eat(ctx);
+      out += ")";
+      continue;
+    }
+    if (isOp(peek(ctx), ",")) {
+      eat(ctx);
+      out += ",";
+      continue;
+    }
+    const before = ctx.i;
+    const expr = parseExpr(ctx);
+    if (ctx.i === before) throw new GraphExpressionError();
+    out += (needsStar(out, expr) ? "*" : "") + expr;
   }
   return out;
 }
 
-/** `sinx` → `sin(x)`. A longer name (`log10`) is not split into `log(10)`. */
-function splitGluedFunctionOperands(input: string): string {
-  const re = new RegExp(
-    `(?<![A-Za-z_])(${GRAPH_FN_SRC})(x|\\d+(?:\\.\\d+)?)(?![A-Za-z_\\d])`,
-    "gi"
-  );
-  return input.replace(re, (match, fn: string, operand: string, offset: number, whole: string) => {
-    const slice = whole.slice(offset).toLowerCase();
-    const splitsLongerName = GRAPH_FUNCTION_TOKENS.some(
-      (name) => name.length > fn.length && slice.startsWith(name)
-    );
-    if (splitsLongerName) return match;
-    return `${fn}(${operand})`;
-  });
+function parseExpr(ctx: Ctx): string {
+  let out = parseTerm(ctx);
+  while (isOp(peek(ctx), "+") || isOp(peek(ctx), "-")) {
+    const op = eat(ctx);
+    if (op.k !== "op") throw new GraphExpressionError();
+    out += op.v + parseTerm(ctx);
+  }
+  return out;
+}
+
+function parseTerm(ctx: Ctx): string {
+  let out = parseFactor(ctx);
+  while (true) {
+    const next = peek(ctx);
+    if (isOp(next, "*") || isOp(next, "/")) {
+      const op = eat(ctx);
+      if (op.k !== "op") throw new GraphExpressionError();
+      out += op.v + parseFactor(ctx);
+      continue;
+    }
+    // `-` here is subtraction (`x-2`), not another factor.
+    if (
+      next &&
+      next.k !== "op" &&
+      next.k !== "rp" &&
+      startsFactor(next)
+    ) {
+      out += "*" + parseFactor(ctx);
+      continue;
+    }
+    break;
+  }
+  return out;
+}
+
+function parseFactor(ctx: Ctx): string {
+  if (isOp(peek(ctx), "-")) {
+    eat(ctx);
+    return `-${parseFactor(ctx)}`;
+  }
+  return parsePrimary(ctx);
+}
+
+function parsePrimary(ctx: Ctx): string {
+  const next = peek(ctx);
+  if (next?.k === "fn") return applyPowers(ctx, parseFunction(ctx));
+  if (next?.k === "lp") return applyPowers(ctx, parseParen(ctx));
+  if (
+    next?.k === "num" ||
+    next?.k === "var" ||
+    next?.k === "pi" ||
+    next?.k === "e" ||
+    next?.k === "ident"
+  ) {
+    return parseAtomProduct(ctx);
+  }
+  throw new GraphExpressionError();
+}
+
+/** One implicit product of atoms. `5x^2` is `5*x^2`, and `/` is not included. */
+function parseAtomProduct(ctx: Ctx): string {
+  let out = parseOneAtom(ctx);
+  while (true) {
+    const next = peek(ctx);
+    if (next?.k === "lp") {
+      out += "*" + applyPowers(ctx, parseParen(ctx));
+      continue;
+    }
+    if (
+      next?.k === "num" ||
+      next?.k === "var" ||
+      next?.k === "pi" ||
+      next?.k === "e" ||
+      next?.k === "ident"
+    ) {
+      out += "*" + parseOneAtom(ctx);
+      continue;
+    }
+    break;
+  }
+  return out;
+}
+
+function parseOneAtom(ctx: Ctx): string {
+  const tok = eat(ctx);
+  if (tok.k === "ident" && peek(ctx)?.k === "lp") {
+    // `sec(x)` is not a JessieCode call. `sec*(x)` would plot the wrong curve.
+    throw new GraphExpressionError();
+  }
+  return applyPowers(ctx, renderAtom(tok));
+}
+
+function applyPowers(ctx: Ctx, base: string): string {
+  let out = base;
+  while (isOp(peek(ctx), "^")) {
+    eat(ctx);
+    out += `^${parseTightPower(ctx)}`;
+  }
+  return out;
+}
+
+function parseTightPower(ctx: Ctx): string {
+  if (isOp(peek(ctx), "-")) {
+    eat(ctx);
+    return `-${parseTightPower(ctx)}`;
+  }
+  const next = peek(ctx);
+  if (next?.k === "lp") return applyPowers(ctx, parseParen(ctx));
+  if (next?.k === "fn") return applyPowers(ctx, parseFunction(ctx));
+  if (
+    next?.k === "num" ||
+    next?.k === "var" ||
+    next?.k === "pi" ||
+    next?.k === "e" ||
+    next?.k === "ident"
+  ) {
+    return applyPowers(ctx, renderAtom(eat(ctx)));
+  }
+  throw new GraphExpressionError();
+}
+
+/**
+ * Desmos: `sin^2(x)` and `sin^2 x` are `sin(x)^2`. The exponent sits on the
+ * name; the argument is still the following factor (`sin 2x` → `sin(2*x)`,
+ * `sin x^2` → `sin(x^2)`, `tan x/2` → `tan(x)/2`).
+ */
+function parseFunction(ctx: Ctx): string {
+  const tok = eat(ctx);
+  if (tok.k !== "fn") throw new GraphExpressionError();
+  let preExp: string | null = null;
+  if (isOp(peek(ctx), "^")) {
+    const saved = ctx.i;
+    eat(ctx);
+    const expTok = peek(ctx);
+    const expOk =
+      expTok?.k === "num" ||
+      expTok?.k === "var" ||
+      expTok?.k === "pi" ||
+      expTok?.k === "e" ||
+      expTok?.k === "lp";
+    if (!expOk) {
+      ctx.i = saved;
+    } else {
+      const exp = parseTightExponent(ctx);
+      if (canStartCallArgument(peek(ctx))) preExp = exp;
+      else ctx.i = saved;
+    }
+  }
+  let call: string;
+  const next = peek(ctx);
+  if (next?.k === "lp") {
+    call = tok.name + parseParen(ctx);
+  } else if (next?.k === "ident") {
+    throw new GraphExpressionError();
+  } else if (canStartCallArgument(next)) {
+    call = `${tok.name}(${parseFactor(ctx)})`;
+  } else {
+    call = tok.name;
+  }
+  return preExp ? `${call}^${preExp}` : call;
+}
+
+function parseTightExponent(ctx: Ctx): string {
+  const next = peek(ctx);
+  if (next?.k === "lp") return parseParen(ctx);
+  if (
+    next?.k === "num" ||
+    next?.k === "var" ||
+    next?.k === "pi" ||
+    next?.k === "e"
+  ) {
+    return renderAtom(eat(ctx));
+  }
+  throw new GraphExpressionError();
+}
+
+function parseParen(ctx: Ctx): string {
+  if (eat(ctx).k !== "lp") throw new GraphExpressionError();
+  if (peek(ctx)?.k === "rp") {
+    eat(ctx);
+    return "()";
+  }
+  let inner = "";
+  while (peek(ctx) && peek(ctx)?.k !== "rp") {
+    if (isOp(peek(ctx), ",")) {
+      if (!inner || inner.endsWith(",")) throw new GraphExpressionError();
+      inner += ",";
+      eat(ctx);
+      continue;
+    }
+    const before = ctx.i;
+    const expr = parseExpr(ctx);
+    if (ctx.i === before) throw new GraphExpressionError();
+    inner += (needsStar(inner, expr) ? "*" : "") + expr;
+  }
+  if (peek(ctx)?.k !== "rp") throw new GraphExpressionError();
+  eat(ctx);
+  return `(${inner})`;
 }
 
 export function serializeGraphStateJson(state: GraphState): string {

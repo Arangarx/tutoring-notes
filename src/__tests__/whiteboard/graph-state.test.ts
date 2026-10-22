@@ -141,7 +141,80 @@ describe("graph-state", () => {
       expect(preprocessGraphExpression("log10x")).toBe("log10(x)");
       expect(preprocessGraphExpression("log10")).toBe("log10");
       expect(preprocessGraphExpression("sinxy")).toBe("sinxy");
-      expect(preprocessGraphExpression("sinx^2")).toBe("sin(x)^2");
+      // Desmos: the exponent binds inside the call. sinx^2 is sin(x^2), not sin(x)^2.
+      expect(preprocessGraphExpression("sinx^2")).toBe("sin(x^2)");
+    });
+
+    // JessieCode's bundle reads `window` on import, and `snippet()` evaluates
+    // through a board. This file runs in node, so the curve-vs-Math check is
+    // the Playwright test "plotted log and trig expressions match Math at a sampled x".
+    it("follows Desmos for a function applied to the next term", () => {
+      const cases: Array<[string, string]> = [
+        ["sin 2x", "sin(2*x)"],
+        ["sin x^2", "sin(x^2)"],
+        ["3 sin 2x", "3*sin(2*x)"],
+        ["ln 2x", "ln(2*x)"],
+        ["sin x + 1", "sin(x)+1"],
+        ["tan x/2", "tan(x)/2"],
+        ["sin x cos x", "sin(x)*cos(x)"],
+        ["x sin x", "x*sin(x)"],
+        ["log10 x", "log10(x)"],
+        ["log2 x", "log2(x)"],
+        ["pi x", "PI*x"],
+        ["2pi x", "2*PI*x"],
+        ["x pi", "x*PI"],
+        ["sinx", "sin(x)"],
+        ["sinx^2", "sin(x^2)"],
+        ["sin^2(x)", "sin(x)^2"],
+        ["sin^2 x", "sin(x)^2"],
+        ["e^x", "EULER^x"],
+        ["e", "EULER"],
+        ["Sin(X)", "sin(x)"],
+        ["X", "x"],
+        ["sinh(x)", "sinh(x)"],
+        ["cosh(x)", "cosh(x)"],
+        ["tanh(x)", "tanh(x)"],
+        ["asinh(x)", "asinh(x)"],
+        ["acosh(x)", "acosh(x)"],
+        ["atanh(x)", "atanh(x)"],
+        ["cot(x)", "cot(x)"],
+        ["acot(x)", "acot(x)"],
+        ["cbrt(x)", "cbrt(x)"],
+        ["x^2", "x^2"],
+        ["5x", "5*x"],
+        ["2(x+1)", "2*(x+1)"],
+        ["(x+1)(x-1)", "(x+1)*(x-1)"],
+        ["sin(x)^2", "sin(x)^2"],
+        ["cos(x)sin(x)", "cos(x)*sin(x)"],
+        ["2sinx cosx", "2*sin(x)*cos(x)"],
+        ["log(x,2)", "log(x,2)"],
+        ["exp(x)", "exp(x)"],
+        ["abs(x)", "abs(x)"],
+        ["x/2", "x/2"],
+        ["1/x", "1/x"],
+        ["-sin(x)", "-sin(x)"],
+        ["sin(-x)", "sin(-x)"],
+        ["ln(x)/ln(2)", "ln(x)/ln(2)"],
+        ["sin(x)+cos(x)", "sin(x)+cos(x)"],
+        ["log(x)+ln(x)", "log(x)+ln(x)"],
+        ["tan(2x)", "tan(2*x)"],
+        ["sqrt(x)", "sqrt(x)"],
+        ["2sin(x)", "2*sin(x)"],
+        ["log10(x)", "log10(x)"],
+        ["asin(x)", "asin(x)"],
+        ["acos(x)", "acos(x)"],
+        ["atan(x)", "atan(x)"],
+      ];
+      for (const [input, output] of cases) {
+        expect(preprocessGraphExpression(input)).toBe(output);
+      }
+    });
+
+    it("rejects an expression it cannot rewrite without guessing", () => {
+      expect(() => preprocessGraphExpression("x".repeat(201))).toThrow(/too long/i);
+      expect(() => preprocessGraphExpression("sec(x)")).toThrow();
+      expect(() => preprocessGraphExpression("csc(x)")).toThrow();
+      expect(() => preprocessGraphExpression("sin xy")).toThrow();
     });
 
     it("keeps expressions that already parse", () => {
