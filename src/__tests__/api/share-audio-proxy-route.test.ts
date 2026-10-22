@@ -73,7 +73,10 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-async function seedShareAudioFixture(opts?: { shareRecordingInEmail?: boolean }) {
+async function seedShareAudioFixture(opts?: {
+  shareRecordingInEmail?: boolean;
+  noteStatus?: "DRAFT" | "READY";
+}) {
   const tutor = await db.adminUser.create({
     data: {
       email: `${uniq("tutor")}@example.com`,
@@ -98,7 +101,7 @@ async function seedShareAudioFixture(opts?: { shareRecordingInEmail?: boolean })
       assessment: "",
       nextSteps: "",
       linksJson: "[]",
-      status: "READY",
+      status: opts?.noteStatus ?? "READY",
       shareRecordingInEmail: opts?.shareRecordingInEmail ?? true,
     },
   });
@@ -115,6 +118,60 @@ async function seedShareAudioFixture(opts?: { shareRecordingInEmail?: boolean })
   });
 
   return { tutor, student, shareToken, note, recording };
+}
+
+/** Recording has no whiteboardSessionId. The note's session is the only share path. */
+async function seedNoteLinkedRecording(
+  noteStatus: "DRAFT" | "READY",
+  opts?: { ended?: boolean }
+) {
+  const tutor = await db.adminUser.create({
+    data: {
+      email: `${uniq("tutor")}@example.com`,
+      role: "TUTOR",
+      approvalStatus: "APPROVED",
+    },
+  });
+  const student = await db.student.create({
+    data: { name: `Note linked audio ${uniq()}`, adminUserId: tutor.id },
+  });
+  const shareToken = generateShareToken();
+  await db.shareLink.create({
+    data: { studentId: student.id, token: shareToken },
+  });
+  const note = await db.sessionNote.create({
+    data: {
+      studentId: student.id,
+      date: new Date("2026-06-15T00:00:00Z"),
+      topics: "Note linked audio",
+      homework: "",
+      assessment: "",
+      nextSteps: "",
+      linksJson: "[]",
+      status: noteStatus,
+      shareRecordingInEmail: false,
+    },
+  });
+  await db.whiteboardSession.create({
+    data: {
+      adminUserId: tutor.id,
+      studentId: student.id,
+      noteId: note.id,
+      endedAt: opts?.ended === false ? null : new Date("2026-06-15T01:00:00Z"),
+      eventsBlobUrl: "https://example.invalid/note-linked-audio-events.json",
+    },
+  });
+  const recording = await db.sessionRecording.create({
+    data: {
+      adminUserId: tutor.id,
+      studentId: student.id,
+      noteId: note.id,
+      blobUrl: "https://blob.example.com/audio/note-linked.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 2048,
+    },
+  });
+  return { shareToken, recording, note };
 }
 
 function makeGetRequest(
@@ -228,7 +285,67 @@ describe("GET /api/audio/[recordingId] — share-scoped proxy contract (P1-J1)",
 
     expect(res.status).toBe(404);
     const json = (await res.json()) as { error?: string };
-    expect(json.error).toMatch(/not found/i);
+    expect(json.error).toBe("Not found.");
     expect(streamBlobWithRangeSupportMock).not.toHaveBeenCalled();
+  });
+
+  it("hides a recording reached only through a DRAFT note that has a whiteboard session", async () => {
+    const { shareToken, recording } = await seedNoteLinkedRecording("DRAFT");
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const res = await GET(makeGetRequest(recording.id, shareToken), {
+        params: Promise.resolve({ recordingId: recording.id }),
+      });
+
+      expect(res.status).toBe(404);
+      const json = (await res.json()) as { error?: string };
+      expect(json.error).toBe("Not found.");
+      expect(streamBlobWithRangeSupportMock).not.toHaveBeenCalled();
+      expect(spy.mock.calls.map((call) => String(call[0])).join("\n")).toContain(
+        "reason=note_not_visible"
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("hides that recording when the note's whiteboard session is still live", async () => {
+    const { shareToken, recording } = await seedNoteLinkedRecording("DRAFT", {
+      ended: false,
+    });
+
+    const res = await GET(makeGetRequest(recording.id, shareToken), {
+      params: Promise.resolve({ recordingId: recording.id }),
+    });
+
+    expect(res.status).toBe(404);
+    const json = (await res.json()) as { error?: string };
+    expect(json.error).toBe("Not found.");
+    expect(streamBlobWithRangeSupportMock).not.toHaveBeenCalled();
+  });
+
+  it("still serves email-only DRAFT audio that has no whiteboard session", async () => {
+    const { shareToken, recording } = await seedShareAudioFixture({
+      shareRecordingInEmail: true,
+      noteStatus: "DRAFT",
+    });
+
+    const res = await GET(makeGetRequest(recording.id, shareToken), {
+      params: Promise.resolve({ recordingId: recording.id }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(streamBlobWithRangeSupportMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves a recording reached only through a READY note that has a whiteboard session", async () => {
+    const { shareToken, recording } = await seedNoteLinkedRecording("READY");
+
+    const res = await GET(makeGetRequest(recording.id, shareToken), {
+      params: Promise.resolve({ recordingId: recording.id }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(streamBlobWithRangeSupportMock).toHaveBeenCalledTimes(1);
   });
 });

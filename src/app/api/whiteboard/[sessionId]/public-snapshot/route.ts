@@ -1,7 +1,7 @@
 import { db, withDbRetry } from "@/lib/db";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import {
-  assertShareProxyAccess,
+  assertWhiteboardReplayRequestAccess,
   fetchShareBlobWithBearer,
   gatePublicWbSessionBlob,
 } from "@/lib/share/proxy-share-resource";
@@ -11,8 +11,10 @@ import {
  *
  * GET /api/whiteboard/[sessionId]/public-snapshot?token=<shareToken>
  *
- * Same trust model as public-events: valid ShareLink whose studentId
- * matches the session's studentId. Only ended sessions are accessible.
+ * Same trust model as public-events: valid ShareLink whose student
+ * matches the session and whose linked note is replay-visible (not
+ * DRAFT), or a learner session that may view this replay. Only ended
+ * sessions are accessible.
  */
 export async function GET(
   req: Request,
@@ -26,10 +28,13 @@ export async function GET(
     `[wbPublicSnapshot.route] GET wbsid=${sessionId} rid=${rid}`
   );
 
-  const access = await assertShareProxyAccess(
+  const access = await assertWhiteboardReplayRequestAccess(
     req,
+    sessionId,
     shareToken,
-    `/api/whiteboard/${sessionId}/public-snapshot?token=${shareToken}`
+    shareToken
+      ? `/api/whiteboard/${sessionId}/public-snapshot?token=${shareToken}`
+      : `/api/whiteboard/${sessionId}/public-snapshot`
   );
   if (!access.ok) return access.response;
 

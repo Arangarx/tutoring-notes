@@ -26,6 +26,8 @@ const PARENT_STATE = "tests/integration/.auth/parent.json";
 const TUTOR_STATE = "tests/integration/.auth/tutor.json";
 /** Bytes stored in the harness. A served concat or recording must equal this. */
 const SHARE_REPLAY_AUDIO_MARKER = "parent-share-replay-audio-oracle-v1";
+/** Bytes stored as the final-snapshot PNG. A served snapshot must equal this. */
+const SHARE_REPLAY_SNAPSHOT_MARKER = "parent-share-replay-snapshot-oracle-v1";
 
 async function attachShareReplayAudio(args: {
   request: import("@playwright/test").APIRequestContext;
@@ -59,6 +61,34 @@ async function attachShareReplayAudio(args: {
       select: { id: true },
     });
     return recording.id;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function attachShareReplaySnapshot(args: {
+  request: import("@playwright/test").APIRequestContext;
+  adminUserId: string;
+  studentId: string;
+  whiteboardSessionId: string;
+}): Promise<void> {
+  const blobUrl = await uploadHarnessBlob({
+    request: args.request,
+    pathname: `whiteboard-sessions/${args.adminUserId}/${args.studentId}/pw-parent-share-snapshot.png`,
+    body: SHARE_REPLAY_SNAPSHOT_MARKER,
+    contentType: "image/png",
+    clientPayload: {
+      kind: "whiteboard-snapshot",
+      whiteboardSessionId: args.whiteboardSessionId,
+      studentId: args.studentId,
+    },
+  });
+  const prisma = new PrismaClient();
+  try {
+    await prisma.whiteboardSession.update({
+      where: { id: args.whiteboardSessionId },
+      data: { snapshotBlobUrl: blobUrl },
+    });
   } finally {
     await prisma.$disconnect();
   }
@@ -611,6 +641,12 @@ test.describe(
           studentId: fixture.studentId,
           whiteboardSessionId: fixture.endedSessionId,
         });
+        await attachShareReplaySnapshot({
+          request: tutor.request,
+          adminUserId: fixture.adminUserId,
+          studentId: fixture.studentId,
+          whiteboardSessionId: fixture.endedSessionId,
+        });
       } finally {
         await tutor.close();
       }
@@ -618,6 +654,7 @@ test.describe(
       const replayPath = `/s/${fixture.shareToken}/whiteboard/${fixture.endedSessionId}`;
       const eventsUrl = `/api/whiteboard/${fixture.endedSessionId}/public-events?token=${fixture.shareToken}`;
       const concatUrl = `/api/whiteboard/${fixture.endedSessionId}/public-concat-audio?token=${fixture.shareToken}`;
+      const snapshotUrl = `/api/whiteboard/${fixture.endedSessionId}/public-snapshot?token=${fixture.shareToken}`;
       const audioUrl = `/api/audio/${recordingId}?token=${fixture.shareToken}`;
 
       const hidden = await page.goto(replayPath, { waitUntil: "domcontentloaded" });
@@ -626,12 +663,15 @@ test.describe(
 
       const events = await page.request.get(eventsUrl);
       const concat = await page.request.get(concatUrl);
+      const snapshot = await page.request.get(snapshotUrl);
       const audio = await page.request.get(audioUrl);
       expect(events.status()).toBe(404);
       expect(concat.status()).toBe(404);
+      expect(snapshot.status()).toBe(404);
       expect(audio.status()).toBe(404);
       expect(await events.text()).not.toContain("pw-replay-rect");
       expect(await concat.text()).not.toBe(SHARE_REPLAY_AUDIO_MARKER);
+      expect(await snapshot.text()).not.toBe(SHARE_REPLAY_SNAPSHOT_MARKER);
       expect(await audio.text()).not.toBe(SHARE_REPLAY_AUDIO_MARKER);
 
       await setNoteStatus(fixture.noteId, "READY");
@@ -642,8 +682,17 @@ test.describe(
         timeout: 30_000,
       });
       const eventsReady = await page.request.get(eventsUrl);
+      const concatReady = await page.request.get(concatUrl);
+      const snapshotReady = await page.request.get(snapshotUrl);
+      const audioReady = await page.request.get(audioUrl);
       expect(eventsReady.status()).toBe(200);
+      expect(concatReady.status()).toBe(200);
+      expect(snapshotReady.status()).toBe(200);
+      expect(audioReady.status()).toBe(200);
       expect(await eventsReady.text()).toContain("pw-replay-rect");
+      expect(await concatReady.text()).toBe(SHARE_REPLAY_AUDIO_MARKER);
+      expect(await snapshotReady.text()).toBe(SHARE_REPLAY_SNAPSHOT_MARKER);
+      expect(await audioReady.text()).toBe(SHARE_REPLAY_AUDIO_MARKER);
     });
   }
 );

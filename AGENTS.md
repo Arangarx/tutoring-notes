@@ -158,6 +158,7 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   `[sal] sal=<token:8> action=access_granted principal=account_holder|learner studentId=<id>`,
   `[sal] sal=<token:8> action=access_granted_anon_grace studentId=<id>`,
   `[sal] sal=<token:8> action=access_denied_redirect studentId=<id> reason=no_session`,
+  `[sal] sal=<token:8> wbsid=<id> action=access_denied studentId=<id> reason=note_not_visible`,
   `[sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed`,
   `[sal] sal=<token:8> action=ownership_denied principal=<type> ...`),
   `tap` (tutor approval + email allowlist — `src/lib/tutor-approval-scope.ts`;

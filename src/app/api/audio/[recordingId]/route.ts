@@ -7,7 +7,7 @@ import {
   sanitizeReplayLogId,
 } from "@/lib/share/learner-replay-access";
 import { getLearnerSessionFromHeaders } from "@/lib/server-session";
-import { parentShareReplayNoteIsHidden } from "@/lib/share/parent-share-replay-access";
+import { parentShareAudioNoteIsHidden } from "@/lib/share/parent-share-replay-access";
 import {
   assertShareProxyAccess,
   learnerReplayNoSessionResponse,
@@ -30,9 +30,10 @@ import {
  *      - `shareRecordingInEmail` on the note; or
  *      - the note has any linked WhiteboardSession; or
  *      - audio was captured against a WB session (`SessionRecording.whiteboardSessionId`).
- *   4. When the recording is tied to a whiteboard session, that session's
- *      linked note must be replay-visible (not DRAFT). Email-only audio
- *      with no whiteboard session is unchanged.
+ *   4. When the recording is tied to a whiteboard session, or is reachable
+ *      because its note has a whiteboard session, that note must be
+ *      replay-visible (not DRAFT). Email-only audio with no whiteboard
+ *      session is unchanged.
  *
  * Range support: forwards the inbound `Range` header to Vercel Blob
  * via `streamBlobWithRangeSupport` so parents can scrub the share
@@ -83,25 +84,45 @@ export async function GET(
       adminUserId: true,
       studentId: true,
       whiteboardSessionId: true,
+      note: {
+        select: {
+          status: true,
+          whiteboardSessions: {
+            where: { studentId: access.studentId },
+            select: { id: true },
+            orderBy: { startedAt: "asc" },
+            take: 1,
+          },
+        },
+      },
     },
   });
 
   if (!recording) {
-    return NextResponse.json({ error: "Recording not found" }, { status: 404 });
+    return shareAudioNotFound();
   }
 
   if (
-    recording.whiteboardSessionId &&
-    (await parentShareReplayNoteIsHidden({
+    await parentShareAudioNoteIsHidden({
       shareToken,
       studentId: access.studentId,
       whiteboardSessionId: recording.whiteboardSessionId,
-    }))
+      note: recording.note
+        ? {
+            status: recording.note.status,
+            whiteboardSessionId: recording.note.whiteboardSessions[0]?.id ?? null,
+          }
+        : null,
+    })
   ) {
-    return NextResponse.json({ error: "Not found." }, { status: 404 });
+    return shareAudioNotFound();
   }
 
   return streamRecording(req, recordingId, recording, "share-audio-proxy");
+}
+
+function shareAudioNotFound(): Response {
+  return NextResponse.json({ error: "Not found." }, { status: 404 });
 }
 
 type StreamableRecording = {
