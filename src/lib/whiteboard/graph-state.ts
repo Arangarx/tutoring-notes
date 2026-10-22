@@ -70,11 +70,15 @@ const CALL_VARIADIC: GraphFunctionSpec = { min: 1, max: Infinity, bare: false };
  * callable in jsxgraph 1.12 `src/parser/jessiecode.js`, which resolves a
  * function name two ways (`getvar` with `isFunctionName`):
  *
- * 1. `defineBuiltIn()` — `acosh acot asinh binomial cbrt cosh cot erf erfc
- *    erfi factorial gcd lb lcm ld lg ln log log10 log2 ndtr ndtri nthroot
- *    pow ratpow trunc sinh`. These win over `Math`, so `pow` is
- *    `JXG.Math.pow(base, exp)`, `trunc` is `JXG.trunc(n, precision?)` and
- *    `log` is `JXG.Math.log(x, base?)`.
+ * 1. `defineBuiltIn()` — `acosh acot asinh cbrt cosh cot erf erfc
+ *    erfi factorial lb ld lg ln log log10 log2 ndtr ndtri nthroot
+ *    pow sinh`. These win over `Math`, so `pow` is
+ *    `JXG.Math.pow(base, exp)` and `log` is `JXG.Math.log(x, base?)`.
+ *    `gcd` is excluded: loops forever on 0, Infinity, or NaN (`gcd(x,2)` freezes the tab at the x=0 sample).
+ *    `lcm` is excluded: same infinite loop on 0, Infinity, or NaN.
+ *    `ratpow` is excluded: it calls `gcd`, so it hangs the same way.
+ *    `trunc` is excluded: JessieCode's `JXG.trunc` rounds (`trunc(2.5)` is 3), a silent wrong curve.
+ *    `binomial` is excluded: huge literals take about 2s per sample.
  * 2. `isMathMethod()` — any truthy `Math[name]` except `E`. Allowlisted here:
  *    `abs acos asin atan atan2 atanh ceil clz32 cos exp expm1 floor fround
  *    hypot imul log1p max min round sign sin sqrt tan tanh`.
@@ -109,14 +113,9 @@ export const GRAPH_FUNCTION_SPECS: Readonly<Record<string, GraphFunctionSpec>> =
   sinh: UNARY,
   // builtIn, optional second argument
   log: { min: 1, max: 2, bare: true },
-  trunc: { min: 1, max: 2, bare: true },
   // builtIn, several arguments
-  binomial: CALL_2,
-  gcd: CALL_2,
-  lcm: CALL_2,
   nthroot: CALL_2,
   pow: CALL_2,
-  ratpow: { min: 3, max: 3, bare: false },
   // Math.*, single argument
   abs: UNARY,
   acos: UNARY,

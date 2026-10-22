@@ -392,7 +392,6 @@ describe("graph-state", () => {
         ["ceil(x)", "ceil(x)"],
         ["round(x)", "round(x)"],
         ["sign(x)", "sign(x)"],
-        ["trunc(x)", "trunc(x)"],
         ["min(x,2)", "min(x,2)"],
         ["max(x, 2)", "max(x,2)"],
         ["max(x,2,3)", "max(x,2,3)"],
@@ -402,12 +401,9 @@ describe("graph-state", () => {
         ["expm1(x)", "expm1(x)"],
         ["log1p(x)", "log1p(x)"],
         ["factorial(x)", "factorial(x)"],
-        ["gcd(x,4)", "gcd(x,4)"],
-        ["lcm(x,4)", "lcm(x,4)"],
         ["lg(x)", "lg(x)"],
         ["lb(x)", "lb(x)"],
         ["ld(x)", "ld(x)"],
-        ["binomial(5,x)", "binomial(5,x)"],
         ["nthroot(x,3)", "nthroot(x,3)"],
         ["erf(x)", "erf(x)"],
         ["floor x", "floor(x)"],
@@ -420,7 +416,20 @@ describe("graph-state", () => {
       });
 
       it("rejects wrong argument counts instead of plotting NaN", () => {
-        for (const input of ["pow(x)", "pow(x,2,3)", "atan2(x)", "sin(x,1)", "floor(x,2)", "min()", "gcd(x)"]) {
+        for (const input of ["pow(x)", "pow(x,2,3)", "atan2(x)", "sin(x,1)", "floor(x,2)", "min()"]) {
+          expect(fail(input)).toThrow(GraphExpressionError);
+        }
+      });
+
+      it("rejects gcd, lcm, ratpow, trunc, and binomial like any unknown name", () => {
+        for (const input of [
+          "gcd(x,2)",
+          "gcd(x,4)",
+          "lcm(x,4)",
+          "ratpow(x,1,2)",
+          "trunc(x)",
+          "binomial(5,x)",
+        ]) {
           expect(fail(input)).toThrow(GraphExpressionError);
         }
       });
@@ -454,6 +463,10 @@ describe("graph-state", () => {
         // JessieCode has no sec/csc anywhere.
         expect(GRAPH_FUNCTION_TOKENS).not.toContain("sec");
         expect(GRAPH_FUNCTION_TOKENS).not.toContain("csc");
+        // Defined in JessieCode, excluded because they hang or plot the wrong curve.
+        for (const name of ["binomial", "gcd", "lcm", "ratpow", "trunc"]) {
+          expect(GRAPH_FUNCTION_TOKENS).not.toContain(name);
+        }
       });
     });
 

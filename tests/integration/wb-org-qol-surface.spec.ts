@@ -782,9 +782,9 @@ test.describe("whiteboard QoL surfaces", () => {
       await expect(host).toBeVisible({ timeout: 30_000 });
       await host.scrollIntoViewIfNeeded();
 
-      // Each of these used to reach JessieCode as a bare identifier or a wrong call
-      // and plot nothing or the wrong curve with no message.
-      const unreadable = ["sec x", "atan2x", "sin2pix", "arcsin x", "(x,1)"];
+      // Each of these used to reach JessieCode as a bare identifier, a wrong call,
+      // or an allowlisted function that hangs or plots the wrong curve, with no message.
+      const unreadable = ["sec x", "atan2x", "sin2pix", "arcsin x", "(x,1)", "gcd(x,2)", "trunc(x)"];
       for (let index = 0; index < unreadable.length; index += 1) {
         await addGraphExpressionViaUI(page, unreadable[index]!);
         await expect(page.getByTestId(`wb-graph-expr-error-${index}`)).toBeVisible();
