@@ -613,13 +613,44 @@ export async function waitForSceneElementIdsContaining(
   await waitForElementOnPeer(page, role, elementId, timeoutMs);
 }
 
+/**
+ * Join key for the student URL. The workspace writes `#k=` and the same value
+ * to `wb-key:<sessionId>`. On a warm dev server the fragment is sometimes
+ * empty by the time the canvas is up; the localStorage shelf still has the
+ * key. Hash present on the first read (the common case) returns immediately.
+ */
 export async function readEncryptionKeyFromHash(page: Page): Promise<string> {
-  const hash = await page.evaluate(() => window.location.hash);
-  const m = hash.match(/[#&]k=([^&]+)/);
-  if (!m?.[1] || m[1].length < 16) {
-    throw new Error(`Workspace hash missing encryption key: ${hash}`);
-  }
-  return decodeURIComponent(m[1]);
+  let captured = "";
+  await expect
+    .poll(
+      async () => {
+        const found = await page.evaluate(() => {
+          const hash = window.location.hash;
+          const fromHash = hash.match(/[#&]k=([^&]+)/);
+          if (fromHash?.[1] && fromHash[1].length >= 16) return fromHash[1];
+          const sessionId =
+            window.location.pathname.split("/").filter(Boolean).at(-2) ?? "";
+          try {
+            const fromLs = sessionId
+              ? window.localStorage.getItem(`wb-key:${sessionId}`)
+              : null;
+            if (fromLs && fromLs.length >= 16) return fromLs;
+          } catch {
+            /* private mode */
+          }
+          return "";
+        });
+        if (!found) return "";
+        captured = decodeURIComponent(found);
+        return "ready";
+      },
+      {
+        timeout: 20_000,
+        message: "Workspace encryption key never appeared in hash or localStorage",
+      }
+    )
+    .toBe("ready");
+  return captured;
 }
 
 export async function waitForTutorStudentConnected(
@@ -1416,6 +1447,14 @@ export async function openTutorAndStudent(
      */
     studentBrowser?: "chromium" | "webkit";
     /**
+     * Playwright `devices` profile key for the student (e.g. "Pixel 7").
+     * Supplies user agent, viewport, DPR, isMobile and hasTouch together;
+     * overrides `studentViewport` / `studentHasTouch` / `studentIsMobile`.
+     * With `studentBrowser: "webkit"` it replaces the "iPhone 13" default.
+     * Default unset: callers are unaffected.
+     */
+    studentDevice?: string;
+    /**
      * When true (default false): after both parties connect in a PENDING session,
      * click the tutor's "Start session" button and wait for the overlay to dismiss.
      * Set to true for tests that need an ACTIVE session but seed a PENDING one.
@@ -1463,12 +1502,18 @@ export async function openTutorAndStudent(
     ? learnerAuthFile
     : undefined;
 
+  const requestedDevice = options?.studentDevice;
+  if (requestedDevice && !devices[requestedDevice]) {
+    throw new Error(`openTutorAndStudent: unknown studentDevice "${requestedDevice}"`);
+  }
+  const studentDeviceProfile = requestedDevice ? devices[requestedDevice] : undefined;
+
   let webkitBrowser: Browser | null = null;
   const studentContext =
     options?.studentBrowser === "webkit"
       ? await (async () => {
           webkitBrowser = await webkit.launch();
-          const iphone = devices["iPhone 13"];
+          const iphone = studentDeviceProfile ?? devices["iPhone 13"];
           return webkitBrowser.newContext({
             ...iphone,
             // Project use.permissions grants microphone. WebKit rejects that
@@ -1481,6 +1526,7 @@ export async function openTutorAndStudent(
           viewport: studentViewport,
           ...(options?.studentHasTouch ? { hasTouch: true } : {}),
           ...(options?.studentIsMobile ? { isMobile: true } : {}),
+          ...(studentDeviceProfile ?? {}),
           ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
         });
   if (options?.prepareContext) await options.prepareContext(studentContext);

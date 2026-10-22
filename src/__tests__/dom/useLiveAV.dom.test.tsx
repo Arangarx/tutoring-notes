@@ -898,6 +898,178 @@ describe("useLiveAV — requestCam", () => {
       expect(result.current.localVideoStream).not.toBeNull();
       unmount();
     });
+
+    // -----------------------------------------------------------------
+    // Partial acquisition + denial: the bundle only asks for the kind that
+    // is still missing, so a denial of THAT kind must not be blamed on the
+    // kind that is already live (live camera must not show a cam error /
+    // 'denied' permission because the mic prompt was refused, and vice
+    // versa). Oracle = user-visible permission/error state per kind.
+    // -----------------------------------------------------------------
+    function makeKindDenyingGum() {
+      const deny = { audio: false, video: false };
+      const calls: MediaStreamConstraints[] = [];
+      const getUM = jest.fn(async (constraints: MediaStreamConstraints) => {
+        calls.push(constraints);
+        if (
+          (constraints.audio && deny.audio) ||
+          (constraints.video && deny.video)
+        ) {
+          throw Object.assign(new Error("denied"), { name: "NotAllowedError" });
+        }
+        const a = constraints.audio ? 1 : 0;
+        const v = constraints.video ? 1 : 0;
+        return makeFakeStream(a, v).stream as unknown as MediaStream;
+      });
+      return { getUM, deny, calls };
+    }
+
+    test("cam landed, then bundle mic denied: camera permission/error untouched, mic error set", async () => {
+      const gum = makeKindDenyingGum();
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await result.current.requestCam();
+      });
+      expect(result.current.localVideoStream).not.toBeNull();
+      expect(result.current.hasCamPermission).toBe("granted");
+
+      gum.deny.audio = true;
+      await act(async () => {
+        await result.current.requestMicAndCam();
+      });
+
+      // The bundle asked for audio only.
+      expect(gum.calls[gum.calls.length - 1].video).toBeFalsy();
+      expect(result.current.error?.type).toBe("permission-denied");
+      expect(result.current.hasMicPermission).toBe("denied");
+      expect(result.current.videoError).toBeNull();
+      expect(result.current.hasCamPermission).toBe("granted");
+      expect(result.current.localVideoStream).not.toBeNull();
+      expect(result.current.localAudioStream).toBeNull();
+      unmount();
+    });
+
+    test("mic landed, then bundle cam denied: mic permission/error untouched, camera error set", async () => {
+      const gum = makeKindDenyingGum();
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await result.current.requestMic();
+      });
+      expect(result.current.localAudioStream).not.toBeNull();
+      expect(result.current.hasMicPermission).toBe("granted");
+
+      gum.deny.video = true;
+      await act(async () => {
+        await result.current.requestMicAndCam();
+      });
+
+      // The bundle asked for video only.
+      expect(gum.calls[gum.calls.length - 1].audio).toBeFalsy();
+      expect(result.current.videoError?.type).toBe("permission-denied");
+      expect(result.current.hasCamPermission).toBe("denied");
+      expect(result.current.error).toBeNull();
+      expect(result.current.hasMicPermission).toBe("granted");
+      expect(result.current.localAudioStream).not.toBeNull();
+      expect(result.current.localVideoStream).toBeNull();
+      unmount();
+    });
+
+    test("full bundle denied (nothing live): both mic and camera error state set", async () => {
+      const gum = makeKindDenyingGum();
+      gum.deny.audio = true;
+      gum.deny.video = true;
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await result.current.requestMicAndCam();
+      });
+      expect(result.current.error?.type).toBe("permission-denied");
+      expect(result.current.videoError?.type).toBe("permission-denied");
+      expect(result.current.hasMicPermission).toBe("denied");
+      expect(result.current.hasCamPermission).toBe("denied");
+      unmount();
+    });
+
+    test("bundle denied, then requestCam retries getUserMedia and recovers (no stuck denial)", async () => {
+      const gum = makeKindDenyingGum();
+      gum.deny.audio = true;
+      gum.deny.video = true;
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await result.current.requestMicAndCam();
+      });
+      expect(result.current.localVideoStream).toBeNull();
+      const callsAfterDenied = gum.calls.length;
+
+      gum.deny.video = false; // user fixed the browser permission
+      await act(async () => {
+        await result.current.requestCam();
+      });
+
+      expect(gum.calls.length).toBe(callsAfterDenied + 1);
+      expect(gum.calls[gum.calls.length - 1].video).toBeTruthy();
+      expect(result.current.localVideoStream).not.toBeNull();
+      expect(result.current.videoError).toBeNull();
+      expect(result.current.hasCamPermission).toBe("granted");
+      unmount();
+    });
+
+    test("bundle denied, then requestMic retries getUserMedia and recovers", async () => {
+      const gum = makeKindDenyingGum();
+      gum.deny.audio = true;
+      gum.deny.video = true;
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await result.current.requestMicAndCam();
+      });
+      expect(result.current.localAudioStream).toBeNull();
+      const callsAfterDenied = gum.calls.length;
+
+      gum.deny.audio = false;
+      await act(async () => {
+        await result.current.requestMic();
+      });
+
+      expect(gum.calls.length).toBe(callsAfterDenied + 1);
+      expect(result.current.localAudioStream).not.toBeNull();
+      expect(result.current.error).toBeNull();
+      expect(result.current.hasMicPermission).toBe("granted");
+      unmount();
+    });
+
+    test("partial bundle denied, then bundle retried: only the missing kind is re-requested and recovers", async () => {
+      const gum = makeKindDenyingGum();
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await result.current.requestCam();
+      });
+      gum.deny.audio = true;
+      await act(async () => {
+        await result.current.requestMicAndCam();
+      });
+      expect(result.current.localAudioStream).toBeNull();
+      const callsAfterDenied = gum.calls.length;
+
+      gum.deny.audio = false;
+      await act(async () => {
+        await result.current.requestMicAndCam();
+      });
+
+      expect(gum.calls.length).toBe(callsAfterDenied + 1);
+      const retry = gum.calls[gum.calls.length - 1];
+      expect(retry.audio).toBeTruthy();
+      expect(retry.video).toBeFalsy();
+      expect(result.current.localAudioStream).not.toBeNull();
+      expect(result.current.error).toBeNull();
+      expect(result.current.hasMicPermission).toBe("granted");
+      expect(result.current.hasCamPermission).toBe("granted");
+      unmount();
+    });
   });
 
   // -----------------------------------------------------------------

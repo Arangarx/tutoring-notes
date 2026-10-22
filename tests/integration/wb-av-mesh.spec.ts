@@ -4,7 +4,6 @@ import path from "path";
 import {
   test,
   expect,
-  devices,
   type Browser,
   type BrowserContext,
   type Page,
@@ -225,15 +224,39 @@ type RemoteVideoSample = {
   error?: string;
 };
 
-async function installPeerConnectionCapture(context: BrowserContext): Promise<void> {
-  await context.addInitScript(() => {
-    const w = window as Window & { __pwPcs?: RTCPeerConnection[] };
+/** Test-side captures installed by `installPeerConnectionCapture`. */
+type PwCaptureWindow = Window & {
+  /** Every RTCPeerConnection the page constructed. */
+  __pwPcs?: RTCPeerConnection[];
+  /** The captured PCs that are not closed (the single "live PCs" definition). */
+  __pwLivePcs?: () => RTCPeerConnection[];
+  /** Every video track getUserMedia handed out. */
+  __pwGumVideoTracks?: MediaStreamTrack[];
+};
+
+/**
+ * Init-script capture shared by every A/V test here: records each
+ * RTCPeerConnection (+ a `__pwLivePcs()` non-closed filter) and each
+ * getUserMedia video track. `relayOnly` additionally forces
+ * `iceTransportPolicy: "relay"` (TURN test: stand-in for a network with no
+ * direct path).
+ */
+async function installPeerConnectionCapture(
+  context: BrowserContext,
+  { relayOnly = false }: { relayOnly?: boolean } = {}
+): Promise<void> {
+  await context.addInitScript((forceRelay: boolean) => {
+    const w = window as PwCaptureWindow;
     const Native = window.RTCPeerConnection;
     const made: RTCPeerConnection[] = [];
     w.__pwPcs = made;
+    w.__pwLivePcs = () =>
+      made.filter(
+        (pc) => pc.signalingState !== "closed" && pc.connectionState !== "closed"
+      );
     class CapturingPeerConnection extends Native {
       constructor(config?: RTCConfiguration) {
-        super(config);
+        super(forceRelay ? { ...(config ?? {}), iceTransportPolicy: "relay" } : config);
         made.push(this);
       }
     }
@@ -241,9 +264,8 @@ async function installPeerConnectionCapture(context: BrowserContext): Promise<vo
 
     // Independent oracle for the single-acquisition invariant: every video
     // track getUserMedia hands out, whatever the app does with it afterwards.
-    const g = window as Window & { __pwGumVideoTracks?: MediaStreamTrack[] };
     const gumTracks: MediaStreamTrack[] = [];
-    g.__pwGumVideoTracks = gumTracks;
+    w.__pwGumVideoTracks = gumTracks;
     const md = navigator.mediaDevices;
     if (md && typeof md.getUserMedia === "function") {
       const nativeGum = md.getUserMedia.bind(md);
@@ -253,7 +275,7 @@ async function installPeerConnectionCapture(context: BrowserContext): Promise<vo
         return stream;
       };
     }
-  });
+  }, relayOnly);
 }
 
 type GumVideoTrackState = { readyState: string; enabled: boolean };
@@ -261,9 +283,10 @@ type GumVideoTrackState = { readyState: string; enabled: boolean };
 /** Every video track created by getUserMedia on the page (init-script capture). */
 async function readGumVideoTracks(page: Page): Promise<GumVideoTrackState[]> {
   return page.evaluate(() =>
-    ((window as unknown as { __pwGumVideoTracks?: MediaStreamTrack[] }).__pwGumVideoTracks ?? []).map(
-      (t) => ({ readyState: t.readyState, enabled: t.enabled })
-    )
+    ((window as PwCaptureWindow).__pwGumVideoTracks ?? []).map((t) => ({
+      readyState: t.readyState,
+      enabled: t.enabled,
+    }))
   );
 }
 
@@ -278,9 +301,8 @@ type PcVideoShape = {
 
 async function readPcVideoShapes(page: Page): Promise<PcVideoShape[]> {
   return page.evaluate(() => {
-    const pcs = (window as unknown as { __pwPcs?: RTCPeerConnection[] }).__pwPcs ?? [];
-    return pcs
-      .filter((pc) => pc.signalingState !== "closed" && pc.connectionState !== "closed")
+    const live = (window as PwCaptureWindow).__pwLivePcs?.() ?? [];
+    return live
       .map((pc) => {
         const video = pc
           .getTransceivers()
@@ -487,11 +509,9 @@ function meshTail(meshLogs: string[]): string {
 async function peerConnectionSummary(page: Page): Promise<string> {
   try {
     return await page.evaluate(async () => {
-      const pcs =
-        (window as unknown as { __pwPcs?: RTCPeerConnection[] }).__pwPcs ?? [];
-      const live = pcs.filter(
-        (pc) => pc.connectionState !== "closed" && pc.signalingState !== "closed"
-      );
+      const w = window as PwCaptureWindow;
+      const pcs = w.__pwPcs ?? [];
+      const live = w.__pwLivePcs?.() ?? [];
       const rows = await Promise.all((live.length > 0 ? live : pcs).map(async (pc) => {
         let send = "no-senders";
         try {
@@ -617,25 +637,10 @@ function docker(args: string): string {
   return execSync(`docker ${args}`, { stdio: ["ignore", "pipe", "pipe"] }).toString();
 }
 
-async function forceRelayOnly(context: BrowserContext): Promise<void> {
-  await context.addInitScript(() => {
-    const Native = window.RTCPeerConnection;
-    const made: RTCPeerConnection[] = [];
-    (window as unknown as { __pwPcs: RTCPeerConnection[] }).__pwPcs = made;
-    class RelayOnlyPeerConnection extends Native {
-      constructor(config?: RTCConfiguration) {
-        super({ ...(config ?? {}), iceTransportPolicy: "relay" });
-        made.push(this);
-      }
-    }
-    window.RTCPeerConnection = RelayOnlyPeerConnection;
-  });
-}
-
 /** Candidate type of the local end of each connected pair on the page. */
 async function selectedLocalCandidateTypes(page: Page): Promise<string[]> {
   return page.evaluate(async () => {
-    const pcs = (window as unknown as { __pwPcs?: RTCPeerConnection[] }).__pwPcs ?? [];
+    const pcs = (window as PwCaptureWindow).__pwPcs ?? [];
     const types: string[] = [];
     for (const pc of pcs) {
       const stats = await pc.getStats();
@@ -707,7 +712,7 @@ test.describe("live A/V over a TURN relay", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] 
       }
       for (const ctx of [tutorContext, studentContext]) {
         await ctx.addCookies([turnCookie]);
-        await forceRelayOnly(ctx);
+        await installPeerConnectionCapture(ctx, { relayOnly: true });
       }
 
       const tutorPage = await tutorContext.newPage();
@@ -858,8 +863,7 @@ async function reloadTutor(tutorPage: Page): Promise<void> {
 /** Waiting room with both cameras on, then the tutor taps Start. Shared by every phone-student test. */
 async function item35WaitingRoomThenStart(
   peers: Item35Peers,
-  meshLogs: string[],
-  relay: boolean
+  meshLogs: string[]
 ): Promise<void> {
   const { tutorPage, studentPage } = peers;
   await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible();
@@ -874,12 +878,6 @@ async function item35WaitingRoomThenStart(
     90_000,
     "waiting-room student camera never played before Start"
   );
-  if (relay) {
-    await expect
-      .poll(() => selectedLocalCandidateTypes(tutorPage), { timeout: 15_000 })
-      .toContain("relay");
-  }
-
   await startSessionAsTutor(tutorPage);
   await expect(studentPage.getByTestId("wb-waiting-overlay")).not.toBeVisible({
     timeout: 30_000,
@@ -934,11 +932,10 @@ async function item35StudentCameraOff(
 async function runItem35Sequence(
   peers: Item35Peers,
   meshLogs: string[],
-  mode: "toggle-then-reload" | "reload-while-off" | "reload-only",
-  relay: boolean
+  mode: "toggle-then-reload" | "reload-only"
 ): Promise<void> {
   const { tutorPage, studentPage } = peers;
-  await item35WaitingRoomThenStart(peers, meshLogs, relay);
+  await item35WaitingRoomThenStart(peers, meshLogs);
 
   if (mode === "reload-only") {
     // No camera toggle: proves the toggle is incidental to the reload failure.
@@ -955,27 +952,6 @@ async function runItem35Sequence(
   }
 
   await item35StudentCameraOff(peers);
-
-  if (mode === "reload-while-off") {
-    await reloadTutor(tutorPage);
-    const onVia = await clickStudentLiveCamera(studentPage);
-    console.log(`[item35] student camera on after tutor rejoin via ${onVia}`);
-    await expect
-      .poll(() => readStudentCamOn(studentPage), {
-        timeout: 15_000,
-        message: "student camera control did not show on after rejoin",
-      })
-      .toBe(true);
-    await expectTutorSeesStudentVideo(
-      tutorPage,
-      studentPage,
-      meshLogs,
-      "after-rejoin-cam-on",
-      20_000,
-      "tutor did not see student video within 20s of the student turning the camera on after rejoin"
-    );
-    return;
-  }
 
   const onVia = await clickStudentLiveCamera(studentPage);
   console.log(`[item35] student camera on via ${onVia}`);
@@ -1006,121 +982,31 @@ async function runItem35Sequence(
 }
 
 /**
- * Join key for the student URL. The workspace writes `#k=` and the same
- * value to `wb-key:<sessionId>`. On a warm dev server the fragment is often
- * empty by the time the canvas is up; the shelf still has the key.
+ * Pixel 7 (touch-primary, narrow layout) student via the shared harness.
+ * Cameras/PC capture are installed by `prepareCamerasAndCapture` before either
+ * page navigates.
  */
-async function readTutorJoinKey(page: Page): Promise<string> {
-  let captured = "";
-  await expect
-    .poll(
-      async () => {
-        const found = await page.evaluate(() => {
-          const hash = window.location.hash;
-          const fromHash = hash.match(/[#&]k=([^&]+)/);
-          if (fromHash?.[1] && fromHash[1].length >= 16) return fromHash[1];
-          const sessionId =
-            window.location.pathname.split("/").filter(Boolean).at(-2) ?? "";
-          try {
-            const fromLs = sessionId
-              ? window.localStorage.getItem(`wb-key:${sessionId}`)
-              : null;
-            if (fromLs && fromLs.length >= 16) return fromLs;
-          } catch {
-            /* private mode */
-          }
-          return "";
-        });
-        if (!found) return "";
-        captured = decodeURIComponent(found);
-        return "ready";
-      },
-      { timeout: 20_000, message: "tutor join key never appeared in hash or localStorage" }
-    )
-    .toBe("ready");
-  return captured;
-}
-
-async function openTutorAndPixel7Student(
+async function openTutorAndPhoneStudent(
   browser: Browser,
-  session: WbLiveSyncSession,
-  prepareContext: (ctx: BrowserContext) => Promise<void>
+  session: WbLiveSyncSession
 ): Promise<Item35Peers> {
-  const pixel = devices["Pixel 7"];
-  const tutorContext = await browser.newContext({
-    storageState: "tests/integration/.auth/tutor.json",
-    viewport: { width: 1280, height: 1200 },
+  const peers = await openTutorAndStudent(browser, session, {
+    ensureFollow: false,
+    studentDevice: "Pixel 7",
+    prepareContext: prepareCamerasAndCapture,
   });
-  await prepareContext(tutorContext);
-
-  const learnerAuthFile = path.join(
-    process.cwd(),
-    "tests",
-    "integration",
-    ".auth",
-    "learner.json"
-  );
-  const studentContext = await browser.newContext({
-    userAgent: pixel.userAgent,
-    viewport: pixel.viewport,
-    deviceScaleFactor: pixel.deviceScaleFactor,
-    isMobile: pixel.isMobile,
-    hasTouch: pixel.hasTouch,
-    ...(fs.existsSync(learnerAuthFile) ? { storageState: learnerAuthFile } : {}),
-  });
-  await prepareContext(studentContext);
-  if (!fs.existsSync(learnerAuthFile)) {
-    await loginLearnerInContext(
-      studentContext,
-      session.learnerHandle,
-      session.learnerPin
-    );
-  }
-
-  const tutorPage = await tutorContext.newPage();
-  await tutorPage.goto(
-    `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
-    { waitUntil: "domcontentloaded" }
-  );
-  await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
-    timeout: 90_000,
-  });
-  await waitForWbE2eBridge(tutorPage, "tutor");
-  const encryptionKey = await readTutorJoinKey(tutorPage);
-
-  const studentPage = await studentContext.newPage();
-  await studentPage.goto(`/join/${session.whiteboardSessionId}#k=${encryptionKey}`, {
-    waitUntil: "domcontentloaded",
-  });
-  await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
-    timeout: 90_000,
-  });
-  await waitForWbE2eBridge(studentPage, "student");
-  await waitForTutorStudentConnected(tutorPage);
-
-  const ua = await studentPage.evaluate(() => navigator.userAgent);
-  const layout = await studentPage.locator(".mynk-wb-chrome").getAttribute("data-layout");
-  console.log(
-    `[item35 C] student ua=${ua} layout=${layout} viewport=${pixel.viewport.width}x${pixel.viewport.height}`
-  );
-  await expect(studentPage.locator(".mynk-wb-chrome")).toHaveAttribute("data-layout", "narrow");
-
-  return {
-    tutorPage,
-    studentPage,
-    async close() {
-      await tutorContext.close();
-      await studentContext.close();
-    },
-  };
+  const ua = await peers.studentPage.evaluate(() => navigator.userAgent);
+  const layout = await peers.studentPage.locator(".mynk-wb-chrome").getAttribute("data-layout");
+  console.log(`[item35 C] student ua=${ua} layout=${layout}`);
+  await expect(peers.studentPage.locator(".mynk-wb-chrome")).toHaveAttribute("data-layout", "narrow");
+  return peers;
 }
 
 /** Non-closed PCs the page created (init-script capture). */
 async function readLivePcTransceiverCounts(page: Page): Promise<number[]> {
   return page.evaluate(() => {
-    const pcs = (window as unknown as { __pwPcs?: RTCPeerConnection[] }).__pwPcs ?? [];
-    return pcs
-      .filter((pc) => pc.signalingState !== "closed" && pc.connectionState !== "closed")
+    const live = (window as PwCaptureWindow).__pwLivePcs?.() ?? [];
+    return live
       .filter((pc) => pc.signalingState === "stable")
       .map((pc) => pc.getTransceivers().length);
   });
@@ -1137,10 +1023,7 @@ async function forceExtraVideoMLine(
   otherPage: Page
 ): Promise<void> {
   const added = await pageWithPc.evaluate(() => {
-    const pcs = (window as unknown as { __pwPcs?: RTCPeerConnection[] }).__pwPcs ?? [];
-    const live = pcs.filter(
-      (pc) => pc.signalingState !== "closed" && pc.connectionState !== "closed"
-    );
+    const live = (window as PwCaptureWindow).__pwLivePcs?.() ?? [];
     const pc = live[live.length - 1];
     if (!pc) return -1;
     pc.addTransceiver("video", { direction: "sendrecv" });
@@ -1259,14 +1142,10 @@ test.describe("item 35 phone student camera + tutor reload", { tag: [TAG.WB_AV, 
   }) => {
     test.setTimeout(300_000);
     const session = await seedWbPendingLiveSyncSession();
-    const peers = await openTutorAndPixel7Student(
-      browser,
-      session,
-      prepareCamerasAndCapture
-    );
+    const peers = await openTutorAndPhoneStudent(browser, session);
     const meshLogs = attachMeshLogs(peers.tutorPage, peers.studentPage);
     try {
-      await runItem35Sequence(peers, meshLogs, "toggle-then-reload", false);
+      await runItem35Sequence(peers, meshLogs, "toggle-then-reload");
     } finally {
       await peers.close();
     }
@@ -1277,14 +1156,10 @@ test.describe("item 35 phone student camera + tutor reload", { tag: [TAG.WB_AV, 
   }) => {
     test.setTimeout(300_000);
     const session = await seedWbPendingLiveSyncSession();
-    const peers = await openTutorAndPixel7Student(
-      browser,
-      session,
-      prepareCamerasAndCapture
-    );
+    const peers = await openTutorAndPhoneStudent(browser, session);
     const meshLogs = attachMeshLogs(peers.tutorPage, peers.studentPage);
     try {
-      await runItem35Sequence(peers, meshLogs, "reload-only", false);
+      await runItem35Sequence(peers, meshLogs, "reload-only");
     } finally {
       await peers.close();
     }
@@ -1294,13 +1169,9 @@ test.describe("item 35 phone student camera + tutor reload", { tag: [TAG.WB_AV, 
 test.describe("phone student acquires exactly one camera", { tag: [TAG.WB_AV] }, () => {
   async function openPhoneStudentLive(browser: Browser) {
     const session = await seedWbPendingLiveSyncSession();
-    const peers = await openTutorAndPixel7Student(
-      browser,
-      session,
-      prepareCamerasAndCapture
-    );
+    const peers = await openTutorAndPhoneStudent(browser, session);
     const meshLogs = attachMeshLogs(peers.tutorPage, peers.studentPage);
-    await item35WaitingRoomThenStart(peers, meshLogs, false);
+    await item35WaitingRoomThenStart(peers, meshLogs);
     return { peers, meshLogs };
   }
 
@@ -1359,8 +1230,21 @@ test.describe("phone student acquires exactly one camera", { tag: [TAG.WB_AV] },
     test.setTimeout(300_000);
     const { peers } = await openPhoneStudentLive(browser);
     try {
+      // Non-vacuous precondition: the capture must have seen at least one
+      // getUserMedia video track, and it must be sending right now. Otherwise
+      // "no track still enabled" below would pass with an empty capture.
+      const before = await readGumVideoTracks(peers.studentPage);
+      expect(
+        before.filter((t) => t.readyState === "live" && t.enabled).length,
+        `no live+enabled getUserMedia video track captured before camera-off: ${JSON.stringify(before)}`
+      ).toBeGreaterThanOrEqual(1);
+
       await item35StudentCameraOff(peers);
       const tracks = await readGumVideoTracks(peers.studentPage);
+      expect(
+        tracks.length,
+        "capture saw no getUserMedia video tracks after camera-off"
+      ).toBeGreaterThanOrEqual(1);
       const stillSending = tracks.filter(
         (t) => t.readyState === "live" && t.enabled
       );

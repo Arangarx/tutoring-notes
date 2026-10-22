@@ -1464,6 +1464,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
     log.log("requestMicAndCam start");
 
+    // Which kinds this bundle actually requested; set inside the mutex and read
+    // by the catch block for error attribution. Before the mutex is ours both
+    // are true (a failure before the re-check is a whole-bundle failure).
+    let bundleNeedAudio = true;
+    let bundleNeedVideo = true;
     const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
       try {
         // Single-acquisition invariant: re-read what is still missing AFTER the
@@ -1472,6 +1477,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         // track (extra m-line, and "camera off" would leave the first one on).
         const needAudio = !localAudioStreamRef.current;
         const needVideo = !localVideoStreamRef.current;
+        bundleNeedAudio = needAudio;
+        bundleNeedVideo = needVideo;
         if (!needAudio && !needVideo) return;
         const touchPrimary =
           typeof window !== "undefined" &&
@@ -1568,13 +1575,21 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         log.warn(
           `requestMicAndCam failed err=${(err as Error)?.message ?? String(err)}`
         );
-        setError(classifiedMic);
-        setVideoError(classifiedCam);
-        if (classifiedMic.type === "permission-denied") {
-          setHasMicPermission("denied");
+        // Attribute the failure only to the kind(s) this bundle actually
+        // requested (needAudio / needVideo, captured inside the mutex). A
+        // kind that was already live (landed via requestCam / requestMic
+        // while the bundle waited) must keep its permission + error state.
+        if (bundleNeedAudio) {
+          setError(classifiedMic);
+          if (classifiedMic.type === "permission-denied") {
+            setHasMicPermission("denied");
+          }
         }
-        if (classifiedCam.type === "permission-denied") {
-          setHasCamPermission("denied");
+        if (bundleNeedVideo) {
+          setVideoError(classifiedCam);
+          if (classifiedCam.type === "permission-denied") {
+            setHasCamPermission("denied");
+          }
         }
       } finally {
         endAcquiring();

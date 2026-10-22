@@ -341,6 +341,14 @@ fix for a real pilot-blocking bug.
     (layout-mode change → NO enumerate) + `@wb-av` surrogate (resize
     across breakpoints → mesh intact).
 
+> Invariants 14-16 are the **target contract** of the `wb-wave5-polish`
+> whiteboard reliability floor. Each is enforced by a fix commit on that
+> branch with a red-before/green-after test; until a given fix lands, the
+> invariant is the spec the fix must satisfy. See
+> [`.cursor/rules/whiteboard-av-reliability.mdc`](../.cursor/rules/whiteboard-av-reliability.mdc)
+> for the agent-facing version (incl. the CSS-scoped-under-`.mynk-wb-chrome`
+> rule, codified in Part 1C).
+
 17. **One live local video track per device; acquisition re-checks after the
     device mutex** (packet item 35, 2026-10-22). `requestCam`, `requestMic`
     and `requestMicAndCam` (touch bootstrap bundle + camera-default effect all
@@ -354,7 +362,10 @@ fix for a real pilot-blocking bug.
     leak), and a reloaded peer's 2-m-line offer meets a stale PC with 3 m-lines
     and fails with `signal-apply-fail` (phone student's video vanished after a
     tutor reload). Camera off disables the **only** video track. Early return
-    leaves `camOn` / permission state untouched. Guard: jest (`useLiveAV` DOM
+    leaves `camOn` / permission state untouched. A denied bundle request
+    sets mic error / permission state only when the bundle asked for audio, and
+    camera error / permission state only when it asked for video (a kind that
+    is already live keeps its state). Guard: jest (`useLiveAV` DOM
     tests: "single acquisition under concurrent requestMicAndCam + requestCam") + `@wb-av`
     Playwright (Pixel 7 student: one live GUM video track, one video m-line,
     cam-off leaves no enabled video track, tutor reload keeps the student's
@@ -364,13 +375,6 @@ fix for a real pilot-blocking bug.
     muted-track tile gating (`hasActiveVideoTracks` requires `!track.muted`)
     to paper over it.
 
-> Invariants 14-16 are the **target contract** of the `wb-wave5-polish`
-> whiteboard reliability floor. Each is enforced by a fix commit on that
-> branch with a red-before/green-after test; until a given fix lands, the
-> invariant is the spec the fix must satisfy. See
-> [`.cursor/rules/whiteboard-av-reliability.mdc`](../.cursor/rules/whiteboard-av-reliability.mdc)
-> for the agent-facing version (incl. the CSS-scoped-under-`.mynk-wb-chrome`
-> rule, codified in Part 1C).
 
 ---
 
