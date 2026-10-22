@@ -865,6 +865,25 @@ Quality bar: a fold must not drop a fact that one full reduce of the same extrac
 **[P1][REC] WS-G — server-side tutor:mic concat replay master**  
 `concatBlobUrl` / `buildReplayAudioPayload` partial; formal `tutor:mic:concat` replay master per plan not complete.
 
+**[P2][AV] Live A/V reload — C2: fingerprint-based peer replacement (deferred from item 35, 2026-10-22)**
+Fix A (one camera track per device) shipped alone for packet item 35. C2 was built and verified in jest but is NOT shipping.
+
+- What it does: `peer-mesh.ts` remembers each peer's DTLS fingerprint set from the applied remote description. An offer carrying a different set means the peer reloaded (new `RTCPeerConnection`, same stable `peerId`), so the mesh fires `leave` to subscribers, closes the stale PC and answers from a fresh one (`event=peer-instance-replaced reason=fingerprint-changed`). Fixes a stale PC with more m-lines than the reloaded peer's offer (`signal-apply-fail`).
+- Patch (peer-mesh.ts + peer-mesh.test.ts, applies with `git apply`): `docs/handoff/item35-c2-fingerprint-replace.patch`.
+- Why deferred (evidence, 2026-10-22): with A + C2 the existing guard `wb-av-mesh.spec.ts` › "after the tutor reloads, both peers still see the other's camera playing" went from 5/5 (pre-fix) to failing 2 of 5, and 2 of 3 in an earlier batch. In the failing runs the tutor's video receiver `track.muted` stayed `true` while RTP flowed (`vIn=889`), so `hasActiveVideoTracks` in `useLiveAV.ts` (requires `!t.muted`) kept the student's tile hidden. A probe `<video>` bound to the muted track painted frames, so the media was fine. It correlates with the replaced peer re-offering video while the other side's late-add offer crosses it. Item 35 tests were also unreliable with C2 (toggle+reload 1/3, reload-only 0/3).
+- Do NOT work around it by loosening the muted-track tile gating without a product decision (a failed camera would show black/frozen video instead of the avatar). Options: (1) when presence says `camOn === true`, require only `readyState !== "ended"`; (2) find why the receiver stays muted after replacement (offer crossing).
+- Trigger to revisit: any recurrence of m-line-count growth after a reload, or un-fixme of `wb-av-mesh.spec.ts` › "tutor reload: student's PC with an extra video m-line still shows the student's camera on the tutor" (currently `test.fixme`; it documents this class and is red without C2).
+- Needs a Sonnet/Opus design pass (fragile surface: `peer-mesh.ts`, `useLiveAV.ts`).
+
+**[P3][AV] Live A/V — B: same-kind `replaceTrack` in `addLocalTrackToAllPeers` (2026-10-22)**
+When a peer already has a sender of the same kind, `addLocalTrackToAllPeers` should `replaceTrack` on it instead of adding a second transceiver, so an extra m-line cannot appear when a track is re-added. Fix A removed the double acquisition that triggered this in practice. Add when m-line growth recurs. Fragile (`peer-mesh.ts`); red-before test: add the same kind twice, assert transceiver count unchanged.
+
+**[P3][AV] Live A/V — C1: explicit per-page-load epoch for reload detection (2026-10-22)**
+Alternative to C2's DTLS-fingerprint inference: each page load announces a random epoch in presence/offer metadata; a changed epoch under the same `peerId` is an unambiguous reload. Cleaner signal than SDP parsing but needs a sync/presence envelope change. Consider together with C2.
+
+**[P3][AV] Live A/V — D: rebuild a removed peer that is still in the roster; eviction-before-offer race (2026-10-22)**
+If the mesh drops a peer (eviction, `leave`) while presence still lists it, nothing re-adds the peer, and an eviction arriving just before the peer's offer can strand the pair. Rebuild the peer from the roster reconcile effect. Fragile (participants-reconcile effect, `useLiveAV.ts`); needs a two-browser Playwright test.
+
 ### Shipped (reference — do not re-open)
 
 Closed history: [`docs/SHIPPED.md`](SHIPPED.md).

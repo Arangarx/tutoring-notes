@@ -341,6 +341,29 @@ fix for a real pilot-blocking bug.
     (layout-mode change → NO enumerate) + `@wb-av` surrogate (resize
     across breakpoints → mesh intact).
 
+17. **One live local video track per device; acquisition re-checks after the
+    device mutex** (packet item 35, 2026-10-22). `requestCam`, `requestMic`
+    and `requestMicAndCam` (touch bootstrap bundle + camera-default effect all
+    call in) are serialized by `chainDeviceAcquire` but the mutex orders calls,
+    it does not dedupe them. Each one therefore re-reads
+    `localAudioStreamRef` / `localVideoStreamRef` **after** the mutex is its own
+    and returns early (or asks `getUserMedia` for only the missing kind) when
+    the track already exists. A second acquisition would put a second video
+    track on its own m-line: "camera off" (`track.enabled = false`) then
+    disables only one of two tracks and the camera keeps streaming (privacy
+    leak), and a reloaded peer's 2-m-line offer meets a stale PC with 3 m-lines
+    and fails with `signal-apply-fail` (phone student's video vanished after a
+    tutor reload). Camera off disables the **only** video track. Early return
+    leaves `camOn` / permission state untouched. Guard: jest (`useLiveAV` DOM
+    tests: "single acquisition under concurrent requestMicAndCam + requestCam") + `@wb-av`
+    Playwright (Pixel 7 student: one live GUM video track, one video m-line,
+    cam-off leaves no enabled video track, tutor reload keeps the student's
+    video). Remaining class (a PC that has *already* grown extra m-lines) is
+    deferred as C2 in [BACKLOG.md](BACKLOG.md) (patch in
+    `docs/handoff/item35-c2-fingerprint-replace.patch`); do not loosen the
+    muted-track tile gating (`hasActiveVideoTracks` requires `!track.muted`)
+    to paper over it.
+
 > Invariants 14-16 are the **target contract** of the `wb-wave5-polish`
 > whiteboard reliability floor. Each is enforced by a fix commit on that
 > branch with a red-before/green-after test; until a given fix lands, the

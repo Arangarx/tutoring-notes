@@ -821,6 +821,86 @@ describe("useLiveAV — requestCam", () => {
   });
 
   // -----------------------------------------------------------------
+  // Item 35: the touch bootstrap (requestMicAndCam) and the camera-default
+  // effect (requestCam) both fire on mount. The device mutex orders them
+  // but must not let both acquire video: a second live video track gets
+  // its own m-line and survives "camera off". Oracle = getUserMedia calls
+  // that ask for video, not hook state.
+  // -----------------------------------------------------------------
+  describe("single acquisition under concurrent requestMicAndCam + requestCam", () => {
+    function makeConstraintAwareGum() {
+      const calls: MediaStreamConstraints[] = [];
+      const getUM = jest.fn(async (constraints: MediaStreamConstraints) => {
+        calls.push(constraints);
+        const a = constraints.audio ? 1 : 0;
+        const v = constraints.video ? 1 : 0;
+        return makeFakeStream(a, v).stream as unknown as MediaStream;
+      });
+      const videoCalls = () => calls.filter((c) => !!c.video).length;
+      const audioCalls = () => calls.filter((c) => !!c.audio).length;
+      return { getUM, calls, videoCalls, audioCalls };
+    }
+
+    test("bundle first, then requestCam (same tick): exactly one video getUserMedia", async () => {
+      const gum = makeConstraintAwareGum();
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await Promise.all([
+          result.current.requestMicAndCam(),
+          result.current.requestCam(),
+        ]);
+      });
+      expect(gum.videoCalls()).toBe(1);
+      expect(gum.audioCalls()).toBe(1);
+      expect(result.current.localAudioStream).not.toBeNull();
+      expect(result.current.localVideoStream).not.toBeNull();
+      expect(result.current.isCamMuted).toBe(false);
+      expect(result.current.isAcquiring).toBe(false);
+      unmount();
+    });
+
+    test("requestCam first, then bundle (same tick): one video getUserMedia, bundle asks audio only", async () => {
+      const gum = makeConstraintAwareGum();
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await Promise.all([
+          result.current.requestCam(),
+          result.current.requestMicAndCam(),
+        ]);
+      });
+      expect(gum.videoCalls()).toBe(1);
+      expect(gum.audioCalls()).toBe(1);
+      const audioCall = gum.calls.find((c) => !!c.audio)!;
+      expect(audioCall.video).toBeFalsy();
+      expect(result.current.localAudioStream).not.toBeNull();
+      expect(result.current.localVideoStream).not.toBeNull();
+      expect(result.current.isCamMuted).toBe(false);
+      unmount();
+    });
+
+    test("requestMic and bundle concurrently: one audio getUserMedia, bundle asks video only", async () => {
+      const gum = makeConstraintAwareGum();
+      const props = makeBaseProps({ _getUserMedia: gum.getUM });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await Promise.all([
+          result.current.requestMic(),
+          result.current.requestMicAndCam(),
+        ]);
+      });
+      expect(gum.audioCalls()).toBe(1);
+      expect(gum.videoCalls()).toBe(1);
+      const videoCall = gum.calls.find((c) => !!c.video)!;
+      expect(videoCall.audio).toBeFalsy();
+      expect(result.current.localAudioStream).not.toBeNull();
+      expect(result.current.localVideoStream).not.toBeNull();
+      unmount();
+    });
+  });
+
+  // -----------------------------------------------------------------
   // Regression: May 15 evening smoke. Tutor granted mic first → mesh
   // built. Tutor later clicked "Allow camera" → localVideoStream
   // changed null→stream. Pre-fix: mesh-build effect's

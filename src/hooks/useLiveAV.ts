@@ -1128,6 +1128,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
         try {
+          // Single-acquisition invariant: another acquire (the bundle) may
+          // have landed audio while this call waited on the mutex.
+          if (localAudioStreamRef.current) return;
           let siblings = audioDevicesRef.current;
           let stream: MediaStream | null = null;
 
@@ -1290,6 +1293,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
         try {
+          // Single-acquisition invariant: the touch bootstrap bundle and the
+          // camera-default effect both call in; the mutex orders them but does
+          // not dedupe, so a second getUserMedia here would send a second
+          // video track on its own m-line and leave the first one enabled
+          // after "camera off". Early return leaves camOn/permission state
+          // untouched (mid-GUM camOn latch, b68efd9c).
+          if (localVideoStreamRef.current) return;
           await enumerateDevicesCore();
           const siblings = videoDevicesRef.current;
           let stream: MediaStream | null = null;
@@ -1456,6 +1466,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
     const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
       try {
+        // Single-acquisition invariant: re-read what is still missing AFTER the
+        // mutex is ours. requestCam / requestMic may have landed a track while
+        // this bundle waited; asking for it again would create a second live
+        // track (extra m-line, and "camera off" would leave the first one on).
+        const needAudio = !localAudioStreamRef.current;
+        const needVideo = !localVideoStreamRef.current;
+        if (!needAudio && !needVideo) return;
         const touchPrimary =
           typeof window !== "undefined" &&
           window.matchMedia("(hover: none), (pointer: coarse)").matches;
@@ -1468,11 +1485,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         let stream: MediaStream;
         try {
           stream = await getUM({
-            audio: audioConstraints,
-            video: videoForBundle,
+            audio: needAudio ? audioConstraints : false,
+            video: needVideo ? videoForBundle : false,
           });
         } catch (firstErr) {
-          if (videoForBundle !== true && videoConstraints === true) {
+          if (needVideo && videoForBundle !== true && videoConstraints === true) {
             log.warn(
               `requestMicAndCam facingMode bundle failed — retrying video:true err=${
                 (firstErr as Error)?.message ?? String(firstErr)
@@ -1480,7 +1497,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
             );
             videoForBundle = true;
             stream = await getUM({
-              audio: audioConstraints,
+              audio: needAudio ? audioConstraints : false,
               video: videoForBundle,
             });
           } else {
@@ -1497,22 +1514,32 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
           return;
         }
-        const audioStream = new MediaStream(stream.getAudioTracks());
-        const videoStream = new MediaStream(stream.getVideoTracks());
-        for (const t of videoStream.getVideoTracks()) {
-          t.enabled = true;
+        const audioStream = needAudio
+          ? new MediaStream(stream.getAudioTracks())
+          : null;
+        const videoStream = needVideo
+          ? new MediaStream(stream.getVideoTracks())
+          : null;
+        if (videoStream) {
+          for (const t of videoStream.getVideoTracks()) {
+            t.enabled = true;
+          }
+          localVideoStreamRef.current = videoStream;
+          setLocalVideoStream(videoStream);
         }
-        localVideoStreamRef.current = videoStream;
-        setLocalVideoStream(videoStream);
-        await wireStudentPublishPath(audioStream);
+        // Order matters (invariant 15): audio is wired before the
+        // hasEverHadLocalMedia latch flips so the first offer carries it.
+        if (audioStream) await wireStudentPublishPath(audioStream);
         setHasEverHadLocalMedia(true);
-        setHasMicPermission("granted");
-        setHasCamPermission("granted");
-        setIsCamMuted(false);
+        if (audioStream) setHasMicPermission("granted");
+        if (videoStream) {
+          setHasCamPermission("granted");
+          setIsCamMuted(false);
+        }
         log.log(
-          `requestMicAndCam acquired audio=${audioStream.getAudioTracks().length} video=${videoStream.getVideoTracks().length}`
+          `requestMicAndCam acquired audio=${audioStream?.getAudioTracks().length ?? 0} video=${videoStream?.getVideoTracks().length ?? 0}`
         );
-        const at = audioStream.getAudioTracks()[0];
+        const at = audioStream?.getAudioTracks()[0];
         const gstA = at?.getSettings?.();
         if (gstA?.deviceId) {
           setSelectedMicDeviceId(gstA.deviceId);
@@ -1522,7 +1549,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         if (gstA?.groupId) {
           pinnedMicEnumerateGroupRef.current = gstA.groupId;
         }
-        const vt = videoStream.getVideoTracks()[0];
+        const vt = videoStream?.getVideoTracks()[0];
         const gstV = vt?.getSettings?.();
         if (gstV?.deviceId) {
           selectedVideoDeviceIdRef.current = gstV.deviceId;

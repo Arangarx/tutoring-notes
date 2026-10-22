@@ -1,4 +1,11 @@
-import { devices, expect, webkit, type Browser, type Page } from "@playwright/test";
+import {
+  devices,
+  expect,
+  webkit,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -1415,6 +1422,11 @@ export async function openTutorAndStudent(
      * Not needed for ACTIVE sessions (seedWbLiveSyncSession default).
      */
     autoStart?: boolean;
+    /**
+     * Runs after each context exists and before either page navigates.
+     * Grants and init scripts have to land before the mesh builds.
+     */
+    prepareContext?: (ctx: BrowserContext) => Promise<void>;
   }
 ) {
   const ensureFollow = options?.ensureFollow !== false;
@@ -1427,6 +1439,7 @@ export async function openTutorAndStudent(
     storageState: "tests/integration/.auth/tutor.json",
     viewport: { width: 1280, height: 1200 },
   });
+  if (options?.prepareContext) await options.prepareContext(tutorContext);
 
   // Load the pre-created learner session storage state (set by integration-setup /
   // auth.setup.ts). This avoids calling /api/auth/learner/login per-test, which
@@ -1470,6 +1483,7 @@ export async function openTutorAndStudent(
           ...(options?.studentIsMobile ? { isMobile: true } : {}),
           ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
         });
+  if (options?.prepareContext) await options.prepareContext(studentContext);
 
   // If no pre-created learner state is available, fall back to a fresh login.
   if (!learnerStorageState) {

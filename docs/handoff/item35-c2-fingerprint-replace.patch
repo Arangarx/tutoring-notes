@@ -1,0 +1,328 @@
+diff --git a/src/__tests__/av/peer-mesh.test.ts b/src/__tests__/av/peer-mesh.test.ts
+index 2644878b..489a76c2 100644
+--- a/src/__tests__/av/peer-mesh.test.ts
++++ b/src/__tests__/av/peer-mesh.test.ts
+@@ -34,6 +34,7 @@
+ 
+ import {
+   createPeerMesh,
++  parseSdpFingerprints,
+   type PeerMesh,
+   type PeerMeshLogger,
+   type PeerConnectionFactory,
+@@ -2163,3 +2164,186 @@ describe("createPeerMesh — renegotiation watchdog (deferred offer never flushe
+     }
+   });
+ });
++
++// =================================================================
++// Reloaded peer = new RTCPeerConnection under the same peerId
++// (item 35: stale PC with more m-lines cannot answer a fresh offer;
++//  detect the new instance from the DTLS fingerprint and swap the PC)
++// =================================================================
++
++function sdpWithFingerprints(...fps: string[]): string {
++  return ["v=0", ...fps.map((fp) => `a=fingerprint:${fp}`), "m=audio 9 UDP/TLS/RTP/SAVPF 111", ""].join("\r\n");
++}
++
++const FP_A = "sha-256 AA:BB:CC:01";
++const FP_B = "sha-256 11:22:33:02";
++
++describe("parseSdpFingerprints", () => {
++  test("reads session-level and media-level lines, across algorithms, normalized and sorted", () => {
++    const sdp = [
++      "v=0",
++      "a=fingerprint:SHA-256 aa:bb",
++      "m=audio 9 UDP/TLS/RTP/SAVPF 111",
++      "a=fingerprint:sha-1 cc:dd",
++      "m=video 9 UDP/TLS/RTP/SAVPF 96",
++      "a=fingerprint:sha-256 AA:BB",
++      "",
++    ].join("\r\n");
++    expect(parseSdpFingerprints(sdp)).toEqual(["sha-1 CC:DD", "sha-256 AA:BB"]);
++  });
++
++  test("returns null when there is no fingerprint or no sdp", () => {
++    expect(parseSdpFingerprints("fake-offer-sdp")).toBeNull();
++    expect(parseSdpFingerprints("")).toBeNull();
++    expect(parseSdpFingerprints(undefined)).toBeNull();
++  });
++});
++
++describe("createPeerMesh — reloaded peer replaced via DTLS fingerprint", () => {
++  function setup(localPeerId = "A") {
++    const sig = makeFakeSignaling();
++    const { factory, instances } = makePcFactory();
++    const { log, lines } = quietLog();
++    const m = createPeerMesh({ signaling: sig, localPeerId, _pcFactory: factory, log });
++    const leaves: string[] = [];
++    const closedWhenLeaveFired: boolean[] = [];
++    m.onPeerLeave((peerId) => {
++      leaves.push(peerId);
++      closedWhenLeaveFired.push(instances[0]?.closed ?? false);
++    });
++    return { sig, instances, lines, m, leaves, closedWhenLeaveFired };
++  }
++
++  test("an offer with a different fingerprint swaps the PC: old closed, no leave sent, answered by the new PC", async () => {
++    const { sig, instances, m, leaves, lines } = setup();
++    m.addPeer("B");
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_A) });
++    await flush();
++    expect(instances).toHaveLength(1);
++    expect(sig.sends.filter((s) => s.kind === "answer")).toHaveLength(1);
++
++    // B reloads: same peerId, fresh PC, new certificate.
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_B) });
++    await flush();
++
++    expect(instances).toHaveLength(2);
++    expect(instances[0]!.closed).toBe(true);
++    expect(instances[1]!.closed).toBe(false);
++    expect(instances[1]!.history.map((h) => h.type)).toContain("setRemoteDescription:offer");
++    // The remote is alive: a `leave` would kill the new instance.
++    expect(sig.sends.some((s) => s.kind === "leave")).toBe(false);
++    expect(sig.sends.filter((s) => s.kind === "answer")).toHaveLength(2);
++    expect(leaves).toEqual(["B"]);
++    expect(m.peers().has("B")).toBe(true);
++    expect(
++      lines.some((l) => l.includes("peer=B") && l.includes("event=peer-instance-replaced reason=fingerprint-changed"))
++    ).toBe(true);
++    m.dispose();
++  });
++
++  test("subscribers hear 'leave' BEFORE the old PC closes (stream reset precedes the new ontrack)", async () => {
++    const { sig, m, closedWhenLeaveFired } = setup();
++    m.addPeer("B");
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_A) });
++    await flush();
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_B) });
++    await flush();
++    expect(closedWhenLeaveFired).toEqual([false]);
++    m.dispose();
++  });
++
++  test("an offer with the same fingerprint (renegotiation / ICE restart) keeps the PC", async () => {
++    const { sig, instances, m, leaves } = setup();
++    m.addPeer("B");
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_A) });
++    await flush();
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_A) });
++    await flush();
++    expect(instances).toHaveLength(1);
++    expect(instances[0]!.closed).toBe(false);
++    expect(leaves).toEqual([]);
++    m.dispose();
++  });
++
++  test("the same fingerprint set in a different order, split across session/media level, is not a new instance", async () => {
++    const { sig, instances, m } = setup();
++    m.addPeer("B");
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_A, FP_B) });
++    await flush();
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_B, FP_A) });
++    await flush();
++    expect(instances).toHaveLength(1);
++    m.dispose();
++  });
++
++  test("an offer with no fingerprint never replaces the PC", async () => {
++    const { sig, instances, m } = setup();
++    m.addPeer("B");
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_A) });
++    await flush();
++    sig.inject("B", { type: "offer", sdp: "opaque-offer-without-fingerprint" });
++    await flush();
++    expect(instances).toHaveLength(1);
++    expect(instances[0]!.closed).toBe(false);
++    m.dispose();
++  });
++
++  test("nothing stored yet (first remote description had no fingerprint) → a later fingerprinted offer does not replace", async () => {
++    const { sig, instances, m } = setup();
++    m.addPeer("B");
++    sig.inject("B", { type: "offer", sdp: "opaque-offer-without-fingerprint" });
++    await flush();
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_B) });
++    await flush();
++    expect(instances).toHaveLength(1);
++    m.dispose();
++  });
++
++  test("an ICE candidate sent right after the new offer reaches the NEW PC, not the closed one", async () => {
++    const { sig, instances, m } = setup();
++    m.addPeer("B");
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_A) });
++    await flush();
++    const cand: RTCIceCandidateInit = { candidate: "new-instance-cand", sdpMid: "0", sdpMLineIndex: 0 };
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_B) });
++    sig.inject("B", { type: "ice", candidate: cand });
++    await flush();
++    expect(instances[1]!.iceApplied).toEqual([cand]);
++    expect(instances[0]!.iceApplied).toEqual([]);
++    m.dispose();
++  });
++
++  test("the fingerprint from an applied ANSWER is remembered (we offered first)", async () => {
++    const { sig, instances, m } = setup();
++    m.addPeer("B");
++    instances[0]!.triggerNegotiationNeeded();
++    await flush();
++    sig.inject("B", { type: "answer", sdp: sdpWithFingerprints(FP_A) });
++    await flush();
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_B) });
++    await flush();
++    expect(instances).toHaveLength(2);
++    expect(instances[0]!.closed).toBe(true);
++    m.dispose();
++  });
++
++  test("an unknown peer's first offer still implicit-adds (invariant 5) and does not fire 'leave'", async () => {
++    const { sig, instances, m, leaves } = setup();
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_B) });
++    await flush();
++    expect(instances).toHaveLength(1);
++    expect(leaves).toEqual([]);
++    m.dispose();
++  });
++
++  test("an answer carrying a different fingerprint is applied in place, never a replacement", async () => {
++    const { sig, instances, m } = setup();
++    m.addPeer("B");
++    sig.inject("B", { type: "offer", sdp: sdpWithFingerprints(FP_A) });
++    await flush();
++    sig.inject("B", { type: "answer", sdp: sdpWithFingerprints(FP_B) });
++    await flush();
++    expect(instances).toHaveLength(1);
++    m.dispose();
++  });
++});
+diff --git a/src/lib/av/peer-mesh.ts b/src/lib/av/peer-mesh.ts
+index c6a4d7e1..21c7125e 100644
+--- a/src/lib/av/peer-mesh.ts
++++ b/src/lib/av/peer-mesh.ts
+@@ -282,12 +282,43 @@ type PeerEntry = {
+    * after a late `addTrack` during an in-flight negotiation.
+    */
+   pendingRenegotiation: boolean;
++  /**
++   * Normalized DTLS `a=fingerprint` set (session + media level, all
++   * algorithms) of the remote description this PC last accepted. A real
++   * renegotiation or ICE restart keeps the remote certificate; a reloaded
++   * page builds a new RTCPeerConnection with a new one. `null` until a
++   * remote description with a parseable fingerprint has been applied.
++   */
++  remoteFingerprints: string[] | null;
+ };
+ 
+ // -----------------------------------------------------------------
+ // Helpers
+ // -----------------------------------------------------------------
+ 
++/**
++ * Sorted, de-duplicated `<algorithm> <HEX>` set from every `a=fingerprint`
++ * line in an SDP (session and media level). `null` when the SDP has none,
++ * so an unparseable or fingerprint-less description never triggers a
++ * replacement.
++ */
++export function parseSdpFingerprints(sdp: string | null | undefined): string[] | null {
++  if (typeof sdp !== "string" || sdp.length === 0) return null;
++  const found = new Set<string>();
++  const re = /^a=fingerprint:(\S+)[ \t]+(\S+)/gim;
++  let m: RegExpExecArray | null;
++  while ((m = re.exec(sdp)) !== null) {
++    found.add(`${m[1]!.toLowerCase()} ${m[2]!.toUpperCase()}`);
++  }
++  if (found.size === 0) return null;
++  return Array.from(found).sort();
++}
++
++function sameFingerprintSet(a: readonly string[], b: readonly string[]): boolean {
++  if (a.length !== b.length) return false;
++  return a.every((fp, i) => fp === b[i]);
++}
++
+ function decidePolite(localPeerId: string, remotePeerId: string): boolean {
+   // Convention: polite = local id sorts AFTER remote id (lex). The
+   // direction is arbitrary as long as it's deterministic and the
+@@ -506,6 +537,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
+       pendingCandidates: [],
+       closed: false,
+       pendingRenegotiation: false,
++      remoteFingerprints: null,
+     };
+ 
+     pc.onnegotiationneeded = () => {
+@@ -723,9 +755,54 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
+         return;
+       }
+     }
++    // **Reloaded peer = new RTCPeerConnection under the same stable peerId.**
++    // The survivor's stale PC may have more m-lines than the reloaded page's
++    // fresh offer and then cannot accept it (setRemoteDescription rejects an
++    // offer whose m-lines do not match the current description), while no
++    // roster edge fires to rebuild it. A different DTLS fingerprint on an
++    // offer is proof the remote is a different instance, so swap the PC.
++    // Missing/unparseable fingerprints never replace anything. Done
++    // synchronously, before the async apply, so ICE that follows the offer
++    // reaches the new entry.
++    if (payload.type === "offer" && entry.remoteFingerprints) {
++      const incoming = parseSdpFingerprints(payload.sdp);
++      if (incoming && !sameFingerprintSet(incoming, entry.remoteFingerprints)) {
++        const fresh = replaceReloadedPeerEntry(entry);
++        if (!fresh) return;
++        entry = fresh;
++      }
++    }
+     void applyInboundSignal(entry, payload);
+   };
+ 
++  /**
++   * Replace `old` with a fresh entry for the same remote peer id. Order is
++   * load-bearing: subscribers hear "leave" first (the hook's onPeerLeave
++   * stops and drains the old tracks and resets the video stream before the
++   * new PC's `ontrack`), then the old PC closes WITHOUT sending a `leave`
++   * (the remote is alive — a `leave` would kill the new instance), then the
++   * new entry is registered. "Leave" here means "prepare streams for the
++   * replacement", the same contract as a graceful remote leave.
++   */
++  function replaceReloadedPeerEntry(old: PeerEntry): PeerEntry | null {
++    const remotePeerId = old.remotePeerId;
++    log.log(
++      `peer=${remotePeerId} event=peer-instance-replaced reason=fingerprint-changed`
++    );
++    fan(leaveSubs, remotePeerId);
++    closePeerEntryLocal(old);
++    try {
++      const fresh = createPeerEntry(remotePeerId);
++      peers.set(remotePeerId, fresh);
++      return fresh;
++    } catch (err) {
++      log.error(
++        `peer=${remotePeerId} event=peer-instance-replace-fail reason=${(err as Error)?.message ?? String(err)}`
++      );
++      return null;
++    }
++  }
++
+   async function applyInboundSignal(
+     entry: PeerEntry,
+     payload: WhiteboardWireSignalPayload
+@@ -771,6 +848,8 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
+         await pc.setRemoteDescription({ type: "offer", sdp: payload.sdp });
+         if (entry.closed) return;
+         entry.hasRemoteDescription = true;
++        entry.remoteFingerprints =
++          parseSdpFingerprints(payload.sdp) ?? entry.remoteFingerprints;
+         await drainPendingCandidates(entry);
+         if (entry.closed) return;
+         const answer = await pc.createAnswer();
+@@ -785,6 +864,8 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
+         await pc.setRemoteDescription({ type: "answer", sdp: payload.sdp });
+         if (entry.closed) return;
+         entry.hasRemoteDescription = true;
++        entry.remoteFingerprints =
++          parseSdpFingerprints(payload.sdp) ?? entry.remoteFingerprints;
+         await drainPendingCandidates(entry);
+         log.log(`peer=${remotePeerId} event=answer-applied`);
+         return;
