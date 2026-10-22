@@ -157,13 +157,52 @@
   border-color: var(--error-border);
 }
 
-.wb-graph-expr-add {
-  display: flex;
+.wb-graph-expr-entry {
+  display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
-.wb-graph-expr-add .wb-graph-expr-input {
-  flex: 1;
+.wb-graph-expr-entry-line {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wb-graph-expr-entry-prefix {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wb-graph-expr-entry-line > .wb-graph-expr-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.wb-graph-expr-entry-line > .wb-graph-expr-btn {
+  flex: 0 0 auto;
+}
+
+.wb-graph-expr-entry-help {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.wb-graph-expr-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-align: left;
+  cursor: text;
+  overflow: hidden;
 }
 
 /* Bottom-right — zoom/pan overlay (replaces JSXGraph built-in navigation). */

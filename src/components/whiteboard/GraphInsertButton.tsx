@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ModalPortal } from "@/components/ModalPortal";
 import { WbIconGraph } from "@/components/whiteboard/chrome/wb-icons";
+import { GraphExpressionEntry } from "@/components/whiteboard/GraphExpressionEntry";
 import {
   insertGraphOnCanvas,
   type ExcalidrawApiLike,
@@ -182,17 +183,12 @@ export function GraphInsertButton({
                   <label htmlFor="wb-graph-expr" style={{ fontSize: 13, fontWeight: 600 }}>
                     Expression
                   </label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span aria-hidden="true" data-testid="wb-graph-expr-y-prefix" style={{ fontSize: 13, fontWeight: 600 }}>
-                      y=
-                    </span>
-                  <input
-                    ref={inputRef}
-                    id="wb-graph-expr"
-                    type="text"
+                  <GraphExpressionEntry
+                    inputRef={inputRef}
+                    inputId="wb-graph-expr"
                     value={state.expression}
-                    onChange={(e) =>
-                      setState({ ...state, expression: e.target.value, error: null })
+                    onChange={(expression) =>
+                      setState({ ...state, expression, error: null })
                     }
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -200,19 +196,9 @@ export function GraphInsertButton({
                         handleInsertWithExpression();
                       }
                     }}
-                    placeholder="2x+1"
-                    style={{
-                      padding: "8px 10px",
-                      border: "1px solid var(--border-default)",
-                      borderRadius: 6,
-                      fontSize: 13,
-                    }}
-                    data-testid="wb-graph-expr-input"
+                    inputTestId="wb-graph-expr-input"
+                    prefixTestId="wb-graph-expr-y-prefix"
                   />
-                  </div>
-                  <p className="muted" style={{ margin: 0, fontSize: 12 }}>
-                    Uses standard function notation (x as the variable).
-                  </p>
                 </div>
               )}
 

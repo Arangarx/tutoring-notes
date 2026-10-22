@@ -40,6 +40,7 @@ import {
   GraphInkModeControl,
   type GraphInkMode,
 } from "@/components/whiteboard/GraphInkModeControl";
+import { GraphExpressionEntry } from "@/components/whiteboard/GraphExpressionEntry";
 import "./graph-embeddable.css";
 
 type EmbeddableElementLike = {
@@ -1020,18 +1021,12 @@ export function GraphEmbeddable({
             onPointerDown={stopEmbedDrag}
             onMouseDown={stopEmbedDrag}
           >
-            {expressions.length === 0 && (
-              <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-                Add an expression to plot (e.g. x^2, sin(x), 5x).
-              </p>
-            )}
             {expressions.map((expr, index) => (
               <div key={`${index}-${expr}`} className="wb-graph-expr-row">
                 {editingIndex === index ? (
-                  <input
-                    className="wb-graph-expr-input"
+                  <GraphExpressionEntry
                     value={editingDraft}
-                    onChange={(e) => setEditingDraft(e.target.value)}
+                    onChange={setEditingDraft}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -1044,14 +1039,15 @@ export function GraphEmbeddable({
                     }}
                     onBlur={() => commitEdit(index)}
                     autoFocus
-                    data-testid={`wb-graph-expr-edit-${index}`}
+                    showHelp={false}
+                    inputTestId={`wb-graph-expr-edit-${index}`}
+                    prefixTestId={`wb-graph-expr-edit-prefix-${index}`}
                   />
                 ) : (
                   <div className="wb-graph-expr-actions">
                     <button
                       type="button"
-                      className="wb-graph-expr-input"
-                      style={{ textAlign: "left", cursor: "text" }}
+                      className="wb-graph-expr-input wb-graph-expr-display"
                       onPointerDown={stopEmbedDrag}
                       onMouseDown={stopEmbedDrag}
                       onClick={() => {
@@ -1060,7 +1056,10 @@ export function GraphEmbeddable({
                       }}
                       data-testid={`wb-graph-expr-display-${index}`}
                     >
-                      {expr || "(empty)"}
+                      <span aria-hidden="true" className="wb-graph-expr-entry-prefix">
+                        y=
+                      </span>
+                      <span>{expr || "(empty)"}</span>
                     </button>
                     <button
                       type="button"
@@ -1086,31 +1085,30 @@ export function GraphEmbeddable({
                 ) : null}
               </div>
             ))}
-            <div className="wb-graph-expr-add">
-              <input
-                className="wb-graph-expr-input"
-                placeholder="e.g. 2*x+1 or 5x"
-                value={draftExpr}
-                onChange={(e) => setDraftExpr(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddExpression();
-                  }
-                }}
-                data-testid="wb-graph-expr-new"
-              />
-              <button
-                type="button"
-                className="wb-graph-expr-btn"
-                onPointerDown={stopEmbedDrag}
-                onMouseDown={stopEmbedDrag}
-                onClick={handleAddExpression}
-                data-testid="wb-graph-expr-add"
-              >
-                Add
-              </button>
-            </div>
+            <GraphExpressionEntry
+              value={draftExpr}
+              onChange={setDraftExpr}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddExpression();
+                }
+              }}
+              inputTestId="wb-graph-expr-new"
+              prefixTestId="wb-graph-expr-new-prefix"
+              trailing={
+                <button
+                  type="button"
+                  className="wb-graph-expr-btn"
+                  onPointerDown={stopEmbedDrag}
+                  onMouseDown={stopEmbedDrag}
+                  onClick={handleAddExpression}
+                  data-testid="wb-graph-expr-add"
+                >
+                  Add
+                </button>
+              }
+            />
           </div>
         )}
       </div>

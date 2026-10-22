@@ -12,6 +12,7 @@ import {
   injectStaleHandleChange,
   openTutorAndStudent,
   readActiveWhiteboardPageId,
+  addGraphExpressionViaUI,
   readGraphElementState,
   readImageElementState,
   readPageDataBucketIds,
@@ -599,6 +600,64 @@ test.describe("whiteboard QoL surfaces", () => {
     const state = await readGraphElementState(page, "tutor", graphId);
     expect(state?.expressions).toContain("2*x+1");
   });
+
+  test(
+    "on-graph expression entry shows y= beside the input and keeps the notation helper",
+    { tag: [TAG.WB_GRAPH] },
+    async ({ page }) => {
+      test.setTimeout(180_000);
+      await openTutorBoard(page);
+      await page.getByTestId("wb-insert-graph").click();
+      await page.getByTestId("wb-graph-insert").click();
+      const host = page.getByTestId("wb-graph-embed-host").first();
+      await expect(host).toBeVisible({ timeout: 30_000 });
+      await host.scrollIntoViewIfNeeded();
+
+      const panel = page.getByTestId("wb-graph-expr-panel");
+      const input = page.getByTestId("wb-graph-expr-new");
+      const prefix = page.getByTestId("wb-graph-expr-new-prefix");
+      await expect(panel).toBeVisible();
+      await expect(prefix).toHaveText("y=");
+      await expect(input).toHaveAttribute("placeholder", "2x+1");
+      const help = "Uses standard function notation (x as the variable).";
+      await expect(panel.getByText(help)).toBeVisible();
+
+      // y= sits on the same line, immediately left of the expression input.
+      const prefixBox = await prefix.boundingBox();
+      const inputBox = await input.boundingBox();
+      const panelBox = await panel.boundingBox();
+      expect(prefixBox, "y= prefix box").not.toBeNull();
+      expect(inputBox, "expression input box").not.toBeNull();
+      expect(panelBox, "expression panel box").not.toBeNull();
+      const prefixRight = prefixBox!.x + prefixBox!.width;
+      const inputLeft = inputBox!.x;
+      expect(prefixRight, "y= right edge is left of the input").toBeLessThanOrEqual(
+        inputLeft + 1
+      );
+      expect(inputLeft - prefixRight, "y= sits immediately left of the input").toBeLessThanOrEqual(
+        16
+      );
+      const prefixMid = prefixBox!.y + prefixBox!.height / 2;
+      const inputMid = inputBox!.y + inputBox!.height / 2;
+      expect(
+        Math.abs(prefixMid - inputMid),
+        "y= midline aligns with the input"
+      ).toBeLessThanOrEqual(4);
+      const addBox = await page.getByTestId("wb-graph-expr-add").boundingBox();
+      expect(addBox, "add button box").not.toBeNull();
+      expect(prefixBox!.x, "y= stays inside the panel").toBeGreaterThanOrEqual(panelBox!.x - 1);
+      expect(
+        addBox!.x + addBox!.width,
+        "y=, input, and Add stay inside the panel"
+      ).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 1);
+
+      await addGraphExpressionViaUI(page, "2*x+1");
+      await expect(panel.getByText(help)).toBeVisible();
+      const displayed = page.getByTestId("wb-graph-expr-display-0");
+      await expect(displayed).toContainText("y=");
+      await expect(displayed).toContainText("2*x+1");
+    }
+  );
 
   test(
     "the student's view of the tutor tile shows the tutor's name",
