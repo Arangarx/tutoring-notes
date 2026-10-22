@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
-import { ShareWhiteboardReplayPlayer } from "./ShareWhiteboardReplayPlayer";
+import { WhiteboardReplayPageShell } from "@/components/whiteboard/replay/WhiteboardReplayPageShell";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
-import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
 import { formatBilledDurationLabel } from "@/lib/billing/display";
 
 export const dynamic = "force-dynamic";
@@ -146,65 +144,36 @@ export default async function ShareWhiteboardPage({
     billedEndLocal: session.billedEndLocal,
   });
 
-  // Build proxy URLs with the share token in the query string so the
-  // client-side fetch includes the credential (same pattern as
-  // `/api/audio/[id]?token=`).
-  const eventsApiUrl = `/api/whiteboard/${whiteboardSessionId}/public-events?token=${token}`;
-  const replayAudio = buildReplayAudioPayload({
-    whiteboardSessionId,
-    concatBlobUrl: session.concatBlobUrl,
-    concatDurationSeconds: session.concatDurationSeconds,
-    audioRecordings: session.audioRecordings,
-    audience: "share",
-    shareToken: token,
-  });
-
   console.log(
     `[wbShareReplay.page] wbsid=${whiteboardSessionId} schema v${session.eventsSchemaVersion}`
   );
 
   return (
-    <main
-      className="wb-share-replay-page"
-      data-testid="wb-share-replay-page"
-    >
-      <header className="wb-share-replay-page__header">
-        <div className="wb-share-replay-page__header-inner">
-          <Link
-            href={`/s/${token}`}
-            className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            ← Back to {studentName}&apos;s notes
-          </Link>
-          <h1 className="heading wb-share-replay-page__title">
-            {sessionLabel}
-          </h1>
-          <p className="wb-share-replay-page__subtitle">
-            Whiteboard recording shared by your tutor
-            {billedLabel ? (
-              <>
-                {" "}
-                ·{" "}
-                <span data-testid="wb-share-billed-duration">{billedLabel}</span>
-              </>
-            ) : null}
-          </p>
-        </div>
-      </header>
-
-      {/* Viewport-locked shell — height chain for embedded replay (phone share path). */}
-      <div className="wb-share-replay-page__player">
-        <ShareWhiteboardReplayPlayer
-          eventsBlobUrl={eventsApiUrl}
-          audioSegments={replayAudio.audioSegments}
-          canonicalAudioBlobUrl={replayAudio.canonicalAudioBlobUrl}
-          canonicalAudioMimeType={replayAudio.canonicalAudioMimeType}
-          canonicalDurationSeconds={replayAudio.canonicalDurationSeconds}
-          whiteboardSessionId={whiteboardSessionId}
-          studentName={studentName}
-          durationSeconds={session.durationSeconds}
-        />
-      </div>
-    </main>
+    <WhiteboardReplayPageShell
+      testId="wb-share-replay-page"
+      backHref={`/s/${token}`}
+      backLabel={`← Back to ${studentName}'s notes`}
+      title={sessionLabel}
+      subtitle={
+        <>
+          Whiteboard recording shared by your tutor
+          {billedLabel ? (
+            <>
+              {" "}
+              ·{" "}
+              <span data-testid="wb-share-billed-duration">{billedLabel}</span>
+            </>
+          ) : null}
+        </>
+      }
+      whiteboardSessionId={whiteboardSessionId}
+      studentName={studentName}
+      durationSeconds={session.durationSeconds}
+      concatBlobUrl={session.concatBlobUrl}
+      concatDurationSeconds={session.concatDurationSeconds}
+      audioRecordings={session.audioRecordings}
+      audience="share"
+      shareToken={token}
+    />
   );
 }

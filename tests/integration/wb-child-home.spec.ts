@@ -4,13 +4,13 @@
  * child can tighten but only a parent can restore.
  */
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { TAG } from "../test-tags";
 import { TEST_PARENT, seedParentAccountHolder } from "./identity/identity.helpers";
 import { loginLearnerInContext } from "./whiteboard-live-sync.helpers";
-import { uploadReplayEvents } from "./wb-replay-harness.helpers";
+import { uploadHarnessBlob, uploadReplayEvents } from "./wb-replay-harness.helpers";
 import { readHarnessMailUrl } from "@/lib/playwright-harness-mail";
 import { seedTestAdmin } from "../visual/helpers";
 
@@ -27,7 +27,7 @@ async function seedChildLogin(opts: {
   accountHolderId: string;
   familyId: string;
   displayName: string;
-  withEndedNote?: { topics: string };
+  withEndedNote?: { topics: string; status?: "DRAFT" | "READY" | "SENT" };
   /**
    * Default true. A real Save to notes does not create a ShareLink;
    * only an explicit false reproduces that shape.
@@ -108,7 +108,7 @@ async function seedChildLogin(opts: {
           assessment: "",
           nextSteps: "",
           linksJson: "[]",
-          status: "READY",
+          status: opts.withEndedNote.status ?? "READY",
         },
         select: { id: true },
       });
@@ -147,6 +147,7 @@ async function seedChildLogin(opts: {
     return {
       learnerProfileId: profile.id,
       studentId: student.id,
+      tutorId: tutor.id,
       handle: `${username}@${opts.familyId}`,
       noteTopics,
       whiteboardSessionId,
@@ -176,6 +177,60 @@ async function familyIdFor(accountHolderId: string): Promise<string> {
 }
 
 const PARENT_RESTORED = "Your parent turned this back on.";
+/** Bytes stored in the harness. A successful fetch must return this exact body. */
+const AUDIO_MARKER = "learner-replay-audio-oracle-v1";
+
+async function attachReplayAudio(args: {
+  request: APIRequestContext;
+  adminUserId: string;
+  studentId: string;
+  whiteboardSessionId: string;
+}): Promise<{ recordingId: string }> {
+  const blobUrl = await uploadHarnessBlob({
+    request: args.request,
+    pathname: `audio/${args.adminUserId}/${args.studentId}/pw-learner-replay.webm`,
+    body: AUDIO_MARKER,
+    contentType: "audio/webm",
+    clientPayload: { kind: "audio", studentId: args.studentId },
+  });
+  const prisma = new PrismaClient();
+  try {
+    await prisma.whiteboardSession.update({
+      where: { id: args.whiteboardSessionId },
+      data: { concatBlobUrl: blobUrl, concatDurationSeconds: 3 },
+    });
+    const recording = await prisma.sessionRecording.create({
+      data: {
+        adminUserId: args.adminUserId,
+        studentId: args.studentId,
+        whiteboardSessionId: args.whiteboardSessionId,
+        blobUrl,
+        mimeType: "audio/webm",
+        sizeBytes: AUDIO_MARKER.length,
+        durationSeconds: 3,
+      },
+      select: { id: true },
+    });
+    return { recordingId: recording.id };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function stampLearnerSessions(
+  learnerProfileId: string,
+  data: { revokedAt?: Date; expiresAt?: Date }
+): Promise<void> {
+  const prisma = new PrismaClient();
+  try {
+    await prisma.learnerDeviceSession.updateMany({
+      where: { learnerProfileId },
+      data,
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
 
 function consentRow(page: Page, testId: string) {
   return page.getByTestId(testId).locator("xpath=ancestor::div[contains(@class,'rounded-[10px]')][1]");
@@ -363,6 +418,236 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
       await expect(page.getByTestId("wb-replay-in-frame")).toHaveCount(0);
     } finally {
       await deniedContext.close();
+    }
+  });
+
+  test("DRAFT-linked ended session is 404 on the learner page and the replay APIs", {
+    tag: [TAG.WB_RECORDING],
+  }, async ({ browser, page }) => {
+    test.setTimeout(180_000);
+    const accountHolderId = await seedParentAccountHolder();
+    const familyId = await familyIdFor(accountHolderId);
+    const adminUserId = await seedTestAdmin();
+    const id = suffix();
+    const child = await seedChildLogin({
+      accountHolderId,
+      familyId,
+      displayName: `Draft replay ${id}`,
+      withEndedNote: { topics: `Draft note ${id}`, status: "DRAFT" },
+      withShareLink: false,
+      tutorAdminUserId: adminUserId,
+    });
+    if (!child.whiteboardSessionId) throw new Error("expected an ended session");
+    const sessionId = child.whiteboardSessionId;
+
+    await uploadReplayEvents({
+      request: page.request,
+      adminUserId,
+      studentId: child.studentId,
+      whiteboardSessionId: sessionId,
+    });
+    const { recordingId } = await attachReplayAudio({
+      request: page.request,
+      adminUserId,
+      studentId: child.studentId,
+      whiteboardSessionId: sessionId,
+    });
+
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      await loginLearnerInContext(context, child.handle, CURRENT_PIN);
+      const childPage = await context.newPage();
+      const pageResponse = await childPage.goto(
+        `/join/notes/${sessionId}/whiteboard`,
+        { waitUntil: "domcontentloaded" }
+      );
+      expect(pageResponse?.status()).toBe(404);
+      await expect(childPage.getByTestId("learner-wb-replay-page")).toHaveCount(0);
+
+      const events = await context.request.get(`/api/whiteboard/${sessionId}/public-events`);
+      const concat = await context.request.get(
+        `/api/whiteboard/${sessionId}/public-concat-audio`
+      );
+      const audio = await context.request.get(`/api/audio/${recordingId}`);
+      expect(events.status()).toBe(404);
+      expect(concat.status()).toBe(404);
+      expect(audio.status()).toBe(404);
+      expect(await events.text()).not.toContain("pw-replay-rect");
+      expect(await concat.text()).not.toBe(AUDIO_MARKER);
+      expect(await audio.text()).not.toBe(AUDIO_MARKER);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("learner replay APIs deny strangers and serve the owning child's audio", {
+    tag: [TAG.WB_RECORDING],
+  }, async ({ browser, page }) => {
+    test.setTimeout(180_000);
+    const accountHolderId = await seedParentAccountHolder();
+    const familyId = await familyIdFor(accountHolderId);
+    const adminUserId = await seedTestAdmin();
+    const id = suffix();
+    const owner = await seedChildLogin({
+      accountHolderId,
+      familyId,
+      displayName: `Api owner ${id}`,
+      withEndedNote: { topics: `Api owner note ${id}` },
+      withShareLink: false,
+      tutorAdminUserId: adminUserId,
+    });
+    const other = await seedChildLogin({
+      accountHolderId,
+      familyId,
+      displayName: `Api other ${id}`,
+      withEndedNote: { topics: `Api other note ${id}` },
+      withShareLink: false,
+      tutorAdminUserId: adminUserId,
+    });
+    const denied = await seedChildLogin({
+      accountHolderId,
+      familyId,
+      displayName: `Api denied ${id}`,
+      withEndedNote: { topics: `Api denied note ${id}` },
+      withShareLink: false,
+      tutorAdminUserId: adminUserId,
+      allowWhiteboardRecording: false,
+    });
+    if (!owner.whiteboardSessionId || !other.whiteboardSessionId || !denied.whiteboardSessionId) {
+      throw new Error("expected ended sessions");
+    }
+
+    await uploadReplayEvents({
+      request: page.request,
+      adminUserId,
+      studentId: owner.studentId,
+      whiteboardSessionId: owner.whiteboardSessionId,
+    });
+    const ownerAudio = await attachReplayAudio({
+      request: page.request,
+      adminUserId,
+      studentId: owner.studentId,
+      whiteboardSessionId: owner.whiteboardSessionId,
+    });
+    await uploadReplayEvents({
+      request: page.request,
+      adminUserId,
+      studentId: denied.studentId,
+      whiteboardSessionId: denied.whiteboardSessionId,
+    });
+    const deniedAudio = await attachReplayAudio({
+      request: page.request,
+      adminUserId,
+      studentId: denied.studentId,
+      whiteboardSessionId: denied.whiteboardSessionId,
+    });
+    const otherAudio = await attachReplayAudio({
+      request: page.request,
+      adminUserId,
+      studentId: other.studentId,
+      whiteboardSessionId: other.whiteboardSessionId,
+    });
+
+    const ownerEvents = `/api/whiteboard/${owner.whiteboardSessionId}/public-events`;
+    const ownerConcat = `/api/whiteboard/${owner.whiteboardSessionId}/public-concat-audio`;
+    const ownerRecording = `/api/audio/${ownerAudio.recordingId}`;
+    const deniedEvents = `/api/whiteboard/${denied.whiteboardSessionId}/public-events`;
+    const deniedConcat = `/api/whiteboard/${denied.whiteboardSessionId}/public-concat-audio`;
+    const deniedRecording = `/api/audio/${deniedAudio.recordingId}`;
+
+    const bare = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      expect((await bare.request.get(ownerEvents)).status()).toBe(401);
+      expect((await bare.request.get(ownerConcat)).status()).toBe(401);
+      expect((await bare.request.get(ownerRecording)).status()).toBe(401);
+    } finally {
+      await bare.close();
+    }
+
+    const otherContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      await loginLearnerInContext(otherContext, other.handle, CURRENT_PIN);
+      expect((await otherContext.request.get(ownerEvents)).status()).toBe(404);
+      expect((await otherContext.request.get(ownerConcat)).status()).toBe(404);
+      expect((await otherContext.request.get(ownerRecording)).status()).toBe(404);
+      expect((await otherContext.request.get(`/api/audio/${otherAudio.recordingId}`)).status()).toBe(
+        200
+      );
+    } finally {
+      await otherContext.close();
+    }
+
+    const deniedContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      await loginLearnerInContext(deniedContext, denied.handle, CURRENT_PIN);
+      expect((await deniedContext.request.get(deniedEvents)).status()).toBe(404);
+      expect((await deniedContext.request.get(deniedConcat)).status()).toBe(404);
+      expect((await deniedContext.request.get(deniedRecording)).status()).toBe(404);
+    } finally {
+      await deniedContext.close();
+    }
+
+    const revokedContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      await loginLearnerInContext(revokedContext, owner.handle, CURRENT_PIN);
+      await stampLearnerSessions(owner.learnerProfileId, { revokedAt: new Date() });
+      expect((await revokedContext.request.get(ownerEvents)).status()).toBe(401);
+      expect((await revokedContext.request.get(ownerConcat)).status()).toBe(401);
+      expect((await revokedContext.request.get(ownerRecording)).status()).toBe(401);
+    } finally {
+      await revokedContext.close();
+    }
+
+    const expiredContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      await loginLearnerInContext(expiredContext, owner.handle, CURRENT_PIN);
+      await stampLearnerSessions(owner.learnerProfileId, {
+        expiresAt: new Date(Date.now() - 60_000),
+      });
+      expect((await expiredContext.request.get(ownerEvents)).status()).toBe(401);
+      expect((await expiredContext.request.get(ownerRecording)).status()).toBe(401);
+    } finally {
+      await expiredContext.close();
+    }
+
+    const ownerContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      await loginLearnerInContext(ownerContext, owner.handle, CURRENT_PIN);
+      const events = await ownerContext.request.get(ownerEvents);
+      const concat = await ownerContext.request.get(ownerConcat);
+      const audio = await ownerContext.request.get(ownerRecording);
+      const foreign = await ownerContext.request.get(`/api/audio/${otherAudio.recordingId}`);
+      expect(events.status()).toBe(200);
+      expect(await events.text()).toContain("pw-replay-rect");
+      expect(concat.status()).toBe(200);
+      expect(await concat.text()).toBe(AUDIO_MARKER);
+      expect(audio.status()).toBe(200);
+      expect(await audio.text()).toBe(AUDIO_MARKER);
+      expect(foreign.status()).toBe(404);
+      expect(await foreign.text()).not.toBe(AUDIO_MARKER);
+    } finally {
+      await ownerContext.close();
     }
   });
 

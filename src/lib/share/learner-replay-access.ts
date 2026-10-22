@@ -1,17 +1,44 @@
 import { db, withDbRetry } from "@/lib/db";
+import { isStudentContentAccessSuspended } from "@/lib/erasure/active-erasure-scope";
 import { loadParentVisibleWhiteboardReplayIds } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 
 /**
  * Ended, note-linked whiteboard replay a signed-in learner may open.
  *
  * Ownership is the session student's learner profile. Visibility reuses
- * {@link loadParentVisibleWhiteboardReplayIds} (ended, note-linked, and
+ * {@link loadParentVisibleWhiteboardReplayIds} (ended, non-DRAFT note, and
  * the same consent rules as the parent share card) so the learner sees
- * exactly those replays. A missing share link is irrelevant — this path
- * is authorized by the learner session, not a token.
+ * exactly those replays. An erased student is not visible. A missing share
+ * link is irrelevant — this path is authorized by the learner session, not
+ * a token.
  *
- * Denials log `[lpr]`. Callers turn `ok: false` into notFound / 404.
+ * Logs use `[lpr]`, the same prefix as the denials. `[sal] access_granted
+ * principal=learner` stays the share-token line; this path has no token.
+ * Callers turn `ok: false` into notFound / 404.
  */
+
+const LOG_ID_MAX = 64;
+
+/** Strip CR/LF and cap length so a route param cannot forge a second log line. */
+export function sanitizeReplayLogId(value: string): string {
+  return value.replace(/[\r\n]/g, "").slice(0, LOG_ID_MAX);
+}
+
+/** No learner session on a replay page or API. Callers that are APIs return 401. */
+export function logLearnerReplayNoSession(args: {
+  whiteboardSessionId?: string;
+  recordingId?: string;
+}): void {
+  const wbsid = args.whiteboardSessionId
+    ? ` wbsid=${sanitizeReplayLogId(args.whiteboardSessionId)}`
+    : "";
+  const recording = args.recordingId
+    ? ` recordingId=${sanitizeReplayLogId(args.recordingId)}`
+    : "";
+  console.error(
+    `[lpr] lpr=unknown${wbsid} action=replay_denied reason=no_session${recording}`
+  );
+}
 const replaySessionSelect = {
   id: true,
   studentId: true,
@@ -70,7 +97,7 @@ function deny(
   reason: "missing" | "not_owner" | "not_visible"
 ): LearnerReplayAccess {
   console.error(
-    `[lpr] lpr=${learnerProfileId} wbsid=${whiteboardSessionId} action=replay_denied reason=${reason}`
+    `[lpr] lpr=${sanitizeReplayLogId(learnerProfileId)} wbsid=${sanitizeReplayLogId(whiteboardSessionId)} action=replay_denied reason=${reason}`
   );
   return { ok: false, reason };
 }
@@ -83,6 +110,9 @@ export async function resolveLearnerWhiteboardReplay(
   if (!session) return deny(learnerProfileId, whiteboardSessionId, "missing");
   if (session.student.learnerProfileId !== learnerProfileId) {
     return deny(learnerProfileId, whiteboardSessionId, "not_owner");
+  }
+  if (await isStudentContentAccessSuspended(session.studentId)) {
+    return deny(learnerProfileId, whiteboardSessionId, "not_visible");
   }
   if (!session.noteId) {
     return deny(learnerProfileId, whiteboardSessionId, "not_visible");
@@ -103,6 +133,10 @@ export async function resolveLearnerWhiteboardReplay(
   if (!ids.includes(session.id)) {
     return deny(learnerProfileId, whiteboardSessionId, "not_visible");
   }
+
+  console.log(
+    `[lpr] lpr=${sanitizeReplayLogId(learnerProfileId)} wbsid=${sanitizeReplayLogId(whiteboardSessionId)} action=replay_granted principal=learner studentId=${sanitizeReplayLogId(session.studentId)}`
+  );
 
   return {
     ok: true,

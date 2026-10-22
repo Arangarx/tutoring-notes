@@ -2,6 +2,8 @@
 
 Living document for open work, pilot feedback, reliability gaps, and deferred product decisions.
 
+**Andrew decision (2026-10-21): replay audio follows the consent snapshot at recording time.** If audio consent was off, the child is not recorded, so there is nothing to hide. Do not add a second gate on the child's current audio toggle.
+
 ## Go over soon (Andrew 2026-09-28)
 
 **Keep at the top (Andrew 2026-10-05).** This whole section stays here until Andrew explicitly clears an item. Reviewing or refining does not mean deleting the raw notes or the open items under them, and it does not mean moving them down the backlog.

@@ -24,6 +24,12 @@ jest.mock("@/lib/env", () => ({
   env: { BLOB_READ_WRITE_TOKEN: "test_blob_rw_token" },
 }));
 
+jest.mock("next/headers", () => ({
+  cookies: async () => ({
+    getAll: () => [],
+  }),
+}));
+
 const streamBlobWithRangeSupportMock = jest.fn();
 jest.mock("@/lib/audio/proxy-stream", () => ({
   __esModule: true,

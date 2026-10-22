@@ -3,6 +3,7 @@ import { formatDateOnlyDisplay } from "@/lib/date-only";
 import type { ParentShareNoteModel } from "@/components/notes/ParentShareNoteCard";
 import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
 import {
+  REPLAY_VISIBLE_NOTE_STATUS,
   loadParentVisibleWhiteboardReplayIds,
   loadWhiteboardReplayIdsByNoteIds,
   mergeWhiteboardStubsForShareCard,
@@ -46,7 +47,7 @@ export async function loadLearnerHomeNotes(learnerProfileId: string): Promise<{
   const notes = await db.sessionNote.findMany({
     where: {
       studentId: { in: studentIds },
-      status: { not: "DRAFT" },
+      status: REPLAY_VISIBLE_NOTE_STATUS,
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: {

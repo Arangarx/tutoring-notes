@@ -7,6 +7,12 @@ import {
 import { orderedUnique } from "@/lib/notes/display-utils";
 
 /**
+ * Auto-created notes stay DRAFT until Save. A replay is visible only once
+ * the linked note has left DRAFT — the same rule as the child home list.
+ */
+export const REPLAY_VISIBLE_NOTE_STATUS = { not: "DRAFT" } as const;
+
+/**
  * Load whiteboard session ids for parent share cards using direct FK queries.
  * Parent `/s/...` must not rely on nested `include` alone — production showed links
  * missing while `/api/audio` gates still passed (rows exist in DB).
@@ -124,8 +130,9 @@ function keepLatest(
 /**
  * Ended whiteboard sessions a parent may open from the child notes page.
  * A live session is omitted (its share URL 404s). A session is omitted when
- * effective whiteboard consent is off for that student's owner, or the
- * session snapshot froze it off. Self-learners use their own latest record.
+ * its note is still DRAFT, when effective whiteboard consent is off for that
+ * student's owner, or when the session snapshot froze whiteboard recording
+ * off. Self-learners use their own latest record.
  */
 export async function loadParentVisibleWhiteboardReplayIds(args: {
   noteIds: string[];
@@ -149,7 +156,8 @@ export async function loadParentVisibleWhiteboardReplayIds(args: {
     ),
   ];
 
-  const [restriction, tutorRecords, orgRecords, sessions] = await Promise.all([
+  const [restriction, tutorRecords, orgRecords, sessions, visibleNotes] =
+    await Promise.all([
     db.consentRestriction.findUnique({
       where: { learnerProfileId: args.learnerProfileId },
       select: {
@@ -204,7 +212,16 @@ export async function loadParentVisibleWhiteboardReplayIds(args: {
         consentSnapshot: { select: { allowWhiteboardRecording: true } },
       },
     }),
+    db.sessionNote.findMany({
+      where: {
+        id: { in: args.noteIds },
+        status: REPLAY_VISIBLE_NOTE_STATUS,
+      },
+      select: { id: true },
+    }),
   ]);
+
+  const visibleNoteIds = new Set(visibleNotes.map((note) => note.id));
 
   const byTutor = keepLatest(tutorRecords, (row) => row.adminUserId ?? null);
   const byOrg = keepLatest(orgRecords, (row) => row.organizationId ?? null);
@@ -225,7 +242,7 @@ export async function loadParentVisibleWhiteboardReplayIds(args: {
 
   const byNote = new Map<string, typeof sessions>();
   for (const session of sessions) {
-    if (!session.noteId) continue;
+    if (!session.noteId || !visibleNoteIds.has(session.noteId)) continue;
     if (blockedStudentIds.has(session.studentId)) continue;
     if (session.consentSnapshot && !session.consentSnapshot.allowWhiteboardRecording) {
       continue;

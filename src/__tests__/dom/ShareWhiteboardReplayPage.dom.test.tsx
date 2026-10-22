@@ -43,14 +43,18 @@ jest.mock("@/lib/db", () => ({
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
 
-jest.mock("@/lib/whiteboard/replay-audio-payload", () => ({
-  buildReplayAudioPayload: () => ({
-    audioSegments: [],
-    canonicalAudioBlobUrl: null,
-    canonicalAudioMimeType: null,
-    canonicalDurationSeconds: null,
-  }),
-}));
+jest.mock("@/lib/whiteboard/replay-audio-payload", () => {
+  const actual = jest.requireActual("@/lib/whiteboard/replay-audio-payload");
+  return {
+    ...actual,
+    buildReplayAudioPayload: () => ({
+      audioSegments: [],
+      canonicalAudioBlobUrl: null,
+      canonicalAudioMimeType: null,
+      canonicalDurationSeconds: null,
+    }),
+  };
+});
 
 describe("ShareWhiteboardPage (WS-U-COPY 2.10)", () => {
   beforeEach(() => {

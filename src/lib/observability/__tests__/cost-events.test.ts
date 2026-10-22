@@ -220,12 +220,14 @@ describe("logBlobEgressEvent", () => {
       sessionRecordingId: "rec-1",
       adminUserId: "admin-1",
       whiteboardSessionId: "wbs-1",
+      route: "learner-audio-proxy",
     });
 
     const arg = mockCostEventCreate.mock.calls[0][0];
     expect(arg.data.kind).toBe("BLOB_EGRESS");
     expect(arg.data.bytesTransferred).toBe(28_000_000);
     expect(arg.data.sessionRecordingId).toBe("rec-1");
+    expect(arg.data.metadata).toEqual({ route: "learner-audio-proxy" });
     expect(Number(arg.data.estimatedCostUsd)).toBeGreaterThan(0);
   });
 });

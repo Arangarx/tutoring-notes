@@ -8,9 +8,12 @@
 import { NextResponse } from "next/server";
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
-import { getLearnerSession } from "@/lib/learner-session";
 import { checkApiShareAccess } from "@/lib/share-access-scope";
-import { resolveLearnerWhiteboardReplay } from "@/lib/share/learner-replay-access";
+import {
+  logLearnerReplayNoSession,
+  resolveLearnerWhiteboardReplay,
+} from "@/lib/share/learner-replay-access";
+import { getLearnerSessionFromHeaders } from "@/lib/server-session";
 
 export type ShareProxyAccess =
   | { ok: true; studentId: string }
@@ -50,6 +53,15 @@ export async function assertShareProxyAccess(
   return { ok: true, studentId: access.studentId };
 }
 
+/** 401 when a replay API has neither a share token nor a learner session. */
+export function learnerReplayNoSessionResponse(args: {
+  whiteboardSessionId?: string;
+  recordingId?: string;
+}): Response {
+  logLearnerReplayNoSession(args);
+  return NextResponse.json({ error: "Missing token." }, { status: 401 });
+}
+
 /**
  * Share-token access, or a signed-in learner who may view this ended replay.
  * No token and no learner session stays a 401. A learner who does not own
@@ -66,14 +78,11 @@ export async function assertWhiteboardReplayRequestAccess(
     return assertShareProxyAccess(req, shareToken, apiPath);
   }
 
-  const learner = await getLearnerSession(req);
+  const learner = await getLearnerSessionFromHeaders();
   if (!learner) {
-    console.error(
-      `[lpr] lpr=unknown wbsid=${whiteboardSessionId} action=replay_denied reason=no_session`
-    );
     return {
       ok: false,
-      response: NextResponse.json({ error: "Missing token." }, { status: 401 }),
+      response: learnerReplayNoSessionResponse({ whiteboardSessionId }),
     };
   }
 

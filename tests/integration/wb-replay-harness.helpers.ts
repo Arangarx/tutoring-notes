@@ -29,27 +29,22 @@ export function replayEventsFixture(): string {
 }
 
 /**
- * Put a replay event log into the Playwright blob harness and point the
- * session row at it. Caller must already be authenticated as the owning tutor.
+ * Mint a harness blob and PUT bytes. Caller must already be authenticated
+ * as the tutor who owns the student or whiteboard session.
  */
-export async function uploadReplayEvents(args: {
+export async function uploadHarnessBlob(args: {
   request: APIRequestContext;
-  adminUserId: string;
-  studentId: string;
-  whiteboardSessionId: string;
-  /** Override the default one-rectangle fixture. */
-  eventsJson?: string;
+  pathname: string;
+  body: string | Buffer;
+  contentType: string;
+  clientPayload: Record<string, unknown>;
 }): Promise<string> {
   const mintRes = await args.request.post("/api/upload/blob", {
     data: {
       type: "blob.generate-client-token",
       payload: {
-        pathname: `whiteboard-sessions/${args.adminUserId}/${args.studentId}/pw-replay-events.json`,
-        clientPayload: JSON.stringify({
-          kind: "whiteboard-events",
-          whiteboardSessionId: args.whiteboardSessionId,
-          studentId: args.studentId,
-        }),
+        pathname: args.pathname,
+        clientPayload: JSON.stringify(args.clientPayload),
         multipart: false,
       },
     },
@@ -68,25 +63,51 @@ export async function uploadReplayEvents(args: {
     throw new Error("Harness mint response missing putUrl, blobUrl, or putToken");
   }
   const putRes = await args.request.put(mint.putUrl, {
-    data: args.eventsJson ?? replayEventsFixture(),
+    data: args.body,
     headers: {
-      "content-type": "application/json",
+      "content-type": args.contentType,
       "x-blob-harness-put-token": mint.putToken,
     },
   });
   if (!putRes.ok()) {
     throw new Error(`Harness PUT failed (${putRes.status()}): ${await putRes.text()}`);
   }
+  return mint.blobUrl;
+}
+
+/**
+ * Put a replay event log into the Playwright blob harness and point the
+ * session row at it. Caller must already be authenticated as the owning tutor.
+ */
+export async function uploadReplayEvents(args: {
+  request: APIRequestContext;
+  adminUserId: string;
+  studentId: string;
+  whiteboardSessionId: string;
+  /** Override the default one-rectangle fixture. */
+  eventsJson?: string;
+}): Promise<string> {
+  const blobUrl = await uploadHarnessBlob({
+    request: args.request,
+    pathname: `whiteboard-sessions/${args.adminUserId}/${args.studentId}/pw-replay-events.json`,
+    body: args.eventsJson ?? replayEventsFixture(),
+    contentType: "application/json",
+    clientPayload: {
+      kind: "whiteboard-events",
+      whiteboardSessionId: args.whiteboardSessionId,
+      studentId: args.studentId,
+    },
+  });
 
   assertLocalDatabaseUrlForHarness();
   const prisma = new PrismaClient();
   try {
     await prisma.whiteboardSession.update({
       where: { id: args.whiteboardSessionId },
-      data: { eventsBlobUrl: mint.blobUrl },
+      data: { eventsBlobUrl: blobUrl },
     });
   } finally {
     await prisma.$disconnect();
   }
-  return mint.blobUrl;
+  return blobUrl;
 }

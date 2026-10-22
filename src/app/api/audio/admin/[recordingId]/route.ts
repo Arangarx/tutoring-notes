@@ -75,7 +75,7 @@ export async function GET(
         studentId: recording.studentId,
         whiteboardSessionId: recording.whiteboardSessionId,
         sessionId: recording.whiteboardSessionId,
-        metadata: { route: "admin-audio-proxy" },
+        route: "admin-audio-proxy",
       });
     }
   }

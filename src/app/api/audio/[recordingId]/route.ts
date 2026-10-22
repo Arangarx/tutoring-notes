@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
-import { getLearnerSession } from "@/lib/learner-session";
 import { logBlobEgressEvent } from "@/lib/observability/cost-events";
-import { resolveLearnerWhiteboardReplay } from "@/lib/share/learner-replay-access";
-import { assertShareProxyAccess, streamShareBlobWithRange } from "@/lib/share/proxy-share-resource";
+import {
+  resolveLearnerWhiteboardReplay,
+  sanitizeReplayLogId,
+} from "@/lib/share/learner-replay-access";
+import { getLearnerSessionFromHeaders } from "@/lib/server-session";
+import {
+  assertShareProxyAccess,
+  learnerReplayNoSessionResponse,
+  streamShareBlobWithRange,
+} from "@/lib/share/proxy-share-resource";
 
 /**
  * Proxy private Vercel Blob audio to browsers on the share page.
@@ -79,7 +86,7 @@ export async function GET(
     return NextResponse.json({ error: "Recording not found" }, { status: 404 });
   }
 
-  return streamRecording(req, recordingId, recording);
+  return streamRecording(req, recordingId, recording, "share-audio-proxy");
 }
 
 type StreamableRecording = {
@@ -93,7 +100,8 @@ type StreamableRecording = {
 async function streamRecording(
   req: Request,
   recordingId: string,
-  recording: StreamableRecording
+  recording: StreamableRecording,
+  route: string
 ): Promise<Response> {
   const response = await streamShareBlobWithRange(
     req,
@@ -112,7 +120,7 @@ async function streamRecording(
         studentId: recording.studentId,
         whiteboardSessionId: recording.whiteboardSessionId,
         sessionId: recording.whiteboardSessionId,
-        metadata: { route: "share-audio-proxy" },
+        route,
       });
     }
   }
@@ -125,12 +133,9 @@ async function serveLearnerWhiteboardRecording(
   req: Request,
   recordingId: string
 ): Promise<Response> {
-  const learner = await getLearnerSession(req);
+  const learner = await getLearnerSessionFromHeaders();
   if (!learner) {
-    console.error(
-      `[lpr] lpr=unknown action=replay_denied reason=no_session recordingId=${recordingId}`
-    );
-    return NextResponse.json({ error: "Missing token" }, { status: 401 });
+    return learnerReplayNoSessionResponse({ recordingId });
   }
 
   const recording = await db.sessionRecording.findUnique({
@@ -145,7 +150,7 @@ async function serveLearnerWhiteboardRecording(
   });
   if (!recording?.whiteboardSessionId) {
     console.error(
-      `[lpr] lpr=${learner.learnerProfileId} action=replay_denied reason=not_visible recordingId=${recordingId}`
+      `[lpr] lpr=${sanitizeReplayLogId(learner.learnerProfileId)} action=replay_denied reason=not_visible recordingId=${sanitizeReplayLogId(recordingId)}`
     );
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
@@ -154,12 +159,18 @@ async function serveLearnerWhiteboardRecording(
     learner.learnerProfileId,
     recording.whiteboardSessionId
   );
-  if (!access.ok || access.studentId !== recording.studentId) {
+  if (!access.ok) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+  if (access.studentId !== recording.studentId) {
+    console.error(
+      `[lpr] lpr=${sanitizeReplayLogId(learner.learnerProfileId)} wbsid=${sanitizeReplayLogId(recording.whiteboardSessionId)} action=replay_denied reason=recording_student_mismatch recordingId=${sanitizeReplayLogId(recordingId)} studentId=${sanitizeReplayLogId(recording.studentId)}`
+    );
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
   const erasureBlocked = await assertStudentNotErasedApi(recording.studentId);
   if (erasureBlocked) return erasureBlocked;
 
-  return streamRecording(req, recordingId, recording);
+  return streamRecording(req, recordingId, recording, "learner-audio-proxy");
 }

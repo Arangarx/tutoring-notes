@@ -197,6 +197,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | Component | File | Dedup Status |
 |---|---|---|
 | `WhiteboardReplay` | `src/components/whiteboard/WhiteboardReplay.tsx` | **owned by recording slice 3 — do not edit** |
+| `WhiteboardReplayPageShell` | `src/components/whiteboard/replay/WhiteboardReplayPageShell.tsx` — props: back link, labels, audience (`share` \| `learner`) which builds the event and audio URLs. Used by the share-token page and `/join/notes/[id]/whiteboard` | **canonical** |
 | `WhiteboardNotesPanel` | `src/components/whiteboard/WhiteboardNotesPanel.tsx` | **owned by recording slice 3 — do not edit** |
 | `TutorNotesSection` | `src/components/whiteboard/TutorNotesSection.tsx` | **owned by recording slice 3 — do not edit** |
 | `ExcalidrawDynamic` | `src/components/whiteboard/ExcalidrawDynamic.tsx` | **live session — do not edit from UI chunks** |

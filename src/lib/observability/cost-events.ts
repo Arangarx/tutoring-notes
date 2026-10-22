@@ -201,6 +201,8 @@ export type LogBlobEgressInput = {
   studentId?: string | null;
   whiteboardSessionId?: string | null;
   sessionId?: string | null;
+  /** Which proxy served the bytes. Stored as metadata.route. */
+  route: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -215,7 +217,7 @@ export async function logBlobEgressEvent(input: LogBlobEgressInput): Promise<voi
     sessionRecordingId: input.sessionRecordingId,
     whiteboardSessionId: input.whiteboardSessionId,
     sessionId: input.sessionId ?? input.whiteboardSessionId,
-    metadata: input.metadata,
+    metadata: { ...input.metadata, route: input.route },
   });
 }
 

@@ -23,6 +23,37 @@ export type ReplayAudioPayload = {
   hasAudio: boolean;
 };
 
+export type ReplayProxyAudience = "admin" | "share" | "learner";
+
+/**
+ * One URL for replay event logs, concat audio, and per-recording audio.
+ * Share appends the token. Learner and admin rely on their own session.
+ */
+export function replayProxyUrl(args: {
+  resource: "events" | "concat-audio" | "recording";
+  whiteboardSessionId: string;
+  recordingId?: string;
+  audience: ReplayProxyAudience;
+  shareToken?: string;
+}): string {
+  const tokenQuery =
+    args.audience === "share"
+      ? `?token=${encodeURIComponent(args.shareToken ?? "")}`
+      : "";
+  if (args.resource === "recording") {
+    const id = args.recordingId ?? "";
+    if (args.audience === "admin") return `/api/audio/admin/${id}`;
+    return `/api/audio/${id}${tokenQuery}`;
+  }
+  if (args.resource === "events") {
+    return `/api/whiteboard/${args.whiteboardSessionId}/public-events${tokenQuery}`;
+  }
+  if (args.audience === "admin") {
+    return `/api/whiteboard/${args.whiteboardSessionId}/concat-audio`;
+  }
+  return `/api/whiteboard/${args.whiteboardSessionId}/public-concat-audio${tokenQuery}`;
+}
+
 /**
  * WS-G — build replay audio props for SSR / review payload loaders.
  * When `concatBlobUrl` is present, returns a single canonical segment;
@@ -34,18 +65,20 @@ export function buildReplayAudioPayload(
   const { whiteboardSessionId, concatBlobUrl, concatDurationSeconds, audioRecordings } =
     args;
 
-  const concatUrl =
-    args.audience === "share"
-      ? `/api/whiteboard/${whiteboardSessionId}/public-concat-audio?token=${encodeURIComponent(args.shareToken ?? "")}`
-      : args.audience === "learner"
-        ? `/api/whiteboard/${whiteboardSessionId}/public-concat-audio`
-        : `/api/whiteboard/${whiteboardSessionId}/concat-audio`;
+  const concatUrl = replayProxyUrl({
+    resource: "concat-audio",
+    whiteboardSessionId,
+    audience: args.audience,
+    shareToken: args.shareToken,
+  });
   const recordingUrl = (recordingId: string) =>
-    args.audience === "share"
-      ? `/api/audio/${recordingId}?token=${encodeURIComponent(args.shareToken ?? "")}`
-      : args.audience === "learner"
-        ? `/api/audio/${recordingId}`
-        : `/api/audio/admin/${recordingId}`;
+    replayProxyUrl({
+      resource: "recording",
+      whiteboardSessionId,
+      recordingId,
+      audience: args.audience,
+      shareToken: args.shareToken,
+    });
 
   if (concatBlobUrl) {
     const canonicalUrl = concatUrl;

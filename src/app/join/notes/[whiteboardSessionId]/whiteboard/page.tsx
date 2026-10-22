@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ShareWhiteboardReplayPlayer } from "@/app/s/[token]/whiteboard/[whiteboardSessionId]/ShareWhiteboardReplayPlayer";
+import { WhiteboardReplayPageShell } from "@/components/whiteboard/replay/WhiteboardReplayPageShell";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
-import { resolveLearnerWhiteboardReplay } from "@/lib/share/learner-replay-access";
+import {
+  logLearnerReplayNoSession,
+  resolveLearnerWhiteboardReplay,
+} from "@/lib/share/learner-replay-access";
 import { getLearnerSessionFromHeaders } from "@/lib/server-session";
-import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +42,7 @@ export default async function LearnerWhiteboardReplayPage({
 
   const learnerSession = await getLearnerSessionFromHeaders();
   if (!learnerSession) {
-    console.error(
-      `[lpr] lpr=unknown wbsid=${whiteboardSessionId} action=replay_denied reason=no_session`
-    );
+    logLearnerReplayNoSession({ whiteboardSessionId });
     redirect(`/students/login?returnTo=${encodeURIComponent(path)}`);
   }
 
@@ -55,42 +54,19 @@ export default async function LearnerWhiteboardReplayPage({
 
   await assertStudentNotErased(access.studentId);
 
-  const eventsApiUrl = `/api/whiteboard/${whiteboardSessionId}/public-events`;
-  const replayAudio = buildReplayAudioPayload({
-    whiteboardSessionId,
-    concatBlobUrl: access.session.concatBlobUrl,
-    concatDurationSeconds: access.session.concatDurationSeconds,
-    audioRecordings: access.session.audioRecordings,
-    audience: "learner",
-  });
-
   return (
-    <main className="wb-share-replay-page" data-testid="learner-wb-replay-page">
-      <header className="wb-share-replay-page__header">
-        <div className="wb-share-replay-page__header-inner">
-          <Link
-            href="/join"
-            className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            ← Back to your notes
-          </Link>
-          <h1 className="heading wb-share-replay-page__title">
-            Whiteboard with {access.studentName}
-          </h1>
-        </div>
-      </header>
-      <div className="wb-share-replay-page__player">
-        <ShareWhiteboardReplayPlayer
-          eventsBlobUrl={eventsApiUrl}
-          audioSegments={replayAudio.audioSegments}
-          canonicalAudioBlobUrl={replayAudio.canonicalAudioBlobUrl}
-          canonicalAudioMimeType={replayAudio.canonicalAudioMimeType}
-          canonicalDurationSeconds={replayAudio.canonicalDurationSeconds}
-          whiteboardSessionId={whiteboardSessionId}
-          studentName={access.studentName}
-          durationSeconds={access.session.durationSeconds}
-        />
-      </div>
-    </main>
+    <WhiteboardReplayPageShell
+      testId="learner-wb-replay-page"
+      backHref="/join"
+      backLabel="← Back to your notes"
+      title={`Whiteboard with ${access.studentName}`}
+      whiteboardSessionId={whiteboardSessionId}
+      studentName={access.studentName}
+      durationSeconds={access.session.durationSeconds}
+      concatBlobUrl={access.session.concatBlobUrl}
+      concatDurationSeconds={access.session.concatDurationSeconds}
+      audioRecordings={access.session.audioRecordings}
+      audience="learner"
+    />
   );
 }

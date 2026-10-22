@@ -11,7 +11,10 @@ import {
 } from "@/lib/recording/concat-audio";
 import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 import { resolveEffectiveSegments } from "@/lib/whiteboard/replay-helpers";
-import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
+import {
+  buildReplayAudioPayload,
+  replayProxyUrl,
+} from "@/lib/whiteboard/replay-audio-payload";
 
 describe("WS-G resolveEffectiveSegments", () => {
   it("when canonicalAudioBlobUrl is set → single effective segment", () => {
@@ -116,6 +119,36 @@ describe("WS-G buildReplayAudioPayload", () => {
     expect(payload.audioSegments).toHaveLength(1);
     expect(payload.audioSegments[0]?.url).toBe("/api/whiteboard/wbs-1/concat-audio");
     expect(payload.canonicalDurationSeconds).toBe(300);
+  });
+
+  it("uses one URL helper for learner, share, and admin audiences", () => {
+    expect(
+      replayProxyUrl({
+        resource: "concat-audio",
+        whiteboardSessionId: "wbs-1",
+        audience: "learner",
+      })
+    ).toBe("/api/whiteboard/wbs-1/public-concat-audio");
+    expect(
+      replayProxyUrl({
+        resource: "recording",
+        whiteboardSessionId: "wbs-1",
+        recordingId: "rec-1",
+        audience: "share",
+        shareToken: "tok",
+      })
+    ).toBe("/api/audio/rec-1?token=tok");
+    const learner = buildReplayAudioPayload({
+      whiteboardSessionId: "wbs-1",
+      concatBlobUrl: "https://blob.example.com/concat.webm",
+      concatDurationSeconds: 8,
+      audioRecordings: [],
+      audience: "learner",
+    });
+    expect(learner.canonicalAudioBlobUrl).toBe(
+      "/api/whiteboard/wbs-1/public-concat-audio"
+    );
+    expect(learner.canonicalAudioBlobUrl).not.toContain("token=");
   });
 
   it("falls back to per-recording proxies when concat absent", () => {
