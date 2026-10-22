@@ -13,6 +13,16 @@ import { orderedUnique } from "@/lib/notes/display-utils";
 export const REPLAY_VISIBLE_NOTE_STATUS = { not: "DRAFT" } as const;
 
 /**
+ * In-memory form of {@link REPLAY_VISIBLE_NOTE_STATUS}. A missing note is
+ * not a replay. READY and SENT both pass; DRAFT does not.
+ */
+export function isReplayVisibleNoteStatus(
+  status: string | null | undefined
+): boolean {
+  return status != null && status !== REPLAY_VISIBLE_NOTE_STATUS.not;
+}
+
+/**
  * Load whiteboard session ids for parent share cards using direct FK queries.
  * Parent `/s/...` must not rely on nested `include` alone — production showed links
  * missing while `/api/audio` gates still passed (rows exist in DB).

@@ -152,18 +152,6 @@ async function createShareFixture() {
 
   const eventsBlobUrl = "https://blob.example.com/events/share-public.json";
   const snapshotBlobUrl = "https://blob.example.com/snapshots/share-public.png";
-  const session = await db.whiteboardSession.create({
-    data: {
-      adminUserId: tutor.id,
-      studentId: student.id,
-      consentAcknowledged: true,
-      eventsBlobUrl,
-      snapshotBlobUrl,
-      eventsSchemaVersion: 1,
-      endedAt: new Date("2026-06-01T18:00:00Z"),
-    },
-  });
-
   const note = await db.sessionNote.create({
     data: {
       studentId: student.id,
@@ -175,6 +163,18 @@ async function createShareFixture() {
       linksJson: "[]",
       status: "READY",
       shareRecordingInEmail: true,
+    },
+  });
+  const session = await db.whiteboardSession.create({
+    data: {
+      adminUserId: tutor.id,
+      studentId: student.id,
+      noteId: note.id,
+      consentAcknowledged: true,
+      eventsBlobUrl,
+      snapshotBlobUrl,
+      eventsSchemaVersion: 1,
+      endedAt: new Date("2026-06-01T18:00:00Z"),
     },
   });
 

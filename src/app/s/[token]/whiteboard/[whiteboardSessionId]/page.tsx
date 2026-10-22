@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import { WhiteboardReplayPageShell } from "@/components/whiteboard/replay/WhiteboardReplayPageShell";
+import { parentShareReplayNoteIsHidden } from "@/lib/share/parent-share-replay-access";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { formatBilledDurationLabel } from "@/lib/billing/display";
@@ -36,6 +37,8 @@ export async function generateMetadata({
  *     so a token for student A cannot access student B's sessions.
  *   - Only exposes ended sessions (`endedAt != null`). Live sessions
  *     are never shown here.
+ *   - The linked note must be replay-visible (not DRAFT), the same rule
+ *     as the learner replay and the note cards on `/s/[token]`.
  *   - All Blob content is fetched via `/api/whiteboard/[id]/public-*`
  *     proxy routes that re-validate the token, so raw Blob URLs are
  *     never embedded in the page HTML.
@@ -133,6 +136,16 @@ export default async function ShareWhiteboardPage({
     console.log(
       `[wbShareReplay.page] wbsid=${whiteboardSessionId} session still live — 404 on share`
     );
+    notFound();
+  }
+
+  if (
+    await parentShareReplayNoteIsHidden({
+      shareToken: token,
+      studentId: link.studentId,
+      whiteboardSessionId,
+    })
+  ) {
     notFound();
   }
 

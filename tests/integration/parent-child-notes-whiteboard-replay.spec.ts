@@ -15,12 +15,69 @@ import { TAG } from "../test-tags";
 import { generateShareToken } from "@/lib/security";
 import { seedTestAdmin } from "../visual/helpers";
 import { seedParentAccountHolder } from "./identity/identity.helpers";
-import { uploadReplayEvents } from "./wb-replay-harness.helpers";
+import {
+  uploadHarnessBlob,
+  uploadReplayEvents,
+} from "./wb-replay-harness.helpers";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
 const PARENT_STATE = "tests/integration/.auth/parent.json";
 const TUTOR_STATE = "tests/integration/.auth/tutor.json";
+/** Bytes stored in the harness. A served concat or recording must equal this. */
+const SHARE_REPLAY_AUDIO_MARKER = "parent-share-replay-audio-oracle-v1";
+
+async function attachShareReplayAudio(args: {
+  request: import("@playwright/test").APIRequestContext;
+  adminUserId: string;
+  studentId: string;
+  whiteboardSessionId: string;
+}): Promise<string> {
+  const blobUrl = await uploadHarnessBlob({
+    request: args.request,
+    pathname: `audio/${args.adminUserId}/${args.studentId}/pw-parent-share-replay.webm`,
+    body: SHARE_REPLAY_AUDIO_MARKER,
+    contentType: "audio/webm",
+    clientPayload: { kind: "audio", studentId: args.studentId },
+  });
+  const prisma = new PrismaClient();
+  try {
+    await prisma.whiteboardSession.update({
+      where: { id: args.whiteboardSessionId },
+      data: { concatBlobUrl: blobUrl, concatDurationSeconds: 3 },
+    });
+    const recording = await prisma.sessionRecording.create({
+      data: {
+        adminUserId: args.adminUserId,
+        studentId: args.studentId,
+        whiteboardSessionId: args.whiteboardSessionId,
+        blobUrl,
+        mimeType: "audio/webm",
+        sizeBytes: SHARE_REPLAY_AUDIO_MARKER.length,
+        durationSeconds: 3,
+      },
+      select: { id: true },
+    });
+    return recording.id;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function setNoteStatus(
+  noteId: string,
+  status: "DRAFT" | "READY" | "SENT"
+): Promise<void> {
+  const prisma = new PrismaClient();
+  try {
+    await prisma.sessionNote.update({
+      where: { id: noteId },
+      data: { status },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
 
 type ReplayFixture = {
   learnerProfileId: string;
@@ -40,6 +97,7 @@ async function seedParentNotesReplay(opts: {
   restrictWhiteboardRecording?: boolean;
   recordAllowWhiteboard?: boolean | null;
   isSelfLearner?: boolean;
+  noteStatus?: "DRAFT" | "READY" | "SENT";
 }): Promise<ReplayFixture> {
   assertLocalDatabaseUrlForHarness();
   const prisma = new PrismaClient();
@@ -73,7 +131,7 @@ async function seedParentNotesReplay(opts: {
         assessment: "",
         nextSteps: "",
         linksJson: "[]",
-        status: "READY",
+        status: opts.noteStatus ?? "READY",
         shareRecordingInEmail: false,
       },
       select: { id: true },
@@ -523,6 +581,69 @@ test.describe(
         "href",
         `/s/${allowed.shareToken}/whiteboard/${allowed.endedSessionId}`
       );
+    });
+
+    test("DRAFT-linked ended session is 404 on the parent share replay and its APIs", async ({
+      page,
+      browser,
+    }) => {
+      test.setTimeout(180_000);
+      const fixture = await seedParentNotesReplay({
+        withShareToken: true,
+        withLiveSession: false,
+        allowWhiteboardRecording: true,
+        noteStatus: "DRAFT",
+      });
+      if (!fixture.shareToken) throw new Error("expected a share token");
+
+      const tutor = await browser.newContext({ storageState: TUTOR_STATE });
+      let recordingId: string;
+      try {
+        await uploadReplayEvents({
+          request: tutor.request,
+          adminUserId: fixture.adminUserId,
+          studentId: fixture.studentId,
+          whiteboardSessionId: fixture.endedSessionId,
+        });
+        recordingId = await attachShareReplayAudio({
+          request: tutor.request,
+          adminUserId: fixture.adminUserId,
+          studentId: fixture.studentId,
+          whiteboardSessionId: fixture.endedSessionId,
+        });
+      } finally {
+        await tutor.close();
+      }
+
+      const replayPath = `/s/${fixture.shareToken}/whiteboard/${fixture.endedSessionId}`;
+      const eventsUrl = `/api/whiteboard/${fixture.endedSessionId}/public-events?token=${fixture.shareToken}`;
+      const concatUrl = `/api/whiteboard/${fixture.endedSessionId}/public-concat-audio?token=${fixture.shareToken}`;
+      const audioUrl = `/api/audio/${recordingId}?token=${fixture.shareToken}`;
+
+      const hidden = await page.goto(replayPath, { waitUntil: "domcontentloaded" });
+      expect(hidden?.status()).toBe(404);
+      await expect(page.getByTestId("wb-share-replay-page")).toHaveCount(0);
+
+      const events = await page.request.get(eventsUrl);
+      const concat = await page.request.get(concatUrl);
+      const audio = await page.request.get(audioUrl);
+      expect(events.status()).toBe(404);
+      expect(concat.status()).toBe(404);
+      expect(audio.status()).toBe(404);
+      expect(await events.text()).not.toContain("pw-replay-rect");
+      expect(await concat.text()).not.toBe(SHARE_REPLAY_AUDIO_MARKER);
+      expect(await audio.text()).not.toBe(SHARE_REPLAY_AUDIO_MARKER);
+
+      await setNoteStatus(fixture.noteId, "READY");
+
+      const shown = await page.goto(replayPath, { waitUntil: "domcontentloaded" });
+      expect(shown?.status()).toBe(200);
+      await expect(page.getByTestId("wb-share-replay-page")).toBeVisible({
+        timeout: 30_000,
+      });
+      const eventsReady = await page.request.get(eventsUrl);
+      expect(eventsReady.status()).toBe(200);
+      expect(await eventsReady.text()).toContain("pw-replay-rect");
     });
   }
 );

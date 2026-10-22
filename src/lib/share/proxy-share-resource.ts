@@ -13,6 +13,7 @@ import {
   logLearnerReplayNoSession,
   resolveLearnerWhiteboardReplay,
 } from "@/lib/share/learner-replay-access";
+import { parentShareReplayNoteIsHidden } from "@/lib/share/parent-share-replay-access";
 import { getLearnerSessionFromHeaders } from "@/lib/server-session";
 
 export type ShareProxyAccess =
@@ -64,9 +65,10 @@ export function learnerReplayNoSessionResponse(args: {
 
 /**
  * Share-token access, or a signed-in learner who may view this ended replay.
- * No token and no learner session stays a 401. A learner who does not own
- * the session, or whose consent hides it, is a 404. Blob bytes stay behind
- * this check — callers still proxy with the server token.
+ * A share token whose ended session is linked to a DRAFT (or missing) note
+ * is a 404. No token and no learner session stays a 401. A learner who does
+ * not own the session, or whose consent hides it, is a 404. Blob bytes stay
+ * behind this check — callers still proxy with the server token.
  */
 export async function assertWhiteboardReplayRequestAccess(
   req: Request,
@@ -75,7 +77,21 @@ export async function assertWhiteboardReplayRequestAccess(
   apiPath: string
 ): Promise<ShareProxyAccess> {
   if (shareToken) {
-    return assertShareProxyAccess(req, shareToken, apiPath);
+    const access = await assertShareProxyAccess(req, shareToken, apiPath);
+    if (!access.ok) return access;
+    if (
+      await parentShareReplayNoteIsHidden({
+        shareToken,
+        studentId: access.studentId,
+        whiteboardSessionId,
+      })
+    ) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Not found." }, { status: 404 }),
+      };
+    }
+    return access;
   }
 
   const learner = await getLearnerSessionFromHeaders();

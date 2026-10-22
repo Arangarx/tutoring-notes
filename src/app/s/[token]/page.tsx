@@ -13,6 +13,7 @@ import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
 import {
   loadWhiteboardReplayIdsByNoteIds,
   mergeWhiteboardStubsForShareCard,
+  REPLAY_VISIBLE_NOTE_STATUS,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
@@ -52,7 +53,7 @@ export default async function SharePage({
 
   const student = link.student;
   const notes = await db.sessionNote.findMany({
-    where: { studentId: student.id, status: { not: "DRAFT" } },
+    where: { studentId: student.id, status: REPLAY_VISIBLE_NOTE_STATUS },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: parentShareNoteInclude,
   });

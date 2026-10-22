@@ -90,11 +90,24 @@ async function seedPublicConcatFixture(opts?: {
   await db.shareLink.create({
     data: { studentId: student.id, token: shareToken },
   });
+  const note = await db.sessionNote.create({
+    data: {
+      studentId: student.id,
+      date: new Date("2026-06-15T00:00:00Z"),
+      topics: "Concat replay",
+      homework: "",
+      assessment: "",
+      nextSteps: "",
+      linksJson: "[]",
+      status: "READY",
+    },
+  });
   const ended = opts?.ended !== false;
   const session = await db.whiteboardSession.create({
     data: {
       adminUserId: tutor.id,
       studentId: student.id,
+      noteId: note.id,
       sessionPhase: ended ? "ACTIVE" : "ACTIVE",
       sessionMode: "LIVE",
       eventsBlobUrl: `https://blob.vercel-storage.com/test-${uniq()}.json`,

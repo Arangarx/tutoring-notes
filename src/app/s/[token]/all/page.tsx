@@ -17,6 +17,7 @@ import {
 import {
   loadWhiteboardReplayIdsByNoteIds,
   mergeWhiteboardStubsForShareCard,
+  REPLAY_VISIBLE_NOTE_STATUS,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -69,7 +70,7 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
 
   const [notes, totalCount] = await Promise.all([
     db.sessionNote.findMany({
-      where: { studentId: student.id, status: { not: "DRAFT" }, ...searchFilter },
+      where: { studentId: student.id, status: REPLAY_VISIBLE_NOTE_STATUS, ...searchFilter },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       skip,
       take: pageSize,
@@ -89,7 +90,9 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
         whiteboardSessions: parentShareWhiteboardSessionsArgs,
       },
     }),
-    db.sessionNote.count({ where: { studentId: student.id, status: { not: "DRAFT" }, ...searchFilter } }),
+    db.sessionNote.count({
+      where: { studentId: student.id, status: REPLAY_VISIBLE_NOTE_STATUS, ...searchFilter },
+    }),
   ]);
 
   const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(

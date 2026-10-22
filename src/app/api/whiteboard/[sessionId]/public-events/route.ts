@@ -12,8 +12,9 @@ import {
  * GET /api/whiteboard/[sessionId]/public-events?token=<shareToken>
  *
  * Auth: a valid, non-revoked ShareLink token whose student matches the
- * session, or a learner session that may view this replay (same ended /
- * note-linked / consent rules as the parent share card).
+ * session and whose linked note is replay-visible (not DRAFT), or a
+ * learner session that may view this replay (same ended / note-linked /
+ * consent rules as the parent share card).
  *
  * Only ended sessions are accessible — we never expose a live in-
  * progress session's event stream on the public share surface.

@@ -80,6 +80,7 @@ describe("ShareWhiteboardPage (WS-U-COPY 2.10)", () => {
       concatBlobUrl: null,
       concatDurationSeconds: null,
       audioRecordings: [],
+      note: { status: "READY" },
     });
   });
 

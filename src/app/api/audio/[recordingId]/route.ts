@@ -7,6 +7,7 @@ import {
   sanitizeReplayLogId,
 } from "@/lib/share/learner-replay-access";
 import { getLearnerSessionFromHeaders } from "@/lib/server-session";
+import { parentShareReplayNoteIsHidden } from "@/lib/share/parent-share-replay-access";
 import {
   assertShareProxyAccess,
   learnerReplayNoSessionResponse,
@@ -29,6 +30,9 @@ import {
  *      - `shareRecordingInEmail` on the note; or
  *      - the note has any linked WhiteboardSession; or
  *      - audio was captured against a WB session (`SessionRecording.whiteboardSessionId`).
+ *   4. When the recording is tied to a whiteboard session, that session's
+ *      linked note must be replay-visible (not DRAFT). Email-only audio
+ *      with no whiteboard session is unchanged.
  *
  * Range support: forwards the inbound `Range` header to Vercel Blob
  * via `streamBlobWithRangeSupport` so parents can scrub the share
@@ -84,6 +88,17 @@ export async function GET(
 
   if (!recording) {
     return NextResponse.json({ error: "Recording not found" }, { status: 404 });
+  }
+
+  if (
+    recording.whiteboardSessionId &&
+    (await parentShareReplayNoteIsHidden({
+      shareToken,
+      studentId: access.studentId,
+      whiteboardSessionId: recording.whiteboardSessionId,
+    }))
+  ) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
   return streamRecording(req, recordingId, recording, "share-audio-proxy");
