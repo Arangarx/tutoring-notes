@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { TAG } from "../../test-tags";
 import { seedParentAccountHolder } from "./identity.helpers";
 import {
   readLearnerOwnershipOracle,
@@ -115,4 +116,40 @@ test.describe("P2-ID-2 — parent dashboard + child-notes scoping", () => {
     });
     await expect(page.getByText(owned.noteTopics)).toBeVisible();
   });
+
+  test(
+    "parent saves a display name on the profile tab and it survives reload",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      const accountHolderId = await seedParentAccountHolder();
+      const owned = await seedParentChildWithNote({ accountHolderId });
+      const nextName = `Renamed ${owned.childName}`.slice(0, 80);
+
+      await page.goto(`/account/children/${owned.learnerProfileId}`);
+      await expect(page.getByRole("link", { name: "Profile" })).toHaveAttribute(
+        "aria-current",
+        "page"
+      );
+      // The Profile section title. The page h1 is the learner's current name.
+      await expect(
+        page.locator('[data-slot="card-title"]').filter({ hasText: /^Display name$/ })
+      ).toBeVisible({ timeout: 15_000 });
+
+      const input = page.getByLabel("Display name");
+      await expect(input).toHaveAttribute("maxlength", "80");
+      await expect(
+        page.getByRole("button", { name: "Save display name" })
+      ).toBeVisible();
+
+      await input.fill(nextName);
+      await page.getByRole("button", { name: "Save display name" }).click();
+      await expect(page.getByTestId("display-name-saved")).toBeVisible({
+        timeout: 15_000,
+      });
+
+      await page.reload();
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(nextName);
+      await expect(page.getByLabel("Display name")).toHaveValue(nextName);
+    }
+  );
 });
