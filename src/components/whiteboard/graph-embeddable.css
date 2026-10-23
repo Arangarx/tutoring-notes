@@ -232,6 +232,13 @@
   pointer-events: auto;
 }
 
+.wb-graph-fit-student {
+  max-width: 148px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+}
+
 .wb-graph-nav-zoom {
   display: flex;
   flex-direction: column;
@@ -261,4 +268,22 @@
   border: 1px dashed var(--border-subtle);
   border-radius: 4px;
   background: color-mix(in srgb, var(--surface-drawer) 50%, transparent);
+}
+
+/* Phone expression launcher — screen space, outside the zoomed graph box. */
+.wb-graph-expr-tray-launch {
+  position: fixed;
+  left: 12px;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  z-index: 70;
+  max-width: calc(100vw - 24px);
+}
+
+/* Phone expression sheet. Sits above the board; height follows the visual viewport via inline bottom. */
+.wb-graph-expr-tray {
+  max-height: min(70dvh, 100%);
+  overflow: auto;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface-drawer);
+  color: var(--text-strong);
 }

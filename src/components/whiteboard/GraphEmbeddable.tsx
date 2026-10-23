@@ -13,6 +13,23 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { ModalPortal } from "@/components/ModalPortal";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  isPhoneLayout,
+  useWbLayoutMode,
+} from "@/components/whiteboard/chrome/useWbLayoutMode";
+import type { PeerPageViewState } from "@/hooks/usePeerPageViewState";
+import {
+  graphSceneBoxFitToPeer,
+  resizeGraphElementToBox,
+} from "@/lib/whiteboard/fit-graph-to-peer";
 import { useTheme } from "@/components/ThemeProvider";
 import {
   addGraphExpression,
@@ -105,7 +122,151 @@ type Props = {
   syncFromBoard?: boolean;
   /** Fired after graphStateJson is written to the Excalidraw scene (live sync path). */
   onAfterPersist?: () => void;
+  /**
+   * Tutor only. Latest peer viewport, read on click so the embed callback
+   * identity does not change on every viewport message.
+   */
+  fitPeerViewRef?: RefObject<PeerPageViewState | null>;
+  /** Tutor active page. Fit applies only when the peer is on this page. */
+  fitPageIdRef?: RefObject<string>;
 };
+
+/** How much of the layout viewport the soft keyboard currently covers. */
+function useKeyboardOverlapPx(): number {
+  const [overlap, setOverlap] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const next = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
+      setOverlap((prev) => (Math.abs(prev - next) < 0.5 ? prev : next));
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+  return overlap;
+}
+
+type ExpressionFieldsProps = {
+  expressions: string[];
+  exprErrors: string[];
+  editingIndex: number | null;
+  editingDraft: string;
+  draftExpr: string;
+  onEditingDraft: (value: string) => void;
+  onCommitEdit: (index: number) => void;
+  onCancelEdit: () => void;
+  onBeginEdit: (index: number, expr: string) => void;
+  onRemove: (index: number) => void;
+  onDraft: (value: string) => void;
+  onAdd: () => void;
+};
+
+/** Shared expression list. Inline on desktop/tablet, inside the phone tray. */
+function GraphExpressionFields({
+  expressions,
+  exprErrors,
+  editingIndex,
+  editingDraft,
+  draftExpr,
+  onEditingDraft,
+  onCommitEdit,
+  onCancelEdit,
+  onBeginEdit,
+  onRemove,
+  onDraft,
+  onAdd,
+}: ExpressionFieldsProps) {
+  return (
+    <>
+      {expressions.map((expr, index) => (
+        <div key={`${index}-${expr}`} className="wb-graph-expr-row">
+          {editingIndex === index ? (
+            <GraphExpressionEntry
+              value={editingDraft}
+              onChange={onEditingDraft}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  onCommitEdit(index);
+                }
+                if (e.key === "Escape") onCancelEdit();
+              }}
+              onBlur={() => onCommitEdit(index)}
+              autoFocus
+              showHelp={false}
+              inputTestId={`wb-graph-expr-edit-${index}`}
+              prefixTestId={`wb-graph-expr-edit-prefix-${index}`}
+            />
+          ) : (
+            <div className="wb-graph-expr-actions">
+              <button
+                type="button"
+                className="wb-graph-expr-input wb-graph-expr-display"
+                onPointerDown={stopEmbedDrag}
+                onMouseDown={stopEmbedDrag}
+                onClick={() => onBeginEdit(index, expr)}
+                data-testid={`wb-graph-expr-display-${index}`}
+              >
+                <GraphExpressionPrefix />
+                <span>{expr || "(empty)"}</span>
+              </button>
+              <button
+                type="button"
+                className="wb-graph-expr-btn wb-graph-expr-btn--danger"
+                aria-label={`Remove expression ${index + 1}`}
+                onPointerDown={stopEmbedDrag}
+                onMouseDown={stopEmbedDrag}
+                onClick={() => onRemove(index)}
+                data-testid={`wb-graph-expr-remove-${index}`}
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {exprErrors[index] ? (
+            <div
+              className="wb-graph-expr-error"
+              role="alert"
+              data-testid={`wb-graph-expr-error-${index}`}
+            >
+              {exprErrors[index]}
+            </div>
+          ) : null}
+        </div>
+      ))}
+      <GraphExpressionEntry
+        value={draftExpr}
+        onChange={onDraft}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onAdd();
+          }
+        }}
+        inputTestId="wb-graph-expr-new"
+        prefixTestId="wb-graph-expr-new-prefix"
+        trailing={
+          <button
+            type="button"
+            className="wb-graph-expr-btn"
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            onClick={onAdd}
+            data-testid="wb-graph-expr-add"
+          >
+            Add
+          </button>
+        }
+      />
+    </>
+  );
+}
 
 const JSXGRAPH_CSS_ID = "mynk-jsxgraph-css";
 const BBOX_PERSIST_MS = 400;
@@ -382,8 +543,13 @@ export function GraphEmbeddable({
   readOnly = false,
   syncFromBoard = false,
   onAfterPersist,
+  fitPeerViewRef,
+  fitPageIdRef,
 }: Props) {
   const { resolvedTheme } = useTheme();
+  const { layoutMode } = useWbLayoutMode();
+  const phoneLayout = isPhoneLayout(layoutMode);
+  const keyboardOverlap = useKeyboardOverlapPx();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<JxgBoard | null>(null);
   /**
@@ -406,6 +572,8 @@ export function GraphEmbeddable({
   const bboxHandlerRef = useRef<(() => void) | null>(null);
 
   const [panelOpen, setPanelOpen] = useState(true);
+  const phonePanelDefaulted = useRef(false);
+  const [fitReady, setFitReady] = useState(false);
   const [expressions, setExpressions] = useState<string[]>(
     () => graphStateRef.current.expressions ?? []
   );
@@ -954,6 +1122,75 @@ export function GraphEmbeddable({
     replot(nextExprs, true);
   };
 
+  useEffect(() => {
+    if (!phoneLayout || phonePanelDefaulted.current) return;
+    phonePanelDefaulted.current = true;
+    setPanelOpen(false);
+  }, [phoneLayout]);
+
+  useEffect(() => {
+    if (!fitPeerViewRef) return;
+    const tick = () => {
+      const peer = fitPeerViewRef.current;
+      const pageId = fitPageIdRef?.current;
+      const ready = Boolean(
+        peer &&
+          pageId &&
+          peer.pageId === pageId &&
+          (peer.viewportWidth ?? 0) > 0 &&
+          (peer.viewportHeight ?? 0) > 0
+      );
+      setFitReady((prev) => (prev === ready ? prev : ready));
+    };
+    tick();
+    const id = window.setInterval(tick, 400);
+    return () => window.clearInterval(id);
+  }, [fitPeerViewRef, fitPageIdRef]);
+
+  const handleFitToStudent = useCallback(() => {
+    const peer = fitPeerViewRef?.current;
+    const pageId = fitPageIdRef?.current;
+    if (!peer || !pageId || peer.pageId !== pageId || !elementId) return;
+    const box = graphSceneBoxFitToPeer({
+      panX: peer.panX,
+      panY: peer.panY,
+      zoom: peer.zoom,
+      viewportWidth: peer.viewportWidth ?? 0,
+      viewportHeight: peer.viewportHeight ?? 0,
+      visibleLeft: peer.visibleLeft,
+      visibleTop: peer.visibleTop,
+    });
+    if (!box) return;
+    const api = excalidrawAPIRef?.current ?? excalidrawAPI;
+    if (!api) return;
+    if (resizeGraphElementToBox({ excalidrawAPI: api, elementId, box })) {
+      onAfterPersist?.();
+    }
+  }, [elementId, excalidrawAPI, excalidrawAPIRef, fitPageIdRef, fitPeerViewRef, onAfterPersist]);
+
+  const expressionFields = (
+    <GraphExpressionFields
+      expressions={expressions}
+      exprErrors={exprErrors}
+      editingIndex={editingIndex}
+      editingDraft={editingDraft}
+      draftExpr={draftExpr}
+      onEditingDraft={setEditingDraft}
+      onCommitEdit={commitEdit}
+      onCancelEdit={() => {
+        setEditingIndex(null);
+        setEditingDraft("");
+      }}
+      onBeginEdit={(index, expr) => {
+        setEditingIndex(index);
+        setEditingDraft(expr);
+      }}
+      onRemove={handleRemove}
+      onDraft={setDraftExpr}
+      onAdd={handleAddExpression}
+    />
+  );
+
   return (
     <div
       className="wb-graph-root"
@@ -1004,115 +1241,73 @@ export function GraphEmbeddable({
           >
             Reset view
           </button>
-          <button
-            type="button"
-            className="wb-graph-strip-btn wb-graph-expr-toggle"
-            onClick={() => setPanelOpen((open) => !open)}
-            onPointerDown={stopEmbedDrag}
-            onMouseDown={stopEmbedDrag}
-            aria-expanded={panelOpen}
-            data-testid="wb-graph-expr-toggle"
-          >
-            ƒ Expressions
-            <span aria-hidden>{panelOpen ? "▾" : "▸"}</span>
-          </button>
+          {!phoneLayout && (
+            <button
+              type="button"
+              className="wb-graph-strip-btn wb-graph-expr-toggle"
+              onClick={() => setPanelOpen((open) => !open)}
+              onPointerDown={stopEmbedDrag}
+              onMouseDown={stopEmbedDrag}
+              aria-expanded={panelOpen}
+              data-testid="wb-graph-expr-toggle"
+            >
+              ƒ Expressions
+              <span aria-hidden>{panelOpen ? "▾" : "▸"}</span>
+            </button>
+          )}
         </div>
-        {panelOpen && (
+        {!phoneLayout && panelOpen && (
           <div
             className="wb-graph-expr-body"
             data-testid="wb-graph-expr-panel"
             onPointerDown={stopEmbedDrag}
             onMouseDown={stopEmbedDrag}
           >
-            {expressions.map((expr, index) => (
-              <div key={`${index}-${expr}`} className="wb-graph-expr-row">
-                {editingIndex === index ? (
-                  <GraphExpressionEntry
-                    value={editingDraft}
-                    onChange={setEditingDraft}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        commitEdit(index);
-                      }
-                      if (e.key === "Escape") {
-                        setEditingIndex(null);
-                        setEditingDraft("");
-                      }
-                    }}
-                    onBlur={() => commitEdit(index)}
-                    autoFocus
-                    showHelp={false}
-                    inputTestId={`wb-graph-expr-edit-${index}`}
-                    prefixTestId={`wb-graph-expr-edit-prefix-${index}`}
-                  />
-                ) : (
-                  <div className="wb-graph-expr-actions">
-                    <button
-                      type="button"
-                      className="wb-graph-expr-input wb-graph-expr-display"
-                      onPointerDown={stopEmbedDrag}
-                      onMouseDown={stopEmbedDrag}
-                      onClick={() => {
-                        setEditingIndex(index);
-                        setEditingDraft(expr);
-                      }}
-                      data-testid={`wb-graph-expr-display-${index}`}
-                    >
-                      <GraphExpressionPrefix />
-                      <span>{expr || "(empty)"}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="wb-graph-expr-btn wb-graph-expr-btn--danger"
-                      aria-label={`Remove expression ${index + 1}`}
-                      onPointerDown={stopEmbedDrag}
-                      onMouseDown={stopEmbedDrag}
-                      onClick={() => handleRemove(index)}
-                      data-testid={`wb-graph-expr-remove-${index}`}
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-                {exprErrors[index] ? (
-                  <div
-                    className="wb-graph-expr-error"
-                    role="alert"
-                    data-testid={`wb-graph-expr-error-${index}`}
-                  >
-                    {exprErrors[index]}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-            <GraphExpressionEntry
-              value={draftExpr}
-              onChange={setDraftExpr}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleAddExpression();
-                }
-              }}
-              inputTestId="wb-graph-expr-new"
-              prefixTestId="wb-graph-expr-new-prefix"
-              trailing={
-                <button
-                  type="button"
-                  className="wb-graph-expr-btn"
-                  onPointerDown={stopEmbedDrag}
-                  onMouseDown={stopEmbedDrag}
-                  onClick={handleAddExpression}
-                  data-testid="wb-graph-expr-add"
-                >
-                  Add
-                </button>
-              }
-            />
+            {expressionFields}
           </div>
         )}
       </div>
+      )}
+      {!readOnly && phoneLayout && !panelOpen && (
+        <ModalPortal>
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-expr-tray-launch"
+            onClick={() => setPanelOpen(true)}
+            aria-expanded={false}
+            data-testid="wb-graph-expr-toggle"
+            style={{ zIndex: 70 }}
+          >
+            ƒ Expressions
+          </button>
+        </ModalPortal>
+      )}
+      {!readOnly && phoneLayout && (
+        <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
+          <SheetContent
+            side="bottom"
+            className="wb-graph-expr-tray"
+            data-testid="wb-graph-expr-tray"
+            style={{ bottom: keyboardOverlap, zIndex: 80 }}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+          >
+            <SheetHeader>
+              <SheetTitle>Expressions</SheetTitle>
+              <SheetDescription>
+                Edit the expressions plotted on this graph.
+              </SheetDescription>
+            </SheetHeader>
+            <div
+              className="wb-graph-expr-body"
+              data-testid="wb-graph-expr-panel"
+              onPointerDown={stopEmbedDrag}
+              onMouseDown={stopEmbedDrag}
+            >
+              {expressionFields}
+            </div>
+          </SheetContent>
+        </Sheet>
       )}
       {!readOnly && (
       <div
@@ -1120,6 +1315,20 @@ export function GraphEmbeddable({
         onPointerDownCapture={stopEmbedDragCapture}
         onMouseDownCapture={stopEmbedDragCapture}
       >
+        {fitPeerViewRef ? (
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-fit-student"
+            onClick={handleFitToStudent}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            disabled={!fitReady}
+            title="Fit graph to student's screen"
+            data-testid="wb-graph-fit-student-screen"
+          >
+            {"Fit graph to student's screen"}
+          </button>
+        ) : null}
         <div className="wb-graph-nav-zoom">
           <button
             type="button"

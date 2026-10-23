@@ -1,5 +1,6 @@
 import {
   detectLayoutMode,
+  isPhoneLayout,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 
 describe("detectLayoutMode", () => {
@@ -31,5 +32,14 @@ describe("detectLayoutMode", () => {
     test("tablet portrait", () => {
       expect(detectLayoutMode(768, 1024, touch)).toBe("tablet-portrait");
     });
+  });
+});
+
+describe("isPhoneLayout", () => {
+  test("phones use the tray; tablets and desktop do not", () => {
+    expect(isPhoneLayout("narrow")).toBe(true);
+    expect(isPhoneLayout("phone-landscape")).toBe(true);
+    expect(isPhoneLayout("tablet-portrait")).toBe(false);
+    expect(isPhoneLayout("desktop")).toBe(false);
   });
 });

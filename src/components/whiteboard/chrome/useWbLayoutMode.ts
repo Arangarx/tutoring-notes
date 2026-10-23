@@ -118,3 +118,12 @@ export function isTouchLayout(mode: WbLayoutMode): boolean {
     mode === "phone-landscape"
   );
 }
+
+/**
+ * Phones only: portrait `narrow` and `phone-landscape`.
+ * Tablet portrait and desktop stay on the desktop chrome path.
+ * A mouse window under 400px is already classified as `narrow`.
+ */
+export function isPhoneLayout(mode: WbLayoutMode): boolean {
+  return mode === "narrow" || mode === "phone-landscape";
+}

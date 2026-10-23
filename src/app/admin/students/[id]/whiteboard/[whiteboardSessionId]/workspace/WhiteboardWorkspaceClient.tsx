@@ -1840,6 +1840,8 @@ export function WhiteboardWorkspaceClient({
   useActiveEmbeddableRebind(excalidrawAPI);
 
   const peerPageView = usePeerPageViewState(effectivePointerSync, role);
+  const fitPeerViewRef = useRef(peerPageView);
+  fitPeerViewRef.current = peerPageView;
   useViewportWireBroadcast({
     enabled: role === "student" && Boolean(studentSyncClient),
     sync: studentSyncClient,
@@ -5411,11 +5413,13 @@ export function WhiteboardWorkspaceClient({
           readOnly={false}
           syncFromBoard
           onAfterPersist={handleGraphPersisted}
+          fitPeerViewRef={role === "tutor" ? fitPeerViewRef : undefined}
+          fitPageIdRef={role === "tutor" ? activePageIdRef : undefined}
         />
       );
     }
     return undefined;
-  }, [excalidrawAPI, handleGraphPersisted]);
+  }, [excalidrawAPI, handleGraphPersisted, role, fitPeerViewRef, activePageIdRef]);
 
   const handleExcalidrawLinkOpen = useCallback(
     (

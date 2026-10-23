@@ -10,6 +10,7 @@ import {
   clickBoardPageTab,
   drawTestStrokeOnRole,
   injectStaleHandleChange,
+  insertGraphOnRole,
   openTutorAndStudent,
   readActiveWhiteboardPageId,
   addGraphExpressionViaUI,
@@ -27,6 +28,7 @@ import {
   waitForWbE2eBridge,
   readViewportSnapshot,
 } from "./whiteboard-live-sync.helpers";
+import type { Page } from "@playwright/test";
 import { viewportCoordsToSceneCoords } from "@/lib/whiteboard/excalidraw-viewport-coords";
 import { BOARD_TITLE_MAX_LENGTH } from "@/lib/whiteboard/board-title";
 import {
@@ -306,7 +308,7 @@ test.describe("whiteboard QoL surfaces", () => {
     "an image file becomes its own board and does not keep the anchor stroke",
     { tag: [TAG.WB_ASSETS, TAG.WB_CHROME, TAG.WB_SYNC, TAG.WB_STROKES] },
     async ({ browser }) => {
-      test.setTimeout(240_000);
+      test.setTimeout(180_000);
       const session = await seedWbLiveSyncSession();
       const peers = await openTutorAndStudent(browser, session);
       try {
@@ -1091,4 +1093,287 @@ test.describe("whiteboard QoL surfaces", () => {
       await expect(page.getByTestId("wb-session-menu-more-below")).toHaveCount(0);
     }
   );
+
+  /**
+   * PLAYWRIGHT-GAP: iOS soft keyboard covering the phone expression tray.
+   * Playwright cannot show the iOS keyboard or shrink visualViewport the way
+   * Safari does, so tray-vs-keyboard occlusion is hardware-only.
+   * See docs/BACKLOG.md — PLAYWRIGHT-GAP graph expression tray iOS keyboard.
+   */
+  test(
+    "phone expression editing opens a bottom tray inside the viewport and plots on both peers",
+    { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentBrowser: "webkit",
+      });
+      try {
+        const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, []);
+        await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+        const studentHost = peers.studentPage.getByTestId("wb-graph-embed-host").first();
+        await expect(studentHost).toBeVisible({ timeout: 30_000 });
+
+        const toggle = peers.studentPage.getByTestId("wb-graph-expr-toggle");
+        await expect(toggle).toBeVisible({ timeout: 20_000 });
+        await toggle.click();
+
+        const tray = peers.studentPage.getByTestId("wb-graph-expr-tray");
+        await expect(tray).toBeVisible();
+        const insideHost = await tray.evaluate(
+          (el) => !!el.closest("[data-testid='wb-graph-embed-host']")
+        );
+        expect(insideHost, "phone tray is screen-space, outside the graph box").toBe(
+          false
+        );
+        await expect(studentHost.getByTestId("wb-graph-expr-panel")).toHaveCount(0);
+
+        const input = tray.getByTestId("wb-graph-expr-new");
+        await expect(input).toBeVisible();
+        await expect
+          .poll(
+            () =>
+              input.evaluate((el) => {
+                const rect = el.getBoundingClientRect();
+                const vv = window.visualViewport;
+                const viewLeft = vv ? vv.offsetLeft : 0;
+                const viewTop = vv ? vv.offsetTop : 0;
+                const viewRight = viewLeft + (vv ? vv.width : window.innerWidth);
+                const viewBottom = viewTop + (vv ? vv.height : window.innerHeight);
+                const slack = 2;
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const hit = document.elementFromPoint(centerX, centerY);
+                const scale =
+                  el instanceof HTMLElement && el.offsetHeight > 0
+                    ? rect.height / el.offsetHeight
+                    : 0;
+                return {
+                  inView:
+                    rect.width > 8 &&
+                    rect.height > 8 &&
+                    rect.left >= viewLeft - slack &&
+                    rect.top >= viewTop - slack &&
+                    rect.right <= viewRight + slack &&
+                    rect.bottom <= viewBottom + slack,
+                  hitOk: !!hit && (hit === el || el.contains(hit)),
+                  scaleOk: scale > 0.9 && scale < 1.1,
+                };
+              }),
+            { timeout: 10_000 }
+          )
+          .toEqual({ inView: true, hitOk: true, scaleOk: true });
+
+        await input.fill("2x+1");
+        await input.press("Enter");
+
+        await expect
+          .poll(
+            async () => {
+              const tutor = await readMountedGraphInk(peers.tutorPage);
+              const student = await readMountedGraphInk(peers.studentPage);
+              return (
+                (tutor.functionGraphs[0]?.pts.length ?? 0) > 0 &&
+                (student.functionGraphs[0]?.pts.length ?? 0) > 0
+              );
+            },
+            { timeout: 20_000 }
+          )
+          .toBe(true);
+
+        const tutorInk = await readMountedGraphInk(peers.tutorPage);
+        const studentInk = await readMountedGraphInk(peers.studentPage);
+        expect(tutorInk.functionGraphs.length).toBeGreaterThan(0);
+        expect(studentInk.functionGraphs.length).toBeGreaterThan(0);
+        expectCurveMatchesMath(
+          tutorInk.functionGraphs[0].pts,
+          (x) => 2 * x + 1,
+          "tutor phone-entered line"
+        );
+        expectCurveMatchesMath(
+          studentInk.functionGraphs[0].pts,
+          (x) => 2 * x + 1,
+          "student phone-entered line"
+        );
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "desktop and tablet keep the inline graph expression panel",
+    { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentViewport: { width: 768, height: 1024 },
+        studentHasTouch: true,
+        studentIsMobile: true,
+        ensureFollow: false,
+      });
+      try {
+        const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, []);
+        await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+        await expect(peers.tutorPage.getByTestId("wb-graph-embed-host").first()).toBeVisible({
+          timeout: 30_000,
+        });
+        await expect(peers.studentPage.getByTestId("wb-graph-embed-host").first()).toBeVisible({
+          timeout: 30_000,
+        });
+
+        const tutorHost = peers.tutorPage.getByTestId("wb-graph-embed-host").first();
+        const tabletHost = peers.studentPage.getByTestId("wb-graph-embed-host").first();
+        await expect(tutorHost.getByTestId("wb-graph-expr-panel")).toBeVisible();
+        await expect(tabletHost.getByTestId("wb-graph-expr-panel")).toBeVisible();
+        await expect(peers.tutorPage.getByTestId("wb-graph-expr-tray")).toHaveCount(0);
+        await expect(peers.studentPage.getByTestId("wb-graph-expr-tray")).toHaveCount(0);
+        const tutorInside = await tutorHost
+          .getByTestId("wb-graph-expr-panel")
+          .evaluate((el) => !!el.closest("[data-testid='wb-graph-embed-host']"));
+        const tabletInside = await tabletHost
+          .getByTestId("wb-graph-expr-panel")
+          .evaluate((el) => !!el.closest("[data-testid='wb-graph-embed-host']"));
+        expect(tutorInside, "desktop panel stays on the graph").toBe(true);
+        expect(tabletInside, "tablet panel stays on the graph").toBe(true);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "tutor fit places the graph inside the student's visible view",
+    { tag: [TAG.WB_GRAPH, TAG.WB_CHROME, TAG.WB_VIEWPORT] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentBrowser: "webkit",
+      });
+      try {
+        const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, ["x"]);
+        await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+        await expect(peers.studentPage.getByTestId("wb-graph-embed-host").first()).toBeVisible({
+          timeout: 30_000,
+        });
+
+        const before = await graphHostContainedInStudentView(peers.studentPage);
+        expect(before.contained, "inserted graph overflows the phone before fit").toBe(
+          false
+        );
+
+        const fit = peers.tutorPage.getByTestId("wb-graph-fit-student-screen");
+        await expect(fit).toBeEnabled({ timeout: 20_000 });
+        await fit.click();
+
+        await expect
+          .poll(async () => (await graphHostContainedInStudentView(peers.studentPage)).contained, {
+            timeout: 20_000,
+          })
+          .toBe(true);
+
+        await expect
+          .poll(async () => {
+            const tutor = await readEmbedSceneBox(peers.tutorPage, "tutor", graphId);
+            const student = await readEmbedSceneBox(peers.studentPage, "student", graphId);
+            if (!tutor || !student) return false;
+            return (
+              Math.abs(tutor.width - student.width) <= 1 &&
+              Math.abs(tutor.height - student.height) <= 1 &&
+              Math.abs(tutor.x - student.x) <= 1 &&
+              Math.abs(tutor.y - student.y) <= 1
+            );
+          }, { timeout: 20_000 })
+          .toBe(true);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
 });
+
+type EmbedSceneBox = { x: number; y: number; width: number; height: number };
+
+async function readEmbedSceneBox(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string
+): Promise<EmbedSceneBox | null> {
+  return page.evaluate(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              getElements: () => Array<{
+                id?: string;
+                x?: number;
+                y?: number;
+                width?: number;
+                height?: number;
+              }>;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      const el = bridge?.getElements().find((entry) => entry.id === id);
+      if (
+        !el ||
+        typeof el.x !== "number" ||
+        typeof el.y !== "number" ||
+        typeof el.width !== "number" ||
+        typeof el.height !== "number"
+      ) {
+        return null;
+      }
+      return { x: el.x, y: el.y, width: el.width, height: el.height };
+    },
+    { r: role, id: elementId }
+  );
+}
+
+/** Graph host box vs the student's on-screen visible board (mount ∩ chrome ∩ visualViewport). */
+async function graphHostContainedInStudentView(page: Page): Promise<{ contained: boolean }> {
+  return page.evaluate(() => {
+    const host = document
+      .querySelector("[data-testid='wb-graph-embed-host']")
+      ?.getBoundingClientRect();
+    const mount = document
+      .querySelector("[data-testid='student-whiteboard-canvas-mount']")
+      ?.getBoundingClientRect();
+    if (!host || !mount || !(host.width > 0) || !(mount.width > 0)) {
+      return { contained: false };
+    }
+    let left = mount.left;
+    let top = mount.top;
+    let right = mount.right;
+    let bottom = mount.bottom;
+    const topbar = document.querySelector("header.mynk-wb-topbar")?.getBoundingClientRect();
+    if (topbar && topbar.height > 0) top = Math.max(top, topbar.bottom);
+    const bottomBar = document.querySelector("nav.mynk-wb-bottom-toolbar")?.getBoundingClientRect();
+    if (bottomBar && bottomBar.height > 0 && bottomBar.width > 0) {
+      const midX = (mount.left + mount.right) / 2;
+      const leftRail = bottomBar.height > bottomBar.width && bottomBar.right <= midX;
+      if (leftRail) left = Math.max(left, bottomBar.right);
+      else bottom = Math.min(bottom, bottomBar.top);
+    }
+    const vv = window.visualViewport;
+    if (vv && vv.width > 0 && vv.height > 0) {
+      left = Math.max(left, vv.offsetLeft);
+      top = Math.max(top, vv.offsetTop);
+      right = Math.min(right, vv.offsetLeft + vv.width);
+      bottom = Math.min(bottom, vv.offsetTop + vv.height);
+    }
+    const slack = 6;
+    const contained =
+      host.left >= left - slack &&
+      host.top >= top - slack &&
+      host.right <= right + slack &&
+      host.bottom <= bottom + slack;
+    return { contained };
+  });
+}

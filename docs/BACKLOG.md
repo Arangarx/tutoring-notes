@@ -1841,6 +1841,15 @@ Lower priority.
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
+**[P2][TEST] PLAYWRIGHT-GAP — iOS soft keyboard covers the phone graph expression tray (2026-10-22)**  
+On a phone, graph expression editing opens in a bottom sheet (`wb-graph-expr-tray`). The sheet offsets itself with `visualViewport` when the keyboard shrinks the visible area. Playwright cannot summon the iOS keyboard or reproduce that occlusion. Hardware check: on an iPhone, open ƒ Expressions, focus the expression field, and confirm the field stays above the keyboard. Surrogate: `wb-org-qol-surface.spec.ts` › "phone expression editing opens a bottom tray inside the viewport and plots on both peers" (input inside the layout viewport, no keyboard).
+
+**[P2][TEST] Pre-existing failure — `wb-graph-ink.spec.ts:185` third stroke starts on the graph controls (2026-10-23)**  
+"draw preview follows the drag locally…" fails 3 of 3 runs at line 282 (`previews` length 0 on the third in-progress stroke), on HEAD `aaddfdfe` without the phone tray work and with it. Cause is test geometry, not product behavior. The third stroke starts at 40% / 70% of `.wb-graph-board-host`. At the harness 1280×1200 viewport that point is (592.2, 709.6), and `.wb-graph-controls` spans x 313–593, y 706.7–863 (the y= entry plus notation helper from `44b18050` made it taller). `elementFromPoint` there returns `div.wb-graph-controls-strip`, so pointerdown never reaches the board. Fix: start that stroke higher (for example 50% height) or in a column right of the controls, and assert the start point is not inside `.wb-graph-controls` (relational check). Do not change the product.
+
+**[P2][TEST] Pre-existing flake — "tutor can rename the current board" hangs on hover (2026-10-23)**  
+`wb-org-qol-surface.spec.ts` › "tutor can rename the current board" fails 1 of 3 with `--repeat-each=3 --retries=0` (always the third repeat), both on `aaddfdfe` without the tray work (2 pass / 1 fail) and with it (2 pass / 1 fail); 180 s timeout, `hover()` on the Board 1 tab never completes. The trace shows a tutor console error `[peer-mesh] … event=restart-fail … setLocalDescription: The order of m-lines in subsequent offer doesn't match order from previous offer/answer` (a live-A/V renegotiation race). Next dev mode surfaces that `console.error` as the "1 Issue" badge, which sits bottom-left over the Board 1 tab and takes the pointer. Two separate things to chase: the m-line-order restart failure in `peer-mesh.ts` (fragile surface, `docs/LIVE-AV.md`), and test-env hardening so the dev issue badge cannot cover the board strip (for example `devIndicators: false` in the Playwright dev server).
+
 **[P2][TEST] PLAYWRIGHT-GAP — long End wait before review (2026-10-12; goal corrected 2026-10-15)**  
 The tutor still waits on the upload drain and the caller in front of `endWhiteboardSession` before review. Notes-blur tests do not measure it. Do not add timing logs. The product goal is WS-K in §3: a running note during the session, and End only folds the tail. The tutor does not leave for the next student while that runs. A timer-only test does not count.
 
