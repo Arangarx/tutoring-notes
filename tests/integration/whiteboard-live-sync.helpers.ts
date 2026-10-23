@@ -1466,9 +1466,16 @@ export async function openTutorAndStudent(
      * Grants and init scripts have to land before the mesh builds.
      */
     prepareContext?: (ctx: BrowserContext) => Promise<void>;
+    /**
+     * When true (default), wait until the tutor sync pill says the student
+     * is connected. Set false when the test must observe the pre-connect
+     * waiting room itself. Existing callers omit it and still wait.
+     */
+    waitForConnected?: boolean;
   }
 ) {
   const ensureFollow = options?.ensureFollow !== false;
+  const waitForConnected = options?.waitForConnected !== false;
   const studentViewport = options?.studentViewport ?? {
     width: 1280,
     height: 640,
@@ -1566,7 +1573,9 @@ export async function openTutorAndStudent(
   if (ensureFollow) {
     await ensureStudentFollowsTutor(studentPage);
   }
-  await waitForTutorStudentConnected(tutorPage);
+  if (waitForConnected) {
+    await waitForTutorStudentConnected(tutorPage);
+  }
 
   if (options?.autoStart) {
     await startSessionAsTutor(tutorPage);

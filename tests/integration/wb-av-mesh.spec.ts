@@ -1,6 +1,4 @@
 import { execSync } from "child_process";
-import fs from "fs";
-import path from "path";
 import {
   test,
   expect,
@@ -9,9 +7,7 @@ import {
   type Page,
 } from "@playwright/test";
 import {
-  loginLearnerInContext,
   openTutorAndStudent,
-  readEncryptionKeyFromHash,
   seedWbLiveSyncSession,
   seedWbPendingLiveSyncSession,
   startSessionAsTutor,
@@ -696,43 +692,19 @@ test.describe("live A/V over a TURN relay", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] 
       value: encodeURIComponent(JSON.stringify(TURN_ICE)),
       url: baseURL,
     };
-    const learnerAuthFile = path.join(process.cwd(), "tests", "integration", ".auth", "learner.json");
 
-    const tutorContext = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
-      viewport: { width: 1280, height: 900 },
-    });
-    const studentContext = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      ...(fs.existsSync(learnerAuthFile) ? { storageState: learnerAuthFile } : {}),
-    });
-    try {
-      if (!fs.existsSync(learnerAuthFile)) {
-        await loginLearnerInContext(studentContext, session.learnerHandle, session.learnerPin);
-      }
-      for (const ctx of [tutorContext, studentContext]) {
+    const peers = await openTutorAndStudent(browser, session, {
+      // The test asserts the waiting room itself. The helper's default wait
+      // would hide that the Start button and "Connecting…" clear only after relay.
+      waitForConnected: false,
+      ensureFollow: false,
+      prepareContext: async (ctx) => {
         await ctx.addCookies([turnCookie]);
         await installPeerConnectionCapture(ctx, { relayOnly: true });
-      }
-
-      const tutorPage = await tutorContext.newPage();
-      await tutorPage.goto(
-        `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
-        { waitUntil: "domcontentloaded" }
-      );
-      await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
-        timeout: 90_000,
-      });
-      await waitForWbE2eBridge(tutorPage, "tutor");
-      const key = await readEncryptionKeyFromHash(tutorPage);
-
-      const studentPage = await studentContext.newPage();
-      await studentPage.goto(`/join/${session.whiteboardSessionId}#k=${key}`, {
-        waitUntil: "domcontentloaded",
-      });
-      await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
-        timeout: 90_000,
-      });
+      },
+    });
+    try {
+      const { tutorPage, studentPage } = peers;
 
       // What Tyson saw stuck: Start stays disabled and the student stays on
       // "Connecting…" until the video link is actually up.
@@ -746,8 +718,7 @@ test.describe("live A/V over a TURN relay", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] 
         .poll(() => selectedLocalCandidateTypes(tutorPage), { timeout: 15_000 })
         .toContain("relay");
     } finally {
-      await tutorContext.close();
-      await studentContext.close();
+      await peers.close();
     }
   });
 });
