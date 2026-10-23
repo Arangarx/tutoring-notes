@@ -6,7 +6,8 @@
  *
  * Tags: @wb-graph @wb-sync
  */
-import { expect, test, type Page } from "./fixtures";
+import { expect, test } from "./fixtures";
+import type { Page } from "@playwright/test";
 import { TAG } from "../test-tags";
 import { scrollForViewportSceneCenter } from "../../src/lib/whiteboard/viewport-align";
 import {
@@ -56,6 +57,119 @@ async function activateTutorGraph(tutorPage: Page): Promise<{ x: number; y: numb
     .poll(() => pointerReachesGraphHost(tutorPage, x, y), { timeout: 10_000 })
     .toBe(true);
   return { x, y };
+}
+
+type ViewportBox = { x: number; y: number; width: number; height: number };
+type PlotPoint = { x: number; y: number };
+
+/**
+ * Largest axis-aligned part of `.wb-graph-board-host` that does not overlap
+ * `.wb-graph-controls`, then inset off the board rim and the controls edge.
+ * Stroke points come from this live rect, not from fractions of the full board,
+ * so a taller controls strip cannot move a stroke onto the y= helper.
+ */
+async function plotAreaClearOfGraphControls(page: Page): Promise<ViewportBox> {
+  const board = await page.locator(".wb-graph-board-host").first().boundingBox();
+  const controls = await page.locator(".wb-graph-controls").first().boundingBox();
+  expect(board, "graph board box").not.toBeNull();
+  expect(controls, "graph controls box").not.toBeNull();
+  const slab = largestBoardSlabOutsideControls(board!, controls!);
+  const plot = insetPlotAwayFromRimAndControls(slab, board!);
+  expect(plot.width, "plot area clear of graph controls").toBeGreaterThan(48);
+  expect(plot.height, "plot area clear of graph controls").toBeGreaterThan(36);
+  return plot;
+}
+
+function largestBoardSlabOutsideControls(board: ViewportBox, controls: ViewportBox): ViewportBox {
+  const boardRight = board.x + board.width;
+  const boardBottom = board.y + board.height;
+  const overlapLeft = Math.max(board.x, controls.x);
+  const overlapTop = Math.max(board.y, controls.y);
+  const overlapRight = Math.min(boardRight, controls.x + controls.width);
+  const overlapBottom = Math.min(boardBottom, controls.y + controls.height);
+  const overlaps = overlapRight > overlapLeft && overlapBottom > overlapTop;
+  if (!overlaps) return board;
+
+  const slabs: ViewportBox[] = [
+    { x: board.x, y: board.y, width: board.width, height: overlapTop - board.y },
+    { x: board.x, y: overlapBottom, width: board.width, height: boardBottom - overlapBottom },
+    { x: board.x, y: board.y, width: overlapLeft - board.x, height: board.height },
+    { x: overlapRight, y: board.y, width: boardRight - overlapRight, height: board.height },
+  ];
+  const usable = slabs.filter((slab) => slab.width > 80 && slab.height > 72);
+  usable.sort((a, b) => b.width * b.height - a.width * a.height);
+  expect(usable.length, "board area outside graph controls").toBeGreaterThan(0);
+  return usable[0];
+}
+
+function insetPlotAwayFromRimAndControls(slab: ViewportBox, board: ViewportBox): ViewportBox {
+  const rim = 48;
+  const controlsGap = 16;
+  const onBoardEdge = (slabEdge: number, boardEdge: number) => Math.abs(slabEdge - boardEdge) < 1;
+  const padLeft = onBoardEdge(slab.x, board.x) ? rim : controlsGap;
+  const padTop = onBoardEdge(slab.y, board.y) ? rim : controlsGap;
+  const padRight = onBoardEdge(slab.x + slab.width, board.x + board.width) ? rim : controlsGap;
+  const padBottom = onBoardEdge(slab.y + slab.height, board.y + board.height) ? rim : controlsGap;
+  return {
+    x: slab.x + padLeft,
+    y: slab.y + padTop,
+    width: slab.width - padLeft - padRight,
+    height: slab.height - padTop - padBottom,
+  };
+}
+
+function strokeOnPlot(
+  plot: ViewportBox,
+  which: "persist" | "cancel" | "switch"
+): { start: PlotPoint; end: PlotPoint } {
+  const left = plot.x;
+  const right = plot.x + plot.width;
+  const top = plot.y;
+  const bottom = plot.y + plot.height;
+  const midX = (left + right) / 2;
+  const midY = (top + bottom) / 2;
+  if (which === "persist") {
+    return { start: { x: left, y: midY }, end: { x: right, y: top } };
+  }
+  if (which === "cancel") {
+    return { start: { x: left, y: bottom }, end: { x: midX, y: midY } };
+  }
+  const start = { x: midX, y: (top + midY) / 2 };
+  return {
+    start,
+    end: {
+      x: Math.min(start.x + 40, right),
+      y: Math.max(start.y - 24, top),
+    },
+  };
+}
+
+/** Chosen start is on the plot: elementFromPoint hits the board, not the controls. */
+async function expectPointerOnBoardNotControls(
+  page: Page,
+  point: PlotPoint,
+  label: string
+): Promise<void> {
+  const hit = await page.evaluate(({ x, y }) => {
+    const el = document.elementFromPoint(x, y);
+    return {
+      onBoard: !!el?.closest(".wb-graph-board-host"),
+      onControls: !!el?.closest(".wb-graph-controls"),
+    };
+  }, point);
+  expect(hit.onControls, `${label} elementFromPoint is not graph controls`).toBe(false);
+  expect(hit.onBoard, `${label} elementFromPoint is inside the board`).toBe(true);
+}
+
+async function strokeClearOfGraphControls(
+  page: Page,
+  which: "persist" | "cancel" | "switch"
+): Promise<{ start: PlotPoint; end: PlotPoint }> {
+  const plot = await plotAreaClearOfGraphControls(page);
+  const stroke = strokeOnPlot(plot, which);
+  await expectPointerOnBoardNotControls(page, stroke.start, `${which} stroke start`);
+  await expectPointerOnBoardNotControls(page, stroke.end, `${which} stroke end`);
+  return stroke;
 }
 
 test.describe("graph points and free draw", () => {
@@ -196,17 +310,9 @@ test.describe("graph points and free draw", () => {
         await tutorPage.waitForTimeout(700);
         await tutorPage.getByTestId("wb-graph-mode-draw").click();
 
-        const host = tutorPage.locator(".wb-graph-board-host").first();
-        const box = await host.boundingBox();
-        expect(box, "graph board box").not.toBeNull();
-        const strokeStart = {
-          x: box!.x + box!.width * 0.35,
-          y: box!.y + box!.height * 0.4,
-        };
-        const strokeEnd = {
-          x: box!.x + box!.width * 0.72,
-          y: box!.y + box!.height * 0.22,
-        };
+        const drawn = await strokeClearOfGraphControls(tutorPage, "persist");
+        const strokeStart = drawn.start;
+        const strokeEnd = drawn.end;
 
         const versionBefore = await readElementVersion(tutorPage, "tutor", graphId);
         await tutorPage.mouse.move(strokeStart.x, strokeStart.y);
@@ -249,14 +355,9 @@ test.describe("graph points and free draw", () => {
           .toBe(1);
 
         const versionAfterPersist = await readElementVersion(tutorPage, "tutor", graphId);
-        const cancelStart = {
-          x: box!.x + box!.width * 0.3,
-          y: box!.y + box!.height * 0.62,
-        };
-        const cancelEnd = {
-          x: box!.x + box!.width * 0.6,
-          y: box!.y + box!.height * 0.55,
-        };
+        const cancel = await strokeClearOfGraphControls(tutorPage, "cancel");
+        const cancelStart = cancel.start;
+        const cancelEnd = cancel.end;
         await tutorPage.mouse.move(cancelStart.x, cancelStart.y);
         await tutorPage.mouse.down();
         await tutorPage.mouse.move(cancelEnd.x, cancelEnd.y, { steps: 6 });
@@ -271,13 +372,12 @@ test.describe("graph points and free draw", () => {
         expect(await readElementVersion(tutorPage, "tutor", graphId)).toBe(versionAfterPersist);
 
         await tutorPage.getByTestId("wb-graph-mode-draw").click();
-        const switchStart = {
-          x: box!.x + box!.width * 0.4,
-          y: box!.y + box!.height * 0.7,
-        };
+        // Third stroke starts in the live plot (board rect minus controls), not on .wb-graph-controls.
+        const modeSwitch = await strokeClearOfGraphControls(tutorPage, "switch");
+        const switchStart = modeSwitch.start;
         await tutorPage.mouse.move(switchStart.x, switchStart.y);
         await tutorPage.mouse.down();
-        await tutorPage.mouse.move(switchStart.x + 40, switchStart.y - 24, { steps: 4 });
+        await tutorPage.mouse.move(modeSwitch.end.x, modeSwitch.end.y, { steps: 4 });
         await tutorPage.waitForTimeout(50);
         expect((await readMountedGraphInk(tutorPage)).previews).toHaveLength(1);
         const panBtn = tutorPage.getByTestId("wb-graph-mode-pan");
@@ -379,7 +479,7 @@ async function readTutorEmbedFrame(page: Page, elementId: string): Promise<Tutor
             getAppState: () => {
               width?: number;
               height?: number;
-              zoom?: number | { value?: number };
+              zoom?: number | { value: number };
             };
           }
         >;
@@ -393,6 +493,11 @@ async function readTutorEmbedFrame(page: Page, elementId: string): Promise<Tutor
       throw new Error("graph element missing canvas size");
     }
     const st = bridge.getAppState();
+    // Excalidraw zoom is a number or `{ value: number }`.
+    const rawZoom = st.zoom as number | { value: number } | undefined;
+    let zoom = 1;
+    if (typeof rawZoom === "number") zoom = rawZoom;
+    else if (rawZoom && typeof rawZoom.value === "number") zoom = rawZoom.value;
     return {
       canvasWidth: el.width,
       canvasHeight: el.height,
@@ -401,12 +506,7 @@ async function readTutorEmbedFrame(page: Page, elementId: string): Promise<Tutor
       angle: typeof el.angle === "number" ? el.angle : 0,
       appWidth: typeof st.width === "number" ? st.width : 0,
       appHeight: typeof st.height === "number" ? st.height : 0,
-      zoom:
-        typeof st.zoom === "number"
-          ? st.zoom
-          : typeof st.zoom?.value === "number"
-            ? st.zoom.value
-            : 1,
+      zoom,
     };
   }, elementId);
 }
