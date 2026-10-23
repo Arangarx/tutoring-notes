@@ -30,10 +30,9 @@ import {
  *      - `shareRecordingInEmail` on the note; or
  *      - the note has any linked WhiteboardSession; or
  *      - audio was captured against a WB session (`SessionRecording.whiteboardSessionId`).
- *   4. When the recording is tied to a whiteboard session, or is reachable
- *      because its note has a whiteboard session, that note must be
- *      replay-visible (not DRAFT). Email-only audio with no whiteboard
- *      session is unchanged.
+ *   4. The note must be replay-visible (not DRAFT). If the recording or its
+ *      note is tied to a whiteboard session, that session must have ended.
+ *      Otherwise the same 404 and `[sal] ... reason=note_not_visible` log.
  *
  * Range support: forwards the inbound `Range` header to Vercel Blob
  * via `streamBlobWithRangeSupport` so parents can scrub the share

@@ -75,7 +75,7 @@ afterAll(async () => {
 
 async function seedShareAudioFixture(opts?: {
   shareRecordingInEmail?: boolean;
-  noteStatus?: "DRAFT" | "READY";
+  noteStatus?: "DRAFT" | "READY" | "SENT";
 }) {
   const tutor = await db.adminUser.create({
     data: {
@@ -172,6 +172,58 @@ async function seedNoteLinkedRecording(
     },
   });
   return { shareToken, recording, note };
+}
+
+/** Recording.whiteboardSessionId points at a session that has not ended. */
+async function seedDirectLiveSessionRecording() {
+  const tutor = await db.adminUser.create({
+    data: {
+      email: `${uniq("tutor")}@example.com`,
+      role: "TUTOR",
+      approvalStatus: "APPROVED",
+    },
+  });
+  const student = await db.student.create({
+    data: { name: `Live session audio ${uniq()}`, adminUserId: tutor.id },
+  });
+  const shareToken = generateShareToken();
+  await db.shareLink.create({
+    data: { studentId: student.id, token: shareToken },
+  });
+  const note = await db.sessionNote.create({
+    data: {
+      studentId: student.id,
+      date: new Date("2026-06-15T00:00:00Z"),
+      topics: "Live session audio",
+      homework: "",
+      assessment: "",
+      nextSteps: "",
+      linksJson: "[]",
+      status: "READY",
+      shareRecordingInEmail: false,
+    },
+  });
+  const session = await db.whiteboardSession.create({
+    data: {
+      adminUserId: tutor.id,
+      studentId: student.id,
+      noteId: note.id,
+      endedAt: null,
+      eventsBlobUrl: "https://example.invalid/live-session-audio-events.json",
+    },
+  });
+  const recording = await db.sessionRecording.create({
+    data: {
+      adminUserId: tutor.id,
+      studentId: student.id,
+      noteId: note.id,
+      whiteboardSessionId: session.id,
+      blobUrl: "https://blob.example.com/audio/live-session.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 2048,
+    },
+  });
+  return { shareToken, recording };
 }
 
 function makeGetRequest(
@@ -324,10 +376,53 @@ describe("GET /api/audio/[recordingId] — share-scoped proxy contract (P1-J1)",
     expect(streamBlobWithRangeSupportMock).not.toHaveBeenCalled();
   });
 
-  it("still serves email-only DRAFT audio that has no whiteboard session", async () => {
+  it("hides email-only DRAFT audio that has no whiteboard session", async () => {
     const { shareToken, recording } = await seedShareAudioFixture({
       shareRecordingInEmail: true,
       noteStatus: "DRAFT",
+    });
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const res = await GET(makeGetRequest(recording.id, shareToken), {
+        params: Promise.resolve({ recordingId: recording.id }),
+      });
+
+      expect(res.status).toBe(404);
+      const json = (await res.json()) as { error?: string };
+      expect(json.error).toBe("Not found.");
+      expect(streamBlobWithRangeSupportMock).not.toHaveBeenCalled();
+      expect(spy.mock.calls.map((call) => String(call[0])).join("\n")).toContain(
+        "reason=note_not_visible"
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("hides a recording tied directly to a still-live whiteboard session", async () => {
+    const { shareToken, recording } = await seedDirectLiveSessionRecording();
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const res = await GET(makeGetRequest(recording.id, shareToken), {
+        params: Promise.resolve({ recordingId: recording.id }),
+      });
+
+      expect(res.status).toBe(404);
+      const json = (await res.json()) as { error?: string };
+      expect(json.error).toBe("Not found.");
+      expect(streamBlobWithRangeSupportMock).not.toHaveBeenCalled();
+      expect(spy.mock.calls.map((call) => String(call[0])).join("\n")).toContain(
+        "reason=note_not_visible"
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("serves READY email-only audio that has no whiteboard session", async () => {
+    const { shareToken, recording } = await seedShareAudioFixture({
+      shareRecordingInEmail: true,
+      noteStatus: "READY",
     });
 
     const res = await GET(makeGetRequest(recording.id, shareToken), {
@@ -340,6 +435,20 @@ describe("GET /api/audio/[recordingId] — share-scoped proxy contract (P1-J1)",
 
   it("serves a recording reached only through a READY note that has a whiteboard session", async () => {
     const { shareToken, recording } = await seedNoteLinkedRecording("READY");
+
+    const res = await GET(makeGetRequest(recording.id, shareToken), {
+      params: Promise.resolve({ recordingId: recording.id }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(streamBlobWithRangeSupportMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves SENT email-only audio that has no whiteboard session", async () => {
+    const { shareToken, recording } = await seedShareAudioFixture({
+      shareRecordingInEmail: true,
+      noteStatus: "SENT",
+    });
 
     const res = await GET(makeGetRequest(recording.id, shareToken), {
       params: Promise.resolve({ recordingId: recording.id }),

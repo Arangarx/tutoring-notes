@@ -3,8 +3,9 @@
  *
  * Parent share-token replay is visible only for an ended session whose
  * linked note has left DRAFT. Oracle is the note status row, not the
- * gate's own branch. READY and SENT stay visible. A still-live session
- * and a session owned by another student are not this gate's denial.
+ * gate's own branch. READY and SENT stay visible. By default a still-live
+ * session and a session owned by another student are not this gate's denial.
+ * denyLiveSession is the audio proxy, which has no separate not-ended response.
  */
 
 import { db } from "@/lib/db";
@@ -148,6 +149,23 @@ describe("parentShareReplayNoteIsHidden", () => {
       })
     ).resolves.toBe(false);
     expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("hides a still-live session when audio asks to deny it", async () => {
+    const live = await seed({ noteStatus: "READY", ended: false });
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(
+      parentShareReplayNoteIsHidden({
+        shareToken: live.token,
+        studentId: live.studentId,
+        whiteboardSessionId: live.sessionId,
+        denyLiveSession: true,
+      })
+    ).resolves.toBe(true);
+    expect(spy.mock.calls.map((call) => String(call[0])).join("\n")).toContain(
+      `wbsid=${live.sessionId} action=access_denied studentId=${live.studentId} reason=note_not_visible`
+    );
     spy.mockRestore();
   });
 });

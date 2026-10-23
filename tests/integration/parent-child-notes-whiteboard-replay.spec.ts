@@ -94,6 +94,90 @@ async function attachShareReplaySnapshot(args: {
   }
 }
 
+async function seedEmailOnlyShareAudio(): Promise<{
+  shareToken: string;
+  noteId: string;
+  adminUserId: string;
+  studentId: string;
+}> {
+  assertLocalDatabaseUrlForHarness();
+  const prisma = new PrismaClient();
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    const accountHolderId = await seedParentAccountHolder();
+    const adminUserId = await seedTestAdmin();
+    const profile = await prisma.learnerProfile.create({
+      data: {
+        accountHolderId,
+        displayName: `Email audio ${suffix}`,
+      },
+      select: { id: true },
+    });
+    const student = await prisma.student.create({
+      data: {
+        name: `Email audio ${suffix}`,
+        adminUserId,
+        learnerProfileId: profile.id,
+      },
+      select: { id: true },
+    });
+    const shareToken = generateShareToken();
+    await prisma.shareLink.create({
+      data: { studentId: student.id, token: shareToken },
+    });
+    const note = await prisma.sessionNote.create({
+      data: {
+        studentId: student.id,
+        date: new Date("2026-10-01T00:00:00.000Z"),
+        topics: `Email-only audio ${suffix}`,
+        homework: "",
+        assessment: "",
+        nextSteps: "",
+        linksJson: "[]",
+        status: "DRAFT",
+        shareRecordingInEmail: true,
+      },
+      select: { id: true },
+    });
+    return { shareToken, noteId: note.id, adminUserId, studentId: student.id };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function attachEmailOnlyAudio(args: {
+  request: import("@playwright/test").APIRequestContext;
+  adminUserId: string;
+  studentId: string;
+  noteId: string;
+}): Promise<string> {
+  const blobUrl = await uploadHarnessBlob({
+    request: args.request,
+    pathname: `audio/${args.adminUserId}/${args.studentId}/pw-email-only-share.webm`,
+    body: SHARE_REPLAY_AUDIO_MARKER,
+    contentType: "audio/webm",
+    clientPayload: { kind: "audio", studentId: args.studentId },
+  });
+  const prisma = new PrismaClient();
+  try {
+    const recording = await prisma.sessionRecording.create({
+      data: {
+        adminUserId: args.adminUserId,
+        studentId: args.studentId,
+        noteId: args.noteId,
+        blobUrl,
+        mimeType: "audio/webm",
+        sizeBytes: SHARE_REPLAY_AUDIO_MARKER.length,
+        durationSeconds: 3,
+      },
+      select: { id: true },
+    });
+    return recording.id;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 async function setNoteStatus(
   noteId: string,
   status: "DRAFT" | "READY" | "SENT"
@@ -693,6 +777,37 @@ test.describe(
       expect(await concatReady.text()).toBe(SHARE_REPLAY_AUDIO_MARKER);
       expect(await snapshotReady.text()).toBe(SHARE_REPLAY_SNAPSHOT_MARKER);
       expect(await audioReady.text()).toBe(SHARE_REPLAY_AUDIO_MARKER);
+    });
+
+    test("email-only DRAFT audio is 404 on the share token until the note is READY", async ({
+      page,
+      browser,
+    }) => {
+      test.setTimeout(120_000);
+      const fixture = await seedEmailOnlyShareAudio();
+      const tutor = await browser.newContext({ storageState: TUTOR_STATE });
+      let recordingId: string;
+      try {
+        recordingId = await attachEmailOnlyAudio({
+          request: tutor.request,
+          adminUserId: fixture.adminUserId,
+          studentId: fixture.studentId,
+          noteId: fixture.noteId,
+        });
+      } finally {
+        await tutor.close();
+      }
+
+      const audioUrl = `/api/audio/${recordingId}?token=${fixture.shareToken}`;
+      const hidden = await page.request.get(audioUrl);
+      expect(hidden.status()).toBe(404);
+      expect(await hidden.text()).not.toBe(SHARE_REPLAY_AUDIO_MARKER);
+
+      await setNoteStatus(fixture.noteId, "READY");
+
+      const shown = await page.request.get(audioUrl);
+      expect(shown.status()).toBe(200);
+      expect(await shown.text()).toBe(SHARE_REPLAY_AUDIO_MARKER);
     });
   }
 );

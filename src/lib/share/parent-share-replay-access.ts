@@ -5,11 +5,14 @@ import { isReplayVisibleNoteStatus } from "@/lib/share/loadWhiteboardReplayIdsFo
 function logNoteNotVisible(args: {
   shareToken: string;
   studentId: string;
-  whiteboardSessionId: string;
+  whiteboardSessionId?: string | null;
 }): void {
   const sal = sanitizeReplayLogId(args.shareToken).slice(0, 8);
+  const wbsid = args.whiteboardSessionId
+    ? ` wbsid=${sanitizeReplayLogId(args.whiteboardSessionId)}`
+    : "";
   console.error(
-    `[sal] sal=${sal} wbsid=${sanitizeReplayLogId(args.whiteboardSessionId)} action=access_denied studentId=${sanitizeReplayLogId(args.studentId)} reason=note_not_visible`
+    `[sal] sal=${sal}${wbsid} action=access_denied studentId=${sanitizeReplayLogId(args.studentId)} reason=note_not_visible`
   );
 }
 
@@ -22,8 +25,10 @@ function logNoteNotVisible(args: {
  * Consent stays on the card loaders; this gate does not re-apply it, so a
  * READY or SENT note that the share page links still opens.
  *
- * Missing, other-student, and still-live sessions return hidden=false so the
- * caller's existing ownership and ended-session responses stay in place.
+ * Missing and other-student sessions return hidden=false so the caller's
+ * ownership response stays in place. A still-live session does too, unless
+ * `denyLiveSession` is set — the audio proxy has no separate "not ended"
+ * response, so that path hides the live session with the same log.
  *
  * `[sal] sal=<token:8> action=access_denied ... reason=note_not_visible`.
  * The full token is never logged.
@@ -32,6 +37,7 @@ export async function parentShareReplayNoteIsHidden(args: {
   shareToken: string;
   studentId: string;
   whiteboardSessionId: string;
+  denyLiveSession?: boolean;
 }): Promise<boolean> {
   const session = await withDbRetry(
     () =>
@@ -46,8 +52,13 @@ export async function parentShareReplayNoteIsHidden(args: {
     { label: "parentShareReplay.note" }
   );
 
-  if (!session || session.studentId !== args.studentId || !session.endedAt) {
+  if (!session || session.studentId !== args.studentId) {
     return false;
+  }
+  if (!session.endedAt) {
+    if (!args.denyLiveSession) return false;
+    logNoteNotVisible(args);
+    return true;
   }
   if (isReplayVisibleNoteStatus(session.note?.status)) {
     return false;
@@ -60,12 +71,11 @@ export async function parentShareReplayNoteIsHidden(args: {
 /**
  * Share-token audio note gate.
  *
- * A recording tied to a whiteboard session uses {@link parentShareReplayNoteIsHidden}.
- * A recording with no session of its own still uses that visibility rule when
- * its note has a whiteboard session for this student — including a session
- * that has not ended, because this path has no separate "not ended" response.
- * Email-only audio (no session on the recording and none on the note) is
- * left to the caller's existing share clause.
+ * Audio is served only when the note is replay-visible ({@link isReplayVisibleNoteStatus})
+ * and, if the recording or its note is tied to a whiteboard session, that
+ * session has ended. A still-live session is hidden here because this path
+ * has no separate "not ended" response. Email-only audio (no session on the
+ * recording and none on the note) follows the same note-status rule.
  */
 export async function parentShareAudioNoteIsHidden(args: {
   shareToken: string;
@@ -78,17 +88,26 @@ export async function parentShareAudioNoteIsHidden(args: {
       shareToken: args.shareToken,
       studentId: args.studentId,
       whiteboardSessionId: args.whiteboardSessionId,
+      denyLiveSession: true,
     });
   }
 
-  const noteSessionId = args.note?.whiteboardSessionId;
-  if (!args.note || !noteSessionId) return false;
-  if (isReplayVisibleNoteStatus(args.note.status)) return false;
+  if (!isReplayVisibleNoteStatus(args.note?.status)) {
+    logNoteNotVisible({
+      shareToken: args.shareToken,
+      studentId: args.studentId,
+      whiteboardSessionId: args.note?.whiteboardSessionId,
+    });
+    return true;
+  }
 
-  logNoteNotVisible({
+  const noteSessionId = args.note?.whiteboardSessionId;
+  if (!noteSessionId) return false;
+
+  return parentShareReplayNoteIsHidden({
     shareToken: args.shareToken,
     studentId: args.studentId,
     whiteboardSessionId: noteSessionId,
+    denyLiveSession: true,
   });
-  return true;
 }
