@@ -7,7 +7,12 @@ import {
   hydrateRemoteImageFilesForScene,
   type HydrateRemoteImageFilesResult,
 } from "@/lib/whiteboard/hydrate-remote-files";
-import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
+import {
+  loadReconcileElements,
+  readLiveSceneIncludingDeleted,
+  reconcileScenesWith,
+  sceneElementsDiffer,
+} from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import type {
   WhiteboardSyncClient,
   WhiteboardWireFollow,
@@ -179,6 +184,20 @@ export function useStudentWhiteboardCanvas(
    * position triggers a spurious revert during the rAF write.
    */
   const tutorViewportApplyRef = useRef(false);
+  /** True from the start of `runV3Apply` until its `finally`. */
+  const v3ApplyInFlightRef = useRef(false);
+  /**
+   * Set when `onCanvasChange` was dropped by the apply guards. The edit is
+   * still in the live scene; {@link flushDirtyAfterApplyRef} commits it once
+   * no apply window is open.
+   */
+  const localDirtyDuringApplyRef = useRef(false);
+  /**
+   * A v3 apply reconciled a dropped edit from the live scene into
+   * `pageDataRef`, so the bucket diff can no longer see it: commit anyway.
+   */
+  const liveEditAbsorbedRef = useRef(false);
+  const flushDirtyAfterApplyRef = useRef<() => void>(() => {});
   /**
    * True while the student is wheeling/panning on the canvas (plus a short
    * trailing window). View-lock revert runs only when this is set — tutor
@@ -327,6 +346,7 @@ export function useStudentWhiteboardCanvas(
       const releaseApplyingRemote = () => {
         applyingRemoteRef.current = false;
         tutorViewportApplyRef.current = false;
+        flushDirtyAfterApplyRef.current();
       };
       applyViewportAligned(api, follow, {
         wbsid: wbsid || undefined,
@@ -531,6 +551,9 @@ export function useStudentWhiteboardCanvas(
       const previous = activePageIdRef.current;
       const actAtStart = previous;
       const switchedPage = previous !== followTarget;
+      // Whether the live scene holds the active page's elements. Until a
+      // switch paints the new page, the live scene is still the old board.
+      let liveShowsActivePage = !switchedPage;
       if (switchedPage) {
         console.info(
           `[student-apply] ${wbsidTag}wba=${wba} author=tutor action=page-switch from=${previous} to=${followTarget}`
@@ -559,6 +582,7 @@ export function useStudentWhiteboardCanvas(
           // captureUpdate: "NEVER" — tutor page-switch prefetch must not
           // enter the student's local undo/redo stack.
           apiForSwitch.updateScene({ elements: prefetched as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
+          liveShowsActivePage = true;
         }
         // Scope undo/redo history to the current board — same as the tutor
         // page-switch path (WhiteboardWorkspaceClient selectTutorPage). Without
@@ -569,11 +593,21 @@ export function useStudentWhiteboardCanvas(
       onTutorPageMeta?.(page);
 
       applyingRemoteRef.current = true;
+      v3ApplyInFlightRef.current = true;
       try {
         const holdH1 = studentApplyHoldPromise("H1");
         if (holdH1) await holdH1;
-        const appState = api.getAppState() as unknown;
-        for (const pageId of pageIds) {
+        const reconcileElements = await loadReconcileElements();
+        // Active page last: its live write is then the final scene write, so
+        // no later hydrate await can let a stale repaint land over an edit.
+        const activeAtOrder = activePageIdRef.current;
+        const orderedPageIds = [
+          ...pageIds.filter((id) => id !== activeAtOrder),
+          ...pageIds.filter((id) => id === activeAtOrder),
+        ];
+        let livePaintedPageId: string | null = null;
+        for (const pageId of orderedPageIds) {
+          livePaintedPageId = null;
           const base = (docV3.pages[pageId] ?? []) as ReadonlyArray<ExcalidrawLikeElement>;
           const remoteCopy = base.map((e) => ({ ...e }) as ExcalidrawLikeElement);
           const hydrate = await hydrateRemoteImageFilesForScene(
@@ -602,18 +636,37 @@ export function useStudentWhiteboardCanvas(
           );
           onHydrateResult?.(hydrate);
 
-          const local: ExcalidrawLikeElement[] =
-            (pageDataRef.current[pageId] as ExcalidrawLikeElement[] | undefined) ??
-            [];
+          // No await from here to updateScene: read local → reconcile → write
+          // in one tick so no student input can land in between.
+          // The live scene is the merge baseline only when it is provably
+          // this page; edits the apply guard dropped exist only there. After
+          // a switch it can still be the previous board, so use the bucket.
+          const liveIsThisPage =
+            !switchedPage &&
+            pageId === actAtStart &&
+            activePageIdRef.current === pageId &&
+            pageSwitchProgrammaticRef.current === 0;
+          const bucket =
+            (pageDataRef.current[pageId] as ExcalidrawLikeElement[] | undefined) ?? [];
+          const local: ReadonlyArray<ExcalidrawLikeElement> = liveIsThisPage
+            ? readLiveSceneIncludingDeleted(api)
+            : bucket;
+          if (
+            liveIsThisPage &&
+            localDirtyDuringApplyRef.current &&
+            sceneElementsDiffer(local, bucket)
+          ) {
+            liveEditAbsorbedRef.current = true;
+          }
 
-          const merged = await mergeScenesReconciled(
+          const merged = reconcileScenesWith(
+            reconcileElements,
             local,
             remoteCopy,
-            appState,
+            api.getAppState(),
             { shouldDropRemoteElement }
           );
           pageDataRef.current[pageId] = merged;
-
           const stillOnTargetWriteTime =
             activePageIdRef.current === pageId &&
             pageSwitchProgrammaticRef.current === 0;
@@ -623,19 +676,25 @@ export function useStudentWhiteboardCanvas(
             (api as typeof api & {
               updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
             }).updateScene({ elements: merged as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
+            livePaintedPageId = pageId;
+            liveShowsActivePage = true;
           }
         }
 
         const actEnd = activePageIdRef.current;
         const toShow = pageDataRef.current[actEnd];
         let liveWrite = 0;
-        if (toShow && pageSwitchProgrammaticRef.current === 0) {
+        if (livePaintedPageId === actEnd) {
+          // The last page's write above already painted this bucket.
+          liveWrite = 1;
+        } else if (toShow && pageSwitchProgrammaticRef.current === 0) {
           // captureUpdate: "NEVER" — final active-tab re-paint after v3 apply
           // is tutor-origin data; must not pollute the student's undo stack.
           (api as typeof api & {
             updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
           }).updateScene({ elements: toShow as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
           liveWrite = 1;
+          liveShowsActivePage = true;
         }
 
         if (followTutorView) {
@@ -685,6 +744,14 @@ export function useStudentWhiteboardCanvas(
         );
       } finally {
         applyingRemoteRef.current = false;
+        v3ApplyInFlightRef.current = false;
+        // An edit dropped while the live scene still showed the previous
+        // board belongs to no page we can attribute it to.
+        if (!liveShowsActivePage) {
+          localDirtyDuringApplyRef.current = false;
+          liveEditAbsorbedRef.current = false;
+        }
+        flushDirtyAfterApplyRef.current();
       }
     },
     [
@@ -923,6 +990,67 @@ export function useStudentWhiteboardCanvas(
     []
   );
 
+  /** Record the active page's local elements and broadcast them to the tutor. */
+  const commitLocalElements = useCallback(
+    (
+      elements: ReadonlyArray<unknown>,
+      reason: "onChange" | "post-apply-flush"
+    ) => {
+      localDirtyDuringApplyRef.current = false;
+      liveEditAbsorbedRef.current = false;
+      pageDataRef.current[activePageIdRef.current] = elements as ExcalidrawLikeElement[];
+      onLocalElementSnapshot(elements);
+      if (!sync) return;
+      const pageId = activePageIdRef.current;
+      console.info(
+        `[student-broadcast] ${wbsidTag}author=student action=broadcast-v2 page=${pageId} elements=${elements.length} reason=${reason}`
+      );
+      try {
+        sync.broadcastScene(
+          elements as ReadonlyArray<ExcalidrawLikeElement>,
+          getPageBroadcastExtras()
+        );
+      } catch (err) {
+        console.warn(
+          "[useStudentWhiteboardCanvas] broadcast failed:",
+          (err as Error)?.message ?? String(err)
+        );
+      }
+    },
+    [getPageBroadcastExtras, onLocalElementSnapshot, sync, wbsidTag]
+  );
+
+  /**
+   * Once no apply window is open, commit an edit the guards dropped. Unless
+   * an apply absorbed the edit, the `(id, version, versionNonce)` diff
+   * against the bucket skips scenes the apply itself wrote, so this never
+   * echoes a tutor document back.
+   */
+  const flushDirtyAfterApply = useCallback(() => {
+    if (!localDirtyDuringApplyRef.current) return;
+    if (
+      applyingRemoteRef.current ||
+      tutorViewportApplyRef.current ||
+      v3ApplyInFlightRef.current ||
+      pageSwitchProgrammaticRef.current !== 0
+    ) {
+      return;
+    }
+    const api = excalidrawApiRef.current;
+    if (!api) return;
+    const absorbed = liveEditAbsorbedRef.current;
+    localDirtyDuringApplyRef.current = false;
+    liveEditAbsorbedRef.current = false;
+    const live = readLiveSceneIncludingDeleted(api);
+    const known =
+      (pageDataRef.current[activePageIdRef.current] as
+        | ReadonlyArray<ExcalidrawLikeElement>
+        | undefined) ?? [];
+    if (!absorbed && !sceneElementsDiffer(live, known)) return;
+    commitLocalElements(live, "post-apply-flush");
+  }, [commitLocalElements]);
+  flushDirtyAfterApplyRef.current = flushDirtyAfterApply;
+
   const onCanvasChange = useCallback(
     (
       elements: ReadonlyArray<unknown>,
@@ -931,7 +1059,10 @@ export function useStudentWhiteboardCanvas(
     ) => {
       // tutorViewportApplyRef covers the rAF window between runV3Apply's finally
       // (which prematurely clears applyingRemoteRef) and onApplied firing.
-      if (applyingRemoteRef.current || tutorViewportApplyRef.current) return;
+      if (applyingRemoteRef.current || tutorViewportApplyRef.current) {
+        localDirtyDuringApplyRef.current = true;
+        return;
+      }
 
       const api = excalidrawApiRef.current;
       if (
@@ -992,26 +1123,9 @@ export function useStudentWhiteboardCanvas(
         }
       }
 
-      pageDataRef.current[activePageIdRef.current] = elements as ExcalidrawLikeElement[];
-      onLocalElementSnapshot(elements);
-      if (!sync) return;
-      const pageId = activePageIdRef.current;
-      console.info(
-        `[student-broadcast] ${wbsidTag}author=student action=broadcast-v2 page=${pageId} elements=${elements.length} reason=onChange`
-      );
-      try {
-        sync.broadcastScene(
-          elements as ReadonlyArray<ExcalidrawLikeElement>,
-          getPageBroadcastExtras()
-        );
-      } catch (err) {
-        console.warn(
-          "[useStudentWhiteboardCanvas] broadcast failed:",
-          (err as Error)?.message ?? String(err)
-        );
-      }
+      commitLocalElements(elements, "onChange");
     },
-    [getPageBroadcastExtras, onLocalElementSnapshot, sync, wbsidTag]
+    [commitLocalElements]
   );
 
   return {

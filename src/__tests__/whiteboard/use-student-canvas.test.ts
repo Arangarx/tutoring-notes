@@ -52,7 +52,7 @@ jest.mock("@/lib/whiteboard/hydrate-remote-files", () => ({
 /** Per-element LWW test double (mirrors reconcileElements rules; no Excalidraw import in Jest). */
 type LwwElement = { id: string; version: number; versionNonce: number };
 
-async function lwwMergeForTests(
+function lwwMergeForTests(
   localElementsRaw: ReadonlyArray<unknown>,
   remoteElementsRaw: ReadonlyArray<unknown>
 ) {
@@ -75,12 +75,20 @@ async function lwwMergeForTests(
   return [...byId.values()] as unknown as ReadonlyArray<ExcalidrawLikeElement>;
 }
 
-jest.mock("@/lib/whiteboard/apply-reconciled-remote-scene", () => ({
-  mergeScenesReconciled: jest.fn(lwwMergeForTests),
-  updateSceneMergingWithRemote: jest.fn(),
-}));
+// The real module with the LWW double standing in for Excalidraw's
+// `reconcileElements` (spy args: local, remote, appState).
+jest.mock("@/lib/whiteboard/apply-reconciled-remote-scene", () => {
+  const actual = jest.requireActual("@/lib/whiteboard/apply-reconciled-remote-scene");
+  const reconcile = jest.fn(lwwMergeForTests);
+  return {
+    ...actual,
+    __lwwReconcile: reconcile,
+    loadReconcileElements: jest.fn(async () => reconcile),
+    updateSceneMergingWithRemote: jest.fn(),
+  };
+});
 
-import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
+import * as reconcileModule from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import { hydrateRemoteImageFilesForScene } from "@/lib/whiteboard/hydrate-remote-files";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
@@ -89,9 +97,11 @@ import type {
   WhiteboardWireRemoteDetails,
 } from "@/lib/whiteboard/sync-client";
 
-const mergeSpy = mergeScenesReconciled as jest.MockedFunction<
-  typeof mergeScenesReconciled
->;
+const mergeSpy = (
+  reconcileModule as unknown as {
+    __lwwReconcile: jest.MockedFunction<typeof lwwMergeForTests>;
+  }
+).__lwwReconcile;
 
 function tutorFollowWire(
   scrollX: number,
@@ -361,6 +371,127 @@ describe("useStudentWhiteboardCanvas", () => {
     );
   });
 
+  describe("edits the apply guard dropped (WB-STUDENT-APPLY-RACE)", () => {
+    const hydrateSpy = () =>
+      hydrateRemoteImageFilesForScene as jest.MockedFunction<
+        typeof hydrateRemoteImageFilesForScene
+      >;
+
+    /** Parks the next hydrate until the returned release() is called. */
+    function holdNextHydrate(): () => void {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => {
+        release = r;
+      });
+      hydrateSpy().mockImplementationOnce(async () => {
+        await gate;
+        return { addedFileCount: 0, fetchFailed: [], missingAssetUrlFileIds: [] };
+      });
+      return release;
+    }
+
+    const doc = (rev: number, els: ExcalidrawLikeElement[]) => ({
+      document: { rev, pages: { p1: els } },
+      page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+    });
+
+    it("keeps a dropped student edit on the canvas and broadcasts it once the apply ends", async () => {
+      const { sync, broadcastScene, emitRemote } = makeMockSync();
+      const { api, getScene, setScene } = makeApi({ elements: [] });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
+      );
+      const releaseHydrate = holdNextHydrate();
+      await act(async () => {
+        emitRemote("tutor", [], doc(1, [makeElement("tutor-a", 1, 1)]));
+        await Promise.resolve();
+      });
+
+      const studentEdit = makeElement("student-edit", 1, 7);
+      setScene([...getScene(), studentEdit]);
+      act(() => {
+        result.current.onCanvasChange(getScene());
+      });
+      expect(broadcastScene).not.toHaveBeenCalled();
+
+      await act(async () => {
+        releaseHydrate();
+      });
+      await flushAsyncWork();
+
+      expect(getScene().map((e) => e.id)).toContain("student-edit");
+      expect(broadcastScene).toHaveBeenCalledTimes(1);
+      const sent = broadcastScene.mock.calls[0]![0] as ExcalidrawLikeElement[];
+      expect(sent.map((e) => e.id).sort()).toEqual(["student-edit", "tutor-a"]);
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/\[student-broadcast\].*reason=post-apply-flush/)
+      );
+    });
+
+    it("does not broadcast when the only guarded changes were the apply's own writes", async () => {
+      const { sync, broadcastScene, emitRemote } = makeMockSync();
+      const { api, getScene } = makeApi({ elements: [] });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
+      );
+      const releaseHydrate = holdNextHydrate();
+      await act(async () => {
+        emitRemote("tutor", [], doc(1, [makeElement("tutor-a", 1, 1)]));
+        await Promise.resolve();
+      });
+      act(() => {
+        result.current.onCanvasChange(getScene());
+      });
+      await act(async () => {
+        releaseHydrate();
+      });
+      await flushAsyncWork();
+      // Excalidraw's onChange for the apply's own updateScene, still guarded.
+      expect(getScene().map((e) => e.id)).toEqual(["tutor-a"]);
+      expect(broadcastScene).not.toHaveBeenCalled();
+    });
+
+    it("drops the edit when the live scene still showed the previous board", async () => {
+      const { sync, broadcastScene, emitRemote } = makeMockSync();
+      const { api, getScene, setScene } = makeApi({ elements: [] });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
+      );
+      await act(async () => {
+        emitRemote("tutor", [], doc(1, [makeElement("b1-tutor", 1, 1)]));
+      });
+      await flushAsyncWork();
+      broadcastScene.mockClear();
+
+      const releaseHydrate = holdNextHydrate();
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 2, pages: { p1: [makeElement("b1-tutor", 1, 1)], p2: [] } },
+          page: {
+            activePageId: "p2",
+            pageList: [
+              { id: "p1", title: "P1" },
+              { id: "p2", title: "P2" },
+            ],
+          },
+        });
+        await Promise.resolve();
+      });
+      // Drawn on the board-1 scene that is still visible during the switch.
+      setScene([...getScene(), makeElement("during-switch", 1, 3)]);
+      act(() => {
+        result.current.onCanvasChange(getScene());
+      });
+      await act(async () => {
+        releaseHydrate();
+      });
+      await flushAsyncWork();
+
+      expect(getScene().map((e) => e.id)).toEqual([]);
+      expect(broadcastScene).not.toHaveBeenCalled();
+    });
+  });
+
   it("preserves local-only elements across tutor v3 apply (P7)", async () => {
     const { sync, emitRemote } = makeMockSync();
     const localStroke = makeElement("local-stroke", 2, 100);
@@ -430,11 +561,11 @@ describe("useStudentWhiteboardCanvas", () => {
     ).toBe(false);
   });
 
-  it("merges active page from pageDataRef and repaints live on same-page apply", async () => {
+  it("merges active page against the live scene (not the stale bucket) and repaints on same-page apply", async () => {
     const { sync, emitRemote } = makeMockSync();
-    const bucketP1 = [makeElement("cached-p1", 5, 5)];
-    const liveWrong = [makeElement("live-wrong", 9, 9)];
-    const { api, updateScene } = makeApi({ elements: liveWrong });
+    // A student edit present only on the live canvas (its onChange was dropped).
+    const liveEdit = [makeElement("live-edit", 9, 9)];
+    const { api, updateScene } = makeApi({ elements: liveEdit });
     renderHook(() =>
       useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
     );
@@ -452,16 +583,15 @@ describe("useStudentWhiteboardCanvas", () => {
     });
 
     const [localArg] = mergeSpy.mock.calls[0]!;
-    expect((localArg as ExcalidrawLikeElement[]).some((e) => e.id === "cached-p1")).toBe(
-      false
-    );
-    expect((localArg as ExcalidrawLikeElement[]).some((e) => e.id === "live-wrong")).toBe(
-      false
+    expect((localArg as ExcalidrawLikeElement[]).some((e) => e.id === "live-edit")).toBe(
+      true
     );
     const elementWrites = updateScene.mock.calls.filter(
       (c) => (c[0] as { elements?: unknown }).elements
     );
-    expect(elementWrites.length).toBeGreaterThan(0);
+    expect(elementWrites.length).toBe(1);
+    const painted = (elementWrites[0]![0] as { elements: ExcalidrawLikeElement[] }).elements;
+    expect(painted.map((e) => e.id).sort()).toEqual(["live-edit", "remote"]);
   });
 
   it("defers live repaint when pageSwitchProgrammaticRef is non-zero", async () => {

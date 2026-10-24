@@ -341,11 +341,20 @@ test.describe("WB-STUDENT-APPLY-RACE — student edits during a held tutor apply
         await drawTestStrokeOnRole(peers.studentPage, "student", studentStroke, 200, 60, 260, 120);
 
         await release(peers.studentPage, "H1", "H2");
+        // The bridge's drawTestStroke rebuilds the tutor scene without
+        // tombstones, so the undo must reach the student before the next
+        // tutor stroke or no later doc carries the deletion.
+        await expect
+          .poll(() => readSceneElementIds(peers.studentPage, "student"), {
+            timeout: 15_000,
+            message: "tutor-erased stroke removed on the student",
+          })
+          .not.toContain(tutorStroke);
         await forceNextStudentApply(peers.tutorPage, peers.studentPage, `race-b-${tag}`);
 
         expect(
           await readSceneElementIds(peers.studentPage, "student"),
-          "tutor-erased stroke gone on the student"
+          "tutor-erased stroke stays gone on the student"
         ).not.toContain(tutorStroke);
         expect(await readSceneElementIds(peers.tutorPage, "tutor")).not.toContain(tutorStroke);
       } finally {
