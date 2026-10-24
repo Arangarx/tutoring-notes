@@ -26,6 +26,11 @@ import {
   resolveStudentScrollForFollow,
 } from "@/lib/whiteboard/viewport-align";
 import type { WbFollowDebugTelemetry } from "@/lib/whiteboard/wb-follow-debug-telemetry";
+import {
+  installStudentApplyHold,
+  runAfterStudentApplyHold,
+  studentApplyHoldPromise,
+} from "@/lib/whiteboard/e2e-student-apply-hold";
 
 /** Trailing window after the last wheel/pointer/touch on the canvas. */
 const STUDENT_VIEWPORT_GESTURE_TRAIL_MS = 300;
@@ -139,6 +144,9 @@ export function useStudentWhiteboardCanvas(
   }, [followTutorView]);
   const onTutorPageMeta = options?.onTutorPageMeta;
   const followDebugTelemetry = options?.followDebugTelemetry;
+  useEffect(() => {
+    if (sync) installStudentApplyHold();
+  }, [sync]);
 
   const recordRecvFollow = useCallback(
     (f: WhiteboardWireFollow) => {
@@ -380,7 +388,7 @@ export function useStudentWhiteboardCanvas(
               followDebugTelemetry.lastAppliedAt.current = Date.now();
             }
           }
-          releaseApplyingRemote();
+          runAfterStudentApplyHold("H2", releaseApplyingRemote);
         },
         onHold: (reason) => {
           console.info(
@@ -562,6 +570,8 @@ export function useStudentWhiteboardCanvas(
 
       applyingRemoteRef.current = true;
       try {
+        const holdH1 = studentApplyHoldPromise("H1");
+        if (holdH1) await holdH1;
         const appState = api.getAppState() as unknown;
         for (const pageId of pageIds) {
           const base = (docV3.pages[pageId] ?? []) as ReadonlyArray<ExcalidrawLikeElement>;

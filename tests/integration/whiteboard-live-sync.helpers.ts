@@ -1,4 +1,10 @@
-import { expect, type Page } from "@playwright/test";
+import {
+  devices,
+  expect,
+  webkit,
+  type Browser,
+  type Page,
+} from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -558,10 +564,13 @@ async function locateStudentFollowCheckbox(page: Page) {
 
 async function closeStudentOverflowIfOpen(page: Page): Promise<void> {
   const dropdown = page.getByTestId("wb-topbar-overflow-dropdown");
+  if (!(await dropdown.isVisible())) return;
+  await page.keyboard.press("Escape");
+  // WebKit iPhone does not deliver Escape to the menu. Toggle it closed.
   if (await dropdown.isVisible()) {
-    await page.keyboard.press("Escape");
-    await expect(dropdown).not.toBeVisible({ timeout: 3_000 });
+    await page.getByTestId("wb-student-topbar-overflow").click();
   }
+  await expect(dropdown).not.toBeVisible({ timeout: 3_000 });
 }
 
 export async function ensureStudentFollowsTutor(page: Page): Promise<void> {
@@ -1194,6 +1203,12 @@ export async function openTutorAndStudent(
     studentHasTouch?: boolean;
     studentIsMobile?: boolean;
     /**
+     * Launch the student in WebKit with the iPhone 13 device profile.
+     * The tutor stays on the caller’s Chromium browser. WebKit has no
+     * fake microphone; the student A/V picker must stay inert.
+     */
+    studentBrowser?: "chromium" | "webkit";
+    /**
      * When true (default false): after both parties connect in a PENDING session,
      * click the tutor's "Start session" button and wait for the overlay to dismiss.
      * Set to true for tests that need an ACTIVE session but seed a PENDING one.
@@ -1235,12 +1250,25 @@ export async function openTutorAndStudent(
     ? learnerAuthFile
     : undefined;
 
-  const studentContext = await browser.newContext({
-    viewport: studentViewport,
-    ...(options?.studentHasTouch ? { hasTouch: true } : {}),
-    ...(options?.studentIsMobile ? { isMobile: true } : {}),
-    ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
-  });
+  let webkitBrowser: Browser | null = null;
+  const studentContext =
+    options?.studentBrowser === "webkit"
+      ? await (async () => {
+          webkitBrowser = await webkit.launch();
+          return webkitBrowser.newContext({
+            ...devices["iPhone 13"],
+            // Project use.permissions grants microphone. WebKit rejects that
+            // grant ("Unknown permission: microphone") and has no fake mic.
+            permissions: [],
+            ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
+          });
+        })()
+      : await browser.newContext({
+          viewport: studentViewport,
+          ...(options?.studentHasTouch ? { hasTouch: true } : {}),
+          ...(options?.studentIsMobile ? { isMobile: true } : {}),
+          ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
+        });
 
   // If no pre-created learner state is available, fall back to a fresh login.
   if (!learnerStorageState) {
@@ -1295,6 +1323,7 @@ export async function openTutorAndStudent(
     async close() {
       await tutorContext.close();
       await studentContext.close();
+      await (webkitBrowser as Browser | null)?.close();
     },
   };
 }
