@@ -897,6 +897,9 @@ Phase 1b outbox + atomic end-session · Phase 1c snapshot · Phase 4a–4d live 
 
 ### Sync & capture
 
+**[P0][WB] WB-STUDENT-APPLY-RACE — student edits lost during a tutor apply — FIXED on `fix/wb-student-apply-race` (2026-10-23, pending Andrew smoke + merge)**  
+Student edits (graph expressions, strokes, undo) made while a tutor v3 apply was in its hydrate awaits, or in the viewport-align window up to `releaseApplyingRemote`, were dropped by the apply guard and then overwritten from the stale page bucket (Sarah hit it live). Fix: `runV3Apply` reconciles against the live scene (with tombstones) in one synchronous block when the live scene is provably this page, active page last; guarded changes are flagged and committed after the window through the normal `pageDataRef` / snapshot / broadcast path. Idle apply/broadcast counts unchanged. Tests: `tests/integration/wb-student-apply-race.spec.ts` (T1/T2 desktop + iPhone 13 WebKit, T3a/b, T5a/b, T6). **Still open:** the ~7 Hz idle tutor-doc / student-echo loop (design memo option (d)) — tracked on `feat/org-qol`, not in this hotfix.
+
 **[P1][WB] WS-T-8 — roster End shows replay CTA when recording-count===0**  
 `canReplay` vs DB recording-count oracle mismatch.
 

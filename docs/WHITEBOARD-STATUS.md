@@ -187,6 +187,17 @@ Gated **no-op by default**; ships on tutor + student whiteboard surfaces for pro
 
 Component: `src/components/whiteboard/WhiteboardDebugHud.tsx`; flag hook: `src/lib/whiteboard/use-wb-debug-enabled.ts`.
 
+### Student apply race — edits during a tutor apply (2026-10-23)
+
+**Branch:** `fix/wb-student-apply-race` (hotfix off `master`). While `applyingRemoteRef` / `tutorViewportApplyRef` are set, the student's `onCanvasChange` returns early. Before this fix, an edit made in that window (during the `runV3Apply` hydrate awaits, or the viewport-align rAF window up to `releaseApplyingRemote`) was never saved, and the apply then repainted from the stale `pageDataRef` bucket, erasing it.
+
+- **Live-scene reconcile:** per page, read → reconcile → `updateScene` runs with no await in between. The baseline is `readLiveSceneIncludingDeleted(api)` (tombstones included) only when the live scene is provably this page (no tutor page switch this apply, `pageSwitchProgrammaticRef === 0`); otherwise the bucket. The active page is processed last, so its write is the final scene write.
+- **Post-apply flush:** the guard sets `localDirtyDuringApplyRef`. When the window really ends (apply `finally` and `releaseApplyingRemote`), the hook commits the live scene through the normal `pageDataRef` / `onLocalElementSnapshot` / broadcast path, but only if it differs from the bucket by `(id, version, versionNonce)` or the reconcile absorbed a dropped edit. The log reads `[student-broadcast] … reason=post-apply-flush`. If the live scene showed the previous board, the flag is cleared rather than flushed.
+- **Shared helpers:** `src/lib/whiteboard/apply-reconciled-remote-scene.ts` provides `loadReconcileElements`, `reconcileScenesWith`, `readLiveSceneIncludingDeleted` and `sceneElementsDiffer`. The tutor `applyRemoteToCanvas` uses the same live reader.
+- **E2E seam:** `src/lib/whiteboard/e2e-student-apply-hold.ts` exposes `window.__WBX_STUDENT_APPLY_HOLD__` with H1 (hydrate window) and H2 (viewport-align release). It only runs when `NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1`.
+- **Gate:** `tests/integration/wb-student-apply-race.spec.ts` (wb-regression; `@wb-graph` / `@wb-strokes` / `@wb-sync`). Idle apply/broadcast counts matched master, and no flush fired while idle.
+- **Not in this fix:** the idle tutor-doc / student-echo loop (memo option (d)), and the `WB-STUDENT-V3-APPLY-ORDER` ordering. Neither was touched.
+
 ---
 
 ## Phase 1 sub-section status
