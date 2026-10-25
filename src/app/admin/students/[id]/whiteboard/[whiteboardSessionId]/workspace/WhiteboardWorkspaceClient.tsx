@@ -4869,12 +4869,10 @@ export function WhiteboardWorkspaceClient({
       }
       // ---- Student path (role="student"): student canvas sync ----
       if (role === "student") {
-        if (studentApplyingRemoteRef.current) {
-          // Guarded: the hook marks the change and commits it after the apply.
-          studentOnCanvasChange(elements, _appState, files);
-          return;
-        }
+        // While an apply is in flight the hook marks the change and commits
+        // it after the apply.
         studentOnCanvasChange(elements, _appState, files);
+        if (studentApplyingRemoteRef.current) return;
         markLoadingCleared("remote_scene");
         if (!pathJoinToken) return;
         const api = excalidrawAPIRef.current;

@@ -42,12 +42,18 @@ type HoldPoint = "H1" | "H2";
 
 type HoldWindow = Window & {
   __WBX_STUDENT_APPLY_HOLD__?: {
-    arm: (p: HoldPoint) => void;
+    arm: (p: HoldPoint, options?: { pageSwitchOnly?: boolean }) => void;
     release: (p: HoldPoint) => void;
     parkedTotal: (p: HoldPoint) => number;
     parkedNow: (p: HoldPoint) => number;
   };
-  __TN_WB_E2E__?: Record<string, { historyUndo: () => void }>;
+  __TN_WB_E2E__?: Record<
+    string,
+    {
+      historyUndo: () => void;
+      drawTestStroke: (id: string, x1: number, y1: number, x2: number, y2: number) => void;
+    }
+  >;
 };
 
 /** Settle after the forced apply: the idle document stream lands several applies. */
@@ -168,6 +174,91 @@ async function graphEditDuringHeldApply(
   }
 }
 
+/**
+ * Tutor switches to a board that already has content; the student draws on
+ * that board while the switching apply is parked. The edit must persist on
+ * both peers and only ever appear on the new board.
+ */
+async function editOnNewBoardDuringHeldSwitch(
+  browser: import("@playwright/test").Browser,
+  studentBrowser: "chromium" | "webkit"
+): Promise<void> {
+  const session = await seedWbLiveSyncSession();
+  const peers = await openTutorAndStudent(browser, session, { studentBrowser });
+  const tutor = peers.tutorPage;
+  const student = peers.studentPage;
+  try {
+    await waitForHoldApi(student);
+    const tag = `t7-${studentBrowser}-${Date.now()}`;
+    const board1Stroke = `tutor-b1-${tag}`;
+    const board2Stroke = `tutor-b2-${tag}`;
+    const studentStroke = `student-b2-${tag}`;
+
+    await drawTestStrokeOnRole(tutor, "tutor", board1Stroke, 60, 60, 160, 120);
+    await waitForElementOnPeer(student, "student", board1Stroke, 15_000);
+    const strip = tutor.getByTestId("wb-tutor-page-strip");
+    await strip.getByRole("button", { name: "Add board" }).click();
+    await expect(strip.getByRole("tab", { name: "Board 2", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+      { timeout: 10_000 }
+    );
+    await drawTestStrokeOnRole(tutor, "tutor", board2Stroke, 300, 300, 380, 340);
+    await waitForElementOnPeer(student, "student", board2Stroke, 15_000);
+    await clickBoardPageTab(tutor, "tutor", "Board 1");
+    await waitForElementOnPeer(student, "student", board1Stroke, 15_000);
+    await expect
+      .poll(() => readSceneElementIds(student, "student"), { timeout: 15_000 })
+      .not.toContain(board2Stroke);
+
+    const before = await parkedTotal(student, "H1");
+    await student.evaluate(() => {
+      const hold = (window as HoldWindow).__WBX_STUDENT_APPLY_HOLD__!;
+      hold.arm("H1", { pageSwitchOnly: true });
+      hold.arm("H2");
+    });
+    await clickBoardPageTab(tutor, "tutor", "Board 2");
+    await expect
+      .poll(() => parkedTotal(student, "H1"), {
+        timeout: 15_000,
+        message: "switching apply parked at H1",
+      })
+      .toBeGreaterThan(before);
+    // The switch shows board 2 before the slow hydrate.
+    const duringHold = await readSceneElementIds(student, "student");
+    expect(duringHold, "student shows board 2 while the switch is held").toContain(board2Stroke);
+    expect(duringHold).not.toContain(board1Stroke);
+
+    await drawTestStrokeOnRole(student, "student", studentStroke, 200, 60, 260, 120);
+    await release(student, "H1", "H2");
+    await forceNextStudentApply(tutor, student, `race-b-${tag}`);
+
+    expect(
+      await readSceneElementIds(student, "student"),
+      "student board 2 keeps the student stroke after the next tutor apply"
+    ).toContain(studentStroke);
+    await waitForElementOnPeer(tutor, "tutor", studentStroke, 15_000);
+    for (const role of ["student", "tutor"] as const) {
+      const ids = await readSceneElementIds(role === "tutor" ? tutor : student, role);
+      expect(ids, `${role} board 2 free of the board-1 stroke`).not.toContain(board1Stroke);
+    }
+
+    await clickBoardPageTab(tutor, "tutor", "Board 1");
+    await waitForElementOnPeer(student, "student", board1Stroke, 15_000);
+    await student.waitForTimeout(POST_APPLY_SETTLE_MS);
+    expect(
+      await readSceneElementIds(student, "student"),
+      "student board 1 free of the board-2 student stroke"
+    ).not.toContain(studentStroke);
+    expect(
+      await readSceneElementIds(tutor, "tutor"),
+      "tutor board 1 free of the board-2 student stroke"
+    ).not.toContain(studentStroke);
+  } finally {
+    await peers.close();
+  }
+}
+
 test.describe("WB-STUDENT-APPLY-RACE — student edits during a held tutor apply", () => {
   test.setTimeout(240_000);
 
@@ -185,6 +276,14 @@ test.describe("WB-STUDENT-APPLY-RACE — student edits during a held tutor apply
       { tag: [TAG.WB_GRAPH, TAG.WB_SYNC] },
       async ({ browser }) => {
         await graphEditDuringHeldApply(browser, studentBrowser, "H2");
+      }
+    );
+
+    test(
+      `T7 (${studentBrowser} student) — stroke drawn on the new board while the tutor's board switch is held persists on both peers, only on that board`,
+      { tag: [TAG.WB_STROKES, TAG.WB_SYNC] },
+      async ({ browser }) => {
+        await editOnNewBoardDuringHeldSwitch(browser, studentBrowser);
       }
     );
   }
@@ -341,15 +440,6 @@ test.describe("WB-STUDENT-APPLY-RACE — student edits during a held tutor apply
         await drawTestStrokeOnRole(peers.studentPage, "student", studentStroke, 200, 60, 260, 120);
 
         await release(peers.studentPage, "H1", "H2");
-        // The bridge's drawTestStroke rebuilds the tutor scene without
-        // tombstones, so the undo must reach the student before the next
-        // tutor stroke or no later doc carries the deletion.
-        await expect
-          .poll(() => readSceneElementIds(peers.studentPage, "student"), {
-            timeout: 15_000,
-            message: "tutor-erased stroke removed on the student",
-          })
-          .not.toContain(tutorStroke);
         await forceNextStudentApply(peers.tutorPage, peers.studentPage, `race-b-${tag}`);
 
         expect(
@@ -357,6 +447,82 @@ test.describe("WB-STUDENT-APPLY-RACE — student edits during a held tutor apply
           "tutor-erased stroke stays gone on the student"
         ).not.toContain(tutorStroke);
         expect(await readSceneElementIds(peers.tutorPage, "tutor")).not.toContain(tutorStroke);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "T8 — tutor-only activity (strokes, board add, board switch with prefetch) makes the student send zero post-apply flushes",
+    { tag: [TAG.WB_STROKES, TAG.WB_SYNC] },
+    async ({ browser }) => {
+      // Echo guard: a post-apply flush must only ever carry a student edit,
+      // never re-send the tutor document the apply itself wrote.
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session);
+      const tutor = peers.tutorPage;
+      const student = peers.studentPage;
+      try {
+        const flushes: string[] = [];
+        student.on("console", (msg) => {
+          const text = msg.text();
+          if (text.includes("reason=post-apply-flush")) flushes.push(text);
+        });
+        const tag = `t8-${Date.now()}`;
+        const strip = tutor.getByTestId("wb-tutor-page-strip");
+        for (let i = 0; i < 3; i++) {
+          const id = `tutor-b1-${i}-${tag}`;
+          await drawTestStrokeOnRole(tutor, "tutor", id, 60 + 80 * i, 60, 120 + 80 * i, 120);
+          await waitForElementOnPeer(student, "student", id, 15_000);
+        }
+        await strip.getByRole("button", { name: "Add board" }).click();
+        await expect(strip.getByRole("tab", { name: "Board 2", exact: true })).toHaveAttribute(
+          "aria-selected",
+          "true",
+          { timeout: 10_000 }
+        );
+        const board2Stroke = `tutor-b2-${tag}`;
+        await drawTestStrokeOnRole(tutor, "tutor", board2Stroke, 300, 300, 380, 340);
+        await waitForElementOnPeer(student, "student", board2Stroke, 15_000);
+        await clickBoardPageTab(tutor, "tutor", "Board 1");
+        await waitForElementOnPeer(student, "student", `tutor-b1-0-${tag}`, 15_000);
+        await clickBoardPageTab(tutor, "tutor", "Board 2");
+        await waitForElementOnPeer(student, "student", board2Stroke, 15_000);
+        await student.waitForTimeout(POST_APPLY_SETTLE_MS);
+
+        expect(flushes, "student post-apply flushes during tutor-only activity").toEqual([]);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "T5c — tutor undo followed in the same tick by another stroke: the undone stroke is gone on both peers",
+    { tag: [TAG.WB_STROKES, TAG.WB_SYNC] },
+    async ({ browser }) => {
+      // Guards the bridge's drawTestStroke: like a real Excalidraw edit it must
+      // keep the undo's tombstone, or no later document carries the deletion
+      // (the T5b flake root cause).
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session);
+      try {
+        const tag = `t5c-${Date.now()}`;
+        const tutorStroke = `tutor-${tag}`;
+        const nextStroke = `race-b-${tag}`;
+        await drawTestStrokeOnRole(peers.tutorPage, "tutor", tutorStroke, 60, 60, 160, 120);
+        await waitForElementOnPeer(peers.studentPage, "student", tutorStroke, 15_000);
+        await peers.tutorPage.evaluate((id) => {
+          const tutor = (window as HoldWindow).__TN_WB_E2E__!.tutor!;
+          tutor.historyUndo();
+          tutor.drawTestStroke(id, 420, 120, 500, 160);
+        }, nextStroke);
+        await waitForElementOnPeer(peers.studentPage, "student", nextStroke, 15_000);
+        await peers.studentPage.waitForTimeout(POST_APPLY_SETTLE_MS);
+
+        expect(await readSceneElementIds(peers.tutorPage, "tutor")).not.toContain(tutorStroke);
+        expect(await readSceneElementIds(peers.studentPage, "student")).not.toContain(tutorStroke);
       } finally {
         await peers.close();
       }

@@ -11,6 +11,7 @@ import {
 import { parseGraphStateJson } from "@/lib/whiteboard/graph-state";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
+import { readLiveSceneIncludingDeleted } from "@/lib/whiteboard/apply-reconciled-remote-scene";
 
 export type WbE2eRole = "tutor" | "student";
 
@@ -231,7 +232,9 @@ export function registerWbE2eSceneBridge(
       invokeSceneMutationHook(role);
     },
     drawTestStroke(strokeId, x1, y1, x2, y2) {
-      const existing = api.getSceneElements() as ExcalidrawLikeElement[];
+      // Keep tombstones, as a real Excalidraw edit does: dropping them would
+      // erase an undo/erase before the next document carries the deletion.
+      const existing = readLiveSceneIncludingDeleted(api);
       const el = makeLine(strokeId, x1, y1, x2, y2);
       // IMMEDIATELY so the stroke enters the undo stack and Ctrl+Z can remove it.
       api.updateScene({ elements: [...existing, el], captureUpdate: "IMMEDIATELY" });

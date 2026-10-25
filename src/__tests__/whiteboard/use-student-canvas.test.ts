@@ -449,6 +449,9 @@ describe("useStudentWhiteboardCanvas", () => {
       // Excalidraw's onChange for the apply's own updateScene, still guarded.
       expect(getScene().map((e) => e.id)).toEqual(["tutor-a"]);
       expect(broadcastScene).not.toHaveBeenCalled();
+      expect(consoleInfoSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("dirty-cleared-uncommitted")
+      );
     });
 
     it("drops the edit when the live scene still showed the previous board", async () => {
@@ -489,6 +492,72 @@ describe("useStudentWhiteboardCanvas", () => {
 
       expect(getScene().map((e) => e.id)).toEqual([]);
       expect(broadcastScene).not.toHaveBeenCalled();
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^\[wba\] author=student action=dirty-cleared-uncommitted reason=live-overwritten-from-bucket page=p2$/
+        )
+      );
+    });
+
+    it("keeps an edit made on the new board when the switch already painted it", async () => {
+      const { sync, broadcastScene, emitRemote } = makeMockSync();
+      const { api, getScene, setScene } = makeApi({ elements: [] });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
+      );
+      const pages = {
+        p1: [makeElement("b1-tutor", 1, 1)],
+        p2: [makeElement("b2-tutor", 1, 2)],
+      };
+      const pageList = [
+        { id: "p1", title: "P1" },
+        { id: "p2", title: "P2" },
+      ];
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages },
+          page: { activePageId: "p1", pageList },
+        });
+      });
+      await flushAsyncWork();
+      expect(getScene().map((e) => e.id)).toEqual(["b1-tutor"]);
+      broadcastScene.mockClear();
+
+      const releaseHydrate = holdNextHydrate();
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 2, pages },
+          page: { activePageId: "p2", pageList },
+        });
+        await Promise.resolve();
+      });
+      expect(getScene().map((e) => e.id)).toEqual(["b2-tutor"]);
+      setScene([...getScene(), makeElement("student-b2", 1, 3)]);
+      act(() => {
+        result.current.onCanvasChange(getScene());
+      });
+      expect(broadcastScene).not.toHaveBeenCalled();
+      await act(async () => {
+        releaseHydrate();
+      });
+      await flushAsyncWork();
+
+      expect(getScene().map((e) => e.id).sort()).toEqual(["b2-tutor", "student-b2"]);
+      expect(broadcastScene).toHaveBeenCalledTimes(1);
+      const sent = broadcastScene.mock.calls[0]![0] as ExcalidrawLikeElement[];
+      expect(sent.map((e) => e.id).sort()).toEqual(["b2-tutor", "student-b2"]);
+      expect(
+        (broadcastScene.mock.calls[0]![1] as { scenePageId?: string }).scenePageId
+      ).toBe("p2");
+
+      expect(consoleInfoSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("dirty-cleared-uncommitted")
+      );
+
+      await act(async () => {
+        await result.current.selectStudentPage("p1");
+      });
+      expect(getScene().map((e) => e.id)).toEqual(["b1-tutor"]);
     });
   });
 

@@ -197,7 +197,20 @@ export function useStudentWhiteboardCanvas(
    * `pageDataRef`, so the bucket diff can no longer see it: commit anyway.
    */
   const liveEditAbsorbedRef = useRef(false);
+  /**
+   * A v3 apply repainted the canvas from a bucket (not the live scene) while
+   * a dropped change was pending, so any edit in it is gone.
+   */
+  const liveOverwrittenWhileDirtyRef = useRef(false);
   const flushDirtyAfterApplyRef = useRef<() => void>(() => {});
+  const logDirtyClearedUncommitted = useCallback(
+    (reason: "live-shows-previous-board" | "live-overwritten-from-bucket") => {
+      console.info(
+        `[wba] ${wbsidTag}author=student action=dirty-cleared-uncommitted reason=${reason} page=${activePageIdRef.current}`
+      );
+    },
+    [wbsidTag]
+  );
   /**
    * True while the student is wheeling/panning on the canvas (plus a short
    * trailing window). View-lock revert runs only when this is set — tutor
@@ -549,7 +562,6 @@ export function useStudentWhiteboardCanvas(
 
       const followTarget = page.activePageId;
       const previous = activePageIdRef.current;
-      const actAtStart = previous;
       const switchedPage = previous !== followTarget;
       // Whether the live scene holds the active page's elements. Until a
       // switch paints the new page, the live scene is still the old board.
@@ -595,7 +607,7 @@ export function useStudentWhiteboardCanvas(
       applyingRemoteRef.current = true;
       v3ApplyInFlightRef.current = true;
       try {
-        const holdH1 = studentApplyHoldPromise("H1");
+        const holdH1 = studentApplyHoldPromise("H1", { pageSwitch: switchedPage });
         if (holdH1) await holdH1;
         const reconcileElements = await loadReconcileElements();
         // Active page last: its live write is then the final scene write, so
@@ -640,11 +652,11 @@ export function useStudentWhiteboardCanvas(
           // in one tick so no student input can land in between.
           // The live scene is the merge baseline only when it is provably
           // this page; edits the apply guard dropped exist only there. After
-          // a switch it can still be the previous board, so use the bucket.
+          // a switch without a prefetch paint it is still the previous
+          // board, so use the bucket.
           const liveIsThisPage =
-            !switchedPage &&
-            pageId === actAtStart &&
-            activePageIdRef.current === pageId &&
+            liveShowsActivePage &&
+            pageId === activePageIdRef.current &&
             pageSwitchProgrammaticRef.current === 0;
           const bucket =
             (pageDataRef.current[pageId] as ExcalidrawLikeElement[] | undefined) ?? [];
@@ -671,6 +683,9 @@ export function useStudentWhiteboardCanvas(
             activePageIdRef.current === pageId &&
             pageSwitchProgrammaticRef.current === 0;
           if (stillOnTargetWriteTime) {
+            if (!liveIsThisPage && localDirtyDuringApplyRef.current) {
+              liveOverwrittenWhileDirtyRef.current = true;
+            }
             // captureUpdate: "NEVER" — tutor-origin per-page sync applies must
             // not enter the student's local undo/redo stack.
             (api as typeof api & {
@@ -688,6 +703,9 @@ export function useStudentWhiteboardCanvas(
           // The last page's write above already painted this bucket.
           liveWrite = 1;
         } else if (toShow && pageSwitchProgrammaticRef.current === 0) {
+          if (localDirtyDuringApplyRef.current) {
+            liveOverwrittenWhileDirtyRef.current = true;
+          }
           // captureUpdate: "NEVER" — final active-tab re-paint after v3 apply
           // is tutor-origin data; must not pollute the student's undo stack.
           (api as typeof api & {
@@ -748,8 +766,12 @@ export function useStudentWhiteboardCanvas(
         // An edit dropped while the live scene still showed the previous
         // board belongs to no page we can attribute it to.
         if (!liveShowsActivePage) {
+          if (localDirtyDuringApplyRef.current) {
+            logDirtyClearedUncommitted("live-shows-previous-board");
+          }
           localDirtyDuringApplyRef.current = false;
           liveEditAbsorbedRef.current = false;
+          liveOverwrittenWhileDirtyRef.current = false;
         }
         flushDirtyAfterApplyRef.current();
       }
@@ -759,6 +781,7 @@ export function useStudentWhiteboardCanvas(
       commitPageList,
       followTutorView,
       joinToken,
+      logDirtyClearedUncommitted,
       onHydrateResult,
       onTutorPageMeta,
       recordRecvFollow,
@@ -998,6 +1021,7 @@ export function useStudentWhiteboardCanvas(
     ) => {
       localDirtyDuringApplyRef.current = false;
       liveEditAbsorbedRef.current = false;
+      liveOverwrittenWhileDirtyRef.current = false;
       pageDataRef.current[activePageIdRef.current] = elements as ExcalidrawLikeElement[];
       onLocalElementSnapshot(elements);
       if (!sync) return;
@@ -1039,16 +1063,21 @@ export function useStudentWhiteboardCanvas(
     const api = excalidrawApiRef.current;
     if (!api) return;
     const absorbed = liveEditAbsorbedRef.current;
+    const overwritten = liveOverwrittenWhileDirtyRef.current;
     localDirtyDuringApplyRef.current = false;
     liveEditAbsorbedRef.current = false;
+    liveOverwrittenWhileDirtyRef.current = false;
     const live = readLiveSceneIncludingDeleted(api);
     const known =
       (pageDataRef.current[activePageIdRef.current] as
         | ReadonlyArray<ExcalidrawLikeElement>
         | undefined) ?? [];
-    if (!absorbed && !sceneElementsDiffer(live, known)) return;
+    if (!absorbed && !sceneElementsDiffer(live, known)) {
+      if (overwritten) logDirtyClearedUncommitted("live-overwritten-from-bucket");
+      return;
+    }
     commitLocalElements(live, "post-apply-flush");
-  }, [commitLocalElements]);
+  }, [commitLocalElements, logDirtyClearedUncommitted]);
   flushDirtyAfterApplyRef.current = flushDirtyAfterApply;
 
   const onCanvasChange = useCallback(
