@@ -18,6 +18,10 @@
  *
  * Oracles are peer state through the E2E scene bridge: the edit is on the
  * student canvas AND on the tutor canvas after a forced follow-up apply.
+ * T8 counts `reason=post-apply-flush` and expects zero during tutor-only
+ * activity; T8-control is the same counter on a student edit during the
+ * hold and expects at least one, so a renamed log line cannot pass T8
+ * vacuously.
  *
  * Gate: npx playwright test --project=wb-regression tests/integration/wb-student-apply-race.spec.ts --workers=1 --reporter=line
  */
@@ -58,6 +62,19 @@ type HoldWindow = Window & {
 
 /** Settle after the forced apply: the idle document stream lands several applies. */
 const POST_APPLY_SETTLE_MS = 1_500;
+
+/**
+ * Counts student broadcasts logged with `reason=post-apply-flush`.
+ * Shared by T8 (expects zero) and T8-control (expects at least one) so the
+ * marker string cannot drift between the absence check and its positive control.
+ */
+function attachPostApplyFlushCounter(page: Page): { count: () => number } {
+  let count = 0;
+  page.on("console", (msg) => {
+    if (msg.text().includes("reason=post-apply-flush")) count += 1;
+  });
+  return { count: () => count };
+}
 
 async function waitForHoldApi(page: Page): Promise<void> {
   await page.waitForFunction(
@@ -464,11 +481,7 @@ test.describe("WB-STUDENT-APPLY-RACE — student edits during a held tutor apply
       const tutor = peers.tutorPage;
       const student = peers.studentPage;
       try {
-        const flushes: string[] = [];
-        student.on("console", (msg) => {
-          const text = msg.text();
-          if (text.includes("reason=post-apply-flush")) flushes.push(text);
-        });
+        const flushes = attachPostApplyFlushCounter(student);
         const tag = `t8-${Date.now()}`;
         const strip = tutor.getByTestId("wb-tutor-page-strip");
         for (let i = 0; i < 3; i++) {
@@ -491,12 +504,61 @@ test.describe("WB-STUDENT-APPLY-RACE — student edits during a held tutor apply
         await waitForElementOnPeer(student, "student", board2Stroke, 15_000);
         await student.waitForTimeout(POST_APPLY_SETTLE_MS);
 
-        expect(flushes, "student post-apply flushes during tutor-only activity").toEqual([]);
+        expect(
+          flushes.count(),
+          "student post-apply flushes during tutor-only activity"
+        ).toBe(0);
       } finally {
         await peers.close();
       }
     }
   );
+
+  for (const studentBrowser of ["chromium", "webkit"] as const) {
+    test(
+      `T8-control (${studentBrowser} student) — a student stroke inside the viewport-align window logs at least one post-apply flush`,
+      { tag: [TAG.WB_STROKES, TAG.WB_SYNC] },
+      async ({ browser }) => {
+        // Positive control for T8 (T3a pattern): the shared counter must see
+        // reason=post-apply-flush when the student edits during the hold.
+        const session = await seedWbLiveSyncSession();
+        const peers = await openTutorAndStudent(browser, session, { studentBrowser });
+        try {
+          await waitForHoldApi(peers.studentPage);
+          const flushes = attachPostApplyFlushCounter(peers.studentPage);
+          const tag = `t8c-${studentBrowser}-${Date.now()}`;
+          await armAndParkStudentApply(
+            peers.tutorPage,
+            peers.studentPage,
+            ["H2"],
+            "H2",
+            `race-a-${tag}`
+          );
+
+          const strokeId = `student-${tag}`;
+          await drawTestStrokeOnRole(peers.studentPage, "student", strokeId, 60, 60, 160, 120);
+          expect(
+            await readSceneElementIds(peers.studentPage, "student"),
+            "student stroke landed while the apply was held"
+          ).toContain(strokeId);
+          expect(
+            flushes.count(),
+            "no post-apply flush before the held edit is released"
+          ).toBe(0);
+
+          await release(peers.studentPage, "H2");
+          await expect
+            .poll(() => flushes.count(), {
+              timeout: 10_000,
+              message: "student post-apply flush after an edit during the hold",
+            })
+            .toBeGreaterThanOrEqual(1);
+        } finally {
+          await peers.close();
+        }
+      }
+    );
+  }
 
   test(
     "T5c — tutor undo followed in the same tick by another stroke: the undone stroke is gone on both peers",
