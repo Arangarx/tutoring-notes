@@ -1,44 +1,70 @@
-# Student edits no longer lost while a tutor update is landing (master hotfix) — smoke runbook
+# Student drawing no longer disappears while the tutor is drawing — smoke runbook
 
 **Branch:** `fix/wb-student-apply-race`
 **Tip commit:** [`0570a200`](https://github.com/Arangarx/tutoring-notes/commit/0570a2000861c3aa061af9793a96415310d56643)
-**Base:** `master` [`eebafee1`](https://github.com/Arangarx/tutoring-notes/commit/eebafee1169acf8ba262140dc3efde6e60f83763)
-**Preview:** [fix/wb-student-apply-race preview](https://tutoring-notes-git-fix-wb-studen-40796b-arangarx-5209s-projects.vercel.app)
+**Preview:** [whiteboard fix preview](https://tutoring-notes-git-fix-wb-studen-40796b-arangarx-5209s-projects.vercel.app)
 
 ---
 
-## When Andrew runs this (mandatory policy)
+## Before you start
 
-Smokebooks are **not** mid-wave bug hunts. See [`.cursor/rules/smoke-when-done.mdc`](../../.cursor/rules/smoke-when-done.mdc).
+This runbook is for you, Tyson. Plan on about **30 minutes**. Run the items from top to bottom. One live session covers items 1–6. Skip the **Cross-branch / post-merge** section at the bottom. Leave those boxes empty.
 
-| Phase | Who |
-|-------|-----|
-| Spec → implementation → Playwright per acceptance item → automated gates green | **Agents** |
-| **One** hardware smoke when feature is **DONE** | **Andrew** |
+**What this is.** This is a fix for whiteboard drawing. When the student drew, erased, undid, or typed a graph formula at the same moment as the tutor was drawing or moving the board, the student's work could vanish. This link has **only** that fix. It is a different site address from [preview.usemynk.com](https://preview.usemynk.com). The other preview features (organizations and the rest) are **not** on this link. Do not test anything else here.
 
-**Smokebook items must be** new surface, subjective UX, or hardware / external-env paths Playwright cannot hermeticize. Use **Coverage** for automated citations; mark **N/A with notes** when Playwright already covers the behavior unless **human-only** applies. **Notes** is Andrew-only — leave blank during authoring.
+**Devices.**
 
-Run order: top to bottom. Re-run **Cross-branch / post-merge** after this hotfix merges to `master` (and again when the same fix lands on `feat/org-qol`). This is a per-branch hotfix smoke, not the comprehensive pre-master both-theme run.
+- **Device A** is your laptop or computer. You are the **tutor**.
+- **Device B** is an **iPhone**. You are the **student**. A second computer is acceptable only if you have no iPhone. If you use a second computer, write that in **Notes** on item 1.
 
-**Pair for every item:** real tutor laptop (desktop browser) and a real student iPhone (Safari), both on the **Preview** above, in one live whiteboard session. Student **follow** stays on unless an item says otherwise. Use a student you can scribble on.
+**Sign in on Device A.** Open the [whiteboard fix preview sign-in page](https://tutoring-notes-git-fix-wb-studen-40796b-arangarx-5209s-projects.vercel.app/login). Sign in with the **same tutor email and password** you use on preview.usemynk.com, then the second-factor code (email code, authenticator app, or text). You must sign in again here even if you are already signed in on preview.usemynk.com. Do **not** use **Sign in with Google**. Do not click password-reset or sign-up emails during this test.
 
----
+**Which student.** Use a student that **you** (the tutor) added and connected. Do **not** use an organization learner. Organization learners will not work on this link. If you do not have a student you added and connected, **stop and tell Andrew**. Do not create a workaround.
 
-## What this fix does
+**Starting a session.** Do this once, before item 1.
 
-On the student phone, while a tutor update was being applied — and during the follow-view alignment right after it — anything the student drew, erased, undid, or typed into a graph was dropped, then overwritten by the tutor's copy. The update now merges with what is actually on the student's screen, and edits made during that window are saved and sent once it finishes. A student edit made right as the tutor switches to an already-loaded board is kept.
+1. On Device A, open **Students** and open that student's page.
+2. Press **Start**. The button may say **Start session**. You should land on a waiting screen that says **Ready to start?**
+3. Leave the mode on **Online**. Do not choose **In person**.
+4. Press **Copy student link**. Send that link to Device B (text or email to yourself is fine).
+5. On the iPhone, open **that exact link**. Before you sign in, look at the address. It must start with `tutoring-notes-git-fix-wb-studen-40796b`. If it opens preview.usemynk.com or usemynk.com, **stop and tell Andrew**.
+6. Sign in as the student or the parent, whichever the join page asks (**Child sign in** or **Parent sign in**).
+7. Allow the camera and the microphone on **both** devices when the browser asks. It asks again because this is a new address.
+8. When Device B is in the waiting room, go back to Device A. When it is no longer waiting for the student to connect, press **Start session**. Both devices should now show the whiteboard.
+9. On Device B, leave **Follow tutor view** on. If that switch is off, turn it on. The phone should keep looking at the same area of the board as the laptop.
+
+**Stay on this address the whole time.** Do not open preview.usemynk.com or usemynk.com tabs for this test.
+
+**Shared test database.** This preview uses the same data as preview.usemynk.com. Do not end or edit sessions you care about on preview.usemynk.com while you run this.
+
+**If something blocks you** (you cannot log in, the link opens the wrong site, or the student will not connect): mark the item **FAIL** or **N/A with notes**, write what happened under **Notes**, and tell Andrew. Do not work around it.
+
+**How to mark each item.** Check **one** box. Write what you actually saw under **Notes** (leave the line blank only if you have nothing to add).
+
+- **PASS** — you ran it and it matched **Expect**.
+- **FAIL** — you ran it and the main expectation failed, or it was wholly broken. Say what you saw.
+- **PARTIAL** — some of the checks worked and some did not. Say which.
+- **N/A with notes** — this item does not apply on this run (say why).
+- **SKIP** — you chose not to run a valid test (say why).
+- If every box is empty, the item was not run.
 
 ---
 
 ## Feature smoke items
 
-### 1. Simultaneous drawing feel (tutor laptop + student iPhone)
+### 1. Drawing at the same time
 
-**Action:** On the **Preview**, sign in as the tutor on the laptop. Open a student and start a **live** whiteboard session **with recording on** (you will end this same session in item 6). On the iPhone, open the student join link in Safari and join. Leave student **follow** on. Once both are on the live board, draw continuously at the same time for about one minute: tutor with the pencil (also pan and zoom while follow stays on), student with a finger on the phone. Vary stroke length. Glance at both screens while you draw, not only at the end.
+**Action:**
 
-**Expect:** Every student stroke stays on both screens. Nothing the student just drew flickers back to an older copy or disappears when the tutor's strokes, pans, or zooms land. Tutor strokes still show up on the phone. No new lag versus a normal master session.
+1. Use the live session from **Before you start**. Device A is the tutor on the computer. Device B is the student on the iPhone. **Follow tutor view** stays on. Near the top of Device A you should see the word **Recording**. Leave it. This same session is used through item 6. If you are not on the board yet, do **Starting a session** above first.
+2. On Device A, choose the pencil. On Device B, draw with a finger (choose the pencil on the phone if it asks).
+3. For about **one minute**, both of you draw at the same time. Mix short lines and longer lines.
+4. On Device A, while you keep drawing, also move the board: hold the **Space** bar and drag. Then zoom in and out with the mouse wheel. If the wheel only slides the board up and down, hold **Ctrl** (or **Cmd** on a Mac) and roll the wheel.
+5. Look at **both** screens while you are drawing, not only at the end. Watch the lines the student just made.
 
-**Ignore this run:** A stroke made in the split second the tutor switches to a brand-new empty board (item 4). Recording/replay behavior (item 6).
+**Expect:** Every line the student draws stays on both screens. Nothing the student just drew flickers away or disappears when your lines, your pan, or your zoom show up on the phone. Your lines still show up on the phone. It should not feel slower than a normal session on preview.usemynk.com.
+
+**Ignore this run:** A line made in the split second you switch to a brand-new empty board (item 4). Recording and replay (item 6).
 
 - [ ] PASS
 - [ ] FAIL
@@ -50,13 +76,19 @@ On the student phone, while a tutor update was being applied — and during the 
 
 **Notes:**
 
-### 2. Student graph editing while the tutor is active
+### 2. Student edits a graph formula while the tutor draws
 
-**Action:** Same live pair, follow still on. On the laptop, drop a graph on the current board and keep drawing and moving other marks so tutor updates keep landing. On the iPhone, open that graph and type or edit an expression (for example `x^2`). Wait until the tutor has drawn at least a few more strokes after you finish typing. Look at the graph on both screens.
+**Action:**
 
-**Expect:** The expression you typed stays on the phone and shows on the tutor laptop. Later tutor strokes do not wipe it or revert the graph to empty.
+1. Stay in the same live session. **Follow tutor view** stays on.
+2. On Device A, press **Insert graph**. Choose **New blank graph**, then press **Insert**. A graph (a coordinate plane) appears on the board. Keep drawing other lines on the laptop the whole time the student is typing, so your updates keep arriving on the phone.
+3. On Device B, tap the graph's formula line (the line on the graph that shows the formula). Type `x^2`, then leave that line (tap elsewhere on the graph, or press the keyboard's done / return key, so the formula is entered).
+4. If the formula box is hard to reach on the phone, look for a button on the graph named **ƒ Expressions**, open it, and tap the formula line there. If you still cannot reach a box to type in, write that in **Notes**. That difficulty is a separate known issue. Do not invent another way to enter the formula.
+5. After the formula is typed, wait until you have drawn at least a few more lines on Device A. Then look at the graph on **both** screens.
 
-**Ignore this run:** Graph styling, axis labels, or fit-to-view polish. Desmos-style math correctness beyond "the expression I typed is still there."
+**Expect:** The formula you typed (`x^2`, or whatever you typed) stays on the phone and shows on the laptop. Later lines you draw on the laptop do not wipe it or put the graph back to empty.
+
+**Ignore this run:** How the graph looks, the axis labels, and whether the math is "correct" beyond "the formula I typed is still there." If the phone's formula box was hard to reach, write that in **Notes**. That is a separate known issue. Do not fail this item only because the box was hard to open. If you could not type a formula at all, mark **PARTIAL** and say so.
 
 - [ ] PASS
 - [ ] FAIL
@@ -68,13 +100,19 @@ On the student phone, while a tutor update was being applied — and during the 
 
 **Notes:**
 
-### 3. Student undo and erase while the tutor is drawing
+### 3. Student undo and erase while the tutor draws
 
-**Action:** Same live pair, follow still on. Tutor keeps drawing on the laptop the whole time. On the phone: (a) draw a short stroke, then **undo** it while the tutor is still drawing; (b) draw another short stroke and **erase** it (or erase one of your earlier marks) while the tutor is still drawing. After each, wait for a few more tutor strokes to land, then check both screens.
+**Action:**
 
-**Expect:** The undone stroke and the erased mark stay gone on the phone and on the laptop. They do not come back when the next tutor update arrives. Tutor strokes made during the undo/erase stay on both screens.
+1. Stay in the same live session. **Follow tutor view** stays on.
+2. On Device A, keep drawing the whole time. Do not stop for the student's undo or erase.
+3. On Device B: draw a short line, then press **Undo** (the curved arrow in the toolbar) while Device A is still drawing. Wait until a few more of your lines have shown up on the phone. Look at both screens. The undone line should be gone on both.
+4. On Device B: draw another short line, then switch to the **eraser** and rub that line out (or rub out one of your earlier marks) while Device A is still drawing. Wait until a few more of your lines have shown up. Look at both screens again.
+5. You are watching two things: the student's undone or erased mark stays gone, and the lines you drew during that time stay on both screens.
 
-**Ignore this run:** Undo of the tutor's own strokes from the phone (tutor undo is not this item). Graph expression undo (item 2).
+**Expect:** The undone line and the erased mark stay gone on the phone and on the laptop. They do not come back when your next lines arrive. The lines you drew during the undo and the erase stay on both screens.
+
+**Ignore this run:** Undoing the tutor's own lines from the phone. That is not this item. Undoing the graph formula is item 2.
 
 - [ ] PASS
 - [ ] FAIL
@@ -86,13 +124,23 @@ On the student phone, while a tutor update was being applied — and during the 
 
 **Notes:**
 
-### 4. Board switch while the student is drawing
+### 4. Board switch while the student draws
 
-**Action:** Same live pair, follow still on. On the laptop, put a recognizable mark on **Board 1**. Add **Board 2** and put a different recognizable mark on it (both boards now have content and have been opened). Switch back to Board 1 so both are already loaded. Then, while the student is **mid-stroke** on the phone, switch to Board 2. Let the student finish that stroke (or start a new one on whichever board they landed on). Switch back to Board 1. Open each board on both devices and compare.
+**Action:**
 
-**Expect:** The student's stroke ends up only on the board where it was drawn. Marks from Board 1 do not show on Board 2, and marks from Board 2 do not show on Board 1, on either device.
+1. Stay in the same live session. **Follow tutor view** stays on.
+2. On Device A, on **Board 1**, draw a mark you will recognize, such as the letter **A**.
+3. Press **Add board** (the **+** on the board tabs). A second tab appears (**Board 2**). Draw a different mark on it, such as the letter **B**. Both boards now have something on them, and you have opened both.
+4. Switch back to **Board 1**.
+5. On Device B, start a line and **keep your finger down**.
+6. While that finger is still down, on Device A switch to **Board 2**.
+7. On Device B, finish the line (lift your finger). If the phone changed boards, the line may finish on the board you landed on. That is fine. You can also draw one new short line on whichever board the phone is showing.
+8. On Device A, switch back to **Board 1**.
+9. On **both** devices, open **Board 1**, then **Board 2**. Compare what is on each.
 
-**Ignore this run:** A stroke made in the split second while switching to a brand-new **empty** board may be lost. That is known, same as today, and backlogged. This item uses two boards that already have content.
+**Expect:** The student's line is only on the board where it was drawn. Marks from Board 1 do not show on Board 2, and marks from Board 2 do not show on Board 1, on either device.
+
+**Ignore this run:** A stroke made in the split second while switching to a brand-new **empty** board may be lost. That is known, same as today, and not a failure of this item. This item uses two boards that already have content.
 
 - [ ] PASS
 - [ ] FAIL
@@ -104,13 +152,18 @@ On the student phone, while a tutor update was being applied — and during the 
 
 **Notes:**
 
-### 5. Idle check (follow on, nobody drawing)
+### 5. Idle for one to two minutes
 
-**Action:** Same live pair. Stop drawing. Leave student follow on. Leave both devices on the live board, screen awake, for 1–2 minutes. Watch the phone and the laptop. Note whether the phone gets unusually warm or the battery drops faster than a normal idle session.
+**Action:**
 
-**Expect:** No flicker, no marks appearing or disappearing, no board jumping. Phone heat and battery drain stay in the normal range for an open live session. The board you left is the board still on screen.
+1. Stay in the same live session. Stop drawing on both devices.
+2. Leave **Follow tutor view** on. Leave both screens awake and on the live board.
+3. Wait **1 to 2 minutes**. Watch the phone and the laptop. Do not lock the phone and do not leave Safari.
+4. Notice whether the phone gets unusually warm, or the battery drops faster than a normal idle session with the board open.
 
-**Ignore this run:** Ordinary screen-on battery use. Locking the phone or backgrounding Safari (not this item).
+**Expect:** No flicker. No marks appearing or disappearing. The board does not jump. The board you left is still the board on screen. Phone heat and battery drain stay in the normal range for an open live session.
+
+**Ignore this run:** Ordinary screen-on battery use. Locking the phone or leaving Safari. That is not this item.
 
 - [ ] PASS
 - [ ] FAIL
@@ -122,13 +175,20 @@ On the student phone, while a tutor update was being applied — and during the 
 
 **Notes:**
 
-### 6. Normal session end-to-end (recording, notes, replay)
+### 6. A normal session, from recording through replay
 
-**Action:** On the session from items 1–5 (recording was on from the start; if you already ended it, start a short new live session with recording on, draw one stroke from each device, then end). From the tutor laptop, end the session the way you usually do. Open that session's notes and the replay.
+**Action:**
 
-**Expect:** Start, draw, end, notes, and replay work as they do on master. The student strokes from this session are present. No new error toast on end.
+1. Use the session from items 1–5. Recording starts by itself when the live session starts. On Device A, near the top, confirm you see the word **Recording**. You do not press a separate **Start recording** button. If the page says **Recording & notes off** instead, mark **N/A with notes** and tell Andrew.
+2. If you already ended this session, start a short new one the same way as **Before you start** (Online, **Copy student link**, same address check). Draw one short line on each device before you end it. Do not use a session you care about.
+3. On Device A, draw one short line if you have not already. On Device B, draw one short line. Confirm each line shows on the other device.
+4. On Device A, press **End session**. Confirm if it asks.
+5. Wait until you land on the review screen. Notes may still be filling in. That screen is the notes for this session.
+6. Open the replay: a play control on that screen, or **View whiteboard** on the note. Press play and watch for a few seconds. Look for the lines from this session.
 
-**Ignore this run:** Some recording/replay automated tests already fail on master (known, being investigated separately; waiver recorded). If replay or recording misbehaves here, still mark **FAIL** and describe what you saw in Notes — it may be pre-existing, not this hotfix. Do not re-prove board-leak or follow-toggle alignment; those specs stayed green (see Coverage).
+**Expect:** You can draw, end the session, open the notes, and play the replay. The student's lines from this session are there. No new error message traps you when you press **End session**.
+
+**Ignore this run:** If the replay starts near the end, or jumps to the end, that is a known separate issue. Write what you saw in **Notes** and do not fail this item for that alone. Other recording or replay problems: still mark **FAIL** and describe what you saw. They may already happen on the normal site and are being looked at separately. Do not spend this item re-checking whether a mark leaked onto the wrong board, or whether the Follow control lines up with the button beside it.
 
 - [ ] PASS
 - [ ] FAIL
@@ -143,6 +203,8 @@ On the student phone, while a tutor update was being applied — and during the 
 ---
 
 ## Cross-branch / post-merge
+
+Tyson: **do not run this section.** Leave every box below empty. It is only for after `fix/wb-student-apply-race` merges.
 
 Run this section **after** `fix/wb-student-apply-race` merges into `master`. The same fix is then carried onto `feat/org-qol`. Fetch each preview via Vercel MCP (`list_deployments` → `meta.githubCommitRef` → `https://<meta.branchAlias>`). Do not pattern-match a `tutoring-notes-git-*` URL.
 
@@ -194,6 +256,8 @@ Run this section **after** `fix/wb-student-apply-race` merges into `master`. The
 ---
 
 ## Overall result
+
+Check this last, after items 1–6. The Cross-branch section is not part of this run.
 
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
 
