@@ -10,30 +10,34 @@
 
 This runbook is for you, Tyson. Plan on about **30 minutes**. Run the items from top to bottom. One live session covers items 1–6. Skip the **Cross-branch / post-merge** section at the bottom. Leave those boxes empty.
 
-**What this is.** This is a fix for whiteboard drawing. When the student drew, erased, undid, or typed a graph formula at the same moment as the tutor was drawing or moving the board, the student's work could vanish. This link has **only** that fix. It is a different site address from [preview.usemynk.com](https://preview.usemynk.com). The other preview features (organizations and the rest) are **not** on this link. Do not test anything else here.
+**What this is.** This is a fix for whiteboard drawing. When the student drew, erased, undid, or typed a graph formula at the same moment as the tutor was drawing or moving the board, the student's work could vanish. Open that fix in one of the two ways below. The six checks (items 1–6) are identical for either option.
 
 **Devices.**
 
 - **Device A** is your laptop or computer. You are the **tutor**.
 - **Device B** is an **iPhone**. You are the **student**. A second computer is acceptable only if you have no iPhone. If you use a second computer, write that in **Notes** on item 1.
 
-**Sign in on Device A.** Open the [whiteboard fix preview sign-in page](https://tutoring-notes-git-fix-wb-studen-40796b-arangarx-5209s-projects.vercel.app/login). Sign in with the **same tutor email and password** you use on preview.usemynk.com, then the second-factor code (email code, authenticator app, or text). You must sign in again here even if you are already signed in on preview.usemynk.com. Do **not** use **Sign in with Google**. Do not click password-reset or sign-up emails during this test.
+**Option A (simplest) — ask Andrew to switch preview.usemynk.com to the fix.** When you are ready to start this smoke, message Andrew and wait until he confirms [preview.usemynk.com](https://preview.usemynk.com) is switched. Then use [https://preview.usemynk.com](https://preview.usemynk.com) as usual: the same login, **Sign in with Google** is OK, and the camera and microphone are already allowed. The student link will also be on preview.usemynk.com. While it is switched, the organization features and the other preview fixes are **not** there. Finish or pause your other preview re-tests first, and do not test anything else during this smoke. Tell Andrew as soon as you are done so he can switch it back. If anything looks like the normal preview again mid-test (for example, organization pages reappear), stop and tell Andrew — it was switched back early.
 
-**Which student.** Use a student that **you** (the tutor) added and connected. Do **not** use an organization learner. Organization learners will not work on this link. If you do not have a student you added and connected, **stop and tell Andrew**. Do not create a workaround.
+**Option B — use the separate fix link directly (no need to wait for Andrew).** This link has **only** that fix. It is a different site address from [preview.usemynk.com](https://preview.usemynk.com). The other preview features (organizations and the rest) are **not** on this link. Do not test anything else here.
 
-**Starting a session.** Do this once, before item 1.
+**Sign in on Device A (Option B).** Open the [whiteboard fix preview sign-in page](https://tutoring-notes-git-fix-wb-studen-40796b-arangarx-5209s-projects.vercel.app/login). Sign in with the **same tutor email and password** you use on preview.usemynk.com, then the second-factor code (email code, authenticator app, or text). You must sign in again here even if you are already signed in on preview.usemynk.com. Do **not** use **Sign in with Google**. Do not click password-reset or sign-up emails during this test.
+
+**Which student (Option B).** Use a student that **you** (the tutor) added and connected. Do **not** use an organization learner. Organization learners will not work on this link. If you do not have a student you added and connected, **stop and tell Andrew**. Do not create a workaround.
+
+**Starting a session.** Do this once, before item 1. These steps are the same for either option. Use the address you're using (Option A or B).
 
 1. On Device A, open **Students** and open that student's page.
 2. Press **Start**. The button may say **Start session**. You should land on a waiting screen that says **Ready to start?**
 3. Leave the mode on **Online**. Do not choose **In person**.
 4. Press **Copy student link**. Send that link to Device B (text or email to yourself is fine).
-5. On the iPhone, open **that exact link**. Before you sign in, look at the address. It must start with `tutoring-notes-git-fix-wb-studen-40796b`. If it opens preview.usemynk.com or usemynk.com, **stop and tell Andrew**.
+5. On the iPhone, open **that exact link**. Before you sign in, look at the address. It must be the address you're using (Option A or B). On Option B, open the student link exactly as copied and check it starts with `tutoring-notes-git-fix-wb-studen-40796b`. If Option B opens preview.usemynk.com or usemynk.com, **stop and tell Andrew**.
 6. Sign in as the student or the parent, whichever the join page asks (**Child sign in** or **Parent sign in**).
-7. Allow the camera and the microphone on **both** devices when the browser asks. It asks again because this is a new address.
+7. On Option A, the camera and the microphone are already allowed. On Option B, allow the camera and the microphone on **both** devices when the browser asks. It asks again because this is a new address.
 8. When Device B is in the waiting room, go back to Device A. When it is no longer waiting for the student to connect, press **Start session**. Both devices should now show the whiteboard.
 9. On Device B, leave **Follow tutor view** on. If that switch is off, turn it on. The phone should keep looking at the same area of the board as the laptop.
 
-**Stay on this address the whole time.** Do not open preview.usemynk.com or usemynk.com tabs for this test.
+**Stay on the address you're using (Option A or B) the whole time.** On Option B, do not open preview.usemynk.com or usemynk.com tabs for this test.
 
 **Shared test database.** This preview uses the same data as preview.usemynk.com. Do not end or edit sessions you care about on preview.usemynk.com while you run this.
 
@@ -180,7 +184,7 @@ This runbook is for you, Tyson. Plan on about **30 minutes**. Run the items from
 **Action:**
 
 1. Use the session from items 1–5. Recording starts by itself when the live session starts. On Device A, near the top, confirm you see the word **Recording**. You do not press a separate **Start recording** button. If the page says **Recording & notes off** instead, mark **N/A with notes** and tell Andrew.
-2. If you already ended this session, start a short new one the same way as **Before you start** (Online, **Copy student link**, same address check). Draw one short line on each device before you end it. Do not use a session you care about.
+2. If you already ended this session, start a short new one the same way as **Before you start** (Online, **Copy student link**, and check the join link is on the address you're using (Option A or B)). Draw one short line on each device before you end it. Do not use a session you care about.
 3. On Device A, draw one short line if you have not already. On Device B, draw one short line. Confirm each line shows on the other device.
 4. On Device A, press **End session**. Confirm if it asks.
 5. Wait until you land on the review screen. Notes may still be filling in. That screen is the notes for this session.
