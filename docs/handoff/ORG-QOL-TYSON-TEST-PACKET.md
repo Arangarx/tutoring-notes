@@ -1,10 +1,12 @@
 # Session joining, organization accounts, and whiteboard quality — Tyson test packet
 
 **Branch:** `feat/org-qol`
-**Tip commit:** [`c2e97afb`](https://github.com/Arangarx/tutoring-notes/commit/c2e97afb)
+**Tip commit:** [`af876496`](https://github.com/Arangarx/tutoring-notes/commit/af876496a7e216a4bfe9e3aa7f8618729945b876)
 **Preview:** [preview.usemynk.com](https://preview.usemynk.com)
 
-This packet is for the tutoring app **Mynk**. It covers joining a scheduled session, who is allowed to claim a learner, whiteboard changes, and organization staff. Organization accounts are in this build. Items **50–70** are the new ones.
+Updated 2026-10-27 — items marked **Re-test** changed since your last run.
+
+This packet is for the tutoring app **Mynk**. It covers joining a scheduled session, who is allowed to claim a learner, whiteboard changes, and organization staff. Organization accounts are in this build. Items **50–70** are the new ones. Items **71** and **73** are new this run. Item **72** is skipped.
 
 ## Run these again
 
@@ -14,13 +16,24 @@ If you already scored one of these, clear that box and run it again. Each change
 - **3** — the child's home has more cards; this item is still the upcoming Join
 - **9** — current learners are listed above Add a learner
 - **11** — claim links moved to Account & sharing
+- **13** — the display name card shows on the child account
+- **16** — a session past midnight saves with no error, and a 90-minute span does not ask about a long session
 - **23** — hints depend on the tool, and they are not in the phone's bottom bar
 - **24** — the other person's cursor circle is a bit smaller
 - **25** — both directions, and the other person's view box stays put while you pan
 - **26** — chat uses the video-tile names, and a closed chat shows a count
+- **28** — the graph shows y= beside the box, and again on the expression line after you insert
 - **34** — the student-page button says Start session
-- **38** — Share link is on Account & sharing
-- **47, 48, 49** — wheel zoom, the two menus, and the homepage Sign in menu
+- **35** — the student is on a phone; after the tutor reloads, the student's camera is still there
+- **38** — the loading spinner clears, and the parent share link hides the note until it is saved to notes
+- **39** — cancel while the signed-in parent is waiting
+- **42** — a 60-minute save does not ask you to confirm
+- **47, 49** — wheel zoom, and the homepage Sign in menu
+- **48** — on a wide window the session sliders button is hidden; on a narrow window or a phone it appears
+- **58** — the words when Start session is unavailable
+- **60** — View whiteboard is hidden until the note is saved, then it opens that child's replay
+- **71** — new: log, sine, and a formula the app can't read
+- **73** — new: a session longer than four hours asks before it saves
 
 Item 8 is unchanged. The join page still says **Child sign in** and **Parent sign in**. The renamed words are on the homepage **Sign in** menu (item 49), not on that join page.
 
@@ -369,6 +382,8 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 ### 13. Display name, at most 80 characters
 
+**Re-test:** Yes. Clear any earlier box. Last time the display name card did not show on the child account. Check **Manage** for that child again.
+
 **Action:**
 
 1. Continue as the correct parent right after the connection in item 12. You should see a **Display name** card: "This is what your tutor sees on their roster — not your login email or family id."
@@ -389,7 +404,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: src/__tests__/account/DisplayNameSetupForm.dom.test.tsx › sends a second, different name after the first save]` — `[automated: src/__tests__/identity/claim-setup-consent-save.test.ts › replaces the tutor roster name when the display name is saved again]` — `[human-only: the tutor's Students list after a real save]`
+**Coverage:** `[automated: src/__tests__/account/DisplayNameSetupForm.dom.test.tsx › sends a second, different name after the first save]` — `[automated: src/__tests__/account/DisplayNameSetupForm.dom.test.tsx › sends a second name through the later-edit save]` — `[automated: tests/integration/identity/parent-dashboard-notes-scope.spec.ts › parent saves a display name on the profile tab and it survives reload]` — `[automated: src/__tests__/identity/claim-setup-consent-save.test.ts › replaces the tutor roster name when the display name is saved again]` — `[human-only: the tutor's Students list after a real save, and the card on the child account]`
 
 **Notes:**
 
@@ -447,6 +462,8 @@ Run top to bottom. Later items reuse the learner you create earlier.
 
 ### 16. A session that runs past midnight
 
+**Re-test:** Yes. Clear any earlier box. That save used to show an error.
+
 **Action:**
 
 1. On Device A, open **Schedule** and press **New session**.
@@ -455,7 +472,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 4. Set **Subject** to `Midnight check`. Press **Save session**.
 5. Find that session on the schedule for that date and, if the calendar shows the next day, on the next day too.
 
-**Expect:** Before you save, **End time** becomes **01:00**. After you save, the appointment is about an hour and a half long and ends at 1:00 AM the next day. It does not show as ending before it starts, and it does not shrink to zero minutes.
+**Expect:** Before you save, **End time** becomes **01:00** the next day. After you save, the appointment is about 90 minutes long and ends at 1:00 AM the next day. The save completes with no error. It does not show as ending before it starts, and it does not shrink to zero minutes. A 90-minute span does **not** open **Schedule a long session?**. That question is only for a much longer span (item 73).
 
 **Ignore this run:** Google's own display of overnight events, if it splits them. Grade what Mynk's schedule shows.
 
@@ -465,7 +482,7 @@ Run top to bottom. Later items reuse the learner you create earlier.
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-bridge.spec.ts › Midnight schedule]` — `[human-only: the End time you see in the form]`
+**Coverage:** `[automated: tests/integration/wb-org-qol-bridge.spec.ts › Midnight schedule]` — `[automated: tests/integration/wb-org-qol-bridge.spec.ts › Midnight schedule edit — a saved same-day session can be edited to cross midnight]` — `[human-only: the End time you see in the form, and that the save shows no error]`
 
 **Notes:**
 
@@ -560,7 +577,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › an image file becomes its own board]` — `[human-only: a real photo from your computer]`
+**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › an image file becomes its own board and does not keep the anchor stroke]` — `[human-only: a real photo from your computer]`
 
 **Notes:**
 
@@ -724,7 +741,7 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 **Expect:** Before that one click, a drag on the graph moves the board (or does not pan the graph itself). After one click in the graph, the graph takes the pointer and you can pan or use the graph. There are **no** words "Click to interact". After the other person changes the graph, Device A can still use the graph **without clicking it a second time**.
 
-**Ignore this run:** Plotting points and freehand inside the graph are items 45 and 46.
+**Ignore this run:** Plotting points and freehand inside the graph are items 45 and 46. A formula the student types on their own device can occasionally snap back to the earlier formula. That is known, and a fix is still coming. Do not fail this item for that.
 
 - [ ] PASS
 - [ ] FAIL
@@ -738,16 +755,19 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 ### 28. Graph entry shows y= and an example
 
+**Re-test:** Yes. Clear any earlier box. After you insert, the expression line on the graph also shows **y=** and the expression.
+
 **Action:**
 
 1. On Device A, press **Insert graph**.
 2. Press **Plot expression**.
-3. Look at the left of the text box and at the faded example inside the box.
+3. Look at the left of the text box, at the faded example inside the box, and at the small print under it.
 4. Type `2*x+1` and press **Insert**.
+5. On the graph, look at the expression line (the row that lists what you just plotted). If you do not see it, press **ƒ Expressions** on the graph. Do this on the computer, not on the phone's bottom tray.
 
-**Expect:** You see a **y=** label immediately left of the box. The faded example is `2x+1`. After insert, the board shows a straight line for that formula. The small print says it uses standard function notation with x as the variable.
+**Expect:** In the insert box, **y=** sits immediately left of the box. The faded example is `2x+1`. The small print says "Uses standard function notation (x as the variable)." After insert, the board shows a straight line for that formula, and the expression line on the graph also shows **y=** and the expression you typed (`2*x+1`).
 
-**Ignore this run:** Point plotting and free draw inside the graph are items 45 and 46.
+**Ignore this run:** Point plotting and free draw inside the graph are items 45 and 46. The phone bottom tray and **Fit graph to student's screen** (item 72).
 
 - [ ] PASS
 - [ ] FAIL
@@ -755,7 +775,53 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › plotting y= stores that expression on the graph]` — `[human-only: the y= label and the example text]`
+**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › plotting y= stores that expression on the graph]` — `[automated: tests/integration/wb-org-qol-surface.spec.ts › on-graph expression entry shows y= beside the input and keeps the notation helper]` — `[human-only: the y= label, the example text, and the expression line after insert]`
+
+**Notes:**
+
+### 71. Log, trig, and a formula the app can't read
+
+**Re-test:** New this run.
+
+**Action:**
+
+Stay on the graph from item 28, on the computer. Use the expression line on the graph (the row with **y=** and **Add**). Do not use the phone's bottom tray. Add these one at a time. Press **Add**, or press Enter, after each one:
+
+1. `log10(x)`
+2. `ln x`
+3. `sin x` (or `2sin(x)` if you prefer)
+4. `sec x`
+5. `gcd(x,2)`
+
+Also add `log(x)`. Under **Notes**, write what it draws (a curve, a straight line, an error, or nothing). We are still deciding whether log means natural log or base 10. Do not mark this item FAIL because of what `log(x)` draws.
+
+**Expect:** The first three (`log10(x)`, `ln x`, and `sin x` or `2sin(x)`) each draw a curve. `sec x` and `gcd(x,2)` show "Couldn't understand this expression." and do not draw a curve. A wrong curve with no message is a FAIL. The curves from the first three can stay on the graph while you try the ones that should fail.
+
+**Ignore this run:** The phone bottom tray (item 72). What `log(x)` draws — write it in Notes, and do not pass or fail the item on that shape.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-org-qol-surface.spec.ts › plotted log and trig expressions match Math at a sampled x]` — `[automated: tests/integration/wb-org-qol-surface.spec.ts › unreadable expressions show the error state and draw no curve]` — `[human-only: what log(x) draws, written in Notes]`
+
+**Notes:**
+
+### 72. Phone expression tray and Fit graph — SKIP this run
+
+**Action:** Do not run this item. Check **SKIP**. Do not open the expression tray on a phone, and do not press **Fit graph to student's screen**.
+
+**Expect:** This item is not graded this run.
+
+**Ignore this run:** The whole item. The phone's expression tray and **Fit graph to student's screen** are being reworked.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
 
 **Notes:**
 
@@ -807,6 +873,8 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 ### 47. A plain mouse wheel zooms
 
+**Re-test:** Yes. Clear any earlier box. A plain mouse wheel zooms.
+
 **Action:**
 
 1. Stay in the live room on Device A, with a mouse. Use the select or hand tool so a drag is not drawing.
@@ -830,13 +898,16 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 
 ### 48. The session menu and the drawing menu are not the same button
 
+**Re-test:** Yes. Clear any earlier box. On a wide window the session sliders button is hidden. On a narrow window or a phone, it appears.
+
 **Action:**
 
-1. On Device A, in the live room, find the top-bar button named **More session options**. It is a sliders icon (three horizontal lines with knobs), not three vertical dots.
-2. Find the tool-rail button named **More — z-order, delete, hand**. It is still the vertical three dots.
-3. On a phone, or with the window short, press **More session options**. If the list is taller than the panel, look at the bottom of the panel. Scroll to the end of the list.
+1. On Device A, in the live room, use a **wide** computer window. Look along the top bar for copy link, the microphone, the grid, and **Recenter view**. The session options button is a sliders icon (three horizontal lines with knobs). On this wide window it should be hidden.
+2. Find the tool-rail button named **More — z-order, delete, hand**. It is the vertical three dots. That is the drawing menu, not the session options.
+3. Narrow the window, or switch to a phone. The sliders button (**More session options**) appears. It is not the drawing menu's vertical dots.
+4. Press **More session options**. If the list is taller than the panel, look at the bottom of the panel. Scroll to the end of the list.
 
-**Expect:** The two buttons do not look the same, and the names above are the ones you hear or see on hover. You do not have to guess which three-dot control holds session options, because that control is the sliders. When the session list is taller than the panel, the bottom says **More below** until you scroll to the end, and that line is gone at the end. When everything fits, **More below** is not shown. On a phone the session button is large enough to hit without opening the drawing menu by mistake.
+**Expect:** On a wide computer window, copy link, the microphone, the grid, and **Recenter view** are on the top bar, and the session options (sliders) button is hidden. Narrow the window or use a phone and the sliders button appears. It is not the drawing menu's vertical dots. When the session list is taller than the panel, the bottom says **More below** until you scroll to the end, and that line is gone at the end. When everything fits, **More below** is not shown. On a phone the session button is large enough to hit without opening the drawing menu by mistake.
 
 **Ignore this run:** Nothing.
 
@@ -851,6 +922,8 @@ Use Device A as the tutor and Device B as the parent or child, in a live room: *
 **Notes:**
 
 ### 49. Homepage Sign in menu, and the page stays on the phone
+
+**Re-test:** Yes. Clear any earlier box. The homepage **Sign in** menu uses the new names.
 
 **Action:**
 
@@ -1031,14 +1104,19 @@ These are checks that the changes above did not break the paths you already know
 
 ### 35. Audio and video tiles
 
+**Re-test:** Yes. Clear any earlier box. The student is on a phone. After the tutor reloads, the student's camera must still be there.
+
 **Action:**
 
 1. In the waiting room, before **Start session**, allow the camera and microphone on **both** devices.
 2. Confirm you can see your own preview on each device.
 3. After **Start session**, talk for a few seconds on Device B and listen on Device A. Then the other way.
 4. Turn the camera off and on once on Device B. Look at the tile on Device A.
+5. Put the student on a phone (Device B). Leave both cameras on.
+6. On Device A (the tutor), reload the page. Look at the student's camera tile on the tutor's screen, and look at the student's own picture on the phone.
+7. On the phone, turn the camera off. Look at the picture, and look at the phone's camera light.
 
-**Expect:** Each side hears the other. The camera toggle shows and hides the picture. The tile name from item 18 still looks right with the camera off. No need to judge music quality beyond "I could hear a sentence."
+**Expect:** Each side hears the other. The camera toggle shows and hides the picture. The tile name from item 18 still looks right with the camera off. No need to judge music quality beyond "I could hear a sentence." With the student on a phone and both cameras on, after the tutor reloads, the tutor still sees the student's camera (not an empty box), and the student's picture comes back on the student side too. When the student turns the camera off, the picture is hidden and the phone's camera light goes off.
 
 **Ignore this run:** Bluetooth headsets and speaker echo. Mention them in Notes if they got in the way, and mark PARTIAL only if a built-in mic also failed.
 
@@ -1048,7 +1126,7 @@ These are checks that the changes above did not break the paths you already know
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[human-only: real microphones, speakers, and cameras]`
+**Coverage:** `[automated: tests/integration/wb-av-mesh.spec.ts › item 35: Pixel 7 student, waiting-room cameras, student cam off then on, tutor reload keeps the student's video]` — `[automated: tests/integration/wb-av-mesh.spec.ts › item 35: Pixel 7 student, waiting-room cameras, tutor reload only (no camera toggle) keeps the student's video]` — `[human-only: real microphones, speakers, cameras, and the phone's camera light]`
 
 **Notes:**
 
@@ -1062,7 +1140,7 @@ These are checks that the changes above did not break the paths you already know
 
 **Expect:** The session ends. You get a review screen with the board you just used, not a blank error. Notes either appear, or you get a clear failure / "taking longer" message **and** **Finish review** is still there (item 30). Recording started on its own when the session started. You should not have had to press a separate "start recording" button.
 
-**Ignore this run:** Whether the note text is good. The empty boxes and the skeleton inside them while you wait are item 64. Replay scrubbing that jumps to the end is a known issue — if that is all that is wrong, say so and do not fail this item for it. Fit view is item 65.
+**Ignore this run:** Whether the note text is good. The empty boxes and the skeleton inside them while you wait are item 64. Replay scrubbing that jumps to the end is a known issue — if that is all that is wrong, say so and do not fail this item for it. The **Loading scene** spinner is item 38. Do not grade it here. Fit view is item 65.
 
 - [ ] PASS
 - [ ] FAIL
@@ -1099,18 +1177,20 @@ These are checks that the changes above did not break the paths you already know
 
 ### 38. Replay from notes, and from a parent share link
 
-**Re-test:** Yes. Clear any earlier box. **Share link** is on **Account & sharing**.
+**Re-test:** Yes. Clear any earlier box. **Share link** is still on **Account & sharing**. Also check that **Loading scene** clears, and that a note stays hidden on the parent share link until it is saved to notes.
 
 **Action:**
 
-1. After item 36, on the review screen or the student's notes, open the whiteboard replay (a play control on the review screen, or **View whiteboard** if you see it on a note).
-2. Let it play for a few seconds. You should see the board from that session, not an empty canvas and not a login wall. Do not grade Fit view here.
-3. On the student page, press **Account & sharing**. Copy the share link.
-4. On Device B, open that link **signed out** (private window). Find the note and press **View whiteboard**.
+1. After item 36, on the review screen, open the whiteboard replay (a play control on the review screen, or **View whiteboard** if you see it on a note). Watch for **Loading scene**.
+2. Let it play for a few seconds. You should see the board from that session, not an empty canvas and not a login wall. Do not grade Fit view here. The **Loading scene** spinner should already be gone, and it should not keep spinning while the replay plays.
+3. Before you press **Save to notes**, on the student page press **Account & sharing** and copy the share link. On Device B, open that link **signed out** (private window). Look for the note's audio and for the board picture.
+4. On Device A, press **Save to notes**.
+5. On Device B, refresh the share link. Find the note and press **View whiteboard**.
+6. Separately, while a session is still live (you have not ended it), look at the share link again.
 
-**Expect:** The tutor can replay the session from the notes / review screen. The parent share link opens without a tutor login, and **View whiteboard** shows that session's board. A live session that has not ended does not appear on the share link.
+**Expect:** The **Loading scene** spinner clears once the board shows, and it does not keep spinning while the replay plays. On the parent share link, **View whiteboard**: the note's audio and the board picture stay hidden while the note is not saved yet, and they appear after the tutor presses **Save to notes**. A session that is still live does not appear on the share link. The tutor can replay the session from the notes or the review screen, and the parent share link opens without a tutor login.
 
-**Ignore this run:** Replay that always jumps to the end of the timeline — known, write it in Notes, and do not fail the item if the board itself shows. PDF pages may show as placeholders. Fit view is item 65. Do not re-prove the play button if the board already shows; the new check is the share-link path on Account & sharing.
+**Ignore this run:** Replay that always jumps to the end of the timeline — known, write it in Notes, and do not fail the item if the board itself shows. PDF pages may show as placeholders. Fit view is item 65. Do not re-prove the play button if the board already shows; the new checks are the spinner, and the share-link path before and after **Save to notes**.
 
 - [ ] PASS
 - [ ] FAIL
@@ -1118,16 +1198,18 @@ These are checks that the changes above did not break the paths you already know
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/view-whiteboard-new-replay.spec.ts › tutor note link ?surface=replay auto-enters WhiteboardReplayInFrame]` — `[automated: tests/integration/view-whiteboard-new-replay.spec.ts › parent share note View whiteboard opens WhiteboardReplayInFrame]` — `[human-only: a real share link in a signed-out browser]`
+**Coverage:** `[automated: tests/integration/view-whiteboard-new-replay.spec.ts › tutor note link ?surface=replay auto-enters WhiteboardReplayInFrame]` — `[automated: tests/integration/view-whiteboard-new-replay.spec.ts › parent share note View whiteboard opens WhiteboardReplayInFrame]` — `[automated: tests/integration/view-whiteboard-new-replay.spec.ts › Loading scene spinner clears during playback when the log starts with a viewport]` — `[automated: tests/integration/parent-child-notes-whiteboard-replay.spec.ts › DRAFT-linked ended session is 404 on the parent share replay and its APIs]` — `[automated: tests/integration/parent-child-notes-whiteboard-replay.spec.ts › email-only DRAFT audio is 404 on the share token until the note is READY]` — `[human-only: a real share link in a signed-out browser, before and after Save to notes]`
 
 **Notes:**
 
 ### 39. Cancel a session that has not started
 
+**Re-test:** Yes. Clear any earlier box. Device B is the parent, signed in. That was the case that got stuck.
+
 **Action:**
 
 1. On Device A, start a whiteboard and stay in the waiting room. Do not press **Start session**.
-2. Have Device B open the student link so they are waiting too.
+2. On Device B, sign in as the **parent** for that learner and open the student link so they are waiting too. Do not use a signed-out window for this item.
 3. On Device A, press **Cancel session**, then **Confirm cancel**.
 
 **Expect:** Device A leaves the room and lands back on the students list (or that student's page), not on a dead whiteboard. Device B leaves the waiting room and sees that the session was canceled (wording like "Session was canceled"), not a spinner that never ends.
@@ -1140,7 +1222,7 @@ These are checks that the changes above did not break the paths you already know
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-cancel-pending-session.spec.ts › tutor cancel → student sees 'Session was canceled' (not stuck in waiting room)]` — `[automated: tests/integration/wb-cancel-pending-session.spec.ts › after cancel, tutor URL is the student roster, not the deleted workspace]`
+**Coverage:** `[automated: tests/integration/wb-cancel-pending-session.spec.ts › tutor cancel → student sees 'Session was canceled' (not stuck in waiting room)]` — `[automated: tests/integration/wb-cancel-pending-session.spec.ts › after cancel, tutor URL is the student roster, not the deleted workspace]` — `[automated: tests/integration/wb-cancel-pending-session.spec.ts › account-holder join: tutor cancel clears the waiting overlay with canceled]`
 
 **Notes:**
 
@@ -1190,13 +1272,15 @@ These are checks that the changes above did not break the paths you already know
 
 ### 42. Create and edit a scheduled session
 
+**Re-test:** Yes. Clear any earlier box. A 60-minute save does not ask you to confirm.
+
 **Action:**
 
 1. On Device A, **Schedule**, **New session**. Pick a student, subject `Edit check`, today, start time about 3 hours from now, planned length **~60 min (soft)**. Press **Save session**.
 2. Open that session again and change the subject to `Edit check 2`. Press **Save changes**.
 3. Do not press **Cancel session** unless you are done with that row.
 
-**Expect:** The dialog title is **Schedule session** when creating and **Edit session** when editing. The saved row shows the new subject. **End time** follows the length you picked (about an hour after the start). Cancel is a separate button, **Cancel session**, only while editing, and you do not have to use it.
+**Expect:** The dialog title is **Schedule session** when creating and **Edit session** when editing. The saved row shows the new subject. **End time** follows the length you picked (about an hour after the start). Saving about 60 minutes does **not** ask you to confirm, and you do not see **Schedule a long session?**. Cancel is a separate button, **Cancel session**, only while editing, and you do not have to use it. A session over four hours is item 73.
 
 **Ignore this run:** The midnight case (item 16) and the calendar title (item 15).
 
@@ -1206,7 +1290,34 @@ These are checks that the changes above did not break the paths you already know
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[human-only: the schedule form on the preview]`
+**Coverage:** `[human-only: the schedule form on the preview, including that a 60-minute save does not ask you to confirm]`
+
+**Notes:**
+
+### 73. Long session asks first
+
+**Re-test:** New this run.
+
+**Action:**
+
+1. On Device A, open **Schedule** and press **New session**.
+2. Pick any student. Set **Start time** to **10:00** and **End time** to **15:00** (this is longer than four hours). Set **Subject** to `Long check`.
+3. Press **Save session**. Read the question.
+4. Press **Go back**. Look at the schedule for `Long check`.
+5. If the form is still open, press **Save session** again. If it closed, open **New session** and enter the same times again, then press **Save session**. Press **Save anyway**.
+6. Find `Long check` on the schedule.
+
+**Expect:** **Save session** opens **Schedule a long session?**. The question shows the length ("This session runs 5 hours.") and "Check the start and end times." **Go back** does not save: `Long check` is not on the schedule. **Save anyway** does save, and the session shows on the schedule.
+
+**Ignore this run:** A 60-minute save (item 42) and a 90-minute save past midnight (item 16). Those must not open this question.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/wb-org-qol-bridge.spec.ts › Long session confirm — a span over four hours asks before saving]` — `[human-only: the length you read on the question]`
 
 **Notes:**
 
@@ -1454,13 +1565,16 @@ Andrew creates the organization and activates it. You do the rest. Use plus-addr
 
 ### 58. A self-learner with no consent record does not get Start
 
+**Re-test:** Yes. Clear any earlier box. The words on the unavailable card are the ones below.
+
 **Action:**
 
 1. Add a self-learner (item 14) and connect them, but do not press **Save preferences** or **Decline** on the privacy step yet.
-2. On Device A, open that student. Look at the **Session** card.
+2. On Device A, open that student. Look at the **Session** card. Read the title and both sentences.
 3. Then, as that self-learner, open **Manage**, then **Privacy**, and save. Refresh the tutor's student page.
+4. If you can, turn one switch off after that save and look at **Start session** again.
 
-**Expect:** Before any privacy record exists, **Start session** is not there. You see **Start whiteboard session unavailable** and a line that privacy preferences are not complete. After a record has been saved, **Start session** is there. A record still counts if they later turn a switch off. Missing the button only happens when privacy has never been saved.
+**Expect:** Before any privacy record exists, **Start session** is not there. The title is "Start whiteboard session unavailable". Then: "This learner's privacy preferences are not complete. You cannot start a session until they finish them." And: "They finish privacy preferences under Manage → Privacy in their Mynk account." After they save preferences, **Start session** is back, even if a switch is later turned off.
 
 **Ignore this run:** A child whose parent has not finished privacy. This item is the self-learner. If setup will not let you leave the person half-finished, mark the "no button" half N/A with notes and still grade the half after a record exists.
 
@@ -1500,13 +1614,16 @@ Andrew creates the organization and activates it. You do the rest. Use plus-addr
 
 ### 60. The child's home lists notes and replays, and keeps an empty upcoming list
 
+**Re-test:** Yes. Clear any earlier box. **View whiteboard** is hidden until the note is saved, then it opens that child's replay.
+
 **Action:**
 
 1. Sign in as a child who has no appointment coming up. On the "Hi, …" page, find **Upcoming sessions**.
-2. Sign in as a child who has finished a session that produced a note (item 36). Find **Session notes**.
-3. Press **View whiteboard** on that note if it is there.
+2. Use a child who just finished a session (item 36) **before** the tutor presses **Save to notes**. Sign in as that child and look at **Session notes** for **View whiteboard**.
+3. On Device A, as the tutor, press **Save to notes** for that session.
+4. On the child's "Hi, …" page, refresh. Find **Session notes** and press **View whiteboard** if it is there.
 
-**Expect:** When nothing is scheduled, the **Upcoming sessions** card stays on the page and says "No upcoming sessions scheduled." It does not disappear. **Session notes** lists the past note. **View whiteboard** opens that session's replay. If there are no notes yet, the card says "No session notes yet" and still stays on the page.
+**Expect:** When nothing is scheduled, the **Upcoming sessions** card stays on the page and says "No upcoming sessions scheduled." It does not disappear. While the note is not saved yet, **View whiteboard** is not there. After the tutor saves, **View whiteboard** is there and opens that child's replay. If there are no notes yet, the card says "No session notes yet" and still stays on the page.
 
 **Ignore this run:** Fit view (item 65). Replay that jumps to the end of the timeline. Note quality.
 
@@ -1516,7 +1633,7 @@ Andrew creates the organization and activates it. You do the rest. Use plus-addr
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** `[automated: tests/integration/wb-child-home.spec.ts › shows the child's ended note and replay, and says nothing is scheduled when upcoming is empty]` — `[human-only: the replay on the child's own home]`
+**Coverage:** `[automated: tests/integration/wb-child-home.spec.ts › shows the child's ended note and replay, and says nothing is scheduled when upcoming is empty]` — `[automated: tests/integration/wb-child-home.spec.ts › shows Watch the whiteboard recording for a saved note with no share link]` — `[automated: tests/integration/wb-child-home.spec.ts › DRAFT-linked ended session is 404 on the learner page and the replay APIs]` — `[human-only: the replay on the child's own home, before and after the tutor saves]`
 
 **Notes:**
 
