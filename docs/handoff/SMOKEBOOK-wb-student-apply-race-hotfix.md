@@ -15,7 +15,7 @@ This runbook is for you, Tyson. Plan on about **30 minutes**. Run the items from
 **Devices.**
 
 - **Device A** is your laptop or computer. You are the **tutor**.
-- **Device B** is an **iPhone**. You are the **student**. A second computer is acceptable only if you have no iPhone. If you use a second computer, write that in **Notes** on item 1.
+- **Device B** is your phone (Android is fine). You are the **student**. If you have no phone, a second computer works; write that in **Notes** on item 1.
 
 **Option A (simplest) — ask Andrew to switch preview.usemynk.com to the fix.** When you are ready to start this smoke, message Andrew and wait until he confirms [preview.usemynk.com](https://preview.usemynk.com) is switched. Then use [https://preview.usemynk.com](https://preview.usemynk.com) as usual: the same login, **Sign in with Google** is OK, and the camera and microphone are already allowed. The student link will also be on preview.usemynk.com. While it is switched, the organization features and the other preview fixes are **not** there. Finish or pause your other preview re-tests first, and do not test anything else during this smoke. Tell Andrew as soon as you are done so he can switch it back. If anything looks like the normal preview again mid-test (for example, organization pages reappear), stop and tell Andrew — it was switched back early.
 
@@ -31,7 +31,7 @@ This runbook is for you, Tyson. Plan on about **30 minutes**. Run the items from
 2. Press **Start**. The button may say **Start session**. You should land on a waiting screen that says **Ready to start?**
 3. Leave the mode on **Online**. Do not choose **In person**.
 4. Press **Copy student link**. Send that link to Device B (text or email to yourself is fine).
-5. On the iPhone, open **that exact link**. Before you sign in, look at the address. It must be the address you're using (Option A or B). On Option B, open the student link exactly as copied and check it starts with `tutoring-notes-git-fix-wb-studen-40796b`. If Option B opens preview.usemynk.com or usemynk.com, **stop and tell Andrew**.
+5. On your phone, open **that exact link**. Before you sign in, look at the address. It must be the address you're using (Option A or B). On Option B, open the student link exactly as copied and check it starts with `tutoring-notes-git-fix-wb-studen-40796b`. If Option B opens preview.usemynk.com or usemynk.com, **stop and tell Andrew**.
 6. Sign in as the student or the parent, whichever the join page asks (**Child sign in** or **Parent sign in**).
 7. On Option A, the camera and the microphone are already allowed. On Option B, allow the camera and the microphone on **both** devices when the browser asks. It asks again because this is a new address.
 8. When Device B is in the waiting room, go back to Device A. When it is no longer waiting for the student to connect, press **Start session**. Both devices should now show the whiteboard.
@@ -60,7 +60,7 @@ This runbook is for you, Tyson. Plan on about **30 minutes**. Run the items from
 
 **Action:**
 
-1. Use the live session from **Before you start**. Device A is the tutor on the computer. Device B is the student on the iPhone. **Follow tutor view** stays on. Near the top of Device A you should see the word **Recording**. Leave it. This same session is used through item 6. If you are not on the board yet, do **Starting a session** above first.
+1. Use the live session from **Before you start**. Device A is the tutor on the computer. Device B is the student on your phone. **Follow tutor view** stays on. Near the top of Device A you should see the word **Recording**. Leave it. This same session is used through item 6. If you are not on the board yet, do **Starting a session** above first.
 2. On Device A, choose the pencil. On Device B, draw with a finger (choose the pencil on the phone if it asks).
 3. For about **one minute**, both of you draw at the same time. Mix short lines and longer lines.
 4. On Device A, while you keep drawing, also move the board: hold the **Space** bar and drag. Then zoom in and out with the mouse wheel. If the wheel only slides the board up and down, hold **Ctrl** (or **Cmd** on a Mac) and roll the wheel.
@@ -162,12 +162,12 @@ This runbook is for you, Tyson. Plan on about **30 minutes**. Run the items from
 
 1. Stay in the same live session. Stop drawing on both devices.
 2. Leave **Follow tutor view** on. Leave both screens awake and on the live board.
-3. Wait **1 to 2 minutes**. Watch the phone and the laptop. Do not lock the phone and do not leave Safari.
+3. Wait **1 to 2 minutes**. Watch the phone and the laptop. Do not lock the phone and do not switch away from the browser.
 4. Notice whether the phone gets unusually warm, or the battery drops faster than a normal idle session with the board open.
 
 **Expect:** No flicker. No marks appearing or disappearing. The board does not jump. The board you left is still the board on screen. Phone heat and battery drain stay in the normal range for an open live session.
 
-**Ignore this run:** Ordinary screen-on battery use. Locking the phone or leaving Safari. That is not this item.
+**Ignore this run:** Ordinary screen-on battery use. Locking the phone or switching away from the browser. That is not this item.
 
 - [ ] PASS
 - [ ] FAIL
@@ -223,7 +223,7 @@ Run this section **after** `fix/wb-student-apply-race` merges into `master`. The
 
 ### 1. Master spot-check after the hotfix merge
 
-**Action:** On the **master** preview (alias fetched after the merge), tutor laptop + student iPhone, one short live session with follow on. Draw at the same time for about 20 seconds, including one pan/zoom from the tutor. End the session.
+**Action:** On the **master** preview (alias fetched after the merge), tutor laptop + student on your phone, one short live session with follow on. Draw at the same time for about 20 seconds, including one pan/zoom from the tutor. End the session.
 
 **Expect:** Student strokes stay on both screens. No flicker back to an older copy. End session completes with no new error toast.
 
