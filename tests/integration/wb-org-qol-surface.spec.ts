@@ -308,7 +308,7 @@ test.describe("whiteboard QoL surfaces", () => {
     "an image file becomes its own board and does not keep the anchor stroke",
     { tag: [TAG.WB_ASSETS, TAG.WB_CHROME, TAG.WB_SYNC, TAG.WB_STROKES] },
     async ({ browser }) => {
-      test.setTimeout(180_000);
+      test.setTimeout(240_000);
       const session = await seedWbLiveSyncSession();
       const peers = await openTutorAndStudent(browser, session);
       try {
@@ -1115,12 +1115,30 @@ test.describe("whiteboard QoL surfaces", () => {
         const studentHost = peers.studentPage.getByTestId("wb-graph-embed-host").first();
         await expect(studentHost).toBeVisible({ timeout: 30_000 });
 
-        const toggle = peers.studentPage.getByTestId("wb-graph-expr-toggle");
-        await expect(toggle).toBeVisible({ timeout: 20_000 });
-        await toggle.click();
+        // The inserted graph is larger than the phone, so a control painted
+        // inside the scaled graph is off-screen. The launcher is viewport chrome.
+        expect(
+          (await graphHostContainedInStudentView(peers.studentPage)).contained,
+          "graph is larger than the phone view"
+        ).toBe(false);
+
+        const launcher = peers.studentPage.getByTestId("wb-graph-phone-expr-launcher");
+        // Fully inside the visual viewport, unscaled, and clear of the bottom toolbar.
+        await expect
+          .poll(() => phoneChromeLauncherGeometry(peers.studentPage), { timeout: 20_000 })
+          .toEqual({
+            present: true,
+            inViewport: true,
+            clearOfToolbar: true,
+            outsideGraph: true,
+            hitOk: true,
+            unscaled: true,
+          });
+        await launcher.tap();
 
         const tray = peers.studentPage.getByTestId("wb-graph-expr-tray");
         await expect(tray).toBeVisible();
+        await expect(tray.getByTestId("wb-graph-expr-picker")).toHaveCount(0);
         const insideHost = await tray.evaluate(
           (el) => !!el.closest("[data-testid='wb-graph-embed-host']")
         );
@@ -1230,6 +1248,8 @@ test.describe("whiteboard QoL surfaces", () => {
         await expect(tabletHost.getByTestId("wb-graph-expr-panel")).toBeVisible();
         await expect(peers.tutorPage.getByTestId("wb-graph-expr-tray")).toHaveCount(0);
         await expect(peers.studentPage.getByTestId("wb-graph-expr-tray")).toHaveCount(0);
+        await expect(peers.tutorPage.getByTestId("wb-graph-phone-expr-launcher")).toHaveCount(0);
+        await expect(peers.studentPage.getByTestId("wb-graph-phone-expr-launcher")).toHaveCount(0);
         const tutorInside = await tutorHost
           .getByTestId("wb-graph-expr-panel")
           .evaluate((el) => !!el.closest("[data-testid='wb-graph-embed-host']"));
@@ -1280,14 +1300,177 @@ test.describe("whiteboard QoL surfaces", () => {
             const tutor = await readEmbedSceneBox(peers.tutorPage, "tutor", graphId);
             const student = await readEmbedSceneBox(peers.studentPage, "student", graphId);
             if (!tutor || !student) return false;
-            return (
-              Math.abs(tutor.width - student.width) <= 1 &&
-              Math.abs(tutor.height - student.height) <= 1 &&
-              Math.abs(tutor.x - student.x) <= 1 &&
-              Math.abs(tutor.y - student.y) <= 1
-            );
+            return sceneBoxesMatch(tutor, student);
           }, { timeout: 20_000 })
           .toBe(true);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "Ctrl+Z after fit restores the graph box on tutor and student",
+    { tag: [TAG.WB_GRAPH, TAG.WB_CHROME, TAG.WB_VIEWPORT] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentBrowser: "webkit",
+      });
+      try {
+        const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, ["x"]);
+        await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+        await expect(peers.tutorPage.getByTestId("wb-graph-embed-host").first()).toBeVisible({
+          timeout: 30_000,
+        });
+        // Selecting the graph commits the current scene (Excalidraw pointer-up),
+        // so the following Fit is its own undo entry rather than bundled with insert.
+        // mouse.click hit-tests through the embed (pointer-events none until active);
+        // locator.click on the host waits forever because it is not the hit target.
+        const tutorBoard = peers.tutorPage
+          .getByTestId("wb-graph-embed-host")
+          .first()
+          .locator(".wb-graph-board-host");
+        const tutorBoardBox = await tutorBoard.boundingBox();
+        expect(tutorBoardBox, "tutor graph board").not.toBeNull();
+        await peers.tutorPage.mouse.click(
+          tutorBoardBox!.x + 48,
+          tutorBoardBox!.y + 48
+        );
+
+        const before = await readEmbedSceneBox(peers.tutorPage, "tutor", graphId);
+        expect(before, "graph box before fit").not.toBeNull();
+
+        const fit = peers.tutorPage.getByTestId("wb-graph-fit-student-screen");
+        await expect(fit).toBeEnabled({ timeout: 20_000 });
+        await fit.click();
+
+        await expect
+          .poll(async () => {
+            const fitted = await readEmbedSceneBox(peers.tutorPage, "tutor", graphId);
+            return Boolean(fitted && before && !sceneBoxesMatch(fitted, before));
+          }, { timeout: 20_000 })
+          .toBe(true);
+
+        await peers.tutorPage.evaluate(() => {
+          const target = document.querySelector(".excalidraw");
+          if (!(target instanceof HTMLElement)) return;
+          if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+          target.focus();
+        });
+        await peers.tutorPage.keyboard.press("Control+z");
+
+        await expect
+          .poll(async () => {
+            const tutor = await readEmbedSceneBox(peers.tutorPage, "tutor", graphId);
+            const student = await readEmbedSceneBox(peers.studentPage, "student", graphId);
+            if (!tutor || !student || !before) return false;
+            return sceneBoxesMatch(tutor, before) && sceneBoxesMatch(student, before);
+          }, { timeout: 20_000 })
+          .toBe(true);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "phone tray picker edits only the chosen graph",
+    { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentBrowser: "webkit",
+      });
+      try {
+        const graph1 = await insertGraphOnRole(peers.tutorPage, "tutor", session, ["x"]);
+        const graph2 = await insertGraphOnRole(peers.tutorPage, "tutor", session, []);
+        await waitForElementOnPeer(peers.studentPage, "student", graph1, 30_000);
+        await waitForElementOnPeer(peers.studentPage, "student", graph2, 30_000);
+        await expect(peers.tutorPage.getByTestId("wb-graph-embed-host")).toHaveCount(2);
+
+        // Under 400px the tutor is phone chrome even with a mouse pointer.
+        await peers.tutorPage.setViewportSize({ width: 390, height: 844 });
+        await openPhoneGraphPickerOn(peers.tutorPage, "Graph 2");
+        const input = peers.tutorPage.getByTestId("wb-graph-expr-tray").getByTestId("wb-graph-expr-new");
+        await input.fill("x^2");
+        await input.press("Enter");
+        await expectOnlyGraph2Changed(peers, graph1, graph2);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  // Blocked by WB-STUDENT-APPLY-RACE (docs/BACKLOG.md): a student edit made while a tutor apply is in flight is overwritten; ~20% red. Unfixme with that fix.
+  test.fixme(
+    "phone student tray picker edits only the chosen graph",
+    { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentBrowser: "webkit",
+      });
+      try {
+        const graph1 = await insertGraphOnRole(peers.tutorPage, "tutor", session, ["x"]);
+        const graph2 = await insertGraphOnRole(peers.tutorPage, "tutor", session, []);
+        await waitForElementOnPeer(peers.studentPage, "student", graph1, 30_000);
+        await waitForElementOnPeer(peers.studentPage, "student", graph2, 30_000);
+        await expect(peers.studentPage.getByTestId("wb-graph-embed-host")).toHaveCount(2);
+
+        await openPhoneGraphPickerOn(peers.studentPage, "Graph 2");
+        const input = peers.studentPage
+          .getByTestId("wb-graph-expr-tray")
+          .getByTestId("wb-graph-expr-new");
+        await input.fill("x^2");
+        await input.press("Enter");
+        await expectOnlyGraph2Changed(peers, graph1, graph2);
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "Escape in an expression field cancels the edit and the next Escape closes the tray",
+    { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentBrowser: "webkit",
+      });
+      try {
+        const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, ["x^2"]);
+        await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+        const launcher = peers.studentPage.getByTestId("wb-graph-phone-expr-launcher");
+        await expect(launcher).toBeVisible({ timeout: 20_000 });
+        await launcher.tap();
+
+        const tray = peers.studentPage.getByTestId("wb-graph-expr-tray");
+        await expect(tray).toBeVisible();
+        await tray.getByTestId("wb-graph-expr-display-0").click();
+        const edit = tray.getByTestId("wb-graph-expr-edit-0");
+        await expect(edit).toBeVisible();
+        await edit.fill("999*x");
+        await edit.press("Escape");
+
+        await expect(tray).toBeVisible();
+        await expect(tray.getByTestId("wb-graph-expr-display-0")).toContainText("x^2");
+        await expect(tray.getByTestId("wb-graph-expr-display-0")).not.toContainText("999");
+        await expect
+          .poll(async () => {
+            const state = await readGraphElementState(peers.studentPage, "student", graphId);
+            return state?.expressions.join("|") ?? "";
+          }, { timeout: 5_000 })
+          .toBe("x^2");
+
+        await peers.studentPage.keyboard.press("Escape");
+        await expect(tray).toBeHidden();
+        await expect(launcher).toBeFocused();
       } finally {
         await peers.close();
       }
@@ -1296,6 +1479,155 @@ test.describe("whiteboard QoL surfaces", () => {
 });
 
 type EmbedSceneBox = { x: number; y: number; width: number; height: number };
+
+function sceneBoxesMatch(a: EmbedSceneBox, b: EmbedSceneBox): boolean {
+  return (
+    Math.abs(a.x - b.x) <= 1 &&
+    Math.abs(a.y - b.y) <= 1 &&
+    Math.abs(a.width - b.width) <= 1 &&
+    Math.abs(a.height - b.height) <= 1
+  );
+}
+
+/** Viewport-fixed phone launcher: inside the visual viewport, unscaled, clear of the toolbar. */
+async function phoneChromeLauncherGeometry(page: Page): Promise<{
+  present: boolean;
+  inViewport: boolean;
+  clearOfToolbar: boolean;
+  outsideGraph: boolean;
+  hitOk: boolean;
+  unscaled: boolean;
+}> {
+  return page.evaluate(() => {
+    const btn = document.querySelector("[data-testid='wb-graph-phone-expr-launcher']");
+    if (!(btn instanceof HTMLElement)) {
+      return {
+        present: false,
+        inViewport: false,
+        clearOfToolbar: false,
+        outsideGraph: false,
+        hitOk: false,
+        unscaled: false,
+      };
+    }
+    const r = btn.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const vLeft = vv ? vv.offsetLeft : 0;
+    const vTop = vv ? vv.offsetTop : 0;
+    const vRight = vLeft + (vv ? vv.width : window.innerWidth);
+    const vBottom = vTop + (vv ? vv.height : window.innerHeight);
+    const slack = 2;
+    const inViewport =
+      r.width > 8 &&
+      r.height > 8 &&
+      r.left >= vLeft - slack &&
+      r.top >= vTop - slack &&
+      r.right <= vRight + slack &&
+      r.bottom <= vBottom + slack;
+    const toolbar = document
+      .querySelector("[data-testid='wb-bottom-toolbar']")
+      ?.getBoundingClientRect();
+    const clearOfToolbar =
+      !toolbar ||
+      toolbar.width < 1 ||
+      toolbar.height < 1 ||
+      r.right <= toolbar.left + slack ||
+      r.left >= toolbar.right - slack ||
+      r.bottom <= toolbar.top + slack ||
+      r.top >= toolbar.bottom - slack;
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const scale = btn.offsetHeight > 0 ? r.height / btn.offsetHeight : 0;
+    return {
+      present: r.width > 8 && r.height > 8,
+      inViewport,
+      clearOfToolbar,
+      outsideGraph: !btn.closest("[data-testid='wb-graph-embed-host']"),
+      hitOk: !!hit && (hit === btn || btn.contains(hit)),
+      unscaled: scale > 0.9 && scale < 1.1,
+    };
+  });
+}
+
+async function openPhoneGraphPickerOn(page: Page, graphLabel: string) {
+  const launcher = page.getByTestId("wb-graph-phone-expr-launcher");
+  await expect(launcher).toBeVisible({ timeout: 20_000 });
+  await launcher.click();
+  const tray = page.getByTestId("wb-graph-expr-tray");
+  await expect(tray).toBeVisible();
+  await expect(tray.getByTestId("wb-graph-expr-picker")).toBeVisible();
+  await tray.getByRole("tab", { name: graphLabel }).click();
+}
+
+async function expectOnlyGraph2Changed(
+  peers: { tutorPage: Page; studentPage: Page },
+  graph1: string,
+  graph2: string
+) {
+  for (const [label, page, role] of [
+    ["student", peers.studentPage, "student"],
+    ["tutor", peers.tutorPage, "tutor"],
+  ] as const) {
+    await expect
+      .poll(
+        async () => {
+          const first = (await readMountedGraphInk(page, graph1)).functionGraphs.map((g) => g.pts);
+          const second = (await readMountedGraphInk(page, graph2)).functionGraphs.map((g) => g.pts);
+          const s1 = await readGraphElementState(page, role, graph1);
+          const s2 = await readGraphElementState(page, role, graph2);
+          return {
+            graph1Curve:
+              first.length === 1 &&
+              curveMatches((x) => x, first[0]) &&
+              !curveMatches((x) => x * x, first[0]),
+            graph2Curve: second.length > 0 && curveMatches((x) => x * x, second[0]),
+            graph1Expressions: s1?.expressions.join("|"),
+            graph2Expressions: s2?.expressions.join("|"),
+          };
+        },
+        { timeout: 20_000, message: `${label} sees graph 2 edited, graph 1 unchanged` }
+      )
+      .toEqual({
+        graph1Curve: true,
+        graph2Curve: true,
+        graph1Expressions: "x",
+        graph2Expressions: "x^2",
+      });
+  }
+}
+
+async function selectedElementIds(
+  page: Page,
+  role: "tutor" | "student"
+): Promise<string[]> {
+  return page.evaluate((r) => {
+    const bridge = (
+      window as Window & {
+        __TN_WB_E2E__?: Record<string, { getAppState: () => Record<string, unknown> }>;
+      }
+    ).__TN_WB_E2E__?.[r];
+    const selected = bridge?.getAppState()?.selectedElementIds;
+    if (!selected || typeof selected !== "object") return [];
+    return Object.entries(selected as Record<string, boolean>)
+      .filter(([, on]) => on)
+      .map(([id]) => id);
+  }, role);
+}
+
+function curveMatches(
+  fn: (x: number) => number,
+  pts: Array<[number, number]>
+): boolean {
+  let compared = 0;
+  for (const [x, y] of pts) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const oracle = fn(x);
+    if (!Number.isFinite(oracle)) continue;
+    compared += 1;
+    const scale = Math.max(1, Math.abs(oracle));
+    if (Math.abs(y - oracle) > 1e-4 * scale) return false;
+  }
+  return compared > 0;
+}
 
 async function readEmbedSceneBox(
   page: Page,

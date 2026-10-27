@@ -270,20 +270,14 @@
   background: color-mix(in srgb, var(--surface-drawer) 50%, transparent);
 }
 
-/* Phone expression launcher — screen space, outside the zoomed graph box. */
-.wb-graph-expr-tray-launch {
-  position: fixed;
-  left: 12px;
-  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-  z-index: 70;
-  max-width: calc(100vw - 24px);
-}
-
-/* Phone expression sheet. Sits above the board; height follows the visual viewport via inline bottom. */
-.wb-graph-expr-tray {
-  max-height: min(70dvh, 100%);
-  overflow: auto;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  background: var(--surface-drawer);
-  color: var(--text-strong);
+.wb-graph-fit-reason {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

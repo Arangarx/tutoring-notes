@@ -196,6 +196,10 @@ import {
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
+import {
+  GraphPhoneTrayProvider,
+  WbGraphExprTray,
+} from "@/components/whiteboard/chrome/WbGraphExprTray";
 import { WbRoleProvider, deriveWbCapabilities, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
 import {
   WaitingRoomOverlay,
@@ -6739,6 +6743,7 @@ export function WhiteboardWorkspaceClient({
 
   return (
     <WbRoleProvider role={role}>
+    <GraphPhoneTrayProvider>
     <LiveBoardChrome
       layoutMode={layoutMode}
       orientation={orientation}
@@ -7717,7 +7722,9 @@ export function WhiteboardWorkspaceClient({
         />
       </footer>
       }
-      actionSheets={touchLayout ? (
+      actionSheets={
+        <>
+          {touchLayout ? (
         <WbChromeErrorBoundary>
           <>
             <WbActionSheetBackdrop open={touchSheetOpen} onDismiss={dismissTouchSheets} />
@@ -7761,8 +7768,12 @@ export function WhiteboardWorkspaceClient({
             </WbActionSheet>
           </>
         </WbChromeErrorBoundary>
-      ) : null}
+          ) : null}
+          <WbGraphExprTray />
+        </>
+      }
     />
+    </GraphPhoneTrayProvider>
     {/* Waiting-room overlay — rendered OVER the board; board stays mounted so
         A/V mesh is continuous. Dismissed when phaseActive flips to true
         (tutor clicks Start → activateSessionLive sets sessionPhase=ACTIVE). */}

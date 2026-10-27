@@ -5,26 +5,16 @@
  * embeddable via the `renderEmbeddable` prop (tutor workspace).
  */
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
-import { ModalPortal } from "@/components/ModalPortal";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import {
   isPhoneLayout,
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
+import {
+  readGraphBoardOrder,
+  useGraphPhoneTray,
+} from "@/components/whiteboard/chrome/WbGraphExprTray";
 import type { PeerPageViewState } from "@/hooks/usePeerPageViewState";
 import {
   graphSceneBoxFitToPeer,
@@ -131,27 +121,6 @@ type Props = {
   fitPageIdRef?: RefObject<string>;
 };
 
-/** How much of the layout viewport the soft keyboard currently covers. */
-function useKeyboardOverlapPx(): number {
-  const [overlap, setOverlap] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      const next = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
-      setOverlap((prev) => (Math.abs(prev - next) < 0.5 ? prev : next));
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
-  return overlap;
-}
-
 type ExpressionFieldsProps = {
   expressions: string[];
   exprErrors: string[];
@@ -195,7 +164,15 @@ function GraphExpressionFields({
                   e.preventDefault();
                   onCommitEdit(index);
                 }
-                if (e.key === "Escape") onCancelEdit();
+                if (e.key === "Escape") {
+                  // Radix listens for Escape on document capture. preventDefault
+                  // there (Sheet onEscapeKeyDown) keeps the tray open; stopping
+                  // here keeps the key from any later bubble listener. Blur must
+                  // not commit — onCancelEdit sets that guard.
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCancelEdit();
+                }
               }}
               onBlur={() => onCommitEdit(index)}
               autoFocus
@@ -247,6 +224,10 @@ function GraphExpressionFields({
           if (e.key === "Enter") {
             e.preventDefault();
             onAdd();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
           }
         }}
         inputTestId="wb-graph-expr-new"
@@ -549,7 +530,7 @@ export function GraphEmbeddable({
   const { resolvedTheme } = useTheme();
   const { layoutMode } = useWbLayoutMode();
   const phoneLayout = isPhoneLayout(layoutMode);
-  const keyboardOverlap = useKeyboardOverlapPx();
+  const tray = useGraphPhoneTray();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<JxgBoard | null>(null);
   /**
@@ -572,8 +553,10 @@ export function GraphEmbeddable({
   const bboxHandlerRef = useRef<(() => void) | null>(null);
 
   const [panelOpen, setPanelOpen] = useState(true);
-  const phonePanelDefaulted = useRef(false);
-  const [fitReady, setFitReady] = useState(false);
+  const skipBlurCommitRef = useRef(false);
+  const focusTrayAfterCancelRef = useRef(false);
+  /** null = fit is available. Otherwise why the button is disabled. */
+  const [fitBlock, setFitBlock] = useState<null | "waiting" | "other-board">("waiting");
   const [expressions, setExpressions] = useState<string[]>(
     () => graphStateRef.current.expressions ?? []
   );
@@ -588,6 +571,23 @@ export function GraphEmbeddable({
   const strokeDraftRef = useRef<GraphStrokeDraft | null>(null);
 
   const elementId = element.id ?? "";
+  const registerGraph = tray?.register;
+  const unregisterGraph = tray?.unregister;
+
+  useEffect(() => {
+    if (!registerGraph || !unregisterGraph || readOnly || !phoneLayout || !elementId) {
+      return;
+    }
+    const api = excalidrawAPIRef?.current ?? excalidrawAPI;
+    let order = 0;
+    try {
+      order = readGraphBoardOrder(api?.getSceneElements() ?? [], elementId);
+    } catch {
+      order = 0;
+    }
+    registerGraph({ id: elementId, order });
+    return () => unregisterGraph(elementId);
+  }, [registerGraph, unregisterGraph, readOnly, phoneLayout, elementId, excalidrawAPI, excalidrawAPIRef]);
 
   const graphStateJsonRaw =
     typeof element.customData?.graphStateJson === "string"
@@ -1101,6 +1101,10 @@ export function GraphEmbeddable({
   };
 
   const commitEdit = (index: number) => {
+    if (skipBlurCommitRef.current) {
+      skipBlurCommitRef.current = false;
+      return;
+    }
     const nextState = updateGraphExpression(
       graphStateRef.current,
       index,
@@ -1110,6 +1114,13 @@ export function GraphEmbeddable({
     setEditingIndex(null);
     setEditingDraft("");
     replot(nextExprs, true);
+  };
+
+  const cancelEdit = () => {
+    skipBlurCommitRef.current = true;
+    focusTrayAfterCancelRef.current = true;
+    setEditingIndex(null);
+    setEditingDraft("");
   };
 
   const handleRemove = (index: number) => {
@@ -1123,24 +1134,28 @@ export function GraphEmbeddable({
   };
 
   useEffect(() => {
-    if (!phoneLayout || phonePanelDefaulted.current) return;
-    phonePanelDefaulted.current = true;
-    setPanelOpen(false);
-  }, [phoneLayout]);
+    if (!focusTrayAfterCancelRef.current || editingIndex !== null) return;
+    focusTrayAfterCancelRef.current = false;
+    tray?.trayRef.current?.focus();
+  }, [editingIndex, tray]);
 
   useEffect(() => {
     if (!fitPeerViewRef) return;
     const tick = () => {
       const peer = fitPeerViewRef.current;
       const pageId = fitPageIdRef?.current;
-      const ready = Boolean(
-        peer &&
-          pageId &&
-          peer.pageId === pageId &&
-          (peer.viewportWidth ?? 0) > 0 &&
-          (peer.viewportHeight ?? 0) > 0
+      const sized =
+        (peer?.viewportWidth ?? 0) > 0 && (peer?.viewportHeight ?? 0) > 0;
+      const samePage = Boolean(peer && pageId && peer.pageId === pageId && sized);
+      const otherBoard = Boolean(
+        peer && pageId && peer.pageId && peer.pageId !== pageId
       );
-      setFitReady((prev) => (prev === ready ? prev : ready));
+      const next: null | "waiting" | "other-board" = samePage
+        ? null
+        : otherBoard
+          ? "other-board"
+          : "waiting";
+      setFitBlock((prev) => (prev === next ? prev : next));
     };
     tick();
     const id = window.setInterval(tick, 400);
@@ -1168,6 +1183,14 @@ export function GraphEmbeddable({
     }
   }, [elementId, excalidrawAPI, excalidrawAPIRef, fitPageIdRef, fitPeerViewRef, onAfterPersist]);
 
+  const fitBlockReason =
+    fitBlock === "other-board"
+      ? "Student is on another board"
+      : fitBlock === "waiting"
+        ? "Waiting for the student to connect"
+        : null;
+  const fitReasonId = elementId ? `wb-graph-fit-reason-${elementId}` : undefined;
+
   const expressionFields = (
     <GraphExpressionFields
       expressions={expressions}
@@ -1177,10 +1200,7 @@ export function GraphEmbeddable({
       draftExpr={draftExpr}
       onEditingDraft={setEditingDraft}
       onCommitEdit={commitEdit}
-      onCancelEdit={() => {
-        setEditingIndex(null);
-        setEditingDraft("");
-      }}
+      onCancelEdit={cancelEdit}
       onBeginEdit={(index, expr) => {
         setEditingIndex(index);
         setEditingDraft(expr);
@@ -1195,6 +1215,7 @@ export function GraphEmbeddable({
     <div
       className="wb-graph-root"
       data-wb-graph="true"
+      data-graph-id={elementId || undefined}
       data-read-only={readOnly ? "true" : undefined}
       data-testid="wb-graph-embed-host"
     >
@@ -1242,18 +1263,18 @@ export function GraphEmbeddable({
             Reset view
           </button>
           {!phoneLayout && (
-            <button
-              type="button"
-              className="wb-graph-strip-btn wb-graph-expr-toggle"
-              onClick={() => setPanelOpen((open) => !open)}
-              onPointerDown={stopEmbedDrag}
-              onMouseDown={stopEmbedDrag}
-              aria-expanded={panelOpen}
-              data-testid="wb-graph-expr-toggle"
-            >
-              ƒ Expressions
-              <span aria-hidden>{panelOpen ? "▾" : "▸"}</span>
-            </button>
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-expr-toggle"
+            onClick={() => setPanelOpen((open) => !open)}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            aria-expanded={panelOpen}
+            data-testid="wb-graph-expr-toggle"
+          >
+            ƒ Expressions
+            <span aria-hidden>{panelOpen ? "▾" : "▸"}</span>
+          </button>
           )}
         </div>
         {!phoneLayout && panelOpen && (
@@ -1268,36 +1289,12 @@ export function GraphEmbeddable({
         )}
       </div>
       )}
-      {!readOnly && phoneLayout && !panelOpen && (
-        <ModalPortal>
-          <button
-            type="button"
-            className="wb-graph-strip-btn wb-graph-expr-tray-launch"
-            onClick={() => setPanelOpen(true)}
-            aria-expanded={false}
-            data-testid="wb-graph-expr-toggle"
-            style={{ zIndex: 70 }}
-          >
-            ƒ Expressions
-          </button>
-        </ModalPortal>
-      )}
-      {!readOnly && phoneLayout && (
-        <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
-          <SheetContent
-            side="bottom"
-            className="wb-graph-expr-tray"
-            data-testid="wb-graph-expr-tray"
-            style={{ bottom: keyboardOverlap, zIndex: 80 }}
-            onPointerDown={stopEmbedDrag}
-            onMouseDown={stopEmbedDrag}
-          >
-            <SheetHeader>
-              <SheetTitle>Expressions</SheetTitle>
-              <SheetDescription>
-                Edit the expressions plotted on this graph.
-              </SheetDescription>
-            </SheetHeader>
+      {phoneLayout &&
+      !readOnly &&
+      tray?.open &&
+      tray.selectedId === elementId &&
+      tray.slot
+        ? createPortal(
             <div
               className="wb-graph-expr-body"
               data-testid="wb-graph-expr-panel"
@@ -1305,10 +1302,10 @@ export function GraphEmbeddable({
               onMouseDown={stopEmbedDrag}
             >
               {expressionFields}
-            </div>
-          </SheetContent>
-        </Sheet>
-      )}
+            </div>,
+            tray.slot
+          )
+        : null}
       {!readOnly && (
       <div
         className="wb-graph-nav"
@@ -1316,18 +1313,26 @@ export function GraphEmbeddable({
         onMouseDownCapture={stopEmbedDragCapture}
       >
         {fitPeerViewRef ? (
-          <button
-            type="button"
-            className="wb-graph-strip-btn wb-graph-fit-student"
-            onClick={handleFitToStudent}
-            onPointerDown={stopEmbedDrag}
-            onMouseDown={stopEmbedDrag}
-            disabled={!fitReady}
-            title="Fit graph to student's screen"
-            data-testid="wb-graph-fit-student-screen"
-          >
-            {"Fit graph to student's screen"}
-          </button>
+          <>
+            <button
+              type="button"
+              className="wb-graph-strip-btn wb-graph-fit-student"
+              onClick={handleFitToStudent}
+              onPointerDown={stopEmbedDrag}
+              onMouseDown={stopEmbedDrag}
+              disabled={fitBlock !== null}
+              title={fitBlockReason ?? undefined}
+              aria-describedby={fitBlockReason ? fitReasonId : undefined}
+              data-testid="wb-graph-fit-student-screen"
+            >
+              {"Fit graph to student's screen"}
+            </button>
+            {fitBlockReason && fitReasonId ? (
+              <span id={fitReasonId} className="wb-graph-fit-reason">
+                {fitBlockReason}
+              </span>
+            ) : null}
+          </>
         ) : null}
         <div className="wb-graph-nav-zoom">
           <button

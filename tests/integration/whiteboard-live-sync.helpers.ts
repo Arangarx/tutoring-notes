@@ -1606,9 +1606,15 @@ export async function addGraphExpressionViaUI(
   const host = page.getByTestId("wb-graph-embed-host").first();
   await expect(host).toBeVisible({ timeout: 30_000 });
   await host.scrollIntoViewIfNeeded();
-  const panel = page.getByTestId("wb-graph-expr-panel");
-  if (!(await panel.isVisible())) {
-    await page.getByTestId("wb-graph-expr-toggle").click();
+  const phoneLauncher = page.getByTestId("wb-graph-phone-expr-launcher");
+  if (await phoneLauncher.isVisible()) {
+    const tray = page.getByTestId("wb-graph-expr-tray");
+    if (!(await tray.isVisible())) await phoneLauncher.click();
+  } else {
+    const panel = page.getByTestId("wb-graph-expr-panel");
+    if (!(await panel.isVisible())) {
+      await host.getByTestId("wb-graph-expr-toggle").click();
+    }
   }
   const input = page.getByTestId("wb-graph-expr-new");
   await input.click();
@@ -1723,8 +1729,12 @@ export type MountedGraphInk = {
  * Read the mounted JSXGraph board in user coordinates.
  * Point coords come from the library's X()/Y(); stroke coords from the curve's data arrays.
  */
-export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> {
-  return page.evaluate(() => {
+/** Reads the first mounted graph, or the graph with `graphId` when several are mounted. */
+export async function readMountedGraphInk(
+  page: Page,
+  graphId?: string
+): Promise<MountedGraphInk> {
+  return page.evaluate((onlyGraphId) => {
     const empty = {
       points: [] as { id: string; x: number; y: number }[],
       strokes: [] as { id: string; pts: [number, number][] }[],
@@ -1763,7 +1773,9 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
     ).JXG;
     // JSXGraph keys JXG.boards by its own id, which is not the DOM id.
     const host = document.querySelector(
-      '[data-testid="wb-graph-embed-host"] .wb-graph-board-host'
+      onlyGraphId
+        ? `[data-graph-id="${onlyGraphId}"] .wb-graph-board-host`
+        : '[data-testid="wb-graph-embed-host"] .wb-graph-board-host'
     );
     if (!JXG || !host) return empty;
     const board = Object.values(JXG.boards).find(
@@ -1830,7 +1842,7 @@ export async function readMountedGraphInk(page: Page): Promise<MountedGraphInk> 
       bbox = null;
     }
     return { points, strokes, previews, bbox, functionGraphCount, functionGraphs };
-  });
+  }, graphId);
 }
 
 export type VisibleSceneRect = {

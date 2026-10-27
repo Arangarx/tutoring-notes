@@ -228,6 +228,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `WbRecenterViewButton` | `src/components/whiteboard/chrome/WbRecenterViewButton.tsx` | Tutor-only top-bar / overflow control. Returns the tutor camera to the center of the current board's content. Students do not get it. Props: `onRecenter`, `variant` (`icon` \| `menu`). | **canonical** |
 | `WbSessionChat` | `src/components/whiteboard/chrome/WbSessionChat.tsx` | SMOKE-POST-2 collapsed in-session text chat (ephemeral relay wire only). | **canonical** |
 | `GraphInkModeControl` | `src/components/whiteboard/GraphInkModeControl.tsx` | Graph embed tool: Pan (default) / Point / Draw. Composes `Button` (`size="sm"`, `secondary` when pressed, `outline` otherwise). Props: `mode`, `onMode`, optional `onPointerDown`. | **canonical** |
+| `WbGraphExprTray` | `src/components/whiteboard/chrome/WbGraphExprTray.tsx` | Phone-only viewport-fixed Expressions launcher plus bottom `Sheet`. One graph edits directly; several graphs use a `Tabs` picker (Graph 1, Graph 2 in board order). Composes `Button`, `Sheet`, `Tabs`. Desktop and tablet keep the on-graph panel. | **canonical** |
 | `Providers` | `src/components/Providers.tsx` | Root client providers (session, theme, etc.) | **canonical** |
 | `LocalDateTimeText` | `src/components/LocalDateTimeText.tsx` | Client-rendered local datetime from UTC | **canonical** |
 | `ModalPortal` | `src/components/ModalPortal.tsx` | Portal for modals | **canonical** |

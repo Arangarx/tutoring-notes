@@ -135,6 +135,7 @@ Sign-In UI **shipped on `master`**. **`calendar.events.owned` write, ICS feed, a
 **Recorded waivers**
 
 - **WAIVER-LASER-PW-RED (Andrew 2026-10-06, `feat/org-qol`):** `tests/integration/wb-org-qol-surface.spec.ts` › "a laser drag does not add a stroke to either scene" cannot be shown red through the real app (a laser trail is an ephemeral pointer message, never a scene element). Kept as a regression guard; the red-before proof is the laser adapter unit test. Hardware regression check is item 29 in `docs/handoff/ORG-QOL-TYSON-TEST-PACKET.md`.
+- **MASTER-PREEXISTING-GATE-FAILURES (Andrew 2026-10-24):** twelve Playwright tests failed the same way on hotfix `fix/wb-student-apply-race` and on unmodified master `eebafee1`. Waiver: merge the hotfix once its own tests and Sonnet review are green; these 12 stay known master failures. Full list in §9. The eight unknown-cause failures are investigated immediately after that merge. The second full gate (`0570a200`) also failed `tests/integration/wb-replay-scrub-seek.spec.ts:767` on master `eebafee1` (same VAD-harness-zero-segments family as `:645`); it is on the §9 investigate list.
 
 ### Triage corrections (Andrew 2026-07-10, on the swing-item review)
 
@@ -914,6 +915,9 @@ Remainder: per-role color/visibility hardware verify. Wire shipped.
 
 **[P1][WB] WB-STUDENT-V3-APPLY-ORDER (2026-10-07)**  
 Student `runV3Apply` moves `activePageId` before replacing the live scene, so a document whose new page is already active can store the visible anchor stroke into the new page. Mitigated for PDF/image insert by broadcasting new boards before the switch (`a5eaa056`). Real fix in `useStudentWhiteboardCanvas.ts` — Opus-owned.
+
+**[P1][WB] WB-STUDENT-APPLY-RACE (2026-10-23)**
+`runV3Apply` (`src/hooks/useStudentWhiteboardCanvas.ts` ~575–638) snapshots `pageDataRef` before its awaits. `onCanvasChange` returns early during an apply (~936), so a local edit made while a tutor apply is in flight is dropped and the merge writes the stale tutor version back. Observed: a graph expression reverts ~70–80ms later, ~17–20% of runs on the iPhone WebKit student. Tutor `apply-v3` arrives ~7 Hz indefinitely (student viewport broadcast ↔ tutor re-broadcast), which keeps that window open. Strokes are probably affected the same way. Design in progress (Opus). Do not patch the apply path until that design lands. Red oracle: `wb-org-qol-surface.spec.ts` › "phone student tray picker edits only the chosen graph" (`test.fixme`). Unfixme with the fix.
 
 **[P2][WB] WB-RENAME-PERSIST (2026-10-07) — Andrew decision**  
 A renamed board tab is live (the student sees it) and is written into the sessionStorage board draft. Reload shows the previous title only when the last persisted event batch predates the rename. Each batch stores `boardDocumentJson` from `pageListRef` at persist time, so a later batch (a stroke after the rename) carries the new title and reload restores it. A rename by itself does not write a batch. Writing a batch via `recordPageSwitch({ evenIfNotRecording: true })` put a pre-Start `page-switch` into the replay log; that option is reverted.
@@ -1841,8 +1845,40 @@ Lower priority.
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
+**[P1][TEST] MASTER-PREEXISTING-GATE-FAILURES (2026-10-24)**
+
+During the pre-master gate for hotfix `fix/wb-student-apply-race` (clean `npm ci` worktree), 12 Playwright tests failed identically on the hotfix branch and on unmodified master `eebafee1`.
+
+**Andrew decision 2026-10-24 (explicit waiver):** merge the hotfix once its own tests and Sonnet review are green. Treat these 12 as known master failures. Investigate the 8 recording/replay ones immediately after the hotfix merges. The second full gate on `0570a200` added `tests/integration/wb-replay-scrub-seek.spec.ts:767` (also fails on master `eebafee1`; same VAD-harness-zero-segments family as `:645`) to that investigate list.
+
+**Environment-only** (no `OPENAI_API_KEY` in the local dev env; `.env` has it empty):
+
+- `tests/audio-upload.spec.ts:138`, `:151`, `:217` — ai-assist-panel omitted without the key
+- `tests/integration/wb-vad-per-speaker-durability.spec.ts:284` — transcription `failed`
+
+**Unknown cause, to investigate** (harness vs real bug). These eight, plus `:767` from the second full gate on `0570a200`:
+
+- `tests/integration/recording-end-to-end.spec.ts:110` — first-open `currentTime` near the end
+- `tests/integration/wb-replay-scrub-seek.spec.ts:533` — `concat_skipped` / `no_mixdown_segments`, 300s timeout
+- `tests/integration/wb-replay-scrub-seek.spec.ts:645` — VAD harness, 0 `tutor:mic` segments
+- `tests/integration/wb-replay-scrub-seek.spec.ts:767` — "multi-segment VAD: seek into later segment lands at intra-segment offset"; `tutor:mic` segments 0, expected >=2; also fails on master `eebafee1`; same VAD-harness-zero-segments family as `:645`
+- `tests/integration/recording-resilience.spec.ts:224` — `SessionRecording` count 0, `no_mixdown_segments`
+- `tests/integration/wb-tab-kill-audio-durability.spec.ts:181` — 0 `tutor:mic` outbox rows/segments
+- `tests/integration/wb-tab-kill-audio-durability.spec.ts:275` — 0 `tutor:mic` outbox rows/segments
+- `tests/integration/view-whiteboard-new-replay.spec.ts:189` — `share-wb-replay-links` matched 3; shared local DB reuses `Playwright Student` with many READY notes (test isolation)
+- `tests/integration/wb-cancel-pending-session.spec.ts:176` — `wb-waiting-cancel-confirm` never appears
+
+**Flakes seen** (not part of the 12): `tests/integration/wb-wave5-polish.spec.ts:568` and `:777`, `tests/integration/wb-cancel-pending-session.spec.ts:121`, `tests/integration/calendar-sync-badge.spec.ts:16`, `tests/integration/wb-notes-shimmer.spec.ts:289` and `:326`. Second full gate (`0570a200`) also flaked: `tests/integration/wb-session-lifecycle.spec.ts:1564`, `tests/integration/wb-notes-shimmer.spec.ts:254`, and jest `src/__tests__/dom/WhiteboardWorkspaceOutboxDrainUI.dom.test.tsx` "shows Saving your recording…" (outbox row `seg-pending-p2-j5` still present; passed alone).
+
+**Status:** `WAIVED` for the hotfix merge. The eight unknown-cause items, plus `:767`, stay `OPEN` and are investigated immediately after that merge.
+
 **[P2][TEST] PLAYWRIGHT-GAP — iOS soft keyboard covers the phone graph expression tray (2026-10-22)**  
 On a phone, graph expression editing opens in a bottom sheet (`wb-graph-expr-tray`). The sheet offsets itself with `visualViewport` when the keyboard shrinks the visible area. Playwright cannot summon the iOS keyboard or reproduce that occlusion. Hardware check: on an iPhone, open ƒ Expressions, focus the expression field, and confirm the field stays above the keyboard. Surrogate: `wb-org-qol-surface.spec.ts` › "phone expression editing opens a bottom tray inside the viewport and plots on both peers" (input inside the layout viewport, no keyboard).
+
+**[P3][WB] graph phone tray follow-ups (2026-10-23; launcher updated 2026-10-27)**
+- The phone expression launcher is one viewport-fixed chrome control (`WbGraphExprTray`), shown only in phone layout when the current board has a graph. One graph edits directly; more than one uses a picker labeled Graph 1, Graph 2 in board order. The per-graph strip toggle remains on desktop and tablet.
+- Tutor fit-readiness still polls every 400ms on desktop, because Fit graph to student's screen stays on the graph for the tutor.
+- `useWbLayoutMode` starts as `desktop`, so the first phone render can flash the inline expression panel before the effect switches to the tray.
 
 **[P2][TEST] Fixed 2026-10-23 — `wb-graph-ink.spec.ts` draw-preview strokes stay off the graph controls**  
 "draw preview follows the drag locally…" failed 3 of 3 at the third in-progress stroke (`previews` length 0). Cause was test geometry: the stroke started at 40% / 70% of `.wb-graph-board-host`, and `.wb-graph-controls` (taller since the y= helper in `44b18050`) covered that point, so `elementFromPoint` returned `div.wb-graph-controls-strip`. Stroke points now come from the live board rect with the controls rect removed, and each stroke start asserts `elementFromPoint` is inside `.wb-graph-board-host` and not inside `.wb-graph-controls`. Product code unchanged. Spec green 3/3 on `feat/org-qol`.

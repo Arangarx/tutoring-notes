@@ -1,0 +1,29 @@
+/* Viewport-fixed phone launcher. JS sets left/top so the box stays in the
+   visible viewport and clear of the bottom toolbar and other chrome. */
+.wb-graph-phone-expr-launcher {
+  position: fixed;
+  z-index: 40;
+  right: 12px;
+  bottom: 72px;
+  width: max-content;
+}
+
+/* Phone expression sheet. Height follows the visual viewport via inline bottom. */
+.wb-graph-expr-tray {
+  max-height: min(70dvh, 100%);
+  overflow: auto;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface-drawer);
+  color: var(--text-strong);
+}
+
+.wb-graph-expr-picker {
+  width: 100%;
+}
+
+.wb-graph-expr-tray-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
