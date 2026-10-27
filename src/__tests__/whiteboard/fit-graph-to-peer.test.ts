@@ -72,6 +72,9 @@ describe("resizeGraphElementToBox", () => {
     expect(next[0].version).toBe(4);
     expect(next[0].customData?.graphStateJson).toBe(graph.customData.graphStateJson);
     expect(next[1]).toBe(other);
-    expect(updateScene.mock.calls[0][0].captureUpdate).toBeUndefined();
+    // Excalidraw 0.18 CaptureUpdateAction.IMMEDIATELY records the update on
+    // the undo stack immediately, the same as a user resize. Omitting
+    // captureUpdate defaults to EVENTUALLY, which is not undoable yet.
+    expect(updateScene.mock.calls[0][0].captureUpdate).toBe("IMMEDIATELY");
   });
 });

@@ -1,4 +1,7 @@
-import type { GraphPersistApiLike } from "@/lib/whiteboard/graph-persist";
+import {
+  patchGraphElement,
+  type GraphPersistApiLike,
+} from "@/lib/whiteboard/graph-persist";
 import {
   peerVisibleSceneRect,
   type PeerViewportWire,
@@ -39,17 +42,13 @@ export function graphSceneBoxFitToPeer(peer: PeerViewportWire): GraphSceneBox | 
   };
 }
 
-type SceneElementLike = {
-  id: string;
-  version?: number;
-  versionNonce?: number;
-  updated?: number;
-};
-
 /**
  * Write a graph embed's scene box. Same element fields a manual resize
  * changes (x, y, width, height). graphStateJson is left untouched.
- * Omits captureUpdate so Excalidraw records it like a user resize.
+ * `captureUpdate: "IMMEDIATELY"` is Excalidraw 0.18
+ * `CaptureUpdateAction.IMMEDIATELY`: the box change is recorded on the
+ * undo stack immediately, like a user resize. Omitting it defaults to
+ * EVENTUALLY, which is not undoable until a later capture.
  */
 export function resizeGraphElementToBox(args: {
   excalidrawAPI: GraphPersistApiLike;
@@ -57,23 +56,15 @@ export function resizeGraphElementToBox(args: {
   box: GraphSceneBox;
 }): boolean {
   const { excalidrawAPI, elementId, box } = args;
-  let changed = false;
-  const elements = excalidrawAPI.getSceneElements().map((raw) => {
-    const el = raw as SceneElementLike;
-    if (el.id !== elementId) return raw;
-    changed = true;
-    return {
-      ...el,
+  return patchGraphElement(
+    excalidrawAPI,
+    elementId,
+    () => ({
       x: box.x,
       y: box.y,
       width: box.width,
       height: box.height,
-      version: (el.version ?? 1) + 1,
-      versionNonce: Math.floor(Math.random() * 2 ** 31),
-      updated: Date.now(),
-    };
-  });
-  if (!changed) return false;
-  excalidrawAPI.updateScene({ elements });
-  return true;
+    }),
+    "IMMEDIATELY"
+  );
 }
