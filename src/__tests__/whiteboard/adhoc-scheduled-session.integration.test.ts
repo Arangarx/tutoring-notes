@@ -170,13 +170,25 @@ async function seedPersonalStudent(consent: boolean) {
  * Organization owns the student (`organizationId` set, `adminUserId` null).
  * Consent is the organization row, which is what the start gate reads, so a
  * whiteboard row exists and its `scheduledSessionId` can be checked.
+ *
+ * Opening that room also requires an active organization and an admitted
+ * instructor (`orgInstructorAdmitted`). This fixture is that instructor.
+ * A pending org with no membership is a denial, not this scenario.
  */
 async function seedOrgOwnedStudent() {
   const tutor = await seedTutor();
   const org = await db.organization.create({
     data: {
       name: `Ad hoc org ${uniq("org")}`,
+      status: "active",
       createdByOperatorId: "adhoc-op@example.com",
+    },
+  });
+  await db.organizationMember.create({
+    data: {
+      organizationId: org.id,
+      adminUserId: tutor.id,
+      roles: ["instructor"],
     },
   });
   const student = await seedClaimedChild({
