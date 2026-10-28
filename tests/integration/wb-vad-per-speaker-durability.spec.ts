@@ -19,6 +19,13 @@ import {
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
+/**
+ * TutorNote.error / TranscriptChunk.error when the server has no OpenAI key.
+ * The review banner says "couldn't finish your notes" for every failure, so
+ * that copy is not this oracle.
+ */
+const OPENAI_NOT_CONFIGURED = "OPENAI_API_KEY not configured";
+
 /** Above injectVadOverrides threshold (0.15) — forces "speech" in VAD tick. */
 const VAD_METER_HIGH = 0.5;
 /** Below threshold — forces silence accumulation toward a boundary cut. */
@@ -92,8 +99,14 @@ async function fetchTranscriptChunks(
   return (await res.json()) as {
     count: number;
     byStream: Record<string, number>;
-    rows: Array<{ streamId: string; speakerId: string | null; status: string }>;
+    rows: Array<{
+      streamId: string;
+      speakerId: string | null;
+      status: string;
+      error: string | null;
+    }>;
     tutorNoteStatus: string | null;
+    tutorNoteError: string | null;
   };
 }
 
@@ -343,6 +356,9 @@ test.describe(
         timeout: 180_000,
       });
 
+      // done/partial when a key is configured. The exact not-configured error
+      // when it is not. Any other failure still fails this test.
+      let noteOutcome: "ready" | "not-configured" | null = null;
       await expect
         .poll(
           async () => {
@@ -350,21 +366,40 @@ test.describe(
               peers.tutorPage,
               session.whiteboardSessionId
             );
-            return tx.tutorNoteStatus;
+            if (tx.tutorNoteStatus === "done" || tx.tutorNoteStatus === "partial") {
+              noteOutcome = "ready";
+              return "ready";
+            }
+            if (tx.tutorNoteStatus === "failed") {
+              if (tx.tutorNoteError === OPENAI_NOT_CONFIGURED) {
+                noteOutcome = "not-configured";
+                return "not-configured";
+              }
+              throw new Error(
+                `Tutor note failed: ${tx.tutorNoteError ?? "(no error recorded)"}`
+              );
+            }
+            return tx.tutorNoteStatus ?? "pending";
           },
           { timeout: 240_000 }
         )
-        .toMatch(/^(done|partial)$/);
+        .toMatch(/^(ready|not-configured)$/);
 
       const tx = await fetchTranscriptChunks(
         peers.tutorPage,
         session.whiteboardSessionId
       );
       expect(tx.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(1);
+      if (noteOutcome === "not-configured") {
+        expect(tx.tutorNoteError).toBe(OPENAI_NOT_CONFIGURED);
+        expect(
+          tx.rows.some((row) => row.error === OPENAI_NOT_CONFIGURED)
+        ).toBe(true);
+      }
       // [human-only] Fake-mic synthetic WebM cannot be transcribed by Whisper (400 /
       // ffmpeg corrupt); per-speaker upload+enqueue path is proven (WS-A outbox 5-axis
       // review); transcript E2E requires real audio hardware.
-      if (process.env.HUMAN_ONLY_AUDIO) {
+      if (noteOutcome === "ready" && process.env.HUMAN_ONLY_AUDIO) {
         const perSpeakerStreamIds = Object.keys(tx.byStream).filter((id) =>
           id.startsWith("speaker:")
         );

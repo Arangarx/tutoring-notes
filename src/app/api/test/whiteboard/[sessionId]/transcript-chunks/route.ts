@@ -19,6 +19,7 @@ export async function GET(
       streamId: true,
       speakerId: true,
       status: true,
+      error: true,
       recordingTimeOffsetMs: true,
     },
     orderBy: { recordingTimeOffsetMs: "asc" },
@@ -31,7 +32,7 @@ export async function GET(
 
   const tutorNote = await db.tutorNote.findUnique({
     where: { sessionId },
-    select: { status: true, lastReducedChunkCount: true, content: true },
+    select: { status: true, error: true, lastReducedChunkCount: true, content: true },
   });
 
   const doneChunkCount = rows.filter((r) => r.status === "done").length;
@@ -68,6 +69,7 @@ export async function GET(
     byStream,
     rows,
     tutorNoteStatus: tutorNote?.status ?? null,
+    tutorNoteError: tutorNote?.error ?? null,
     tutorNoteContent: tutorNote?.content ?? null,
     tutorNoteLastReducedChunkCount: tutorNote?.lastReducedChunkCount ?? 0,
     doneChunkCount,
