@@ -3,10 +3,12 @@
 }
 
 /* The monolith fade is always on. This cue replaces it and only shows
-   while the list can still scroll. */
-.mynk-wb-chrome .mynk-wb-menu-scroll .mynk-wb-topbar-overflow-dropdown__scroll {
+   while the list can still scroll. Fade clearance is the component's
+   own parameter (--mynk-menu-scroll-fade-pad), not a reach-in to the
+   shared scroll class. */
+.mynk-wb-chrome .mynk-wb-menu-scroll__scroller {
   mask-image: none;
-  padding-bottom: 4px;
+  padding-bottom: var(--mynk-menu-scroll-fade-pad, 40px);
   max-height: min(70dvh, 880px);
 }
 

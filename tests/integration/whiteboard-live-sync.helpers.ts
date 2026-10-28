@@ -1197,6 +1197,15 @@ export async function readControlViewportRect(
 }
 
 /**
+ * Half-pixel slack for viewport-edge containment.
+ * Commit a0ff5d63 sized the touch overflow button to the 44px top bar.
+ * Flex centering of that full-height control rounds to about -0.5px.
+ * visual-layout-oracles allows 2–4px for subpixel rounding. A control
+ * shifted by more than this still fails.
+ */
+export const VIEWPORT_CONTAINMENT_SLACK_PX = 2;
+
+/**
  * Control must be fully inside the layout viewport (tappable without scroll).
  * Use for top-bar chrome — catches horizontal clip regressions on phone.
  */
@@ -1211,7 +1220,9 @@ export async function assertControlFullyInViewport(
   expect(rect.width, `${testId} width`).toBeGreaterThan(0);
   expect(rect.height, `${testId} height`).toBeGreaterThan(0);
   expect(rect.left, `${testId} left edge`).toBeGreaterThanOrEqual(0);
-  expect(rect.top, `${testId} top edge`).toBeGreaterThanOrEqual(0);
+  expect(rect.top, `${testId} top edge`).toBeGreaterThanOrEqual(
+    -VIEWPORT_CONTAINMENT_SLACK_PX
+  );
   expect(rect.right, `${testId} right edge`).toBeLessThanOrEqual(
     rect.viewportWidth
   );

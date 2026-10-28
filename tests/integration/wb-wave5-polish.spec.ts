@@ -8,6 +8,7 @@ import {
 import {
   assertControlFullyInViewport,
   assertEqualVerticalInsetInParent,
+  VIEWPORT_CONTAINMENT_SLACK_PX,
   assertStudentPortraitTopBarControls,
   clickBoardPageTab,
   drawTestStrokeOnRole,
@@ -916,7 +917,9 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
           expect(rect.width, `${rect.id} width at ${width}px`).toBeGreaterThan(0);
           expect(rect.height, `${rect.id} height at ${width}px`).toBeGreaterThan(0);
           expect(rect.left, `${rect.id} left edge at ${width}px`).toBeGreaterThanOrEqual(0);
-          expect(rect.top, `${rect.id} top edge at ${width}px`).toBeGreaterThanOrEqual(0);
+          expect(rect.top, `${rect.id} top edge at ${width}px`).toBeGreaterThanOrEqual(
+            -VIEWPORT_CONTAINMENT_SLACK_PX
+          );
           expect(
             rect.right,
             `${rect.id} right edge at ${width}px`
