@@ -130,9 +130,31 @@ test.describe("whiteboard QoL surfaces", () => {
     const peers = await openTutorAndStudent(browser, session);
     try {
       await waitForTutorStudentConnected(peers.tutorPage);
+      // The Next dev issues badge sits on the bottom-left and takes the pointer
+      // after console errors accumulate. Production has no badge.
+      // `devIndicators: false` does not remove this button on the current Next.
+      await peers.tutorPage.addStyleTag({
+        content: "nextjs-portal { display: none !important; }",
+      });
       const boards = peers.tutorPage.getByRole("tablist", { name: "Boards" });
       await boards.getByRole("tab", { name: "Board 1" }).hover();
-      await boards.getByRole("button", { name: "Rename Board 1" }).click();
+      const rename = boards.getByRole("button", { name: "Rename Board 1" });
+      await expect
+        .poll(async () => {
+          const box = await rename.boundingBox();
+          if (!box || box.width < 1 || box.height < 1) return "missing";
+          return peers.tutorPage.evaluate(
+            ({ x, y }) => {
+              const el = document.elementFromPoint(x, y);
+              if (!el) return "none";
+              if (el.closest("nextjs-portal")) return "portal";
+              return el.closest('[role="tablist"]') ? "tablist" : "other";
+            },
+            { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+          );
+        })
+        .toBe("tablist");
+      await rename.click();
       const nameField = boards.getByRole("textbox", { name: "Name for Board 1" });
       await expect(nameField).toHaveAttribute("maxLength", String(BOARD_TITLE_MAX_LENGTH));
       await nameField.evaluate((el) => el.removeAttribute("maxlength"));
