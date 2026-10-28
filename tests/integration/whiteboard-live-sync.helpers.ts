@@ -1650,6 +1650,60 @@ export async function assertEqualVerticalInsetInParent(
   ).toBeLessThanOrEqual(tolerancePx);
 }
 
+export type VisualViewportControlPlacement = {
+  present: boolean;
+  inViewport: boolean;
+  hitOk: boolean;
+  unscaled: boolean;
+};
+
+/**
+ * One bounds oracle for chrome controls: inside the visual viewport, unscaled,
+ * and the element under the pointer. Callers add surface-specific checks
+ * (toolbar clearance, which graph) on top of this.
+ */
+export async function readControlInVisualViewport(
+  page: Page,
+  testId: string
+): Promise<VisualViewportControlPlacement> {
+  return page.evaluate((id) => {
+    const el = document.querySelector(`[data-testid="${id}"]`);
+    if (!(el instanceof HTMLElement)) {
+      return {
+        present: false,
+        inViewport: false,
+        hitOk: false,
+        unscaled: false,
+      };
+    }
+    const rect = el.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const viewLeft = vv ? vv.offsetLeft : 0;
+    const viewTop = vv ? vv.offsetTop : 0;
+    const viewRight = viewLeft + (vv ? vv.width : window.innerWidth);
+    const viewBottom = viewTop + (vv ? vv.height : window.innerHeight);
+    const slack = 2;
+    const present = rect.width > 8 && rect.height > 8;
+    const inViewport =
+      present &&
+      rect.left >= viewLeft - slack &&
+      rect.top >= viewTop - slack &&
+      rect.right <= viewRight + slack &&
+      rect.bottom <= viewBottom + slack;
+    const hit = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2
+    );
+    const scale = el.offsetHeight > 0 ? rect.height / el.offsetHeight : 0;
+    return {
+      present,
+      inViewport,
+      hitOk: !!hit && (hit === el || el.contains(hit)),
+      unscaled: scale > 0.9 && scale < 1.1,
+    };
+  }, testId);
+}
+
 /** Left edges of overflow dropdown menu rows — consistent left alignment oracle. */
 export async function readOverflowMenuItemLeftEdges(
   page: Page

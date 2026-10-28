@@ -122,3 +122,41 @@ export function readVisualViewportBox(): CssBox | null {
     height: vv.height,
   };
 }
+
+/** Layout-viewport edges when the visual viewport is missing. */
+export function readVisualViewportEdges(): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+} | null {
+  if (typeof window === "undefined") return null;
+  const box = readVisualViewportBox();
+  if (!box) {
+    return {
+      left: 0,
+      top: 0,
+      right: window.innerWidth,
+      bottom: window.innerHeight,
+    };
+  }
+  return {
+    left: box.left,
+    top: box.top,
+    right: box.left + box.width,
+    bottom: box.top + box.height,
+  };
+}
+
+/** Shared resize/scroll subscription. Callers read the box via {@link readVisualViewportBox}. */
+export function subscribeVisualViewport(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const vv = window.visualViewport;
+  if (!vv) return () => undefined;
+  vv.addEventListener("resize", onChange);
+  vv.addEventListener("scroll", onChange);
+  return () => {
+    vv.removeEventListener("resize", onChange);
+    vv.removeEventListener("scroll", onChange);
+  };
+}

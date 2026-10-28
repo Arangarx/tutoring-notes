@@ -1875,10 +1875,10 @@ During the pre-master gate for hotfix `fix/wb-student-apply-race` (clean `npm ci
 **[P2][TEST] PLAYWRIGHT-GAP — iOS soft keyboard covers the phone graph expression tray (2026-10-22)**  
 On a phone, graph expression editing opens in a bottom sheet (`wb-graph-expr-tray`). The sheet offsets itself with `visualViewport` when the keyboard shrinks the visible area. Playwright cannot summon the iOS keyboard or reproduce that occlusion. Hardware check: on an iPhone, open ƒ Expressions, focus the expression field, and confirm the field stays above the keyboard. Surrogate: `wb-org-qol-surface.spec.ts` › "phone expression editing opens a bottom tray inside the viewport and plots on both peers" (input inside the layout viewport, no keyboard).
 
-**[P3][WB] graph phone tray follow-ups (2026-10-23; launcher updated 2026-10-27)**
+**[P3][WB] graph phone tray follow-ups (2026-10-23; launcher updated 2026-10-27; review blockers 2026-10-27)**
 - The phone expression launcher is one viewport-fixed chrome control (`WbGraphExprTray`), shown only in phone layout when the current board has a graph. One graph edits directly; more than one uses a picker labeled Graph 1, Graph 2 in board order. The per-graph strip toggle remains on desktop and tablet.
-- Tutor fit-readiness still polls every 400ms on desktop, because Fit graph to student's screen stays on the graph for the tutor.
-- `useWbLayoutMode` starts as `desktop`, so the first phone render can flash the inline expression panel before the effect switches to the tray.
+- Graphs Excalidraw never mounts (scrolled off the current board) are not registered with the phone tray, so the picker can undercount and skip a "Graph N". Fixing that means reading the scene without going through the embed mount. Not done — it is easy to get wrong next to the apply path.
+- Fit graph to student's screen updates when the peer viewport wire changes (`emitFitPeerView`), not on a 400ms poll.
 
 **[P2][TEST] Fixed 2026-10-23 — `wb-graph-ink.spec.ts` draw-preview strokes stay off the graph controls**  
 "draw preview follows the drag locally…" failed 3 of 3 at the third in-progress stroke (`previews` length 0). Cause was test geometry: the stroke started at 40% / 70% of `.wb-graph-board-host`, and `.wb-graph-controls` (taller since the y= helper in `44b18050`) covered that point, so `elementFromPoint` returned `div.wb-graph-controls-strip`. Stroke points now come from the live board rect with the controls rect removed, and each stroke start asserts `elementFromPoint` is inside `.wb-graph-board-host` and not inside `.wb-graph-controls`. Product code unchanged. Spec green 3/3 on `feat/org-qol`.

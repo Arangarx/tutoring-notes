@@ -5,6 +5,20 @@ import type { WhiteboardSyncClient, WhiteboardWirePageViewStateMsg } from "@/lib
 
 export type PeerPageViewState = WhiteboardWirePageViewStateMsg;
 
+const fitPeerViewListeners = new Set<() => void>();
+
+/** Notify graph Fit buttons that `fitPeerViewRef` was just updated. */
+export function emitFitPeerView(): void {
+  for (const listener of fitPeerViewListeners) listener();
+}
+
+export function subscribeFitPeerView(listener: () => void): () => void {
+  fitPeerViewListeners.add(listener);
+  return () => {
+    fitPeerViewListeners.delete(listener);
+  };
+}
+
 /**
  * Latest viewport wire from the opposite role (for VP-01 ghost overlay).
  */

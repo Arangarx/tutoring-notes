@@ -26,6 +26,7 @@ import {
   waitForTutorStudentConnected,
   waitUntilPageFingerprintClear,
   waitForWbE2eBridge,
+  readControlInVisualViewport,
   readViewportSnapshot,
 } from "./whiteboard-live-sync.helpers";
 import type { Page } from "@playwright/test";
@@ -1151,37 +1152,15 @@ test.describe("whiteboard QoL surfaces", () => {
         await expect(input).toBeVisible();
         await expect
           .poll(
-            () =>
-              input.evaluate((el) => {
-                const rect = el.getBoundingClientRect();
-                const vv = window.visualViewport;
-                const viewLeft = vv ? vv.offsetLeft : 0;
-                const viewTop = vv ? vv.offsetTop : 0;
-                const viewRight = viewLeft + (vv ? vv.width : window.innerWidth);
-                const viewBottom = viewTop + (vv ? vv.height : window.innerHeight);
-                const slack = 2;
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                const hit = document.elementFromPoint(centerX, centerY);
-                const scale =
-                  el instanceof HTMLElement && el.offsetHeight > 0
-                    ? rect.height / el.offsetHeight
-                    : 0;
-                return {
-                  inView:
-                    rect.width > 8 &&
-                    rect.height > 8 &&
-                    rect.left >= viewLeft - slack &&
-                    rect.top >= viewTop - slack &&
-                    rect.right <= viewRight + slack &&
-                    rect.bottom <= viewBottom + slack,
-                  hitOk: !!hit && (hit === el || el.contains(hit)),
-                  scaleOk: scale > 0.9 && scale < 1.1,
-                };
-              }),
+            () => readControlInVisualViewport(peers.studentPage, "wb-graph-expr-new"),
             { timeout: 10_000 }
           )
-          .toEqual({ inView: true, hitOk: true, scaleOk: true });
+          .toEqual({
+            present: true,
+            inViewport: true,
+            hitOk: true,
+            unscaled: true,
+          });
 
         await input.fill("2x+1");
         await input.press("Enter");
@@ -1476,6 +1455,266 @@ test.describe("whiteboard QoL surfaces", () => {
       }
     }
   );
+
+  test.describe("phone graph tray review blockers", () => {
+    test(
+      "tray stays closed after leaving a board and coming back",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ browser }) => {
+        test.setTimeout(240_000);
+        const session = await seedWbLiveSyncSession();
+        const peers = await openTutorAndStudent(browser, session, {
+          studentBrowser: "webkit",
+        });
+        try {
+          const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, ["x^2"]);
+          await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+          const launcher = peers.studentPage.getByTestId("wb-graph-phone-expr-launcher");
+          await expect(launcher).toBeVisible({ timeout: 20_000 });
+          await launcher.tap();
+          const tray = peers.studentPage.getByTestId("wb-graph-expr-tray");
+          await expect(tray).toBeVisible();
+
+          await peers.tutorPage.getByRole("button", { name: "Add board" }).click();
+          await expect(peers.studentPage.getByTestId("wb-graph-embed-host")).toHaveCount(0, {
+            timeout: 20_000,
+          });
+          await expect(tray).toBeHidden();
+
+          await clickBoardPageTab(peers.tutorPage, "tutor", "Board 1");
+          await expect(peers.studentPage.getByTestId("wb-graph-embed-host")).toHaveCount(1, {
+            timeout: 20_000,
+          });
+          await expect(launcher).toBeVisible();
+          await expect(launcher).toHaveAttribute("aria-expanded", "false");
+          await expect(tray).toBeHidden();
+        } finally {
+          await peers.close();
+        }
+      }
+    );
+
+    test(
+      "tray stays closed after the only graph is deleted and a new one is inserted",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ page }) => {
+        test.setTimeout(180_000);
+        const session = await openTutorBoard(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        const graphId = await insertGraphOnRole(page, "tutor", session, ["x"]);
+        const launcher = page.getByTestId("wb-graph-phone-expr-launcher");
+        await expect(launcher).toBeVisible({ timeout: 20_000 });
+        await launcher.click();
+        const tray = page.getByTestId("wb-graph-expr-tray");
+        await expect(tray).toBeVisible();
+
+        await deleteSceneElement(page, "tutor", graphId);
+        await expect(page.getByTestId("wb-graph-embed-host")).toHaveCount(0, {
+          timeout: 20_000,
+        });
+        await expect(launcher).toHaveCount(0);
+
+        await insertGraphOnRole(page, "tutor", session, ["x^2"]);
+        await expect(page.getByTestId("wb-graph-embed-host")).toHaveCount(1, {
+          timeout: 20_000,
+        });
+        await expect(launcher).toBeVisible();
+        await expect(launcher).toHaveAttribute("aria-expanded", "false");
+        await expect(tray).toBeHidden();
+      }
+    );
+
+    test(
+      "a phone graph mount never paints the inline expression panel",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ page }) => {
+        test.setTimeout(180_000);
+        await page.addInitScript(() => {
+          const w = window as Window & { __wbInlineExprPanelSeen?: boolean };
+          w.__wbInlineExprPanelSeen = false;
+          const mark = () => {
+            if (document.querySelector("[data-testid='wb-graph-expr-panel']")) {
+              w.__wbInlineExprPanelSeen = true;
+            }
+          };
+          const obs = new MutationObserver(mark);
+          const arm = () => {
+            obs.observe(document.documentElement, { childList: true, subtree: true });
+            mark();
+          };
+          if (document.documentElement) arm();
+          else document.addEventListener("DOMContentLoaded", arm);
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+        const session = await openTutorBoard(page);
+        const graphId = await insertGraphOnRole(page, "tutor", session, ["x"]);
+        await expect(page.getByTestId("wb-graph-embed-host")).toHaveCount(1, {
+          timeout: 20_000,
+        });
+        await expect(page.getByTestId("wb-graph-phone-expr-launcher")).toBeVisible({
+          timeout: 20_000,
+        });
+        // The observer latches the first time the inline panel is inserted, including
+        // a one-frame flash that is gone by the time the launcher is visible.
+        await page.waitForTimeout(300);
+        expect(
+          await page.evaluate(
+            () =>
+              (window as Window & { __wbInlineExprPanelSeen?: boolean })
+                .__wbInlineExprPanelSeen === true
+          )
+        ).toBe(false);
+        await expect(page.getByTestId("wb-graph-expr-panel")).toHaveCount(0);
+        expect(graphId).toBeTruthy();
+        await insertGraphOnRole(page, "tutor", session, ["x^2"]);
+        await expect(page.getByTestId("wb-graph-embed-host")).toHaveCount(2, {
+          timeout: 20_000,
+        });
+        expect(
+          await page.evaluate(
+            () =>
+              (window as Window & { __wbInlineExprPanelSeen?: boolean })
+                .__wbInlineExprPanelSeen === true
+          )
+        ).toBe(false);
+        await expect(page.getByTestId("wb-graph-expr-panel")).toHaveCount(0);
+      }
+    );
+
+    test(
+      "Escape-cancel then Enter plots on a phone in Chromium",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ page }) => {
+        test.setTimeout(180_000);
+        const session = await openTutorBoard(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        const graphId = await insertGraphOnRole(page, "tutor", session, ["x^2"]);
+        await expect(page.getByTestId("wb-graph-embed-host")).toHaveCount(1, {
+          timeout: 20_000,
+        });
+        await escapeCancelThenPlot(page, "tutor", graphId, true);
+      }
+    );
+
+    test(
+      "Escape-cancel then Enter plots on a phone in WebKit",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ browser }) => {
+        test.setTimeout(240_000);
+        const session = await seedWbLiveSyncSession();
+        const peers = await openTutorAndStudent(browser, session, {
+          studentBrowser: "webkit",
+        });
+        try {
+          const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, ["x^2"]);
+          await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+          await expect(peers.studentPage.getByTestId("wb-graph-embed-host")).toHaveCount(1, {
+            timeout: 30_000,
+          });
+          await escapeCancelThenPlot(peers.studentPage, "student", graphId, true);
+        } finally {
+          await peers.close();
+        }
+      }
+    );
+
+    test(
+      "desktop Escape-cancel then Enter plots the next expression",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ page }) => {
+        test.setTimeout(180_000);
+        const session = await openTutorBoard(page);
+        const graphId = await insertGraphOnRole(page, "tutor", session, ["x^2"]);
+        await expect(page.getByTestId("wb-graph-expr-panel")).toBeVisible({ timeout: 20_000 });
+        await escapeCancelThenPlot(page, "tutor", graphId, false);
+      }
+    );
+
+    test(
+      "switching graph tabs drops the in-progress edit",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ page }) => {
+        test.setTimeout(180_000);
+        const session = await openTutorBoard(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        const graph1 = await insertGraphOnRole(page, "tutor", session, ["x"]);
+        await insertGraphOnRole(page, "tutor", session, ["x^2"]);
+        await expect(page.getByTestId("wb-graph-embed-host")).toHaveCount(2, {
+          timeout: 20_000,
+        });
+        await openPhoneGraphPickerOn(page, "Graph 1");
+        const tray = page.getByTestId("wb-graph-expr-tray");
+        await tray.getByTestId("wb-graph-expr-display-0").click();
+        const edit = tray.getByTestId("wb-graph-expr-edit-0");
+        await expect(edit).toBeVisible();
+        await edit.fill("999*x");
+        await tray.getByRole("tab", { name: "Graph 2" }).click();
+        await expect(tray.getByTestId("wb-graph-expr-display-0")).toContainText("x^2");
+        await tray.getByRole("tab", { name: "Graph 1" }).click();
+        await expect(tray.getByTestId("wb-graph-expr-edit-0")).toHaveCount(0);
+        await expect(tray.getByTestId("wb-graph-expr-display-0")).toContainText("x");
+        await expect(tray.getByTestId("wb-graph-expr-display-0")).not.toContainText("999");
+        const state = await readGraphElementState(page, "tutor", graph1);
+        expect(state?.expressions.join("|")).toBe("x");
+      }
+    );
+
+    test(
+      "picker labels follow scene order after a reorder",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ page }) => {
+        test.setTimeout(180_000);
+        const session = await openTutorBoard(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        const graph1 = await insertGraphOnRole(page, "tutor", session, ["x"]);
+        const graph2 = await insertGraphOnRole(page, "tutor", session, ["x^2"]);
+        await expect(page.getByTestId("wb-graph-embed-host")).toHaveCount(2, {
+          timeout: 20_000,
+        });
+        await openPhoneGraphPickerOn(page, "Graph 1");
+        const tray = page.getByTestId("wb-graph-expr-tray");
+        await expect(tray.getByTestId("wb-graph-expr-display-0")).toContainText("x");
+        await moveSceneElementBefore(page, "tutor", graph2, graph1);
+        await expect(tray.getByRole("tab", { name: "Graph 1" })).toBeVisible();
+        await tray.getByRole("tab", { name: "Graph 1" }).click();
+        await expect(tray.getByTestId("wb-graph-expr-display-0")).toContainText("x^2");
+        await tray.getByRole("tab", { name: "Graph 2" }).click();
+        await expect(tray.getByTestId("wb-graph-expr-display-0")).toHaveText(/x$/);
+      }
+    );
+
+    test(
+      "Escape on a tray control closes the tray and does not reach document",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ page }) => {
+        test.setTimeout(180_000);
+        const session = await openTutorBoard(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await insertGraphOnRole(page, "tutor", session, ["x"]);
+        const launcher = page.getByTestId("wb-graph-phone-expr-launcher");
+        await expect(launcher).toBeVisible({ timeout: 20_000 });
+        await launcher.click();
+        const tray = page.getByTestId("wb-graph-expr-tray");
+        await expect(tray).toBeVisible();
+        await page.evaluate(() => {
+          const w = window as Window & { __wbDocEscape?: number };
+          w.__wbDocEscape = 0;
+          document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") w.__wbDocEscape = (w.__wbDocEscape ?? 0) + 1;
+          });
+        });
+        await tray.getByRole("button", { name: "Close" }).focus();
+        await page.keyboard.press("Escape");
+        await expect(tray).toBeHidden();
+        await expect(launcher).toBeFocused();
+        expect(
+          await page.evaluate(
+            () => (window as Window & { __wbDocEscape?: number }).__wbDocEscape ?? 0
+          )
+        ).toBe(0);
+      }
+    );
+  });
 });
 
 type EmbedSceneBox = { x: number; y: number; width: number; height: number };
@@ -1489,6 +1728,96 @@ function sceneBoxesMatch(a: EmbedSceneBox, b: EmbedSceneBox): boolean {
   );
 }
 
+async function deleteSceneElement(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string
+) {
+  await page.evaluate(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<string, { deleteElement?: (elementId: string) => void }>;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.deleteElement) throw new Error(`deleteElement missing for ${r}`);
+      bridge.deleteElement(id);
+    },
+    { r: role, id: elementId }
+  );
+}
+
+async function moveSceneElementBefore(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string,
+  beforeId: string
+) {
+  await page.evaluate(
+    ({ r, id, before }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            { moveElementBefore?: (elementId: string, beforeId: string) => void }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.moveElementBefore) throw new Error(`moveElementBefore missing for ${r}`);
+      bridge.moveElementBefore(id, before);
+    },
+    { r: role, id: elementId, before: beforeId }
+  );
+}
+
+/** Escape cancels the open edit; the next Enter must plot (curve vs Math). */
+async function escapeCancelThenPlot(
+  page: Page,
+  role: "tutor" | "student",
+  graphId: string,
+  phone: boolean
+) {
+  const root = phone
+    ? page.getByTestId("wb-graph-expr-tray")
+    : page.getByTestId("wb-graph-expr-panel");
+  if (phone) {
+    const launcher = page.getByTestId("wb-graph-phone-expr-launcher");
+    await expect(launcher).toBeVisible({ timeout: 20_000 });
+    if (role === "student") await launcher.tap();
+    else await launcher.click();
+  }
+  await expect(root).toBeVisible();
+  await root.getByTestId("wb-graph-expr-display-0").click();
+  const edit = root.getByTestId("wb-graph-expr-edit-0");
+  await expect(edit).toBeVisible();
+  await edit.fill("999*x");
+  await edit.press("Escape");
+  await expect(root.getByTestId("wb-graph-expr-display-0")).toContainText("x^2");
+  await expect(root.getByTestId("wb-graph-expr-display-0")).not.toContainText("999");
+
+  await root.getByTestId("wb-graph-expr-display-0").click();
+  const next = root.getByTestId("wb-graph-expr-edit-0");
+  await expect(next).toBeVisible();
+  await next.fill("2*x+1");
+  await next.press("Enter");
+
+  await expect
+    .poll(async () => {
+      const ink = await readMountedGraphInk(page, graphId);
+      const pts = ink.functionGraphs[0]?.pts ?? [];
+      return pts.length > 0 && curveMatches((x) => 2 * x + 1, pts);
+    }, { timeout: 20_000 })
+    .toBe(true);
+  const ink = await readMountedGraphInk(page, graphId);
+  expectCurveMatchesMath(
+    ink.functionGraphs[0]?.pts ?? [],
+    (x) => 2 * x + 1,
+    `${role} expression after Escape-cancel`
+  );
+  const stillSquare = curveMatches((x) => x * x, ink.functionGraphs[0]?.pts ?? []);
+  expect(stillSquare, `${role} curve is no longer y=x^2`).toBe(false);
+}
+
 /** Viewport-fixed phone launcher: inside the visual viewport, unscaled, clear of the toolbar. */
 async function phoneChromeLauncherGeometry(page: Page): Promise<{
   present: boolean;
@@ -1498,32 +1827,14 @@ async function phoneChromeLauncherGeometry(page: Page): Promise<{
   hitOk: boolean;
   unscaled: boolean;
 }> {
-  return page.evaluate(() => {
+  const box = await readControlInVisualViewport(page, "wb-graph-phone-expr-launcher");
+  const extra = await page.evaluate(() => {
     const btn = document.querySelector("[data-testid='wb-graph-phone-expr-launcher']");
     if (!(btn instanceof HTMLElement)) {
-      return {
-        present: false,
-        inViewport: false,
-        clearOfToolbar: false,
-        outsideGraph: false,
-        hitOk: false,
-        unscaled: false,
-      };
+      return { clearOfToolbar: false, outsideGraph: false };
     }
     const r = btn.getBoundingClientRect();
-    const vv = window.visualViewport;
-    const vLeft = vv ? vv.offsetLeft : 0;
-    const vTop = vv ? vv.offsetTop : 0;
-    const vRight = vLeft + (vv ? vv.width : window.innerWidth);
-    const vBottom = vTop + (vv ? vv.height : window.innerHeight);
     const slack = 2;
-    const inViewport =
-      r.width > 8 &&
-      r.height > 8 &&
-      r.left >= vLeft - slack &&
-      r.top >= vTop - slack &&
-      r.right <= vRight + slack &&
-      r.bottom <= vBottom + slack;
     const toolbar = document
       .querySelector("[data-testid='wb-bottom-toolbar']")
       ?.getBoundingClientRect();
@@ -1535,17 +1846,19 @@ async function phoneChromeLauncherGeometry(page: Page): Promise<{
       r.left >= toolbar.right - slack ||
       r.bottom <= toolbar.top + slack ||
       r.top >= toolbar.bottom - slack;
-    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    const scale = btn.offsetHeight > 0 ? r.height / btn.offsetHeight : 0;
     return {
-      present: r.width > 8 && r.height > 8,
-      inViewport,
       clearOfToolbar,
       outsideGraph: !btn.closest("[data-testid='wb-graph-embed-host']"),
-      hitOk: !!hit && (hit === btn || btn.contains(hit)),
-      unscaled: scale > 0.9 && scale < 1.1,
     };
   });
+  return {
+    present: box.present,
+    inViewport: box.inViewport,
+    clearOfToolbar: extra.clearOfToolbar,
+    outsideGraph: extra.outsideGraph,
+    hitOk: box.hitOk,
+    unscaled: box.unscaled,
+  };
 }
 
 async function openPhoneGraphPickerOn(page: Page, graphLabel: string) {

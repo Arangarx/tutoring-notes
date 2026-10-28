@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /**
  * Whiteboard chrome layout modes × orientation matrix
@@ -86,29 +86,57 @@ function detectLayoutState(): WbLayoutState {
   };
 }
 
-/** Responsive layout + orientation for live board chrome. */
+const SERVER_LAYOUT: WbLayoutState = {
+  layoutMode: "desktop",
+  orientation: "landscape",
+};
+
+let clientLayout: WbLayoutState = SERVER_LAYOUT;
+
+function getClientLayoutSnapshot(): WbLayoutState {
+  const next = detectLayoutState();
+  if (
+    clientLayout.layoutMode === next.layoutMode &&
+    clientLayout.orientation === next.orientation
+  ) {
+    return clientLayout;
+  }
+  clientLayout = next;
+  return clientLayout;
+}
+
+function getServerLayoutSnapshot(): WbLayoutState {
+  return SERVER_LAYOUT;
+}
+
+function subscribeLayoutMode(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener("resize", onStoreChange);
+  window.addEventListener("orientationchange", onStoreChange);
+  const mq =
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(hover: none), (pointer: coarse)")
+      : null;
+  mq?.addEventListener("change", onStoreChange);
+  return () => {
+    window.removeEventListener("resize", onStoreChange);
+    window.removeEventListener("orientationchange", onStoreChange);
+    mq?.removeEventListener("change", onStoreChange);
+  };
+}
+
+/**
+ * Responsive layout + orientation for live board chrome.
+ * The client snapshot is read on the first client render (including a graph
+ * that mounts later), so a phone does not paint the desktop panel for a frame.
+ * SSR still reports desktop; hydration reconciles after that.
+ */
 export function useWbLayoutMode(): WbLayoutState {
-  const [state, setState] = useState<WbLayoutState>({
-    layoutMode: "desktop",
-    orientation: "landscape",
-  });
-
-  useEffect(() => {
-    const update = () => setState(detectLayoutState());
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("orientationchange", update);
-    const mq = window.matchMedia("(hover: none), (pointer: coarse)");
-    const onMq = () => update();
-    mq.addEventListener("change", onMq);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("orientationchange", update);
-      mq.removeEventListener("change", onMq);
-    };
-  }, []);
-
-  return state;
+  return useSyncExternalStore(
+    subscribeLayoutMode,
+    getClientLayoutSnapshot,
+    getServerLayoutSnapshot
+  );
 }
 
 export function isTouchLayout(mode: WbLayoutMode): boolean {

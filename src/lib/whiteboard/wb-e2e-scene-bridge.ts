@@ -42,6 +42,13 @@ export type WbE2eSceneBridge = {
   widthOf: (strokeId: string) => number;
   /** Move an element by delta in scene units (bumps version, triggers sync). */
   moveElement: (elementId: string, deltaX: number, deltaY: number) => void;
+  /** Mark an element deleted through the live scene API (triggers sync). */
+  deleteElement: (elementId: string) => void;
+  /**
+   * Place `elementId` immediately before `beforeId` in scene order.
+   * Reassigns fractional `index` values so getSceneElements() follows that order.
+   */
+  moveElementBefore: (elementId: string, beforeId: string) => void;
   /** Scene center at viewport center via {@link viewportSceneCenterFromScroll} (oracle). */
   appStateCenterXY: () => { x: number; y: number };
   /** Set scroll/zoom on the live canvas (triggers onChange + sync). */
@@ -332,6 +339,49 @@ export function registerWbE2eSceneBridge(
       el.updated = now;
       const next = [...existing];
       next[idx] = el as ExcalidrawLikeElement;
+      api.updateScene({ elements: next });
+      invokeSceneMutationHook(role);
+    },
+    deleteElement(elementId) {
+      const now = Date.now();
+      const existing = api.getSceneElements() as ExcalidrawLikeElement[];
+      const idx = existing.findIndex((e) => (e as { id?: string }).id === elementId);
+      if (idx < 0) {
+        throw new Error(`deleteElement: ${elementId} not in scene`);
+      }
+      const el = { ...existing[idx] } as Record<string, unknown> & { version?: number };
+      el.isDeleted = true;
+      el.version = (typeof el.version === "number" ? el.version : 0) + 1;
+      el.versionNonce = now;
+      el.updated = now;
+      const next = [...existing];
+      next[idx] = el as ExcalidrawLikeElement;
+      api.updateScene({ elements: next });
+      invokeSceneMutationHook(role);
+    },
+    moveElementBefore(elementId, beforeId) {
+      const now = Date.now();
+      const existing = (api.getSceneElements() as ExcalidrawLikeElement[]).map(
+        (el) => ({ ...el }) as ExcalidrawLikeElement
+      );
+      const from = existing.findIndex((e) => e.id === elementId);
+      if (from < 0 || !existing.some((e) => e.id === beforeId)) {
+        throw new Error(`moveElementBefore: ${elementId} before ${beforeId} missing`);
+      }
+      const indices = [...existing]
+        .map((el) => el.index)
+        .sort((a, b) => String(a ?? "").localeCompare(String(b ?? "")));
+      const [item] = existing.splice(from, 1);
+      const dest = existing.findIndex((e) => e.id === beforeId);
+      existing.splice(dest, 0, item);
+      const next = existing.map((el, i) => {
+        const copy = { ...el } as Record<string, unknown>;
+        if (indices.length === existing.length) copy.index = indices[i];
+        copy.version = (typeof copy.version === "number" ? copy.version : 0) + 1;
+        copy.versionNonce = now + i;
+        copy.updated = now;
+        return copy as ExcalidrawLikeElement;
+      });
       api.updateScene({ elements: next });
       invokeSceneMutationHook(role);
     },

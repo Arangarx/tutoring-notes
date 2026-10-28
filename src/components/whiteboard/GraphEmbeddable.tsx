@@ -15,7 +15,10 @@ import {
   readGraphBoardOrder,
   useGraphPhoneTray,
 } from "@/components/whiteboard/chrome/WbGraphExprTray";
-import type { PeerPageViewState } from "@/hooks/usePeerPageViewState";
+import {
+  subscribeFitPeerView,
+  type PeerPageViewState,
+} from "@/hooks/usePeerPageViewState";
 import {
   graphSceneBoxFitToPeer,
   resizeGraphElementToBox,
@@ -128,7 +131,7 @@ type ExpressionFieldsProps = {
   editingDraft: string;
   draftExpr: string;
   onEditingDraft: (value: string) => void;
-  onCommitEdit: (index: number) => void;
+  onCommitEdit: (index: number, source: "blur" | "enter") => void;
   onCancelEdit: () => void;
   onBeginEdit: (index: number, expr: string) => void;
   onRemove: (index: number) => void;
@@ -162,7 +165,7 @@ function GraphExpressionFields({
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  onCommitEdit(index);
+                  onCommitEdit(index, "enter");
                 }
                 if (e.key === "Escape") {
                   // Radix listens for Escape on document capture. preventDefault
@@ -174,7 +177,7 @@ function GraphExpressionFields({
                   onCancelEdit();
                 }
               }}
-              onBlur={() => onCommitEdit(index)}
+              onBlur={() => onCommitEdit(index, "blur")}
               autoFocus
               showHelp={false}
               inputTestId={`wb-graph-expr-edit-${index}`}
@@ -588,6 +591,19 @@ export function GraphEmbeddable({
     registerGraph({ id: elementId, order });
     return () => unregisterGraph(elementId);
   }, [registerGraph, unregisterGraph, readOnly, phoneLayout, elementId, excalidrawAPI, excalidrawAPIRef]);
+
+  const syncOrders = tray?.syncOrders;
+  useLayoutEffect(() => {
+    if (!syncOrders || !phoneLayout || readOnly || !elementId) return;
+    const api = excalidrawAPIRef?.current ?? excalidrawAPI;
+    let elements: readonly unknown[] = [];
+    try {
+      elements = api?.getSceneElements() ?? [];
+    } catch {
+      return;
+    }
+    syncOrders(elements);
+  }, [syncOrders, phoneLayout, readOnly, elementId, element, excalidrawAPI, excalidrawAPIRef]);
 
   const graphStateJsonRaw =
     typeof element.customData?.graphStateJson === "string"
@@ -1100,11 +1116,12 @@ export function GraphEmbeddable({
     replot(nextExprs, true);
   };
 
-  const commitEdit = (index: number) => {
-    if (skipBlurCommitRef.current) {
+  const commitEdit = (index: number, source: "blur" | "enter") => {
+    if (source === "blur" && skipBlurCommitRef.current) {
       skipBlurCommitRef.current = false;
       return;
     }
+    skipBlurCommitRef.current = false;
     const nextState = updateGraphExpression(
       graphStateRef.current,
       index,
@@ -1139,6 +1156,14 @@ export function GraphEmbeddable({
     tray?.trayRef.current?.focus();
   }, [editingIndex, tray]);
 
+  useLayoutEffect(() => {
+    if (!phoneLayout || !tray || tray.selectedId === elementId) return;
+    if (editingIndex === null) return;
+    skipBlurCommitRef.current = true;
+    setEditingIndex(null);
+    setEditingDraft("");
+  }, [phoneLayout, tray, elementId, editingIndex]);
+
   useEffect(() => {
     if (!fitPeerViewRef) return;
     const tick = () => {
@@ -1158,8 +1183,7 @@ export function GraphEmbeddable({
       setFitBlock((prev) => (prev === next ? prev : next));
     };
     tick();
-    const id = window.setInterval(tick, 400);
-    return () => window.clearInterval(id);
+    return subscribeFitPeerView(tick);
   }, [fitPeerViewRef, fitPageIdRef]);
 
   const handleFitToStudent = useCallback(() => {
@@ -1191,6 +1215,15 @@ export function GraphEmbeddable({
         : null;
   const fitReasonId = elementId ? `wb-graph-fit-reason-${elementId}` : undefined;
 
+  if (
+    phoneLayout &&
+    tray &&
+    editingIndex !== null &&
+    tray.selectedId !== elementId
+  ) {
+    skipBlurCommitRef.current = true;
+  }
+
   const expressionFields = (
     <GraphExpressionFields
       expressions={expressions}
@@ -1202,6 +1235,7 @@ export function GraphEmbeddable({
       onCommitEdit={commitEdit}
       onCancelEdit={cancelEdit}
       onBeginEdit={(index, expr) => {
+        skipBlurCommitRef.current = false;
         setEditingIndex(index);
         setEditingDraft(expr);
       }}

@@ -87,7 +87,7 @@ import {
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorLiveCursors } from "@/hooks/useCollaboratorLiveCursors";
 import { useActiveEmbeddableRebind } from "@/lib/whiteboard/active-embeddable-rebind";
-import { usePeerPageViewState } from "@/hooks/usePeerPageViewState";
+import { emitFitPeerView, usePeerPageViewState } from "@/hooks/usePeerPageViewState";
 import {
   useViewportWireBroadcast,
   type ViewportWireCamera,
@@ -1846,6 +1846,9 @@ export function WhiteboardWorkspaceClient({
   const peerPageView = usePeerPageViewState(effectivePointerSync, role);
   const fitPeerViewRef = useRef(peerPageView);
   fitPeerViewRef.current = peerPageView;
+  useEffect(() => {
+    emitFitPeerView();
+  }, [peerPageView]);
   useViewportWireBroadcast({
     enabled: role === "student" && Boolean(studentSyncClient),
     sync: studentSyncClient,

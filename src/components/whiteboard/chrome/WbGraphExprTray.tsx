@@ -26,6 +26,11 @@ import {
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
+import {
+  readVisualViewportBox,
+  readVisualViewportEdges,
+  subscribeVisualViewport,
+} from "@/lib/whiteboard/visible-viewport";
 import "./WbGraphExprTray.css";
 
 export type GraphTrayEntry = {
@@ -40,6 +45,8 @@ type GraphPhoneTrayContextValue = {
   unregister: (id: string) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
+  /** Recompute every registered graph's board order from the live scene. */
+  syncOrders: (elements: readonly unknown[]) => void;
   /** Graph whose expression fields belong in the open tray. */
   selectedId: string | null;
   setSelectedId: (id: string) => void;
@@ -127,6 +134,21 @@ export function GraphPhoneTrayProvider({ children }: { children: ReactNode }) {
     setSlotState((prev) => (prev === el ? prev : el));
   }, []);
 
+  const syncOrders = useCallback(
+    (elements: readonly unknown[]) => {
+      let changed = false;
+      for (const [id, entry] of entriesRef.current) {
+        const order = readGraphBoardOrder(elements, id);
+        if (entry.order !== order) {
+          entriesRef.current.set(id, { id, order });
+          changed = true;
+        }
+      }
+      if (changed) publish();
+    },
+    [publish]
+  );
+
   const selectedId = graphs.some((g) => g.id === pickedId)
     ? pickedId
     : (graphs[0]?.id ?? null);
@@ -138,6 +160,7 @@ export function GraphPhoneTrayProvider({ children }: { children: ReactNode }) {
       unregister,
       open,
       setOpen,
+      syncOrders,
       selectedId,
       setSelectedId: setPickedId,
       slot,
@@ -146,7 +169,7 @@ export function GraphPhoneTrayProvider({ children }: { children: ReactNode }) {
       trayRef,
       focusLauncherAfterCloseRef,
     }),
-    [graphs, register, unregister, open, selectedId, slot, setSlot]
+    [graphs, register, unregister, open, syncOrders, selectedId, slot, setSlot]
   );
 
   return (
@@ -189,11 +212,12 @@ function placeGraphExprLauncher(root: HTMLElement) {
   const box = root.getBoundingClientRect();
   if (box.width < 1 || box.height < 1) return;
 
-  const vv = window.visualViewport;
-  let leftBound = vv ? vv.offsetLeft : 0;
-  let topBound = vv ? vv.offsetTop : 0;
-  let rightBound = leftBound + (vv ? vv.width : window.innerWidth);
-  let bottomBound = topBound + (vv ? vv.height : window.innerHeight);
+  const edges = readVisualViewportEdges();
+  if (!edges) return;
+  let leftBound = edges.left;
+  let topBound = edges.top;
+  let rightBound = edges.right;
+  let bottomBound = edges.bottom;
 
   const toolbar = shownRect(document.querySelector("[data-testid='wb-bottom-toolbar']"));
   if (toolbar) {
@@ -269,19 +293,13 @@ function useKeyboardOverlapPx(enabled: boolean): number {
   const [overlap, setOverlap] = useState(0);
   useEffect(() => {
     if (!enabled) return;
-    const vv = window.visualViewport;
-    if (!vv) return;
     const update = () => {
-      const next = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
+      const box = readVisualViewportBox();
+      const next = box ? Math.max(0, window.innerHeight - box.top - box.height) : 0;
       setOverlap((prev) => (Math.abs(prev - next) < 0.5 ? prev : next));
     };
     update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
+    return subscribeVisualViewport(update);
   }, [enabled]);
   return enabled ? overlap : 0;
 }
@@ -300,8 +318,30 @@ export function WbGraphExprTray() {
   const show = phone && graphs.length > 0 && tray !== null;
 
   useEffect(() => {
-    if (!phone && tray?.open) tray.setOpen(false);
-  }, [phone, tray]);
+    if (!tray?.open) return;
+    if (!phone || graphs.length === 0) tray.setOpen(false);
+  }, [phone, graphs.length, tray]);
+
+  useEffect(() => {
+    if (!tray?.open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const target = event.target;
+      const trayEl = tray.trayRef.current;
+      if (!(target instanceof Node) || !trayEl?.contains(target)) return;
+      const inField =
+        target instanceof Element && Boolean(target.closest("input, textarea"));
+      if (inField) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      tray.focusLauncherAfterCloseRef.current = true;
+      tray.setOpen(false);
+      requestAnimationFrame(() => tray.launcherRef.current?.focus());
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [tray]);
 
   useLayoutEffect(() => {
     const anchor = anchorRef.current;
@@ -328,15 +368,12 @@ export function WbGraphExprTray() {
       }
     };
     watch();
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", schedule);
-    vv?.addEventListener("scroll", schedule);
+    const unsubscribeViewport = subscribeVisualViewport(schedule);
     window.addEventListener("resize", schedule);
     return () => {
       cancelAnimationFrame(frame);
       ro?.disconnect();
-      vv?.removeEventListener("resize", schedule);
-      vv?.removeEventListener("scroll", schedule);
+      unsubscribeViewport();
       window.removeEventListener("resize", schedule);
     };
   }, [show, graphs.length]);
@@ -390,6 +427,7 @@ export function WbGraphExprTray() {
               event.preventDefault();
               return;
             }
+            event.stopPropagation();
             tray.focusLauncherAfterCloseRef.current = true;
           }}
         >
