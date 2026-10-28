@@ -475,6 +475,71 @@ test.describe(
   "student detail session disclosures",
   { tag: [TAG.WB_CHROME] },
   () => {
+    test("expanded disclosure shows its section title once", async ({ page }) => {
+      test.setTimeout(120_000);
+      const { adminUserId, studentId } = await seedFreshStudent(
+        `Disclosure title ${Date.now()}`
+      );
+      await seedOpenWhiteboardSession({ adminUserId, studentId });
+      const endedId = await seedOpenWhiteboardSession({ adminUserId, studentId });
+      const prisma = new PrismaClient();
+      try {
+        await prisma.whiteboardSession.update({
+          where: { id: endedId },
+          data: { endedAt: new Date(Date.now() - 60 * 60 * 1000) },
+        });
+      } finally {
+        await prisma.$disconnect();
+      }
+
+      await openStudentDetail(page, studentId);
+
+      // The section title is the disclosure's only visible heading. A nested
+      // list heading that repeats it makes the title appear twice.
+      const visibleHeadingTexts = async (testId: string) => {
+        const item = page
+          .getByTestId(testId)
+          .locator("xpath=ancestor::*[@data-slot='accordion-item'][1]");
+        return item.evaluate((el) =>
+          [...el.querySelectorAll("h1,h2,h3,h4,h5,h6")]
+            .filter((node) => {
+              const style = getComputedStyle(node);
+              const rect = node.getBoundingClientRect();
+              return (
+                style.display !== "none" &&
+                style.visibility !== "hidden" &&
+                rect.width > 0 &&
+                rect.height > 0
+              );
+            })
+            .map((node) => (node.textContent ?? "").replace(/\s+/g, " ").trim())
+        );
+      };
+
+      await expandStudentSessionDisclosure(page, OPEN_SESSIONS_DISCLOSURE_TESTID);
+      await expect(page.getByTestId("roster-end-and-review")).toBeVisible();
+      const openTitle = (
+        await page.getByTestId(OPEN_SESSIONS_DISCLOSURE_TESTID).innerText()
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+      const openHeadings = await visibleHeadingTexts(OPEN_SESSIONS_DISCLOSURE_TESTID);
+      expect(openHeadings, "open disclosure has a single heading").toHaveLength(1);
+      expect(
+        openHeadings.filter((text) => text.includes(openTitle)),
+        "open-sessions title appears once"
+      ).toHaveLength(1);
+
+      await expandStudentSessionDisclosure(page, ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID);
+      await expect(page.getByRole("link", { name: "Review" })).toBeVisible();
+      const endedHeadings = await visibleHeadingTexts(ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID);
+      expect(endedHeadings, "ended disclosure has a single heading").toHaveLength(1);
+      expect(
+        endedHeadings.filter((text) => text.includes("Ended — needs review")),
+        "ended-needs-review title appears once"
+      ).toHaveLength(1);
+    });
+
     test("Open sessions disclosure is collapsed until opened", async ({ page }) => {
       test.setTimeout(120_000);
       const { adminUserId, studentId } = await seedFreshStudent(

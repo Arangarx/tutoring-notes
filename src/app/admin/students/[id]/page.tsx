@@ -215,6 +215,7 @@ export default async function StudentDetailPage({
                     <ActiveWhiteboardSessionsList
                       studentId={student.id}
                       sessions={student.whiteboardSessions}
+                      variant="bare"
                     />
                   ),
                 },
@@ -231,6 +232,7 @@ export default async function StudentDetailPage({
                       studentId={student.id}
                       sessions={endedUnsavedRows}
                       totalCount={endedUnsavedTotalCount}
+                      variant="bare"
                     />
                   ),
                 },

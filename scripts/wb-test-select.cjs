@@ -66,7 +66,7 @@ const PATH_RULES = [
     tags: [TAG.WB_CHROME],
   },
   {
-    re: /student-detail-view|StudentCriticalCard|StudentAccountSharing|StudentDetailShell|admin-student-detail-stage6|admin\/students\/\[id\]\/(?:page|account|notes)/,
+    re: /student-detail-view|StudentCriticalCard|StudentAccountSharing|StudentDetailShell|StudentSessionDisclosures|ActiveWhiteboardSessionsList|EndedUnsavedSessionsList|admin-student-detail-stage6|admin\/students\/\[id\]\/(?:page|account|notes)/,
     tags: [TAG.WB_CHROME],
   },
   {
@@ -211,6 +211,8 @@ function needsWbJest(files, tags) {
   );
 }
 
+module.exports = { tagsForPaths, expandTags, PATH_RULES, TAG };
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const files = gitChangedFiles(args.base);
@@ -272,4 +274,6 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}

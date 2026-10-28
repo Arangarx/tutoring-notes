@@ -41,9 +41,12 @@ export function ResumeWhiteboardSessionLink({
 export function ActiveWhiteboardSessionsList({
   studentId,
   sessions,
+  variant = "card",
 }: {
   studentId: string;
   sessions: readonly ActiveWbListItem[];
+  /** `bare` omits the heading when a parent disclosure already titles the section. */
+  variant?: "card" | "bare";
 }) {
   if (sessions.length === 0) {
     return null;
@@ -51,7 +54,9 @@ export function ActiveWhiteboardSessionsList({
 
   return (
     <div className="mt-4 rounded-lg border border-border bg-muted/20 p-4">
-      <h4 className="m-0 text-sm font-semibold text-foreground">Open whiteboard sessions</h4>
+      {variant === "card" ? (
+        <h4 className="m-0 text-sm font-semibold text-foreground">Open whiteboard sessions</h4>
+      ) : null}
       <p className="mt-1 mb-3 text-xs leading-relaxed text-muted-foreground">
         These whiteboard rooms are still open — they haven&apos;t been ended yet. Resume one to
         pick up where you left off, or end it to finalize the recording and go to review.

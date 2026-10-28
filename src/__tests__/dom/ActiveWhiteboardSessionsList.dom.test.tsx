@@ -42,6 +42,30 @@ beforeEach(() => {
 });
 
 describe("ActiveWhiteboardSessionsList — End and review wiring (WS-N4)", () => {
+  it("shows the section heading by default", () => {
+    render(
+      <ActiveWhiteboardSessionsList
+        studentId="stu_roster"
+        sessions={[{ id: "wb_roster_heading", startedAt: new Date("2026-07-05T12:00:00Z") }]}
+      />
+    );
+    expect(screen.getByRole("heading", { name: "Open whiteboard sessions" })).toBeInTheDocument();
+  });
+
+  it("omits the section heading when nested in a disclosure", () => {
+    render(
+      <ActiveWhiteboardSessionsList
+        studentId="stu_roster"
+        sessions={[{ id: "wb_roster_bare", startedAt: new Date("2026-07-05T12:00:00Z") }]}
+        variant="bare"
+      />
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Open whiteboard sessions" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("roster-end-and-review")).toBeInTheDocument();
+  });
+
   it("calls finalizeWhiteboardSessionWithOutbox with studentId (outbox drain path)", async () => {
     const user = userEvent.setup();
     render(

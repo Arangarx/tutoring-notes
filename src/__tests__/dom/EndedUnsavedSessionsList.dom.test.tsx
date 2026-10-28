@@ -61,6 +61,21 @@ describe("EndedUnsavedSessionsList", () => {
     expect(screen.getByText(/\+3 older not shown/i)).toBeInTheDocument();
   });
 
+  it("omits the section heading when nested in a disclosure", () => {
+    render(
+      <EndedUnsavedSessionsList
+        studentId={studentId}
+        sessions={sessions}
+        totalCount={sessions.length}
+        variant="bare"
+      />
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Ended — needs review" })
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Review" })).toHaveLength(2);
+  });
+
   it("returns null when there are no sessions", () => {
     const { container } = render(
       <EndedUnsavedSessionsList studentId={studentId} sessions={[]} totalCount={0} />
