@@ -20,7 +20,7 @@ For open work, see [`docs/BACKLOG.md`](BACKLOG.md).
 
 - **Schedule page ICS block + planned-length → end-time** — Removed misplaced compact calendar/ICS block from schedule page (ICS lives under Settings → Calendar integrations). Planned length moves end time when start or length changes until end is edited directly (commits [`3f93bf71`](https://github.com/Arangarx/tutoring-notes/commit/3f93bf71) / [`2c5edfb8`](https://github.com/Arangarx/tutoring-notes/commit/2c5edfb8) per backlog).
 
-- **SSG-2 / PRESARAH-2 — student-detail End → End-and-review** — `ActiveWhiteboardSessionsList` offers Resume / End and review / Cancel and delete; covered by `wb-end-from-roster.spec.ts` (no silent orphan end path).
+- **SSG-2 / PRESARAH-2 — student-detail End → End-and-review** — Under the session card, a collapsed-by-default "Open sessions (N)" disclosure mounts `ActiveWhiteboardSessionsList` (Resume / End and review / Cancel and delete for each open room, up to 20). The card keeps a single Resume for the newest room. "Ended — needs review" is the same collapsed disclosure for `EndedUnsavedSessionsList` when a recent ended-unsaved session exists. Covered by `wb-end-from-roster.spec.ts` (no silent orphan end path).
 
 - **WS-M — two-device tutor hears student** — Resolved; working for a while per Andrew triage 2026-07-10.
 

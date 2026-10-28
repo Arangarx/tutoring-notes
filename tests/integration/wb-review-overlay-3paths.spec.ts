@@ -21,6 +21,10 @@ import {
 } from "../helpers/blob-gate";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+import {
+  expandStudentSessionDisclosure,
+  OPEN_SESSIONS_DISCLOSURE_TESTID,
+} from "./student-session-disclosure.helpers";
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
@@ -149,6 +153,7 @@ async function endViaGate(page: Page, studentId: string, whiteboardSessionId: st
 async function endViaRoster(page: Page, studentId: string) {
   await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle");
+  await expandStudentSessionDisclosure(page, OPEN_SESSIONS_DISCLOSURE_TESTID);
   const endAndReviewBtn = page.getByTestId("roster-end-and-review").first();
   await expect(endAndReviewBtn).toBeVisible({ timeout: 10_000 });
   await endAndReviewBtn.click();

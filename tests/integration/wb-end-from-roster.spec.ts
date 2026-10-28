@@ -17,6 +17,12 @@ import {
 } from "../helpers/blob-gate";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+import {
+  ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID,
+  expandStudentSessionDisclosure,
+  OPEN_SESSIONS_DISCLOSURE_TESTID,
+} from "./student-session-disclosure.helpers";
+import { seedOpenWhiteboardSession, seedTestAdmin } from "../visual/helpers";
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
@@ -244,6 +250,7 @@ test.describe(
           waitUntil: "domcontentloaded",
         });
         await page.waitForLoadState("networkidle");
+        await expandStudentSessionDisclosure(page, OPEN_SESSIONS_DISCLOSURE_TESTID);
 
         const endAndReviewBtn = page.getByTestId("roster-end-and-review").first();
         await expect(endAndReviewBtn).toBeVisible({ timeout: 10_000 });
@@ -332,6 +339,7 @@ test.describe(
       await expect(page).toHaveURL(new RegExp(`/admin/students/${studentId}$`), {
         timeout: 5_000,
       });
+      await expandStudentSessionDisclosure(page, OPEN_SESSIONS_DISCLOSURE_TESTID);
 
       const rosterAnchor = page
         .locator(`[data-testid="roster-resume-session"][href*="${whiteboardSessionId}"]`)
@@ -405,6 +413,308 @@ test.describe(
       } finally {
         await prisma.$disconnect();
       }
+    });
+  }
+);
+
+async function seedFreshStudent(name: string): Promise<{
+  adminUserId: string;
+  studentId: string;
+}> {
+  const adminUserId = await seedTestAdmin();
+  const prisma = new PrismaClient();
+  try {
+    const student = await prisma.student.create({
+      data: {
+        name,
+        adminUserId,
+        parentEmail: "disclosure@test.local",
+      },
+      select: { id: true },
+    });
+    return { adminUserId, studentId: student.id };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/** Two open rooms on a fresh student. The card Resume target is the newer one. */
+async function seedNewerAndOlderOpenSessions(): Promise<{
+  studentId: string;
+  newerId: string;
+  olderId: string;
+}> {
+  const { adminUserId, studentId } = await seedFreshStudent(
+    `Open sessions ${Date.now()}`
+  );
+  const newerId = await seedOpenWhiteboardSession({ adminUserId, studentId });
+  const olderId = await seedOpenWhiteboardSession({ adminUserId, studentId });
+  const prisma = new PrismaClient();
+  try {
+    const now = Date.now();
+    await prisma.whiteboardSession.update({
+      where: { id: newerId },
+      data: { startedAt: new Date(now) },
+    });
+    await prisma.whiteboardSession.update({
+      where: { id: olderId },
+      data: { startedAt: new Date(now - 2 * 60 * 60 * 1000) },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+  return { studentId, newerId, olderId };
+}
+
+async function openStudentDetail(page: import("@playwright/test").Page, studentId: string) {
+  await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle");
+}
+
+test.describe(
+  "student detail session disclosures",
+  { tag: [TAG.WB_CHROME] },
+  () => {
+    test("Open sessions disclosure is collapsed until opened", async ({ page }) => {
+      test.setTimeout(120_000);
+      const { adminUserId, studentId } = await seedFreshStudent(
+        `Collapsed open ${Date.now()}`
+      );
+      await seedOpenWhiteboardSession({ adminUserId, studentId });
+
+      await openStudentDetail(page, studentId);
+
+      const trigger = page.getByTestId(OPEN_SESSIONS_DISCLOSURE_TESTID);
+      await expect(trigger).toBeVisible();
+      await expect(trigger).toHaveText(/Open sessions \(1\)/);
+      await expect(trigger).toHaveAttribute("aria-expanded", "false");
+      await expect(page.getByTestId("student-main-control").getByTestId("roster-resume-session")).toBeVisible();
+      await expect(page.getByTestId("roster-end-and-review")).toHaveCount(0);
+      await expect(page.getByTestId("roster-cancel-delete")).toHaveCount(0);
+
+      await expandStudentSessionDisclosure(page, OPEN_SESSIONS_DISCLOSURE_TESTID);
+
+      await expect(page.getByTestId("roster-end-and-review")).toBeVisible();
+      await expect(page.getByTestId("roster-cancel-delete")).toBeVisible();
+    });
+
+    test("two open sessions lists both and End and review finalizes the older one", async ({
+      page,
+    }) => {
+      test.setTimeout(180_000);
+      const { studentId, newerId, olderId } = await seedNewerAndOlderOpenSessions();
+      // A used room has a persisted stroke batch. An empty room falls through to
+      // Vercel Blob checkpoint listing, which the Playwright harness token cannot call.
+      const prismaSeed = new PrismaClient();
+      try {
+        await prismaSeed.whiteboardEventBatch.create({
+          data: {
+            whiteboardSessionId: olderId,
+            batchSeq: 1,
+            fromEventIndex: 0,
+            toEventIndex: 0,
+            eventsJson: [{ t: 0, op: "add", elements: [] }],
+            boardDocumentJson: {
+              schemaVersion: 1,
+              activePageId: "p1",
+              pageList: [],
+              pages: {},
+            },
+            schemaVersion: 1,
+          },
+        });
+      } finally {
+        await prismaSeed.$disconnect();
+      }
+
+      await openStudentDetail(page, studentId);
+
+      await expect(page.getByTestId(OPEN_SESSIONS_DISCLOSURE_TESTID)).toHaveText(
+        /Open sessions \(2\)/
+      );
+      await expect(
+        page.getByTestId("student-main-control").getByTestId("roster-resume-session")
+      ).toHaveAttribute("href", new RegExp(newerId));
+
+      await expandStudentSessionDisclosure(page, OPEN_SESSIONS_DISCLOSURE_TESTID);
+
+      const olderRow = page.locator(`li:has(a[href*="${olderId}"])`);
+      const newerRow = page.locator(`li:has(a[href*="${newerId}"])`);
+      await expect(olderRow).toBeVisible();
+      await expect(newerRow).toBeVisible();
+
+      await olderRow.getByTestId("roster-end-and-review").click();
+
+      await expect(page).toHaveURL(new RegExp(`/whiteboard/${olderId}/workspace`), {
+        timeout: 60_000,
+      });
+      await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
+        timeout: 90_000,
+      });
+
+      const prisma = new PrismaClient();
+      try {
+        const older = await prisma.whiteboardSession.findUnique({
+          where: { id: olderId },
+          select: { endedAt: true },
+        });
+        const newer = await prisma.whiteboardSession.findUnique({
+          where: { id: newerId },
+          select: { endedAt: true },
+        });
+        expect(older?.endedAt, "older session is finalized").toBeTruthy();
+        expect(newer?.endedAt, "card Resume session stays open").toBeNull();
+      } finally {
+        await prisma.$disconnect();
+      }
+    });
+
+    test("two open sessions Cancel and delete removes the older one", async ({ page }) => {
+      test.setTimeout(120_000);
+      const { studentId, newerId, olderId } = await seedNewerAndOlderOpenSessions();
+
+      await openStudentDetail(page, studentId);
+      await expandStudentSessionDisclosure(page, OPEN_SESSIONS_DISCLOSURE_TESTID);
+
+      const olderRow = page.locator(`li:has(a[href*="${olderId}"])`);
+      const newerRow = page.locator(`li:has(a[href*="${newerId}"])`);
+      await expect(olderRow).toBeVisible();
+      await expect(newerRow).toBeVisible();
+
+      await olderRow.getByTestId("roster-cancel-delete").click();
+      await expect(page.getByTestId("roster-cancel-delete-confirm")).toBeVisible();
+      await page.getByTestId("roster-cancel-delete-confirm-yes").click();
+
+      await page.waitForURL(`**/admin/students/${studentId}`, { timeout: 20_000 });
+      await page.waitForLoadState("networkidle");
+      await expandStudentSessionDisclosure(page, OPEN_SESSIONS_DISCLOSURE_TESTID);
+      await expect(page.locator(`li:has(a[href*="${olderId}"])`)).toHaveCount(0);
+      await expect(page.locator(`li:has(a[href*="${newerId}"])`)).toBeVisible();
+      await expect(
+        page.getByTestId("student-main-control").getByTestId("roster-resume-session")
+      ).toHaveAttribute("href", new RegExp(newerId));
+
+      const prisma = new PrismaClient();
+      try {
+        const gone = await prisma.whiteboardSession.findUnique({
+          where: { id: olderId },
+          select: { id: true },
+        });
+        const kept = await prisma.whiteboardSession.findUnique({
+          where: { id: newerId },
+          select: { endedAt: true },
+        });
+        expect(gone, "older session row is deleted").toBeNull();
+        expect(kept?.endedAt, "newer session stays open").toBeNull();
+      } finally {
+        await prisma.$disconnect();
+      }
+    });
+
+    test("no Open sessions disclosure when the student has zero open sessions", async ({
+      page,
+    }) => {
+      test.setTimeout(90_000);
+      const { studentId } = await seedFreshStudent(`No open sessions ${Date.now()}`);
+
+      await openStudentDetail(page, studentId);
+
+      await expect(page.getByTestId("student-session-card")).toBeVisible();
+      await expect(page.getByTestId(OPEN_SESSIONS_DISCLOSURE_TESTID)).toHaveCount(0);
+      await expect(page.getByTestId("roster-end-and-review")).toHaveCount(0);
+      await expect(page.getByTestId("roster-cancel-delete")).toHaveCount(0);
+    });
+
+    test("Ended — needs review is collapsed and Review opens that session", async ({
+      page,
+    }) => {
+      test.setTimeout(180_000);
+      const { adminUserId, studentId } = await seedFreshStudent(
+        `Ended unsaved ${Date.now()}`
+      );
+      const whiteboardSessionId = await seedOpenWhiteboardSession({
+        adminUserId,
+        studentId,
+      });
+      const prisma = new PrismaClient();
+      try {
+        await prisma.whiteboardSession.update({
+          where: { id: whiteboardSessionId },
+          data: { endedAt: new Date(Date.now() - 60 * 60 * 1000) },
+        });
+      } finally {
+        await prisma.$disconnect();
+      }
+
+      await openStudentDetail(page, studentId);
+
+      await expect(page.getByTestId(OPEN_SESSIONS_DISCLOSURE_TESTID)).toHaveCount(0);
+      const trigger = page.getByTestId(ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID);
+      await expect(trigger).toBeVisible();
+      await expect(trigger).toHaveText(/Ended — needs review/);
+      await expect(trigger).toHaveAttribute("aria-expanded", "false");
+      await expect(page.getByRole("link", { name: "Review" })).toHaveCount(0);
+
+      await expandStudentSessionDisclosure(page, ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID);
+      await page.getByRole("link", { name: "Review" }).click();
+
+      await expect(page).toHaveURL(
+        new RegExp(`/whiteboard/${whiteboardSessionId}/workspace`),
+        { timeout: 60_000 }
+      );
+      await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
+        timeout: 90_000,
+      });
+    });
+
+    test("Ended — needs review is absent without an ended unsaved session", async ({
+      page,
+    }) => {
+      test.setTimeout(120_000);
+
+      const empty = await seedFreshStudent(`No ended ${Date.now()}`);
+      await openStudentDetail(page, empty.studentId);
+      await expect(page.getByTestId(ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID)).toHaveCount(0);
+
+      const saved = await seedFreshStudent(`Saved ended ${Date.now()}`);
+      const savedSessionId = await seedOpenWhiteboardSession({
+        adminUserId: saved.adminUserId,
+        studentId: saved.studentId,
+      });
+      const old = await seedFreshStudent(`Old ended ${Date.now()}`);
+      const oldSessionId = await seedOpenWhiteboardSession({
+        adminUserId: old.adminUserId,
+        studentId: old.studentId,
+      });
+      const prisma = new PrismaClient();
+      try {
+        const note = await prisma.sessionNote.create({
+          data: {
+            studentId: saved.studentId,
+            date: new Date("2026-02-01"),
+            topics: "Saved topics",
+            homework: "Saved homework",
+            nextSteps: "Saved next steps",
+          },
+          select: { id: true },
+        });
+        await prisma.whiteboardSession.update({
+          where: { id: savedSessionId },
+          data: { endedAt: new Date(), noteId: note.id },
+        });
+        await prisma.whiteboardSession.update({
+          where: { id: oldSessionId },
+          data: { endedAt: new Date(Date.now() - 32 * 24 * 60 * 60 * 1000) },
+        });
+      } finally {
+        await prisma.$disconnect();
+      }
+
+      await openStudentDetail(page, saved.studentId);
+      await expect(page.getByTestId(ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID)).toHaveCount(0);
+
+      await openStudentDetail(page, old.studentId);
+      await expect(page.getByTestId(ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID)).toHaveCount(0);
     });
   }
 );

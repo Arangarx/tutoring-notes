@@ -14,7 +14,12 @@ import { StudentOverflowActions } from "@/components/admin/StudentOverflowAction
 import { deriveStudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
 import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
 import { studentDetailView } from "@/lib/student-detail-view";
-import { ResumeWhiteboardSessionLink } from "./whiteboard/ActiveWhiteboardSessionsList";
+import { StudentSessionDisclosures } from "@/components/admin/StudentSessionDisclosures";
+import {
+  ActiveWhiteboardSessionsList,
+  ResumeWhiteboardSessionLink,
+} from "./whiteboard/ActiveWhiteboardSessionsList";
+import { EndedUnsavedSessionsList } from "./whiteboard/EndedUnsavedSessionsList";
 import { StartWhiteboardSession } from "./whiteboard/StartWhiteboardSession";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +68,30 @@ export default async function StudentDetailPage({
 
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [endedUnsavedSessions, endedUnsavedTotalCount] = await Promise.all([
+    db.whiteboardSession.findMany({
+      where: {
+        studentId: id,
+        endedAt: { gte: thirtyDaysAgo },
+        noteId: null,
+      },
+      orderBy: { endedAt: "desc" },
+      take: 20,
+      select: { id: true, startedAt: true, endedAt: true },
+    }),
+    db.whiteboardSession.count({
+      where: {
+        studentId: id,
+        endedAt: { not: null },
+        noteId: null,
+      },
+    }),
+  ]);
+  const endedUnsavedRows = endedUnsavedSessions.flatMap((session) =>
+    session.endedAt != null ? [{ ...session, endedAt: session.endedAt }] : []
+  );
 
   const lp = student.learnerProfile;
   const lpId = lp?.id ?? null;
@@ -173,6 +202,42 @@ export default async function StudentDetailPage({
           </div>
         ) : null}
       </SectionCard>
+
+      <StudentSessionDisclosures
+        sections={[
+          ...(openSessions > 0
+            ? [
+                {
+                  value: "open-sessions",
+                  testId: "student-open-sessions-disclosure",
+                  title: `Open sessions (${openSessions})`,
+                  content: (
+                    <ActiveWhiteboardSessionsList
+                      studentId={student.id}
+                      sessions={student.whiteboardSessions}
+                    />
+                  ),
+                },
+              ]
+            : []),
+          ...(endedUnsavedRows.length > 0
+            ? [
+                {
+                  value: "ended-needs-review",
+                  testId: "student-ended-needs-review-disclosure",
+                  title: "Ended — needs review",
+                  content: (
+                    <EndedUnsavedSessionsList
+                      studentId={student.id}
+                      sessions={endedUnsavedRows}
+                      totalCount={endedUnsavedTotalCount}
+                    />
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
 
       <UpcomingSessionsCard
         mode="tutor"

@@ -127,6 +127,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 |---|---|---|---|---|---|
 | `StudentCriticalCard` | `src/components/admin/StudentCriticalCard.tsx` | One Alert for a step that blocks the next session. The sentence is passed in. Setup passes `ClaimInviteSection` as children under that sentence. Deletion passes `purgeEligibleAt` and shows the date. | `text`, `purgeEligibleAt`, `children` | `/admin/students/[id]`, erasure shell | **canonical** |
 | `StudentAccountSharing` | `src/components/admin/StudentAccountSharing.tsx` | Account & sharing for one personal student. Composes `ConnectedParentSection` or `ClaimInviteSection`, plus `ShareLinkRow` and `ShareLinkControls`. | `studentId`, `studentName`, `needsInviteEmail`, `connected`, `shareUrl`, `shareAction`, `revokeAction` | `/admin/students/[id]/account` | **canonical — composition, not a second student page** |
+| `StudentSessionDisclosures` | `src/components/admin/StudentSessionDisclosures.tsx` | Collapsed-by-default session lists under the session card. Composes `Accordion`. Each section mounts its existing list only while expanded. | `sections` (`value`, `testId`, `title`, `content`) | `/admin/students/[id]` | **canonical** |
 
 ### Shared layout (cross-realm)
 
