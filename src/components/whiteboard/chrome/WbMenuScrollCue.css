@@ -2,13 +2,11 @@
   position: relative;
 }
 
-/* The monolith fade is always on. This cue replaces it and only shows
-   while the list can still scroll. Fade clearance is the component's
-   own parameter (--mynk-menu-scroll-fade-pad), not a reach-in to the
-   shared scroll class. */
+/* The cue is the only "more below" affordance and only shows while the
+   list can still scroll. Padding is the menu inset (4px), not fade clearance. */
 .mynk-wb-chrome .mynk-wb-menu-scroll__scroller {
   mask-image: none;
-  padding-bottom: var(--mynk-menu-scroll-fade-pad, 40px);
+  padding-bottom: 4px;
   max-height: min(70dvh, 880px);
 }
 

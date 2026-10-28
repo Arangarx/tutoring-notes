@@ -1,23 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import "./WbMenuScrollCue.css";
-
-/** Lifts the last row above the 28px fade plus its label. */
-const DEFAULT_FADE_CLEARANCE_PX = 40;
 
 /**
  * Scrollable menu body with an explicit "more below" cue.
  * The cue is present only while content remains below the fold.
+ * Bottom padding is the menu's own 4px inset — the cue replaced the
+ * fade, so the last row does not sit above a clearance gap.
  */
-export function WbMenuScrollCue({
-  children,
-  fadeClearancePx = DEFAULT_FADE_CLEARANCE_PX,
-}: {
-  children: ReactNode;
-  /** Bottom padding, in px, that keeps the last row above the fade. */
-  fadeClearancePx?: number;
-}) {
+export function WbMenuScrollCue({ children }: { children: ReactNode }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [moreBelow, setMoreBelow] = useState(false);
 
@@ -39,12 +31,8 @@ export function WbMenuScrollCue({
     };
   }, []);
 
-  const scrollStyle = {
-    "--mynk-menu-scroll-fade-pad": `${fadeClearancePx}px`,
-  } as CSSProperties;
-
   return (
-    <div className="mynk-wb-menu-scroll" style={scrollStyle}>
+    <div className="mynk-wb-menu-scroll">
       <div
         ref={scrollerRef}
         className="mynk-wb-topbar-overflow-dropdown__scroll mynk-wb-menu-scroll__scroller"

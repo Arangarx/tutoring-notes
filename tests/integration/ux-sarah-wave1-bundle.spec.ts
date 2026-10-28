@@ -63,7 +63,7 @@ test.describe("UX Sarah wave-1 bundle", () => {
   });
 
   test(
-    "D — student overflow Sign out clears fade mask at bottom",
+    "D — student overflow Sign out is fully hittable when the menu is scrolled to the end",
     { tag: [TAG.WB_CHROME] },
     async ({ browser }) => {
       test.setTimeout(120_000);
@@ -87,30 +87,50 @@ test.describe("UX Sarah wave-1 bundle", () => {
         const dropdown = studentPage.getByTestId("wb-topbar-overflow-dropdown");
         await expect(dropdown).toBeVisible({ timeout: 10_000 });
 
+        const scroll = dropdown.locator(".mynk-wb-menu-scroll__scroller");
         const signOut = dropdown.getByTestId("learner-sign-out");
-        await signOut.scrollIntoViewIfNeeded();
-        await expect(signOut).toBeVisible();
+        const cue = dropdown.getByTestId("wb-session-menu-more-below");
 
-        const scroll = dropdown.locator(".mynk-wb-topbar-overflow-dropdown__scroll");
+        // Not at the end: the menu scrolls, so the cue is present.
+        const roomBelow = await scroll.evaluate(
+          (el) => el.scrollHeight - el.scrollTop - el.clientHeight
+        );
+        expect(roomBelow, "session menu must scroll so the cue can show").toBeGreaterThan(4);
+        await expect(cue).toBeVisible();
+
+        await scroll.evaluate((el) => {
+          el.scrollTop = el.scrollHeight;
+        });
+        await expect(cue).toHaveCount(0);
+
+        // Last item (Sign out) sits fully inside the scroll box.
         const scrollBox = await scroll.boundingBox();
         const signOutBox = await signOut.boundingBox();
         expect(scrollBox).not.toBeNull();
         expect(signOutBox).not.toBeNull();
-
-        const scrollPadding = await scroll.evaluate((el) =>
-          Number.parseFloat(getComputedStyle(el).paddingBottom)
+        expect(signOutBox!.y).toBeGreaterThanOrEqual(scrollBox!.y - 1);
+        expect(signOutBox!.x).toBeGreaterThanOrEqual(scrollBox!.x - 1);
+        expect(signOutBox!.x + signOutBox!.width).toBeLessThanOrEqual(
+          scrollBox!.x + scrollBox!.width + 1
         );
-        expect(
-          scrollPadding,
-          "overflow scrollport needs bottom padding to clear fade mask"
-        ).toBeGreaterThanOrEqual(36);
-
-        // Sign out row must sit fully inside the scrollport (not clipped by fade).
         expect(signOutBox!.y + signOutBox!.height).toBeLessThanOrEqual(
           scrollBox!.y + scrollBox!.height + 1
         );
 
-        await expect(signOut).toBeInViewport();
+        // Center of Sign out hits Sign out — nothing covering it.
+        const hit = await studentPage.evaluate(({ x, y }) => {
+          const el = document.elementFromPoint(x, y);
+          const row = el?.closest('[data-testid="learner-sign-out"]');
+          return {
+            hitSignOut: row !== null && row !== undefined,
+            testId:
+              el?.closest("[data-testid]")?.getAttribute("data-testid") ?? null,
+          };
+        }, {
+          x: signOutBox!.x + signOutBox!.width / 2,
+          y: signOutBox!.y + signOutBox!.height / 2,
+        });
+        expect(hit.hitSignOut, `elementFromPoint hit ${hit.testId}`).toBe(true);
       } finally {
         await peers.close();
       }

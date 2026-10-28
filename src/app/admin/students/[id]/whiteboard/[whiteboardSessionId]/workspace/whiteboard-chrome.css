@@ -61,9 +61,11 @@
   overflow: hidden;
 }
 
-/* ── Top bar (44px) ── */
+/* ── Top bar (44px flex line) ──
+   border-b is 1px and box-sizing is border-box. A bare height of 44px
+   leaves a 43px content box, so a 44px control centers at -0.5px. */
 .mynk-wb-topbar {
-  height: 44px;
+  height: calc(44px + 1px);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -3024,7 +3026,6 @@
   padding: 4px;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 
 .mynk-wb-topbar-overflow-dropdown__scroll::-webkit-scrollbar {
