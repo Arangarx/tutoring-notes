@@ -1215,6 +1215,8 @@ export function GraphEmbeddable({
         : null;
   const fitReasonId = elementId ? `wb-graph-fit-reason-${elementId}` : undefined;
 
+  // Render-time write: blur during unmount fires before layout effects,
+  // so the flag must already be set when this graph leaves the phone tray.
   if (
     phoneLayout &&
     tray &&

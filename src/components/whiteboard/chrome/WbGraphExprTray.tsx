@@ -335,9 +335,11 @@ export function WbGraphExprTray() {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      tray.focusLauncherAfterCloseRef.current = true;
       tray.setOpen(false);
       requestAnimationFrame(() => tray.launcherRef.current?.focus());
+      // This path focuses the launcher itself. Leave the flag clear so a
+      // later close (overlay, another control) does not focus it again.
+      tray.focusLauncherAfterCloseRef.current = false;
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

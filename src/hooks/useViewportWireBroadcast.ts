@@ -4,7 +4,10 @@ import { useEffect, useRef, type RefObject } from "react";
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
 import { measureVisibleViewport } from "@/lib/whiteboard/measure-visible-viewport";
-import { visibleViewportWireFields } from "@/lib/whiteboard/visible-viewport";
+import {
+  subscribeVisualViewport,
+  visibleViewportWireFields,
+} from "@/lib/whiteboard/visible-viewport";
 
 const DEBOUNCE_MS = 100;
 const UNCHANGED_RESEND_MS = 5_000;
@@ -129,14 +132,12 @@ export function useViewportWireBroadcast(args: {
       el.addEventListener("wheel", scheduleFlush, { passive: true });
       el.addEventListener("pointermove", scheduleFlush, { passive: true });
       window.addEventListener("resize", scheduleFlush);
-      window.visualViewport?.addEventListener("resize", onVisualViewport);
-      window.visualViewport?.addEventListener("scroll", onVisualViewport);
+      const unsubscribeVisualViewport = subscribeVisualViewport(onVisualViewport);
       detach = () => {
         el.removeEventListener("wheel", scheduleFlush);
         el.removeEventListener("pointermove", scheduleFlush);
         window.removeEventListener("resize", scheduleFlush);
-        window.visualViewport?.removeEventListener("resize", onVisualViewport);
-        window.visualViewport?.removeEventListener("scroll", onVisualViewport);
+        unsubscribeVisualViewport();
       };
       scheduleFlush();
     };

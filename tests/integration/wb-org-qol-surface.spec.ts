@@ -1714,6 +1714,45 @@ test.describe("whiteboard QoL surfaces", () => {
         ).toBe(0);
       }
     );
+
+    test(
+      "Escape close does not refocus the launcher on a later outside close",
+      { tag: [TAG.WB_GRAPH, TAG.WB_CHROME] },
+      async ({ page }) => {
+        test.setTimeout(180_000);
+        const session = await openTutorBoard(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await insertGraphOnRole(page, "tutor", session, ["x"]);
+        const launcher = page.getByTestId("wb-graph-phone-expr-launcher");
+        await expect(launcher).toBeVisible({ timeout: 20_000 });
+        await launcher.click();
+        const tray = page.getByTestId("wb-graph-expr-tray");
+        await expect(tray).toBeVisible();
+        await tray.getByRole("button", { name: "Close" }).focus();
+        await page.keyboard.press("Escape");
+        await expect(tray).toBeHidden();
+        await expect(launcher).toBeFocused();
+
+        // A real click would focus the launcher before open, and the sheet
+        // would restore that focus on any close. Dispatch the click so the
+        // only way the launcher becomes focused is the stale close flag.
+        await page.evaluate(() => {
+          (document.activeElement as HTMLElement | null)?.blur();
+        });
+        await launcher.dispatchEvent("click");
+        await expect(tray).toBeVisible();
+        const overlay = page.locator("[data-slot='sheet-overlay']");
+        await overlay.click({ position: { x: 12, y: 160 } });
+        await expect(tray).toBeHidden();
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) => {
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+            })
+        );
+        await expect(launcher).not.toBeFocused();
+      }
+    );
   });
 });
 
