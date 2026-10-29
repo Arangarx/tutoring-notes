@@ -72,3 +72,23 @@ whistling humming clicking clicking Bye. Okay. Okay. Thank you. Bye. Bye. Bye. B
     - Notice placement (Andrew): short line next to the recording / audio control in the session (tutor sees it before recording). Ships with the transcript hotfix.
     - Priority (Andrew): language support must be figured out QUICKLY: Spanish at minimum to operate in the US; worldwide needs more. Backlog as near-term high priority: per-learner / per-tutor transcription language setting (English + Spanish first), plus investigate safe auto-detection (auto-detect on silent audio is what produced the foreign-text hallucinations, so detection must be paired with the silence guard).
 
+
+## Tyson retest results (Discord, 2026-10-29 13:32-13:40)
+
+Screenshot: `../../.cursor/projects/c-Users-arang-Documents-Andrew-dev-agentic-projects-tutoring-notes/assets/image-1083787f-c67e-462c-a255-b15bac9d8e40.png`
+
+Verbatim:
+> went through all the retests, most are fixed, some are not and some weren't broken in the first place, though I'm assuming it's because a fix might have affected it.
+> The three new tests all pass.
+> There is still a problem with the camera views from test 35, especially if either the tutor or student refresh their page while in the waiting room.
+> Test 48 still has the same problem as it did before. The more session options button shows for device B (student, phone) but not device A (tutor, desktop)
+> Test 60 still does not show the view or watch whiteboard for the student, just the tutor.
+> Those are the three that are still broken after the retest.
+> for the retests, yeah. I haven't looked at the hotfix yet and you still have that list of items from when i finished the beginning testing yesterday
+
+Orchestrator notes:
+- **Still broken:** 35 (camera tiles; worst after tutor OR student refresh in the WAITING ROOM; earlier fix eaf302c9 = one camera track per device; C2 fingerprint-replace was deferred, see `docs/handoff/item35-c2-fingerprint-replace.patch` + BACKLOG; live A/V = fragile surface, plan-mode + Sonnet/Opus), 48 (More session options button missing on desktop tutor, present on phone student; earlier treated as packet wording only (39380078/21fe17db), so Tyson's report says it is a real bug, re-investigate), 60 (student has no view/watch whiteboard; ON HOLD for the privacy review: allowWhiteboardRecording defaults off and hides child replay; see privacy brief decisions 1-3).
+- **New-items doc:** all three new tests PASS.
+- **Hotfix (apply race) smoke:** NOT yet done by Tyson.
+- **Ambiguity to confirm with Tyson:** which items "weren't broken in the first place". He may mean items that never failed, or items that now pass where he expected a failure. Read his notes in the Google Docs before assuming.
+- The 10/28 list (above) is still open.
