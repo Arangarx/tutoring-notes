@@ -128,11 +128,25 @@ test.describe("whiteboard QoL surfaces", () => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
     const peers = await openTutorAndStudent(browser, session);
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    function watchPage(page: import("@playwright/test").Page, role: string) {
+      page.on("console", (msg) => {
+        if (msg.type() === "error") consoleErrors.push(`${role}: ${msg.text()}`);
+      });
+      page.on("pageerror", (err) => {
+        pageErrors.push(`${role}: ${err.message}`);
+      });
+    }
+    watchPage(peers.tutorPage, "tutor");
+    watchPage(peers.studentPage, "student");
     try {
       await waitForTutorStudentConnected(peers.tutorPage);
-      // The Next dev issues badge sits on the bottom-left and takes the pointer
-      // after console errors accumulate. Production has no badge.
-      // `devIndicators: false` does not remove this button on the current Next.
+      // Next 15.5 still paints "Open issues overlay" while the dev error
+      // count is above zero, even with devIndicators: false (that flag
+      // only drops the Dev Tools logo). Hide the portal so the badge
+      // cannot take the Board 1 pointer. Recorded console text is an
+      // annotation and does not fail this test.
       await peers.tutorPage.addStyleTag({
         content: "nextjs-portal { display: none !important; }",
       });
@@ -169,6 +183,11 @@ test.describe("whiteboard QoL surfaces", () => {
       ).toBeVisible({ timeout: 20_000 });
       // Reload persistence is WB-RENAME-PERSIST. The live strip is what this covers.
     } finally {
+      const clip = (lines: string[]) => lines.join("\n").slice(0, 4000) || "(none)";
+      test.info().annotations.push(
+        { type: "console-error", description: clip(consoleErrors) },
+        { type: "pageerror", description: clip(pageErrors) },
+      );
       await peers.close();
     }
   });

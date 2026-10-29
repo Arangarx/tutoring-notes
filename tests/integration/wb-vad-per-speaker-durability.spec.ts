@@ -391,6 +391,10 @@ test.describe(
       );
       expect(tx.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(1);
       if (noteOutcome === "not-configured") {
+        test.info().annotations.push({
+          type: "openai-not-configured",
+          description: OPENAI_NOT_CONFIGURED,
+        });
         expect(tx.tutorNoteError).toBe(OPENAI_NOT_CONFIGURED);
         expect(
           tx.rows.some((row) => row.error === OPENAI_NOT_CONFIGURED)

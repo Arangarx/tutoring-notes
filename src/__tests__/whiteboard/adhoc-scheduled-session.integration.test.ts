@@ -167,6 +167,37 @@ async function seedPersonalStudent(consent: boolean) {
 }
 
 /**
+ * Pending org, or an active org the acting tutor does not belong to.
+ * Consent exists so the denial is admission, not a missing consent row.
+ */
+async function seedDeniedOrgStudent(kind: "pending" | "non-member") {
+  const tutor = await seedTutor();
+  const org = await db.organization.create({
+    data: {
+      name: `Ad hoc org ${uniq("org")}`,
+      status: kind === "pending" ? "pending" : "active",
+      createdByOperatorId: "adhoc-op@example.com",
+    },
+  });
+  if (kind === "pending") {
+    await db.organizationMember.create({
+      data: {
+        organizationId: org.id,
+        adminUserId: tutor.id,
+        roles: ["instructor"],
+      },
+    });
+  }
+  const student = await seedClaimedChild({
+    adminUserId: null,
+    organizationId: org.id,
+    consentForAdminUserId: null,
+    consentForOrganizationId: org.id,
+  });
+  return { tutor, student };
+}
+
+/**
  * Organization owns the student (`organizationId` set, `adminUserId` null).
  * Consent is the organization row, which is what the start gate reads, so a
  * whiteboard row exists and its `scheduledSessionId` can be checked.
@@ -289,6 +320,30 @@ describe("createWhiteboardSession ad-hoc appointment", () => {
     });
     expect(whiteboard).not.toBeNull();
     expect(whiteboard?.scheduledSessionId).toBeNull();
+  });
+
+  it("rejects createWhiteboardSession for a pending organization", async () => {
+    const { tutor, student } = await seedDeniedOrgStudent("pending");
+    actAs(tutor);
+
+    await expect(createWhiteboardSession(student.id)).rejects.toThrow(
+      "ORG_ADMISSION_DENIED",
+    );
+    expect(
+      await db.whiteboardSession.count({ where: { studentId: student.id } }),
+    ).toBe(0);
+  });
+
+  it("rejects createWhiteboardSession when the tutor is not an organization member", async () => {
+    const { tutor, student } = await seedDeniedOrgStudent("non-member");
+    actAs(tutor);
+
+    await expect(createWhiteboardSession(student.id)).rejects.toThrow(
+      "ORG_ADMISSION_DENIED",
+    );
+    expect(
+      await db.whiteboardSession.count({ where: { studentId: student.id } }),
+    ).toBe(0);
   });
 
   it("deletes the ad-hoc ScheduledSession when session create throws for missing consent", async () => {

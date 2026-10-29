@@ -80,8 +80,12 @@ const CONTENT_SECURITY_POLICY = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  // The Next dev indicator sits on the bottom corner and swallows clicks
-  // on whiteboard chrome during Playwright. Production builds do not show it.
+  // Read once, when this process starts. `devIndicators: false` drops the
+  // Next.js Dev Tools logo. Next 15.5 still shows "Open issues overlay"
+  // while the dev error count is above zero, so click targets at the
+  // bottom-left also hide `nextjs-portal`. A server started without
+  // PLAYWRIGHT_TEST never takes this branch; Playwright globalSetup
+  // rejects that reused process.
   ...(process.env.PLAYWRIGHT_TEST === "1" ? { devIndicators: false as const } : {}),
   env: {
     NEXT_PUBLIC_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "development",

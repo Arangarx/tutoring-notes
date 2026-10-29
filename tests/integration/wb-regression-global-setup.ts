@@ -9,10 +9,16 @@ const {
 const {
   startPlaywrightOutputMute,
 } = require("../../scripts/playwright-mute-output.cjs");
+const {
+  assertPlaywrightDevServers,
+} = require("../../scripts/playwright-harness-gate.cjs");
 
 export default async function globalSetup(): Promise<() => void> {
   applyWbRegressionLocalDatabaseEnv();
   assertLocalDatabaseUrlForHarness();
+  // Web servers are already up (plugin setup runs before this hook).
+  // Reject a reused `npm run dev` that never saw PLAYWRIGHT_TEST=1.
+  await assertPlaywrightDevServers();
   // Mutes Playwright browser playback on whatever device is current,
   // including headphones plugged in mid-run. Capture stays audible to
   // the recorder; Chromium --mute-audio would silence the fake mic.
