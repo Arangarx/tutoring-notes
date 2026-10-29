@@ -36,21 +36,20 @@ import {
   deleteWhiteboardSessionAndDataAction,
   type TutorNoteStatusResult,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import {
+  EMPTY_STRUCTURED_NOTE,
+  type StructuredNoteFields,
+} from "@/lib/note-content";
 
 import "@/styles/tutor-notes-shimmer.css";
+
+export type { StructuredNoteFields };
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type StructuredFields = {
-  topics: string;
-  assessment: string;
-  nextSteps: string;
-  links: string;
-};
-
-export type StructuredNoteFields = StructuredFields;
+type StructuredFields = StructuredNoteFields;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -107,7 +106,7 @@ export function noteFieldsAreEmpty(fields: StructuredFields): boolean {
 }
 
 export function parseNoteContent(content: string | null): StructuredFields {
-  if (!content) return { topics: "", assessment: "", nextSteps: "", links: "" };
+  if (!content) return { ...EMPTY_STRUCTURED_NOTE };
   try {
     const parsed = JSON.parse(content) as Record<string, unknown>;
     return {
@@ -124,7 +123,7 @@ export function parseNoteContent(content: string | null): StructuredFields {
     };
   } catch {
     // Legacy markdown content — surface in topics for manual review
-    return { topics: content, assessment: "", nextSteps: "", links: "" };
+    return { ...EMPTY_STRUCTURED_NOTE, topics: content };
   }
 }
 
@@ -155,7 +154,7 @@ export default function TutorNotesSection({
   const [internalFields, setInternalFields] = useState<StructuredFields>(() =>
     initialNote.found && initialNote.content
       ? parseNoteContent(initialNote.content)
-      : { topics: "", assessment: "", nextSteps: "", links: "" }
+      : { ...EMPTY_STRUCTURED_NOTE }
   );
 
   const fields = isControlled ? controlledFields! : internalFields;

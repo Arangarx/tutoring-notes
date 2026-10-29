@@ -32,6 +32,10 @@ import "server-only";
 
 import OpenAI from "openai";
 import { env } from "@/lib/env";
+import {
+  EMPTY_STRUCTURED_NOTE,
+  type StructuredNoteFields,
+} from "@/lib/note-content";
 import { db, withDbRetry } from "@/lib/db";
 import { isTutorApproved } from "@/lib/tutor-approval-scope";
 import {
@@ -98,25 +102,7 @@ export type LiveReduceResult =
   | { outcome: "skipped"; reason: string }
   | { outcome: "failed"; error: string };
 
-/**
- * Structured note fields matching SessionNote DB columns.
- * homework is intentionally omitted: it folds into nextSteps per REQ-S3-4.
- */
-export type StructuredNoteFields = {
-  topics: string;
-  assessment: string;
-  /** UI label "Plan". Includes follow-ups + homework per REQ-S3-4. */
-  nextSteps: string;
-  links: string;
-};
-
-/** Canonical empty reduce result. Silence has no topics, assessment, plan, or links. */
-export const EMPTY_STRUCTURED_NOTE: StructuredNoteFields = {
-  topics: "",
-  assessment: "",
-  nextSteps: "",
-  links: "",
-};
+export { EMPTY_STRUCTURED_NOTE, type StructuredNoteFields };
 
 // ---------------------------------------------------------------------------
 // Internal helpers

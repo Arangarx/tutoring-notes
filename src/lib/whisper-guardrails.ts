@@ -144,6 +144,11 @@ const NUMBER_UNIT_RE = /(\d+(?:\.\d+)?)\s*(mm|cm)\b/gi;
  */
 const WRAPPED_SOUND_OF =
   /^(?:\*\*|\*|\[|\()\s*sounds?\s+of\b[\s\S]*?(?:\*\*|\]|\)|\*)[.!?]?\s*$/i;
+/**
+ * The gerund has to be the next word. Bare "Sounds of birds chirping" stays
+ * on purpose: a looser "sounds of …" match would also drop "Sounds of the
+ * letter B", which is real speech.
+ */
 const SOUND_OF_GERUND_LINE = /^sounds?\s+of\s+\p{L}+ing\b/iu;
 const FINITE_CLAUSE =
   /\b(?:is|are|was|were|am|means|mean|has|have|had|does|do|did)\b/i;

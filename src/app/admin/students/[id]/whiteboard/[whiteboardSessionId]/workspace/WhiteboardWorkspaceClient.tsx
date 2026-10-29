@@ -175,7 +175,6 @@ import {
   WaitingRoomOverlay,
   type WtrSessionMode,
 } from "@/components/whiteboard/chrome/WaitingRoomOverlay";
-import { TranscriptionLanguageNotice } from "@/components/recording/TranscriptionLanguageNotice";
 import {
   shapeIconFor,
   WbIconCamera,
@@ -6701,30 +6700,22 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone">
           <div
-            className="mynk-wb-topbar__zone"
-            data-testid="wb-tutor-recording-cluster"
+            className={`mynk-wb-live-badge${
+              presence.pillColor === "red"
+                ? ""
+                : ` mynk-wb-live-badge--${presence.pillColor}`
+            }`}
+            data-testid="wb-recording-pill"
           >
-            <div
-              className={`mynk-wb-live-badge${
+            <span
+              className={`mynk-wb-live-badge__dot${
                 presence.pillColor === "red"
                   ? ""
-                  : ` mynk-wb-live-badge--${presence.pillColor}`
+                  : ` mynk-wb-live-badge__dot--${presence.pillColor}`
               }`}
-              data-testid="wb-recording-pill"
-            >
-              <span
-                className={`mynk-wb-live-badge__dot${
-                  presence.pillColor === "red"
-                    ? ""
-                    : ` mynk-wb-live-badge__dot--${presence.pillColor}`
-                }`}
-                aria-hidden
-              />
-              {presence.pillLabel}
-            </div>
-            {phaseActive ? (
-              <TranscriptionLanguageNotice className="mynk-wb-topbar__desktop-only whitespace-nowrap" />
-            ) : null}
+              aria-hidden
+            />
+            {presence.pillLabel}
           </div>
           <span className="mynk-wb-timer" data-testid="wb-timer">
             {formatTimerMinutesOnly(liveTimerMs)}

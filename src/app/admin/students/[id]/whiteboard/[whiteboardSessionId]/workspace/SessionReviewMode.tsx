@@ -13,6 +13,7 @@ import TutorNotesSection, {
   parseNoteContent,
   type StructuredNoteFields,
 } from "@/components/whiteboard/TutorNotesSection";
+import { EMPTY_STRUCTURED_NOTE } from "@/lib/note-content";
 import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
 import { ReviewBoardThumbnail } from "./ReviewBoardThumbnail";
 import { ReviewConfirmSlot } from "./ReviewConfirmSlot";
@@ -54,10 +55,7 @@ export function SessionReviewMode({
 
   const initialParsedFieldsRef = useRef<StructuredNoteFields | null>(null);
   const [notesFields, setNotesFields] = useState<StructuredNoteFields>({
-    topics: "",
-    assessment: "",
-    nextSteps: "",
-    links: "",
+    ...EMPTY_STRUCTURED_NOTE,
   });
 
   useEffect(() => {

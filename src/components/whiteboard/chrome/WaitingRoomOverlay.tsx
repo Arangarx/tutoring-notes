@@ -200,16 +200,14 @@ export function WaitingRoomOverlay({
 
         {/* ── A/V controls + tutor transcription notice (before Start / record) ── */}
         <div
-          className="flex flex-col items-center gap-2"
+          className="mynk-wtr-audio-cluster"
           data-testid="wb-waiting-audio-controls"
         >
           <div className="mynk-wtr-av-controls">
             {micControlNode}
             {camControlNode}
           </div>
-          {isTutor ? (
-            <TranscriptionLanguageNotice className="text-center" />
-          ) : null}
+          {isTutor ? <TranscriptionLanguageNotice /> : null}
         </div>
 
         {/* ── Device pickers (mic + camera selects) ── */}

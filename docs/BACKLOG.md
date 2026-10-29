@@ -94,9 +94,11 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
 
 ### Near-term high priority — transcription languages (Andrew 2026-10-28)
 
-**Transcription language support (English + Spanish first).** Whisper is pinned to English (`TRANSCRIPTION_LANGUAGE` in `src/lib/transcribe-constants.ts`) because leaving language unset made silent audio hallucinate foreign text. Tutors see “Transcription currently supports English only.” under the waiting-room mic/camera controls before Start, and beside the recording pill once the session is live. Students do not see it.
+**Transcription language support (English + Spanish first).** Whisper is pinned to English (`TRANSCRIPTION_LANGUAGE` in `src/lib/transcribe-constants.ts`) because leaving language unset made silent audio hallucinate foreign text. Tutors see “Transcription currently supports English only.” in the waiting room, under the mic/camera controls, before Start. Students do not see it. It is not on the live session bar.
 
 Next: a per-learner, per-tutor, or per-session language setting. Spanish is the minimum for US operation; more languages later. Investigate safe auto-detection, but pair it with the silence guard — auto-detect on silent audio produced those foreign-text hallucinations. Remove the English-only notice once the setting is real.
+
+Digit-only transcript chunks (`42.`, `3.14`) are classified empty and dropped by whisper-guardrails (`classifySentence` ignores a sentence with no letters, so the chunk is empty) (pre-existing). On a math app a lone numeric answer may be real speech — revisit with per-speaker VAD.
 
 **Release-priority placement is not settled** — confirm with Andrew where this sits in the ordered list above. **Status:** `OPEN` — near-term, high priority.
 
