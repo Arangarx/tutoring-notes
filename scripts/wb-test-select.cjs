@@ -53,6 +53,10 @@ const PATH_RULES = [
     tags: [TAG.WB_CONSENT],
   },
   {
+    re: /wb-transcription-language-notice|TranscriptionLanguageNotice/i,
+    tags: [TAG.WB_RECORDING, TAG.WB_CHROME],
+  },
+  {
     re: /GraphEmbeddable|graph-state|graph-persist|insert-asset/i,
     tags: [TAG.WB_GRAPH],
   },

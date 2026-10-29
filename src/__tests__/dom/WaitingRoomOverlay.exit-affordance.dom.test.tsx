@@ -113,4 +113,27 @@ describe("WaitingRoomOverlay — WS-F exit affordances", () => {
     expect(screen.getByTestId("wb-waiting-cancel-confirm")).toBeDisabled();
     expect(screen.getByTestId("wb-waiting-cancel-back")).toBeDisabled();
   });
+
+  test("tutor: English-only transcription notice sits in the audio-control cluster", () => {
+    render(<WaitingRoomOverlay {...baseProps} role="tutor" />);
+
+    const cluster = screen.getByTestId("wb-waiting-audio-controls");
+    const notice = screen.getByTestId("wb-transcription-language-notice");
+    expect(notice).toHaveTextContent(
+      "Transcription currently supports English only."
+    );
+    expect(cluster).toContainElement(notice);
+    expect(cluster).toContainElement(screen.getByTestId("mock-mic"));
+  });
+
+  test("student: waiting room does not show the transcription language notice", () => {
+    render(<WaitingRoomOverlay {...baseProps} role="student" />);
+
+    expect(
+      screen.queryByTestId("wb-transcription-language-notice")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Transcription currently supports/i)
+    ).not.toBeInTheDocument();
+  });
 });
