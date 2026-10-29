@@ -34,6 +34,7 @@ import {
 } from "./whiteboard-live-sync.helpers";
 import { seedOpenWhiteboardSession, seedTestAdmin, seedTestStudent, TEST_LEARNER } from "../visual/helpers";
 import { TAG } from "../test-tags";
+import { clearStudentStartBlockers } from "../helpers/clear-student-start-blockers";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -297,6 +298,12 @@ test.describe(
             timeout: 45_000,
             waitUntil: "commit",
           });
+
+          // The shared Playwright Student keeps other open rooms and upcoming
+          // appointments. Those make the card Resume or Open room. Start is
+          // the control only after both are gone.
+          await clearStudentStartBlockers(studentId);
+          await tutorPage.reload({ waitUntil: "domcontentloaded" });
 
           // Desktop CTA lives in the ready-to-teach banner. The same control
           // is also mounted in the mobile bar (md:hidden) — one visible button.

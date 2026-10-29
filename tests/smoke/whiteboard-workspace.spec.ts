@@ -12,6 +12,7 @@ import {
 } from "../helpers/blob-gate";
 import { TAG } from "../test-tags";
 import { PrismaClient } from "@prisma/client";
+import { clearStudentStartBlockers } from "../helpers/clear-student-start-blockers";
 
 const { applyWbRegressionLocalDatabaseEnv } = require("../../scripts/wb-regression-local-db.cjs");
 
@@ -114,16 +115,7 @@ test("whiteboard — createWhiteboardSession starts session (needs BLOB)", { tag
   test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
   applyWbRegressionLocalDatabaseEnv();
-
-  const prisma = new PrismaClient();
-  try {
-    await prisma.whiteboardSession.updateMany({
-      where: { studentId, endedAt: null },
-      data: { endedAt: new Date() },
-    });
-  } finally {
-    await prisma.$disconnect();
-  }
+  await clearStudentStartBlockers(studentId);
 
   await loginAsTestAdmin(guardedPage);
   await guardedPage.goto(`/admin/students/${studentId}`, {

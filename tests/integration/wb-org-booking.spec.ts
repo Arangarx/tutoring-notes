@@ -299,11 +299,15 @@ test.describe("org booking calls the bridge @wb-presence", () => {
       await page.locator("#schedule-end").fill("15:00");
       await expect(page.locator("#schedule-end")).toHaveValue("15:00");
       await page.getByTestId("schedule-save-session").click();
-      await expect(page.getByTestId("schedule-save-error")).toBeVisible({ timeout: 30_000 });
+      const longConfirm = page.getByTestId("schedule-long-session-confirm");
+      await expect(longConfirm).toBeVisible({ timeout: 30_000 });
+      await expect(longConfirm).toContainText("23 hours, ending the next day");
       expect(
         await prisma.scheduledSession.count({ where: { studentId: student.id, subject: "Backwards" } })
       ).toBe(0);
       await expect(page.getByText("Backwards")).toHaveCount(0);
+      await page.getByTestId("schedule-long-session-back").click();
+      await expect(longConfirm).toBeHidden();
       const close = page.getByTestId("schedule-create-form").getByRole("button", { name: "Close" });
       await expect(close).toBeEnabled();
       await close.click();

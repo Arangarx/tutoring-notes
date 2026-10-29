@@ -14,6 +14,7 @@ import { TAG } from "../test-tags";
 import { generateShareToken } from "@/lib/security";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { uploadReplayEvents } from "./wb-replay-harness.helpers";
+import { promoteSessionNoteReady } from "./wb-replay-note.helpers";
 
 const RENDERED_BANNER = /multi-?part|multi-?segment|drift|out of sync/i;
 const LEARNER_STATE = "tests/integration/.auth/learner.json";
@@ -111,6 +112,8 @@ test.describe(
       await expect(frame).not.toContainText("timing may drift");
       const tutorBody = await page.locator("body").innerText();
       expect(tutorBody).not.toMatch(RENDERED_BANNER);
+
+      await promoteSessionNoteReady(session.whiteboardSessionId);
 
       const learner = await browser.newContext({ storageState: LEARNER_STATE });
       try {
