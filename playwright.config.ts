@@ -27,6 +27,14 @@ const path = require("path");
 // `--mute-audio`. Every slot then sits under the silent-track RMS floor,
 // recovery burns ~6s, and a short session only keeps a sub-second webm.
 // A real tone plus dropping that mute gives the analyser energy.
+// Playback to the machine is muted separately by
+// scripts/playwright-mute-output.ps1 (started from globalSetup), so the
+// tone still reaches the recorder but not speakers or headphones.
+// globalSetup is on the root config, so one helper covers every project
+// in a `playwright test` invocation. The projects that drop --mute-audio
+// (and therefore need that OS mute) are integration, wb-regression, and
+// wb-in-person-unmasked. Other projects keep Chromium's mute. The helper
+// only mutes executables under ms-playwright, never the user's Chrome.
 const PW_FAKE_MIC_WAV = path
   .resolve(__dirname, "tests/fixtures/pw-fake-mic.wav")
   .replace(/\\/g, "/");
