@@ -91,6 +91,67 @@ function lookupWindowsProcess(pid) {
   return { ppid, commandLine: out.slice(tab + 1).replace(/\r?\n$/, "") };
 }
 
+const READY_LINE = "[playwright-mute] ready";
+const DEFAULT_READY_TIMEOUT_MS = 90000;
+
+/**
+ * Keep reading helper stderr for the life of the process. Resolves when
+ * the helper has finished its first sweep and logged READY_LINE.
+ * The data listener stays attached so a full pipe cannot stall later sweeps.
+ */
+function waitForHelperReady(child, logPath, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let buf = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      fail(
+        new Error(
+          `[playwright-mute] timed out waiting for ready after ${timeoutMs}ms\n${buf.slice(-2000)}`,
+        ),
+      );
+    }, timeoutMs);
+
+    function fail(err) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.stderr.off("data", onData);
+      child.off("exit", onExit);
+      reject(err);
+    }
+
+    function succeed() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off("exit", onExit);
+      resolve();
+    }
+
+    function onData(chunk) {
+      try {
+        fs.appendFileSync(logPath, chunk);
+      } catch {
+        /* log dir disappeared */
+      }
+      if (settled) return;
+      buf += chunk.toString();
+      if (buf.includes(READY_LINE)) succeed();
+    }
+
+    function onExit(code) {
+      fail(
+        new Error(
+          `[playwright-mute] helper exited before ready code=${code}\n${buf.slice(-2000)}`,
+        ),
+      );
+    }
+
+    child.stderr.on("data", onData);
+    child.on("exit", onExit);
+  });
+}
+
 /**
  * Mute OS playback for Playwright's browsers until the runner exits.
  * Chromium's --mute-audio flag also silences the fake mic the recorder
@@ -99,11 +160,15 @@ function lookupWindowsProcess(pid) {
  *
  * Do not spawn PowerShell detached. On Windows, `detached: true` makes
  * powershell.exe exit 0 before -File runs, so the helper never mutes and
- * the log stays empty (seen 2026-10-28). The process stays attached,
- * unref'd, and leaves when the runner pid dies or stop() is called.
- * No-op off Windows. Returns a stop function.
+ * the log stays empty (seen 2026-10-28). The process stays attached.
+ *
+ * Does not resolve until the helper logs `[playwright-mute] ready`, which
+ * is after C# compile and the first sweep. Callers must await that, or the
+ * first browsers play during compile. After ready the process is unref'd
+ * and leaves when the runner pid dies or stop() is called.
+ * No-op off Windows. Resolves to a stop function.
  */
-function startPlaywrightOutputMute(options = {}) {
+async function startPlaywrightOutputMute(options = {}) {
   if (process.platform !== "win32") return () => {};
   const lookup = options.lookup || defaultProcessLookup;
   const runnerPid = resolvePlaywrightRunnerPid(
@@ -115,51 +180,54 @@ function startPlaywrightOutputMute(options = {}) {
   const logPath =
     options.logPath ||
     path.join(__dirname, "..", "test-results", "playwright-mute.log");
-  let logStream;
-  let child;
+  const readyTimeoutMs = options.readyTimeoutMs || DEFAULT_READY_TIMEOUT_MS;
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  // Attached, not detached: see the comment above. stderr is a pipe
+  // because a numeric fd is not a reliable Windows stdio target.
+  const child = spawn(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      script,
+      "-ParentPid",
+      String(runnerPid),
+    ],
+    { stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
+  );
+  const ready = waitForHelperReady(child, logPath, readyTimeoutMs);
+  const pid = child.pid;
+  fs.appendFileSync(
+    logPath,
+    `[playwright-mute] self=${process.pid} ppid=${process.ppid} runner=${runnerPid} helperPid=${pid}\n`,
+  );
   try {
-    fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    logStream = fs.createWriteStream(logPath, { flags: "a" });
-    // Attached, not detached: see the comment above. stderr is a pipe
-    // because a numeric fd is not a reliable Windows stdio target.
-    child = spawn(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        script,
-        "-ParentPid",
-        String(runnerPid),
-      ],
-      { stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
-    );
-    child.stderr.pipe(logStream);
-    child.unref();
-    child.stderr.unref();
-    if (typeof logStream.unref === "function") logStream.unref();
-    const pid = child.pid;
-    logStream.write(
-      `[playwright-mute] self=${process.pid} ppid=${process.ppid} runner=${runnerPid} helperPid=${pid}\n`,
-    );
-    return () => {
-      try {
-        logStream.write(`[playwright-mute] stop helperPid=${pid}\n`);
-      } catch {
-        /* stream already closed */
-      }
-      if (!pid) return;
-      try {
-        process.kill(pid);
-      } catch {
-        /* already exited with the test run */
-      }
-    };
+    await ready;
   } catch (err) {
-    console.error("[playwright-mute] failed to start output mute", err);
-    return () => {};
+    try {
+      if (pid) process.kill(pid);
+    } catch {
+      /* already exited */
+    }
+    throw err;
   }
+  child.unref();
+  child.stderr.unref();
+  return () => {
+    try {
+      fs.appendFileSync(logPath, `[playwright-mute] stop helperPid=${pid}\n`);
+    } catch {
+      /* log already gone */
+    }
+    if (!pid) return;
+    try {
+      process.kill(pid);
+    } catch {
+      /* already exited with the test run */
+    }
+  };
 }
 
 module.exports = {

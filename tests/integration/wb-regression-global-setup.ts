@@ -23,10 +23,12 @@ export default async function globalSetup(): Promise<() => void> {
   // including headphones plugged in mid-run. Capture stays audible to
   // the recorder; Chromium --mute-audio would silence the fake mic.
   // Playwright 1.58 runs this hook in the @playwright/test/cli.js process
-  // (not a short-lived worker). Task teardown calls the returned stop
-  // after the tests finish. The helper also exits on its own if that
-  // runner pid dies, so a crashed run does not leave it muted forever.
-  const stopOutputMute = startPlaywrightOutputMute();
+  // (not a short-lived worker). Await ready — the helper's first sweep —
+  // before returning, so browsers do not launch while C# is still compiling.
+  // Task teardown calls the returned stop after the tests finish. The helper
+  // also exits on its own if that runner pid dies, so a crashed run does not
+  // leave it muted forever.
+  const stopOutputMute = await startPlaywrightOutputMute();
   // Test-runner skip guard for hermetic blob specs (webServer sets server-side vars).
   if (!process.env.PLAYWRIGHT_TEST) {
     process.env.PLAYWRIGHT_TEST = "1";

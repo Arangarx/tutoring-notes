@@ -159,11 +159,11 @@ describe("playwright output mute lifetime", () => {
     while (stoppers.length) stoppers.pop()();
   });
 
-  it("stays alive while the runner pid is alive", async () => {
+  it("does not return until the first sweep is ready, then stays up", async () => {
     if (process.platform !== "win32") return;
     const logPath = path.join(os.tmpdir(), `pw-mute-${process.pid}-${Date.now()}.log`);
     const before = new Set(muteHelperPids());
-    const stop = startPlaywrightOutputMute({
+    const stop = await startPlaywrightOutputMute({
       parentPid: process.pid,
       logPath,
       lookup: () => ({
@@ -172,17 +172,92 @@ describe("playwright output mute lifetime", () => {
       }),
     });
     stoppers.push(stop);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    const started = muteHelperPids().filter((pid) => !before.has(pid));
-    expect(started.length).toBeGreaterThan(0);
-    for (const pid of started) expect(pidAlive(pid)).toBe(true);
     const text = fs.readFileSync(logPath, "utf8");
     expect(text).toContain(`self=${process.pid}`);
     expect(text).toContain(`runner=${process.pid}`);
     expect(text).toContain(`watching pid=${process.pid}`);
+    expect(text).toContain("[playwright-mute] ready");
+    expect(text.indexOf(`watching pid=${process.pid}`)).toBeLessThan(
+      text.indexOf("[playwright-mute] ready"),
+    );
+    const started = muteHelperPids().filter((pid) => !before.has(pid));
+    expect(started.length).toBeGreaterThan(0);
+    for (const pid of started) expect(pidAlive(pid)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    for (const pid of started) expect(pidAlive(pid)).toBe(true);
     stop();
     stoppers.pop();
     await new Promise((resolve) => setTimeout(resolve, 500));
     for (const pid of started) expect(pidAlive(pid)).toBe(false);
-  }, 20000);
+  }, 120000);
+});
+
+function csharpStatic(ps1, signature) {
+  const start = ps1.indexOf(signature);
+  if (start < 0) throw new Error(`missing ${signature}`);
+  const next = ps1.indexOf("\n  static ", start + signature.length);
+  const run = ps1.indexOf("\n  public static void Run", start + signature.length);
+  const end = next >= 0 ? next : run;
+  return ps1.slice(start, end < 0 ? undefined : end);
+}
+
+describe("playwright output mute script contract", () => {
+  const ps1 = fs.readFileSync(
+    path.join(__dirname, "../../scripts/playwright-mute-output.ps1"),
+    "utf8",
+  );
+  const cjs = fs.readFileSync(
+    path.join(__dirname, "../../scripts/playwright-mute-output.cjs"),
+    "utf8",
+  );
+
+  it("waits for the ready line before the helper is unref'd", () => {
+    const start = cjs.indexOf("async function startPlaywrightOutputMute");
+    const body = cjs.slice(start);
+    const waitAt = body.indexOf("await ready");
+    const unrefAt = body.indexOf("child.unref(");
+    expect(waitAt).toBeGreaterThan(-1);
+    expect(unrefAt).toBeGreaterThan(waitAt);
+    expect(cjs).toContain('"[playwright-mute] ready"');
+  });
+
+  it("logs muted pid= only after GetMute reads back 1", () => {
+    const apply = csharpStatic(ps1, "static void ApplyMute(");
+    const should = csharpStatic(ps1, "static bool ShouldMute(");
+    expect(should).not.toContain("muted pid=");
+    expect(apply.indexOf("SetMute(")).toBeGreaterThan(-1);
+    expect(apply.indexOf("SetMute(")).toBeLessThan(apply.indexOf("GetMute("));
+    expect(apply.indexOf("GetMute(")).toBeLessThan(apply.indexOf("muted == 0"));
+    expect(apply.indexOf("muted == 0")).toBeLessThan(apply.indexOf("muted pid="));
+  });
+
+  it("does not cache a failed image lookup and drops a reused pid", () => {
+    const should = csharpStatic(ps1, "static bool ShouldMute(");
+    const empty = should.indexOf("string.IsNullOrEmpty(image)");
+    const giveUp = should.indexOf("return false", empty);
+    const assign = should.indexOf("Cache[pid] =");
+    expect(empty).toBeGreaterThan(-1);
+    expect(giveUp).toBeGreaterThan(empty);
+    expect(assign).toBeGreaterThan(giveUp);
+    expect(should).toContain("prev.StartTicks != ticks");
+    expect(should).toContain("Cache.Remove(pid)");
+    expect(should).not.toContain("Cache[pid] = false");
+    expect(ps1).toContain("static void PruneCache()");
+  });
+
+  it("keeps sweeping after one device or session throws and releases COM objects", () => {
+    const sweep = csharpStatic(ps1, "static void SweepOnce()");
+    const sessionFor = sweep.indexOf("for (int s = 0;");
+    const sessionCatch = sweep.indexOf("session failed:");
+    const deviceCatch = sweep.indexOf("device failed:");
+    expect(sessionFor).toBeGreaterThan(-1);
+    expect(sessionCatch).toBeGreaterThan(sessionFor);
+    expect(deviceCatch).toBeGreaterThan(sessionCatch);
+    expect(sweep).toContain("ReleaseCom(sessions)");
+    expect(sweep).toContain("ReleaseCom(mgrObj)");
+    expect(sweep).toContain("ReleaseCom(dev)");
+    expect(sweep).toContain("ReleaseCom(col)");
+    expect(sweep).toContain("ReleaseCom(en)");
+    expect(csharpStatic(ps1, "static void ApplyMute(")).toContain("ReleaseCom(volObj)");
+  });
 });
