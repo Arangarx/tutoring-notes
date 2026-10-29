@@ -1,7 +1,14 @@
-import { test, expect, type Page } from "@playwright/test";
+import { execSync } from "child_process";
+import fs from "fs";
+import path from "path";
+import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import {
+  loginLearnerInContext,
   openTutorAndStudent,
+  readEncryptionKeyFromHash,
   seedWbLiveSyncSession,
+  seedWbPendingLiveSyncSession,
+  waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 
@@ -181,6 +188,160 @@ test.describe("live A/V mesh + layout firewall", { tag: [TAG.WB_AV] }, () => {
         .toBe(true);
     } finally {
       await peers.close();
+    }
+  });
+});
+
+/**
+ * TURN relay (Tyson 2026-10-19: phone and laptop on one home Wi‑Fi never
+ * connected — tutor tile "Connection failed", phone "Connecting…", Start
+ * disabled). Direct paths fail on routers without NAT hairpinning, so the
+ * page must hand the browser TURN servers from the server.
+ *
+ * Both browsers are forced to relay-only (`iceTransportPolicy: "relay"`), the
+ * stand-in for a network where no direct path exists. A local coturn
+ * container is the TURN server; the Playwright-only cookie points the server
+ * page at it. With STUN only, relay-only never connects.
+ */
+const COTURN_CONTAINER = "pw-coturn-relay";
+const COTURN_USER = "pw";
+const COTURN_PASS = "pw-relay-pass";
+const LOCAL_TURN_ICE: RTCIceServer[] = [
+  {
+    urls: ["turn:127.0.0.1:3478?transport=udp", "turn:127.0.0.1:3478?transport=tcp"],
+    username: COTURN_USER,
+    credential: COTURN_PASS,
+  },
+];
+
+function docker(args: string): string {
+  return execSync(`docker ${args}`, { stdio: ["ignore", "pipe", "pipe"] }).toString();
+}
+
+async function forceRelayOnly(context: BrowserContext): Promise<void> {
+  await context.addInitScript(() => {
+    const Native = window.RTCPeerConnection;
+    const made: RTCPeerConnection[] = [];
+    (window as unknown as { __pwPcs: RTCPeerConnection[] }).__pwPcs = made;
+    class RelayOnlyPeerConnection extends Native {
+      constructor(config?: RTCConfiguration) {
+        super({ ...(config ?? {}), iceTransportPolicy: "relay" });
+        made.push(this);
+      }
+    }
+    window.RTCPeerConnection = RelayOnlyPeerConnection;
+  });
+}
+
+/** Candidate type of the local end of each connected pair on the page. */
+async function selectedLocalCandidateTypes(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const pcs = (window as unknown as { __pwPcs?: RTCPeerConnection[] }).__pwPcs ?? [];
+    const types: string[] = [];
+    for (const pc of pcs) {
+      const stats = await pc.getStats();
+      stats.forEach((r) => {
+        if (r.type === "candidate-pair" && r.state === "succeeded" && r.nominated) {
+          const local = stats.get(r.localCandidateId);
+          if (local?.candidateType) types.push(local.candidateType as string);
+        }
+      });
+    }
+    return types;
+  });
+}
+
+test.describe("live A/V over a TURN relay", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] }, () => {
+  test.beforeAll(() => {
+    try {
+      docker(`rm -f ${COTURN_CONTAINER}`);
+    } catch {
+      /* not running */
+    }
+    docker(
+      [
+        "run -d --rm",
+        `--name ${COTURN_CONTAINER}`,
+        "-p 3478:3478 -p 3478:3478/udp -p 49160-49200:49160-49200/udp",
+        "coturn/coturn:4.6",
+        "-n --log-file=stdout --no-tls --no-dtls --fingerprint --lt-cred-mech",
+        `--user=${COTURN_USER}:${COTURN_PASS} --realm=pw.local`,
+        "--listening-port=3478 --min-port=49160 --max-port=49200",
+      ].join(" ")
+    );
+  });
+
+  test.afterAll(() => {
+    try {
+      docker(`rm -f ${COTURN_CONTAINER}`);
+    } catch {
+      /* already gone */
+    }
+  });
+
+  test("relay-only peers connect through the server-issued TURN servers", async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const session = await seedWbPendingLiveSyncSession();
+    const baseURL = testInfo.project.use.baseURL ?? "http://localhost:3100";
+    const turnCookie = {
+      name: "pw_turn_ice_servers",
+      value: encodeURIComponent(JSON.stringify(LOCAL_TURN_ICE)),
+      url: baseURL,
+    };
+    const learnerAuthFile = path.join(process.cwd(), "tests", "integration", ".auth", "learner.json");
+
+    const tutorContext = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const studentContext = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      ...(fs.existsSync(learnerAuthFile) ? { storageState: learnerAuthFile } : {}),
+    });
+    try {
+      if (!fs.existsSync(learnerAuthFile)) {
+        await loginLearnerInContext(studentContext, session.learnerHandle, session.learnerPin);
+      }
+      for (const ctx of [tutorContext, studentContext]) {
+        await ctx.addCookies([turnCookie]);
+        await forceRelayOnly(ctx);
+      }
+
+      const tutorPage = await tutorContext.newPage();
+      await tutorPage.goto(
+        `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+        { waitUntil: "domcontentloaded" }
+      );
+      await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+        timeout: 90_000,
+      });
+      await waitForWbE2eBridge(tutorPage, "tutor");
+      const key = await readEncryptionKeyFromHash(tutorPage);
+
+      const studentPage = await studentContext.newPage();
+      await studentPage.goto(`/join/${session.whiteboardSessionId}#k=${key}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+        timeout: 90_000,
+      });
+
+      // What Tyson saw stuck: Start stays disabled and the student stays on
+      // "Connecting…" until the video link is actually up.
+      await expect(tutorPage.getByTestId("wb-start-session")).toBeEnabled({ timeout: 60_000 });
+      await expect(
+        studentPage.getByTestId("wb-waiting-overlay").getByRole("heading", { level: 2 })
+      ).not.toHaveText(/connecting/i, { timeout: 30_000 });
+
+      // The link really runs through the relay, not a direct path.
+      await expect
+        .poll(() => selectedLocalCandidateTypes(tutorPage), { timeout: 15_000 })
+        .toContain("relay");
+    } finally {
+      await tutorContext.close();
+      await studentContext.close();
     }
   });
 });
