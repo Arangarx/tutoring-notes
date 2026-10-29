@@ -85,6 +85,7 @@ describe("transcribeAudio", () => {
       expect.objectContaining({
         model: "whisper-1",
         response_format: "verbose_json",
+        language: "en",
       })
     );
     expect(mockSplit).toHaveBeenCalledWith(SMALL_BUFFER, "session.webm", "audio/webm");

@@ -2,13 +2,13 @@ import "server-only";
 
 import OpenAI, { APIError, RateLimitError, toFile } from "openai";
 import { env } from "@/lib/env";
-import { WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
+import { TRANSCRIPTION_LANGUAGE, WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
 import {
   probeAudioBufferDurationSeconds,
   splitAudioIntoWhisperParts,
   type WhisperAudioPart,
 } from "@/lib/transcribe-ffmpeg";
-import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
+import { silenceHallucinationReason } from "@/lib/whisper-guardrails";
 import { estimateCostUsd, logCostEvent } from "@/lib/observability/cost-events";
 import {
   TRANSCRIBE_FALLBACK_MODEL,
@@ -23,8 +23,10 @@ export { TRANSCRIBE_FALLBACK_MODEL, TRANSCRIBE_PRIMARY_MODEL } from "@/lib/ai-mo
  * Transcribe a single audio chunk blob (one uploaded segment blob).
  *
  * Primary model:  gpt-4o-mini-transcribe ($0.003/min, ~35% better WER than whisper-1).
- * Fallback model: whisper-1 — engaged when looksLikeSilenceHallucination fires on the
- *                 primary pass result (quality guard from whisper-guardrails.ts).
+ * Fallback model: whisper-1 — only when the primary API call fails. An empty or
+ *                 silence-hallucination primary result is stored as "" and is
+ *                 not re-transcribed (whisper-guardrails.ts). Fallback text is
+ *                 dropped by the same predicate.
  *
  * Large chunks are split via ffmpeg (reusing splitAudioIntoWhisperParts from
  * transcribe-ffmpeg.ts — read-only reuse; that file is NOT modified).
@@ -106,6 +108,7 @@ async function callTranscribeApi(
       const response = await client.audio.transcriptions.create({
         model,
         file,
+        language: TRANSCRIPTION_LANGUAGE,
         response_format: responseFormatForModel(model),
       });
 
@@ -255,8 +258,19 @@ export async function transcribeChunk(
       probedDurationSeconds = null;
     }
 
+    const dropIfSilent = (text: string, duration: number | null): string => {
+      const reason = silenceHallucinationReason(text, duration);
+      if (!reason) return text;
+      console.log(
+        `[txc] wbsid=${sessionId} action=silence_dropped part=${partLabel} reason=${reason}`
+      );
+      return "";
+    };
+
     try {
-      // Primary pass — gpt-4o-mini-transcribe
+      // Primary pass — gpt-4o-mini-transcribe. Empty / silence hallucinations
+      // are discarded. They are not retried on whisper-1 (that retry is what
+      // stored "Thanks for watching!" and the mm / CJK runs).
       const primary = await callTranscribeApi(
         part,
         TRANSCRIBE_PRIMARY_MODEL,
@@ -264,14 +278,14 @@ export async function transcribeChunk(
         partLabel,
         probedDurationSeconds
       );
-      transcript = primary.transcript;
+      transcript = dropIfSilent(primary.transcript, primary.durationSeconds);
       durationSeconds = primary.durationSeconds;
-
-      // Quality guard — if result looks like a silence hallucination, retry with whisper-1.
-      if (looksLikeSilenceHallucination(transcript, durationSeconds)) {
-        console.log(
-          `[txc] wbsid=${sessionId} action=quality_guard_trip part=${partLabel} primary_model=${TRANSCRIBE_PRIMARY_MODEL} fallback=${TRANSCRIBE_FALLBACK_MODEL}`
-        );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[txc] wbsid=${sessionId} action=primary_failed part=${partLabel} fallback=${TRANSCRIBE_FALLBACK_MODEL} err=${msg}`
+      );
+      try {
         const fallback = await callTranscribeApi(
           part,
           TRANSCRIBE_FALLBACK_MODEL,
@@ -279,16 +293,17 @@ export async function transcribeChunk(
           `${partLabel}-fallback`,
           probedDurationSeconds
         );
-        transcript = fallback.transcript;
+        transcript = dropIfSilent(fallback.transcript, fallback.durationSeconds);
         durationSeconds = fallback.durationSeconds;
         modelUsed = TRANSCRIBE_FALLBACK_MODEL;
+      } catch (fallbackErr: unknown) {
+        const fallbackMsg =
+          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        console.error(
+          `[txc] wbsid=${sessionId} action=part_failed part=${partLabel} err=${fallbackMsg}`
+        );
+        return { error: `Transcription failed on part ${partLabel}: ${fallbackMsg}` };
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[txc] wbsid=${sessionId} action=part_failed part=${partLabel} err=${msg}`
-      );
-      return { error: `Transcription failed on part ${partLabel}: ${msg}` };
     }
 
     if (transcript) partTranscripts.push(transcript);

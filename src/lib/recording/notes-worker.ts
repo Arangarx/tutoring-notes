@@ -128,6 +128,12 @@ export type StructuredNoteFields = {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/** Blank and whitespace-only chunks are silence drops — omit them from the join. */
+function spokenChunkText(transcript: string | null | undefined): string | null {
+  const text = (transcript ?? "").trim();
+  return text.length > 0 ? text : null;
+}
+
 function buildReducePrompt(
   extractions: Array<ChunkExtractionPayload & { speakerLabel?: string | null }>,
   rawTranscripts?: Array<{ text: string; speakerLabel?: string | null }>
@@ -285,10 +291,10 @@ export async function processLiveReduceJob(
     }));
 
   const rawTranscripts = doneChunks
-    .filter((c) => c.transcript)
+    .filter((c) => spokenChunkText(c.transcript))
     .sort((a, b) => a.recordingTimeOffsetMs - b.recordingTimeOffsetMs)
     .map((c) => ({
-      text: c.transcript as string,
+      text: spokenChunkText(c.transcript) as string,
       speakerLabel: speakerLabelForChunk(c.id),
     }));
 
@@ -572,10 +578,10 @@ export async function processNotesReduceJob(
 
   // Fallback: use raw transcripts from done chunks ordered by recordingTimeOffsetMs
   const rawTranscripts = chunks
-    .filter((c) => c.status === "done" && c.transcript)
+    .filter((c) => c.status === "done" && spokenChunkText(c.transcript))
     .sort((a, b) => a.recordingTimeOffsetMs - b.recordingTimeOffsetMs)
     .map((c) => ({
-      text: c.transcript as string,
+      text: spokenChunkText(c.transcript) as string,
       speakerLabel: speakerLabelForChunk(c.id),
     }));
 

@@ -3,7 +3,9 @@
  *
  * Tests:
  *  1. Happy path — primary model returns good transcript.
- *  2. Fallback path — quality guard trips on primary → whisper-1 used.
+ *  2. Silence drop — empty or hallucination is stored as '' and whisper-1 is not called.
+ *     whisper-1 is only a primary-API-error fallback, and its text is dropped
+ *     when it matches the same predicate.
  *  3. Split path — oversized buffer triggers ffmpeg split, parts assembled.
  *  4. Missing API key — returns error without calling API.
  *  5. Retry on 429 then success.
@@ -11,7 +13,7 @@
  *  7. ffmpeg split failure on oversized buffer — returns error.
  */
 
-import { RateLimitError } from "openai";
+import { APIError, RateLimitError } from "openai";
 
 const mockTranscriptionsCreate = jest.fn();
 
@@ -70,6 +72,7 @@ const rateLimitHeaders = new Headers();
 describe("transcribeChunk", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockTranscriptionsCreate.mockReset();
     // Default: split returns the original buffer as a single part.
     mockSplit.mockImplementation(async (buffer, filename, mimeType) => [
       { buffer, filename, mimeType: mimeType.split(";")[0].trim() },
@@ -105,20 +108,17 @@ describe("transcribeChunk", () => {
       expect.objectContaining({
         model: TRANSCRIBE_PRIMARY_MODEL,
         response_format: "json",
+        language: "en",
       })
     );
   });
 
   // -------------------------------------------------------------------------
-  // 2. Fallback path — quality guard trips
+  // 2. Silence drop — do not store a whisper-1 retry of junk
   // -------------------------------------------------------------------------
-  test("fallback: quality guard trips on primary result → whisper-1 used", async () => {
-    mockProbe.mockResolvedValueOnce(1.5);
-    mockTranscriptionsCreate
-      // Primary call returns a hallucination ("thanks for watching" pattern).
-      .mockResolvedValueOnce({ text: "Thanks for watching!" })
-      // Fallback (whisper-1) returns real content.
-      .mockResolvedValueOnce({ text: "Student struggled with factoring.", duration: 45 });
+  test("primary empty transcript is stored as '' and whisper-1 is not called", async () => {
+    mockProbe.mockResolvedValueOnce(8);
+    mockTranscriptionsCreate.mockResolvedValueOnce({ text: "" });
 
     const result = await transcribeChunk({
       buffer: SMALL_BUFFER,
@@ -127,23 +127,129 @@ describe("transcribeChunk", () => {
       sessionId: SESSION_ID,
     });
 
+    expect(result).toMatchObject({ transcript: "" });
+    expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(1);
+    expect(mockTranscriptionsCreate.mock.calls[0][0].model).toBe(TRANSCRIBE_PRIMARY_MODEL);
+  });
+
+  test("primary 'Thanks for watching!' is stored as '' and whisper-1 is not called", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
+    mockProbe.mockResolvedValueOnce(12);
+    mockTranscriptionsCreate
+      .mockResolvedValueOnce({ text: "Thanks for watching!" })
+      .mockResolvedValueOnce({ text: "5.5mm 6mm 7mm should not be stored", duration: 12 });
+
+    const result = await transcribeChunk({
+      buffer: SMALL_BUFFER,
+      filename: "chunk.webm",
+      mimeType: "audio/webm",
+      sessionId: SESSION_ID,
+    });
+
+    expect(result).toMatchObject({ transcript: "" });
+    expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        `[txc] wbsid=${SESSION_ID} action=silence_dropped part=1/1 reason=phrase`
+      )
+    );
+    logSpy.mockRestore();
+  });
+
+  test("primary API error falls back to whisper-1, then drops a number-unit hallucination", async () => {
+    mockProbe.mockResolvedValueOnce(12);
+    mockTranscriptionsCreate
+      .mockRejectedValueOnce(new APIError(400, { message: "bad" }, "bad audio", new Headers()))
+      .mockResolvedValueOnce({ text: "5.5mm 6mm 7mm", duration: 12 });
+
+    const result = await transcribeChunk({
+      buffer: SMALL_BUFFER,
+      filename: "chunk.webm",
+      mimeType: "audio/webm",
+      sessionId: SESSION_ID,
+    });
+
+    expect(result).toMatchObject({ transcript: "" });
     expect("error" in result).toBe(false);
-    if (!("error" in result)) {
-      expect(result.transcript).toBe("Student struggled with factoring.");
-      expect(result.durationMs).toBe(45000);
-      expect(result.modelUsed).toBe(TRANSCRIBE_FALLBACK_MODEL);
-    }
-    // Two calls: primary + fallback.
     expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(2);
-    const calls = mockTranscriptionsCreate.mock.calls;
-    expect(calls[0][0]).toMatchObject({
-      model: TRANSCRIBE_PRIMARY_MODEL,
-      response_format: "json",
-    });
-    expect(calls[1][0]).toMatchObject({
+    expect(mockTranscriptionsCreate.mock.calls[1][0]).toMatchObject({
       model: TRANSCRIBE_FALLBACK_MODEL,
-      response_format: "verbose_json",
+      language: "en",
     });
+  });
+
+  test("primary API error falls back to whisper-1, then drops a CJK hallucination", async () => {
+    mockProbe.mockResolvedValueOnce(9);
+    mockTranscriptionsCreate
+      .mockRejectedValueOnce(new APIError(400, { message: "bad" }, "bad audio", new Headers()))
+      .mockResolvedValueOnce({
+        text: "如果您的電話沒有充電,請先關機。",
+        duration: 9,
+      });
+
+    const result = await transcribeChunk({
+      buffer: SMALL_BUFFER,
+      filename: "chunk.webm",
+      mimeType: "audio/webm",
+      sessionId: SESSION_ID,
+    });
+
+    expect(result).toMatchObject({ transcript: "" });
+    expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(2);
+  });
+
+  test("primary API error keeps real whisper-1 speech", async () => {
+    mockProbe.mockResolvedValueOnce(20);
+    mockTranscriptionsCreate
+      .mockRejectedValueOnce(new APIError(400, { message: "bad" }, "bad audio", new Headers()))
+      .mockResolvedValueOnce({
+        text: "trigonometric functions work again, finally. The log of x.",
+        duration: 20,
+      });
+
+    const result = await transcribeChunk({
+      buffer: SMALL_BUFFER,
+      filename: "chunk.webm",
+      mimeType: "audio/webm",
+      sessionId: SESSION_ID,
+    });
+
+    expect(result).toMatchObject({
+      transcript: "trigonometric functions work again, finally. The log of x.",
+      modelUsed: TRANSCRIBE_FALLBACK_MODEL,
+    });
+    expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(2);
+  });
+
+  test("mixed parts keep real speech and drop the junk part", async () => {
+    mockSplit.mockResolvedValueOnce([
+      { buffer: Buffer.alloc(8, 0x01), filename: "chunk-part1.webm", mimeType: "audio/webm" },
+      { buffer: Buffer.alloc(8, 0x02), filename: "chunk-part2.webm", mimeType: "audio/webm" },
+    ]);
+    mockProbe.mockResolvedValueOnce(15).mockResolvedValueOnce(10);
+    mockTranscriptionsCreate
+      .mockResolvedValueOnce({
+        text: "trigonometric functions work again, finally. The log of x.",
+      })
+      .mockResolvedValueOnce({ text: "Thanks for watching!" })
+      .mockResolvedValueOnce({ text: "5.5mm 6mm 7mm", duration: 10 });
+
+    const result = await transcribeChunk({
+      buffer: SMALL_BUFFER,
+      filename: "chunk.webm",
+      mimeType: "audio/webm",
+      sessionId: SESSION_ID,
+    });
+
+    expect(result).toMatchObject({
+      transcript: "trigonometric functions work again, finally. The log of x.",
+    });
+    // One create() per part. The junk part must not trigger whisper-1.
+    expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(2);
+    expect(mockTranscriptionsCreate.mock.calls.map((c) => c[0].model)).toEqual([
+      TRANSCRIBE_PRIMARY_MODEL,
+      TRANSCRIBE_PRIMARY_MODEL,
+    ]);
   });
 
   // -------------------------------------------------------------------------
@@ -307,10 +413,10 @@ describe("transcribeChunk", () => {
   // -------------------------------------------------------------------------
   // 9. response_format per model
   // -------------------------------------------------------------------------
-  test("primary model uses json response_format; whisper-1 fallback keeps verbose_json", async () => {
-    mockProbe.mockResolvedValueOnce(2);
+  test("both create() calls send language en; whisper-1 fallback keeps verbose_json", async () => {
+    mockProbe.mockResolvedValueOnce(12);
     mockTranscriptionsCreate
-      .mockResolvedValueOnce({ text: "Thanks for watching!" })
+      .mockRejectedValueOnce(new APIError(400, { message: "bad" }, "bad audio", new Headers()))
       .mockResolvedValueOnce({ text: "Real tutoring content.", duration: 12 });
 
     await transcribeChunk({
@@ -321,7 +427,15 @@ describe("transcribeChunk", () => {
     });
 
     expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(2);
-    expect(mockTranscriptionsCreate.mock.calls[0][0].response_format).toBe("json");
-    expect(mockTranscriptionsCreate.mock.calls[1][0].response_format).toBe("verbose_json");
+    expect(mockTranscriptionsCreate.mock.calls[0][0]).toMatchObject({
+      model: TRANSCRIBE_PRIMARY_MODEL,
+      response_format: "json",
+      language: "en",
+    });
+    expect(mockTranscriptionsCreate.mock.calls[1][0]).toMatchObject({
+      model: TRANSCRIBE_FALLBACK_MODEL,
+      response_format: "verbose_json",
+      language: "en",
+    });
   });
 });
