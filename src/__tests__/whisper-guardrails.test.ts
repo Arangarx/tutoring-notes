@@ -35,6 +35,7 @@ const JUNK_AT_LONG_DURATION: string[] = [
   "5.5mm 6mm 7mm",
   "5.5mm 6mm 7mm 8mm 9mm 10mm 11mm 12mm 13mm 14mm 15mm 16mm 17mm 18mm 19mm 20mm",
   "5mm 5mm 5mm 5mm",
+  "3 mm 3 mm 3 mm",
   "Skip. Skip. Skip.",
   "[Sound of typing]",
   "(sound of typing)",
@@ -123,6 +124,7 @@ describe("looksLikeSilenceHallucination", () => {
     expect(silenceHallucinationReason("   ")).toBe("empty");
     expect(silenceHallucinationReason("Thanks for watching!")).toBe("phrase");
     expect(silenceHallucinationReason("5.5mm 6mm 7mm")).toBe("number_unit");
+    expect(silenceHallucinationReason("3 mm 3 mm 3 mm")).toBe("number_unit");
     expect(silenceHallucinationReason("ä ä ä ä ä ä ä ä ä ä ä ä")).toBe("repetition");
     expect(silenceHallucinationReason("如果您的電話沒有充電,請先關機。")).toBe("non_latin");
     expect(silenceHallucinationReason("Silence. Exhaling.")).toBe("sound");
