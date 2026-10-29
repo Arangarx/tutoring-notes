@@ -92,3 +92,6 @@ Orchestrator notes:
 - **Hotfix (apply race) smoke:** NOT yet done by Tyson.
 - **Ambiguity to confirm with Tyson:** which items "weren't broken in the first place". He may mean items that never failed, or items that now pass where he expected a failure. Read his notes in the Google Docs before assuming.
 - The 10/28 list (above) is still open.
+
+- **Item 48 follow-up (Tyson via Andrew, 2026-10-29 13:53):** Tyson ran it full screen and did not narrow the window. So the app behaved as designed (button hidden on wide windows). Open product question for Andrew: should More session options also show on wide desktop windows?
+
