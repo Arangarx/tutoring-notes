@@ -1,6 +1,6 @@
 import OpenAI, { APIError, RateLimitError, toFile } from "openai";
 import { env } from "@/lib/env";
-import { WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
+import { TRANSCRIPTION_LANGUAGE, WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
 import { splitAudioIntoWhisperParts, type WhisperAudioPart } from "@/lib/transcribe-ffmpeg";
 import {
   estimateCostUsd,
@@ -85,6 +85,7 @@ async function transcribeSinglePart(
       const response = await client.audio.transcriptions.create({
         model: modelRequested,
         file,
+        language: TRANSCRIPTION_LANGUAGE,
         response_format: "verbose_json",
       });
 

@@ -468,4 +468,28 @@ describe("processChunkTranscribeJob", () => {
       speakerId: null,
     });
   });
+
+  test("silence-dropped chunk is done with an empty transcript and no error", async () => {
+    setupHappyPath();
+    mockTranscribeChunk.mockResolvedValue({
+      transcript: "",
+      durationMs: 8000,
+      modelUsed: "gpt-4o-mini-transcribe",
+    });
+
+    const outcome = await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+    });
+
+    expect(outcome).toBe("done");
+    const finalCall = mockUpsertTranscriptChunk.mock.calls.at(-1)?.[0];
+    expect(finalCall).toMatchObject({
+      status: "done",
+      transcript: "",
+      durationMs: 8000,
+    });
+    expect(finalCall.error).toBeUndefined();
+  });
 });

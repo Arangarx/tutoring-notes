@@ -346,6 +346,67 @@ describe("processNotesReduceJob — successful reduce", () => {
     expect(result.outcome).toBe("done");
     expect(result).toMatchObject({ outcome: "done", isPartial: false });
   });
+
+  it("joins real speech and skips empty silence-dropped chunks", async () => {
+    mockGetChunks.mockResolvedValue([
+      makeChunk({ id: "c-silent", transcript: "", recordingTimeOffsetMs: 0 }),
+      makeChunk({
+        id: "c-speech",
+        transcript: "trigonometric functions work again, finally. The log of x.",
+        recordingTimeOffsetMs: 4000,
+      }),
+      makeChunk({ id: "c-blank", transcript: "   ", recordingTimeOffsetMs: 8000 }),
+    ]);
+    mockGetExtractions.mockResolvedValue([]);
+    mockOpenAISuccess(JSON.stringify({
+      topics: "Trigonometry",
+      assessment: "",
+      nextSteps: "",
+      links: "",
+    }));
+
+    const result = await processNotesReduceJob(SESSION_ID);
+
+    expect(result).toMatchObject({ outcome: "done", isPartial: false });
+    const userMsg = mockChatCreate.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "user"
+    ).content as string;
+    expect(userMsg).toContain("trigonometric functions work again, finally. The log of x.");
+    expect(userMsg).not.toContain("Thanks for watching");
+    expect(userMsg).not.toContain("[Segment 2]");
+  });
+
+  it("a fully silent session still produces an empty done note", async () => {
+    mockGetChunks.mockResolvedValue([
+      makeChunk({ id: "c1", transcript: "", recordingTimeOffsetMs: 0 }),
+      makeChunk({ id: "c2", transcript: "", recordingTimeOffsetMs: 5000 }),
+      makeChunk({ id: "c3", transcript: "   ", recordingTimeOffsetMs: 9000 }),
+    ]);
+    mockGetExtractions.mockResolvedValue([]);
+    mockOpenAISuccess(JSON.stringify({
+      topics: "",
+      assessment: "",
+      nextSteps: "",
+      links: "",
+    }));
+
+    const result = await processNotesReduceJob(SESSION_ID);
+
+    expect(result).toMatchObject({ outcome: "done", isPartial: false });
+    const userMsg = mockChatCreate.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "user"
+    ).content as string;
+    expect(userMsg).toContain("No audio transcript was available");
+    const doneCall = mockUpdateNote.mock.calls.find(
+      (c: unknown[]) => (c[1] as { status?: string }).status === "done"
+    );
+    expect(parseNoteContent((doneCall?.[1] as { content: string }).content)).toEqual({
+      topics: "",
+      assessment: "",
+      nextSteps: "",
+      links: "",
+    });
+  });
 });
 
 describe("processNotesReduceJob — failure handling", () => {
