@@ -258,8 +258,8 @@ export async function transcribeChunk(
       probedDurationSeconds = null;
     }
 
-    const dropIfSilent = (text: string, duration: number | null): string => {
-      const reason = silenceHallucinationReason(text, duration);
+    const dropIfSilent = (text: string): string => {
+      const reason = silenceHallucinationReason(text);
       if (!reason) return text;
       console.log(
         `[txc] wbsid=${sessionId} action=silence_dropped part=${partLabel} reason=${reason}`
@@ -278,7 +278,7 @@ export async function transcribeChunk(
         partLabel,
         probedDurationSeconds
       );
-      transcript = dropIfSilent(primary.transcript, primary.durationSeconds);
+      transcript = dropIfSilent(primary.transcript);
       durationSeconds = primary.durationSeconds;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -293,7 +293,7 @@ export async function transcribeChunk(
           `${partLabel}-fallback`,
           probedDurationSeconds
         );
-        transcript = dropIfSilent(fallback.transcript, fallback.durationSeconds);
+        transcript = dropIfSilent(fallback.transcript);
         durationSeconds = fallback.durationSeconds;
         modelUsed = TRANSCRIBE_FALLBACK_MODEL;
       } catch (fallbackErr: unknown) {

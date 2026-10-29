@@ -12,9 +12,8 @@
  * finally. The log of x. OK." is kept. We do not surgically delete an outro
  * out of a chunk that also contains tutoring speech.
  *
- * `durationSeconds` stays in the signature because legacy upload and the
- * chunk worker both pass Whisper's duration. It is not a drop signal. The
- * old "≤ 2s and < 40 chars" rule deleted real short utterances.
+ * Clip length is not a drop signal. The old "≤ 2s and < 40 chars" rule
+ * deleted real short utterances, so duration is not an argument.
  */
 
 import { TRANSCRIPTION_LANGUAGE } from "@/lib/transcribe-constants";
@@ -47,7 +46,6 @@ const FILLER_WORDS = new Set([
   "thank",
   "thanks",
   "you",
-  "skip",
 ]);
 
 const SOUND_WORDS = new Set([
@@ -134,26 +132,79 @@ function hasSubstantive(text: string): boolean {
   );
 }
 
+const PHRASE_TESTS = PHRASE_SOURCES.map((source) => new RegExp(source, "i"));
+const PHRASE_STRIPS = PHRASE_SOURCES.map((source) => new RegExp(source, "gi"));
+
+/** Number + mm/cm token. Fresh copies are taken at use so lastIndex stays put. */
+const NUMBER_UNIT_RE = /(\d+(?:\.\d+)?)\s*(mm|cm)\b/gi;
+
+/**
+ * Wrapped caption: ** ** , * * , [ ], or ( ).
+ * Or a standalone "sound(s) of <gerund>" line with no finite verb.
+ */
+const WRAPPED_SOUND_OF =
+  /^(?:\*\*|\*|\[|\()\s*sounds?\s+of\b[\s\S]*?(?:\*\*|\]|\)|\*)[.!?]?\s*$/i;
+const SOUND_OF_GERUND_LINE = /^sounds?\s+of\s+\p{L}+ing\b/iu;
+const FINITE_CLAUSE =
+  /\b(?:is|are|was|were|am|means|mean|has|have|had|does|do|did)\b/i;
+
 function matchesPhrase(text: string): boolean {
-  return PHRASE_SOURCES.some((source) => new RegExp(source, "i").test(text));
+  return PHRASE_TESTS.some((re) => re.test(text));
 }
 
 function stripPhrases(text: string): string {
   let out = text;
-  for (const source of PHRASE_SOURCES) {
-    out = out.replace(new RegExp(source, "gi"), " ");
+  for (const re of PHRASE_STRIPS) {
+    re.lastIndex = 0;
+    out = out.replace(re, " ");
   }
   return out;
 }
 
+/**
+ * Millimetre counting runs from Tyson's session ("5.5mm 6mm 7mm" and the
+ * long strictly-increasing run) are junk. A 3-token run drops only when it
+ * is millimetres or starts on a decimal — that is the Tyson 3-token fixture.
+ * "3 cm 4 cm 5 cm" is three whole centimetres, so it stays. Four or more
+ * mm/cm tokens drop when they strictly increase or are the same value
+ * repeated ("5mm 5mm 5mm 5mm").
+ */
 function isNumberUnitOnly(text: string): boolean {
-  const units = text.match(/\d+(?:\.\d+)?\s*(?:mm|cm)\b/gi);
-  if (!units || units.length < 2) return false;
+  const tokenRe = new RegExp(NUMBER_UNIT_RE.source, "gi");
+  const units: { value: number; unit: string }[] = [];
+  for (const match of text.matchAll(tokenRe)) {
+    units.push({ value: Number(match[1]), unit: match[2].toLowerCase() });
+  }
+  if (units.length < 3) return false;
   const rest = text
-    .replace(/\d+(?:\.\d+)?\s*(?:mm|cm)\b/gi, " ")
+    .replace(new RegExp(NUMBER_UNIT_RE.source, "gi"), " ")
     .replace(/[^\p{L}]+/gu, " ")
     .trim();
-  return rest.length === 0;
+  if (rest.length > 0) return false;
+
+  const values = units.map((unit) => unit.value);
+  const strictlyIncreasing = values.every(
+    (value, index) => index === 0 || value > values[index - 1]
+  );
+  const exactRepeat = values.every((value) => value === values[0]);
+  if (!strictlyIncreasing && !exactRepeat) return false;
+  if (units.length >= 4) return true;
+
+  const millimetres = units.every((unit) => unit.unit === "mm");
+  const fractionalStart = !Number.isInteger(values[0]);
+  return millimetres || fractionalStart;
+}
+
+/** "SKIP SKIP SKIP" / "Skip. Skip. Skip." — a single "Skip it." is speech. */
+function isRepeatedSkipOnly(text: string): boolean {
+  const words = wordsOf(text);
+  return words.length >= 2 && words.every((word) => word === "skip");
+}
+
+function isSoundOfCaption(text: string): boolean {
+  const trimmed = text.trim();
+  if (WRAPPED_SOUND_OF.test(trimmed)) return true;
+  return SOUND_OF_GERUND_LINE.test(trimmed) && !FINITE_CLAUSE.test(trimmed);
 }
 
 function isCharRepetition(text: string): boolean {
@@ -190,7 +241,7 @@ function isNonLatinDominant(text: string): boolean {
 }
 
 function isSoundOnly(text: string): boolean {
-  if (/^(?:\*\*)?(?:sounds?\s+of)\b/i.test(text.trim())) return true;
+  if (isSoundOfCaption(text)) return true;
   const words = wordsOf(text);
   if (words.length === 0) return false;
   let sound = 0;
@@ -246,14 +297,11 @@ function classifySentence(sentence: string): SilenceDropReason | "keep" | "ignor
  * speech worth keeping. Callers persist "" on a non-null reason.
  */
 export function silenceHallucinationReason(
-  transcript: string,
-  durationSeconds: number | null
+  transcript: string
 ): SilenceDropReason | null {
-  // See file comment: duration is not a drop signal.
-  void durationSeconds;
-
   const original = transcript.trim();
   if (!original) return "empty";
+  if (isRepeatedSkipOnly(original)) return "filler";
 
   const reasons: SilenceDropReason[] = [];
   for (const sentence of splitSentences(original)) {
@@ -273,9 +321,6 @@ export function silenceHallucinationReason(
  * Returns true when the transcript is very likely a silence / junk artifact
  * rather than a tutoring session. Callers skip or delete that segment.
  */
-export function looksLikeSilenceHallucination(
-  transcript: string,
-  durationSeconds: number | null
-): boolean {
-  return silenceHallucinationReason(transcript, durationSeconds) !== null;
+export function looksLikeSilenceHallucination(transcript: string): boolean {
+  return silenceHallucinationReason(transcript) !== null;
 }

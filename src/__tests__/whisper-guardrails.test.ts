@@ -6,9 +6,8 @@ import {
 /**
  * Independent oracle: the exact strings Whisper stored on Tyson's 2026-10-28
  * session (docs/handoff/tyson-feedback-2026-10-28.md) plus the real sentences
- * in those same blocks. Duration is 30s so the old "clip ≤ 2s" rule cannot
- * make a junk string pass by accident, and 1.5s on real phrases so that rule
- * cannot hide a false drop.
+ * in those same blocks. Clip length is not an input — the strings themselves
+ * are the oracle. Tyson's junk must drop; real tutoring speech must stay.
  */
 const JUNK_AT_LONG_DURATION: string[] = [
   "Thanks for watching!",
@@ -35,6 +34,12 @@ const JUNK_AT_LONG_DURATION: string[] = [
   "Sound of typing on computer screen.",
   "5.5mm 6mm 7mm",
   "5.5mm 6mm 7mm 8mm 9mm 10mm 11mm 12mm 13mm 14mm 15mm 16mm 17mm 18mm 19mm 20mm",
+  "5mm 5mm 5mm 5mm",
+  "Skip. Skip. Skip.",
+  "[Sound of typing]",
+  "(sound of typing)",
+  "*sounds of birds chirping*",
+  "**Sound of rain falling**",
   "ä ä ä ä ä ä ä ä ä ä ä ä ä ä ä ä",
   "Ä, Ä, ä, ä, ä, ä, ä, ä, ä, ä, ä, ä",
   "SKIP SKIP SKIP SKIP SKIP",
@@ -59,14 +64,24 @@ const REAL_SPEECH: string[] = [
   "trigonometric functions work again, finally. The log of x. OK.",
   "trigonometric functions work again, finally. The log of x. Thank you for watching!",
   "Draw. Draw. How? That's not even possible!",
+  "Yes.",
+  "No.",
+  "Skip it.",
+  "Sound of music is a movie.",
+  "Sounds of the letter B.",
+  "3 cm 4 cm 5 cm",
+  "θ = π/2",
+  "x² + y² = r²",
+  "∫ f(x) dx = F(x) + C",
+  "El estudiante resolvió la ecuación cuadrática.",
+  "Wir haben heute die quadratische Formel geübt.",
 ];
 
 describe("looksLikeSilenceHallucination", () => {
   test("flags classic YouTube-style Whisper hallucination", () => {
     expect(
       looksLikeSilenceHallucination(
-        "thanks for watching please subscribe and hit that like button....",
-        5
+        "thanks for watching please subscribe and hit that like button...."
       )
     ).toBe(true);
   });
@@ -74,53 +89,52 @@ describe("looksLikeSilenceHallucination", () => {
   test("does not flag a normal short tutoring phrase", () => {
     expect(
       looksLikeSilenceHallucination(
-        "We reviewed factoring and she had trouble with negative signs.",
-        45
+        "We reviewed factoring and she had trouble with negative signs."
       )
     ).toBe(false);
   });
 
   test("flags empty transcript", () => {
-    expect(looksLikeSilenceHallucination("", 0)).toBe(true);
-    expect(looksLikeSilenceHallucination("   ", 12)).toBe(true);
+    expect(looksLikeSilenceHallucination("")).toBe(true);
+    expect(looksLikeSilenceHallucination("   ")).toBe(true);
   });
 
   /** Sarah Apr 2026 — Neon transcript exact match; Whisper hallucination on weak audio. */
   test('flags "Thank you for watching." (23 chars)', () => {
-    expect(looksLikeSilenceHallucination("Thank you for watching.", 23)).toBe(true);
+    expect(looksLikeSilenceHallucination("Thank you for watching.")).toBe(true);
   });
 
   test.each(JUNK_AT_LONG_DURATION)(
     "flags Tyson silence hallucination %j",
     (transcript) => {
-      expect(looksLikeSilenceHallucination(transcript, 30)).toBe(true);
+      expect(looksLikeSilenceHallucination(transcript)).toBe(true);
     }
   );
 
   test.each(REAL_SPEECH)(
     "keeps real speech even on a short clip %j",
     (transcript) => {
-      expect(looksLikeSilenceHallucination(transcript, 1.5)).toBe(false);
-      expect(looksLikeSilenceHallucination(transcript, 45)).toBe(false);
+      expect(looksLikeSilenceHallucination(transcript)).toBe(false);
     }
   );
 
   test("reports a reason code for each junk class", () => {
-    expect(silenceHallucinationReason("", 30)).toBe("empty");
-    expect(silenceHallucinationReason("   ", 30)).toBe("empty");
-    expect(silenceHallucinationReason("Thanks for watching!", 30)).toBe("phrase");
-    expect(silenceHallucinationReason("5.5mm 6mm 7mm", 30)).toBe("number_unit");
-    expect(silenceHallucinationReason("ä ä ä ä ä ä ä ä ä ä ä ä", 30)).toBe("repetition");
-    expect(silenceHallucinationReason("如果您的電話沒有充電,請先關機。", 30)).toBe("non_latin");
-    expect(silenceHallucinationReason("Silence. Exhaling.", 30)).toBe("sound");
-    expect(silenceHallucinationReason("**whistling** **humming**", 30)).toBe("sound");
-    expect(silenceHallucinationReason("Bye. Bye.", 30)).toBe("filler");
-    expect(silenceHallucinationReason("OK.", 30)).toBe("filler");
-    expect(silenceHallucinationReason("The log of x.", 1.5)).toBeNull();
+    expect(silenceHallucinationReason("")).toBe("empty");
+    expect(silenceHallucinationReason("   ")).toBe("empty");
+    expect(silenceHallucinationReason("Thanks for watching!")).toBe("phrase");
+    expect(silenceHallucinationReason("5.5mm 6mm 7mm")).toBe("number_unit");
+    expect(silenceHallucinationReason("ä ä ä ä ä ä ä ä ä ä ä ä")).toBe("repetition");
+    expect(silenceHallucinationReason("如果您的電話沒有充電,請先關機。")).toBe("non_latin");
+    expect(silenceHallucinationReason("Silence. Exhaling.")).toBe("sound");
+    expect(silenceHallucinationReason("**whistling** **humming**")).toBe("sound");
+    expect(silenceHallucinationReason("Bye. Bye.")).toBe("filler");
+    expect(silenceHallucinationReason("OK.")).toBe("filler");
+    expect(silenceHallucinationReason("Okay.")).toBe("filler");
+    expect(silenceHallucinationReason("Thank you.")).toBe("filler");
+    expect(silenceHallucinationReason("The log of x.")).toBeNull();
     expect(
       silenceHallucinationReason(
-        "trigonometric functions work again, finally. The log of x.",
-        1.5
+        "trigonometric functions work again, finally. The log of x."
       )
     ).toBeNull();
   });

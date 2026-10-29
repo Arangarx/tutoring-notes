@@ -110,6 +110,14 @@ export type StructuredNoteFields = {
   links: string;
 };
 
+/** Canonical empty reduce result. Silence has no topics, assessment, plan, or links. */
+export const EMPTY_STRUCTURED_NOTE: StructuredNoteFields = {
+  topics: "",
+  assessment: "",
+  nextSteps: "",
+  links: "",
+};
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -118,6 +126,14 @@ export type StructuredNoteFields = {
 function spokenChunkText(transcript: string | null | undefined): string | null {
   const text = (transcript ?? "").trim();
   return text.length > 0 ? text : null;
+}
+
+/** True when the reduce has tutoring content. Silence must not call the model. */
+function hasReduceSource(
+  extractions: readonly unknown[],
+  rawTranscripts: readonly unknown[]
+): boolean {
+  return extractions.length > 0 || rawTranscripts.length > 0;
 }
 
 function buildReducePrompt(
@@ -286,6 +302,18 @@ export async function processLiveReduceJob(
   console.log(
     `[tnt] wbsid=${sessionId} action=live_reduce_inputs extractions=${orderedExtractions.length} rawTranscripts=${rawTranscripts.length} watermarkWas=${watermark} nowReducing=${doneCount}`
   );
+
+  if (!hasReduceSource(orderedExtractions, rawTranscripts)) {
+    await updateTutorNote(sessionId, {
+      content: JSON.stringify(EMPTY_STRUCTURED_NOTE),
+      lastReducedChunkCount: doneCount,
+      lastLiveReduceAt: new Date(),
+    });
+    console.log(
+      `[tnt] wbsid=${sessionId} action=live_reduce_empty_skip_llm chunks=${doneCount}`
+    );
+    return { outcome: "live_done" };
+  }
 
   // --- 4. OpenAI reduce call ------------------------------------------------
   if (!env.OPENAI_API_KEY) {
@@ -561,6 +589,22 @@ export async function processNotesReduceJob(
   console.log(
     `[tnt] wbsid=${sessionId} action=reduce_inputs extractions=${orderedExtractions.length} rawTranscripts=${rawTranscripts.length} isPartial=${isPartial}`
   );
+
+  if (!hasReduceSource(orderedExtractions, rawTranscripts)) {
+    const finalStatus = isPartial ? "partial" : "done";
+    await updateTutorNote(sessionId, {
+      status: finalStatus,
+      content: JSON.stringify(EMPTY_STRUCTURED_NOTE),
+      isPartial,
+      generatedAt: new Date(),
+    });
+    console.log(
+      `[tnt] wbsid=${sessionId} action=reduce_empty_skip_llm status=${finalStatus} chunks=${doneChunks}`
+    );
+    return isPartial
+      ? { outcome: "partial", isPartial: true }
+      : { outcome: "done", isPartial: false };
+  }
 
   // --- 6. Mark as generating ------------------------------------------------------
   await updateTutorNote(sessionId, { status: "generating" });

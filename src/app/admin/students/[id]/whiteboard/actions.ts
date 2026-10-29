@@ -1626,7 +1626,7 @@ export async function generateNotesFromWhiteboardSessionAction(
       };
     }
 
-    if (looksLikeSilenceHallucination(result.transcript, result.durationSeconds)) {
+    if (looksLikeSilenceHallucination(result.transcript)) {
       console.warn(
         `[generateNotesFromWB] rid=${rid} wbsid=${whiteboardSessionId} segment ${i + 1} likely silence — skipping`
       );

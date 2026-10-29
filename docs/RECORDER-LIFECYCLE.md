@@ -478,7 +478,7 @@ explicit precedence, add tests in
 `src/__tests__/recording/lifecycle-machine.test.ts`. Then thread the
 input from the host. Do NOT introduce side effects in the FSM.
 
-**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs / ers / sal prefixes
+**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs / ers / sal / txc prefixes
 documented?**
 A: AGENTS.md "Per-session ID logging is mandatory." section. The
 3-letter prefixes used in this stack are `wbsid` (whiteboard
@@ -559,7 +559,21 @@ key is `ah-login:<normalizedEmail>`; key lines:
 `tfr` (2FA-verify durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
 key is `2fa-verify:<adminUserId>`; key lines:
 `[tfr] tfr=2fa-verify:<id> action=rate-limited count=<n> retryAfterSec=<s>`,
-`[tfr] tfr=2fa-verify:<id> action=approaching-limit count=<n>/20`), and
+`[tfr] tfr=2fa-verify:<id> action=approaching-limit count=<n>/20`),
+`txc` (transcription chunk — `src/lib/recording/transcribe-chunk.ts`,
+`transcription-worker.ts`, `transcribe-sweep.ts`, `chunk-transcribe-enqueue.ts`,
+`transcript-store.ts`, and the chunk-transcribe queue route; writes
+`[txc] wbsid=<id> action=<action> ...`. Actions include `silence_dropped`,
+`chunk_start`, `chunk_done`, `api_ok`, `api_retry`, `ffmpeg_unavailable`,
+`ffmpeg_split_failed`, `primary_failed`, `part_done`, `part_failed`,
+`worker_start`, `worker_skip`, `worker_offset`, `worker_done`, `blob_fetched`,
+`blob_fetch_failed`, `transcribe_failed`, `sweep_start`, `sweep_pick`,
+`sweep_done`, `sweep_time_budget_exceeded`, `sweep_auth_rejected`, `enqueue`,
+`enqueue_pending_upsert`, `enqueue_pending_error`, `enqueue_action_start`,
+`enqueue_action_skipped`, `enqueue_action_rejected`, `enqueue_rejected`,
+`after_worker_error`, `after_worker_fetch_error`, `queue_auth_rejected`,
+`route_received`, `route_invalid_payload`, `route_worker_threw`,
+`route_returning_500`, `session_sweep_kick`, `upsert`, `status_update`), and
 the component-specific ones in `useAudioRecorder` (`aud=`).
 
 ### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)

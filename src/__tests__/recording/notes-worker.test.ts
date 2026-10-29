@@ -70,6 +70,7 @@ import {
 } from "@/lib/recording/transcript-store";
 import { processNotesReduceJob } from "@/lib/recording/notes-worker";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
+import { logCostEvent } from "@/lib/observability/cost-events";
 import { parseNoteContent } from "@/components/whiteboard/TutorNotesSection";
 
 const mockGetSession = db.whiteboardSession.findUnique as jest.Mock;
@@ -78,6 +79,7 @@ const mockGetChunks = getTranscriptChunksBySessionId as jest.Mock;
 const mockGetExtractions = getChunkExtractionsBySessionId as jest.Mock;
 const mockUpdateNote = updateTutorNote as jest.Mock;
 const mockUpsertNotePending = upsertTutorNotePending as jest.Mock;
+const mockLogCostEvent = logCostEvent as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -339,12 +341,21 @@ describe("processNotesReduceJob — successful reduce", () => {
   it("handles sessions with no chunks (no audio)", async () => {
     mockGetChunks.mockResolvedValue([]); // no audio chunks
     mockGetExtractions.mockResolvedValue([]);
-    mockOpenAISuccess(JSON.stringify({ topics: "", assessment: "", nextSteps: "", links: "" }));
 
     const result = await processNotesReduceJob(SESSION_ID);
 
-    expect(result.outcome).toBe("done");
     expect(result).toMatchObject({ outcome: "done", isPartial: false });
+    expect(mockChatCreate).not.toHaveBeenCalled();
+    expect(mockLogCostEvent).not.toHaveBeenCalled();
+    const doneCall = mockUpdateNote.mock.calls.find(
+      (c: unknown[]) => (c[1] as { status?: string }).status === "done"
+    );
+    expect(parseNoteContent((doneCall?.[1] as { content: string }).content)).toEqual({
+      topics: "",
+      assessment: "",
+      nextSteps: "",
+      links: "",
+    });
   });
 
   it("joins real speech and skips empty silence-dropped chunks", async () => {
@@ -383,20 +394,12 @@ describe("processNotesReduceJob — successful reduce", () => {
       makeChunk({ id: "c3", transcript: "   ", recordingTimeOffsetMs: 9000 }),
     ]);
     mockGetExtractions.mockResolvedValue([]);
-    mockOpenAISuccess(JSON.stringify({
-      topics: "",
-      assessment: "",
-      nextSteps: "",
-      links: "",
-    }));
 
     const result = await processNotesReduceJob(SESSION_ID);
 
     expect(result).toMatchObject({ outcome: "done", isPartial: false });
-    const userMsg = mockChatCreate.mock.calls[0][0].messages.find(
-      (m: { role: string }) => m.role === "user"
-    ).content as string;
-    expect(userMsg).toContain("No audio transcript was available");
+    expect(mockChatCreate).not.toHaveBeenCalled();
+    expect(mockLogCostEvent).not.toHaveBeenCalled();
     const doneCall = mockUpdateNote.mock.calls.find(
       (c: unknown[]) => (c[1] as { status?: string }).status === "done"
     );

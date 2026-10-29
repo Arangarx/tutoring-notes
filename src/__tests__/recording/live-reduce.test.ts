@@ -68,6 +68,7 @@ import {
 import { logCostEvent } from "@/lib/observability/cost-events";
 import { processLiveReduceJob } from "@/lib/recording/notes-worker";
 import { processNotesReduceJob } from "@/lib/recording/notes-worker";
+import { parseNoteContent } from "@/components/whiteboard/TutorNotesSection";
 
 const mockGetSession = db.whiteboardSession.findUnique as jest.Mock;
 const mockGetNote = getTutorNoteBySessionId as jest.Mock;
@@ -284,6 +285,31 @@ describe("(a) processLiveReduceJob — reduce runs live during unsealed session"
     });
     expect(mockUpdateNote).not.toHaveBeenCalled();
     expect(mockLogCostEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not call the LLM when every done chunk is blank and there are no extractions", async () => {
+    const silentChunks = [
+      { ...makeChunk("c1", "done", 0), transcript: "" },
+      { ...makeChunk("c2", "done", 5000), transcript: "   " },
+    ];
+    mockGetNote.mockResolvedValue(makeNote({ lastReducedChunkCount: 0 }));
+    mockGetChunks.mockResolvedValue(silentChunks);
+    mockGetExtractions.mockResolvedValue([]);
+
+    const result = await processLiveReduceJob(SESSION_ID);
+
+    expect(result.outcome).toBe("live_done");
+    expect(mockChatCreate).not.toHaveBeenCalled();
+    expect(mockLogCostEvent).not.toHaveBeenCalled();
+    const updateCall = mockUpdateNote.mock.calls.find(
+      (c: unknown[]) => typeof (c[1] as { content?: string }).content === "string"
+    );
+    expect(parseNoteContent((updateCall?.[1] as { content: string }).content)).toEqual({
+      topics: "",
+      assessment: "",
+      nextSteps: "",
+      links: "",
+    });
   });
 });
 
