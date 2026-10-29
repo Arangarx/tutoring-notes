@@ -99,6 +99,14 @@ Orchestrator notes:
 - **Item 48 resolved (Discord 13:52-13:55, screenshot `../../.cursor/projects/c-Users-arang-Documents-Andrew-dev-agentic-projects-tutoring-notes/assets/image-1505611b-001d-4e9d-bbb0-7781d0b45a99.png`):** Tyson is on 3840x2160 full screen. **The Google Doc he used has NO instruction to narrow the window** (the repo packet `docs/handoff/ORG-QOL-TYSON-TEST-PACKET.md` item 48 steps 1-3 does). Docs drift between repo packet and the Google Doc = test-doc failure; audit the Doc's item 48 (and spot-check other re-test items) against the repo packet. After narrowing: button appears and opens the options = PASS.
 - **NEW BUG (item 48, Tyson):** "if i have the menu open and expand the window so the button goes away, the menu stays pulled up and won't go away until I shrink it and click the button again." Expected (orchestrator default, everything in the menu is on the bar once wide): the session options menu closes when its trigger button hides (or stays closable via outside click / Escape). Red-first Playwright in `tests/integration/wb-org-qol-surface.spec.ts` next to "session menu and drawing menu use different icons and a more-below cue" (tag @wb-chrome): open at 1000px, resize to 1280px, assert the menu is closed (and outside click / Escape closes it at any width). Then fix + Sonnet review.
 
+## Apply-race hotfix smoke — FAIL (Tyson, Discord 2026-10-29 16:02-16:11)
+
+Screenshot: `../../.cursor/projects/c-Users-arang-Documents-Andrew-dev-agentic-projects-tutoring-notes/assets/image-c773aa44-17f7-4764-94bc-ad5d7be3517b.png`
+
+> that was the quickest round of testing I've ever done / it doesn't work / the student is just stuck on connecting so i can't actually start the session / i've refreshed a few times and even gone back and clicked the link again, still nothing / student is stuck on connecting, tutor is stuck waiting for student to connect
+
+Andrew then pointed preview.usemynk.com at `fix/wb-student-apply-race`. Tyson's join link after that was preview.usemynk.com/join/2c626508-...: the tutor's waiting room ("Ready to start?") shows the student tile "J" with "Connection failed · Retry". It goes to connecting and back every few seconds, the same as on the hotfix branch link. Earlier the same day, feat/org-qol on preview connected fine. Under investigation (environment suspected first).
+
 ## Rule (Andrew 2026-10-29)
 
 Every Tyson failure gets a browser test that reproduces his exact steps before any fix. If that test passes, bring it to Andrew as a design question. Do not relabel a passing reproduction as a wording issue.

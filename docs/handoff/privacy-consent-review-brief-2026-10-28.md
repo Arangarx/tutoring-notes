@@ -98,6 +98,15 @@ Reading, pending the gaps below:
 
 **All six decisions are settled.** Item 60 and the organization-consent part of item 58 are off HOLD and go into the consent wave.
 
+## Abandoned sessions — DECIDED (Andrew 2026-10-29 16:17)
+
+A background job ends any session with no activity for 24 hours, through the shared stale/forced End path. It applies to all sessions, and the whiteboard-off purge follows. Andrew: there is never a good reason for a session to run forever with nothing happening. While live, data is acceptable as long as nobody can get at it. Future: an "are you still there?" prompt (Netflix-style) that ends idle sessions sooner — backlog WB-IDLE-STILL-THERE.
+
+## Consent plan Q1 and Q2 — DECIDED (Andrew 2026-10-29 16:20)
+
+- **Q1, notes off:** the tutor keeps the review step, and the review screen ends with a "Share session" save that releases the replay to the family. If the tutor never finalizes the session, the family has nothing to access, the same as today.
+- **Q2, when consent counts:** consent changes apply forward only. The consent in force when the tutor presses Start governs that session, and the frozen snapshot is the proof. A change made mid-session or later applies from the next session. Today the snapshot is frozen when the session is created, not at Start, and Start re-reads the live record. A session created before the learner was claimed gets no snapshot at all. The consent wave fixes both (refreeze at Start, written as an upsert). Andrew 16:22: snapshot-less sessions should only be legacy test data plus one or two of Sarah's, and must be impossible before going public. Invariant: every started session has a snapshot. Creating a session for an unclaimed learner still skips the snapshot in today's code, so Start's upsert is what makes the invariant hold, and a test guards it. Legacy rows are left as they are (decision 1). **Andrew 16:23, LOCKED:** if no consent record exists when the tutor presses Start, the session cannot start, online or in person, and no exception. The Start button shows why it is blocked (decision 6). Required Playwright tests: Start is refused with no record in both online and in-person modes, the reason is visible, and the session stays PENDING with no snapshot and no recording.
+
 ## Transcription language — DECIDED (Andrew 2026-10-29 15:03)
 
 Release priority #8 in `docs/BACKLOG.md` (TXC-LANG). It comes after the consent wave and the org-leak fix, ahead of calculus. Auto-detect is a later, separate step. The language limit must be disclosed before signup, on a public, up-to-date roadmap and known-limits page. The in-session notice is not enough on its own.
