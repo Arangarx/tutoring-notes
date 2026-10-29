@@ -564,7 +564,7 @@ async function _transcribeAndGenerateImpl(
     }
 
     if (
-      looksLikeSilenceHallucination(transcribeResult.transcript, transcribeResult.durationSeconds)
+      looksLikeSilenceHallucination(transcribeResult.transcript)
     ) {
       console.warn(
         `[transcribeAndGenerate] rid=${rid} likely silence/mic hallucination — skipping segment`,
@@ -765,7 +765,7 @@ async function _transcribeAndGenerateImpl(
       // Defense in depth: if the structuring model returns nothing but the transcript is still
       // obvious Whisper junk (e.g. older deploys, or a rare Unicode edge case on the pre-persist check),
       // fail like the early guard — delete blobs + rows so tutors don't save junk in Topics.
-      if (looksLikeSilenceHallucination(trimmed, lastWhisperDurationSeconds)) {
+      if (looksLikeSilenceHallucination(trimmed)) {
         console.warn(
           `[transcribeAndGenerate] rid=${rid} late hallucination after all-empty LLM`,
           JSON.stringify({
