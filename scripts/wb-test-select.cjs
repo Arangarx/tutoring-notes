@@ -42,6 +42,10 @@ const TAG_ADJACENCY = {
 /** Changed path → tags (union). Order: more specific rules first. */
 const PATH_RULES = [
   {
+    re: /wb-transcription-language-notice|TranscriptionLanguageNotice/i,
+    tags: [TAG.WB_RECORDING, TAG.WB_CHROME],
+  },
+  {
     re: /GraphEmbeddable|graph-state|graph-persist|insert-asset/i,
     tags: [TAG.WB_GRAPH],
   },

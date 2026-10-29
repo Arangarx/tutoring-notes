@@ -92,6 +92,14 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
 
 **Background (not blocking the ordered list):** Wave C/D dedupe (fragile WB/A/V — Opus-grade); agenticPipeline Phase 2; NativeSelect; design-system gallery. Dedupe Wave A/B + tokens already done — new work still = zero new duplication ([`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md)).
 
+### Near-term high priority — transcription languages (Andrew 2026-10-28)
+
+**Transcription language support (English + Spanish first).** Whisper is pinned to English (`TRANSCRIPTION_LANGUAGE` in `src/lib/transcribe-constants.ts`) because leaving language unset made silent audio hallucinate foreign text. Tutors see “Transcription currently supports English only.” under the waiting-room mic/camera controls before Start, and beside the recording pill once the session is live. Students do not see it.
+
+Next: a per-learner, per-tutor, or per-session language setting. Spanish is the minimum for US operation; more languages later. Investigate safe auto-detection, but pair it with the silence guard — auto-detect on silent audio produced those foreign-text hallucinations. Remove the English-only notice once the setting is real.
+
+**Release-priority placement is not settled** — confirm with Andrew where this sits in the ordered list above. **Status:** `OPEN` — near-term, high priority.
+
 ### QUEUED — `/admin/design-system` component gallery (Andrew 2026-07-27)
 
 **Why:** Andrew’s work days no longer have appetite for full-site manual reviews — hunting every card/subpage to eyeball dedupe/layout is too slow. Agents must give him a **findable, organized** eyeball surface instead of “go look around the app.”
