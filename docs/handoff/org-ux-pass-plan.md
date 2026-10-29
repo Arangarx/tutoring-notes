@@ -379,5 +379,19 @@ Only two; everything else above is decided by your 2026-10-28 answers or by exis
 ## Andrew answers (2026-10-28 evening)
 
 1. Org-only learner in an instructor's Students list: **yes**, badged "via {Org}", opening just that instructor's appointments and sessions with that learner.
-2. Wording: Andrew did not mean to set a new blanket rule. Goal: language **consistent** AND **sensible to whoever is reading it** (audience-appropriate). Do NOT flip already-passed wording (e.g. "Add learner" in items 9/61) as part of these waves. Prepare a short audience-by-audience glossary proposal (tutor personal screens, org staff screens, parent/learner screens, site admin) for Andrew to approve; apply wording changes only after he approves it.
+2. **Glossary — APPROVED (Andrew 2026-10-29 15:35)** as in the table below, with "student" on the tutor's own screens (the menu stays "Students", and "Add learner" becomes "Add student"; this supersedes "do not flip passed wording" for that button). Apply it consistently on every signed-in screen. Public marketing pages are out of scope for this pass. One word per idea within each audience, chosen for that reader:
+
+| Idea | Tutor's own screens | Organization staff screens | Family screens (parent, self-learner, child) | Site admin |
+|---|---|---|---|---|
+| Person teaching | tutor | instructor | your tutor (from an org: "your tutor at {Org}") | tutor (account); instructor (org role) |
+| Person learning | student (open: "Add learner" already passed) | learner | your child (to a parent); you (to a self-learner or child) | learner |
+| Adult account | parent / self-learner | parent / self-learner | label "Self learner / Parent" | account holder |
+| Booked time | appointment | appointment | session | appointment |
+| The lesson itself | session | session | session | session |
+| Session type | Online / In person | Online / In person | Online / In person | Online / In person |
+| The org | organization (never "org") | organization | organization | organization |
+
+Resolved: tutor screens use "student" everywhere, including the add button and the roster label. Update Tyson packet items 9 and 61 in the same wave.
+
+2a. Wording: Andrew did not mean to set a new blanket rule. Goal: language **consistent** AND **sensible to whoever is reading it** (audience-appropriate). Do NOT flip already-passed wording (e.g. "Add learner" in items 9/61) as part of these waves. Prepare a short audience-by-audience glossary proposal (tutor personal screens, org staff screens, parent/learner screens, site admin) for Andrew to approve; apply wording changes only after he approves it.
 

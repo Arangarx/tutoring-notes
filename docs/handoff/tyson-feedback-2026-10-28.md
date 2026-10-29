@@ -98,3 +98,7 @@ Orchestrator notes:
 
 - **Item 48 resolved (Discord 13:52-13:55, screenshot `../../.cursor/projects/c-Users-arang-Documents-Andrew-dev-agentic-projects-tutoring-notes/assets/image-1505611b-001d-4e9d-bbb0-7781d0b45a99.png`):** Tyson is on 3840x2160 full screen. **The Google Doc he used has NO instruction to narrow the window** (the repo packet `docs/handoff/ORG-QOL-TYSON-TEST-PACKET.md` item 48 steps 1-3 does). Docs drift between repo packet and the Google Doc = test-doc failure; audit the Doc's item 48 (and spot-check other re-test items) against the repo packet. After narrowing: button appears and opens the options = PASS.
 - **NEW BUG (item 48, Tyson):** "if i have the menu open and expand the window so the button goes away, the menu stays pulled up and won't go away until I shrink it and click the button again." Expected (orchestrator default, everything in the menu is on the bar once wide): the session options menu closes when its trigger button hides (or stays closable via outside click / Escape). Red-first Playwright in `tests/integration/wb-org-qol-surface.spec.ts` next to "session menu and drawing menu use different icons and a more-below cue" (tag @wb-chrome): open at 1000px, resize to 1280px, assert the menu is closed (and outside click / Escape closes it at any width). Then fix + Sonnet review.
+
+## Rule (Andrew 2026-10-29)
+
+Every Tyson failure gets a browser test that reproduces his exact steps before any fix. If that test passes, bring it to Andrew as a design question. Do not relabel a passing reproduction as a wording issue.

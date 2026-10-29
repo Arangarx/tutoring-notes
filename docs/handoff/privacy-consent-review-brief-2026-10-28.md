@@ -2,6 +2,8 @@
 
 Prepared for Andrew's privacy review. Item 60 (child replay hidden) is ON HOLD until these decisions are made. Read-only investigation; file/line refs are on `feat/org-qol` at time of writing.
 
+Review format (Andrew 2026-10-29): talk through each decision in chat. The multiple-choice widget was too cramped. Record the answer under that decision once he gives it.
+
 ## Summary
 
 Families see **four** switches on this branch (live, audio, whiteboard, notes); `master` shows only live + audio. Whiteboard and notes were hidden on 2026-06-30 because they were not enforced (`eafb1927`, `77dde18b`) and came back with the org-learner work (2026-10-11).
@@ -55,6 +57,50 @@ Copy: `src/lib/consent-toggle-copy.ts`. Claim setup: `ConsentSetupForm.tsx` 36�
 6. **Org learners.** (a) Count the org consent row so Start appears. (b) Keep Start hidden until a tutor-owned row exists.
 
 Andrew's stated starting position (2026-10-28): "Allow live session" off means no whiteboard session at all — nothing to record (leans 5a).
+
+## Andrew's principles (2026-10-29, general answer — not yet a lock on 1–6)
+
+1. Anything they have consented to record is recorded.
+2. Anything they have not consented to record is not recorded.
+3. When a learner has not consented to a type of recording, that is clear to both the learner and the tutor, so neither expects something that will not happen.
+4. If anything was recorded, both the tutor and the learner can replay it. Audio-only can be just an audio scrubber.
+
+Reading, pending the gaps below:
+
+- The whiteboard switch stays. It is consent to record the drawings, separate from audio. It does not mean "hide the replay." Off means the drawings are not saved (decision 2a). On means they are saved and both people can replay them.
+- The live switch stops promising that the board is saved for later review. Saving the board is the whiteboard switch.
+- Tutor-only replay is out (not 1c). A share link shows the same recording the learner and tutor can already open, and nothing that was not recorded (decision 3a).
+- The notes switch has to do something. Off means no drafted notes (decision 4a, with the transcript question below).
+- Audio stays its own switch.
+
+### Andrew's answers to the follow-ups (2026-10-29 14:26) — LOCKED
+
+1. **Existing data:** almost all test data. Replays that are available today stay as they are. Enforce the new rules going forward only. No migration or cleanup.
+2. **Tutor's own voice:** online with learner audio off, the tutor's track is still saved (the tutor's own voice). In person with learner audio off, **no audio at all**, because one microphone hears the learner. Revisit only if we can reliably separate voices inside one stream.
+3. **Transcripts:** Andrew's intent was safety — no learner audio consent means no learner audio to transcribe. He does not know where COPPA lands on transcribing audio that is then thrown away. Orchestrator recommendation (not legal advice): transcription of the learner's voice requires audio consent. Never transcribe learner audio that consent says not to keep, even briefly. The kept transcript is lasting personal information. Notes off means no transcript and no drafted notes, while audio on still gives an audio replay. Get a lawyer's read on the COPPA voice rules before unsupervised child pilots.
+4. **Board at session end:** while live, keep what the session needs to run, including reloads. With whiteboard consent off, delete the board at session end. That also means no board snapshot image in the notes.
+5. **Who gets the replay:** the tutor, plus the self-learner, or the parent and the child learner.
+
+### Decision 5 — LOCKED (Andrew 2026-10-29 14:36): the live switch means online only
+
+- The switch becomes "Allow online sessions." Off means the learner cannot join remotely, and the tutor cannot start an online session. This applies to self-learners too: the `/join` gap is a bug and gets closed.
+- In-person sessions are allowed with it off. What is saved follows the audio, whiteboard, and notes switches.
+- Rewrite the scheduling-calendar note above the switch to match. It currently says the app is "effectively just a scheduling calendar" with this off, which stops being true.
+- **In-person access must be a deliberate, reliable path, not an access fluke.** Today it works only because the waiting room flips to In person. Every entry point to an in-person session (Start, Open room, resume, schedule) gets the same answer for the same consent.
+- **Tests must state the decision.** A Playwright matrix: each switch on and off, against online Start, learner join (child, parent, self-learner), in-person Start, what is saved (learner audio, tutor audio, board, transcript, notes, board image), and who can replay (tutor, self-learner, parent, child, share link). Test titles name the rule, e.g. "online sessions off: in-person Start is allowed and saves nothing the family declined."
+- **Copy audit:** every consent string (switch labels, help text, notes above the switches, decline warnings, self-learner agreement) and the privacy page must match what the app does after this wave. The privacy-page overclaims listed above get fixed in the same wave.
+
+### Decision 6 — LOCKED (Andrew 2026-10-29 14:40)
+
+- A session the organization scheduled follows the consent the learner (or parent) gave that organization. Start appears when that consent allows it.
+- A tutor's private session with the same learner follows the consent given to that tutor personally. Organization consent never covers private work.
+- Whenever Start, Open room, or Join is unavailable, a one-line reason says why. Applies to both cases.
+
+**All six decisions are settled.** Item 60 and the organization-consent part of item 58 are off HOLD and go into the consent wave.
+
+## Transcription language — DECIDED (Andrew 2026-10-29 15:03)
+
+Release priority #8 in `docs/BACKLOG.md` (TXC-LANG). It comes after the consent wave and the org-leak fix, ahead of calculus. Auto-detect is a later, separate step. The language limit must be disclosed before signup, on a public, up-to-date roadmap and known-limits page. The in-session notice is not enough on its own.
 
 ## Also on tomorrow's agenda (non-privacy)
 
