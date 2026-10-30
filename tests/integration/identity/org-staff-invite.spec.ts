@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { TAG } from "../../test-tags";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -89,7 +90,7 @@ function invitePath(url: URL): string {
   return `${url.pathname}${url.search}`;
 }
 
-test.describe("organization staff invites", () => {
+test.describe("organization staff invites", { tag: [TAG.ORG, TAG.WB_PRESENCE] }, () => {
   test.use({ storageState: OPERATOR_STATE });
 
   test("operator sees one sentence when the owner has no verified account", async ({ page }) => {
@@ -439,7 +440,7 @@ test.describe("organization staff invites", () => {
   });
 });
 
-test.describe("organization staff sign-in landing", () => {
+test.describe("organization staff sign-in landing", { tag: [TAG.ORG, TAG.WB_PRESENCE] }, () => {
   test.use({ storageState: EMPTY_STATE });
 
   test("sign-in from /login lands a scheduler on the organization and an instructor on the student list", async ({
@@ -522,7 +523,7 @@ test.describe("organization staff sign-in landing", () => {
   });
 });
 
-test.describe("organization invite reasons do not reveal an account", () => {
+test.describe("organization invite reasons do not reveal an account", { tag: [TAG.ORG, TAG.WB_PRESENCE] }, () => {
   test.use({ storageState: EMPTY_STATE });
 
   test("expired and already-used invitations read the same with or without an account", async ({

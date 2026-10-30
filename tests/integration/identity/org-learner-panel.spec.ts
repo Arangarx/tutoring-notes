@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { TAG } from "../../test-tags";
 import { PrismaClient } from "@prisma/client";
 
 import { TEST_ADMIN } from "../../visual/helpers";
@@ -42,7 +43,7 @@ async function addLearner(
   await page.getByTestId("org-learner-create").click();
 }
 
-test.describe("organization learner panel", () => {
+test.describe("organization learner panel", { tag: [TAG.ORG, TAG.WB_PRESENCE] }, () => {
   test.use({ storageState: OPERATOR_STATE });
 
   test("owner sees the parent email, the learner cap sentence, and a scheduler does not", async ({

@@ -293,7 +293,7 @@ async function expectSentenceInsideChrome(page: Page, chromeTestId: string, sent
   expect(clipped).toBe(false);
 }
 
-test.describe("org removal and suspension", { tag: [TAG.WB_CHROME, TAG.WB_PRESENCE] }, () => {
+test.describe("org removal and suspension", { tag: [TAG.ORG, TAG.WB_CHROME, TAG.WB_PRESENCE] }, () => {
   test.setTimeout(120_000);
 
   test.afterAll(async () => {

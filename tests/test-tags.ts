@@ -28,6 +28,8 @@ export const TAG = {
   WB_CHROME: "@wb-chrome",
   /** Live A/V mesh, leave/reconnect (WebRTC harness). */
   WB_AV: "@wb-av",
+  /** Organization booking, roster, and schedule scoping. */
+  ORG: "@org",
 } as const;
 
 export type WbTestTag = (typeof TAG)[keyof typeof TAG];
@@ -43,6 +45,8 @@ export const TAG_ADJACENCY: Readonly<Record<WbTestTag, readonly WbTestTag[]>> = 
   [TAG.WB_RECORDING]: [TAG.WB_SYNC, TAG.WB_PRESENCE],
   [TAG.WB_CHROME]: [TAG.WB_SYNC],
   [TAG.WB_AV]: [TAG.WB_SYNC, TAG.WB_PRESENCE],
+  /** Booking on the org page reaches join. */
+  [TAG.ORG]: [TAG.WB_PRESENCE],
 };
 
 export function expandTags(selected: Iterable<WbTestTag>): WbTestTag[] {

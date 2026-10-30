@@ -25,6 +25,7 @@ const TAG = {
   WB_RECORDING: "@wb-recording",
   WB_CHROME: "@wb-chrome",
   WB_AV: "@wb-av",
+  ORG: "@org",
 };
 
 const TAG_ADJACENCY = {
@@ -37,6 +38,7 @@ const TAG_ADJACENCY = {
   [TAG.WB_RECORDING]: [TAG.WB_SYNC, TAG.WB_PRESENCE],
   [TAG.WB_CHROME]: [TAG.WB_SYNC],
   [TAG.WB_AV]: [TAG.WB_SYNC, TAG.WB_PRESENCE],
+  [TAG.ORG]: [TAG.WB_PRESENCE],
 };
 
 /** Changed path → tags (union). Order: more specific rules first. */
@@ -112,6 +114,10 @@ const PATH_RULES = [
   {
     re: /wb-org-removal|WbOrgForceEndPill|org-force-end-touch|stale-session-stamp/i,
     tags: [TAG.WB_CHROME, TAG.WB_PRESENCE],
+  },
+  {
+    re: /src\/components\/org\/|src\/lib\/org-|src\/app\/admin\/organization\/|src\/app\/admin\/orgs\/|src\/lib\/scheduling\/|src\/app\/admin\/schedule\/|src\/app\/admin\/students\/page\.tsx|src\/components\/admin\/StudentsRoster\.tsx/,
+    tags: [TAG.ORG],
   },
   {
     re: /wb-org-booking|org-session-access|OrgSchedulePanel|org-booking-bridge/i,

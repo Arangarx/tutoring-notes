@@ -22,6 +22,7 @@ Canonical registry: [`tests/test-tags.ts`](../../tests/test-tags.ts).
 | `@wb-recording` | Recording FSM / banner copy |
 | `@wb-chrome` | Toolbars, rails, flyouts, layout |
 | `@wb-av` | Live A/V mesh / reconnect |
+| `@org` | Organization booking, roster, schedule scoping (adjacency `@wb-presence`) |
 
 **New tests:** add domain tag(s) on the `test()` or `test.describe()` — see [`playwright-on-fix.mdc`](playwright-on-fix.mdc).
 

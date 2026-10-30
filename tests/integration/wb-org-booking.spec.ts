@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Browser, type BrowserContext } from "@playwright/test";
+import { TAG } from "../test-tags";
 import { PrismaClient } from "@prisma/client";
 import { encode } from "next-auth/jwt";
 import { uploadReplayEvents } from "./wb-replay-harness.helpers";
@@ -172,7 +173,7 @@ async function seedMember(
   return admin;
 }
 
-test.describe("org booking calls the bridge @wb-presence", () => {
+test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.WB_PRESENCE] }, () => {
   test.afterAll(async () => {
     await prisma.$disconnect();
   });
