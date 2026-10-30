@@ -1871,6 +1871,10 @@ Lower priority.
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
+**[P1][NOTES] RESOLVED 2026-10-30 — manual notes when generation fails or times out (`e02aac69`)**
+
+A failed TutorNote with no stored content, and a notes poll that times out, unmounted the editable form. The tutor saw the error or timeout banner, Regenerate, and Finish review, and could not type notes. Andrew 2026-10-30: keep the empty form mounted and editable, with that banner and Regenerate. No earlier backlog row used this title; this line records the close. [`e02aac69`](https://github.com/Arangarx/tutoring-notes/commit/e02aac690cf62b4a300fa6677263754a622eee2b). Playwright: `tests/integration/wb-notes-shimmer.spec.ts` › "failed note with no stored content keeps an empty editable form beside the error" and "timed-out generation keeps an empty editable form beside the timeout notice".
+
 **[P3][TEST] WS-K-3S-BUDGET-FLAKE (2026-10-30, `feat/org-qol`)**
 
 `tests/integration/wb-notes-shimmer.spec.ts` — "live watermark current at End → done within 3s, zero finalize-reduce LLM calls". Wall clock from `sealSessionAndEnqueueNotes` until the tutor note status is `done` sometimes exceeds `NOTES_DONE_POLL_BUDGET_MS` (3000). Pre-existing. The chunk-transcribe HTTP queue is not on this path: `enqueueNotesReduce` stays an in-process `after()` plus `processNotesReduceJob`, and `holdPoint("notes:reduce:before_resolve")` returns immediately when that point is not armed. `src/lib/recording/chunk-transcribe-enqueue.ts` differs from `4ba869fc` only by comments.
