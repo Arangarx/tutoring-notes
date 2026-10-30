@@ -8,6 +8,19 @@ export function isPlaywrightTestProductionLocked(): boolean {
   );
 }
 
+/**
+ * The ONE test-gate predicate: the Playwright sentinel is set AND this is not a
+ * production runtime. `next start` (what `npm run test:prod-shape` runs) is
+ * NODE_ENV=production, so every gate built on this is closed there even if a
+ * sentinel leaks into the environment. The blob harness and the test seams
+ * (`src/lib/test-seams.ts`) both compose it; nothing re-derives it.
+ */
+export function isPlaywrightTestEnvEnabled(): boolean {
+  return (
+    !isPlaywrightTestProductionLocked() && process.env.PLAYWRIGHT_TEST === "1"
+  );
+}
+
 function isPlaywrightTestRouteEnv(): boolean {
   return (
     process.env.NODE_ENV === "test" || process.env.PLAYWRIGHT_TEST === "1"

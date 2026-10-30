@@ -18,10 +18,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { list } from "@vercel/blob";
 import type { ErasureScopeKind } from "@prisma/client";
 import { db } from "@/lib/db";
 import { fetchPrivateBlobBytes } from "@/lib/blob";
+import { listCheckpointBlobsForSession } from "@/lib/blob-list";
 import { collectReplayAssetUrls } from "@/lib/whiteboard/replay-helpers";
 import type { WBEventLog } from "@/lib/whiteboard/event-log";
 
@@ -98,27 +98,6 @@ export async function resolveErasureScopeStudents(
     studentIds,
     sessionIds: sessions.map((s) => s.id),
   };
-}
-
-async function listCheckpointBlobsForSession(sessionId: string): Promise<string[]> {
-  const prefix = `whiteboard-checkpoints/${sessionId}/`;
-  const urls: string[] = [];
-  let cursor: string | undefined;
-
-  for (;;) {
-    const page = await list({
-      prefix,
-      limit: 1000,
-      cursor,
-    });
-    for (const blob of page.blobs) {
-      urls.push(blob.url);
-    }
-    if (!page.hasMore || !page.cursor) break;
-    cursor = page.cursor;
-  }
-
-  return urls;
 }
 
 async function collectEmbeddedAssetUrls(

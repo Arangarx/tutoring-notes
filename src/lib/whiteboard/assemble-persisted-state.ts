@@ -6,9 +6,9 @@
  * exist. Used by `finalizeWhiteboardSessionFromBackend` (WS-C) and WS-D hydrate.
  */
 
-import { list } from "@vercel/blob";
 import { db, withDbRetry } from "@/lib/db";
 import { fetchPrivateBlobBytes } from "@/lib/blob";
+import { listCheckpointBlobsForSession } from "@/lib/blob-list";
 import {
   createEmptyEventLog,
   type WBEvent,
@@ -102,21 +102,6 @@ export async function mergeEventBatchesFromDb(
   };
 }
 
-async function listCheckpointBlobUrls(sessionId: string): Promise<string[]> {
-  const prefix = `whiteboard-checkpoints/${sessionId}/`;
-  const urls: string[] = [];
-  let cursor: string | undefined;
-  for (;;) {
-    const page = await list({ prefix, limit: 1000, cursor });
-    for (const blob of page.blobs) {
-      urls.push(blob.url);
-    }
-    if (!page.hasMore || !page.cursor) break;
-    cursor = page.cursor;
-  }
-  return urls;
-}
-
 /**
  * Best-effort: load the richest legacy checkpoint Blob when DB batches are empty.
  */
@@ -124,7 +109,7 @@ export async function loadBestCheckpointEventLog(
   whiteboardSessionId: string,
   startedAtIso: string
 ): Promise<AssembledBackendEvents | null> {
-  const urls = await listCheckpointBlobUrls(whiteboardSessionId);
+  const urls = await listCheckpointBlobsForSession(whiteboardSessionId);
   if (urls.length === 0) return null;
 
   let best: WBEventLog | null = null;

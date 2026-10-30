@@ -7,7 +7,7 @@
 
 import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
-import { isPlaywrightTestProductionLocked } from "@/lib/playwright-test-route";
+import { isPlaywrightTestEnvEnabled } from "@/lib/playwright-test-route";
 
 /** Vercel Blob hostname guard — production shape. */
 export const ALLOWED_BLOB_HOST_RE =
@@ -24,10 +24,24 @@ const HARNESS_STORE_KEY = Symbol.for("tutoring-notes.blob.harness.store");
 
 const HARNESS_PENDING_PUT_KEY = Symbol.for("tutoring-notes.blob.harness.pendingPut");
 
+const HARNESS_DELETE_FAULTS_KEY = Symbol.for("tutoring-notes.blob.harness.deleteFaults");
+
+/** Delete fault injection (consent wave C0): fail the next N deletes and/or any key under a prefix. */
+type DeleteFaults = { failNext: number; failPrefixes: Set<string> };
+
 type HarnessGlobal = typeof globalThis & {
   [HARNESS_STORE_KEY]?: Map<string, StoredObject>;
   [HARNESS_PENDING_PUT_KEY]?: Map<string, string>;
+  [HARNESS_DELETE_FAULTS_KEY]?: DeleteFaults;
 };
+
+function deleteFaults(): DeleteFaults {
+  const g = globalThis as HarnessGlobal;
+  if (!g[HARNESS_DELETE_FAULTS_KEY]) {
+    g[HARNESS_DELETE_FAULTS_KEY] = { failNext: 0, failPrefixes: new Set() };
+  }
+  return g[HARNESS_DELETE_FAULTS_KEY];
+}
 
 function harnessStore(): Map<string, StoredObject> {
   const g = globalThis as HarnessGlobal;
@@ -49,6 +63,9 @@ function pendingPutTokens(): Map<string, string> {
 export function resetHarnessStore(): void {
   harnessStore().clear();
   pendingPutTokens().clear();
+  const faults = deleteFaults();
+  faults.failNext = 0;
+  faults.failPrefixes.clear();
 }
 
 export function issueHarnessPutToken(pathname: string): string {
@@ -68,12 +85,8 @@ export function consumeHarnessPutToken(pathname: string, token: string | null): 
 }
 
 export function isBlobHarnessActive(): boolean {
-  if (isPlaywrightTestProductionLocked()) {
-    return false;
-  }
   return (
-    process.env.PLAYWRIGHT_TEST === "1" &&
-    process.env.BLOB_HARNESS_LOCAL === "1"
+    isPlaywrightTestEnvEnabled() && process.env.BLOB_HARNESS_LOCAL === "1"
   );
 }
 
@@ -159,6 +172,52 @@ export function harnessStorePut(
 export function harnessStoreGet(pathname: string): StoredObject | null {
   const key = pathname.replace(/^\/+/, "");
   return harnessStore().get(key) ?? null;
+}
+
+export type HarnessListedObject = { key: string; size: number };
+
+/**
+ * Keys (and byte sizes) under a prefix, sorted by key. The independent oracle
+ * for "what is left in the blob store" in purge tests. Empty prefix lists all.
+ */
+export function harnessStoreList(prefix: string): HarnessListedObject[] {
+  const p = prefix.replace(/^\/+/, "");
+  const out: HarnessListedObject[] = [];
+  for (const [key, obj] of harnessStore()) {
+    if (key.startsWith(p)) out.push({ key, size: obj.bytes.byteLength });
+  }
+  return out.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+/** Fail the next `n` harness deletes (any key). The object stays in the store. */
+export function harnessFailNextDeletes(n: number): void {
+  deleteFaults().failNext = Math.max(0, Math.floor(n));
+}
+
+/** Fail every delete of a key under `prefix` until `resetHarnessStore`. */
+export function harnessFailDeleteMatching(prefix: string): void {
+  deleteFaults().failPrefixes.add(prefix.replace(/^\/+/, ""));
+}
+
+/**
+ * Delete one key. Returns whether it existed (a missing key is not an error,
+ * matching `deleteBlob`'s swallowed 404). Throws on an injected fault, before
+ * touching the store. The fault message deliberately avoids "404"/"not found"
+ * so `deleteBlob` cannot mistake it for an already-deleted blob.
+ */
+export function harnessStoreDelete(pathname: string): boolean {
+  const key = pathname.replace(/^\/+/, "");
+  const faults = deleteFaults();
+  if (faults.failNext > 0) {
+    faults.failNext -= 1;
+    throw new Error(`harness: injected delete failure (next-N) for ${key}`);
+  }
+  for (const prefix of faults.failPrefixes) {
+    if (key.startsWith(prefix)) {
+      throw new Error(`harness: injected delete failure (prefix ${prefix}) for ${key}`);
+    }
+  }
+  return harnessStore().delete(key);
 }
 
 function randomSuffix(len = 12): string {

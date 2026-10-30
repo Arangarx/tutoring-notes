@@ -1,5 +1,6 @@
 import { del, head, getDownloadUrl } from "@vercel/blob";
 import {
+  harnessStoreDelete,
   harnessStoreGet,
   isBlobHarnessActive,
   isHarnessBlobUrl,
@@ -18,6 +19,13 @@ export function isBlobConfigured(): boolean {
  * Safe to call in cleanup paths where the blob may or may not exist.
  */
 export async function deleteBlob(url: string): Promise<void> {
+  // Test gate only (PLAYWRIGHT_TEST=1 + BLOB_HARNESS_LOCAL=1, never production): a
+  // harness URL is deleted from the harness store, never sent to the real API.
+  if (isBlobHarnessActive() && isHarnessBlobUrl(url)) {
+    const key = pathnameFromHarnessUrl(url);
+    if (key) harnessStoreDelete(key);
+    return;
+  }
   try {
     await del(url);
   } catch (err: unknown) {
