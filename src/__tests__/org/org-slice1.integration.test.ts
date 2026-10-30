@@ -84,15 +84,8 @@ async function seedUser(opts?: {
   isTestAccount?: boolean;
   role?: "TUTOR" | "ADMIN";
 }) {
-  return db.adminUser.create({
-    data: {
-      email: opts?.email ?? `${uniq("user")}@example.com`,
-      role: opts?.role ?? "TUTOR",
-      approvalStatus: opts?.approvalStatus ?? "APPROVED",
-      emailVerifiedAt: opts?.emailVerifiedAt === undefined ? new Date() : opts.emailVerifiedAt,
-      isTestAccount: opts?.isTestAccount ?? false,
-    },
-  });
+  // The one creator (`upsertAdminByEmail`); no display name, as before.
+  return upsertAdminByEmail(opts?.email ?? `${uniq("user")}@example.com`, opts);
 }
 
 async function seedOperator() {

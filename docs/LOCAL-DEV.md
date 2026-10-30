@@ -104,6 +104,16 @@ Playwright starts the Next dev server on port **3100** with `WHITEBOARD_SYNC_URL
 
 Pre-merge: any whiteboard-touching branch must show green `npm run test:wb-sync` before `git merge --no-ff` (see `AGENTS.md`).
 
+## Organization Jest suites (`npm run test:org-db`)
+
+Runs the two org integration suites (`src/__tests__/org/org-slice1.integration.test.ts` and `org-learner.integration.test.ts`) in **one process** (`--runInBand`) against their own database, `tutoring_notes_org_test`, on the same local Docker Postgres. Both suites refuse to run on any other database (they check `current_database()`), so org rows never land in `tutoring_notes_test`. Run it after `npm run db:up`.
+
+- **Hardcoded URL.** `scripts/test-org-db.mjs` uses `postgresql://postgres:postgres@127.0.0.1:5432/tutoring_notes_org_test` (the local Docker credentials from `.env.example`). It is not read from `.env`.
+- **It overrides your environment.** The script sets `TEST_DATABASE_URL`, `DATABASE_URL` and `DIRECT_URL` to that URL, and `ADMIN_EMAIL=org-operator@example.com` / `OPERATOR_EMAILS=env-operator@example.com`, for the child jest process only. Whatever is in `.env` or your shell for those variables is ignored for this run.
+- **It resets that database every run.** `jest.global-setup.ts` runs `prisma db push --force-reset` on `TEST_DATABASE_URL`, so `tutoring_notes_org_test` is wiped and rebuilt each time. Never point anything you care about at it.
+- **Create it once.** `docker/postgres/init` only creates `tutoring_notes_test`. If `tutoring_notes_org_test` is missing: `docker compose exec postgres psql -U postgres -c "CREATE DATABASE tutoring_notes_org_test;"`.
+- **Why a separate command.** Both suites seed `org-operator@example.com`; run in one process they share that row through `upsertAdminByEmail` (`src/__tests__/helpers/org-seed.ts`) instead of colliding on its unique email.
+
 ## NOTES_AUTH_WALL — notes share-page auth gate
 
 `NOTES_AUTH_WALL` controls whether `/s/[token]` notes pages require authentication.

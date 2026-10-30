@@ -1861,6 +1861,38 @@ Lower priority.
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
+**[P3][TEST] TSC-PREEXISTING-TEST-ERRORS (2026-10-30, `feat/org-qol`)**
+
+`npx tsc --noEmit` exits non-zero from type errors that are all in **test files**, so `tsc` is not a clean gate yet: new errors are caught by diffing against this list, not by exit code. Run on `feat/org-qol` at the W4-hardening verify fix. **None of these files is in `git diff --name-only b180ab84..HEAD`** (the org-qol branch's own diff). `tests/integration/wb-org-booking.spec.ts` was the one file that was in that diff and had errors (12: `displayName: string | null` passed where `string` was typed, and an `offsetWidth` on `SVGElement | HTMLElement`); fixed in the same wave, so it is no longer on the list. `next build` is unaffected (it type-checks the app, not these specs).
+
+Error count per file (code):
+
+- `src/__tests__/admin/design-system-page.test.tsx` — 1 (TS2352)
+- `src/__tests__/api/learner-logout-route.test.ts` — 2 (TS2554)
+- `src/__tests__/calendar/ics-feed-stability.test.ts` — 1 (TS2503)
+- `src/__tests__/calendar/ics-google-timezone.test.ts` — 1 (TS2503)
+- `src/__tests__/components/SubNav.dom.test.tsx` — 2 (TS2307)
+- `src/__tests__/components/ui/form-submit-button.dom.test.tsx` — 2 (TS2345)
+- `src/__tests__/components/whiteboard/WbTopBarMicControl.dom.test.tsx` — 1 (TS2322)
+- `src/__tests__/dom/RecordingControlPanel.dom.test.tsx` — 1 (TS2322)
+- `src/__tests__/dom/WhiteboardWorkspaceAudioBridge.dom.test.tsx` — 1 (TS2322)
+- `src/__tests__/email.test.ts` — 1 (TS2339)
+- `src/__tests__/hooks/useViewportWireBroadcast.test.tsx` — 1 (TS2345)
+- `src/__tests__/identity/email-otp-challenge.test.ts` — 4 (TS2345)
+- `src/__tests__/org/org-booking-bridge.integration.test.ts` — 1 (TS2345)
+- `src/__tests__/org/org-removal-suspend.integration.test.ts` — 1 (TS2556)
+- `src/__tests__/playwright-harness-gate.test.ts` — 1 (TS2493)
+- `src/__tests__/playwright-mute-output.test.ts` — 13 (TS7006 / TS7034 / TS7005)
+- `src/__tests__/recording/audio-capture-policy.test.tsx` — 1 (TS2322)
+- `src/__tests__/whiteboard/adhoc-scheduled-session.integration.test.ts` — 1 (TS2554)
+- `src/lib/av/__tests__/mic-first-acquire.test.ts` — 2 (TS2493)
+- `tests/integration/wb-ghost-viewport.spec.ts` — 2 (TS2339, TS2352)
+- `tests/integration/wb-replay-camera-fit.spec.ts` — 7 (TS2305, TS7006, TS2339)
+- `tests/integration/wb-tutor-recenter.spec.ts` — 3 (TS2339)
+- `tests/integration/wb-wave5-polish.spec.ts` — 1 (TS2345)
+
+Fix them file by file, then make `npx tsc --noEmit` a required gate. Also noted: the TS2578 guard in `src/__tests__/scheduling/family-entry-brand.types.test.tsx` only has teeth while `tsc` runs, so it is checked by diffing this list.
+
 **[P1][TEST] MASTER-PREEXISTING-GATE-FAILURES (2026-10-24)**
 
 During the pre-master gate for hotfix `fix/wb-student-apply-race` (clean `npm ci` worktree), 12 Playwright tests failed identically on the hotfix branch and on unmodified master `eebafee1`.

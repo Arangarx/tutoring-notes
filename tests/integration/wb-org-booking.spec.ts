@@ -38,13 +38,13 @@ function nextAuthSecret(): string {
 
 async function signIn(
   browser: Browser,
-  admin: { id: string; email: string; displayName: string }
+  admin: { id: string; email: string; displayName: string | null }
 ): Promise<{ context: BrowserContext; page: import("@playwright/test").Page }> {
   const token = await encode({
     token: {
       sub: admin.id,
       email: admin.email,
-      name: admin.displayName,
+      name: admin.displayName ?? admin.email,
       role: "TUTOR",
       approvalStatus: "APPROVED",
       emailVerified: true,
@@ -1275,7 +1275,7 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
       const border =
         parseFloat(badgeCs.borderLeftWidth) + parseFloat(badgeCs.borderRightWidth);
       const textClient = textEl.clientWidth;
-      const badgeOffset = el.offsetWidth;
+      const badgeOffset = (el as HTMLElement).offsetWidth;
       return {
         probeText,
         probeWidth,

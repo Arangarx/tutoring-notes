@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ENTRY_BLOCK_COPY } from "@/lib/scheduling/session-entry";
 import type {
@@ -26,6 +27,27 @@ type UpcomingSessionsCardProps = CardChrome &
     | { mode: "family"; sessions: FamilyUpcomingScheduledSessionRow[] }
   );
 
+type ListedSession = {
+  id: string;
+  subject: string;
+  startAt: Date;
+  learnerDisplayName: string | null;
+};
+
+/** The one rows map: `renderAction` is the only per-audience piece. */
+function listRows<S extends ListedSession>(
+  sessions: S[],
+  opts: { promotedId: string | null; showLearner: boolean; renderAction: (session: S) => ReactNode }
+) {
+  return sessions.map((session) => ({
+    id: session.id,
+    subject: session.subject,
+    startAtIso: session.startAt.toISOString(),
+    learnerLabel: opts.showLearner ? (session.learnerDisplayName ?? undefined) : undefined,
+    action: session.id === opts.promotedId ? null : opts.renderAction(session),
+  }));
+}
+
 export function UpcomingSessionsCard(props: UpcomingSessionsCardProps) {
   const title = props.title ?? "Upcoming sessions";
   const description = props.description ?? "Scheduled tutoring appointments.";
@@ -33,40 +55,36 @@ export function UpcomingSessionsCard(props: UpcomingSessionsCardProps) {
   const emptyMessage = props.emptyMessage ?? "No upcoming sessions scheduled.";
   const promotedId = props.promotedId ?? null;
 
+  // One list, one map; the audience only decides the action control and whether the
+  // learner is named on the row.
   const rows =
     props.mode === "family"
-      ? props.sessions.map((session) => ({
-          id: session.id,
-          subject: session.subject,
-          startAtIso: session.startAt.toISOString(),
-          learnerLabel: session.learnerDisplayName ?? undefined,
-          action:
-            session.id === promotedId ? null : (
-              <JoinScheduledSessionButton
-                scheduledSessionId={session.id}
-                startAtIso={session.startAt.toISOString()}
-                endAtIso={session.endAt.toISOString()}
-                entry={session.entry}
-                learnerName={session.learnerDisplayName ?? ""}
-                notYetCopy={ENTRY_BLOCK_COPY.not_yet.family}
-                unavailableCopy={ENTRY_BLOCK_COPY.unknown.family}
-              />
-            ),
-        }))
-      : props.sessions.map((session) => ({
-          id: session.id,
-          subject: session.subject,
-          startAtIso: session.startAt.toISOString(),
-          learnerLabel: undefined,
-          action:
-            session.id === promotedId ? null : (
-              <OpenScheduledRoomButton
-                scheduledSessionId={session.id}
-                entry={session.entry}
-                learnerName={session.learnerDisplayName ?? ""}
-              />
-            ),
-        }));
+      ? listRows(props.sessions, {
+          promotedId,
+          showLearner: true,
+          renderAction: (session) => (
+            <JoinScheduledSessionButton
+              scheduledSessionId={session.id}
+              startAtIso={session.startAt.toISOString()}
+              endAtIso={session.endAt.toISOString()}
+              entry={session.entry}
+              learnerName={session.learnerDisplayName ?? ""}
+              notYetCopy={ENTRY_BLOCK_COPY.not_yet.family}
+              unavailableCopy={ENTRY_BLOCK_COPY.unknown.family}
+            />
+          ),
+        })
+      : listRows(props.sessions, {
+          promotedId,
+          showLearner: false,
+          renderAction: (session) => (
+            <OpenScheduledRoomButton
+              scheduledSessionId={session.id}
+              entry={session.entry}
+              learnerName={session.learnerDisplayName ?? ""}
+            />
+          ),
+        });
 
   return (
     <Card

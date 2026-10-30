@@ -15,7 +15,14 @@ export type SeedApproval = "APPROVED" | "WAITLISTED" | "REJECTED";
  */
 export async function upsertAdminByEmail(
   email: string,
-  opts?: { approvalStatus?: SeedApproval; isTestAccount?: boolean; role?: "TUTOR" | "ADMIN" }
+  opts?: {
+    approvalStatus?: SeedApproval;
+    isTestAccount?: boolean;
+    role?: "TUTOR" | "ADMIN";
+    displayName?: string;
+    /** `null` seeds an unverified account; omitted seeds a verified one. */
+    emailVerifiedAt?: Date | null;
+  }
 ) {
   return db.adminUser.upsert({
     where: { email },
@@ -24,27 +31,30 @@ export async function upsertAdminByEmail(
       email,
       role: opts?.role ?? "TUTOR",
       approvalStatus: opts?.approvalStatus ?? "APPROVED",
-      emailVerifiedAt: new Date("2026-01-01"),
+      emailVerifiedAt:
+        opts?.emailVerifiedAt === undefined ? new Date("2026-01-01") : opts.emailVerifiedAt,
       isTestAccount: opts?.isTestAccount ?? false,
+      ...(opts?.displayName ? { displayName: opts.displayName } : {}),
     },
   });
 }
 
+/** A fresh admin with a unique email. The one creator is `upsertAdminByEmail`. */
 export async function seedAdmin(
   label: string,
-  opts?: { approvalStatus?: SeedApproval; isTestAccount?: boolean }
+  opts?: {
+    approvalStatus?: SeedApproval;
+    isTestAccount?: boolean;
+    role?: "TUTOR" | "ADMIN";
+    emailVerifiedAt?: Date | null;
+    /** A fixed email instead of a unique one (shared-row suites). */
+    email?: string;
+  }
 ) {
-  return db.adminUser.create({
-    data: {
-      // Sign-in lowercases the email, so keep the local part lowercase and space-free.
-      email: `${uniq(label.toLowerCase().replace(/[^a-z0-9]+/g, "-"))}@example.com`,
-      role: "TUTOR",
-      approvalStatus: opts?.approvalStatus ?? "APPROVED",
-      emailVerifiedAt: new Date("2026-01-01"),
-      displayName: label,
-      isTestAccount: opts?.isTestAccount ?? false,
-    },
-  });
+  // Sign-in lowercases the email, so keep the local part lowercase and space-free.
+  const email =
+    opts?.email ?? `${uniq(label.toLowerCase().replace(/[^a-z0-9]+/g, "-"))}@example.com`;
+  return upsertAdminByEmail(email, { ...opts, displayName: label });
 }
 
 export async function seedOrg(status: "active" | "pending" | "suspended" = "active") {
