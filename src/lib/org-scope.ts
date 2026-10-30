@@ -17,6 +17,7 @@ import { authOptions } from "@/auth-options";
 import { CLAIM_INVITE_TTL_MS, generateRawToken, hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
+import { STAFF_HOME_ROLES } from "@/lib/org-appointment-scope";
 import { requireOperator, type OperatorIdentity } from "@/lib/operator";
 import { requireStudentScope } from "@/lib/student-scope";
 import { approveTutor, revokeTutorApproval } from "@/lib/tutor-approval-scope";
@@ -334,7 +335,7 @@ export async function getActiveOrgRoles(
  */
 export async function assertOrgRole(
   organizationId: string,
-  allowed: OrgRole[]
+  allowed: readonly OrgRole[]
 ): Promise<{ adminId: string; email: string; roles: OrgRole[] }> {
   const scope = await requireStudentScope();
   if (scope.kind !== "admin") notFound();
@@ -477,8 +478,6 @@ export async function readOrgInviteForHolder(
   if (invite.expiresAt <= now) return { kind: "expired", ...facts };
   return { kind: "open", ...facts };
 }
-
-const STAFF_HOME_ROLES: OrgRole[] = ["owner", "admin", "scheduler"];
 
 function activeStaffHomeWhere(adminUserId: string) {
   return {

@@ -7,6 +7,7 @@ import { sendClaimInviteEmail } from "@/lib/account-holder-email";
 import { mintStudentClaimInvite, reinviteTargetKind } from "@/lib/claim-invite-service";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
+import { STAFF_HOME_ROLES } from "@/lib/org-appointment-scope";
 import {
   assertCanAddOrgLearner,
   assertCanSendOrgClaimEmail,
@@ -209,7 +210,7 @@ export async function loadSchedulerLearner(
   organizationId: string,
   studentId: string
 ): Promise<SchedulerLearnerCard> {
-  const actor = await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+  const actor = await assertOrgRole(organizationId, STAFF_HOME_ROLES);
   const student = await db.student.findFirst({
     where: { id: studentId, organizationId, adminUserId: null },
     select: {
@@ -253,7 +254,7 @@ export async function loadSchedulerLearner(
 export async function listSchedulerLearners(
   organizationId: string
 ): Promise<SchedulerLearnerCard[]> {
-  await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+  await assertOrgRole(organizationId, STAFF_HOME_ROLES);
   const rows = await db.student.findMany({
     where: { organizationId, adminUserId: null },
     orderBy: { createdAt: "asc" },

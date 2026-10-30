@@ -1,13 +1,14 @@
 import type { OrgRole } from "@prisma/client";
 
-const STAFF_ROLES: readonly OrgRole[] = ["owner", "admin", "scheduler"];
+/** Owner, admin, and scheduler. Instructors are not included. */
+export const STAFF_HOME_ROLES: readonly OrgRole[] = ["owner", "admin", "scheduler"];
 
 /**
  * Staff (owner, admin, scheduler) see every organization appointment.
  * A viewer who holds none of those roles is instructor-only.
  */
 export function orgAppointmentListScope(roles: readonly OrgRole[]): "staff" | "instructor" {
-  return roles.some((role) => STAFF_ROLES.includes(role)) ? "staff" : "instructor";
+  return roles.some((role) => STAFF_HOME_ROLES.includes(role)) ? "staff" : "instructor";
 }
 
 /**

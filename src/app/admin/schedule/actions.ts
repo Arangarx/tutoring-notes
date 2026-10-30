@@ -8,7 +8,11 @@ import { DEFAULT_TUTOR_TIMEZONE } from "@/lib/billing/defaults";
 import { getGoogleCalendarConnectionForTutor } from "@/lib/calendar-oauth";
 import { utcBoundsFromWallClock } from "@/lib/calendar/scheduled-session-datetime";
 import { scheduledSessionsOverlap } from "@/lib/calendar/scheduled-session-overlap";
-import { orgAppointmentListScope, orgLearnerFilterForViewer } from "@/lib/org-appointment-scope";
+import {
+  orgAppointmentListScope,
+  orgLearnerFilterForViewer,
+  STAFF_HOME_ROLES,
+} from "@/lib/org-appointment-scope";
 import { assertOrgRole, orgInstructorAdmitted, orgLog } from "@/lib/org-scope";
 import {
   afterScheduledSessionCreated,
@@ -218,7 +222,7 @@ export async function createScheduledSession(
   let organizationId: string | null = null;
   if (isOrgStudent(student)) {
     organizationId = student.organizationId;
-    await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+    await assertOrgRole(organizationId, STAFF_HOME_ROLES);
     const instructorId = input.instructorAdminUserId;
     if (!instructorId) notFound();
     const admitted = await orgInstructorAdmitted(db, organizationId, instructorId);
@@ -293,7 +297,7 @@ export async function updateScheduledSession(
   let organizationId: string | null = null;
   if (isOrgStudent(existing.student)) {
     organizationId = existing.student.organizationId;
-    await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+    await assertOrgRole(organizationId, STAFF_HOME_ROLES);
     const nextStudent = await db.student.findUnique({
       where: { id: input.studentId },
       select: { adminUserId: true, organizationId: true },
@@ -370,7 +374,7 @@ export async function deleteScheduledSession(sessionId: string): Promise<void> {
   let organizationId: string | null = null;
   if (isOrgStudent(existing.student)) {
     organizationId = existing.student.organizationId;
-    await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+    await assertOrgRole(organizationId, STAFF_HOME_ROLES);
   } else {
     const owned = await assertOwnsScheduledSession(sessionId);
     existing.adminUserId = owned.adminUserId;
@@ -485,7 +489,7 @@ export async function listOrganizationBookingChoices(organizationId: string): Pr
   instructors: Array<{ id: string; name: string }>;
   timeZone: string;
 }> {
-  await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
+  await assertOrgRole(organizationId, STAFF_HOME_ROLES);
   const org = await db.organization.findUnique({
     where: { id: organizationId },
     select: { timezone: true },

@@ -721,6 +721,37 @@ test.describe("instructor scoping on the org page", { tag: [TAG.ORG, TAG.WB_PRES
       const invalidHtml = await page.content();
       expect(invalidHtml).not.toContain(seeded.learnerA.fullName);
       expect(invalidHtml).not.toContain(seeded.learnerB.fullName);
+
+      const otherOrg = await seedOrg();
+      const foreignToken = uniq("foreign").replace(/[^a-z0-9]/gi, "").slice(-8);
+      const foreign = await seedLearner(otherOrg.org.id, otherOrg.owner.id, true, {
+        givenName: `Zora${foreignToken}`,
+        familyName: "Quo",
+      });
+      await prisma.scheduledSession.create({
+        data: {
+          adminUserId: seeded.instructorA.id,
+          studentId: foreign.student.id,
+          date: new Date("2026-10-20T00:00:00.000Z"),
+          startTime: "16:00",
+          endTime: "17:00",
+          startAt: new Date("2026-10-20T22:00:00.000Z"),
+          endAt: new Date("2026-10-20T23:00:00.000Z"),
+          plannedDurationMinutes: 60,
+          subject: "Foreign algebra",
+        },
+      });
+      const foreignResponse = await page.goto(
+        `/admin/organization/${seeded.org.id}?learner=${foreign.student.id}`
+      );
+      expect(foreignResponse?.status()).toBe(200);
+      await expect(page.getByRole("heading", { name: "Not found" })).toHaveCount(0);
+      await expect(page.getByText("No appointments yet.")).toBeVisible();
+      const foreignText = await page.locator("section[aria-label='Appointments']").innerText();
+      expect(foreignText).toBe(invalidText);
+      const foreignHtml = await page.content();
+      expect(foreignHtml).not.toContain(foreign.fullName);
+      expect(foreignHtml).not.toContain(foreign.parentEmail);
     } finally {
       await context.close();
     }

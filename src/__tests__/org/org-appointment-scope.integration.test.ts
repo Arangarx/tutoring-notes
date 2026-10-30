@@ -25,6 +25,7 @@ jest.mock("next-auth", () => ({
 jest.mock("@/auth-options", () => ({ authOptions: {} }));
 
 import { db } from "@/lib/db";
+import { loadInstructorTaughtSessions } from "@/lib/org-learner";
 import {
   listOrganizationBookingChoices,
   listScheduledSessionsForOrganization,
@@ -154,6 +155,18 @@ async function seedLearner(
   return { student, parentEmail, brief, fullName: `${givenName} ${familyName}` };
 }
 
+async function seedTaughtSession(adminUserId: string, studentId: string) {
+  return db.whiteboardSession.create({
+    data: {
+      adminUserId,
+      studentId,
+      consentAcknowledged: true,
+      eventsBlobUrl: "https://blob.example.com/taught-events.json",
+      sessionPhase: "ACTIVE",
+    },
+  });
+}
+
 async function seedAppointment(adminUserId: string, studentId: string, subject: string) {
   return db.scheduledSession.create({
     data: {
@@ -227,6 +240,21 @@ describe("listScheduledSessionsForOrganization role matrix", () => {
     expect(selectBlob).not.toContain("allowLiveSession");
   });
 
+  it("an instructor filter for a learner in another org matches an unknown id", async () => {
+    const seeded = await seedPair();
+    const otherOrg = await seedOrg();
+    const foreign = await seedLearner(otherOrg.org.id, otherOrg.owner.id, "Zora", uniq("quo"));
+    await seedAppointment(seeded.instructor.id, foreign.student.id, "Foreign algebra");
+    mockSession(seeded.instructor.email, seeded.instructor.id);
+    const foreignRows = await listOrg(seeded.org.id, foreign.student.id);
+    const missingRows = await listOrg(seeded.org.id, `missing-${uniq("learner")}`);
+    expect(foreignRows).toEqual([]);
+    expect(missingRows).toEqual([]);
+    expect(foreignRows).toEqual(missingRows);
+    expect(JSON.stringify(foreignRows)).not.toContain(foreign.fullName);
+    expect(JSON.stringify(foreignRows)).not.toContain(foreign.parentEmail);
+  });
+
   it("an instructor learner filter yields nothing for an unbooked id and an unknown id", async () => {
     const seeded = await seedPair();
     mockSession(seeded.instructor.email, seeded.instructor.id);
@@ -277,5 +305,41 @@ describe("listScheduledSessionsForOrganization role matrix", () => {
     expect(line).toContain(`actor=${seeded.instructor.id}`);
     expect(line ?? "").not.toMatch(/token=/);
     expect(line ?? "").not.toContain(seeded.learnerA.parentEmail);
+  });
+});
+
+describe("loadInstructorTaughtSessions", () => {
+  it("groups only the sessions this instructor taught", async () => {
+    const seeded = await seedPair();
+    const sessionA = await seedTaughtSession(seeded.instructor.id, seeded.learnerA.student.id);
+    const sessionB = await seedTaughtSession(seeded.other.id, seeded.learnerB.student.id);
+    mockSession(seeded.instructor.email, seeded.instructor.id);
+
+    const groups = await loadInstructorTaughtSessions(seeded.org.id);
+    expect(groups).toEqual([
+      {
+        studentId: seeded.learnerA.student.id,
+        fullName: seeded.learnerA.fullName,
+        sessions: [
+          {
+            sessionId: sessionA.id,
+            noteCount: 0,
+            replayAvailable: true,
+            audioAvailable: false,
+            transcriptAvailable: false,
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(groups)).not.toContain(sessionB.id);
+    expect(JSON.stringify(groups)).not.toContain(seeded.learnerB.fullName);
+    expect(JSON.stringify(groups)).not.toContain(seeded.learnerA.parentEmail);
+
+    expect(await loadInstructorTaughtSessions(seeded.org.id, seeded.learnerB.student.id)).toEqual(
+      []
+    );
+    expect(
+      await loadInstructorTaughtSessions(seeded.org.id, `missing-${uniq("learner")}`)
+    ).toEqual([]);
   });
 });
