@@ -144,8 +144,11 @@ describe("TutorNotesSection loading state", () => {
       /Note generation failed/i
     );
     expect(screen.getByTestId("wb-regenerate-notes")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-save-note")).toBeInTheDocument();
+    expect(screen.queryByTestId("wb-delete-session")).not.toBeInTheDocument();
     fireEvent.change(topics, { target: { value: "Factoring practiced by hand" } });
     expect(topicsValue()).toBe("Factoring practiced by hand");
+    expect(screen.getByTestId("wb-save-note")).not.toBeDisabled();
   });
 
   it("a timed-out note keeps an empty editable form and the timeout notice", async () => {
@@ -161,8 +164,11 @@ describe("TutorNotesSection loading state", () => {
     expect(topics.value).toBe("");
     expect(topics.readOnly).toBe(false);
     expect(screen.getByTestId("wb-regenerate-notes")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-save-note")).toBeInTheDocument();
+    expect(screen.queryByTestId("wb-delete-session")).not.toBeInTheDocument();
     fireEvent.change(topics, { target: { value: "Factoring practiced by hand" } });
     expect(topicsValue()).toBe("Factoring practiced by hand");
+    expect(screen.getByTestId("wb-save-note")).not.toBeDisabled();
     jest.useRealTimers();
   });
 
@@ -173,7 +179,8 @@ describe("TutorNotesSection loading state", () => {
     expect(screen.queryByTestId("tn-note-field-skeleton")).not.toBeInTheDocument();
     expect(document.querySelector(".tn-notes-generating-wrap")).toBeNull();
     expect(screen.getByTestId("tutor-notes-error")).toBeInTheDocument();
-    expect(screen.queryByTestId("wb-save-note")).not.toBeInTheDocument();
+    expect(screen.getByTestId("wb-save-note")).toBeInTheDocument();
+    expect(screen.queryByTestId("wb-delete-session")).not.toBeInTheDocument();
   });
 
   it("renders editable form only after generation completes", () => {

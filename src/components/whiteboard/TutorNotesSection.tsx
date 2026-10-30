@@ -202,6 +202,9 @@ export default function TutorNotesSection({
     : "Preparing your notes...";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
+  // A finished, failed, or timed-out note can be saved by hand. Session
+  // deletion stays on a finished note: it removes the session, not the draft.
+  const canSaveManualNote = isDone || isFailed || timedOut;
   const isNotStarted = !note.found;
   const hasStoredContent = note.found && Boolean(note.content);
   // In-flight generation stays read-only. A failure or a timeout leaves the
@@ -529,8 +532,8 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          {/* Save error — done only */}
-          {saveError && isDone && (
+          {/* Save error — finished, failed, or timed out */}
+          {saveError && canSaveManualNote && (
             <div
               role="alert"
               style={{
@@ -547,8 +550,8 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          {/* Saved confirmation — done only */}
-          {savedInShell && isDone && (
+          {/* Saved confirmation — finished, failed, or timed out */}
+          {savedInShell && canSaveManualNote && (
             <div
               role="status"
               style={{
@@ -570,7 +573,7 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          {(isDone || showFinishReview) && (
+          {(canSaveManualNote || showFinishReview) && (
             <div
               data-testid="wb-review-leave-actions"
               style={{
@@ -581,7 +584,7 @@ export default function TutorNotesSection({
                 alignItems: "center",
               }}
             >
-              {isDone ? (
+              {canSaveManualNote ? (
                 <button
                   type="button"
                   className="btn primary"

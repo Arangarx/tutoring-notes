@@ -1320,6 +1320,9 @@ Smoke PARTIAL; re-verify without impersonation.
 **[P2][NOTES] REQ-S3-4 — canonical notes schema**  
 Map-reduce vs `NewNoteForm` field alignment.
 
+**[P2][NOTES] Hand-typed session notes are labelled AI-generated**  
+`saveSessionNotesAction` hard-codes `aiGenerated: true` (and the reduce prompt version) on every save, including a note the tutor typed after generation failed or timed out. A hand-typed `SessionNote` is stored as AI-generated. Split that flag from the save path before changing it.
+
 **[P3][NOTES] Formal eval harness + flywheel**  
 Phase 11; post-master.
 

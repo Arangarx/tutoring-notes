@@ -665,6 +665,45 @@ async function expectEmptyEditableNoteFields(
   await expect(topics).toHaveValue(HANDWRITTEN_TOPICS);
 }
 
+/** SessionNote linked from the whiteboard session — the row Save writes. */
+async function readLinkedSessionNoteTopics(sessionId: string): Promise<string | null> {
+  const prisma = new PrismaClient({
+    datasourceUrl: WB_REGRESSION_LOCAL_DATABASE_URL,
+  });
+  try {
+    const session = await prisma.whiteboardSession.findUnique({
+      where: { id: sessionId },
+      select: { note: { select: { topics: true, status: true } } },
+    });
+    if (!session?.note || session.note.status !== "READY") return null;
+    return session.note.topics;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/**
+ * Save is available after a failed or timed-out generation. The persisted
+ * topics string is the oracle; the confirmation is the in-shell feedback.
+ * Delete stays off this path — it removes the session, not a failed draft.
+ */
+async function saveHandwrittenTopics(
+  page: import("@playwright/test").Page,
+  whiteboardSessionId: string
+) {
+  const save = page.getByTestId("wb-save-note");
+  await expect(save).toBeVisible();
+  await expect(save).toBeEnabled();
+  await expect(page.getByTestId("wb-delete-session")).toHaveCount(0);
+  await save.click();
+  await expect
+    .poll(() => readLinkedSessionNoteTopics(whiteboardSessionId), {
+      timeout: 20_000,
+    })
+    .toBe(HANDWRITTEN_TOPICS);
+  await expect(page.getByTestId("wb-save-note-confirmation")).toBeVisible();
+}
+
 test.describe(
   "manual notes when generation does not produce content",
   { tag: [TAG.WB_RECORDING] },
@@ -695,6 +734,7 @@ test.describe(
       );
       await expect(page.getByTestId("wb-regenerate-notes")).toBeVisible();
       await expectEmptyEditableNoteFields(page);
+      await saveHandwrittenTopics(page, whiteboardSessionId);
     });
 
     test("timed-out generation keeps an empty editable form beside the timeout notice", async ({
@@ -722,6 +762,7 @@ test.describe(
       });
       await expect(page.getByTestId("wb-regenerate-notes")).toBeVisible();
       await expectEmptyEditableNoteFields(page);
+      await saveHandwrittenTopics(page, whiteboardSessionId);
     });
   }
 );
