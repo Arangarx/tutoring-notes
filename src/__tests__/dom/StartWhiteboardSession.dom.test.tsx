@@ -19,8 +19,7 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
 }));
 
 import { StartWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/StartWhiteboardSession";
-import { CONSENT_RECORD_PARENT_SECTION_HINT } from "@/lib/consent-action-error";
-import { ENTRY_BLOCK_COPY, type SessionEntryState } from "@/lib/scheduling/session-entry";
+import type { SessionEntryState } from "@/lib/scheduling/session-entry";
 
 function bothBlocked(
   reason: "unclaimed" | "consent_missing_self" | "consent_missing_parent" | "erasure_pending"
@@ -150,7 +149,7 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
     expect(createWhiteboardSessionMock).not.toHaveBeenCalled();
   });
 
-  it("maps ConsentError from the action to friendly copy without Error ID", async () => {
+  it("maps the legacy generic ConsentError to the parent line + hint, without Error ID", async () => {
     const consentErr = Object.assign(
       new Error(
         "Parent privacy preferences must be set before starting a session."
@@ -166,14 +165,62 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        ENTRY_BLOCK_COPY.consent_missing_parent.tutor
+        "The parent hasn't finished privacy preferences yet."
       );
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
-      CONSENT_RECORD_PARENT_SECTION_HINT
+      "Go to the Parent account section on this student's page"
     );
     expect(screen.getByRole("alert").textContent).not.toMatch(/Error ID/i);
   });
+
+  // A refused Start tells the tutor the same sentence the disabled control shows for that
+  // learner's situation. The server throws the per-reason line (see the entry-parity test);
+  // expected strings are written by hand from the W4 copy spec.
+  it.each([
+    {
+      situation: "self-learner",
+      serverMessage: "Maya hasn't finished privacy preferences yet.",
+      expected: "Maya hasn't finished privacy preferences yet.",
+      parentHint: false,
+    },
+    {
+      situation: "parent-held learner",
+      serverMessage: "The parent hasn't finished privacy preferences yet.",
+      expected: "The parent hasn't finished privacy preferences yet.",
+      parentHint: true,
+    },
+    {
+      situation: "unclaimed learner",
+      serverMessage: "Maya hasn't connected their Mynk account yet.",
+      expected: "Maya hasn't connected their Mynk account yet.",
+      parentHint: true,
+    },
+  ])(
+    "after a refused Start, a $situation sees their own line (parent hint: $parentHint)",
+    async ({ serverMessage, expected, parentHint }) => {
+      createWhiteboardSessionMock.mockRejectedValueOnce(
+        Object.assign(new Error(serverMessage), {
+          name: "ConsentError",
+          permission: "consentRecord",
+        })
+      );
+
+      const user = userEvent.setup();
+      render(<StartWhiteboardSession {...baseProps} />);
+      await user.click(screen.getByTestId("start-whiteboard-session-btn"));
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent?.split("\n\n")[0]).toBe(expected);
+      if (parentHint) {
+        expect(alert).toHaveTextContent("Go to the Parent account section on this student's page");
+      } else {
+        expect(alert.textContent).not.toMatch(/Parent account/i);
+        expect(alert.textContent).not.toMatch(/The parent hasn't/i);
+      }
+      expect(alert.textContent).not.toMatch(/Error ID/i);
+    }
+  );
 
   it("surfaces allowLiveSession server message verbatim without digest", async () => {
     const liveDeniedMsg =

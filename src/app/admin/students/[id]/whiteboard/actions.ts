@@ -46,6 +46,7 @@ import {
   entryRefusalError,
   loadSessionEntryState,
   orgAdmissionFailureReason,
+  withConsentRecordReason,
 } from "@/lib/scheduling/session-entry-loader";
 import { orgInstructorAdmitted, withOrgRowLock } from "@/lib/org-scope";
 import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
@@ -259,7 +260,18 @@ export async function startWhiteboardSession(
         `[startWhiteboardSession] wbsid=${whiteboardSessionId} REJECTED: no_consent_record`
       );
     }
-    throw err;
+    // Same refusal, worded for this learner (self / parent / unclaimed) like the control.
+    throw await withConsentRecordReason(
+      err,
+      studentForConsent
+        ? {
+            studentId: session.studentId,
+            adminUserId: session.adminUserId,
+            student: studentForConsent,
+          }
+        : null,
+      studentForConsent?.name ?? ""
+    );
   }
 
   const adminBillingDefaults = await withDbRetry(

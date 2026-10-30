@@ -3,7 +3,7 @@
  * Do not import consent-scope.ts here — it is server-only.
  */
 
-import { ENTRY_BLOCK_COPY } from "@/lib/scheduling/session-entry";
+import { ENTRY_BLOCK_COPY, type EntryBlockReason } from "@/lib/scheduling/session-entry";
 
 /**
  * Tutor sentence when no consent record exists. The same line the disabled
@@ -47,7 +47,7 @@ export function parseConsentActionError(
   if (
     message &&
     (message.includes("Parent privacy preferences must be set") ||
-      message === CONSENT_RECORD_TUTOR_MESSAGE)
+      consentRecordReasonOf(message) !== null)
   ) {
     return { permission: "consentRecord", message };
   }
@@ -55,10 +55,38 @@ export function parseConsentActionError(
   return null;
 }
 
+/** The missing-record reasons a tutor can be refused with, in match order. */
+const CONSENT_RECORD_REASONS = [
+  "consent_missing_parent",
+  "consent_missing_self",
+  "unclaimed",
+] as const satisfies readonly EntryBlockReason[];
+
+/** Whether `message` is this reason's tutor line (`{name}` matches any learner name). */
+function isTutorLineFor(reason: EntryBlockReason, message: string): boolean {
+  const [head, tail] = ENTRY_BLOCK_COPY[reason].tutor.split("{name}");
+  if (tail === undefined) return message === head;
+  return message.length > head.length + tail.length && message.startsWith(head) && message.endsWith(tail);
+}
+
+/**
+ * The missing-record reason a server message carries: the server throws the table line
+ * for the learner's situation (`entryRefusalError`), so the line names the reason.
+ */
+function consentRecordReasonOf(message: string): EntryBlockReason | null {
+  return CONSENT_RECORD_REASONS.find((reason) => isTutorLineFor(reason, message)) ?? null;
+}
+
 export function formatConsentActionError(
   parsed: ParsedConsentActionError
 ): string {
   if (parsed.permission === "consentRecord") {
+    const reason = consentRecordReasonOf(parsed.message);
+    // A self-learner has no parent account, so the Parent-account hint does not fit them.
+    if (reason === "consent_missing_self") return parsed.message;
+    if (reason) return `${parsed.message}\n\n${CONSENT_RECORD_PARENT_SECTION_HINT}`;
+    // A message that names no situation (the generic missing-record error) keeps the
+    // parent line, as before.
     return `${CONSENT_RECORD_TUTOR_MESSAGE}\n\n${CONSENT_RECORD_PARENT_SECTION_HINT}`;
   }
 

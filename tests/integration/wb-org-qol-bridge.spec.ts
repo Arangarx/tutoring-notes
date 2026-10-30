@@ -5,7 +5,6 @@
 import type { Browser } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { PrismaClient } from "@prisma/client";
-import { FAMILY_VISIBLE_REASONS } from "@/lib/scheduling/session-entry";
 import { TAG } from "../test-tags";
 import {
   seedBridgeScheduledSession,
@@ -28,18 +27,29 @@ import {
   startSessionAsTutor,
   seedWbLiveSyncSession,
 } from "./whiteboard-live-sync.helpers";
-import { seedTestAdmin, seedTestLearner, seedTestStudent } from "../visual/helpers";
+import {
+  seedOpenWhiteboardSession,
+  seedTestAdmin,
+  seedTestLearner,
+  seedTestStudent,
+} from "../visual/helpers";
 import { expectReasonUnderControl } from "./entry-reason.helpers";
 
 const PARENT_STATE = "tests/integration/.auth/parent.json";
 const LEARNER_STATE = "tests/integration/.auth/learner.json";
 
 /**
- * W4 family audience (org-ux-pass-plan § 3): consent_missing_self, consent_missing_parent,
- * live_off, not_yet, unknown. Imported from `FAMILY_VISIBLE_REASONS` because that export
- * is this spec list (jest pins the membership).
+ * The only reason codes a family may be sent (org-ux-pass-plan § 3, W4 family audience).
+ * Written by hand from that spec, not imported from the code under test: every other
+ * reason (org suspended, instructor removed, erasure, unclaimed) is internal state.
  */
-const FAMILY_SAFE_REASONS = new Set<string>(FAMILY_VISIBLE_REASONS);
+const FAMILY_SAFE_REASONS = new Set<string>([
+  "consent_missing_parent",
+  "consent_missing_self",
+  "live_off",
+  "not_yet",
+  "unknown",
+]);
 
 function reasonCodesIn(body: string, kind: "attributes" | "payload"): string[] {
   if (kind === "attributes") {
@@ -622,7 +632,7 @@ test.describe("org QoL schedule bridge", () => {
           expect(navigationText.length, "navigation response captured").toBeGreaterThan(1_000);
           expect(rscText, "RSC response carries this appointment").toContain(fx.scheduledSessionId);
           // Allow-list: every reason code a family receives is in the W4 family set
-          // (`FAMILY_VISIBLE_REASONS`). Org name and instructor name never ship.
+          // (`FAMILY_SAFE_REASONS`, hand-written above). Org name and instructor name never ship.
           assertFamilyReasonAllowList("DOM", domHtml, "attributes");
           assertFamilyReasonAllowList("navigation response", navigationText, "payload");
           assertFamilyReasonAllowList("RSC response", rscText, "payload");
@@ -886,3 +896,121 @@ test.describe("org QoL schedule bridge", () => {
     }
   );
 });
+
+/**
+ * A refused Start tells the tutor the same sentence the disabled control shows for that
+ * learner's situation (self-learner / parent-held / unclaimed), and only parent-held and
+ * unclaimed learners get the "Parent account" hint. Real browser, real server action: the
+ * session is seeded PENDING straight into the database (the create path would refuse first),
+ * the tutor presses the waiting-room Start in person, the server refuses. Expected strings
+ * are the W4 copy spec's, written by hand.
+ */
+test.describe(
+  "refused waiting-room Start names the learner's situation",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_CHROME] },
+  () => {
+    test.use({ storageState: "tests/integration/.auth/tutor.json" });
+
+    type Situation = "self-learner" | "parent-held" | "unclaimed";
+
+    async function seedPendingWithoutConsent(situation: Situation) {
+      const adminUserId = await seedTestAdmin();
+      const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+      const learnerName = `Refused ${situation.replace("-", " ")} ${suffix}`;
+      const prisma = new PrismaClient();
+      try {
+        let learnerProfileId: string | null = null;
+        if (situation !== "unclaimed") {
+          const holder = await prisma.accountHolder.create({
+            data: {
+              email: `pw-refused-${suffix}@test.local`,
+              emailVerifiedAt: new Date("2026-01-01"),
+              isSelfLearner: situation === "self-learner",
+            },
+            select: { id: true },
+          });
+          const profile = await prisma.learnerProfile.create({
+            data: {
+              accountHolderId: holder.id,
+              displayName: learnerName,
+              isSelfLearner: situation === "self-learner",
+            },
+            select: { id: true },
+          });
+          learnerProfileId = profile.id;
+        }
+        const student = await prisma.student.create({
+          data: { name: learnerName, adminUserId, learnerProfileId, parentEmail: "parent@test.local" },
+          select: { id: true },
+        });
+        const whiteboardSessionId = await seedOpenWhiteboardSession({
+          adminUserId,
+          studentId: student.id,
+          sessionPhase: "PENDING",
+          sessionMode: "IN_PERSON",
+        });
+        return { studentId: student.id, whiteboardSessionId, learnerName };
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
+
+    const CASES: { situation: Situation; line: (name: string) => string; parentHint: boolean }[] = [
+      {
+        situation: "self-learner",
+        line: (name) => `${name} hasn't finished privacy preferences yet.`,
+        parentHint: false,
+      },
+      {
+        situation: "parent-held",
+        line: () => "The parent hasn't finished privacy preferences yet.",
+        parentHint: true,
+      },
+      {
+        situation: "unclaimed",
+        line: (name) => `${name} hasn't connected their Mynk account yet.`,
+        parentHint: true,
+      },
+    ];
+
+    for (const { situation, line, parentHint } of CASES) {
+      test(`${situation}: the refusal reads the learner's own line`, async ({ page }) => {
+        test.setTimeout(120_000);
+        const { studentId, whiteboardSessionId, learnerName } =
+          await seedPendingWithoutConsent(situation);
+
+        await page.goto(`/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`, {
+          waitUntil: "domcontentloaded",
+        });
+        await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible({ timeout: 90_000 });
+        // Hydrated: a click before hydration is lost, and no refusal would ever show.
+        await waitForWbE2eBridge(page, "tutor");
+        const start = page.getByTestId("wb-start-session");
+        await expect(start).toBeEnabled({ timeout: 30_000 });
+        await start.click();
+
+        const error = page.getByTestId("wb-waiting-start-error");
+        await expect(error).toBeVisible({ timeout: 30_000 });
+        await expect(error).toContainText(line(learnerName));
+        if (parentHint) {
+          await expect(error).toContainText("Parent account section");
+        } else {
+          await expect(error).not.toContainText("Parent account");
+          await expect(error).not.toContainText("The parent hasn't");
+        }
+        // Enforcement is unchanged: still in the waiting room, session not activated.
+        await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible();
+        const prisma = new PrismaClient();
+        try {
+          const row = await prisma.whiteboardSession.findUniqueOrThrow({
+            where: { id: whiteboardSessionId },
+            select: { sessionPhase: true },
+          });
+          expect(row.sessionPhase).toBe("PENDING");
+        } finally {
+          await prisma.$disconnect();
+        }
+      });
+    }
+  }
+);

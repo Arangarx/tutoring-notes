@@ -44,6 +44,7 @@ import {
   ErasureAccessSuspendedError,
   isWhiteboardSessionBlockedByErasure,
 } from "@/lib/erasure/active-erasure-scope";
+import { withConsentRecordReason } from "@/lib/scheduling/session-entry-loader";
 import { logProductEvent } from "@/lib/observability/product-events";
 import { mintServerLiveKey } from "@/lib/whiteboard/live-key";
 
@@ -140,7 +141,13 @@ export async function createWhiteboardSessionCore({
     () =>
       db.student.findUnique({
         where: { id: studentId },
-        select: { learnerProfileId: true },
+        select: {
+          name: true,
+          learnerProfileId: true,
+          adminUserId: true,
+          organizationId: true,
+          learnerProfile: { select: { isSelfLearner: true } },
+        },
       }),
     { label: "createWhiteboardSession.studentForConsent" }
   );
@@ -156,7 +163,12 @@ export async function createWhiteboardSessionCore({
         `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: no_consent_record${schedSuffix}`
       );
     }
-    throw err;
+    // Same refusal, worded for this learner (self / parent / unclaimed) like the control.
+    throw await withConsentRecordReason(
+      err,
+      studentForConsent ? { studentId, adminUserId, student: studentForConsent } : null,
+      studentForConsent?.name ?? ""
+    );
   }
 
   await recheckOrgAdmission(studentId, adminUserId);

@@ -17,6 +17,7 @@ import {
 } from "@/lib/erasure/active-erasure-scope";
 import { orgInstructorAdmitted } from "@/lib/org-scope";
 import {
+  decisionReason,
   entryBlockCopy,
   sessionEntryState,
   type EntryBlockReason,
@@ -140,6 +141,42 @@ export function entryRefusalError(reason: EntryBlockReason, learnerName: string)
     default:
       return new Error(entryBlockCopy(reason, "tutor", learnerName));
   }
+}
+
+const CONSENT_RECORD_REASONS: ReadonlySet<EntryBlockReason> = new Set<EntryBlockReason>([
+  "unclaimed",
+  "consent_missing_self",
+  "consent_missing_parent",
+]);
+
+/**
+ * `assertConsentRecordExists` throws one generic `ConsentError` for every missing-record
+ * case. Where a tutor reads that error (Start, create), swap it for the per-reason error
+ * (`entryRefusalError`) so the words match the disabled control for this learner.
+ *
+ * Message text only: the caller has already refused, and this never turns a refusal into a
+ * pass. If `err` is anything else, there is no source row, or the entry state cannot be
+ * loaded or does not name a missing-record reason, the original error is returned as is.
+ */
+export async function withConsentRecordReason(
+  err: unknown,
+  source: SessionEntrySource | null,
+  learnerName: string
+): Promise<unknown> {
+  if (!(err instanceof ConsentError) || err.permission !== "consentRecord" || !source) return err;
+  try {
+    const state = await loadSessionEntryState(source);
+    // The missing-record reasons block both modes, so either decision names the reason.
+    const reason = decisionReason(state.inPerson);
+    if (reason && CONSENT_RECORD_REASONS.has(reason)) return entryRefusalError(reason, learnerName);
+  } catch (loadErr) {
+    console.warn(
+      `[slc] studentId=${source.studentId} action=consent_reason_lookup_failed ${
+        loadErr instanceof Error ? loadErr.message : String(loadErr)
+      }`
+    );
+  }
+  return err;
 }
 
 /** Throws `entryRefusalError` when `state` does not allow `mode`. */

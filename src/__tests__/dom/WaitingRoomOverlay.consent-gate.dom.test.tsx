@@ -9,9 +9,6 @@ import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { CONSENT_RECORD_PARENT_SECTION_HINT } from "@/lib/consent-action-error";
-import { ENTRY_BLOCK_COPY } from "@/lib/scheduling/session-entry";
-
 jest.mock("@/components/ThemeProvider", () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
   useTheme: () => ({
@@ -338,7 +335,7 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
     );
   });
 
-  test("surfaces friendly consent copy when startWhiteboardSession rejects ConsentError", async () => {
+  test("maps the legacy generic ConsentError to the parent line + hint", async () => {
     const consentErr = Object.assign(
       new Error(
         "Parent privacy preferences must be set before starting a session."
@@ -357,14 +354,65 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        ENTRY_BLOCK_COPY.consent_missing_parent.tutor
+        "The parent hasn't finished privacy preferences yet."
       );
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
-      CONSENT_RECORD_PARENT_SECTION_HINT
+      "Go to the Parent account section on this student's page"
     );
     expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
   });
+
+  // A refused Start tells the tutor the same sentence the disabled control shows for that
+  // learner's situation. The server throws the per-reason line (see the entry-parity test);
+  // expected strings are written by hand from the W4 copy spec.
+  test.each([
+    {
+      situation: "self-learner",
+      serverMessage: "Alex hasn't finished privacy preferences yet.",
+      expected: "Alex hasn't finished privacy preferences yet.",
+      parentHint: false,
+    },
+    {
+      situation: "parent-held learner",
+      serverMessage: "The parent hasn't finished privacy preferences yet.",
+      expected: "The parent hasn't finished privacy preferences yet.",
+      parentHint: true,
+    },
+    {
+      situation: "unclaimed learner",
+      serverMessage: "Alex hasn't connected their Mynk account yet.",
+      expected: "Alex hasn't connected their Mynk account yet.",
+      parentHint: true,
+    },
+  ])(
+    "after a refused Start, a $situation sees their own line (parent hint: $parentHint)",
+    async ({ serverMessage, expected, parentHint }) => {
+      mockStartWhiteboardSession.mockRejectedValueOnce(
+        Object.assign(new Error(serverMessage), {
+          name: "ConsentError",
+          permission: "consentRecord",
+        })
+      );
+
+      const user = userEvent.setup();
+      render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      await user.click(screen.getByTestId("wb-start-session"));
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent?.split("\n\n")[0]).toBe(expected);
+      if (parentHint) {
+        expect(alert).toHaveTextContent("Go to the Parent account section on this student's page");
+      } else {
+        expect(alert.textContent).not.toMatch(/Parent account/i);
+        expect(alert.textContent).not.toMatch(/The parent hasn't/i);
+      }
+      expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
+    }
+  );
 
   test("surfaces generic failure copy when startWhiteboardSession rejects non-Consent notFound (CF-1 / MB-1)", async () => {
     const notFoundErr = Object.assign(new Error("NEXT_NOT_FOUND"), {
@@ -416,7 +464,7 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        ENTRY_BLOCK_COPY.consent_missing_parent.tutor
+        "The parent hasn't finished privacy preferences yet."
       );
     });
     expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
