@@ -93,10 +93,13 @@ type Scenario = {
   /** The learner profile is tombstoned (erasure grace period). */
   erasurePending?: boolean;
   /**
-   * What `startWhiteboardSession` throws for each refused mode: the error name, and for
-   * consent errors the permission and the exact message. Hand-written from the spec.
+   * What `startWhiteboardSession` RESOLVES to for each refused mode: `{ ok: false, reason }`
+   * (returned as data, not thrown: a thrown server-action error is redacted by Next in a
+   * production build). Hand-written from the spec.
    */
-  startRefusal?: { name: string; permission?: string; message?: string };
+  startRefusal?: { reason: EntryBlockReason };
+  /** Refusals that still throw from Start: the error name (erasure is thrown, not returned). */
+  startThrows?: { name: string };
   /** Org admission no-op: Start returns without activating and the log says why. */
   startNoopReason?: "org_inactive" | "instructor_not_admitted";
   /** What the schedule bridge throws to a tutor it refuses (the table line the control shows). */
@@ -123,11 +126,7 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: true,
     onlineAccepted: false,
     bridgeLoggedReason: "live_off",
-    startRefusal: {
-      name: "ConsentError",
-      permission: "allowLiveSession",
-      message: "Live sessions are off in Maya's privacy settings.",
-    },
+    startRefusal: { reason: "live_off" },
   },
   {
     name: "personal, parent-held, no consent record: neither mode (16:23 lock)",
@@ -137,11 +136,7 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: false,
     onlineAccepted: false,
     bridgeLoggedReason: "consent_missing_parent",
-    startRefusal: {
-      name: "ConsentError",
-      permission: "consentRecord",
-      message: "The parent hasn't finished privacy preferences yet.",
-    },
+    startRefusal: { reason: "consent_missing_parent" },
     bridgeTutorRefusal: {
       name: "ConsentError",
       message: "The parent hasn't finished privacy preferences yet.",
@@ -156,11 +151,7 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: false,
     onlineAccepted: false,
     bridgeLoggedReason: "consent_missing_self",
-    startRefusal: {
-      name: "ConsentError",
-      permission: "consentRecord",
-      message: "Maya hasn't finished privacy preferences yet.",
-    },
+    startRefusal: { reason: "consent_missing_self" },
     bridgeTutorRefusal: {
       name: "ConsentError",
       message: "Maya hasn't finished privacy preferences yet.",
@@ -175,11 +166,7 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: false,
     onlineAccepted: false,
     bridgeLoggedReason: "unclaimed",
-    startRefusal: {
-      name: "ConsentError",
-      permission: "consentRecord",
-      message: "Maya hasn't connected their Mynk account yet.",
-    },
+    startRefusal: { reason: "unclaimed" },
     bridgeTutorRefusal: {
       name: "ConsentError",
       message: "Maya hasn't connected their Mynk account yet.",
@@ -194,7 +181,7 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: false,
     onlineAccepted: false,
     bridgeLoggedReason: "erasure_pending",
-    startRefusal: { name: "ErasureAccessSuspendedError" },
+    startThrows: { name: "ErasureAccessSuspendedError" },
     bridgeTutorRefusal: { name: "ErasureAccessSuspendedError" },
   },
   {
@@ -215,11 +202,7 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: true,
     onlineAccepted: false,
     bridgeLoggedReason: "live_off",
-    startRefusal: {
-      name: "ConsentError",
-      permission: "allowLiveSession",
-      message: "Live sessions are off in Maya's privacy settings.",
-    },
+    startRefusal: { reason: "live_off" },
   },
   {
     name: "org suspended: neither mode (Start is the admission no-op, bridge refuses)",
@@ -376,22 +359,27 @@ describe("entry rule parity: what the UI shows is what the server does", () => {
     ] as const) {
       const row = await pendingSession(tutor.id, student.id);
       info.mockClear();
-      const thrown = await startWhiteboardSession(row.id, mode).then(
-        () => null,
-        (err: unknown) => err as Error & { permission?: string }
-      );
+      let thrown: (Error & { permission?: string }) | null = null;
+      let result: Awaited<ReturnType<typeof startWhiteboardSession>> | null = null;
+      try {
+        result = await startWhiteboardSession(row.id, mode);
+      } catch (err) {
+        thrown = err as Error & { permission?: string };
+      }
       const after = await db.whiteboardSession.findUniqueOrThrow({ where: { id: row.id } });
       expect({ mode, activated: after.sessionPhase === "ACTIVE" }).toEqual({
         mode,
         activated: accepted,
       });
       if (!accepted && s.startRefusal) {
-        // The tutor is told why, and the reason is the spec's, not just "it threw".
-        expect({ mode, name: thrown?.name }).toEqual({ mode, name: s.startRefusal.name });
-        if (s.startRefusal.permission) {
-          expect(thrown?.permission).toBe(s.startRefusal.permission);
-        }
-        if (s.startRefusal.message) expect(thrown?.message).toBe(s.startRefusal.message);
+        // The tutor is told why: the refusal is returned with the spec's reason code.
+        expect({ mode, thrown: thrown?.name ?? null }).toEqual({ mode, thrown: null });
+        expect({ mode, result }).toEqual({
+          mode,
+          result: { ok: false, reason: s.startRefusal.reason },
+        });
+      } else if (!accepted && s.startThrows) {
+        expect({ mode, name: thrown?.name }).toEqual({ mode, name: s.startThrows.name });
       } else if (!accepted) {
         // The org admission no-op: nothing thrown, nothing activated, and the log says why.
         expect(thrown).toBeNull();
@@ -463,24 +451,24 @@ describe("entry rule parity: what the UI shows is what the server does", () => {
 
 describe("creating a session for a learner with no consent record says the same line", () => {
   // `StartWhiteboardSession` (student page) calls create, not Start. Hand-written expected
-  // lines; the scenarios are the consent-record ones from the table above.
+  // reason codes; the scenarios are the consent-record ones from the table above.
   const consentRecordScenarios = SCENARIOS.filter(
-    (s) => s.startRefusal?.permission === "consentRecord"
+    (s) =>
+      s.startRefusal !== undefined &&
+      ["consent_missing_parent", "consent_missing_self", "unclaimed"].includes(
+        s.startRefusal.reason
+      )
   );
   it.each(consentRecordScenarios)("$name", async (s) => {
     const { tutor, student } = await seedScenario(s);
     const before = await db.whiteboardSession.count({ where: { studentId: student.id } });
-    const thrown = await createWhiteboardSessionCore({
+    // The core RETURNS the refusal (not thrown), so the action can hand it to the tutor.
+    const result = await createWhiteboardSessionCore({
       adminUserId: tutor.id,
       studentId: student.id,
       rid: "rid-create-refusal",
-    }).then(
-      () => null,
-      (err: unknown) => err as Error & { permission?: string }
-    );
-    expect(thrown?.name).toBe("ConsentError");
-    expect(thrown?.permission).toBe("consentRecord");
-    expect(thrown?.message).toBe(s.startRefusal?.message);
+    });
+    expect(result).toEqual({ ok: false, reason: s.startRefusal?.reason });
     // Enforcement is unchanged: nothing was created.
     expect(await db.whiteboardSession.count({ where: { studentId: student.id } })).toBe(before);
   });

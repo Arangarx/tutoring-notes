@@ -28,12 +28,16 @@ import {
   seedWbLiveSyncSession,
 } from "./whiteboard-live-sync.helpers";
 import {
-  seedOpenWhiteboardSession,
   seedTestAdmin,
   seedTestLearner,
   seedTestStudent,
 } from "../visual/helpers";
 import { expectReasonUnderControl } from "./entry-reason.helpers";
+import {
+  REFUSED_START_CASES,
+  expectRefusedStartShown,
+  seedPendingWithoutConsent,
+} from "../helpers/refused-start";
 
 const PARENT_STATE = "tests/integration/.auth/parent.json";
 const LEARNER_STATE = "tests/integration/.auth/learner.json";
@@ -911,77 +915,15 @@ test.describe(
   () => {
     test.use({ storageState: "tests/integration/.auth/tutor.json" });
 
-    type Situation = "self-learner" | "parent-held" | "unclaimed";
-
-    async function seedPendingWithoutConsent(situation: Situation) {
-      const adminUserId = await seedTestAdmin();
-      const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-      const learnerName = `Refused ${situation.replace("-", " ")} ${suffix}`;
-      const prisma = new PrismaClient();
-      try {
-        let learnerProfileId: string | null = null;
-        if (situation !== "unclaimed") {
-          const holder = await prisma.accountHolder.create({
-            data: {
-              email: `pw-refused-${suffix}@test.local`,
-              emailVerifiedAt: new Date("2026-01-01"),
-              isSelfLearner: situation === "self-learner",
-            },
-            select: { id: true },
-          });
-          const profile = await prisma.learnerProfile.create({
-            data: {
-              accountHolderId: holder.id,
-              displayName: learnerName,
-              isSelfLearner: situation === "self-learner",
-            },
-            select: { id: true },
-          });
-          learnerProfileId = profile.id;
-        }
-        const student = await prisma.student.create({
-          data: { name: learnerName, adminUserId, learnerProfileId, parentEmail: "parent@test.local" },
-          select: { id: true },
-        });
-        const whiteboardSessionId = await seedOpenWhiteboardSession({
-          adminUserId,
-          studentId: student.id,
-          sessionPhase: "PENDING",
-          sessionMode: "IN_PERSON",
-        });
-        return { studentId: student.id, whiteboardSessionId, learnerName };
-      } finally {
-        await prisma.$disconnect();
-      }
-    }
-
-    const CASES: { situation: Situation; line: (name: string) => string; parentHint: boolean }[] = [
-      {
-        situation: "self-learner",
-        line: (name) => `${name} hasn't finished privacy preferences yet.`,
-        parentHint: false,
-      },
-      {
-        situation: "parent-held",
-        line: () => "The parent hasn't finished privacy preferences yet.",
-        parentHint: true,
-      },
-      {
-        situation: "unclaimed",
-        line: (name) => `${name} hasn't connected their Mynk account yet.`,
-        parentHint: true,
-      },
-    ];
-
-    for (const { situation, line, parentHint } of CASES) {
-      test(`${situation}: the refusal reads the learner's own line`, async ({ page }) => {
+    for (const testCase of REFUSED_START_CASES) {
+      test(`${testCase.situation}: the refusal reads the learner's own line`, async ({ page }) => {
         test.setTimeout(120_000);
-        const { studentId, whiteboardSessionId, learnerName } =
-          await seedPendingWithoutConsent(situation);
+        const seeded = await seedPendingWithoutConsent(testCase.situation);
 
-        await page.goto(`/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`, {
-          waitUntil: "domcontentloaded",
-        });
+        await page.goto(
+          `/admin/students/${seeded.studentId}/whiteboard/${seeded.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
         await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible({ timeout: 90_000 });
         // Hydrated: a click before hydration is lost, and no refusal would ever show.
         await waitForWbE2eBridge(page, "tutor");
@@ -989,27 +931,7 @@ test.describe(
         await expect(start).toBeEnabled({ timeout: 30_000 });
         await start.click();
 
-        const error = page.getByTestId("wb-waiting-start-error");
-        await expect(error).toBeVisible({ timeout: 30_000 });
-        await expect(error).toContainText(line(learnerName));
-        if (parentHint) {
-          await expect(error).toContainText("Parent account section");
-        } else {
-          await expect(error).not.toContainText("Parent account");
-          await expect(error).not.toContainText("The parent hasn't");
-        }
-        // Enforcement is unchanged: still in the waiting room, session not activated.
-        await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible();
-        const prisma = new PrismaClient();
-        try {
-          const row = await prisma.whiteboardSession.findUniqueOrThrow({
-            where: { id: whiteboardSessionId },
-            select: { sessionPhase: true },
-          });
-          expect(row.sessionPhase).toBe("PENDING");
-        } finally {
-          await prisma.$disconnect();
-        }
+        await expectRefusedStartShown(page, testCase, seeded);
       });
     }
   }

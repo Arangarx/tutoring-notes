@@ -23,6 +23,7 @@
     "relay:build": "npm run ensure:docker && docker build -t wb-relay-local ../whiteboard-sync",
     "test:wb-jest": "jest --testPathPatterns=whiteboard --testPathPatterns=sync-client --testPathPatterns=viewport-align",
     "test:org-db": "node scripts/test-org-db.mjs",
+    "test:prod-shape": "playwright test -c playwright.prod-shape.config.ts",
     "test:wb-playwright": "playwright test --project=integration-setup && playwright test --project=wb-regression",
     "test:wb-playwright:sharded": "node scripts/wb-relay-shard-run.cjs",
     "test:wb-playwright:full": "npm run test:wb-playwright",

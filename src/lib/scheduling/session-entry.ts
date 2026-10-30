@@ -34,6 +34,31 @@ export type EntryDecision =
   | { allowed: true }
   | { allowed: false; reason: EntryBlockReason };
 
+/**
+ * The reasons that mean "no usable consent record": the learner is unclaimed, or claimed
+ * with no record (self-learner / parent-held). The one list: the loader uses it to tell a
+ * missing-record refusal from any other, and a test pins it against `sessionEntryState`.
+ */
+export const MISSING_RECORD_REASONS = [
+  "unclaimed",
+  "consent_missing_self",
+  "consent_missing_parent",
+] as const satisfies readonly EntryBlockReason[];
+
+export type MissingRecordReason = (typeof MISSING_RECORD_REASONS)[number];
+
+export function isMissingRecordReason(reason: EntryBlockReason): reason is MissingRecordReason {
+  return (MISSING_RECORD_REASONS as readonly EntryBlockReason[]).includes(reason);
+}
+
+/**
+ * A refused Start / create, RETURNED by the server action as data. An expected refusal is
+ * not thrown: Next redacts a thrown server-action error in a production build (generic
+ * message plus a digest; the name and fields are not serialized), so a tutor could never
+ * read a thrown reason there. A resolved value survives serialization.
+ */
+export type EntryRefusal = { ok: false; reason: EntryBlockReason };
+
 /** `online` = remote session (the learner joins from their own device). */
 export type SessionEntryMode = "online" | "inPerson";
 
@@ -292,4 +317,24 @@ export function entryBlockCopy(
   else template = entry.tutor;
   const name = learnerName.trim() || "The learner";
   return template.replaceAll("{name}", name);
+}
+
+/** Where a tutor goes to fix a parent-held or unclaimed learner. */
+export const ENTRY_PARENT_ACCOUNT_HINT =
+  "Go to the Parent account section on this student's page to send a claim invite or check connection status.";
+
+/** Reasons the tutor can fix from the Parent account section (a self-learner has none). */
+const PARENT_ACCOUNT_HINT_REASONS: ReadonlySet<EntryBlockReason> = new Set<EntryBlockReason>([
+  "consent_missing_parent",
+  "unclaimed",
+]);
+
+/**
+ * What a tutor reads after a refused Start or create: the same tutor line the disabled
+ * control shows for that learner's situation, plus the Parent account hint where it fits.
+ * One function for the student-page Start button and the waiting-room Start.
+ */
+export function entryRefusalMessage(reason: EntryBlockReason, learnerName: string): string {
+  const line = entryBlockCopy(reason, "tutor", learnerName);
+  return PARENT_ACCOUNT_HINT_REASONS.has(reason) ? `${line}\n\n${ENTRY_PARENT_ACCOUNT_HINT}` : line;
 }

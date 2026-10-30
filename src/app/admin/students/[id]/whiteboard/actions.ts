@@ -10,7 +10,10 @@ import {
   isAllowedBlobUrl,
   isBlobHarnessActive,
 } from "@/lib/blob-harness";
-import { createWhiteboardSessionCore } from "@/lib/whiteboard/create-session-core";
+import {
+  createWhiteboardSessionCore,
+  type CreateWhiteboardSessionCoreResult,
+} from "@/lib/whiteboard/create-session-core";
 import { getOrCreateWhiteboardForSchedule } from "@/lib/whiteboard/schedule-bridge";
 import { ensureAdHocScheduledSession } from "@/lib/scheduling/ad-hoc-scheduled-session";
 import { db, withDbRetry } from "@/lib/db";
@@ -41,12 +44,11 @@ import {
   ConsentError,
   resolveModeAwareAudioRecordingConsent,
 } from "@/lib/consent-scope";
-import type { EntryBlockReason } from "@/lib/scheduling/session-entry";
+import type { EntryBlockReason, EntryRefusal } from "@/lib/scheduling/session-entry";
 import {
-  entryRefusalError,
+  consentRecordRefusalReason,
   loadSessionEntryState,
   orgAdmissionFailureReason,
-  withConsentRecordReason,
 } from "@/lib/scheduling/session-entry-loader";
 import { orgInstructorAdmitted, withOrgRowLock } from "@/lib/org-scope";
 import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
@@ -101,9 +103,18 @@ import { logProductEvent } from "@/lib/observability/product-events";
  *      `/api/upload/blob` route).
  */
 
+/**
+ * Create a PENDING session and navigate to its workspace.
+ *
+ * On success this never returns: `redirect()` throws NEXT_REDIRECT. It RETURNS only when
+ * the create is refused for a consent reason (`{ ok: false, reason }`): an expected
+ * refusal is data, not a thrown error, because Next redacts a thrown server-action error
+ * in a production build and the tutor could not read why. Unexpected failures (ownership,
+ * erasure, approval, org admission, storage) still throw.
+ */
 export async function createWhiteboardSession(
   studentId: string
-): Promise<void> {
+): Promise<EntryRefusal> {
   const rid = createActionCorrelationId();
 
   const scope = await requireStudentScope();
@@ -118,7 +129,20 @@ export async function createWhiteboardSession(
     studentId,
   });
 
-  let session: { id: string };
+  // A refused or failed create leaves no appointment behind.
+  const rollbackAdHocAppointment = async () => {
+    if (!scheduledSessionId) return;
+    await withDbRetry(
+      () => db.scheduledSession.delete({ where: { id: scheduledSessionId } }),
+      { label: "ensureAdHocScheduledSession.rollback" }
+    ).catch((delErr: unknown) => {
+      console.warn(
+        `[slc] action=adhoc_scheduled_session_rollback_failed scheduledSessionId=${scheduledSessionId} err=${delErr instanceof Error ? delErr.name : "unknown"}`
+      );
+    });
+  };
+
+  let session: CreateWhiteboardSessionCoreResult;
   try {
     session = await createWhiteboardSessionCore({
       adminUserId,
@@ -127,17 +151,12 @@ export async function createWhiteboardSession(
       ...(scheduledSessionId ? { scheduledSessionId } : {}),
     });
   } catch (err) {
-    if (scheduledSessionId) {
-      await withDbRetry(
-        () => db.scheduledSession.delete({ where: { id: scheduledSessionId } }),
-        { label: "ensureAdHocScheduledSession.rollback" }
-      ).catch((delErr: unknown) => {
-        console.warn(
-          `[slc] action=adhoc_scheduled_session_rollback_failed scheduledSessionId=${scheduledSessionId} err=${delErr instanceof Error ? delErr.name : "unknown"}`
-        );
-      });
-    }
+    await rollbackAdHocAppointment();
     throw err;
+  }
+  if (!session.ok) {
+    await rollbackAdHocAppointment();
+    return session;
   }
 
   // redirect() throws a NEXT_REDIRECT internally; the calling form
@@ -202,14 +221,21 @@ export async function openScheduledWhiteboardSession(
   );
 }
 
-export type StartWhiteboardSessionResult = {
-  ok: true;
-  phase: "active";
-};
+/**
+ * `{ ok: true }` the session is ACTIVE (or already past PENDING: Start is idempotent).
+ * `{ ok: false, reason }` Start was refused by the entry rule (no consent record, online
+ * sessions off) and the session stays PENDING. The refusal is DATA, not a thrown error:
+ * Next redacts a thrown server-action error in a production build, so the tutor could not
+ * read why. Unexpected failures (ownership, erasure, org admission, DB) still throw.
+ */
+export type StartWhiteboardSessionResult =
+  | { ok: true; phase: "active" }
+  | EntryRefusal;
 
 /**
  * Transition a whiteboard session from PENDING → ACTIVE when the tutor
  * clicks Start. Idempotent: already-active or ended sessions are no-ops.
+ * A refused Start RESOLVES to `{ ok: false, reason }` (see the result type).
  *
  * @param sessionMode Optional mode to persist at activation time (LIVE or
  *   IN_PERSON). When provided, it is written to the DB alongside the phase
@@ -260,8 +286,9 @@ export async function startWhiteboardSession(
         `[startWhiteboardSession] wbsid=${whiteboardSessionId} REJECTED: no_consent_record`
       );
     }
-    // Same refusal, worded for this learner (self / parent / unclaimed) like the control.
-    throw await withConsentRecordReason(
+    // The refusal is RETURNED, with the reason for this learner (self / parent / unclaimed),
+    // so the tutor reads the same line the control shows. Anything else is unexpected: rethrow.
+    const reason = await consentRecordRefusalReason(
       err,
       studentForConsent
         ? {
@@ -269,9 +296,10 @@ export async function startWhiteboardSession(
             adminUserId: session.adminUserId,
             student: studentForConsent,
           }
-        : null,
-      studentForConsent?.name ?? ""
+        : null
     );
+    if (!reason) throw err;
+    return { ok: false, reason };
   }
 
   const adminBillingDefaults = await withDbRetry(
@@ -303,12 +331,9 @@ export async function startWhiteboardSession(
   const entryDecision = entryState?.[requestedMode === "IN_PERSON" ? "inPerson" : "online"];
   const entryRefusal =
     entryDecision && !entryDecision.allowed ? entryDecision.reason : null;
-  const refuseEntry = (): never => {
-    console.warn(
-      `[slc] wbsid=${whiteboardSessionId} action=session_start_refused mode=${requestedMode} reason=${entryRefusal}`
-    );
-    throw entryRefusalError(entryRefusal as EntryBlockReason, studentForConsent?.name ?? "");
-  };
+  // Set (not thrown) when the rule refuses a still-PENDING session: the callbacks below
+  // return a zero-count no-op, nothing is written, and Start returns the refusal as data.
+  const refused: { reason: EntryBlockReason | null } = { reason: null };
   const orgOwned =
     studentForConsent?.organizationId != null && studentForConsent.adminUserId == null;
   const pendingUpdate = {
@@ -352,7 +377,10 @@ export async function startWhiteboardSession(
             where: { id: whiteboardSessionId },
             select: { sessionPhase: true },
           });
-          if (phase?.sessionPhase === "PENDING") refuseEntry();
+          if (phase?.sessionPhase === "PENDING") {
+            refused.reason = entryRefusal;
+            return { count: 0 };
+          }
         }
         return tx.whiteboardSession.updateMany(pendingUpdate);
       })
@@ -362,12 +390,22 @@ export async function startWhiteboardSession(
             where: { id: whiteboardSessionId },
             select: { sessionPhase: true },
           });
-          if (phase?.sessionPhase === "PENDING") refuseEntry();
+          if (phase?.sessionPhase === "PENDING") {
+            refused.reason = entryRefusal;
+            return { count: 0 };
+          }
         }
         return withDbRetry(() => db.whiteboardSession.updateMany(pendingUpdate), {
           label: "startWhiteboardSession",
         });
       })();
+
+  if (refused.reason) {
+    console.warn(
+      `[slc] wbsid=${whiteboardSessionId} action=session_start_refused mode=${requestedMode} reason=${refused.reason}`
+    );
+    return { ok: false, reason: refused.reason };
+  }
 
   if (result.count > 0) {
     console.info(

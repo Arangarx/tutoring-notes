@@ -65,8 +65,11 @@ jest.mock("next/navigation", () => ({
   useParams: () => ({}),
 }));
 
+type MockStartResult =
+  | { ok: true; phase: string }
+  | { ok: false; reason: string };
 const mockStartWhiteboardSession = jest.fn<
-  Promise<{ ok: boolean; phase: string }>,
+  Promise<MockStartResult>,
   [string, ("LIVE" | "IN_PERSON")?]
 >(() => Promise.resolve({ ok: true, phase: "active" }));
 
@@ -335,65 +338,42 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
     );
   });
 
-  test("maps the legacy generic ConsentError to the parent line + hint", async () => {
-    const consentErr = Object.assign(
-      new Error(
-        "Parent privacy preferences must be set before starting a session."
-      ),
-      { name: "ConsentError", permission: "consentRecord" }
-    );
-    mockStartWhiteboardSession.mockRejectedValueOnce(consentErr);
-
-    const user = userEvent.setup();
-    render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    await user.click(screen.getByTestId("wb-start-session"));
-
-    await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "The parent hasn't finished privacy preferences yet."
-      );
-    });
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Go to the Parent account section on this student's page"
-    );
-    expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
-  });
-
   // A refused Start tells the tutor the same sentence the disabled control shows for that
-  // learner's situation. The server throws the per-reason line (see the entry-parity test);
-  // expected strings are written by hand from the W4 copy spec.
+  // learner's situation. The server RESOLVES the refusal as `{ ok: false, reason }` (a thrown
+  // error is redacted by Next in a production build) and the client words it from the
+  // reason. Expected strings are written by hand from the W4 copy spec.
+  const PARENT_HINT =
+    "Go to the Parent account section on this student's page to send a claim invite or check connection status.";
+
   test.each([
     {
       situation: "self-learner",
-      serverMessage: "Alex hasn't finished privacy preferences yet.",
+      reason: "consent_missing_self" as const,
       expected: "Alex hasn't finished privacy preferences yet.",
       parentHint: false,
     },
     {
       situation: "parent-held learner",
-      serverMessage: "The parent hasn't finished privacy preferences yet.",
+      reason: "consent_missing_parent" as const,
       expected: "The parent hasn't finished privacy preferences yet.",
       parentHint: true,
     },
     {
       situation: "unclaimed learner",
-      serverMessage: "Alex hasn't connected their Mynk account yet.",
+      reason: "unclaimed" as const,
       expected: "Alex hasn't connected their Mynk account yet.",
       parentHint: true,
     },
+    {
+      situation: "learner with online sessions off",
+      reason: "live_off" as const,
+      expected: "Live sessions are off in Alex's privacy settings.",
+      parentHint: false,
+    },
   ])(
     "after a refused Start, a $situation sees their own line (parent hint: $parentHint)",
-    async ({ serverMessage, expected, parentHint }) => {
-      mockStartWhiteboardSession.mockRejectedValueOnce(
-        Object.assign(new Error(serverMessage), {
-          name: "ConsentError",
-          permission: "consentRecord",
-        })
-      );
+    async ({ reason, expected, parentHint }) => {
+      mockStartWhiteboardSession.mockResolvedValueOnce({ ok: false, reason });
 
       const user = userEvent.setup();
       render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);
@@ -403,16 +383,36 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
       await user.click(screen.getByTestId("wb-start-session"));
 
       const alert = await screen.findByRole("alert");
-      expect(alert.textContent?.split("\n\n")[0]).toBe(expected);
-      if (parentHint) {
-        expect(alert).toHaveTextContent("Go to the Parent account section on this student's page");
-      } else {
-        expect(alert.textContent).not.toMatch(/Parent account/i);
-        expect(alert.textContent).not.toMatch(/The parent hasn't/i);
-      }
+      expect(alert.textContent).toBe(parentHint ? `${expected}\n\n${PARENT_HINT}` : expected);
+      // Still in the waiting room: a refusal does not enter the live session.
       expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
+      expect(screen.getByTestId("wb-start-session")).not.toBeDisabled();
     }
   );
+
+  test("a production-redacted unexpected server error still shows the Error ID message", async () => {
+    // Shape Next gives the client for a thrown server-action error in a production build:
+    // generic message + digest; name and custom fields are not serialized.
+    const redacted = Object.assign(
+      new Error(
+        "An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest property is included on this error instance which may provide additional details about the specific error."
+      ),
+      { digest: "9876543210" }
+    );
+    mockStartWhiteboardSession.mockRejectedValueOnce(redacted);
+
+    const user = userEvent.setup();
+    render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await user.click(screen.getByTestId("wb-start-session"));
+
+    const startError = await screen.findByTestId("wb-waiting-start-error");
+    expect(startError).toHaveTextContent(/couldn't start the session/i);
+    expect(startError).toHaveTextContent(/Error ID:\s*9876543210/i);
+    expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
+  });
 
   test("surfaces generic failure copy when startWhiteboardSession rejects non-Consent notFound (CF-1 / MB-1)", async () => {
     const notFoundErr = Object.assign(new Error("NEXT_NOT_FOUND"), {
@@ -446,13 +446,10 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
   });
 
   test("P2-J3 consent denied: Start does not enter live — waiting overlay remains", async () => {
-    const consentErr = Object.assign(
-      new Error(
-        "Parent privacy preferences must be set before starting a session."
-      ),
-      { name: "ConsentError", permission: "consentRecord" }
-    );
-    mockStartWhiteboardSession.mockRejectedValueOnce(consentErr);
+    mockStartWhiteboardSession.mockResolvedValueOnce({
+      ok: false,
+      reason: "consent_missing_parent",
+    });
 
     const user = userEvent.setup();
     render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);

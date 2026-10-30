@@ -7,7 +7,8 @@
  *
  *   1. erasure block
  *   2. tutor approval (B1 cost gate — no cost before approval)
- *   3. CC-1 consent record (before the Blob write, so no orphan Blob)
+ *   3. CC-1 consent record (before the Blob write, so no orphan Blob). A missing record
+ *      is RETURNED as `{ ok: false, reason }`, not thrown (see the result type).
  *   4. empty events.json to Blob (the row's `eventsBlobUrl` is non-null)
  *   5. one transaction: row + consent snapshot + SessionParticipant
  *
@@ -44,7 +45,8 @@ import {
   ErasureAccessSuspendedError,
   isWhiteboardSessionBlockedByErasure,
 } from "@/lib/erasure/active-erasure-scope";
-import { withConsentRecordReason } from "@/lib/scheduling/session-entry-loader";
+import type { EntryRefusal } from "@/lib/scheduling/session-entry";
+import { consentRecordRefusalReason } from "@/lib/scheduling/session-entry-loader";
 import { logProductEvent } from "@/lib/observability/product-events";
 import { mintServerLiveKey } from "@/lib/whiteboard/live-key";
 
@@ -66,11 +68,21 @@ export type CreateWhiteboardSessionCoreInput = {
   scheduledSessionId?: string;
 };
 
-export type CreateWhiteboardSessionCoreResult = {
+/** A session row exists: freshly minted (`created`) or the appointment's existing one. */
+export type CreatedWhiteboardSession = {
+  ok: true;
   id: string;
   studentId: string;
   created: boolean;
 };
+
+/**
+ * Either the session row, or the consent refusal as data (`{ ok: false, reason }`). Other
+ * failures (erasure, approval, org admission, storage) still throw. The refusal is
+ * returned, not thrown, so the action can hand it to the tutor: Next redacts a thrown
+ * server-action error in a production build.
+ */
+export type CreateWhiteboardSessionCoreResult = CreatedWhiteboardSession | EntryRefusal;
 
 async function findForSchedule(
   scheduledSessionId: string
@@ -120,7 +132,7 @@ export async function createWhiteboardSessionCore({
       console.info(
         `[slc] wbsid=${existing.id} action=session_reused${schedSuffix}`
       );
-      return { ...existing, created: false };
+      return { ok: true, ...existing, created: false };
     }
   }
 
@@ -163,12 +175,14 @@ export async function createWhiteboardSessionCore({
         `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: no_consent_record${schedSuffix}`
       );
     }
-    // Same refusal, worded for this learner (self / parent / unclaimed) like the control.
-    throw await withConsentRecordReason(
+    // The refusal is RETURNED, with the reason for this learner (self / parent / unclaimed),
+    // so the tutor reads the same line the control shows. Anything else is unexpected: rethrow.
+    const reason = await consentRecordRefusalReason(
       err,
-      studentForConsent ? { studentId, adminUserId, student: studentForConsent } : null,
-      studentForConsent?.name ?? ""
+      studentForConsent ? { studentId, adminUserId, student: studentForConsent } : null
     );
+    if (!reason) throw err;
+    return { ok: false, reason };
   }
 
   await recheckOrgAdmission(studentId, adminUserId);
@@ -250,7 +264,7 @@ export async function createWhiteboardSessionCore({
             );
           });
         }
-        return { ...winner, created: false };
+        return { ok: true, ...winner, created: false };
       }
     }
     console.error(
@@ -278,5 +292,5 @@ export async function createWhiteboardSessionCore({
     },
   });
 
-  return { ...session, created: true };
+  return { ok: true, ...session, created: true };
 }

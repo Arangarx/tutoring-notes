@@ -149,96 +149,73 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
     expect(createWhiteboardSessionMock).not.toHaveBeenCalled();
   });
 
-  it("maps the legacy generic ConsentError to the parent line + hint, without Error ID", async () => {
-    const consentErr = Object.assign(
-      new Error(
-        "Parent privacy preferences must be set before starting a session."
-      ),
-      { name: "ConsentError", permission: "consentRecord" }
-    );
-    createWhiteboardSessionMock.mockRejectedValueOnce(consentErr);
-
-    const user = userEvent.setup();
-    render(<StartWhiteboardSession {...baseProps} />);
-
-    await user.click(screen.getByTestId("start-whiteboard-session-btn"));
-
-    await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "The parent hasn't finished privacy preferences yet."
-      );
-    });
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Go to the Parent account section on this student's page"
-    );
-    expect(screen.getByRole("alert").textContent).not.toMatch(/Error ID/i);
-  });
-
   // A refused Start tells the tutor the same sentence the disabled control shows for that
-  // learner's situation. The server throws the per-reason line (see the entry-parity test);
-  // expected strings are written by hand from the W4 copy spec.
+  // learner's situation. The server RESOLVES the refusal as `{ ok: false, reason }` (a thrown
+  // error is redacted by Next in a production build), and the client words it from the
+  // reason. Expected strings are written by hand from the W4 copy spec.
+  const PARENT_HINT =
+    "Go to the Parent account section on this student's page to send a claim invite or check connection status.";
+
   it.each([
     {
       situation: "self-learner",
-      serverMessage: "Maya hasn't finished privacy preferences yet.",
+      reason: "consent_missing_self",
       expected: "Maya hasn't finished privacy preferences yet.",
       parentHint: false,
     },
     {
       situation: "parent-held learner",
-      serverMessage: "The parent hasn't finished privacy preferences yet.",
+      reason: "consent_missing_parent",
       expected: "The parent hasn't finished privacy preferences yet.",
       parentHint: true,
     },
     {
       situation: "unclaimed learner",
-      serverMessage: "Maya hasn't connected their Mynk account yet.",
+      reason: "unclaimed",
       expected: "Maya hasn't connected their Mynk account yet.",
       parentHint: true,
     },
+    {
+      situation: "learner with online sessions off",
+      reason: "live_off",
+      expected: "Live sessions are off in Maya's privacy settings.",
+      parentHint: false,
+    },
   ])(
     "after a refused Start, a $situation sees their own line (parent hint: $parentHint)",
-    async ({ serverMessage, expected, parentHint }) => {
-      createWhiteboardSessionMock.mockRejectedValueOnce(
-        Object.assign(new Error(serverMessage), {
-          name: "ConsentError",
-          permission: "consentRecord",
-        })
-      );
+    async ({ reason, expected, parentHint }) => {
+      createWhiteboardSessionMock.mockResolvedValueOnce({ ok: false, reason });
 
       const user = userEvent.setup();
       render(<StartWhiteboardSession {...baseProps} />);
       await user.click(screen.getByTestId("start-whiteboard-session-btn"));
 
       const alert = await screen.findByRole("alert");
-      expect(alert.textContent?.split("\n\n")[0]).toBe(expected);
-      if (parentHint) {
-        expect(alert).toHaveTextContent("Go to the Parent account section on this student's page");
-      } else {
-        expect(alert.textContent).not.toMatch(/Parent account/i);
-        expect(alert.textContent).not.toMatch(/The parent hasn't/i);
-      }
+      expect(alert.textContent).toBe(parentHint ? `${expected}\n\n${PARENT_HINT}` : expected);
       expect(alert.textContent).not.toMatch(/Error ID/i);
+      // The button is usable again: a refusal is not a stuck state.
+      expect(screen.getByTestId("start-whiteboard-session-btn")).toBeEnabled();
     }
   );
 
-  it("surfaces allowLiveSession server message verbatim without digest", async () => {
-    const liveDeniedMsg =
-      "Live sessions are not permitted under the parent's current privacy preferences.";
-    const consentErr = Object.assign(new Error(liveDeniedMsg), {
-      name: "ConsentError",
-      permission: "allowLiveSession",
-    });
-    createWhiteboardSessionMock.mockRejectedValueOnce(consentErr);
+  it("an unexpected production-redacted server error still shows the Error ID message", async () => {
+    // Shape Next gives the client for a thrown server-action error in a production build:
+    // a generic message and a digest; name and custom fields are not serialized.
+    const redacted = Object.assign(
+      new Error(
+        "An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest property is included on this error instance which may provide additional details about the specific error."
+      ),
+      { digest: "1234567890" }
+    );
+    createWhiteboardSessionMock.mockRejectedValueOnce(redacted);
 
     const user = userEvent.setup();
     render(<StartWhiteboardSession {...baseProps} />);
-
     await user.click(screen.getByTestId("start-whiteboard-session-btn"));
 
-    await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent(liveDeniedMsg);
-    });
-    expect(screen.getByRole("alert").textContent).not.toMatch(/Error ID/i);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(
+      "Could not start the session \u2014 the server hit an unexpected error.\n\nError ID: 1234567890\n(copy this and send it back so we can find the failure in the server logs)."
+    );
   });
 });

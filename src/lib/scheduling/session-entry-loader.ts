@@ -1,7 +1,8 @@
 /**
  * Loads the inputs for `sessionEntryState` and builds the state, batched.
- * Also the one place that turns a refused decision into the error a server
- * action throws, so every enforcement site refuses the same way.
+ * Also the one place that turns a refused decision into the error the schedule
+ * bridge throws, and that names the reason behind a missing-record refusal (Start
+ * and create RETURN that reason as data; see `EntryRefusal` in `session-entry.ts`).
  *
  * SERVER-ONLY. The pure rule, copy table and types are in `session-entry.ts`
  * (client-safe); this file reads the database.
@@ -19,8 +20,10 @@ import { orgInstructorAdmitted } from "@/lib/org-scope";
 import {
   decisionReason,
   entryBlockCopy,
+  isMissingRecordReason,
   sessionEntryState,
   type EntryBlockReason,
+  type MissingRecordReason,
   type SessionEntryInputs,
   type SessionEntryMode,
   type SessionEntryState,
@@ -124,8 +127,8 @@ export async function loadSessionEntryState(
 }
 
 /**
- * The error a server action throws for a refused entry. Consent reasons keep the
- * `ConsentError` shape the tutor UI already formats; erasure keeps its own error.
+ * The error the schedule bridge throws to a refused tutor. Consent reasons use
+ * `ConsentError`; erasure keeps its own error. (Start and create return the reason instead.)
  */
 export function entryRefusalError(reason: EntryBlockReason, learnerName: string): Error {
   switch (reason) {
@@ -143,32 +146,26 @@ export function entryRefusalError(reason: EntryBlockReason, learnerName: string)
   }
 }
 
-const CONSENT_RECORD_REASONS: ReadonlySet<EntryBlockReason> = new Set<EntryBlockReason>([
-  "unclaimed",
-  "consent_missing_self",
-  "consent_missing_parent",
-]);
-
 /**
  * `assertConsentRecordExists` throws one generic `ConsentError` for every missing-record
- * case. Where a tutor reads that error (Start, create), swap it for the per-reason error
- * (`entryRefusalError`) so the words match the disabled control for this learner.
+ * case. Where a tutor reads the refusal (Start, create), this names the per-learner reason
+ * (unclaimed / self / parent) so the action can RETURN it as `{ ok: false, reason }`.
  *
- * Message text only: the caller has already refused, and this never turns a refusal into a
- * pass. If `err` is anything else, there is no source row, or the entry state cannot be
- * loaded or does not name a missing-record reason, the original error is returned as is.
+ * Decides nothing: the caller has already refused, and this never turns a refusal into a
+ * pass. It returns null when `err` is anything else, there is no source row, or the entry
+ * state cannot be loaded or does not name a missing-record reason; the caller then rethrows
+ * the original error (an unexpected failure, not an expected refusal).
  */
-export async function withConsentRecordReason(
+export async function consentRecordRefusalReason(
   err: unknown,
-  source: SessionEntrySource | null,
-  learnerName: string
-): Promise<unknown> {
-  if (!(err instanceof ConsentError) || err.permission !== "consentRecord" || !source) return err;
+  source: SessionEntrySource | null
+): Promise<MissingRecordReason | null> {
+  if (!(err instanceof ConsentError) || err.permission !== "consentRecord" || !source) return null;
   try {
     const state = await loadSessionEntryState(source);
     // The missing-record reasons block both modes, so either decision names the reason.
     const reason = decisionReason(state.inPerson);
-    if (reason && CONSENT_RECORD_REASONS.has(reason)) return entryRefusalError(reason, learnerName);
+    if (reason && isMissingRecordReason(reason)) return reason;
   } catch (loadErr) {
     console.warn(
       `[slc] studentId=${source.studentId} action=consent_reason_lookup_failed ${
@@ -176,7 +173,7 @@ export async function withConsentRecordReason(
       }`
     );
   }
-  return err;
+  return null;
 }
 
 /** Throws `entryRefusalError` when `state` does not allow `mode`. */

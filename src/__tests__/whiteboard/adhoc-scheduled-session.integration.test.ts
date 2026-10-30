@@ -39,7 +39,6 @@ jest.mock("@/lib/student-scope", () => ({
 
 import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
-import { ConsentError } from "@/lib/consent-scope";
 import { utcBoundsFromWallClock } from "@/lib/calendar/scheduled-session-datetime";
 import { createWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
 import { uniq } from "../helpers/unique-test-token";
@@ -346,11 +345,15 @@ describe("createWhiteboardSession ad-hoc appointment", () => {
     ).toBe(0);
   });
 
-  it("deletes the ad-hoc ScheduledSession when session create throws for missing consent", async () => {
+  it("deletes the ad-hoc ScheduledSession when session create is refused for missing consent", async () => {
     const { tutor, student } = await seedPersonalStudent(false);
     actAs(tutor);
 
-    await expect(createWhiteboardSession(student.id)).rejects.toThrow(ConsentError);
+    // The refusal is returned as data (a thrown error is redacted in a production build).
+    await expect(createWhiteboardSession(student.id)).resolves.toEqual({
+      ok: false,
+      reason: "consent_missing_parent",
+    });
 
     const appointments = await db.scheduledSession.findMany({
       where: { studentId: student.id },

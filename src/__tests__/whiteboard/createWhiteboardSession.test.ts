@@ -100,8 +100,6 @@ jest.mock("@/lib/consent-scope", () => {
 import { createWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
 import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";
-import { ConsentError } from "@/lib/consent-scope";
-
 const putMock = put as jest.MockedFunction<typeof put>;
 const redirectMock = redirect as jest.MockedFunction<typeof redirect>;
 
@@ -187,17 +185,24 @@ describe("createWhiteboardSession — CC-1 consent record gate", () => {
     });
   });
 
-  test("T-new-A / T1: claimed minor + no ConsentRecord → ConsentError, no Blob, no row", async () => {
+  // Expected refusals are RETURNED as data (a thrown server-action error is redacted by Next
+  // in a production build, so the tutor could not read its reason). Expected reason codes
+  // are hand-written from the entry-rule spec.
+  test("T-new-A / T1: claimed minor + no ConsentRecord → resolves {ok:false, parent reason}, no Blob, no row", async () => {
     requireStudentScopeMock.mockResolvedValue(defaultAdminScope);
     dbConsentRecordFindFirstMock.mockResolvedValue(null);
     dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: false });
 
-    await expect(createWhiteboardSession("student-1")).rejects.toThrow(ConsentError);
+    await expect(createWhiteboardSession("student-1")).resolves.toEqual({
+      ok: false,
+      reason: "consent_missing_parent",
+    });
+    expect(redirectMock).not.toHaveBeenCalled();
     expect(putMock).not.toHaveBeenCalled();
     expect(dbCreateMock).not.toHaveBeenCalled();
   });
 
-  test("T2: unclaimed student → ConsentError, no Blob, no row", async () => {
+  test("T2: unclaimed student → resolves {ok:false, unclaimed}, no Blob, no row", async () => {
     requireStudentScopeMock.mockResolvedValue(defaultAdminScope);
     dbStudentFindUniqueMock.mockResolvedValue({
       erasedAt: null,
@@ -205,7 +210,11 @@ describe("createWhiteboardSession — CC-1 consent record gate", () => {
       learnerProfile: null,
     });
 
-    await expect(createWhiteboardSession("student-1")).rejects.toThrow(ConsentError);
+    await expect(createWhiteboardSession("student-1")).resolves.toEqual({
+      ok: false,
+      reason: "unclaimed",
+    });
+    expect(redirectMock).not.toHaveBeenCalled();
     expect(putMock).not.toHaveBeenCalled();
     expect(dbCreateMock).not.toHaveBeenCalled();
   });
@@ -239,7 +248,7 @@ describe("createWhiteboardSession — CC-1 consent record gate", () => {
     });
   });
 
-  test("self-learner without ConsentRecord → ConsentError, no Blob, no row", async () => {
+  test("self-learner without ConsentRecord → resolves {ok:false, consent_missing_self}, no Blob, no row", async () => {
     requireStudentScopeMock.mockResolvedValue(defaultAdminScope);
     dbConsentRecordFindFirstMock.mockResolvedValue(null);
     dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: true });
@@ -248,7 +257,11 @@ describe("createWhiteboardSession — CC-1 consent record gate", () => {
       learnerProfile: { ...erasureClearStudent.learnerProfile, isSelfLearner: true },
     });
 
-    await expect(createWhiteboardSession("student-1")).rejects.toThrow(ConsentError);
+    await expect(createWhiteboardSession("student-1")).resolves.toEqual({
+      ok: false,
+      reason: "consent_missing_self",
+    });
+    expect(redirectMock).not.toHaveBeenCalled();
     expect(putMock).not.toHaveBeenCalled();
     expect(dbCreateMock).not.toHaveBeenCalled();
   });

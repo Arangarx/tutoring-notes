@@ -43,10 +43,7 @@
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
 import { formatDurationMs as formatDuration } from "@/lib/time/format-duration-ms";
 import { setCaptureDeferActive } from "@/lib/deploy/capture-defer-registry";
-import {
-  formatConsentActionError,
-  parseConsentActionError,
-} from "@/lib/consent-action-error";
+import { entryRefusalMessage } from "@/lib/scheduling/session-entry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHydrated } from "@/hooks/useHydrated";
 import { createPortal } from "react-dom";
@@ -4417,31 +4414,37 @@ export function WhiteboardWorkspaceClient({
       `[wtr] wbsid=${whiteboardSessionId} role=${role} action=start_clicked mode=${mode.toLowerCase()}`
     );
     try {
-      await startWhiteboardSession(whiteboardSessionId, mode);
+      const started = await startWhiteboardSession(whiteboardSessionId, mode);
+      if (!started.ok) {
+        // A refused Start is RETURNED as data (a thrown server-action error is redacted by
+        // Next in a production build). Stay in the waiting room and say why; the button
+        // re-enables via the finally block.
+        setSessionStartError(entryRefusalMessage(started.reason, studentName));
+        console.warn(
+          `[wtr] wbsid=${whiteboardSessionId} role=${role} action=start_refused mode=${mode.toLowerCase()} reason=${started.reason}`
+        );
+        return;
+      }
       setSessionStartError(null);
       setSessionPhase("ACTIVE");
       console.info(
         `[wtr] wbsid=${whiteboardSessionId} role=${role} action=live_entered mode=${mode.toLowerCase()}`
       );
     } catch (err) {
-      const consentErr = parseConsentActionError(err);
-      if (consentErr) {
-        setSessionStartError(formatConsentActionError(consentErr));
-      } else {
-        // Mirror StartWhiteboardSession.tsx — generic tutor copy + digest for
-        // log correlation (ownership/notFound, redacted prod errors, etc.).
-        const digest =
-          err && typeof err === "object" && "digest" in err
-            ? String((err as { digest?: unknown }).digest ?? "")
-            : "";
-        const friendlyBase =
-          "Couldn't start the session. Please refresh and try again — if you recently switched or exited an impersonated account in another tab, reload this page first.";
-        setSessionStartError(
-          digest
-            ? `${friendlyBase}\n\nError ID: ${digest}\n(copy this and send it back so we can find the failure in the server logs).`
-            : friendlyBase
-        );
-      }
+      // Unexpected failure only (a refused Start is returned above). Mirror
+      // StartWhiteboardSession.tsx — generic tutor copy + digest for log
+      // correlation (ownership/notFound, redacted prod errors, etc.).
+      const digest =
+        err && typeof err === "object" && "digest" in err
+          ? String((err as { digest?: unknown }).digest ?? "")
+          : "";
+      const friendlyBase =
+        "Couldn't start the session. Please refresh and try again — if you recently switched or exited an impersonated account in another tab, reload this page first.";
+      setSessionStartError(
+        digest
+          ? `${friendlyBase}\n\nError ID: ${digest}\n(copy this and send it back so we can find the failure in the server logs).`
+          : friendlyBase
+      );
       // Log the failure so a future hardware repro is debuggable.
       // The button re-enables via the finally block — no stuck state.
       console.error(
@@ -4451,7 +4454,7 @@ export function WhiteboardWorkspaceClient({
     } finally {
       setIsStarting(false);
     }
-  }, [whiteboardSessionId, role, isStarting]);
+  }, [whiteboardSessionId, role, isStarting, studentName]);
 
   const handleCancelPendingSession = useCallback(async () => {
     if (isCancelling) return;

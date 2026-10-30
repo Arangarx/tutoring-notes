@@ -18,7 +18,9 @@ import {
   decisionReason,
   entryBlockCopy,
   entryCardParagraphs,
+  entryRefusalMessage,
   FAMILY_VISIBLE_REASONS,
+  MISSING_RECORD_REASONS,
   familySafeEntryState,
   familySafeReason,
   sessionEntryState,
@@ -338,5 +340,65 @@ describe("one copy table: the tutor callout text lives in ENTRY_BLOCK_COPY", () 
   it("the card heading names the control it stands in for", () => {
     expect(ENTRY_CARD_TITLE.start).toBe("Start whiteboard session unavailable");
     expect(ENTRY_CARD_TITLE.openRoom).toBe("Open room unavailable");
+  });
+});
+
+describe("entryRefusalMessage: what a tutor reads after a refused Start (hand-written)", () => {
+  const PARENT_HINT =
+    "Go to the Parent account section on this student's page to send a claim invite or check connection status.";
+
+  it("self-learner: their own line, no Parent-account hint", () => {
+    expect(entryRefusalMessage("consent_missing_self", "Maya")).toBe(
+      "Maya hasn't finished privacy preferences yet."
+    );
+    expect(entryRefusalMessage("consent_missing_self", "Jo Lee")).toBe(
+      "Jo Lee hasn't finished privacy preferences yet."
+    );
+  });
+
+  it("parent-held learner: the parent line plus the Parent-account hint", () => {
+    expect(entryRefusalMessage("consent_missing_parent", "Maya")).toBe(
+      `The parent hasn't finished privacy preferences yet.\n\n${PARENT_HINT}`
+    );
+  });
+
+  it("unclaimed learner: the unclaimed line plus the hint", () => {
+    expect(entryRefusalMessage("unclaimed", "Maya")).toBe(
+      `Maya hasn't connected their Mynk account yet.\n\n${PARENT_HINT}`
+    );
+  });
+
+  it("online off: the live-sessions line, no hint", () => {
+    expect(entryRefusalMessage("live_off", "Maya")).toBe(
+      "Live sessions are off in Maya's privacy settings."
+    );
+  });
+
+  it("a blank learner name falls back to 'The learner', never an empty name", () => {
+    expect(entryRefusalMessage("unclaimed", "  ")).toBe(
+      `The learner hasn't connected their Mynk account yet.\n\n${PARENT_HINT}`
+    );
+  });
+});
+
+describe("MISSING_RECORD_REASONS: the one list of 'no usable consent record' reasons", () => {
+  it("is exactly unclaimed, self and parent", () => {
+    expect([...MISSING_RECORD_REASONS].sort()).toEqual(
+      ["consent_missing_parent", "consent_missing_self", "unclaimed"].sort()
+    );
+  });
+
+  it("is exactly the set of reasons the rule gives when no consent record exists, in both modes", () => {
+    const given = new Set<EntryBlockReason>();
+    for (const claimed of [true, false]) {
+      for (const isSelfLearner of [true, false]) {
+        const state = sessionEntryState({ ...HEALTHY, claimed, isSelfLearner, consent: null });
+        for (const decision of [state.online, state.inPerson]) {
+          const reason = decisionReason(decision);
+          if (reason) given.add(reason);
+        }
+      }
+    }
+    expect([...given].sort()).toEqual([...MISSING_RECORD_REASONS].sort());
   });
 });

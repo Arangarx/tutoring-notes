@@ -5,10 +5,10 @@ import { useHydrated } from "@/hooks/useHydrated";
 import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
 import { Button } from "@/components/ui/button";
 import {
-  formatConsentActionError,
-  parseConsentActionError,
-} from "@/lib/consent-action-error";
-import { tutorControlState, type SessionEntryState } from "@/lib/scheduling/session-entry";
+  entryRefusalMessage,
+  tutorControlState,
+  type SessionEntryState,
+} from "@/lib/scheduling/session-entry";
 import { createWhiteboardSession } from "./actions";
 
 export type StartWhiteboardSessionProps = {
@@ -67,9 +67,14 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
     setError(null);
     setPending(true);
     try {
-      await createWhiteboardSession(studentId);
       // createWhiteboardSession calls redirect() on success, which throws a
-      // NEXT_REDIRECT inside the handler. We never reach this line on success.
+      // NEXT_REDIRECT inside the handler. It RETURNS only a refusal (`{ ok: false,
+      // reason }`): returned as data because Next redacts a thrown server-action error
+      // in a production build, so the reason would never reach the tutor.
+      const refusal = await createWhiteboardSession(studentId);
+      setError(entryRefusalMessage(refusal.reason, props.learnerName));
+      // eslint-disable-next-line no-console
+      console.warn("[createWhiteboardSession] refused", { reason: refusal.reason });
     } catch (err) {
       // NEXT_REDIRECT is the success path — let it propagate so the
       // framework can navigate.
@@ -81,17 +86,6 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
         (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
       ) {
         throw err;
-      }
-
-      const consentErr = parseConsentActionError(err);
-      if (consentErr) {
-        setError(formatConsentActionError(consentErr));
-        // eslint-disable-next-line no-console
-        console.error("[createWhiteboardSession] consent denied", {
-          permission: consentErr.permission,
-          err,
-        });
-        return;
       }
 
       // In production, Next.js replaces server-action error messages with a

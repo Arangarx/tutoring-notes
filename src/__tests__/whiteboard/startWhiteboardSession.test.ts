@@ -52,7 +52,6 @@ jest.mock("@/lib/observability/product-events", () => ({
 }));
 
 import { startWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
-import { ConsentError } from "@/lib/consent-scope";
 
 const ownedSession = {
   id: "wb_42",
@@ -161,13 +160,20 @@ describe("startWhiteboardSession", () => {
     });
   });
 
-  it("T-new-B / T4: legacy PENDING row, claimed, no record → ConsentError, phase stays PENDING", async () => {
+  // An expected refusal is RETURNED as data. Next redacts a thrown server-action error in
+  // a production build (generic message + digest), so the tutor could never read a thrown
+  // reason there; a resolved value survives serialization. Expected values are hand-written.
+  it("T-new-B / T4: legacy PENDING row, claimed, no record → resolves {ok:false, parent line reason}, phase stays PENDING", async () => {
     assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
     dbConsentRecordFindFirstMock.mockResolvedValue(null);
     dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: false });
 
-    await expect(startWhiteboardSession("wb_42")).rejects.toThrow(ConsentError);
+    await expect(startWhiteboardSession("wb_42")).resolves.toEqual({
+      ok: false,
+      reason: "consent_missing_parent",
+    });
     expect(dbUpdateManyMock).not.toHaveBeenCalled();
+    expect(mockLogProductEvent).not.toHaveBeenCalled();
   });
 
   it("no consent record refuses an IN_PERSON start too (Andrew 2026-10-28 lock)", async () => {
@@ -175,7 +181,59 @@ describe("startWhiteboardSession", () => {
     dbConsentRecordFindFirstMock.mockResolvedValue(null);
     dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: false });
 
-    await expect(startWhiteboardSession("wb_42", "IN_PERSON")).rejects.toThrow(ConsentError);
+    await expect(startWhiteboardSession("wb_42", "IN_PERSON")).resolves.toEqual({
+      ok: false,
+      reason: "consent_missing_parent",
+    });
+    expect(dbUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("self-learner with no record resolves {ok:false, consent_missing_self}", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbConsentRecordFindFirstMock.mockResolvedValue(null);
+    dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: true });
+    dbStudentFindUniqueMock.mockResolvedValue({
+      name: "Maya",
+      erasedAt: null,
+      adminUserId: "admin_1",
+      organizationId: null,
+      learnerProfileId: "lp-1",
+      learnerProfile: {
+        isSelfLearner: true,
+        tombstonedAt: null,
+        accountHolderId: null,
+        accountHolder: { tombstonedAt: null },
+      },
+    });
+
+    await expect(startWhiteboardSession("wb_42", "IN_PERSON")).resolves.toEqual({
+      ok: false,
+      reason: "consent_missing_self",
+    });
+    expect(dbUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("unclaimed learner resolves {ok:false, unclaimed}", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbStudentFindUniqueMock.mockResolvedValue({
+      name: "Maya",
+      erasedAt: null,
+      adminUserId: "admin_1",
+      organizationId: null,
+      learnerProfileId: null,
+      learnerProfile: null,
+    });
+
+    await expect(startWhiteboardSession("wb_42", "IN_PERSON")).resolves.toEqual({
+      ok: false,
+      reason: "unclaimed",
+    });
+    expect(dbUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("still throws (rather than returning data) when the caller does not own the session", async () => {
+    assertOwnsWhiteboardSessionMock.mockRejectedValue(new Error("NEXT_NOT_FOUND"));
+    await expect(startWhiteboardSession("wb_42")).rejects.toThrow("NEXT_NOT_FOUND");
     expect(dbUpdateManyMock).not.toHaveBeenCalled();
   });
 });
@@ -188,15 +246,19 @@ describe("startWhiteboardSession — online sessions off (server enforces the en
   });
 
   it("refuses a LIVE start called directly, with the live-sessions reason, and flips nothing", async () => {
-    const error = await startWhiteboardSession("wb_42", "LIVE").catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ConsentError);
-    expect((error as ConsentError).permission).toBe("allowLiveSession");
-    expect((error as Error).message).toBe("Live sessions are off in Maya's privacy settings.");
+    await expect(startWhiteboardSession("wb_42", "LIVE")).resolves.toEqual({
+      ok: false,
+      reason: "live_off",
+    });
     expect(dbUpdateManyMock).not.toHaveBeenCalled();
+    expect(mockLogProductEvent).not.toHaveBeenCalled();
   });
 
   it("refuses the default (no mode given) start as LIVE", async () => {
-    await expect(startWhiteboardSession("wb_42")).rejects.toThrow(ConsentError);
+    await expect(startWhiteboardSession("wb_42")).resolves.toEqual({
+      ok: false,
+      reason: "live_off",
+    });
     expect(dbUpdateManyMock).not.toHaveBeenCalled();
   });
 

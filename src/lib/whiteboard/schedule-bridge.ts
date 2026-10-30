@@ -144,6 +144,10 @@ export async function getOrCreateWhiteboardForSchedule(
       rid,
       scheduledSessionId: sched.id,
     });
+    // The entry check above already refused every refusal the core can return, so this is
+    // only a race (the record vanished in between). Same outcome as the check: a tutor gets
+    // the table line, a learner the neutral `not_available` (via the catch below).
+    if (!session.ok) throw entryRefusalError(session.reason, sched.student.name);
     console.info(
       `[slc] wbsid=${session.id} action=schedule_bridge scheduledSessionId=${sched.id} principal=${principal.kind} created=${session.created}`
     );
