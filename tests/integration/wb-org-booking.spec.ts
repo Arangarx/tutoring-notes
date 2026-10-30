@@ -418,6 +418,8 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
       await instructorSession.page.goto(workspace);
       await expect(instructorSession.page.getByTestId("wb-session-review-mode")).toBeVisible();
       await expect(instructorSession.page.locator("#wb-note-topics")).toHaveValue("Quadratic factoring");
+      await expect(instructorSession.page.getByTestId("wb-review-transcript")).not.toBeVisible();
+      await instructorSession.page.getByRole("button", { name: "Show transcript" }).click();
       await expect(instructorSession.page.getByTestId("wb-review-transcript")).toContainText(
         "The student solved for x."
       );

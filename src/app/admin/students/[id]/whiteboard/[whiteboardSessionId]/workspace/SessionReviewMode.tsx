@@ -9,6 +9,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import TutorNotesSection, {
   parseNoteContent,
   type StructuredNoteFields,
@@ -51,6 +57,7 @@ export function SessionReviewMode({
   );
   const [noteSaved, setNoteSaved] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const initialParsedFieldsRef = useRef<StructuredNoteFields | null>(null);
   const [notesFields, setNotesFields] = useState<StructuredNoteFields>({
@@ -229,9 +236,23 @@ export function SessionReviewMode({
           {!isReplay && <ReviewConfirmSlot />}
           {notesSurface}
           {payload?.transcriptText ? (
-            <p data-testid="wb-review-transcript" className="text-sm text-foreground">
-              {payload.transcriptText}
-            </p>
+            <Accordion
+              type="single"
+              collapsible
+              value={transcriptOpen ? "transcript" : ""}
+              onValueChange={(value) => setTranscriptOpen(value === "transcript")}
+            >
+              <AccordionItem value="transcript">
+                <AccordionTrigger>
+                  {transcriptOpen ? "Hide transcript" : "Show transcript"}
+                </AccordionTrigger>
+                <AccordionContent>
+                  <p data-testid="wb-review-transcript" className="text-sm text-foreground">
+                    {payload.transcriptText}
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           ) : null}
         </aside>
 
