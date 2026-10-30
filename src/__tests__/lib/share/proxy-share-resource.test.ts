@@ -165,7 +165,28 @@ describe("gatePublicWbSessionBlob", () => {
 });
 
 describe("fetchShareBlobWithBearer", () => {
+  // The Bearer header is sent only when a blob token is configured, so the test owns the
+  // environment instead of inheriting whatever the developer's shell happens to export.
+  const savedBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
+  afterEach(() => {
+    if (savedBlobToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+    else process.env.BLOB_READ_WRITE_TOKEN = savedBlobToken;
+  });
+
+  it("sends no Authorization header when no blob token is configured", async () => {
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    const fetchMock = jest.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    await fetchShareBlobWithBearer(DB_BLOB_URL, {
+      contentType: "application/json",
+      cacheMaxAge: 300,
+      unavailableJsonError: "Event log unavailable.",
+      fetchImpl: fetchMock,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(DB_BLOB_URL, { headers: {} });
+  });
+
   it("streams blob with configured content-type and cache", async () => {
+    process.env.BLOB_READ_WRITE_TOKEN = "test-blob-token";
     const fetchMock = jest.fn().mockResolvedValue(
       new Response('{"events":[]}', {
         status: 200,
@@ -184,9 +205,7 @@ describe("fetchShareBlobWithBearer", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       DB_BLOB_URL,
       expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: expect.stringContaining("Bearer"),
-        }),
+        headers: { Authorization: "Bearer test-blob-token" },
       })
     );
   });

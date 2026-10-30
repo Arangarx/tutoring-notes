@@ -52,6 +52,8 @@ describe("createVersionedConsentRecord", () => {
       data: {
         learnerProfileId: "lp-1",
         adminUserId: "tutor-1",
+        // A tutor-owned row has exactly one owner: the organization column is explicitly null.
+        organizationId: null,
         version: 1,
         allowLiveSession: true,
         allowAudioRecording: false,

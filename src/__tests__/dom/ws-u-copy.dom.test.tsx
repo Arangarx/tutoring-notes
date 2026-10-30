@@ -187,6 +187,7 @@ jest.mock("@/lib/whiteboard/sync-client", () => ({
     onRemotePointer: () => () => undefined,
     onRemoteCursor: () => () => undefined,
     onRemoteChat: () => () => undefined,
+    onRemoteSessionLifecycle: () => () => undefined,
     broadcastCursor: jest.fn(),
     broadcastChat: jest.fn(),
     isConnected: () => true,
