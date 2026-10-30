@@ -1192,11 +1192,103 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
         );
         const nameBox = await name.boundingBox();
         const badgeBox = await badge.boundingBox();
-        if (!nameBox || !badgeBox) throw new Error(`name or badge missing in ${view} view`);
+        const rowBox = await row.boundingBox();
+        if (!nameBox || !badgeBox || !rowBox) throw new Error(`name or badge missing in ${view} view`);
+        // Inside the row/card: right edges do not pass the row's right edge.
+        expect(nameBox.x + nameBox.width, `${view} learner name stays inside the row`).toBeLessThanOrEqual(
+          rowBox.x + rowBox.width + 1
+        );
+        expect(
+          badgeBox.x + badgeBox.width,
+          `${view} organization badge stays inside the row`
+        ).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+        // Usable badge width whenever the organization badge is present.
+        expect(badgeBox.width, `${view} organization badge width`).toBeGreaterThanOrEqual(40);
         // Same line: midline of the badge ≈ midline of the learner name.
         const nameMid = nameBox.y + nameBox.height / 2;
         const badgeMid = badgeBox.y + badgeBox.height / 2;
         expect(Math.abs(nameMid - badgeMid), `${view} midline gap`).toBeLessThanOrEqual(4);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("on a 320px screen a long learner name truncates inside the row and the organization badge stays readable", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const organizationName =
+      "Westbridge Regional Preparatory Academy and Conservatory District";
+    expect(organizationName.length).toBeGreaterThanOrEqual(60);
+    await prisma.organization.update({ where: { id: org.id }, data: { name: organizationName } });
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const learner = await seedLearner(org.id, owner.id, true, {
+      givenName: "Alexandria Bartholomew",
+      familyName: "Worthington-Smythe",
+    });
+    expect(learner.fullName.length).toBeGreaterThanOrEqual(40);
+    const appointment = await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+    // A stored Google event id is enough for the schedule mapper to show the
+    // "Synced" badge; no Google connection row is required.
+    await prisma.scheduledSession.update({
+      where: { id: appointment.id },
+      data: { googleEventId: `evt-${appointment.id}` },
+    });
+
+    const { context, page } = await openSchedule(browser, instructor, { width: 320, height: 812 });
+    try {
+      for (const view of ["month", "agenda"] as const) {
+        if (view === "agenda") await showAgenda(page);
+        const row = rowFor(page, appointment.id);
+        const name = row.getByTestId("schedule-session-name");
+        const badge = row.getByTestId("org-badge");
+        const sync = row.getByText("Synced", { exact: true });
+        await name.scrollIntoViewIfNeeded();
+        await expect(name).toHaveText(learner.fullName);
+        await expect(badge).toContainText(organizationName);
+        await expect(sync).toBeVisible();
+        const nameBox = await name.boundingBox();
+        const badgeBox = await badge.boundingBox();
+        const syncBox = await sync.boundingBox();
+        const rowBox = await row.boundingBox();
+        if (!nameBox || !badgeBox || !syncBox || !rowBox) {
+          throw new Error(`name, badge, sync badge, or row missing in ${view} view`);
+        }
+        // Inside the row/card: right edges do not pass the row's right edge.
+        expect(nameBox.x + nameBox.width, `${view} learner name stays inside the row`).toBeLessThanOrEqual(
+          rowBox.x + rowBox.width + 1
+        );
+        expect(
+          badgeBox.x + badgeBox.width,
+          `${view} organization badge stays inside the row`
+        ).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+        expect(syncBox.x + syncBox.width, `${view} sync badge stays inside the row`).toBeLessThanOrEqual(
+          rowBox.x + rowBox.width + 1
+        );
+        // Usable badge width whenever the organization badge is present.
+        expect(badgeBox.width, `${view} organization badge width`).toBeGreaterThanOrEqual(40);
+        // Same line: midline of the badge ≈ midline of the learner name.
+        const nameMid = nameBox.y + nameBox.height / 2;
+        const badgeMid = badgeBox.y + badgeBox.height / 2;
+        expect(Math.abs(nameMid - badgeMid), `${view} midline gap`).toBeLessThanOrEqual(4);
+        const scroll = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        // The page itself does not scroll horizontally.
+        expect(scroll.scrollWidth, `${view} page horizontal scroll`).toBeLessThanOrEqual(
+          scroll.clientWidth + 1
+        );
+        // The name alone does not fit this row: the element clips it with an ellipsis.
+        const fit = await name.evaluate((el) => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }));
+        expect(fit.scrollWidth, `${view} long learner name truncates`).toBeGreaterThan(
+          fit.clientWidth + 1
+        );
       }
     } finally {
       await context.close();

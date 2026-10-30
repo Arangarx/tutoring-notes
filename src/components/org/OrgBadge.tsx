@@ -19,7 +19,7 @@ export function OrgBadge({
       data-testid="org-badge"
       title={`via ${organizationName}`}
     >
-      <span className="truncate">via {organizationName}</span>
+      <span className="min-w-0 truncate">via {organizationName}</span>
     </Badge>
   );
 }

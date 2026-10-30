@@ -69,14 +69,14 @@ function DayDetailSessionItem({
 }: SessionItemProps) {
   return (
     <li
-      className="rounded-[10px] border border-border bg-card p-4"
+      className="min-w-0 rounded-[10px] border border-border bg-card p-4"
       data-testid="schedule-session-item"
       data-session-id={session.id}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <StudentAvatar name={session.studentName} size="md" />
-          <div className="min-w-0 space-y-2">
+          <div className="min-w-0 flex-1 space-y-2">
             <ScheduleSessionTitle session={session} />
             <p className="text-sm text-muted-foreground" data-testid="schedule-session-subject">
               {session.subject}
@@ -117,13 +117,13 @@ function SessionRow({ session, studentOptions, googleConnected, onSaved }: Sessi
 
   return (
     <li
-      className="flex flex-col gap-3 rounded-[10px] border border-border bg-card px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+      className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-border bg-card px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
       data-testid="schedule-agenda-row"
       data-session-id={session.id}
     >
       <div className="flex min-w-0 items-start gap-3">
         <StudentAvatar name={session.studentName} size="md" />
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1">
           <ScheduleSessionTitle session={session} />
           <p className="text-sm text-muted-foreground">
             {session.subject} · {dateLabel} ·{" "}
@@ -279,8 +279,9 @@ export function SchedulePageClient({
         </TabsList>
 
         <TabsContent value="month" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
+          <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
             <SectionCard realm="admin"
+              className="min-w-0"
               title="Calendar"
               description="Native Mynk scheduling — external calendars are optional."
               actions={
@@ -293,7 +294,7 @@ export function SchedulePageClient({
                   onSaved={refreshSchedule}
                 />
               }
-              contentClassName="flex justify-center pt-2"
+              contentClassName="flex min-w-0 justify-center pt-2"
             >
               <Calendar
                 mode="single"
@@ -307,7 +308,12 @@ export function SchedulePageClient({
               />
             </SectionCard>
 
-            <SectionCard realm="admin" title="Day detail" contentClassName="pt-2 min-w-0">
+            <SectionCard
+              realm="admin"
+              className="min-w-0"
+              title="Day detail"
+              contentClassName="min-w-0 pt-2"
+            >
               <DaySessionsPanel
                 selectedDate={selectedDate}
                 sessions={sessions}
@@ -321,8 +327,10 @@ export function SchedulePageClient({
 
         <TabsContent value="agenda" className="space-y-6">
           <SectionCard realm="admin"
+            className="min-w-0"
             title="Upcoming sessions"
             description="Soft duration is planning metadata — start and end recording remain tutor-controlled."
+            contentClassName="min-w-0"
             actions={
               <CreateSessionDialog
                 studentOptions={studentOptions}
