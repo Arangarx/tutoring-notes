@@ -6,9 +6,11 @@ import {
 import {
   armHold,
   expectReleasedByTest,
+  holdState,
   releaseHold,
   waitUntilParked,
 } from "../helpers/consent-harness";
+import { IN_FLIGHT_NOTES_UI_WAIT_MS } from "@/__tests__/helpers/notes-shimmer-budget";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 
@@ -188,7 +190,7 @@ async function recordShortSoloSession(
 
 async function waitForInFlightNotesUi(
   page: import("@playwright/test").Page,
-  timeoutMs = 90_000
+  timeoutMs = IN_FLIGHT_NOTES_UI_WAIT_MS
 ): Promise<{ phase: "pending" | "generating" }> {
   const deadline = Date.now() + timeoutMs;
 
@@ -244,7 +246,7 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_
         whiteboardSessionId
       );
 
-      const { phase } = await waitForInFlightNotesUi(page, 90_000);
+      const { phase } = await waitForInFlightNotesUi(page);
 
       const recordings = await fetchRecordingCount(page, whiteboardSessionId);
       expect(recordings.count).toBeGreaterThanOrEqual(1);
@@ -276,6 +278,16 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_
         expect(phase).toBe("pending");
         await expect(page.getByTestId("tn-note-field-skeleton")).toHaveCount(0);
       }
+
+      const seam = await holdState(
+        page.request,
+        "notes:reduce:before_resolve",
+        whiteboardSessionId
+      );
+      expect(
+        seam.passedThrough,
+        "the parked reduce is the only caller; a pass-through would leave the in-flight UI"
+      ).toBe(0);
 
       await releaseHold(page.request, "notes:reduce:before_resolve", whiteboardSessionId);
       await expectReleasedByTest(

@@ -217,8 +217,16 @@ describe("enqueueChunkTranscribe", () => {
 // When CRON_SECRET is absent (local dev / pre-config), the direct-call path is
 // used unchanged (fail-open).
 
+function restoreEnv(name: "CRON_SECRET" | "PLAYWRIGHT_TEST" | "NODE_ENV", value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)", () => {
   const MOCK_SECRET = "test-cron-secret-xyz";
+  const originalCronSecret = process.env.CRON_SECRET;
+  const originalPlaywrightTest = process.env.PLAYWRIGHT_TEST;
+  const originalNodeEnv = process.env.NODE_ENV;
   let fetchSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -235,8 +243,9 @@ describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)"
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    delete process.env.CRON_SECRET;
-    delete process.env.PLAYWRIGHT_TEST;
+    restoreEnv("CRON_SECRET", originalCronSecret);
+    restoreEnv("PLAYWRIGHT_TEST", originalPlaywrightTest);
+    restoreEnv("NODE_ENV", originalNodeEnv);
   });
 
   test("includes Authorization: Bearer <CRON_SECRET> when CRON_SECRET is set", async () => {
@@ -278,18 +287,30 @@ describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)"
   });
 
   test("a leaked PLAYWRIGHT_TEST in production still uses the bearer fetch", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
     process.env.CRON_SECRET = MOCK_SECRET;
     process.env.PLAYWRIGHT_TEST = "1";
-    try {
-      await enqueueChunkTranscribe(JOB);
-      await new Promise((r) => setTimeout(r, 10));
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      expect(mockProcessChunkTranscribeJob).not.toHaveBeenCalled();
-    } finally {
-      process.env.NODE_ENV = previousNodeEnv;
-    }
+    await enqueueChunkTranscribe(JOB);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(mockProcessChunkTranscribeJob).not.toHaveBeenCalled();
+  });
+
+  test("PLAYWRIGHT_TEST outside production still bearer-fetches the queue route", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.PLAYWRIGHT_TEST = "1";
+    process.env.CRON_SECRET = MOCK_SECRET;
+
+    await enqueueChunkTranscribe(JOB);
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://app.example.com/api/queues/chunk-transcribe");
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      `Bearer ${MOCK_SECRET}`
+    );
+    expect(mockProcessChunkTranscribeJob).not.toHaveBeenCalled();
   });
 
   test("falls back to direct processChunkTranscribeJob call when CRON_SECRET is absent (fail-open)", async () => {
