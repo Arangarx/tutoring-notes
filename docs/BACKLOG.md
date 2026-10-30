@@ -1871,6 +1871,17 @@ Lower priority.
 
 ## 9. Testing & harness (PLAYWRIGHT-GAPs)
 
+**[P3][TEST] WS-K-3S-BUDGET-FLAKE (2026-10-30, `feat/org-qol`)**
+
+`tests/integration/wb-notes-shimmer.spec.ts` — "live watermark current at End → done within 3s, zero finalize-reduce LLM calls". Wall clock from `sealSessionAndEnqueueNotes` until the tutor note status is `done` sometimes exceeds `NOTES_DONE_POLL_BUDGET_MS` (3000). Pre-existing. The chunk-transcribe HTTP queue is not on this path: `enqueueNotesReduce` stays an in-process `after()` plus `processNotesReduceJob`, and `holdPoint("notes:reduce:before_resolve")` returns immediately when that point is not armed. `src/lib/recording/chunk-transcribe-enqueue.ts` differs from `4ba869fc` only by comments.
+
+Observed 2026-10-30 (`--retries=0 --workers=1 --repeat-each=3` except the suite row):
+
+- Tip `ca0ae292`, Playwright webServer has `CRON_SECRET`: full `@wb-recording` run failed at 4722ms; isolated rerun 1 fail (4182ms) and 2 pass.
+- `4ba869fc` (pre-C0, webServer has no `CRON_SECRET`), same isolated rerun: 2 fail (5259ms, 4563ms) and 1 pass.
+
+Do not add a product test-mode branch to hide it. The 3s budget is tighter than this machine's reduce latency.
+
 **[P3][TEST] TSC-PREEXISTING-TEST-ERRORS (2026-10-30, `feat/org-qol`)**
 
 `npx tsc --noEmit` exits non-zero from type errors that are all in **test files**, so `tsc` is not a clean gate yet: new errors are caught by diffing against this list, not by exit code. Run on `feat/org-qol` at the W4-hardening verify fix. **None of these files is in `git diff --name-only b180ab84..HEAD`** (the org-qol branch's own diff). `tests/integration/wb-org-booking.spec.ts` was the one file that was in that diff and had errors (12: `displayName: string | null` passed where `string` was typed, and an `offsetWidth` on `SVGElement | HTMLElement`); fixed in the same wave, so it is no longer on the list. `next build` is unaffected (it type-checks the app, not these specs).
