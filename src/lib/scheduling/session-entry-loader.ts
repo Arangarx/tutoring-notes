@@ -7,7 +7,8 @@
  * (client-safe); this file reads the database.
  */
 
-import { CONSENT_RECORD_TUTOR_MESSAGE } from "@/lib/consent-action-error";
+import type { Prisma } from "@prisma/client";
+
 import { ConsentError, resolveEffectiveConsentForStudent } from "@/lib/consent-scope";
 import { db } from "@/lib/db";
 import {
@@ -37,6 +38,21 @@ export type SessionEntrySource = {
   };
 };
 
+/**
+ * Which half of the admission rule failed. Call only after `orgInstructorAdmitted`
+ * said no: an inactive (or missing) org is `org_inactive`, otherwise the instructor is out.
+ */
+export async function orgAdmissionFailureReason(
+  client: Pick<Prisma.TransactionClient, "organization">,
+  organizationId: string
+): Promise<"org_inactive" | "instructor_not_admitted"> {
+  const org = await client.organization.findUnique({
+    where: { id: organizationId },
+    select: { status: true },
+  });
+  return org?.status === "active" ? "instructor_not_admitted" : "org_inactive";
+}
+
 async function loadOrgInput(
   organizationId: string,
   adminUserId: string
@@ -46,11 +62,8 @@ async function loadOrgInput(
   if (await orgInstructorAdmitted(db, organizationId, adminUserId)) {
     return { active: true, instructorAdmitted: true };
   }
-  const org = await db.organization.findUnique({
-    where: { id: organizationId },
-    select: { status: true },
-  });
-  return { active: org?.status === "active", instructorAdmitted: false };
+  const reason = await orgAdmissionFailureReason(db, organizationId);
+  return { active: reason !== "org_inactive", instructorAdmitted: false };
 }
 
 async function loadInputs(source: SessionEntrySource): Promise<SessionEntryInputs> {
@@ -122,7 +135,8 @@ export function entryRefusalError(reason: EntryBlockReason, learnerName: string)
     case "unclaimed":
     case "consent_missing_self":
     case "consent_missing_parent":
-      return new ConsentError("consentRecord", CONSENT_RECORD_TUTOR_MESSAGE);
+      // The same table line the disabled control shows: one source for the words.
+      return new ConsentError("consentRecord", entryBlockCopy(reason, "tutor", learnerName));
     default:
       return new Error(entryBlockCopy(reason, "tutor", learnerName));
   }

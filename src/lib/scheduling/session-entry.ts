@@ -129,29 +129,43 @@ const JOIN_OPENS_MINUTES = Math.round(JOIN_WINDOW_OPENS_BEFORE_MS / 60_000);
 
 const TUTOR_UNKNOWN = "This session can't be opened right now.";
 const FAMILY_UNAVAILABLE = "This session isn't available right now.";
+const PRIVACY_PATH = "Manage → Privacy";
 
 /**
- * One line per (reason, audience). `{name}` is the learner's name.
+ * One entry per reason, one line per audience. `{name}` is the learner's name.
  * Family lines never reveal org-internal state (org status, instructor
  * membership): those collapse to the generic family line.
  * `scheduler` falls back to the tutor line where it has no short form.
+ * `card` is the full "what to do next" text of the tutor callout on the student
+ * page (one string per paragraph); a reason without `card` shows its tutor line.
  */
 export const ENTRY_BLOCK_COPY: Record<
   EntryBlockReason,
-  { tutor: string; family: string; scheduler?: string }
+  { tutor: string; family: string; scheduler?: string; card?: readonly string[] }
 > = {
   unclaimed: {
     tutor: "{name} hasn't connected their Mynk account yet.",
     family: FAMILY_UNAVAILABLE,
     scheduler: "Waiting on the family",
+    card: [
+      "Before you can start a session, the student's parent must claim this account and set privacy preferences.",
+    ],
   },
   consent_missing_self: {
     tutor: "{name} hasn't finished privacy preferences yet.",
-    family: "Finish privacy preferences (Manage → Privacy) to join.",
+    family: `Finish privacy preferences (${PRIVACY_PATH}) to join.`,
+    card: [
+      "This learner's privacy preferences are not complete. You cannot start a session until they finish them.",
+      `They finish privacy preferences under ${PRIVACY_PATH} in their Mynk account.`,
+    ],
   },
   consent_missing_parent: {
     tutor: "The parent hasn't finished privacy preferences yet.",
     family: "Finish privacy preferences for {name} to join.",
+    card: [
+      "A parent account is connected, but privacy preferences are not complete. You cannot start a session until the parent finishes them.",
+      "Ask the parent to sign in to their Mynk account and complete privacy preferences for this learner. They can find this under their child's profile in Account.",
+    ],
   },
   live_off: {
     tutor: "Live sessions are off in {name}'s privacy settings.",
@@ -183,6 +197,60 @@ export const ENTRY_BLOCK_COPY: Record<
 
 /** Appended to the online-off line when the room can still be opened in person. */
 export const ENTRY_IN_PERSON_STILL_OPEN = "You can still open the room in person.";
+
+/** The visible name of a control a blocked card stands in for. One title per control. */
+export type EntryControl = "start" | "openRoom";
+
+export const ENTRY_CONTROL_LABEL: Record<"openRoom", string> = { openRoom: "Open room" };
+
+/** Card heading: names the control the family or tutor cannot use. */
+export const ENTRY_CARD_TITLE: Record<EntryControl, string> = {
+  start: "Start whiteboard session unavailable",
+  openRoom: `${ENTRY_CONTROL_LABEL.openRoom} unavailable`,
+};
+
+/**
+ * The next-step paragraph under the `unclaimed` card. `**bold**` and `{accountLink}`
+ * are markers the card renders (bold text, a link to Account & sharing).
+ */
+export const ENTRY_UNCLAIMED_NEXT_STEP = {
+  withBanner:
+    "Use the **claim link** banner above to create and copy an invite, or open {accountLink} for details.",
+  claimInvites: "Open {accountLink} to create a claim invite or check connection status.",
+  noInvites:
+    "Parent account linking is not enabled on this site yet. Open {accountLink} for more information.",
+} as const;
+
+/** Paragraphs of the tutor callout for a reason (its `card` text, else its one tutor line). */
+export function entryCardParagraphs(reason: EntryBlockReason, learnerName: string): string[] {
+  const card = (ENTRY_BLOCK_COPY[reason] ?? ENTRY_BLOCK_COPY.unknown).card;
+  return card ? [...card] : [entryBlockCopy(reason, "tutor", learnerName)];
+}
+
+/**
+ * The only reasons a family ever receives. Every other reason (org suspended,
+ * instructor removed, erasure, unclaimed) is internal state the family has no
+ * business learning, and its family line is the generic one anyway, so it
+ * collapses to `unknown` before it leaves the server.
+ */
+const FAMILY_VISIBLE_REASONS: ReadonlySet<EntryBlockReason> = new Set<EntryBlockReason>([
+  "consent_missing_self",
+  "consent_missing_parent",
+  "live_off",
+  "not_yet",
+  "unknown",
+]);
+
+export function familySafeReason(reason: EntryBlockReason): EntryBlockReason {
+  return FAMILY_VISIBLE_REASONS.has(reason) ? reason : "unknown";
+}
+
+/** The entry state as a family may see it: internal reasons collapsed to `unknown`. */
+export function familySafeEntryState(state: SessionEntryState): SessionEntryState {
+  const safe = (decision: EntryDecision): EntryDecision =>
+    decision.allowed ? { allowed: true } : { allowed: false, reason: familySafeReason(decision.reason) };
+  return { online: safe(state.online), inPerson: safe(state.inPerson) };
+}
 
 /** The line for a reason. Unknown reason codes (stale client) render the generic line, never blank. */
 export function entryBlockCopy(

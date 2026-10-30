@@ -12,10 +12,14 @@
 
 import {
   ENTRY_BLOCK_COPY,
+  ENTRY_CARD_TITLE,
   ENTRY_IN_PERSON_STILL_OPEN,
   ENTRY_UNAVAILABLE,
   decisionReason,
   entryBlockCopy,
+  entryCardParagraphs,
+  familySafeEntryState,
+  familySafeReason,
   sessionEntryState,
   tutorControlState,
   type EntryBlockReason,
@@ -267,5 +271,65 @@ describe("entry copy (every reason, every audience, never blank)", () => {
     expect(entryBlockCopy("live_off", "tutor", "   ")).toBe(
       "Live sessions are off in The learner's privacy settings."
     );
+  });
+});
+
+describe("family-safe reasons (a family never learns org-internal state)", () => {
+  const INTERNAL: EntryBlockReason[] = [
+    "org_inactive",
+    "instructor_not_admitted",
+    "erasure_pending",
+    "unclaimed",
+  ];
+
+  it.each(INTERNAL)("%s collapses to the generic reason", (reason) => {
+    expect(familySafeReason(reason)).toBe("unknown");
+    expect(familySafeEntryState(both(reason))).toEqual(both("unknown"));
+  });
+
+  it.each(["consent_missing_self", "consent_missing_parent", "live_off", "not_yet", "unknown"] as const)(
+    "%s is something the family can act on or already sees, and stays",
+    (reason) => {
+      expect(familySafeReason(reason)).toBe(reason);
+    }
+  );
+
+  it("keeps allowed decisions allowed and collapses only the blocked mode", () => {
+    expect(familySafeEntryState({ online: no("live_off"), inPerson: OK })).toEqual({
+      online: no("live_off"),
+      inPerson: OK,
+    });
+    expect(familySafeEntryState({ online: OK, inPerson: OK })).toEqual({ online: OK, inPerson: OK });
+  });
+
+  it("an unrecognised reason (stale code) collapses too, never passes through", () => {
+    expect(familySafeReason("from_the_future" as EntryBlockReason)).toBe("unknown");
+  });
+});
+
+describe("one copy table: the tutor callout text lives in ENTRY_BLOCK_COPY", () => {
+  it("the three callout reasons carry their paragraphs in the table (hand-written from the spec)", () => {
+    expect(entryCardParagraphs("consent_missing_self", "Maya")).toEqual([
+      "This learner's privacy preferences are not complete. You cannot start a session until they finish them.",
+      "They finish privacy preferences under Manage → Privacy in their Mynk account.",
+    ]);
+    expect(entryCardParagraphs("consent_missing_parent", "Maya")).toEqual([
+      "A parent account is connected, but privacy preferences are not complete. You cannot start a session until the parent finishes them.",
+      "Ask the parent to sign in to their Mynk account and complete privacy preferences for this learner. They can find this under their child's profile in Account.",
+    ]);
+    expect(entryCardParagraphs("unclaimed", "Maya")).toEqual([
+      "Before you can start a session, the student's parent must claim this account and set privacy preferences.",
+    ]);
+  });
+
+  it("a reason without callout text shows its one tutor line, with the name filled in", () => {
+    expect(entryCardParagraphs("live_off", "Maya")).toEqual([
+      "Live sessions are off in Maya's privacy settings.",
+    ]);
+  });
+
+  it("the card heading names the control it stands in for", () => {
+    expect(ENTRY_CARD_TITLE.start).toBe("Start whiteboard session unavailable");
+    expect(ENTRY_CARD_TITLE.openRoom).toBe("Open room unavailable");
   });
 });

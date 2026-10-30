@@ -1344,6 +1344,14 @@ Deferral ledger; prompt fix landed — recheck PASS.
 
 ### Consent collection & enforcement
 
+**[P1][CONSENT][ORG-W4] Entry refusals read the rule, then act: loader/Start TOCTOU (2026-10-30, org W4 review).** `startWhiteboardSession` and the schedule bridge load the entry state (`loadSessionEntryState`), then write in a separate step. A family that flips "Allow online sessions" off, or a tutor whose org admission changes, between the read and the PENDING→ACTIVE update can still be let through (or refused) on the old answer. Closed by consent wave **C3a**: the rule is evaluated twice inside one transaction (`startSessionTx`) and the Start throws and rolls back if the second read disagrees (`consent-wave-plan.md` § 3.6 step 4a). Do not patch it separately before C3a.
+
+**[P2][ORG-W4] A stale Open room click on a suspended org throws "Scheduled session not found." instead of the reason (2026-10-30, org W4 review).** Open room is a plain `<form action={openScheduledWhiteboardSession}>`. If the org was suspended (or the instructor removed) after the page loaded, the bridge's admission check returns `not_found` and the action throws, so the tutor lands on the error boundary with "Scheduled session not found." and not the `org_inactive` / `instructor_not_admitted` line the refreshed page would show. The entry rule is already the source of the reason; the fix is to have the action return the reason to the form (or redirect back with it) instead of throwing. Rare (stale tab only); not in W4 scope.
+
+**[P2][CONSENT] Dead `assertConsentFromLiveRecord` and `LIVE_RECORD_DENIAL_COPY.allowLiveSession` (2026-10-30, org W4 review).** After W4 the schedule bridge refuses through `sessionEntryState`, so `assertConsentFromLiveRecord(…, "allowLiveSession")` and the `allowLiveSession` entry of `LIVE_RECORD_DENIAL_COPY` in `src/lib/consent-scope.ts` have no product caller (only `allowNoteSending` is still used, by the notes email path). Delete the `allowLiveSession` branch and copy in consent wave **C5**, with `assertConsentRecordExists` (no alias survives; `consent-wave-plan.md` § 2.4, SF1). Until then the copy there is not shown to anyone.
+
+**[P1][CONSENT][ORG-W4] Server refusal message vs client format for `consentRecord` (2026-10-30).** `entryRefusalError` now throws `ConsentError("consentRecord", <ENTRY_BLOCK_COPY tutor line>)`, the same words the disabled control shows. `formatConsentActionError` still renders every `consentRecord` error as the older `CONSENT_RECORD_TUTOR_MESSAGE` plus the Parent-account hint, so the Start button's red text and the waiting room keep the old sentence. C3a removes `assertConsentRecordExists` from Start; make `formatConsentActionError` show the thrown message for `consentRecord` in the same wave and delete `CONSENT_RECORD_TUTOR_MESSAGE`.
+
 **[P0][CONSENT] CONSENT-COLLECTION-COMPLETENESS (CC-1/CC-2)**  
 Remainder: Playwright gap **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE**.
 

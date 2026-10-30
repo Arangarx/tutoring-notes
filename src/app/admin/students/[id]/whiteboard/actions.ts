@@ -45,6 +45,7 @@ import type { EntryBlockReason } from "@/lib/scheduling/session-entry";
 import {
   entryRefusalError,
   loadSessionEntryState,
+  orgAdmissionFailureReason,
 } from "@/lib/scheduling/session-entry-loader";
 import { orgInstructorAdmitted, withOrgRowLock } from "@/lib/org-scope";
 import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
@@ -317,6 +318,9 @@ export async function startWhiteboardSession(
       tutorTimezone: adminBillingDefaults?.tutorTimezone ?? null,
     },
   };
+  // Why a Start that changed nothing changed nothing (logged below). `not_pending`
+  // = the session was already ACTIVE / ended; the org codes = the admission no-op.
+  let noopReason: "not_pending" | "org_inactive" | "instructor_not_admitted" = "not_pending";
   const result = orgOwned
     ? await withOrgRowLock(studentForConsent.organizationId as string, async (tx) => {
         const admitted = await orgInstructorAdmitted(
@@ -324,7 +328,13 @@ export async function startWhiteboardSession(
           studentForConsent.organizationId as string,
           session.adminUserId
         );
-        if (!admitted) return { count: 0 };
+        if (!admitted) {
+          noopReason = await orgAdmissionFailureReason(
+            tx,
+            studentForConsent.organizationId as string
+          );
+          return { count: 0 };
+        }
         if (entryRefusal) {
           const phase = await tx.whiteboardSession.findUnique({
             where: { id: whiteboardSessionId },
@@ -353,7 +363,7 @@ export async function startWhiteboardSession(
     );
   } else {
     console.info(
-      `[slc] wbsid=${whiteboardSessionId} action=session_start_noop`
+      `[slc] wbsid=${whiteboardSessionId} action=session_start_noop reason=${noopReason}`
     );
   }
 

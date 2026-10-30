@@ -209,6 +209,7 @@ export default async function StudentDetailPage({
               <SessionEntryBlocked
                 size="card"
                 reason={openRoomBlockedReason}
+                control="openRoom"
                 audience="tutor"
                 learnerName={student.name}
                 studentId={student.id}

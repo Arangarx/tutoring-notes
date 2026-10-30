@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import {
   seedBridgeScheduledSession,
+  seedOrgBookedFamilyAppointment,
 } from "./wb-org-qol-bridge.helpers";
 import {
   seedParentAccountHolder,
@@ -393,40 +394,48 @@ test.describe("org QoL schedule bridge", () => {
     }
   );
 
-  test.describe("Join inactive when live consent is off", () => {
+  // Online sessions off (Andrew 2026-10-29, Decision 5): the parent's "Allow online
+  // sessions" switch governs ONLINE only. Two independent tests, one per audience, so
+  // each half can be proven red on its own.
+  async function seedOnlineOffAppointment() {
+    await seedParentAccountHolder();
+    const adminUserId = await seedTestAdmin();
+    const fx = await seedParentConsentFixture({ adminUserId });
+    const prisma = new PrismaClient();
+    try {
+      await prisma.consentRecord.create({
+        data: {
+          learnerProfileId: fx.learnerProfileId,
+          adminUserId: fx.adminUserId,
+          version: 1,
+          allowLiveSession: false,
+          allowAudioRecording: false,
+          allowWhiteboardRecording: false,
+          allowNoteSending: true,
+          setByAccountHolderId: fx.accountHolderId,
+          captureMethod: "electronic",
+        },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+    const sched = await seedBridgeScheduledSession({
+      adminUserId: fx.adminUserId,
+      studentId: fx.studentId,
+      learnerProfileId: fx.learnerProfileId,
+      accountHolderId: fx.accountHolderId,
+      startsInMs: 5 * 60_000,
+    });
+    return { fx, sched };
+  }
+
+  test.describe("Online sessions off: the family's Join is refused", () => {
     test.use({ storageState: PARENT_STATE });
     test(
-      "Join and Open room stay inactive when live session consent is off",
+      "online sessions off: the family's Join is disabled and says why",
       { tag: [TAG.WB_CHROME] },
-      async ({ page, browser }) => {
-        await seedParentAccountHolder();
-        const adminUserId = await seedTestAdmin();
-        const fx = await seedParentConsentFixture({ adminUserId });
-        const prisma = new PrismaClient();
-        try {
-          await prisma.consentRecord.create({
-            data: {
-              learnerProfileId: fx.learnerProfileId,
-              adminUserId: fx.adminUserId,
-              version: 1,
-              allowLiveSession: false,
-              allowAudioRecording: false,
-              allowWhiteboardRecording: false,
-              allowNoteSending: true,
-              setByAccountHolderId: fx.accountHolderId,
-              captureMethod: "electronic",
-            },
-          });
-        } finally {
-          await prisma.$disconnect();
-        }
-        const sched = await seedBridgeScheduledSession({
-          adminUserId: fx.adminUserId,
-          studentId: fx.studentId,
-          learnerProfileId: fx.learnerProfileId,
-          accountHolderId: fx.accountHolderId,
-          startsInMs: 5 * 60_000,
-        });
+      async ({ page }) => {
+        const { sched } = await seedOnlineOffAppointment();
         await page.goto("/account/dashboard", { waitUntil: "domcontentloaded" });
         const row = page.getByTestId(`upcoming-session-row-${sched.scheduledSessionId}`);
         const joinBtn = row.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`);
@@ -440,32 +449,28 @@ test.describe("org QoL schedule bridge", () => {
           "Live sessions are off in privacy settings."
         );
         await expect(page).toHaveURL(/\/account\/dashboard/);
+      }
+    );
+  });
 
-        const tutorContext = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
-          viewport: { width: 1280, height: 1200 },
-        });
-        const tutorPage = await tutorContext.newPage();
-        try {
-          await tutorPage.goto(`/admin/students/${fx.studentId}`, {
-            waitUntil: "domcontentloaded",
-          });
-          const openBtns = tutorPage.getByTestId(
-            `open-scheduled-room-${sched.scheduledSessionId}`
-          );
-          await expect(openBtns.first()).toBeVisible({ timeout: 15_000 });
-          // Online sessions off blocks ONLINE only (Andrew 2026-10-29, Decision 5): the
-          // tutor can still open the room in person, so Open room is a live submit
-          // control and the reason sits under it. There is exactly one per appointment.
-          await expect(openBtns).toHaveCount(1);
-          await expect(openBtns.first()).toBeEnabled();
-          await expect(openBtns.first()).toHaveAttribute("type", "submit");
-          await expect(
-            tutorPage.getByTestId(`open-scheduled-room-reason-${sched.scheduledSessionId}`)
-          ).toContainText("You can still open the room in person.");
-        } finally {
-          await tutorContext.close();
-        }
+  test.describe("Online sessions off: the tutor can still open the room in person", () => {
+    test.use({ storageState: "tests/integration/.auth/tutor.json" });
+    test(
+      "online sessions off: the tutor's Open room stays available for in person, with the reason under it",
+      { tag: [TAG.WB_CHROME] },
+      async ({ page }) => {
+        const { fx, sched } = await seedOnlineOffAppointment();
+        await page.goto(`/admin/students/${fx.studentId}`, { waitUntil: "domcontentloaded" });
+        const openBtns = page.getByTestId(`open-scheduled-room-${sched.scheduledSessionId}`);
+        await expect(openBtns.first()).toBeVisible({ timeout: 15_000 });
+        // Online sessions off blocks ONLINE only: Open room is a live submit control
+        // (in person is allowed) and the reason sits under it. One per appointment.
+        await expect(openBtns).toHaveCount(1);
+        await expect(openBtns.first()).toBeEnabled();
+        await expect(openBtns.first()).toHaveAttribute("type", "submit");
+        await expect(
+          page.getByTestId(`open-scheduled-room-reason-${sched.scheduledSessionId}`)
+        ).toContainText("You can still open the room in person.");
       }
     );
   });
@@ -524,6 +529,85 @@ test.describe("org QoL schedule bridge", () => {
         ).toContainText("Finish privacy preferences for");
       }
     );
+
+    test(
+      "no privacy record and outside the Join window: the family sees the consent reason, not 'Join opens'",
+      { tag: [TAG.ORG, TAG.WB_CHROME] },
+      async ({ page }) => {
+        await seedParentAccountHolder();
+        const adminUserId = await seedTestAdmin();
+        const fx = await seedParentConsentFixture({ adminUserId });
+        // No consent record, and the appointment is 2 hours away (window closed).
+        const sched = await seedBridgeScheduledSession({
+          adminUserId: fx.adminUserId,
+          studentId: fx.studentId,
+          learnerProfileId: fx.learnerProfileId,
+          accountHolderId: fx.accountHolderId,
+          startsInMs: 2 * 60 * 60_000,
+        });
+        await page.goto("/account/dashboard");
+        const joinBtn = page.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`);
+        await expect(joinBtn).toBeDisabled({ timeout: 15_000 });
+        const reason = page.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`);
+        // A family that must act (finish privacy preferences) is told that, not "wait".
+        await expect(reason).toHaveText(`Finish privacy preferences for ${fx.learnerName} to join.`);
+        await expect(reason).not.toContainText("Join opens");
+      }
+    );
+
+    // The org-internal state behind a blocked appointment (suspended org, removed
+    // instructor) is the org's business. A family sees one generic line, and the
+    // reason code is not shipped to their browser (HTML, attributes, or the RSC payload).
+    for (const scenario of [
+      { name: "the organization is suspended", orgStatus: "suspended", instructorRemoved: false },
+      { name: "the instructor was removed", orgStatus: "active", instructorRemoved: true },
+    ] as const) {
+      test(
+        `org-booked appointment where ${scenario.name}: the family sees the generic line and no org-internal reason is sent`,
+        { tag: [TAG.ORG, TAG.WB_CHROME] },
+        async ({ page }) => {
+          const accountHolderId = await seedParentAccountHolder();
+          const fx = await seedOrgBookedFamilyAppointment({
+            accountHolderId,
+            orgStatus: scenario.orgStatus,
+            instructorRemoved: scenario.instructorRemoved,
+          });
+
+          const response = await page.goto("/account/dashboard", {
+            waitUntil: "domcontentloaded",
+          });
+          const row = page.getByTestId(`upcoming-session-row-${fx.scheduledSessionId}`);
+          const joinBtn = row.getByTestId(`join-scheduled-session-${fx.scheduledSessionId}`);
+          await expect(joinBtn).toBeDisabled({ timeout: 15_000 });
+          await expect(
+            row.getByTestId(`join-scheduled-reason-${fx.scheduledSessionId}`)
+          ).toHaveText("This session isn't available right now.");
+
+          // Everything the server sent: the navigation HTML (it embeds the RSC payload),
+          // the rendered DOM, and a direct RSC fetch of the same page.
+          const navigationText = (await response?.text()) ?? "";
+          const domHtml = await page.content();
+          const rsc = await page.request.get("/account/dashboard", { headers: { RSC: "1" } });
+          const rscText = await rsc.text();
+          expect(navigationText.length, "navigation response captured").toBeGreaterThan(1_000);
+          expect(rscText, "RSC response carries this appointment").toContain(fx.scheduledSessionId);
+          for (const [label, body] of [
+            ["navigation response", navigationText],
+            ["DOM", domHtml],
+            ["RSC response", rscText],
+          ] as const) {
+            for (const secret of [
+              "org_inactive",
+              "instructor_not_admitted",
+              "This organization isn't active right now.",
+              "You're not an active instructor in this organization.",
+            ]) {
+              expect(body, `${label} must not contain "${secret}"`).not.toContain(secret);
+            }
+          }
+        }
+      );
+    }
 
     test(
       "Join turns on by itself when the window opens, and the reason line goes away",

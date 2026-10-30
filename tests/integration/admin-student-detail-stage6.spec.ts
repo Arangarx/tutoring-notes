@@ -349,6 +349,9 @@ test.describe("Admin student detail — stage 6", () => {
       await expect(callout).toBeVisible();
       await expect(callout).toHaveAttribute("data-entry-reason", "consent_missing_parent");
       await expect(callout).toContainText("A parent account is connected, but privacy preferences are not complete");
+      // The card stands in for Open room, so it says Open room: not the Start button's name.
+      await expect(callout).toContainText("Open room unavailable");
+      await expect(callout).not.toContainText("Start whiteboard session unavailable");
       // No second, silent control for the same appointment.
       await expect(page.getByTestId(`open-scheduled-room-${appointmentId}`)).toHaveCount(0);
       await expect(page.getByTestId("start-whiteboard-session-btn")).toHaveCount(0);
@@ -363,10 +366,31 @@ test.describe("Admin student detail — stage 6", () => {
       const studentId = await seedReadyStudent(adminUserId, "No Record Start Student", "none");
 
       await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
-      const callout = page.getByTestId("student-main-control").getByTestId("start-wb-consent-callout");
+      const main = page.getByTestId("student-main-control");
+      const callout = main.getByTestId("start-wb-consent-callout");
       await expect(callout).toBeVisible();
       await expect(callout).toHaveAttribute("data-entry-reason", "consent_missing_parent");
       await expect(page.getByTestId("start-whiteboard-session-btn")).toHaveCount(0);
+
+      // Behavior, by what a person can see and do (not by test ids): the callout says
+      // what is wrong and what to do about it, names the control it replaced, and the
+      // control area offers nothing that could start a session.
+      await expect(callout).toContainText("Start whiteboard session unavailable");
+      await expect(callout).toContainText(
+        "A parent account is connected, but privacy preferences are not complete. You cannot start a session until the parent finishes them."
+      );
+      await expect(callout).toContainText(
+        "Ask the parent to sign in to their Mynk account and complete privacy preferences for this learner."
+      );
+      await expect(main.getByRole("button", { name: /start/i })).toHaveCount(0);
+      await expect(main.getByRole("link", { name: /start/i })).toHaveCount(0);
+      // Nothing in the control area is clickable at all, and no session exists.
+      await expect(
+        main.locator("button, a[href], [role='button'], input[type='submit']")
+      ).toHaveCount(0);
+      expect(
+        await withPrisma((prisma) => prisma.whiteboardSession.count({ where: { studentId } }))
+      ).toBe(0);
     }
   );
 

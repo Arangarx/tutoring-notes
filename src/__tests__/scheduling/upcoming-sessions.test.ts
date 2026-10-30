@@ -180,4 +180,82 @@ describe("listUpcomingForStudent / listUpcomingForLearnerProfiles", () => {
       inPerson: { allowed: true },
     });
   });
+  // A family must never receive org-internal state (org suspended, instructor removed)
+  // in the rows that become component props. The tutor side keeps the real reason.
+  it.each([
+    { name: "org suspended", status: "suspended" as const, removed: false, tutorReason: "org_inactive" },
+    { name: "instructor removed", status: "active" as const, removed: true, tutorReason: "instructor_not_admitted" },
+  ])("family rows collapse org-internal reasons ($name); org-side keeps the reason", async (c) => {
+    const instructor = await db.adminUser.create({
+      data: {
+        email: `${uniq("fam-org-instr")}@example.com`,
+        role: "TUTOR",
+        approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
+        isTestAccount: false,
+      },
+    });
+    const org = await db.organization.create({
+      data: {
+        name: `Org ${uniq("fam-org")}`,
+        status: c.status,
+        timezone: "America/Denver",
+        createdByOperatorId: "org-operator@example.com",
+        members: {
+          create: [
+            { adminUserId: instructor.id, roles: ["instructor"], removedAt: c.removed ? new Date() : null },
+          ],
+        },
+      },
+    });
+    const ah = await db.accountHolder.create({
+      data: { email: `${uniq("fam-org-ah")}@example.com`, emailVerifiedAt: new Date() },
+    });
+    const profile = await db.learnerProfile.create({
+      data: { accountHolderId: ah.id, displayName: "Org Kid", isSelfLearner: false },
+    });
+    const student = await db.student.create({
+      data: { name: "Org Kid", adminUserId: null, organizationId: org.id, learnerProfileId: profile.id },
+    });
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId: profile.id,
+        adminUserId: null,
+        organizationId: org.id,
+        version: 1,
+        allowLiveSession: true,
+        allowAudioRecording: true,
+        allowWhiteboardRecording: true,
+        allowNoteSending: true,
+        setByAccountHolderId: ah.id,
+      },
+    });
+    const startAt = new Date(Date.now() + 5 * 60_000);
+    await db.scheduledSession.create({
+      data: {
+        adminUserId: instructor.id,
+        studentId: student.id,
+        date: new Date(Date.UTC(2026, 9, 6)),
+        startTime: "10:00",
+        endTime: "11:00",
+        startAt,
+        endAt: new Date(startAt.getTime() + 60 * 60_000),
+        plannedDurationMinutes: 60,
+        subject: "Org family",
+      },
+    });
+
+    const familyRows = await listUpcomingForLearnerProfiles([profile.id]);
+    expect(familyRows).toHaveLength(1);
+    // Spec: the generic family reason only, in both modes.
+    expect(familyRows[0]!.entry).toEqual({
+      online: { allowed: false, reason: "unknown" },
+      inPerson: { allowed: false, reason: "unknown" },
+    });
+    // The serialized rows (what ships as props) carry no org-internal code.
+    expect(JSON.stringify(familyRows)).not.toMatch(/org_inactive|instructor_not_admitted/);
+
+    const orgSide = await listUpcomingForStudent(instructor.id, student.id);
+    expect(orgSide[0]!.entry.online).toEqual({ allowed: false, reason: c.tutorReason });
+  });
 });

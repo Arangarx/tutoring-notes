@@ -9,7 +9,7 @@
 
 import { db, withDbRetry } from "@/lib/db";
 import { isWithinJoinWindow } from "@/lib/scheduling/join-window";
-import type { SessionEntryState } from "@/lib/scheduling/session-entry";
+import { familySafeEntryState, type SessionEntryState } from "@/lib/scheduling/session-entry";
 import { loadSessionEntryStates } from "@/lib/scheduling/session-entry-loader";
 
 export type UpcomingScheduledSessionRow = {
@@ -79,19 +79,26 @@ function toRow(
   };
 }
 
+/**
+ * Attach the entry state to each kept row. For the family audience the reasons are
+ * collapsed HERE, on the server, before the rows become component props (RSC payload):
+ * a family never receives org-internal state (suspended org, removed instructor) or
+ * tutor-only codes, only the codes `familySafeReason` allows.
+ */
 async function withEntry(
   sources: UpcomingSource[],
-  now: Date
+  now: Date,
+  audience: "tutor" | "family"
 ): Promise<UpcomingScheduledSessionRow[]> {
   const kept = sources.flatMap((source) => {
     const row = toRow(source, now);
     return row ? [{ source, row }] : [];
   });
   const states = await loadSessionEntryStates(kept.map(({ source }) => source));
-  return kept.map(({ row }, index) => ({
-    ...row,
-    entry: states[index] as SessionEntryState,
-  }));
+  return kept.map(({ row }, index) => {
+    const state = states[index] as SessionEntryState;
+    return { ...row, entry: audience === "family" ? familySafeEntryState(state) : state };
+  });
 }
 
 /** Tutor student detail — future appointments for one student. */
@@ -113,7 +120,7 @@ export async function listUpcomingForStudent(
       }),
     { label: "listUpcomingForStudent" }
   );
-  return withEntry(rows, now);
+  return withEntry(rows, now, "tutor");
 }
 
 /** Family dashboards — appointments for learners this account can act for. */
@@ -137,5 +144,5 @@ export async function listUpcomingForLearnerProfiles(
       }),
     { label: "listUpcomingForLearnerProfiles" }
   );
-  return withEntry(rows, now);
+  return withEntry(rows, now, "family");
 }

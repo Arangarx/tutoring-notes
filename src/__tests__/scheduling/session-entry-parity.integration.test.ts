@@ -89,7 +89,24 @@ type Scenario = {
   onlineAccepted: boolean;
   /** Reason code the bridge logs when it refuses (omit when the org admission check refuses first). */
   bridgeLoggedReason?: EntryBlockReason;
+  /** The learner profile is tombstoned (erasure grace period). */
+  erasurePending?: boolean;
+  /**
+   * What `startWhiteboardSession` throws for each refused mode: the error name, and for
+   * consent errors the permission and (part of) the message. Hand-written from the spec.
+   */
+  startRefusal?: { name: string; permission?: string; message?: string };
+  /** Org admission no-op: Start returns without activating and the log says why. */
+  startNoopReason?: "org_inactive" | "instructor_not_admitted";
+  /** What the schedule bridge throws to a tutor it refuses (the table line the control shows). */
+  bridgeTutorRefusal?: { name: string; message?: string };
 };
+
+const CONSENT_RECORD_REFUSAL = {
+  name: "ConsentError",
+  permission: "consentRecord",
+  message: "privacy preferences must be set",
+} as const;
 
 const ALLOWED = { allowed: true } as const;
 const blocked = (reason: EntryBlockReason) => ({ allowed: false, reason }) as const;
@@ -111,6 +128,11 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: true,
     onlineAccepted: false,
     bridgeLoggedReason: "live_off",
+    startRefusal: {
+      name: "ConsentError",
+      permission: "allowLiveSession",
+      message: "Live sessions are off in Maya's privacy settings.",
+    },
   },
   {
     name: "personal, parent-held, no consent record: neither mode (16:23 lock)",
@@ -120,6 +142,11 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: false,
     onlineAccepted: false,
     bridgeLoggedReason: "consent_missing_parent",
+    startRefusal: CONSENT_RECORD_REFUSAL,
+    bridgeTutorRefusal: {
+      name: "ConsentError",
+      message: "The parent hasn't finished privacy preferences yet.",
+    },
   },
   {
     name: "personal, self-learner, no consent record: neither mode",
@@ -130,6 +157,11 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: false,
     onlineAccepted: false,
     bridgeLoggedReason: "consent_missing_self",
+    startRefusal: CONSENT_RECORD_REFUSAL,
+    bridgeTutorRefusal: {
+      name: "ConsentError",
+      message: "Maya hasn't finished privacy preferences yet.",
+    },
   },
   {
     name: "personal, unclaimed: neither mode",
@@ -140,6 +172,23 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: false,
     onlineAccepted: false,
     bridgeLoggedReason: "unclaimed",
+    startRefusal: CONSENT_RECORD_REFUSAL,
+    bridgeTutorRefusal: {
+      name: "ConsentError",
+      message: "Maya hasn't connected their Mynk account yet.",
+    },
+  },
+  {
+    name: "personal, erasure pending (profile in the grace period): neither mode",
+    kind: "personal",
+    consent: "live_on",
+    erasurePending: true,
+    state: { online: blocked("erasure_pending"), inPerson: blocked("erasure_pending") },
+    inPersonAccepted: false,
+    onlineAccepted: false,
+    bridgeLoggedReason: "erasure_pending",
+    startRefusal: { name: "ErasureAccessSuspendedError" },
+    bridgeTutorRefusal: { name: "ErasureAccessSuspendedError" },
   },
   {
     name: "org active, admitted, consent allows live: both modes in",
@@ -159,6 +208,11 @@ const SCENARIOS: Scenario[] = [
     inPersonAccepted: true,
     onlineAccepted: false,
     bridgeLoggedReason: "live_off",
+    startRefusal: {
+      name: "ConsentError",
+      permission: "allowLiveSession",
+      message: "Live sessions are off in Maya's privacy settings.",
+    },
   },
   {
     name: "org suspended: neither mode (Start is the admission no-op, bridge refuses)",
@@ -168,6 +222,7 @@ const SCENARIOS: Scenario[] = [
     state: { online: blocked("org_inactive"), inPerson: blocked("org_inactive") },
     inPersonAccepted: false,
     onlineAccepted: false,
+    startNoopReason: "org_inactive",
   },
   {
     name: "org, instructor removed: neither mode",
@@ -180,6 +235,7 @@ const SCENARIOS: Scenario[] = [
     },
     inPersonAccepted: false,
     onlineAccepted: false,
+    startNoopReason: "instructor_not_admitted",
   },
 ];
 
@@ -195,6 +251,7 @@ async function seedScenario(s: Scenario) {
           accountHolderId: ah.id,
           displayName: "Maya",
           isSelfLearner: s.selfLearner === true,
+          tombstonedAt: s.erasurePending ? new Date() : null,
         },
       })
     : null;
@@ -305,36 +362,64 @@ describe("entry rule parity: what the UI shows is what the server does", () => {
 
     // 2. Start, called directly (not through the UI), in each mode.
     mockSession(tutor.email, tutor.id);
+    const info = jest.spyOn(console, "info");
     for (const [mode, accepted] of [
       ["LIVE", s.onlineAccepted],
       ["IN_PERSON", s.inPersonAccepted],
     ] as const) {
       const row = await pendingSession(tutor.id, student.id);
-      const outcome = await startWhiteboardSession(row.id, mode).then(
-        () => "returned" as const,
-        () => "threw" as const
+      info.mockClear();
+      const thrown = await startWhiteboardSession(row.id, mode).then(
+        () => null,
+        (err: unknown) => err as Error & { permission?: string }
       );
       const after = await db.whiteboardSession.findUniqueOrThrow({ where: { id: row.id } });
       expect({ mode, activated: after.sessionPhase === "ACTIVE" }).toEqual({
         mode,
         activated: accepted,
       });
-      // A refusal is visible to the tutor (it throws) except for the org admission
-      // no-op, which is pinned by the org-removal tests and never activates.
-      if (!accepted && s.kind === "personal") expect(outcome).toBe("threw");
+      if (!accepted && s.startRefusal) {
+        // The tutor is told why, and the reason is the spec's, not just "it threw".
+        expect({ mode, name: thrown?.name }).toEqual({ mode, name: s.startRefusal.name });
+        if (s.startRefusal.permission) {
+          expect(thrown?.permission).toBe(s.startRefusal.permission);
+        }
+        if (s.startRefusal.message) expect(thrown?.message).toContain(s.startRefusal.message);
+      } else if (!accepted) {
+        // The org admission no-op: nothing thrown, nothing activated, and the log says why.
+        expect(thrown).toBeNull();
+        const lines = info.mock.calls.map((call) => String(call[0]));
+        expect(
+          lines.some(
+            (line) =>
+              line.includes(`wbsid=${row.id}`) &&
+              line.includes("action=session_start_noop") &&
+              line.includes(`reason=${s.startNoopReason}`)
+          )
+        ).toBe(true);
+      } else {
+        expect(thrown).toBeNull();
+      }
     }
 
     // 3. The schedule bridge: tutor opens in person, learner joins online.
     const warn = jest.spyOn(console, "warn");
-    const tutorResult = await getOrCreateWhiteboardForSchedule(
+    const tutorOutcome = await getOrCreateWhiteboardForSchedule(
       sched.id,
       { kind: "tutor", adminUserId: tutor.id },
       "rid-parity-tutor"
     ).then(
-      (r) => (r.ok ? ("in" as const) : ("out" as const)),
-      () => "out" as const
+      (r) => ({ result: r.ok ? ("in" as const) : ("out" as const), error: null }),
+      (err: unknown) => ({ result: "out" as const, error: err as Error })
     );
-    expect(tutorResult).toBe(s.inPersonAccepted ? "in" : "out");
+    expect(tutorOutcome.result).toBe(s.inPersonAccepted ? "in" : "out");
+    if (s.bridgeTutorRefusal) {
+      // The tutor sees the same words the disabled control shows (one copy table).
+      expect(tutorOutcome.error?.name).toBe(s.bridgeTutorRefusal.name);
+      if (s.bridgeTutorRefusal.message) {
+        expect(tutorOutcome.error?.message).toBe(s.bridgeTutorRefusal.message);
+      }
+    }
 
     if (profile) {
       const learnerResult = await getOrCreateWhiteboardForSchedule(
@@ -343,8 +428,18 @@ describe("entry rule parity: what the UI shows is what the server does", () => {
         "rid-parity-learner"
       );
       expect(learnerResult.ok).toBe(s.onlineAccepted);
+    } else {
+      // Unclaimed: no learner account can be the participant, so any learner principal
+      // is refused and the refusal leaves no session row behind.
+      const before = await db.whiteboardSession.count({ where: { studentId: student.id } });
+      const stranger = await getOrCreateWhiteboardForSchedule(
+        sched.id,
+        { kind: "learner", learnerProfileId: "not-this-learners-profile" },
+        "rid-parity-stranger"
+      );
+      expect(stranger.ok).toBe(false);
+      expect(await db.whiteboardSession.count({ where: { studentId: student.id } })).toBe(before);
     }
-
     // The refusal is attributable: the bridge logs the same reason code the UI showed.
     if (s.bridgeLoggedReason) {
       const lines = warn.mock.calls.map((call) => String(call[0]));
@@ -356,5 +451,59 @@ describe("entry rule parity: what the UI shows is what the server does", () => {
         )
       ).toBe(true);
     }
+  });
+});
+
+describe("Start on a session that is already ACTIVE is a no-op, whatever the rule says now", () => {
+  const ACTIVATED_AT = new Date("2026-10-20T15:00:00.000Z");
+
+  async function activeSession(adminUserId: string, studentId: string) {
+    return db.whiteboardSession.create({
+      data: {
+        adminUserId,
+        studentId,
+        consentAcknowledged: true,
+        eventsBlobUrl: "https://blob.example.com/events.json",
+        sessionPhase: "ACTIVE",
+        sessionMode: "LIVE",
+        activatedAt: ACTIVATED_AT,
+      },
+    });
+  }
+
+  it.each([
+    { name: "online sessions allowed", consent: "live_on" as const },
+    { name: "online sessions now off (a family flip after Start)", consent: "live_off" as const },
+  ])("$name: a second Start in person changes nothing and does not refuse", async ({ consent }) => {
+    const { tutor, student } = await seedScenario({
+      name: "active",
+      kind: "personal",
+      consent,
+      state: { online: ALLOWED, inPerson: ALLOWED },
+      inPersonAccepted: true,
+      onlineAccepted: true,
+    });
+    mockSession(tutor.email, tutor.id);
+    const info = jest.spyOn(console, "info");
+    const row = await activeSession(tutor.id, student.id);
+
+    // IN_PERSON on a LIVE session: the second Start must not rewrite the mode.
+    await expect(startWhiteboardSession(row.id, "IN_PERSON")).resolves.toMatchObject({ ok: true });
+    // LIVE again while online is off (second case): a no-op, not a refusal.
+    await expect(startWhiteboardSession(row.id, "LIVE")).resolves.toMatchObject({ ok: true });
+
+    const after = await db.whiteboardSession.findUniqueOrThrow({ where: { id: row.id } });
+    expect(after.sessionPhase).toBe("ACTIVE");
+    expect(after.sessionMode).toBe("LIVE");
+    expect(after.activatedAt?.toISOString()).toBe(ACTIVATED_AT.toISOString());
+    const lines = info.mock.calls.map((call) => String(call[0]));
+    expect(
+      lines.filter(
+        (line) =>
+          line.includes(`wbsid=${row.id}`) &&
+          line.includes("action=session_start_noop") &&
+          line.includes("reason=not_pending")
+      )
+    ).toHaveLength(2);
   });
 });

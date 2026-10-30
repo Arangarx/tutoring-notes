@@ -4,7 +4,11 @@ import { openScheduledWhiteboardSession } from "@/app/admin/students/[id]/whiteb
 import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
 import { Button } from "@/components/ui/button";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
-import { tutorControlState, type SessionEntryState } from "@/lib/scheduling/session-entry";
+import {
+  ENTRY_CONTROL_LABEL,
+  tutorControlState,
+  type SessionEntryState,
+} from "@/lib/scheduling/session-entry";
 
 const OPEN_ROOM_CLASS = "min-h-10 rounded-full whitespace-nowrap";
 
@@ -50,7 +54,7 @@ export function OpenScheduledRoomButton({
           aria-describedby={reasonId}
           data-testid={`open-scheduled-room-${scheduledSessionId}`}
         >
-          Open room
+          {ENTRY_CONTROL_LABEL.openRoom}
         </Button>
         {line}
       </div>
@@ -61,7 +65,7 @@ export function OpenScheduledRoomButton({
   return (
     <form action={openRoom} className="flex min-w-0 max-w-64 flex-col items-start gap-1">
       <FormSubmitButton
-        label="Open room"
+        label={ENTRY_CONTROL_LABEL.openRoom}
         pendingLabel="Opening…"
         variant="accent"
         size="sm"
