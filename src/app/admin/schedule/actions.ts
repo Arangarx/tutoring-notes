@@ -26,7 +26,8 @@ import { sessionSpanMinutes } from "@/lib/schedule/planned-end-time";
 import { toScheduledSessionView } from "@/lib/schedule/scheduled-session-mapper";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
 import { isOrgOwnedStudent, tutorAppointmentsWhere } from "@/lib/scheduling/tutor-appointments";
-import { liveEntryAllowedBatch } from "@/lib/scheduling/upcoming-sessions";
+import type { SessionEntryState } from "@/lib/scheduling/session-entry";
+import { loadSessionEntryStates } from "@/lib/scheduling/session-entry-loader";
 import {
   assertOwnsStudent,
   requireStudentScope,
@@ -159,7 +160,7 @@ async function overlapWarningFor(
 /**
  * Lists the authenticated tutor's appointments: their own private students, and
  * organization appointments assigned to them while they are an active instructor
- * (`tutorAppointmentsWhere`). Org rows carry `source` and `liveEntryAllowed`.
+ * (`tutorAppointmentsWhere`). Org rows carry `source` and `entry` (the one entry rule's answer).
  * Never selects parent email, brief, consent, or claim fields.
  */
 export async function listScheduledSessionsForTutor(
@@ -178,6 +179,7 @@ export async function listScheduledSessionsForTutor(
                 adminUserId: true,
                 organizationId: true,
                 learnerProfileId: true,
+                learnerProfile: { select: { isSelfLearner: true } },
                 organization: { select: { id: true, name: true } },
               },
             },
@@ -198,10 +200,12 @@ export async function listScheduledSessionsForTutor(
   const displayTimeZone = admin?.tutorTimezone ?? DEFAULT_TUTOR_TIMEZONE;
   const views = rows.map((row) => toScheduledSessionView(row, googleState, displayTimeZone));
   const orgRows = rows.filter((row) => isOrgOwnedStudent(row.student));
-  const orgFlags = await liveEntryAllowedBatch(orgRows);
-  const liveEntryById = new Map(orgRows.map((row, index) => [row.id, orgFlags[index]]));
+  const orgStates = await loadSessionEntryStates(orgRows);
+  const entryById = new Map<string, SessionEntryState>(
+    orgRows.map((row, index) => [row.id, orgStates[index] as SessionEntryState])
+  );
   return views.map((view) =>
-    view.source.kind === "org" ? { ...view, liveEntryAllowed: liveEntryById.get(view.id) === true } : view
+    view.source.kind === "org" ? { ...view, entry: entryById.get(view.id) } : view
   );
 }
 
@@ -422,7 +426,8 @@ export type OrganizationAppointmentRow = {
   whenLabel: string;
   subject: string;
   availability: "available" | "unavailable";
-  liveEntryAllowed: boolean;
+  /** The one entry rule's answer for opening this appointment's room. */
+  entry: SessionEntryState;
   view: ScheduledSessionView;
 };
 
@@ -460,6 +465,7 @@ export async function listScheduledSessionsForOrganization(
           adminUserId: true,
           organizationId: true,
           learnerProfileId: true,
+          learnerProfile: { select: { isSelfLearner: true } },
           organization: { select: { id: true, name: true } },
           organizationLearner: { select: { givenName: true, familyName: true } },
         },
@@ -468,7 +474,7 @@ export async function listScheduledSessionsForOrganization(
     },
   });
   const googleState: GoogleCalendarUiState = { connected: false, reconnectRequired: false };
-  const liveEntryFlags = await liveEntryAllowedBatch(rows);
+  const entryStates = await loadSessionEntryStates(rows);
   return rows.map((row, index) => {
     const learner = row.student.organizationLearner;
     const learnerName = learner
@@ -486,7 +492,7 @@ export async function listScheduledSessionsForOrganization(
       whenLabel: `${view.date} ${view.startTime}–${view.endTime}`,
       subject: row.subject,
       availability: org.status === "active" ? ("available" as const) : ("unavailable" as const),
-      liveEntryAllowed: liveEntryFlags[index] === true,
+      entry: entryStates[index] as SessionEntryState,
       view,
     };
   });

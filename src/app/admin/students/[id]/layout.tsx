@@ -91,7 +91,6 @@ export default async function StudentDetailLayout({
           learnerProfileId: lpId,
           hasInvite: false,
           latestInviteTargetKind: null,
-          consentRecordExists: false,
           pendingErasure: true,
           purgeEligibleAt: erasureState.purgeEligibleAt,
           hasOpenWhiteboardSession: false,

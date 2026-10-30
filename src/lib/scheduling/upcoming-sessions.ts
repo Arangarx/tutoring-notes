@@ -1,14 +1,16 @@
 /**
  * Upcoming scheduled appointments — shared read paths for tutor student detail
  * and family dashboards. The join window uses `isWithinJoinWindow`.
- * `liveEntryAllowed` matches whether the tutor can start a live session.
+ * `entry` is the one entry rule (`sessionEntryState`): whether, and in which
+ * mode, the room can be opened for this appointment.
  *
  * SERVER-ONLY.
  */
 
-import { resolveEffectiveConsentForStudent } from "@/lib/consent-scope";
 import { db, withDbRetry } from "@/lib/db";
 import { isWithinJoinWindow } from "@/lib/scheduling/join-window";
+import type { SessionEntryState } from "@/lib/scheduling/session-entry";
+import { loadSessionEntryStates } from "@/lib/scheduling/session-entry-loader";
 
 export type UpcomingScheduledSessionRow = {
   id: string;
@@ -18,8 +20,8 @@ export type UpcomingScheduledSessionRow = {
   studentId: string;
   learnerDisplayName: string | null;
   joinWindowOpen: boolean;
-  /** True only when the tutor can start a live session for this appointment. */
-  liveEntryAllowed: boolean;
+  /** Whether the room can be opened, online and in person, and why not. */
+  entry: SessionEntryState;
 };
 
 const upcomingSelect = {
@@ -35,7 +37,7 @@ const upcomingSelect = {
       adminUserId: true,
       organizationId: true,
       learnerProfileId: true,
-      learnerProfile: { select: { displayName: true } },
+      learnerProfile: { select: { displayName: true, isSelfLearner: true } },
     },
   },
 } as const;
@@ -52,11 +54,14 @@ type UpcomingSource = {
     adminUserId: string | null;
     organizationId: string | null;
     learnerProfileId: string | null;
-    learnerProfile: { displayName: string } | null;
+    learnerProfile: { displayName: string; isSelfLearner: boolean } | null;
   };
 };
 
-function toRow(row: UpcomingSource, now: Date): UpcomingScheduledSessionRow | null {
+function toRow(
+  row: UpcomingSource,
+  now: Date
+): Omit<UpcomingScheduledSessionRow, "entry"> | null {
   if (!row.startAt || !row.endAt) return null;
   if (row.endAt.getTime() <= now.getTime()) return null;
   return {
@@ -71,70 +76,10 @@ function toRow(row: UpcomingSource, now: Date): UpcomingScheduledSessionRow | nu
       { startAt: row.startAt, endAt: row.endAt },
       now
     ),
-    liveEntryAllowed: false,
   };
 }
 
-async function appointmentLiveEntryAllowed(input: {
-  learnerProfileId: string | null;
-  studentAdminUserId: string | null;
-  organizationId: string | null;
-  appointmentAdminUserId: string;
-}): Promise<boolean> {
-  if (!input.learnerProfileId) return false;
-  const effective = await resolveEffectiveConsentForStudent(
-    input.learnerProfileId,
-    {
-      adminUserId: input.studentAdminUserId,
-      organizationId: input.organizationId,
-    },
-    input.appointmentAdminUserId,
-    undefined,
-    "appointmentLiveEntry"
-  );
-  return effective?.allowLiveSession === true;
-}
-
-/** The fields `liveEntryAllowedBatch` needs from an appointment row. */
-export type LiveEntrySource = {
-  studentId: string;
-  adminUserId: string;
-  student: {
-    adminUserId: string | null;
-    organizationId: string | null;
-    learnerProfileId: string | null;
-  };
-};
-
-/**
- * Whether each appointment's tutor may open a live session, in input order.
- * One consent lookup per (student, tutor) pair, however many rows share it.
- * The one place that decides `liveEntryAllowed` for a list of appointments.
- */
-export async function liveEntryAllowedBatch(
-  sources: readonly LiveEntrySource[]
-): Promise<boolean[]> {
-  const cache = new Map<string, Promise<boolean>>();
-  const flags = await Promise.all(
-    sources.map((source) => {
-      const key = `${source.studentId}:${source.adminUserId}`;
-      let pending = cache.get(key);
-      if (!pending) {
-        pending = appointmentLiveEntryAllowed({
-          learnerProfileId: source.student.learnerProfileId,
-          studentAdminUserId: source.student.adminUserId,
-          organizationId: source.student.organizationId,
-          appointmentAdminUserId: source.adminUserId,
-        });
-        cache.set(key, pending);
-      }
-      return pending;
-    })
-  );
-  return flags.map((flag) => flag === true);
-}
-
-async function withLiveEntry(
+async function withEntry(
   sources: UpcomingSource[],
   now: Date
 ): Promise<UpcomingScheduledSessionRow[]> {
@@ -142,10 +87,10 @@ async function withLiveEntry(
     const row = toRow(source, now);
     return row ? [{ source, row }] : [];
   });
-  const flags = await liveEntryAllowedBatch(kept.map(({ source }) => source));
+  const states = await loadSessionEntryStates(kept.map(({ source }) => source));
   return kept.map(({ row }, index) => ({
     ...row,
-    liveEntryAllowed: flags[index] === true,
+    entry: states[index] as SessionEntryState,
   }));
 }
 
@@ -168,7 +113,7 @@ export async function listUpcomingForStudent(
       }),
     { label: "listUpcomingForStudent" }
   );
-  return withLiveEntry(rows, now);
+  return withEntry(rows, now);
 }
 
 /** Family dashboards — appointments for learners this account can act for. */
@@ -192,5 +137,5 @@ export async function listUpcomingForLearnerProfiles(
       }),
     { label: "listUpcomingForLearnerProfiles" }
   );
-  return withLiveEntry(rows, now);
+  return withEntry(rows, now);
 }

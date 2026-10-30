@@ -2,48 +2,27 @@
 
 import { useState } from "react";
 import { useHydrated } from "@/hooks/useHydrated";
+import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
 import { Button } from "@/components/ui/button";
 import {
   formatConsentActionError,
   parseConsentActionError,
 } from "@/lib/consent-action-error";
+import { tutorControlState, type SessionEntryState } from "@/lib/scheduling/session-entry";
 import { createWhiteboardSession } from "./actions";
-import { SessionStartBlockedCallout } from "./SessionStartBlockedCallout";
 
 export type StartWhiteboardSessionProps = {
   studentId: string;
-  consentRecordExists: boolean;
-  isSelfLearner: boolean;
-  studentClaimed: boolean;
-  /** ER-4 — block Start when learner is in erasure grace or post-purge. */
-  accessSuspended?: boolean;
+  /** The one entry rule's answer for this student and tutor (`loadSessionEntryState`). */
+  entry: SessionEntryState;
+  /** For `{name}` in the reason copy. */
+  learnerName: string;
   claimInvitesEnabled?: boolean;
   /** Top-of-page UnclaimedParentClaimBanner is shown — callout references it. */
   hasTopClaimBanner?: boolean;
   /** Visible label when the session can start. */
   label?: string;
 };
-
-function canStartSession(props: StartWhiteboardSessionProps): boolean {
-  if (props.accessSuspended) return false;
-  // Same gate as the student page: missing consent hides Start, including for a self-learner.
-  return props.studentClaimed && props.consentRecordExists;
-}
-
-function ErasureSuspendedCallout() {
-  return (
-    <div
-      className="rounded-2xl border border-warning/30 bg-warning/5 p-4 text-sm leading-relaxed text-muted-foreground"
-      data-testid="start-wb-erasure-callout"
-      role="status"
-    >
-      <p className="m-0 text-foreground">
-        This learner&apos;s account is deactivated pending erasure. You cannot
-        start new sessions until erasure is canceled or the grace period ends.
-      </p>
-    </div>
-  );
-}
 
 /**
  * "Start whiteboard session" button.
@@ -55,6 +34,10 @@ function ErasureSuspendedCallout() {
  *   create (PENDING) → workspace mounts with waiting overlay →
  *   tutor presses Start in the workspace → ACTIVE.
  *
+ * When neither mode can be entered the button is replaced by the reason card
+ * (`SessionEntryBlocked`). When only online is blocked the button stays and the
+ * reason shows under it (the waiting room then offers in person).
+ *
  * Legal guardrail: only the per-session in-app attestation gate is removed.
  * The canonical policy text (privacy/terms pages, consent records) is unchanged.
  */
@@ -65,15 +48,15 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
   // SSR HTML is clickable before hydration; that click never runs handleStart.
   const actionsEnabled = useHydrated();
 
-  if (!canStartSession(props)) {
-    if (props.accessSuspended) {
-      return <ErasureSuspendedCallout />;
-    }
+  const { disabledReason, onlineOnlyReason } = tutorControlState(props.entry);
+  if (disabledReason) {
     return (
-      <SessionStartBlockedCallout
+      <SessionEntryBlocked
+        size="card"
+        reason={disabledReason}
+        audience="tutor"
+        learnerName={props.learnerName}
         studentId={studentId}
-        studentClaimed={props.studentClaimed}
-        isSelfLearner={props.isSelfLearner}
         claimInvitesEnabled={props.claimInvitesEnabled ?? false}
         hasTopClaimBanner={props.hasTopClaimBanner ?? false}
       />
@@ -140,6 +123,7 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
     }
   };
 
+  const reasonId = "start-whiteboard-session-reason";
   return (
     <>
       <Button
@@ -148,10 +132,23 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
         className="min-h-11 whitespace-nowrap"
         onClick={handleStart}
         disabled={!actionsEnabled || pending}
+        aria-describedby={onlineOnlyReason ? reasonId : undefined}
         data-testid="start-whiteboard-session-btn"
       >
         {pending ? "Starting\u2026" : (props.label ?? "Start whiteboard session")}
       </Button>
+      {onlineOnlyReason ? (
+        <SessionEntryBlocked
+          size="line"
+          id={reasonId}
+          reason={onlineOnlyReason}
+          audience="tutor"
+          learnerName={props.learnerName}
+          inPersonStillOpen
+          className="mt-2"
+          data-testid={reasonId}
+        />
+      ) : null}
       {error ? (
         <p
           role="alert"

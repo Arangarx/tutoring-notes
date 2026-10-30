@@ -15,12 +15,14 @@ import {
   orgLog,
 } from "@/lib/org-scope";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import { entryBlockCopy } from "@/lib/scheduling/session-entry";
 
 /** Implementation cap. Andrew did not choose this number. Tests import it from here. */
 export const ORG_LEARNER_BRIEF_MAX_CHARS = 500;
 
-export const SCHEDULER_WAITING_ON_FAMILY = "Waiting on the family";
-export const SCHEDULER_LIVE_SESSIONS_OFF = "Live sessions are off";
+/** Scheduler short reasons come from the one entry copy table. */
+const SCHEDULER_WAITING_ON_FAMILY = entryBlockCopy("unclaimed", "scheduler", "");
+const SCHEDULER_LIVE_SESSIONS_OFF = entryBlockCopy("live_off", "scheduler", "");
 
 export class OrgLearnerError extends Error {
   readonly code:

@@ -3,6 +3,7 @@
  */
 
 const dbUpdateManyMock = jest.fn();
+const dbSessionFindUniqueMock = jest.fn();
 const dbStudentFindUniqueMock = jest.fn();
 const dbAdminUserFindUniqueMock = jest.fn();
 const dbErasureJobFindFirstMock = jest.fn();
@@ -14,6 +15,7 @@ jest.mock("@/lib/db", () => ({
   db: {
     whiteboardSession: {
       updateMany: (...args: unknown[]) => dbUpdateManyMock(...args),
+      findUnique: (...args: unknown[]) => dbSessionFindUniqueMock(...args),
     },
     student: {
       findUnique: (...args: unknown[]) => dbStudentFindUniqueMock(...args),
@@ -61,11 +63,15 @@ const ownedSession = {
   consentAcknowledged: true,
 };
 
-function mockConsentRecordExists() {
+function mockConsentRecordExists(allowLiveSession = true) {
   dbStudentFindUniqueMock.mockResolvedValue({
+    name: "Maya",
     erasedAt: null,
+    adminUserId: "admin_1",
+    organizationId: null,
     learnerProfileId: "lp-1",
     learnerProfile: {
+      isSelfLearner: false,
       tombstonedAt: null,
       accountHolderId: null,
       accountHolder: { tombstonedAt: null },
@@ -73,12 +79,18 @@ function mockConsentRecordExists() {
   });
   dbConsentRecordFindFirstMock.mockResolvedValue({
     id: "cr-1",
+    allowLiveSession,
+    allowAudioRecording: true,
+    allowWhiteboardRecording: true,
+    allowNoteSending: true,
     learnerProfile: { isSelfLearner: false },
   });
 }
 
 beforeEach(() => {
   dbUpdateManyMock.mockReset();
+  dbSessionFindUniqueMock.mockReset();
+  dbSessionFindUniqueMock.mockResolvedValue({ sessionPhase: "PENDING" });
   mockLogProductEvent.mockReset();
   assertOwnsWhiteboardSessionMock.mockReset();
   dbStudentFindUniqueMock.mockReset();
@@ -156,5 +168,50 @@ describe("startWhiteboardSession", () => {
 
     await expect(startWhiteboardSession("wb_42")).rejects.toThrow(ConsentError);
     expect(dbUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("no consent record refuses an IN_PERSON start too (Andrew 2026-10-28 lock)", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbConsentRecordFindFirstMock.mockResolvedValue(null);
+    dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: false });
+
+    await expect(startWhiteboardSession("wb_42", "IN_PERSON")).rejects.toThrow(ConsentError);
+    expect(dbUpdateManyMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("startWhiteboardSession — online sessions off (server enforces the entry rule)", () => {
+  beforeEach(() => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbUpdateManyMock.mockResolvedValue({ count: 1 });
+    mockConsentRecordExists(false);
+  });
+
+  it("refuses a LIVE start called directly, with the live-sessions reason, and flips nothing", async () => {
+    const error = await startWhiteboardSession("wb_42", "LIVE").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ConsentError);
+    expect((error as ConsentError).permission).toBe("allowLiveSession");
+    expect((error as Error).message).toBe("Live sessions are off in Maya's privacy settings.");
+    expect(dbUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses the default (no mode given) start as LIVE", async () => {
+    await expect(startWhiteboardSession("wb_42")).rejects.toThrow(ConsentError);
+    expect(dbUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("still starts an IN_PERSON session (Decision 5: the switch governs online only)", async () => {
+    const result = await startWhiteboardSession("wb_42", "IN_PERSON");
+    expect(result).toEqual({ ok: true, phase: "active" });
+    expect(dbUpdateManyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw for a session that is already past PENDING (idempotent end/active stay safe)", async () => {
+    dbSessionFindUniqueMock.mockResolvedValue({ sessionPhase: "ACTIVE" });
+    dbUpdateManyMock.mockResolvedValue({ count: 0 });
+    await expect(startWhiteboardSession("wb_42", "LIVE")).resolves.toEqual({
+      ok: true,
+      phase: "active",
+    });
   });
 });

@@ -23,6 +23,8 @@ export interface FormSubmitButtonProps {
   disabled?: boolean;
   /** Passed to the native `<button>` (a11y). */
   "aria-label"?: string;
+  /** Id of the visible line that explains this control (a11y; never tooltip-only). */
+  "aria-describedby"?: string;
   "data-testid"?: string;
 }
 
@@ -41,6 +43,7 @@ export function FormSubmitButton({
   size,
   disabled,
   "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
   "data-testid": testId,
 }: FormSubmitButtonProps) {
   const { pending } = useFormStatus();
@@ -53,6 +56,7 @@ export function FormSubmitButton({
       size={size}
       disabled={pending || !!disabled}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       aria-busy={pending}
       data-testid={testId}
       className={cn("min-h-11", className?.includes("btn") ? undefined : className)}

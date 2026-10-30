@@ -1,3 +1,5 @@
+import type { SessionEntryState } from "@/lib/scheduling/session-entry";
+
 /** Calendar integration panel row — real Google state + static placeholders. */
 export type CalendarProvider = "google" | "apple" | "other";
 
@@ -50,8 +52,8 @@ export type ScheduledSessionView = {
   /** Always set by the mapper. Org rows are read-only on the tutor Schedule. */
   source: ScheduledSessionSource;
   /**
-   * Org rows on the tutor Schedule only: whether consent allows opening the room.
-   * Absent on personal rows, which start from the student page.
+   * Org rows on the tutor Schedule only: the one entry rule's answer (online and in
+   * person) for opening the room. Absent on personal rows, which start from the student page.
    */
-  liveEntryAllowed?: boolean;
+  entry?: SessionEntryState;
 };

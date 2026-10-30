@@ -11,6 +11,11 @@ type UpcomingSessionsCardProps = {
   mode: "tutor" | "family";
   realm?: "admin" | "account" | "student";
   emptyMessage?: string;
+  /**
+   * An appointment whose control is already the page's main control. Its row is
+   * listed without an action, so one appointment never shows two Open room controls.
+   */
+  promotedId?: string | null;
 };
 
 export function UpcomingSessionsCard({
@@ -20,6 +25,7 @@ export function UpcomingSessionsCard({
   mode,
   realm = mode === "tutor" ? "admin" : "account",
   emptyMessage = "No upcoming sessions scheduled.",
+  promotedId = null,
 }: UpcomingSessionsCardProps) {
   return (
     <Card
@@ -52,17 +58,19 @@ export function UpcomingSessionsCard({
                   mode === "family" ? session.learnerDisplayName ?? undefined : undefined
                 }
                 action={
-                  mode === "tutor" ? (
+                  session.id === promotedId ? null : mode === "tutor" ? (
                     <OpenScheduledRoomButton
                       scheduledSessionId={session.id}
-                      liveEntryAllowed={session.liveEntryAllowed}
+                      entry={session.entry}
+                      learnerName={session.learnerDisplayName ?? ""}
                     />
                   ) : (
                     <JoinScheduledSessionButton
                       scheduledSessionId={session.id}
                       startAtIso={session.startAt.toISOString()}
                       endAtIso={session.endAt.toISOString()}
-                      liveEntryAllowed={session.liveEntryAllowed}
+                      entry={session.entry}
+                      learnerName={session.learnerDisplayName ?? ""}
                     />
                   )
                 }

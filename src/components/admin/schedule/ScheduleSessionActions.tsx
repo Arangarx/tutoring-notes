@@ -3,6 +3,7 @@ import { PlayIcon } from "lucide-react";
 import { CreateSessionDialog } from "@/components/admin/schedule/CreateSessionDialog";
 import { OpenScheduledRoomButton } from "@/components/scheduling/OpenScheduledRoomButton";
 import { Button } from "@/components/ui/button";
+import { ENTRY_UNAVAILABLE } from "@/lib/scheduling/session-entry";
 import { cn } from "@/lib/utils";
 import type { ScheduledSessionView, ScheduleStudentOption } from "@/lib/schedule/types";
 
@@ -30,7 +31,10 @@ export function ScheduleSessionActions({
       {isOrg ? (
         <OpenScheduledRoomButton
           scheduledSessionId={session.id}
-          liveEntryAllowed={session.liveEntryAllowed === true}
+          // The list loader always sets `entry` on org rows; a missing one shows the
+          // generic reason rather than a blank disabled button.
+          entry={session.entry ?? ENTRY_UNAVAILABLE}
+          learnerName={session.studentName}
         />
       ) : (
         <>

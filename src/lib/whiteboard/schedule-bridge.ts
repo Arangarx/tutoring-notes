@@ -16,11 +16,14 @@
  * SERVER-ONLY.
  */
 
-import { assertConsentFromLiveRecord, ConsentError } from "@/lib/consent-scope";
 import { db, withDbRetry } from "@/lib/db";
 import { orgInstructorAdmitted } from "@/lib/org-scope";
 import { decideAhJoin } from "@/lib/join-scope";
 import { isWithinJoinWindow } from "@/lib/scheduling/join-window";
+import {
+  entryRefusalError,
+  loadSessionEntryState,
+} from "@/lib/scheduling/session-entry-loader";
 import { createWhiteboardSessionCore } from "@/lib/whiteboard/create-session-core";
 
 export type ScheduleBridgePrincipal =
@@ -50,6 +53,7 @@ export async function getOrCreateWhiteboardForSchedule(
           endAt: true,
           student: {
             select: {
+              name: true,
               adminUserId: true,
               organizationId: true,
               learnerProfile: {
@@ -103,14 +107,34 @@ export async function getOrCreateWhiteboardForSchedule(
       if (!decision.ok) return deny("not_found", decision.reason);
     }
     if (!isWithinJoinWindow(sched, now)) return deny("not_yet", "outside_window");
-    // Before creating anything: a learner the parent has not allowed into live
-    // sessions must not leave a session row + blob behind.
-    try {
-      await assertConsentFromLiveRecord(sched.studentId, sched.adminUserId, "allowLiveSession");
-    } catch (err) {
-      if (err instanceof ConsentError) return deny("not_available", "consent_live_session");
-      throw err;
+  }
+
+  // Before creating anything: the one entry rule (D3), called in place. A learner
+  // (always remote, so `online`) the parent has not allowed into live sessions, or a
+  // tutor with no usable consent (`inPerson`: the room is reachable in person), must
+  // not leave a session row + blob behind. The refusal logs the same reason code the UI shows.
+  const entryMode = principal.kind === "tutor" ? "inPerson" : "online";
+  const entry = await loadSessionEntryState({
+    studentId: sched.studentId,
+    adminUserId: sched.adminUserId,
+    student: {
+      adminUserId: sched.student.adminUserId,
+      organizationId: sched.student.organizationId,
+      learnerProfileId: sched.student.learnerProfile?.id ?? null,
+      learnerProfile: sched.student.learnerProfile
+        ? { isSelfLearner: sched.student.learnerProfile.isSelfLearner }
+        : null,
+    },
+  });
+  const decision = entry[entryMode];
+  if (!decision.allowed) {
+    console.warn(
+      `[slc] action=schedule_bridge_refused scheduledSessionId=${scheduledSessionId} principal=${principal.kind} mode=${entryMode} reason=${decision.reason} rid=${rid}`
+    );
+    if (principal.kind === "tutor") {
+      throw entryRefusalError(decision.reason, sched.student.name);
     }
+    return { ok: false, reason: "not_available" };
   }
 
   try {

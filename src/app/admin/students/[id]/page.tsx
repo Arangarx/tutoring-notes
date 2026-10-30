@@ -4,7 +4,15 @@ import { db } from "@/lib/db";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
 import { UpcomingSessionsCard } from "@/components/scheduling/UpcomingSessionsCard";
 import { OpenScheduledRoomButton } from "@/components/scheduling/OpenScheduledRoomButton";
+import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
 import { listUpcomingForStudent } from "@/lib/scheduling/upcoming-sessions";
+import {
+  ENTRY_UNAVAILABLE,
+  tutorControlState,
+  type EntryBlockReason,
+  type SessionEntryState,
+} from "@/lib/scheduling/session-entry";
+import { loadSessionEntryState } from "@/lib/scheduling/session-entry-loader";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/SectionCard";
@@ -112,14 +120,6 @@ export default async function StudentDetailPage({
   });
 
   const learnerProfileId = student.learnerProfileId;
-  const consentRecordExists =
-    learnerProfileId && scopedAdminUserId
-      ? !!(await db.consentRecord.findFirst({
-          where: { learnerProfileId, adminUserId: scopedAdminUserId },
-          orderBy: { version: "desc" },
-          select: { id: true },
-        }))
-      : false;
 
   const upcomingScheduledSessions =
     scopedAdminUserId !== null
@@ -132,7 +132,6 @@ export default async function StudentDetailPage({
     learnerProfileId,
     hasInvite: latestInvite !== null,
     latestInviteTargetKind: latestInvite?.inviteTargetKind ?? null,
-    consentRecordExists,
     pendingErasure: erasureState.kind === "pending_grace",
     purgeEligibleAt:
       erasureState.kind === "pending_grace" ? erasureState.purgeEligibleAt : null,
@@ -144,7 +143,28 @@ export default async function StudentDetailPage({
   const lastNote = student.notes[0];
   const openSessions = student.whiteboardSessions.length;
   const resumeSessionId = student.whiteboardSessions[0]?.id ?? null;
-  const nextAppointmentId = upcomingScheduledSessions[0]?.id ?? null;
+  const nextAppointment = upcomingScheduledSessions[0] ?? null;
+  const openRoomControl =
+    view.mainButton === "open_room" && nextAppointment ? nextAppointment : null;
+
+  const openRoomBlockedReason: EntryBlockReason | null = openRoomControl
+    ? tutorControlState(openRoomControl.entry).disabledReason
+    : null;
+
+  // Start session (no appointment): the same entry rule the appointment rows use.
+  let startEntry: SessionEntryState = ENTRY_UNAVAILABLE;
+  if (view.mainButton === "start_session" && scopedAdminUserId) {
+    startEntry = await loadSessionEntryState({
+      studentId: id,
+      adminUserId: scopedAdminUserId,
+      student: {
+        adminUserId: student.adminUserId,
+        organizationId: student.organizationId,
+        learnerProfileId,
+        learnerProfile: lp ? { isSelfLearner: lp.isSelfLearner } : null,
+      },
+    });
+  }
 
   const meta = (
     <>
@@ -182,21 +202,32 @@ export default async function StudentDetailPage({
             <ResumeWhiteboardSessionLink studentId={student.id} sessionId={resumeSessionId} />
           </div>
         ) : null}
-        {view.mainButton === "open_room" && nextAppointmentId ? (
+        {openRoomControl ? (
           <div data-testid="student-main-control">
-            <OpenScheduledRoomButton
-              scheduledSessionId={nextAppointmentId}
-              liveEntryAllowed={upcomingScheduledSessions[0]?.liveEntryAllowed === true}
-            />
+            {openRoomBlockedReason ? (
+              // Blocked by consent / claim / erasure: say why in full, once.
+              <SessionEntryBlocked
+                size="card"
+                reason={openRoomBlockedReason}
+                audience="tutor"
+                learnerName={student.name}
+                studentId={student.id}
+              />
+            ) : (
+              <OpenScheduledRoomButton
+                scheduledSessionId={openRoomControl.id}
+                entry={openRoomControl.entry}
+                learnerName={student.name}
+              />
+            )}
           </div>
         ) : null}
         {view.mainButton === "start_session" ? (
           <div data-testid="student-main-control">
             <StartWhiteboardSession
               studentId={student.id}
-              consentRecordExists={consentRecordExists}
-              isSelfLearner={student.learnerProfile?.isSelfLearner ?? false}
-              studentClaimed={!!student.learnerProfileId}
+              entry={startEntry}
+              learnerName={student.name}
               label="Start session"
             />
           </div>
@@ -244,6 +275,7 @@ export default async function StudentDetailPage({
       <UpcomingSessionsCard
         mode="tutor"
         sessions={upcomingScheduledSessions}
+        promotedId={openRoomControl?.id ?? null}
         description="Open the live room when it is time for the appointment."
       />
 

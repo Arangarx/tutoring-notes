@@ -22,7 +22,6 @@ const READY = {
   learnerProfileId: "lp-1",
   hasInvite: true,
   latestInviteTargetKind: "child_learner" as const,
-  consentRecordExists: true,
   pendingErasure: false,
   purgeEligibleAt: null,
   hasOpenWhiteboardSession: false,
@@ -57,7 +56,6 @@ describe("studentDetailView", () => {
         learnerProfileId: null,
         hasInvite: false,
         latestInviteTargetKind: null,
-        consentRecordExists: false,
       }),
       studentDetailView({
         ...READY,
@@ -75,7 +73,6 @@ describe("studentDetailView", () => {
       studentDetailView({
         ...READY,
         learnerProfileId: "lp-1",
-        consentRecordExists: false,
         hasOpenWhiteboardSession: true,
       }).mainButton
     ).toBe("resume");
@@ -88,7 +85,6 @@ describe("studentDetailView", () => {
         learnerProfileId: null,
         hasInvite: false,
         latestInviteTargetKind: null,
-        consentRecordExists: false,
       }).criticalCard
     ).toEqual({ kind: "setup", text: BEFORE_INVITE });
 
@@ -98,7 +94,6 @@ describe("studentDetailView", () => {
         learnerProfileId: null,
         hasInvite: true,
         latestInviteTargetKind: "self_learner",
-        consentRecordExists: false,
       }).criticalCard
     ).toEqual({ kind: "setup", text: SELF_LEARNER });
 
@@ -108,7 +103,6 @@ describe("studentDetailView", () => {
         learnerProfileId: null,
         hasInvite: true,
         latestInviteTargetKind: "child_learner",
-        consentRecordExists: false,
       }).criticalCard
     ).toEqual({ kind: "setup", text: PARENT });
 
@@ -118,7 +112,6 @@ describe("studentDetailView", () => {
         learnerProfileId: null,
         hasInvite: true,
         latestInviteTargetKind: null,
-        consentRecordExists: false,
       }).criticalCard
     ).toEqual({ kind: "setup", text: PARENT });
   });
@@ -126,7 +119,6 @@ describe("studentDetailView", () => {
   test("a claimed profile with no consent record does not repeat a privacy card", () => {
     const view = studentDetailView({
       ...READY,
-      consentRecordExists: false,
     });
     // The Session card owns this message (blocked callout). A second card would
     // say it twice.
@@ -140,7 +132,6 @@ describe("studentDetailView", () => {
       learnerProfileId: null,
       hasInvite: false,
       latestInviteTargetKind: null,
-      consentRecordExists: false,
       pendingErasure: true,
       purgeEligibleAt: "2026-11-01T15:00:00.000Z",
     });

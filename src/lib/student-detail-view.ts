@@ -26,7 +26,6 @@ export type StudentDetailViewInput = {
   learnerProfileId: string | null;
   hasInvite: boolean;
   latestInviteTargetKind: StudentDetailInviteKind;
-  consentRecordExists: boolean;
   pendingErasure: boolean;
   purgeEligibleAt: string | null;
   hasOpenWhiteboardSession: boolean;

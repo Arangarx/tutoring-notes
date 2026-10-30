@@ -131,8 +131,14 @@ describe("J2 org rows in my Schedule list", () => {
       organizationName: org.name,
     });
     expect(org1?.studentName).toBe("Mary Ann Lee");
-    expect(org1?.liveEntryAllowed).toBe(true);
-    expect(rows.find((row) => row.id === noConsentRow.id)?.liveEntryAllowed).toBe(false);
+    expect(org1?.entry).toEqual({ online: { allowed: true }, inPerson: { allowed: true } });
+    // Online sessions off: online refused with the reason, in person still reachable.
+    expect(rows.find((row) => row.id === noConsentRow.id)?.entry).toEqual({
+      online: { allowed: false, reason: "live_off" },
+      inPerson: { allowed: true },
+    });
+    // Personal rows start from the student page, so they carry no entry state.
+    expect(rows.find((row) => row.id === personalRow.id)?.entry).toBeUndefined();
     expect(rows.find((row) => row.id === personalRow.id)?.source).toEqual({ kind: "personal" });
 
     const blob = JSON.stringify(rows);

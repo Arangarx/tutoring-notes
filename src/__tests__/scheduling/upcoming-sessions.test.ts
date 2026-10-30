@@ -43,7 +43,11 @@ describe("listUpcomingForStudent / listUpcomingForLearnerProfiles", () => {
     expect(rows[0]!.joinWindowOpen).toBe(
       now >= startAt.getTime() - JOIN_WINDOW_OPENS_BEFORE_MS
     );
-    expect(rows[0]!.liveEntryAllowed).toBe(false);
+    // No LearnerProfile yet (unclaimed): neither mode can be entered, and it says why.
+    expect(rows[0]!.entry).toEqual({
+      online: { allowed: false, reason: "unclaimed" },
+      inPerson: { allowed: false, reason: "unclaimed" },
+    });
 
     await db.scheduledSession.delete({ where: { id: sched.id } });
     await db.student.delete({ where: { id: student.id } });
@@ -86,7 +90,11 @@ describe("listUpcomingForStudent / listUpcomingForLearnerProfiles", () => {
     const rows = await listUpcomingForLearnerProfiles([profile.id]);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.joinWindowOpen).toBe(false);
-    expect(rows[0]!.liveEntryAllowed).toBe(false);
+    // Claimed by a parent, but no ConsentRecord: blocked in both modes, parent wording.
+    expect(rows[0]!.entry).toEqual({
+      online: { allowed: false, reason: "consent_missing_parent" },
+      inPerson: { allowed: false, reason: "consent_missing_parent" },
+    });
 
     await db.scheduledSession.deleteMany({ where: { studentId: student.id } });
     await db.student.delete({ where: { id: student.id } });
@@ -95,7 +103,7 @@ describe("listUpcomingForStudent / listUpcomingForLearnerProfiles", () => {
     await db.adminUser.delete({ where: { id: tutor.id } });
   });
 
-  it("allows live entry only when the latest consent allows live sessions", async () => {
+  it("reports entry per mode from the latest consent (online off blocks online only)", async () => {
     const tutor = await db.adminUser.create({
       data: {
         email: `${uniq("live-up")}@example.com`,
@@ -162,7 +170,14 @@ describe("listUpcomingForStudent / listUpcomingForLearnerProfiles", () => {
 
     const allowedRows = await listUpcomingForStudent(tutor.id, allowedStudent.id);
     const blockedRows = await listUpcomingForLearnerProfiles([blocked.id]);
-    expect(allowedRows[0]!.liveEntryAllowed).toBe(true);
-    expect(blockedRows[0]!.liveEntryAllowed).toBe(false);
+    expect(allowedRows[0]!.entry).toEqual({
+      online: { allowed: true },
+      inPerson: { allowed: true },
+    });
+    // Online sessions off blocks ONLINE only; in person stays reachable (Decision 5).
+    expect(blockedRows[0]!.entry).toEqual({
+      online: { allowed: false, reason: "live_off" },
+      inPerson: { allowed: true },
+    });
   });
 });

@@ -39,9 +39,13 @@ import {
   assertEffectiveConsent,
   assertConsentRecordExists,
   ConsentError,
-  resolveEffectiveConsentForStudent,
   resolveModeAwareAudioRecordingConsent,
 } from "@/lib/consent-scope";
+import type { EntryBlockReason } from "@/lib/scheduling/session-entry";
+import {
+  entryRefusalError,
+  loadSessionEntryState,
+} from "@/lib/scheduling/session-entry-loader";
 import { orgInstructorAdmitted, withOrgRowLock } from "@/lib/org-scope";
 import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
 import {
@@ -232,7 +236,13 @@ export async function startWhiteboardSession(
     () =>
       db.student.findUnique({
         where: { id: session.studentId },
-        select: { learnerProfileId: true, adminUserId: true, organizationId: true },
+        select: {
+          name: true,
+          learnerProfileId: true,
+          adminUserId: true,
+          organizationId: true,
+          learnerProfile: { select: { isSelfLearner: true } },
+        },
       }),
     { label: "startWhiteboardSession.studentForConsent" }
   );
@@ -264,15 +274,28 @@ export async function startWhiteboardSession(
     { label: "startWhiteboardSession.adminBillingDefaults" }
   );
 
-  const effective =
-    learnerProfileId != null
-      ? await resolveEffectiveConsentForStudent(
-          learnerProfileId,
-          studentForConsent,
-          session.adminUserId
-        )
-      : null;
   const requestedMode = sessionMode ?? "LIVE";
+  // The one entry rule (org UX W4 / consent plan D3), called in place: the server
+  // refuses a mode the rule does not allow, whatever the client sent or showed.
+  // Missing record / unclaimed already threw above (`assertConsentRecordExists`,
+  // moved into this rule by consent wave C3a). Org inactive / instructor removed
+  // stay the admission no-op inside the org lock (pinned by org-removal tests).
+  const entryState = studentForConsent
+    ? await loadSessionEntryState({
+        studentId: session.studentId,
+        adminUserId: session.adminUserId,
+        student: studentForConsent,
+      })
+    : null;
+  const entryDecision = entryState?.[requestedMode === "IN_PERSON" ? "inPerson" : "online"];
+  const entryRefusal =
+    entryDecision && !entryDecision.allowed ? entryDecision.reason : null;
+  const refuseEntry = (): never => {
+    console.warn(
+      `[slc] wbsid=${whiteboardSessionId} action=session_start_refused mode=${requestedMode} reason=${entryRefusal}`
+    );
+    throw entryRefusalError(entryRefusal as EntryBlockReason, studentForConsent?.name ?? "");
+  };
   const orgOwned =
     studentForConsent?.organizationId != null && studentForConsent.adminUserId == null;
   const pendingUpdate = {
@@ -294,9 +317,6 @@ export async function startWhiteboardSession(
       tutorTimezone: adminBillingDefaults?.tutorTimezone ?? null,
     },
   };
-  const refuseLive =
-    requestedMode !== "IN_PERSON" && effective?.allowLiveSession === false;
-
   const result = orgOwned
     ? await withOrgRowLock(studentForConsent.organizationId as string, async (tx) => {
         const admitted = await orgInstructorAdmitted(
@@ -305,32 +325,22 @@ export async function startWhiteboardSession(
           session.adminUserId
         );
         if (!admitted) return { count: 0 };
-        if (refuseLive) {
+        if (entryRefusal) {
           const phase = await tx.whiteboardSession.findUnique({
             where: { id: whiteboardSessionId },
             select: { sessionPhase: true },
           });
-          if (phase?.sessionPhase === "PENDING") {
-            throw new ConsentError(
-              "allowLiveSession",
-              "Parental consent for live sessions has not been granted."
-            );
-          }
+          if (phase?.sessionPhase === "PENDING") refuseEntry();
         }
         return tx.whiteboardSession.updateMany(pendingUpdate);
       })
     : await (async () => {
-        if (refuseLive) {
+        if (entryRefusal) {
           const phase = await db.whiteboardSession.findUnique({
             where: { id: whiteboardSessionId },
             select: { sessionPhase: true },
           });
-          if (phase?.sessionPhase === "PENDING") {
-            throw new ConsentError(
-              "allowLiveSession",
-              "Parental consent for live sessions has not been granted."
-            );
-          }
+          if (phase?.sessionPhase === "PENDING") refuseEntry();
         }
         return withDbRetry(() => db.whiteboardSession.updateMany(pendingUpdate), {
           label: "startWhiteboardSession",

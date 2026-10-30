@@ -98,7 +98,7 @@ export type WorkspacePreviousSessionPreviewProps = {
   reviewHref: string;
 } & Pick<
   StartWhiteboardSessionProps,
-  "consentRecordExists" | "isSelfLearner" | "studentClaimed"
+  "entry" | "learnerName"
 >;
 
 const PVW = (): string => Math.random().toString(36).slice(2, 7);
@@ -423,9 +423,8 @@ export function WorkspacePreviousSessionPreview(
         >
           <StartWhiteboardSession
             studentId={studentId}
-            consentRecordExists={props.consentRecordExists}
-            isSelfLearner={props.isSelfLearner}
-            studentClaimed={props.studentClaimed}
+            entry={props.entry}
+            learnerName={props.learnerName}
           />
           <Link href={reviewHref} className="btn">
             Open full replay
