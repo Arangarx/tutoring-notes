@@ -1509,6 +1509,18 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
         const lineCount = await expectBadgeLabelInside(badge, narrow);
         expect(lineCount, `${narrow} long organization badge wraps to two lines`).toBeGreaterThanOrEqual(2);
 
+        // 374px is still below the 375px shared-line band, so the badge stays
+        // stacked and must use the moderate radius. A pill here clips a wrap.
+        await page.setViewportSize({ width: 374, height: 812 });
+        const at374 = `${view} @ 374px`;
+        await name.scrollIntoViewIfNeeded();
+        await expectBadgeOnOwnLine(page, row, at374);
+        const linesAt374 = await expectBadgeLabelInside(badge, at374);
+        expect(
+          linesAt374,
+          `${at374} long organization badge wraps to two lines`
+        ).toBeGreaterThanOrEqual(2);
+
         for (const width of SAME_LINE_WIDTHS) {
           await page.setViewportSize({ width, height: 812 });
           const label = `${view} @ ${width}px`;
