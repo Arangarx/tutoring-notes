@@ -1,4 +1,11 @@
-import type { OrgRole } from "@prisma/client";
+import type { OrgRole, Prisma } from "@prisma/client";
+
+/** RED-COMMIT STUB: matches every member row. Replaced in the implementation commit. */
+export function activeOrgInstructorMemberWhere(
+  adminUserId?: string
+): Prisma.OrganizationMemberWhereInput {
+  return { ...(adminUserId ? { adminUserId } : {}) };
+}
 
 /** Owner, admin, and scheduler. Instructors are not included. */
 export const STAFF_HOME_ROLES: readonly OrgRole[] = ["owner", "admin", "scheduler"];

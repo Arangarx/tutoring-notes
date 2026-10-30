@@ -420,7 +420,7 @@ describe("org appointment writes", () => {
     expect(await db.scheduledSession.count({ where: { studentId: student.id } })).toBe(3);
   });
 
-  it("does not list an org appointment on the tutor schedule, and the org list does", async () => {
+  it("lists an org appointment on the assigned instructor's schedule, and the org list does", async () => {
     const { org, owner } = await seedOrg("active");
     const instructor = await seedMember(org.id, ["instructor"]);
     const scheduler = await seedMember(org.id, ["scheduler"]);
@@ -457,9 +457,12 @@ describe("org appointment writes", () => {
       connected: false,
       reconnectRequired: false,
     });
-    expect(tutorList.map((row) => row.id)).not.toContain(created.id);
-    expect(tutorList.map((row) => row.studentId)).toEqual([personal.id]);
-
+    // W3 (Andrew decision 3): the assigned instructor's Schedule lists the org appointment.
+    const personalRow = await db.scheduledSession.findFirstOrThrow({
+      where: { studentId: personal.id },
+    });
+    expect(tutorList.map((row) => row.id).sort()).toEqual([created.id, personalRow.id].sort());
+    expect(tutorList.find((row) => row.id === created.id)?.source.kind).toBe("org");
     mockSession(scheduler.email, scheduler.id);
     const { listScheduledSessionsForOrganization } = await import("@/app/admin/schedule/actions");
     const orgList = await listScheduledSessionsForOrganization(org.id);

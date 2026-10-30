@@ -790,3 +790,370 @@ test.describe("instructor scoping on the org page", { tag: [TAG.ORG, TAG.WB_PRES
     }
   });
 });
+
+
+/**
+ * W3: an org appointment shows on the assigned instructor's Schedule and ICS feed.
+ * Oracles are seeded ids and strings. Appointments are seeded for today, in the
+ * browser's own zone, so the Month day detail and the Agenda both list them.
+ */
+test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TAG.WB_PRESENCE] }, () => {
+  const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  /** An instructor whose Schedule is displayed in this machine's zone. */
+  async function seedInstructor(
+    organizationId: string,
+    label: string,
+    roles: Array<"owner" | "admin" | "scheduler" | "instructor"> = ["instructor"]
+  ) {
+    const admin = await seedMember(organizationId, label, roles);
+    await prisma.adminUser.update({ where: { id: admin.id }, data: { tutorTimezone: LOCAL_TZ } });
+    return admin;
+  }
+
+  async function seedToday(adminUserId: string, studentId: string, subject: string, hour: number) {
+    const now = new Date();
+    const startAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0);
+    return prisma.scheduledSession.create({
+      data: {
+        adminUserId,
+        studentId,
+        date: new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())),
+        startTime: `${String(hour).padStart(2, "0")}:00`,
+        endTime: `${String(hour + 1).padStart(2, "0")}:00`,
+        startAt,
+        endAt: new Date(startAt.getTime() + 60 * 60 * 1000),
+        plannedDurationMinutes: 60,
+        subject,
+      },
+    });
+  }
+
+  async function seedFeedToken(adminUserId: string): Promise<string> {
+    const token = uniq("w3-feed").replace(/[^a-z0-9]/gi, "");
+    await prisma.calendarFeedToken.create({ data: { adminUserId, token } });
+    return token;
+  }
+
+  async function readFeed(
+    page: import("@playwright/test").Page,
+    token: string
+  ): Promise<{ text: string; uids: string[] }> {
+    const response = await page.request.get(`/api/calendar/ics/${token}`);
+    expect(response.status()).toBe(200);
+    const text = (await response.text()).replace(/\r\n[ \t]/g, "");
+    const uids = [...text.matchAll(/^UID:(.+)@usemynk\.com\r?$/gm)].map((match) => match[1]).sort();
+    return { text, uids };
+  }
+
+  async function openSchedule(
+    browser: Browser,
+    admin: { id: string; email: string; displayName: string | null }
+  ) {
+    const session = await signIn(browser, {
+      id: admin.id,
+      email: admin.email,
+      displayName: admin.displayName ?? admin.email,
+    });
+    await session.page.goto("/admin/schedule");
+    expect(session.page.url(), "session cookie was rejected").not.toContain("/login");
+    await expect(session.page.getByTestId("schedule-page")).toBeVisible();
+    return session;
+  }
+
+  const rowFor = (page: import("@playwright/test").Page, id: string) =>
+    page.locator(`[data-session-id="${id}"]`);
+
+  async function showAgenda(page: import("@playwright/test").Page) {
+    await page.getByTestId("schedule-agenda-tab").click();
+    await expect(page.getByTestId("schedule-agenda-row").first()).toBeVisible();
+  }
+
+  async function agendaIds(page: import("@playwright/test").Page): Promise<string[]> {
+    await showAgenda(page);
+    const ids = await page
+      .getByTestId("schedule-agenda-row")
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-session-id") ?? ""));
+    return ids.sort();
+  }
+
+  test("a scheduler-booked appointment appears on the instructor's Schedule with the organization badge", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const learner = await seedLearner(org.id, owner.id);
+    const appointment = await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+
+    const { context, page } = await openSchedule(browser, instructor);
+    try {
+      // Month day detail (today is selected by default).
+      const monthRow = rowFor(page, appointment.id);
+      await expect(monthRow).toContainText(learner.fullName);
+      await expect(monthRow.getByTestId("org-badge")).toHaveText(`via ${org.name}`);
+
+      await showAgenda(page);
+      const agendaRow = rowFor(page, appointment.id);
+      await expect(agendaRow).toContainText(learner.fullName);
+      await expect(agendaRow.getByTestId("org-badge")).toHaveText(`via ${org.name}`);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("the instructor cannot edit or delete an org appointment from Schedule", async ({ browser }) => {
+    test.setTimeout(180_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const ownerInstructor = await seedInstructor(org.id, "Olive Owner", ["owner", "instructor"]);
+    const learner = await seedLearner(org.id, owner.id);
+
+    for (const actor of [instructor, ownerInstructor]) {
+      const personalStudent = await prisma.student.create({
+        data: { name: `Pat ${uniq("personal")}`, adminUserId: actor.id },
+      });
+      const orgRow = await seedToday(actor.id, learner.student.id, "Algebra", 10);
+      const personalRow = await seedToday(actor.id, personalStudent.id, "Chemistry", 12);
+
+      const { context, page } = await openSchedule(browser, actor);
+      try {
+        for (const view of ["month", "agenda"] as const) {
+          if (view === "agenda") await showAgenda(page);
+          const org$ = rowFor(page, orgRow.id);
+          await expect(org$).toBeVisible();
+          await expect(org$.getByRole("button", { name: "Edit" })).toHaveCount(0);
+          await expect(org$.getByTestId("schedule-edit-session")).toHaveCount(0);
+          await expect(org$.getByTestId("schedule-start-session")).toHaveCount(0);
+          await expect(org$.getByTestId(`open-scheduled-room-${orgRow.id}`)).toBeVisible();
+
+          const personal$ = rowFor(page, personalRow.id);
+          await expect(personal$.getByRole("button", { name: "Edit" })).toBeVisible();
+          await expect(personal$.getByTestId("schedule-start-session")).toBeVisible();
+        }
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  test("another instructor's Schedule does not show it", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const rival = await seedInstructor(org.id, "Otto Rival");
+    const learner = await seedLearner(org.id, owner.id);
+    const subject = `Secret ${uniq("subject")}`;
+    const appointment = await seedToday(instructor.id, learner.student.id, subject, 10);
+
+    const mine = await openSchedule(browser, instructor);
+    try {
+      await expect(rowFor(mine.page, appointment.id)).toBeVisible();
+    } finally {
+      await mine.context.close();
+    }
+
+    const theirs = await openSchedule(browser, rival);
+    try {
+      await theirs.page.getByTestId("schedule-agenda-tab").click();
+      await expect(theirs.page.getByText("No upcoming sessions scheduled.")).toBeVisible();
+      const html = await theirs.page.content();
+      expect(html).not.toContain(appointment.id);
+      expect(html).not.toContain(learner.fullName);
+      expect(html).not.toContain(subject);
+      expect(html).not.toContain(org.name);
+    } finally {
+      await theirs.context.close();
+    }
+  });
+
+  test("a removed instructor's Schedule and feed lose org rows", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const learner = await seedLearner(org.id, owner.id);
+    const personalStudent = await prisma.student.create({
+      data: { name: `Pat ${uniq("personal")}`, adminUserId: instructor.id },
+    });
+    const orgRow = await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+    const personalRow = await seedToday(instructor.id, personalStudent.id, "Chemistry", 12);
+    const token = await seedFeedToken(instructor.id);
+
+    const { context, page } = await openSchedule(browser, instructor);
+    try {
+      await expect(rowFor(page, orgRow.id)).toBeVisible();
+      expect((await readFeed(page, token)).uids).toEqual([orgRow.id, personalRow.id].sort());
+
+      await prisma.organizationMember.update({
+        where: {
+          organizationId_adminUserId: { organizationId: org.id, adminUserId: instructor.id },
+        },
+        data: { removedAt: new Date() },
+      });
+
+      await page.goto("/admin/schedule");
+      await expect(rowFor(page, personalRow.id)).toBeVisible();
+      await expect(rowFor(page, orgRow.id)).toHaveCount(0);
+      expect(await page.content()).not.toContain(learner.fullName);
+      expect((await readFeed(page, token)).uids).toEqual([personalRow.id]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("the ICS feed and the Schedule list the same appointments", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const first = await seedOrg();
+    const second = await seedOrg();
+    const instructor = await seedInstructor(first.org.id, "Ida Instructor");
+    await prisma.organizationMember.create({
+      data: { organizationId: second.org.id, adminUserId: instructor.id, roles: ["instructor"] },
+    });
+    const rival = await seedInstructor(first.org.id, "Otto Rival");
+    const learnerFirst = await seedLearner(first.org.id, first.owner.id);
+    const learnerSecond = await seedLearner(second.org.id, second.owner.id);
+    const learnerRival = await seedLearner(first.org.id, first.owner.id);
+    const personalStudent = await prisma.student.create({
+      data: { name: `Pat ${uniq("personal")}`, adminUserId: instructor.id },
+    });
+    const a = await seedToday(instructor.id, learnerFirst.student.id, "Algebra", 9);
+    const b = await seedToday(instructor.id, learnerSecond.student.id, "Biology", 11);
+    const c = await seedToday(instructor.id, personalStudent.id, "Chemistry", 13);
+    const distractor = await seedToday(rival.id, learnerRival.student.id, "Drama", 15);
+    const token = await seedFeedToken(instructor.id);
+    const seeded = [a.id, b.id, c.id].sort();
+
+    const { context, page } = await openSchedule(browser, instructor);
+    try {
+      const scheduleIds = await agendaIds(page);
+      const feed = await readFeed(page, token);
+      expect(scheduleIds).toEqual(seeded);
+      expect(feed.uids).toEqual(seeded);
+      expect(feed.uids).not.toContain(distractor.id);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("the feed never carries the learner's parent email, brief, or surname", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const marker = uniq("feed").replace(/[^a-z0-9]/gi, "").slice(-8);
+    const learner = await seedLearner(org.id, owner.id, true, {
+      givenName: `Gale${marker}`,
+      familyName: `Surnamezz${marker}`,
+    });
+    const brief = `brief-secret-${marker}`;
+    await prisma.organizationLearner.update({
+      where: { studentId: learner.student.id },
+      data: { brief },
+    });
+    const appointment = await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+    const token = await seedFeedToken(instructor.id);
+
+    const { context, page } = await openSchedule(browser, instructor);
+    try {
+      const feed = await readFeed(page, token);
+      expect(feed.uids).toEqual([appointment.id]);
+      expect(feed.text).toContain(`SUMMARY:Tutoring — Gale${marker} S.`);
+      expect(feed.text).not.toContain(learner.parentEmail);
+      expect(feed.text).not.toContain(brief);
+      expect(feed.text).not.toContain(`Surnamezz${marker}`);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("the personal booking picker never lists an org learner", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const learner = await seedLearner(org.id, owner.id);
+    const personalName = `Pat ${uniq("personal")}`;
+    await prisma.student.create({ data: { name: personalName, adminUserId: instructor.id } });
+    await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+
+    const { context, page } = await openSchedule(browser, instructor);
+    try {
+      await page.getByTestId("schedule-new-session").first().click();
+      await expect(page.getByTestId("schedule-create-form")).toBeVisible();
+      await page.locator("#schedule-student").click();
+      const options = page.getByRole("option");
+      await expect(options.filter({ hasText: personalName })).toHaveCount(1);
+      const labels = (await options.allInnerTexts()).map((text) => text.trim());
+      expect(labels).toEqual([personalName]);
+      expect(labels.join("|")).not.toContain(learner.fullName);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("reassigning an appointment moves it between instructors' Schedules", async ({ browser }) => {
+    test.setTimeout(180_000);
+    const { org, owner } = await seedOrg();
+    const scheduler = await seedMember(org.id, "Sam Scheduler", ["scheduler"]);
+    const ada = await seedInstructor(org.id, "Ada Reassign");
+    const bea = await seedInstructor(org.id, "Bea Reassign");
+    const learner = await seedLearner(org.id, owner.id);
+    const appointment = await seedToday(ada.id, learner.student.id, "Algebra", 10);
+
+    const staff = await signIn(browser, scheduler);
+    try {
+      await staff.page.goto(`/admin/organization/${org.id}`);
+      expect(staff.page.url(), "session cookie was rejected").not.toContain("/login");
+      await staff.page.getByTestId(`org-appointment-edit-${appointment.id}`).click();
+      await staff.page.getByTestId("schedule-instructor").click();
+      await staff.page.getByRole("option", { name: "Bea Reassign" }).click();
+      await staff.page.getByTestId("schedule-save-session").click();
+      await expect(staff.page.getByTestId("schedule-edit-form")).toBeHidden({ timeout: 30_000 });
+      await expect
+        .poll(async () => (await prisma.scheduledSession.findUniqueOrThrow({ where: { id: appointment.id } })).adminUserId)
+        .toBe(bea.id);
+    } finally {
+      await staff.context.close();
+    }
+
+    const adaView = await openSchedule(browser, ada);
+    try {
+      await expect(rowFor(adaView.page, appointment.id)).toHaveCount(0);
+      expect(await adaView.page.content()).not.toContain(learner.fullName);
+    } finally {
+      await adaView.context.close();
+    }
+
+    const beaView = await openSchedule(browser, bea);
+    try {
+      await expect(rowFor(beaView.page, appointment.id)).toContainText(learner.fullName);
+    } finally {
+      await beaView.context.close();
+    }
+  });
+
+  test("the org badge shares a line with the learner name", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const learner = await seedLearner(org.id, owner.id);
+    const appointment = await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+
+    const { context, page } = await openSchedule(browser, instructor);
+    try {
+      for (const view of ["month", "agenda"] as const) {
+        if (view === "agenda") await showAgenda(page);
+        const row = rowFor(page, appointment.id);
+        const name = await row.getByTestId("schedule-session-name").boundingBox();
+        const badge = await row.getByTestId("org-badge").boundingBox();
+        if (!name || !badge) throw new Error(`name or badge missing in ${view} view`);
+        // Same line: midline of the badge ≈ midline of the learner name.
+        const nameMid = name.y + name.height / 2;
+        const badgeMid = badge.y + badge.height / 2;
+        expect(Math.abs(nameMid - badgeMid), `${view} midline gap`).toBeLessThanOrEqual(4);
+        // And the badge sits beside the name, not under it.
+        expect(badge.x).toBeGreaterThanOrEqual(name.x + name.width - 1);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+});
