@@ -146,7 +146,23 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   flips to ACTIVE)),
   `slc` (session lifecycle — `createWhiteboardSession` /
   `startWhiteboardSession` / `endWhiteboardSession`; every transition writes
-  `[slc] wbsid=<id> action=session_created|session_started|session_ended ...`),
+  `[slc] wbsid=<id> action=session_created|session_started|session_ended ...`;
+  consent-wave actions (docs/handoff/consent-wave-plan.md § 8, landing with their waves):
+  `board_purge_intent source=end|stale|forced|reaper`, `board_purge_pass1_done|board_purge_pass2_done rows=<n> blobs=<n>`,
+  `board_purge_done`, `board_purge_blob_failed urlHash=<h>`, `board_purge_skipped reason=capability_unreadable|capability_persist`,
+  `board_purge_stuck ageMin=<n>`, `would_reap|reaped phase=<pending|active> idleSince=<iso>`,
+  `reaper_skip reason=already_ended|not_idle|appointment_delay`, `reaper_off`, `reaper_mode_invalid raw=<value>`,
+  and `[slc] cron=session-cleanup job=<reaper|purge> action=job_error err=<message>`),
+  `cns` (consent decisions — one prefix for every consent-resolution log line; always `wbsid=<id>` when a session
+  exists: `action=capabilities_resolved audio=<mode> wb=<persist> notes=<draft> online=<bool> mic=<yes|defer|no> source=snapshot|live`,
+  `refrozen_at_start changed=<keys|none> created=<bool> before=<toggles|none> after=<toggles>`,
+  `refreeze_skipped reason=already_active`, `frozen_at_end source=end|stale|reaper before=none after=<toggles>`,
+  `entry_denied surface=start|open_room|resume|join|schedule principal=<type> reason=<EntryBlockReason> mode=online|in_person`,
+  `learner_lane_refused surface=segment|chunk|queue|kick|sweep streamId=<id>`, `lane_mismatch stored=<id> input=<id>`,
+  `replay_access audio=<bool> board=<bool> source=snapshot|legacy principal=<type>`),
+  `txc` (transcription — `[txc] wbsid=<id> action=refused reason=audio_off|notes_off|notes_forbidden`; sweep auth
+  rejections write `[txc] action=sweep_auth_rejected`),
+  `tnt` (tutor notes drafting — `[tnt] wbsid=<id> action=skip reason=notes_off|no_audio|notes_forbidden`),
   `rol` (JWT role-refresh — auth-options jwt callback
   periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
   stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when

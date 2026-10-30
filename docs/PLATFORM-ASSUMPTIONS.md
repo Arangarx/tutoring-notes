@@ -359,6 +359,7 @@
   - Wrong protocol (http vs wss) → CSP block + connection failure.
   - Origin not in `connect-src` → browser refuses WebSocket.
   - Stale upstream SHA → protocol drift; phase 2 task 9 covers the 90-day verification cadence.
+- **Relay keeps no board state (consent wave C0 source read, 2026-10-30; consent-wave-plan § 3.10, F8).** Read at the pinned upstream SHA `03ff435860b508d7cd9e005cfc90f7977ae2a593` (the same SHA as the `wb-relay-local` container, § 8 below): `src/index.ts` is a pass-through `socket.io` server. It stores no scene, no history and no per-room payload anywhere (no database, no file, no in-memory room buffer). On `join-room` it replies `first-in-room` (sole occupant) or broadcasts `new-user` to the others, then emits `room-user-change` (socket ids only); `server-broadcast` / `server-volatile-broadcast` re-emit `client-broadcast(encryptedData, iv)` to the room's other sockets and retain nothing; `disconnecting` emits `room-user-change` to the remaining peers. Its debug logs carry socket ids and room ids only, never payloads. So a consent board purge has nothing to delete on the relay, and a late joiner cannot be sent an earlier scene. This is **independently re-checked on the wire** by the W24 relay probe (`tests/helpers/relay-probe.ts`, `tests/integration/wb-consent-board-purge.spec.ts` › W24), which joins an emptied room and asserts `init-room`, `first-in-room`, `room-user-change` and no scene payload, with a positive control that the probe does see a broadcast in a live room. **Re-read the relay source whenever the pinned SHA changes** (the 90-day check above); W24 will fail if a future relay starts replaying state.
 - **Migration check**: a managed alternative (Liveblocks, Pusher) would need protocol-shape adaptation. Self-hosted on AWS/GCP would just need DNS + TLS termination.
 
 ### 5.2 WebRTC peer-mesh signaling + STUN
@@ -761,6 +762,18 @@
 - **Generic / AWS equivalent**: CI injects `GIT_COMMIT` / `SOURCE_VERSION` at build time; expose the same via a no-store `/api/version` and bake into client at compile time.
 - **What breaks if violated**: client deploy-freshness poll (deliverable 2) and footer SHA show `"development"` or stale baked values; `/api/version` misreports the running deploy; chunk-recovery still works but users stay on skewed bundles longer without the poll.
 - **Migration check**: confirm the new platform exposes an immutable deploy commit SHA at build **and** runtime for the version endpoint; re-bake client env at compile; keep `/api/version` public and no-store.
+
+### 10.12 Test-only gates — blob harness, test seams, test routes (consent wave C0)
+
+- **Assumption**: every hermetic test surface is opened by ONE predicate, `isPlaywrightTestEnvEnabled()` (`src/lib/playwright-test-route.ts`): `PLAYWRIGHT_TEST=1` **and** neither `NODE_ENV` nor `VERCEL_ENV` is `production`. `next start` (what `npm run test:prod-shape` runs) is `NODE_ENV=production`, so every gate is closed there even if a sentinel leaks into the environment or the real blob token is present.
+- **Where baked in**:
+  - `src/lib/blob-harness.ts` — `isBlobHarnessActive()` = gate + `BLOB_HARNESS_LOCAL=1`. In-memory store, delete fault injection and listing, all on `globalThis` (`Symbol.for` keys) because Next bundles each route separately.
+  - `src/lib/blob.ts` `deleteBlob` and `src/lib/blob-list.ts` `listBlobsByPrefix` route to the harness only under that gate; otherwise they are the real `@vercel/blob` `del` / `list`.
+  - `src/lib/test-seams.ts` — `holdPoint` / `faultPoint` / `armReaperMode`, same gate, `globalThis`-backed armed state, 3 s in-transaction and 30 s out-of-transaction auto-release. Call sites land in the wave that owns each function and are no-ops outside the gate.
+  - `src/app/api/test/{blob/state,seams,seams/probe}/route.ts` — guarded by `guardPlaywrightTestRoute` (404 in production, `PLAYWRIGHT_TEST_SECRET` bearer required).
+  - `playwright.config.ts` webServers set `CRON_SECRET=playwright-cron-secret` (a literal, never a real secret) so the cron driver can call `/api/cron/*` over HTTP. `playwright.prod-shape.config.ts` sets none of these; `src/__tests__/test-gates-production-shape.test.ts` fails if it ever does.
+- **What breaks if violated**: a gate that does not honor the production lock would let a stray env var park or fault production requests, or make `deleteBlob` skip a real delete. The jest guard sets every sentinel and flips only the production signal.
+- **Migration check**: on a new platform keep `NODE_ENV=production` for the served build and never set `PLAYWRIGHT_TEST*` / `BLOB_HARNESS_LOCAL` / the test `CRON_SECRET` in a deployed environment.
 
 ---
 
