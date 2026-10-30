@@ -36,14 +36,13 @@ import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { parseDateOnlyInput } from "@/lib/date-only";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import {
   assertConsentRecordExists,
   ConsentError,
   resolveSessionCapabilities,
 } from "@/lib/consent-scope";
-import { acceptsAudioSegments } from "@/lib/recording/session-capabilities";
+import { TUTOR_MIC_STREAM_ID, acceptsAudioSegments } from "@/lib/recording/session-capabilities";
 import type { EntryBlockReason, EntryRefusal } from "@/lib/scheduling/session-entry";
 import {
   consentRecordRefusalReason,

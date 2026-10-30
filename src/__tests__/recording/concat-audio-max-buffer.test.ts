@@ -45,7 +45,7 @@ jest.mock("@/lib/blob-harness", () => ({
 }));
 
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 import { concatMixdownSegmentsToBlob } from "@/lib/recording/concat-audio";
 
 beforeEach(() => {

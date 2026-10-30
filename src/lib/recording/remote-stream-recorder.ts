@@ -51,16 +51,6 @@
 import { chooseMimeType } from "@/lib/recording/mime";
 import type { UploadOutbox } from "@/lib/recording/upload-outbox";
 
-/**
- * Convention for student-mic stream ids: `student:peer-<peerId>:mic`.
- * Use this helper (rather than building the string by hand) so
- * grep-able call sites stay consistent and any future rename has a
- * single point of edit.
- */
-export function studentMicStreamId(peerId: string): string {
-  return `student:peer-${peerId}:mic`;
-}
-
 export type RemoteStreamRecorderLogger = Pick<
   Console,
   "log" | "warn" | "error"

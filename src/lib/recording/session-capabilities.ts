@@ -199,3 +199,63 @@ export function resolveRemoteRecordingGainLinear(
   if (audioMode === "tutor_only") return 0;
   return mutedPeerIdsInRecording.has(peerId) ? 0 : 1;
 }
+
+// ---------------------------------------------------------------------------
+// Lane identity (consent wave plan § 2.3, D5, F4). The ONE place a stream id is built or parsed.
+//
+// A lane is carried only in `streamId`: `tutor:mic` (the tutor mixdown), `student:peer-<peerId>:mic` (a learner
+// device's recorder/transport id), `speaker:<speakerId>:transcript` (a learner's transcript lane, keyed on the
+// stable speaker identity). Nobody else spells these formats; every other file imports from here, and
+// consent-guards.test.ts fails on any literal left behind.
+// ---------------------------------------------------------------------------
+
+/** The tutor mixdown lane. Also the default lane of a segment or chunk that does not name one. */
+export const TUTOR_MIC_STREAM_ID = "tutor:mic";
+
+const SPEAKER_LANE_PREFIX = "speaker:";
+const SPEAKER_LANE_SUFFIX = ":transcript";
+const PEER_LANE_PATTERN = /^student:peer-(.+):mic$/;
+
+/** Per-device recorder / transport lane for one remote learner peer: `student:peer-<peerId>:mic`. */
+export function studentMicStreamId(peerId: string): string {
+  return `student:peer-${peerId}:mic`;
+}
+
+/**
+ * Transcript lane keyed on the STABLE speaker identity (not the per-device peer id, which can change on a device
+ * switch): `speaker:<speakerId>:transcript`.
+ */
+export function speakerTranscriptStreamId(speakerId: string): string {
+  return `speaker:${speakerId}:transcript`;
+}
+
+/** What a stream id names. `unknown` is anything this module did not build; it is treated as a learner lane. */
+export type Lane =
+  | { kind: "tutor" }
+  | { kind: "learner"; peerId: string; speakerId?: undefined }
+  | { kind: "learner"; speakerId: string; peerId?: undefined }
+  | { kind: "unknown" };
+
+/**
+ * The one parser. Accepts exactly what the three builders produce, plus the legacy speaker lane without the
+ * `:transcript` suffix that the notes labeller has always accepted.
+ */
+export function parseLane(streamId: string): Lane {
+  if (streamId === TUTOR_MIC_STREAM_ID) return { kind: "tutor" };
+  if (streamId.startsWith(SPEAKER_LANE_PREFIX)) {
+    const rest = streamId.slice(SPEAKER_LANE_PREFIX.length);
+    const speakerId = rest.endsWith(SPEAKER_LANE_SUFFIX) ? rest.slice(0, -SPEAKER_LANE_SUFFIX.length) : rest;
+    return { kind: "learner", speakerId };
+  }
+  const peer = PEER_LANE_PATTERN.exec(streamId);
+  if (peer) return { kind: "learner", peerId: peer[1] };
+  return { kind: "unknown" };
+}
+
+/**
+ * Is this stream a learner's? `kind !== "tutor"`, so an UNKNOWN id fails closed as a learner lane: a gate that
+ * refuses learner audio can never be bypassed by a malformed, future or relabeled stream id.
+ */
+export function isLearnerLane(streamId: string): boolean {
+  return parseLane(streamId).kind !== "tutor";
+}

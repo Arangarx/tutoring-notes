@@ -5,10 +5,10 @@
 import React, { createRef } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import {
+  TUTOR_MIC_STREAM_ID,
   resolveRemoteRecordingGainLinear,
   shouldAttachRemoteStreamToRecordingMixdown,
 } from "@/lib/recording/session-capabilities";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 
 const mockUnsubscribe = jest.fn();
 const mockSubscribe = jest.fn(() => mockUnsubscribe);

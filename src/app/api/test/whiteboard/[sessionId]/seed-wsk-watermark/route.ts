@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { guardPlaywrightTestRoute } from "@/lib/playwright-test-route";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 const DEFAULT_NOTE_CONTENT = JSON.stringify({
   topics: "Algebra factoring",
@@ -110,7 +111,7 @@ export async function POST(
         durationMs: 28_000,
         transcript: `Harness transcript segment ${i + 1} for algebra review.`,
         status: "done",
-        streamId: "tutor:mic",
+        streamId: TUTOR_MIC_STREAM_ID,
         transcribedAt: now,
       },
       update: {

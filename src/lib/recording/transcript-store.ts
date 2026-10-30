@@ -10,6 +10,7 @@
 import type { Prisma, TranscriptChunk, TranscriptChunkExtraction, TutorNote } from "@prisma/client";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 import {
   type ChunkExtractionPayload,
   serializeChunkExtraction,
@@ -86,7 +87,7 @@ export async function upsertTranscriptChunk(
     chunkBlobUrl,
     recordingTimeOffsetMs,
     status,
-    streamId = "tutor:mic",
+    streamId = TUTOR_MIC_STREAM_ID,
     speakerId = null,
     ...rest
   } = input;

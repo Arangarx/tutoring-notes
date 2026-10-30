@@ -3,6 +3,7 @@ import { put } from "@vercel/blob";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { guardPlaywrightTestRoute } from "@/lib/playwright-test-route";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 /**
  * Test-env-only: seed one SessionRecording row with a real Vercel Blob URL
@@ -57,7 +58,7 @@ export async function POST(
       mimeType: "audio/webm",
       sizeBytes: tinyWebm.byteLength,
       orderIndex,
-      streamId: "tutor:mic",
+      streamId: TUTOR_MIC_STREAM_ID,
     },
     select: { id: true, orderIndex: true, blobUrl: true },
   });

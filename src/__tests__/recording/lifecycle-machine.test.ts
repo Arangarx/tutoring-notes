@@ -20,11 +20,10 @@
 import {
   derivePresentation,
   evaluateLifecycle,
-  studentMicStreamId,
-  TUTOR_MIC_STREAM_ID,
   type LifecycleInputs,
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
+import { studentMicStreamId, TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 const NOW = 12_345;
 
@@ -608,16 +607,6 @@ describe("derivePresentation — backwards-compat UI strings", () => {
   });
 });
 
-describe("stream id helpers", () => {
-  test("TUTOR_MIC_STREAM_ID is the stable literal", () => {
-    expect(TUTOR_MIC_STREAM_ID).toBe("tutor:mic");
-  });
-
-  test("studentMicStreamId composes a unique id per peer", () => {
-    expect(studentMicStreamId("alpha")).toBe("student:peer-alpha:mic");
-    expect(studentMicStreamId("alpha")).not.toBe(studentMicStreamId("beta"));
-  });
-});
 
 describe("split-brain recording-gate fix (V1 master gate A4)", () => {
   // These tests verify the core invariant of the split-brain fix:

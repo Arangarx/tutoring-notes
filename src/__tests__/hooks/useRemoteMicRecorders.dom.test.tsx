@@ -7,10 +7,10 @@ import { render, act, cleanup } from "@testing-library/react";
 
 import { useRemoteMicRecorders } from "@/hooks/useRemoteMicRecorders";
 import {
-  studentMicStreamId,
   type RemoteStreamRecorder,
   type RemoteStreamRecorderOptions,
 } from "@/lib/recording/remote-stream-recorder";
+import { studentMicStreamId } from "@/lib/recording/session-capabilities";
 import type { AvParticipant } from "@/hooks/useLiveAV";
 import type { UploadOutbox } from "@/lib/recording/upload-outbox";
 

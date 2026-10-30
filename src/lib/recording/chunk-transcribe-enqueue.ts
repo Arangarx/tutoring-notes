@@ -27,7 +27,7 @@ import {
 } from "@/lib/recording/transcript-store";
 import { processChunkTranscribeJob, type ChunkTranscribeInput } from "@/lib/recording/transcription-worker";
 import { getPublicBaseUrl } from "@/lib/public-url";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 export type { ChunkTranscribeInput };
 

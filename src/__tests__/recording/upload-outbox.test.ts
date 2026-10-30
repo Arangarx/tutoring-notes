@@ -40,7 +40,7 @@ import {
 import {
   studentMicStreamId,
   TUTOR_MIC_STREAM_ID,
-} from "@/lib/recording/lifecycle-machine";
+} from "@/lib/recording/session-capabilities";
 
 // ----------------------------------------------------------------
 // Setup helpers

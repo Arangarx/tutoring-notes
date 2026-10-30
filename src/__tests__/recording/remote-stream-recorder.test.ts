@@ -14,14 +14,14 @@
  *   - dispose() does not await trailing enqueue
  *   - missing MediaRecorder ctor → start() warns, no throw
  *   - stream with no audio tracks → start() warns, no throw
- *   - studentMicStreamId helper produces the spec string
+ *   - (the studentMicStreamId wire format is pinned in consent-guards.test.ts, C2a)
  */
 
 import {
   createRemoteStreamRecorder,
-  studentMicStreamId,
   type RemoteStreamRecorderOptions,
 } from "@/lib/recording/remote-stream-recorder";
+import { studentMicStreamId } from "@/lib/recording/session-capabilities";
 import type {
   OutboxRow,
   NewOutboxRow,
@@ -208,15 +208,6 @@ function makeBaseOpts(
 
 beforeEach(() => {
   FakeMediaRecorder.instances = [];
-});
-
-describe("studentMicStreamId helper", () => {
-  test("produces 'student:peer-<id>:mic' format", () => {
-    expect(studentMicStreamId("alice")).toBe("student:peer-alice:mic");
-    expect(studentMicStreamId("opaque-uuid-here")).toBe(
-      "student:peer-opaque-uuid-here:mic"
-    );
-  });
 });
 
 describe("remote-stream-recorder — start/stop basics", () => {

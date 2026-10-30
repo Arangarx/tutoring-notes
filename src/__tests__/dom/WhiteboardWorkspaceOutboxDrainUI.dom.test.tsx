@@ -25,7 +25,7 @@ import {
   type OutboxUploadResult,
   type UploadOutbox,
 } from "@/lib/recording/upload-outbox";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 import {
   resetUploadOutboxForTests,
   setUploadOutboxForTests,

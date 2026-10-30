@@ -52,19 +52,6 @@ export function resolveSpeakerId(peerId: string): string {
   return peerId;
 }
 
-/**
- * Transcript-lane stream id keyed on the STABLE speaker identity.
- *
- * This is deliberately distinct from `studentMicStreamId(peerId)`
- * (`student:peer-<peerId>:mic`, the per-DEVICE transport/recorder id): the
- * transport id may change on a device switch, but the transcript lane must
- * not — so it is keyed on the speaker identity, keeping one continuous
- * transcript per human across devices.
- */
-export function speakerTranscriptStreamId(speakerId: string): string {
-  return `speaker:${speakerId}:transcript`;
-}
-
 /** A live peer as surfaced by `useLiveAV().participants` (minimal shape). */
 export type LivePeer = {
   peerId: string;

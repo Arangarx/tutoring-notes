@@ -47,11 +47,12 @@ import {
   enqueueChunkTranscriptionAction,
   type EndSessionSegment,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import { resolveSpeakerId } from "@/lib/recording/perspeaker-identity";
 import {
-  resolveSpeakerId,
+  TUTOR_MIC_STREAM_ID,
+  parseLane,
   speakerTranscriptStreamId,
-} from "@/lib/recording/perspeaker-identity";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+} from "@/lib/recording/session-capabilities";
 
 export type { OutboxObserverState };
 
@@ -133,16 +134,17 @@ function extForMime(mimeType: string): string {
   return base.split("/")[1] ?? "bin";
 }
 
-function peerIdFromStudentMicStreamId(streamId: string): string | null {
-  const match = /^student:peer-(.+):mic$/.exec(streamId);
-  return match ? match[1] : null;
+/** The device peer id behind a `student:peer-<peerId>:mic` lane; null for every other lane. */
+function peerIdFromLane(streamId: string): string | null {
+  const lane = parseLane(streamId);
+  return lane.kind === "learner" && lane.peerId !== undefined ? lane.peerId : null;
 }
 
 async function handleSegmentUploaded(row: OutboxRow): Promise<void> {
   if (row.transcriptionOnly === true) {
     if (!row.blobRemoteUrl) return;
     const shortObx = row.id.slice(0, 8);
-    const peerId = peerIdFromStudentMicStreamId(row.streamId);
+    const peerId = peerIdFromLane(row.streamId);
     const identityKey = peerId ? resolveSpeakerId(peerId) : row.speakerId ?? "unknown";
     const transcriptStreamId = speakerTranscriptStreamId(identityKey);
     try {

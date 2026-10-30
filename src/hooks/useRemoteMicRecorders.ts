@@ -37,9 +37,9 @@ import type { AvParticipant } from "@/hooks/useLiveAV";
 import { reconcileSpeakers } from "@/lib/recording/perspeaker-identity";
 import {
   createRemoteStreamRecorder,
-  studentMicStreamId,
   type RemoteStreamRecorder,
 } from "@/lib/recording/remote-stream-recorder";
+import { studentMicStreamId } from "@/lib/recording/session-capabilities";
 import type { UploadOutbox } from "@/lib/recording/upload-outbox";
 
 export type UseRemoteMicRecordersOptions = {

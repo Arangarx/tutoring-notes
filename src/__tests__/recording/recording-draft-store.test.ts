@@ -17,7 +17,7 @@ import {
   estimatedDurationSecFromDraft,
 } from "@/lib/recording/recording-draft-recovery";
 import { createUploadOutbox } from "@/lib/recording/upload-outbox";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 const SESSION = "wbs-test-session";
 const STREAM = TUTOR_MIC_STREAM_ID;

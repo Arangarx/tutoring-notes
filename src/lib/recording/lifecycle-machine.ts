@@ -767,23 +767,3 @@ export function derivePresentation(
     pillColor: "grey",
   };
 }
-
-// -----------------------------------------------------------------
-// Convenience helpers for hosts
-// -----------------------------------------------------------------
-
-/**
- * Wraps a single audio recorder's capture stream id. Exported so the
- * workspace + future participant code refer to the same string
- * literal — typos in stream ids would silently fail to capture.
- */
-export const TUTOR_MIC_STREAM_ID = "tutor:mic";
-
-/**
- * Build a `student:peer-<peerId>:mic` stream id for Phase 4. Lives
- * here so all code refers to one shape; if we ever change the prefix
- * convention, every consumer follows automatically.
- */
-export function studentMicStreamId(peerId: string): string {
-  return `student:peer-${peerId}:mic`;
-}

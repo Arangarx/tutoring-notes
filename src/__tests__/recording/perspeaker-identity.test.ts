@@ -1,4 +1,4 @@
-﻿/**
+/**
  * perspeaker-identity ΓÇö deterministic CORE of per-speaker capture (Phase 4 / p3-perspeaker C).
  *
  * These pure functions encode the hard-won device-switch identity invariant
@@ -12,12 +12,12 @@
 import {
   TUTOR_SPEAKER_ID,
   resolveSpeakerId,
-  speakerTranscriptStreamId,
   reconcileSpeakers,
   dedupSpeakerSegments,
   type LivePeer,
   type SpeakerSegment,
 } from "@/lib/recording/perspeaker-identity";
+import { speakerTranscriptStreamId } from "@/lib/recording/session-capabilities";
 
 // identityKey = sha256(learnerProfileId:sessionId)[:12] (hex, no hyphens);
 // deviceId = 8-hex (no hyphens). peerId = `student-<identityKey>-<deviceId>`.

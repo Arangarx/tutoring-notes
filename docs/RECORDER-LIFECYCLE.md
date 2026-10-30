@@ -378,7 +378,11 @@ Future video lanes mirror the mic helpers in
 These slot into the **same** `SessionRecording.streamId` column and the
 same outbox `streamId` field — no schema change required. Grep for
 `studentMicStreamId` when wiring the video helper so naming stays
-consistent.
+consistent. Every lane builder, the `TUTOR_MIC_STREAM_ID` constant and the
+one parser (`parseLane` / `isLearnerLane`, unknown ids fail closed as
+learner lanes) live in `src/lib/recording/session-capabilities.ts` (consent
+wave C2a); a new lane kind gets its builder and a `parseLane` case there, and
+`src/__tests__/consent-guards.test.ts` fails on a lane literal anywhere else.
 
 ### What already supports video (zero schema work)
 

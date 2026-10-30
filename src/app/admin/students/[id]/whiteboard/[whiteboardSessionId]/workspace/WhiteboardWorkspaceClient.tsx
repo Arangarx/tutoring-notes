@@ -68,14 +68,15 @@ import {
 import {
   derivePresentation,
   evaluateLifecycle,
-  TUTOR_MIC_STREAM_ID,
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
 import {
+  TUTOR_MIC_STREAM_ID,
   deriveSessionCapabilities,
   deriveWbCaptureActive,
   resolveRemoteRecordingGainLinear,
   shouldAttachRemoteStreamToRecordingMixdown,
+  studentMicStreamId,
 } from "@/lib/recording/session-capabilities";
 import {
   createSessionMsClock,
@@ -110,7 +111,6 @@ import VideoControls from "@/components/av/VideoControls";
 import { AVTilesPanel } from "@/components/av/AVTilesPanel";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import { useExcalidrawLoadingGuard, excalidrawBoardBgHex } from "@/hooks/useExcalidrawLoadingGuard";
-import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicControl";
 import { WbTopBarMicControlLive } from "@/components/whiteboard/chrome/WbTopBarMicControlLive";
 import { WbToolBtn } from "@/components/whiteboard/chrome/WbToolBtn";

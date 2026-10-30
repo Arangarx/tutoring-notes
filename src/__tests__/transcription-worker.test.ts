@@ -47,7 +47,7 @@ jest.mock("@/lib/recording/extract-chunk", () => ({
 // ---------------------------------------------------------------------------
 
 import { processChunkTranscribeJob } from "@/lib/recording/transcription-worker";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 // ---------------------------------------------------------------------------
 // Fixtures

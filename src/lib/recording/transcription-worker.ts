@@ -37,7 +37,7 @@ import { transcribeChunk } from "@/lib/recording/transcribe-chunk";
 import { extractChunkMap } from "@/lib/recording/extract-chunk";
 import { db } from "@/lib/db";
 import { isTutorApproved } from "@/lib/tutor-approval-scope";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 // ---------------------------------------------------------------------------
 // Types

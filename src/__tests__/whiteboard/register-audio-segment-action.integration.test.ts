@@ -56,7 +56,7 @@ jest.mock("@/lib/consent-scope", () => {
 
 import { db } from "@/lib/db";
 import { registerWhiteboardSessionAudioSegmentAction } from "@/app/admin/students/[id]/whiteboard/actions";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 import { uniq } from "../helpers/unique-test-token";
 
 

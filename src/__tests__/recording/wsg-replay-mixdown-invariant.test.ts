@@ -24,7 +24,7 @@ Object.defineProperty(globalThis, "window", {
 import {
   selectMixdownSegmentsForConcat,
 } from "@/lib/recording/concat-audio";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 import {
   assembleEndSessionSegments,
   resetUploadOutboxForTests,

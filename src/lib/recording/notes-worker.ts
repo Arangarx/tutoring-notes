@@ -49,6 +49,18 @@ import {
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 import { REDUCE_MODEL } from "@/lib/ai-models";
 import { holdPoint } from "@/lib/test-seams";
+import { TUTOR_MIC_STREAM_ID, parseLane } from "@/lib/recording/session-capabilities";
+
+/**
+ * Speaker label for the notes prompt: `tutor` for the tutor lane, the speaker id for a speaker lane, and the raw
+ * stream id for anything else (peer device lanes and unknown ids), exactly what the two inline copies returned.
+ */
+function laneSpeakerLabel(streamId: string): string {
+  const lane = parseLane(streamId);
+  if (lane.kind === "tutor") return "tutor";
+  if (lane.kind === "learner" && lane.speakerId !== undefined) return lane.speakerId;
+  return streamId;
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -247,12 +259,7 @@ export async function processLiveReduceJob(
     const chunk = chunkById.get(chunkId);
     if (!chunk) return null;
     if (chunk.speakerId) return `learner:${chunk.speakerId}`;
-    const streamId = chunk.streamId ?? "tutor:mic";
-    if (streamId === "tutor:mic") return "tutor";
-    if (streamId.startsWith("speaker:")) {
-      return streamId.replace(/^speaker:/, "").replace(/:transcript$/, "");
-    }
-    return streamId;
+    return laneSpeakerLabel(chunk.streamId ?? TUTOR_MIC_STREAM_ID);
   };
 
   const doneChunkIds = new Set(doneChunks.map((c) => c.id));
@@ -522,12 +529,7 @@ export async function processNotesReduceJob(
     const chunk = chunkById.get(chunkId);
     if (!chunk) return null;
     if (chunk.speakerId) return `learner:${chunk.speakerId}`;
-    const streamId = chunk.streamId ?? "tutor:mic";
-    if (streamId === "tutor:mic") return "tutor";
-    if (streamId.startsWith("speaker:")) {
-      return streamId.replace(/^speaker:/, "").replace(/:transcript$/, "");
-    }
-    return streamId;
+    return laneSpeakerLabel(chunk.streamId ?? TUTOR_MIC_STREAM_ID);
   };
 
   // Build ordered extraction list (by chunkId matching done chunks ordered by recordingTimeOffsetMs)
