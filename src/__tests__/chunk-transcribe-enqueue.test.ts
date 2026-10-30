@@ -236,6 +236,7 @@ describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)"
   afterEach(() => {
     fetchSpy.mockRestore();
     delete process.env.CRON_SECRET;
+    delete process.env.PLAYWRIGHT_TEST;
   });
 
   test("includes Authorization: Bearer <CRON_SECRET> when CRON_SECRET is set", async () => {
@@ -274,6 +275,35 @@ describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)"
 
     // Worker is invoked via the HTTP endpoint, not called directly
     expect(mockProcessChunkTranscribeJob).not.toHaveBeenCalled();
+  });
+
+  test("Playwright calls the worker directly even when CRON_SECRET is set", async () => {
+    process.env.CRON_SECRET = MOCK_SECRET;
+    process.env.PLAYWRIGHT_TEST = "1";
+    mockProcessChunkTranscribeJob.mockResolvedValue("done");
+
+    await enqueueChunkTranscribe(JOB);
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Cron routes still need CRON_SECRET on the shared webServer. That must
+    // not divert Playwright chunk transcription through the HTTP queue.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mockProcessChunkTranscribeJob).toHaveBeenCalledWith(JOB);
+  });
+
+  test("a leaked PLAYWRIGHT_TEST in production still uses the bearer fetch", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    process.env.CRON_SECRET = MOCK_SECRET;
+    process.env.PLAYWRIGHT_TEST = "1";
+    try {
+      await enqueueChunkTranscribe(JOB);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(mockProcessChunkTranscribeJob).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 
   test("falls back to direct processChunkTranscribeJob call when CRON_SECRET is absent (fail-open)", async () => {
