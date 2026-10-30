@@ -1,12 +1,12 @@
-import Link from "next/link";
-
 import { createOrganizationByOwnerEmailAction } from "@/app/admin/orgs/actions";
+import { LINK_ROW_LIST_CLASS, LinkRow } from "@/components/LinkRow";
 import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { db } from "@/lib/db";
+import { formatOrganizationListMeta } from "@/lib/org-role-label";
 import { orgStaffErrorSentence } from "@/lib/org-staff-messages";
 import { requireOperator } from "@/lib/operator";
 
@@ -58,20 +58,19 @@ export default async function OperatorOrganizationsPage({
             <Button type="submit">Create organization</Button>
           </form>
         </SectionCard>
-        <SectionCard realm="admin" title="Existing organizations" contentClassName="p-0">
+        <SectionCard realm="admin" title="Existing organizations">
           {organizations.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-muted-foreground">No organizations yet.</p>
+            <p className="text-sm text-muted-foreground">No organizations yet.</p>
           ) : (
-            <ul className="divide-y divide-border" role="list">
+            <ul className={LINK_ROW_LIST_CLASS} role="list">
               {organizations.map((org) => (
-                <li key={org.id} className="px-4 py-3">
-                  <Link
+                <li key={org.id}>
+                  <LinkRow
                     href={`/admin/orgs/${org.id}`}
-                    className="text-sm font-medium text-foreground underline-offset-2 hover:underline"
-                  >
-                    {org.name}
-                  </Link>
-                  <p className="text-sm text-muted-foreground">{org.status}</p>
+                    title={org.name}
+                    meta={formatOrganizationListMeta(org.status)}
+                    testId={`org-operator-link-${org.id}`}
+                  />
                 </li>
               ))}
             </ul>

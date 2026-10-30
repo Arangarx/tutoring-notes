@@ -120,7 +120,7 @@ const PATH_RULES = [
     tags: [TAG.WB_CHROME, TAG.WB_PRESENCE],
   },
   {
-    re: /src\/components\/org\/|src\/lib\/org-|src\/app\/admin\/organization\/|src\/app\/admin\/orgs\/|src\/lib\/scheduling\/|src\/app\/admin\/schedule\/|src\/app\/admin\/students\/page\.tsx|src\/components\/admin\/StudentsRoster\.tsx/,
+    re: /src\/components\/org\/|src\/lib\/org-|src\/app\/admin\/organization\/|src\/app\/admin\/orgs\/|src\/lib\/scheduling\/|src\/app\/admin\/schedule\/|src\/app\/admin\/students\/page\.tsx|src\/components\/admin\/StudentsRoster\.tsx|src\/components\/LinkRow\.tsx|wb-org-link-row/,
     tags: [TAG.ORG],
   },
   {

@@ -12,6 +12,16 @@ jest.mock("@/app/admin/students/actions", () => ({
   createStudent: jest.fn(),
 }));
 
+beforeAll(() => {
+  // AddStudentForm's RadioGroup measures itself. jsdom has no ResizeObserver.
+  // Same stub as add-student-form.dom.test.tsx.
+  global.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as typeof ResizeObserver;
+});
+
 describe("StudentsRoster — erasure state", () => {
   it("shows no erasure badge for normal students", () => {
     render(

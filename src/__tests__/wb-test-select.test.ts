@@ -25,6 +25,8 @@ describe("wb-test-select org paths", () => {
       "src/app/admin/schedule/actions.ts",
       "src/app/admin/students/page.tsx",
       "src/components/admin/StudentsRoster.tsx",
+      "src/components/LinkRow.tsx",
+      "tests/integration/wb-org-link-row.spec.ts",
     ];
     for (const file of files) {
       expect(tagsForPaths([file])).toEqual(expect.arrayContaining(["@org"]));

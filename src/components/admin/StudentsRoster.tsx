@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
+
+import { LINK_ROW_LIST_CLASS, LinkRow } from "@/components/LinkRow";
 
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
 import { SectionCard } from "@/components/SectionCard";
@@ -139,35 +141,21 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
           No students match &ldquo;{query.trim()}&rdquo;.
         </p>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-2.5 p-0 md:gap-3">
-          {filtered.map((s) => (
-            <li key={s.id}>
-              <Link
-                href={`/admin/students/${s.id}`}
-                className="group flex min-h-[60px] items-center gap-3.5 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-ring hover:bg-card/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                <StudentAvatar
-                  name={rosterPendingDisplayLabel(s)}
-                  size="md"
+        <ul className={LINK_ROW_LIST_CLASS}>
+          {filtered.map((s) => {
+            const label = rosterPendingDisplayLabel(s);
+            return (
+              <li key={s.id}>
+                <LinkRow
+                  href={`/admin/students/${s.id}`}
+                  leading={<StudentAvatar name={label} size="md" />}
+                  title={label}
+                  badges={<StudentErasurePendingBadge state={s.erasureState} />}
+                  meta={`Added ${new Date(s.createdAt).toLocaleDateString()}`}
                 />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-[15px] font-semibold text-foreground group-hover:text-brand">
-                      {rosterPendingDisplayLabel(s)}
-                    </div>
-                    <StudentErasurePendingBadge state={s.erasureState} />
-                  </div>
-                  <div className="label-mono mt-0.5 text-[11px] text-muted-foreground">
-                    Added {new Date(s.createdAt).toLocaleDateString()}
-                  </div>
-                </div>
-                <ChevronRight
-                  className="size-[18px] shrink-0 text-muted-foreground group-hover:text-accent-text"
-                  aria-hidden
-                />
-              </Link>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 
