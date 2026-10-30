@@ -277,20 +277,6 @@ describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)"
     expect(mockProcessChunkTranscribeJob).not.toHaveBeenCalled();
   });
 
-  test("Playwright calls the worker directly even when CRON_SECRET is set", async () => {
-    process.env.CRON_SECRET = MOCK_SECRET;
-    process.env.PLAYWRIGHT_TEST = "1";
-    mockProcessChunkTranscribeJob.mockResolvedValue("done");
-
-    await enqueueChunkTranscribe(JOB);
-    await new Promise((r) => setTimeout(r, 10));
-
-    // Cron routes still need CRON_SECRET on the shared webServer. That must
-    // not divert Playwright chunk transcription through the HTTP queue.
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(mockProcessChunkTranscribeJob).toHaveBeenCalledWith(JOB);
-  });
-
   test("a leaked PLAYWRIGHT_TEST in production still uses the bearer fetch", async () => {
     const previousNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";

@@ -48,6 +48,7 @@ import {
 } from "@/lib/recording/transcript-types";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 import { REDUCE_MODEL } from "@/lib/ai-models";
+import { holdPoint } from "@/lib/test-seams";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -456,6 +457,11 @@ export async function processNotesReduceJob(
   if (!note) {
     note = await upsertTutorNotePending(sessionId);
   }
+
+  // Earliest point where the row is pending and every resolving write
+  // (generating, done, partial, failed) is still ahead. No-op unless the
+  // Playwright gate is open and a test armed this point.
+  await holdPoint("notes:reduce:before_resolve", sessionId);
 
   // --- 4. Completion gate: check all chunks done ----------------------------------
   const chunks = await getTranscriptChunksBySessionId(sessionId);

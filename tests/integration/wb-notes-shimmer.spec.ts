@@ -3,6 +3,12 @@ import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
+import {
+  armHold,
+  expectReleasedByTest,
+  releaseHold,
+  waitUntilParked,
+} from "../helpers/consent-harness";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 
@@ -224,39 +230,65 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_
     test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
-    await recordShortSoloSession(page, studentId, whiteboardSessionId);
+    await armHold(page.request, {
+      name: "notes:reduce:before_resolve",
+      sessionId: whiteboardSessionId,
+    });
+    try {
+      await recordShortSoloSession(page, studentId, whiteboardSessionId);
+      // The worker must be parked here. Without the product holdPoint the note
+      // leaves pending/generating before this returns (no OPENAI_API_KEY).
+      await waitUntilParked(
+        page.request,
+        "notes:reduce:before_resolve",
+        whiteboardSessionId
+      );
 
-    const { phase } = await waitForInFlightNotesUi(page, 90_000);
+      const { phase } = await waitForInFlightNotesUi(page, 90_000);
 
-    const recordings = await fetchRecordingCount(page, whiteboardSessionId);
-    expect(recordings.count).toBeGreaterThanOrEqual(1);
+      const recordings = await fetchRecordingCount(page, whiteboardSessionId);
+      expect(recordings.count).toBeGreaterThanOrEqual(1);
 
-    const topicsField = page.locator("#wb-note-topics");
-    await expect(topicsField).toBeVisible();
-    await expect(topicsField).toBeEditable({ editable: false });
-    await expect(page.locator(".tn-notes-generating-wrap")).toHaveCount(0);
-    await expect(page.getByTestId("tutor-notes-content")).not.toBeVisible();
-    await expect(page.getByTestId("wb-save-note")).not.toBeVisible();
+      const topicsField = page.locator("#wb-note-topics");
+      await expect(topicsField).toBeVisible();
+      await expect(topicsField).toBeEditable({ editable: false });
+      await expect(page.locator(".tn-notes-generating-wrap")).toHaveCount(0);
+      await expect(page.getByTestId("tutor-notes-content")).not.toBeVisible();
+      await expect(page.getByTestId("wb-save-note")).not.toBeVisible();
 
-    const empty = await visibleNoteFieldsAreEmpty(page);
-    if (phase === "generating" || empty) {
-      if (phase === "generating") {
-        await expect(topicsField).toHaveValue("");
+      const empty = await visibleNoteFieldsAreEmpty(page);
+      if (phase === "generating" || empty) {
+        if (phase === "generating") {
+          await expect(topicsField).toHaveValue("");
+        }
+        await expectInBoxSkeleton(page, "#wb-note-topics");
+        const bar = topicsSkeletonBar(page);
+        const motion0 = await readSkeletonMotion(bar);
+        expect(motion0.animationName, "in-box skeleton is painted").not.toBe("none");
+        expect(Number.parseFloat(motion0.opacity)).toBeGreaterThan(0.4);
+        await page.waitForTimeout(800);
+        const motion1 = await readSkeletonMotion(bar);
+        expect(
+          motion1.opacity,
+          "skeleton opacity moves over ~800ms (real animation, not static paint)"
+        ).not.toBe(motion0.opacity);
+      } else {
+        expect(phase).toBe("pending");
+        await expect(page.getByTestId("tn-note-field-skeleton")).toHaveCount(0);
       }
-      await expectInBoxSkeleton(page, "#wb-note-topics");
-      const bar = topicsSkeletonBar(page);
-      const motion0 = await readSkeletonMotion(bar);
-      expect(motion0.animationName, "in-box skeleton is painted").not.toBe("none");
-      expect(Number.parseFloat(motion0.opacity)).toBeGreaterThan(0.4);
-      await page.waitForTimeout(800);
-      const motion1 = await readSkeletonMotion(bar);
-      expect(
-        motion1.opacity,
-        "skeleton opacity moves over ~800ms (real animation, not static paint)"
-      ).not.toBe(motion0.opacity);
-    } else {
-      expect(phase).toBe("pending");
-      await expect(page.getByTestId("tn-note-field-skeleton")).toHaveCount(0);
+
+      await releaseHold(page.request, "notes:reduce:before_resolve", whiteboardSessionId);
+      await expectReleasedByTest(
+        page.request,
+        "notes:reduce:before_resolve",
+        whiteboardSessionId
+      );
+    } finally {
+      await releaseHold(
+        page.request,
+        "notes:reduce:before_resolve",
+        whiteboardSessionId
+      );
     }
   });
 

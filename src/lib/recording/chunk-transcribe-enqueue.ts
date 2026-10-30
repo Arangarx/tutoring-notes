@@ -28,7 +28,6 @@ import {
 import { processChunkTranscribeJob, type ChunkTranscribeInput } from "@/lib/recording/transcription-worker";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
-import { isPlaywrightTestEnvEnabled } from "@/lib/playwright-test-route";
 
 export type { ChunkTranscribeInput };
 
@@ -38,19 +37,14 @@ function fireAndForgetWorker(job: ChunkTranscribeInput): void {
   // is sent — leaving TranscriptChunk rows stuck at `transcribing` on Preview.
   after(async () => {
     const secret = process.env.CRON_SECRET;
-    // Playwright's webServer sets CRON_SECRET so `/api/cron/*` can require a
-    // bearer (consent harness). That must not divert chunk transcription
-    // through POST /api/queues/chunk-transcribe: a failed transcribe returns
-    // 500, this helper only logs it, and the notes form unmounts while the
-    // shimmer test is still reading it. The in-process worker is the
-    // deterministic test path. Production keeps the bearer fetch, including
-    // when a Playwright sentinel leaks into a production runtime.
-    if (secret && !isPlaywrightTestEnvEnabled()) {
+    if (secret) {
       // SHOULD-FIX-2 Option A: when CRON_SECRET is configured, route the work
       // through the guarded /api/queues/chunk-transcribe endpoint with a bearer
       // token so all worker invocations pass the same auth guard as the cron
       // sweep. The secret is only accessed server-side (this file is server-only).
       // When CRON_SECRET is absent, fall through to the direct-call path.
+      // A non-OK response (including the worker's 500) is logged only; this
+      // helper does not read the body or write TutorNote state.
       const base = getPublicBaseUrl();
       try {
         const res = await fetch(`${base}/api/queues/chunk-transcribe`, {
@@ -73,8 +67,7 @@ function fireAndForgetWorker(job: ChunkTranscribeInput): void {
       }
       return;
     }
-    // Direct worker: CRON_SECRET unset (local dev) or Playwright, where the
-    // secret is only for cron routes.
+    // Direct worker when CRON_SECRET is unset (local dev fail-open).
     try {
       await processChunkTranscribeJob(job);
     } catch (err: unknown) {

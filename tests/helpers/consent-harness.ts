@@ -106,6 +106,7 @@ export type HoldName =
   | "end:tx:before_update"
   | "reaper:between_scan_and_stamp"
   | "purge:pass1:after_delete_before_stamp"
+  | "notes:reduce:before_resolve"
   | "selftest:probe"
   | "selftest:probe:in_tx";
 

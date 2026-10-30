@@ -9,7 +9,9 @@
  * that owns each function (docs/handoff/consent-wave-plan.md § 6 infra, SF-A):
  * `checkpoint:batch:before_txn` (C4b), `start:tx:between_consent_read_and_update`
  * and `end:tx:before_update` (C3a), `reaper:between_scan_and_stamp` (C4c),
- * `purge:pass1:after_delete_before_stamp` (C4b). Each lands as a no-op.
+ * `purge:pass1:after_delete_before_stamp` (C4b),
+ * `notes:reduce:before_resolve` (notes reduce, before any resolving write).
+ * Each lands as a no-op.
  *
  * GATE (impossible to enable in production): every helper is inert unless
  * `isPlaywrightTestEnvEnabled()` — `PLAYWRIGHT_TEST=1` AND not a production
@@ -53,6 +55,11 @@ export const HOLD_POINTS = {
   "end:tx:before_update": { inTx: true },
   "reaper:between_scan_and_stamp": { inTx: false },
   "purge:pass1:after_delete_before_stamp": { inTx: false },
+  /**
+   * Notes reduce, after the TutorNote row is pending and before any path
+   * can write generating / done / partial / failed. Outside a transaction.
+   */
+  "notes:reduce:before_resolve": { inTx: false },
   /** Harness self-test only (`/api/test/seams/probe`). */
   "selftest:probe": { inTx: false },
   "selftest:probe:in_tx": { inTx: true },

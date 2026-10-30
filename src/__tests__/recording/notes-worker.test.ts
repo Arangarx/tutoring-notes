@@ -387,3 +387,71 @@ describe("processNotesReduceJob — failed chunks do not block reduce", () => {
     }
   });
 });
+
+describe("processNotesReduceJob — notes:reduce:before_resolve", () => {
+  it("leaves the note unresolved until the hold is released", async () => {
+    const previousPlaywright = process.env.PLAYWRIGHT_TEST;
+    process.env.PLAYWRIGHT_TEST = "1";
+    const seams = await import("@/lib/test-seams");
+    seams.armHold({ name: "notes:reduce:before_resolve", sessionId: SESSION_ID });
+
+    mockGetNote.mockResolvedValue({
+      sessionId: SESSION_ID,
+      status: "pending",
+      content: null,
+      lastReducedChunkCount: 0,
+    });
+    mockGetChunks.mockResolvedValue([makeChunk({ status: "done" })]);
+    mockGetExtractions.mockResolvedValue([makeExtraction("chunk-1")]);
+    mockOpenAISuccess(
+      JSON.stringify({
+        topics: "Pythagoras theorem",
+        assessment: "Covered well",
+        nextSteps: "Practice",
+        links: "",
+      })
+    );
+
+    let settled = false;
+    const job = processNotesReduceJob(SESSION_ID).then((result) => {
+      settled = true;
+      return result;
+    });
+
+    try {
+      const deadline = Date.now() + 1_000;
+      while (
+        seams.holdPointState("notes:reduce:before_resolve", SESSION_ID).parked < 1 &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      // Independent of the worker's own timers: the seam reports a parked
+      // caller, the job has not finished, and no resolving status was written.
+      const held = seams.holdPointState("notes:reduce:before_resolve", SESSION_ID);
+      expect(held.parked).toBe(1);
+      expect(settled).toBe(false);
+      const wroteResolvingStatus = mockUpdateNote.mock.calls.some((call) => {
+        const status = (call[1] as { status?: string }).status;
+        return (
+          status === "generating" ||
+          status === "done" ||
+          status === "partial" ||
+          status === "failed"
+        );
+      });
+      expect(wroteResolvingStatus).toBe(false);
+
+      expect(seams.releaseHold("notes:reduce:before_resolve", SESSION_ID)).toBe(1);
+      await expect(job).resolves.toMatchObject({ outcome: "done", isPartial: false });
+      expect(seams.holdPointState("notes:reduce:before_resolve", SESSION_ID).autoReleased).toBe(0);
+    } finally {
+      seams.releaseHold("notes:reduce:before_resolve", SESSION_ID);
+      seams.disarmHold("notes:reduce:before_resolve", SESSION_ID);
+      if (previousPlaywright === undefined) delete process.env.PLAYWRIGHT_TEST;
+      else process.env.PLAYWRIGHT_TEST = previousPlaywright;
+      await job.catch(() => undefined);
+    }
+  });
+});
