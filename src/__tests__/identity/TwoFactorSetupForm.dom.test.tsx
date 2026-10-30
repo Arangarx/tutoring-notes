@@ -40,14 +40,6 @@ function smsCardButton() {
   return within(screen.getByTestId("tfa-choose-sms")).getByRole("button");
 }
 
-beforeAll(() => {
-  global.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as typeof ResizeObserver;
-});
-
 describe("TwoFactorSetupForm — SMS chooser enable state", () => {
   beforeEach(() => {
     jest.clearAllMocks();

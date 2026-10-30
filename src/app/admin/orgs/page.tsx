@@ -1,5 +1,5 @@
 import { createOrganizationByOwnerEmailAction } from "@/app/admin/orgs/actions";
-import { LINK_ROW_LIST_CLASS, LinkRow } from "@/components/LinkRow";
+import { LinkRow, LinkRowList } from "@/components/LinkRow";
 import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ export default async function OperatorOrganizationsPage({
           {organizations.length === 0 ? (
             <p className="text-sm text-muted-foreground">No organizations yet.</p>
           ) : (
-            <ul className={LINK_ROW_LIST_CLASS} role="list">
+            <LinkRowList>
               {organizations.map((org) => (
                 <li key={org.id}>
                   <LinkRow
@@ -73,7 +73,7 @@ export default async function OperatorOrganizationsPage({
                   />
                 </li>
               ))}
-            </ul>
+            </LinkRowList>
           )}
         </SectionCard>
       </div>

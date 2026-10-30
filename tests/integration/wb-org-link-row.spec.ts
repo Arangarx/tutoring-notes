@@ -27,6 +27,21 @@ async function playwrightAdminId(): Promise<string> {
 }
 
 /**
+ * `list-none` drops the list role in Safari/VoiceOver unless the ul
+ * sets role="list". Chromium still exposes a bare ul as a list, so the
+ * explicit attribute is the oracle that all three lists opted in.
+ * The row under test is a listitem inside that list. Assert that item,
+ * not every sibling: the local roster keeps students from prior runs.
+ */
+async function expectExposedAsList(list: Locator, row: Locator) {
+  await expect(list).toHaveRole("list");
+  await expect(list).toHaveAttribute("role", "list");
+  const item = list.getByRole("listitem").filter({ has: row });
+  await expect(item).toHaveCount(1);
+  await expect(item).toHaveRole("listitem");
+}
+
+/**
  * The whole row is the click target, and it fills its list.
  * `list` is the ul that contains the row, not the surrounding card.
  */
@@ -85,10 +100,34 @@ async function expectFullWidthCardLink(
   expect(hrefAtPoint, "right edge of the list is the row link").toBe(expectedHref);
 
   await page.mouse.click(clickX, clickY);
-  await page.waitForURL(
-    (url) => url.pathname === expectedHref,
-    { timeout: 30_000 }
-  );
+  try {
+    await page.waitForURL(
+      (url) => url.pathname === expectedHref,
+      { timeout: 8_000 }
+    );
+  } catch (err) {
+    // Next dev full-reloads while it compiles the destination and drops
+    // this click. The right-edge hit was already proven above. Click again
+    // once the list is back.
+    if (new URL(page.url()).pathname !== expectedHref) {
+      await row.scrollIntoViewIfNeeded();
+      const listBoxNow = await list.boundingBox();
+      const rowBoxNow = await row.boundingBox();
+      expect(listBoxNow, "list box after reload").not.toBeNull();
+      expect(rowBoxNow, "row box after reload").not.toBeNull();
+      const retryX = listBoxNow!.x + listBoxNow!.width - 8;
+      const retryY = rowBoxNow!.y + rowBoxNow!.height / 2;
+      expect(retryX).toBeGreaterThanOrEqual(rowBoxNow!.x);
+      expect(retryX).toBeLessThanOrEqual(rowBoxNow!.x + rowBoxNow!.width);
+      await page.mouse.click(retryX, retryY);
+      await page.waitForURL(
+        (url) => url.pathname === expectedHref,
+        { timeout: 30_000 }
+      );
+    } else {
+      throw err;
+    }
+  }
   expect(new URL(page.url()).pathname).toBe(expectedHref);
 }
 
@@ -114,6 +153,7 @@ test.describe("organization and roster link rows", () => {
     await page.goto("/admin/organization");
     const staffRow = page.getByTestId(`org-staff-link-${org.id}`);
     const staffList = page.getByTestId("org-staff-index").getByRole("list");
+    await expectExposedAsList(staffList, staffRow);
     await expect(staffRow).toContainText("Active · Owner, Admin");
     await expect(staffRow).not.toContainText("active.");
     await expectFullWidthCardLink(
@@ -127,6 +167,7 @@ test.describe("organization and roster link rows", () => {
     await page.goto("/admin/orgs");
     const operatorRow = page.getByRole("link", { name });
     const operatorList = page.getByRole("list").filter({ has: operatorRow });
+    await expectExposedAsList(operatorList, operatorRow);
     await expect(operatorRow).toContainText("Active");
     await expect(operatorRow).not.toContainText("active");
     await expectFullWidthCardLink(
@@ -151,6 +192,7 @@ test.describe("organization and roster link rows", () => {
     await page.goto("/admin/students");
     const row = page.getByRole("link", { name });
     const list = page.getByRole("list").filter({ has: row });
+    await expectExposedAsList(list, row);
     await expectFullWidthCardLink(
       page,
       list,

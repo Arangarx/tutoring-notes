@@ -2,9 +2,21 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
-/** Stack of card rows. Same list on the student roster and both organization lists. */
-export const LINK_ROW_LIST_CLASS =
+/**
+ * Stack of card rows. Same list on the student roster and both organization lists.
+ * `list-none` removes markers and, in Safari, the implicit list role.
+ * `role="list"` puts that role back for VoiceOver.
+ */
+const LINK_ROW_LIST_CLASS =
   "m-0 flex list-none flex-col gap-2.5 p-0 md:gap-3";
+
+export function LinkRowList({ children }: { children: ReactNode }) {
+  return (
+    <ul role="list" className={LINK_ROW_LIST_CLASS}>
+      {children}
+    </ul>
+  );
+}
 
 export type LinkRowProps = {
   href: string;

@@ -33,14 +33,6 @@ jest.mock("@/app/admin/settings/2fa/actions", () => ({
   abandonMethodChange: jest.fn(),
 }));
 
-beforeAll(() => {
-  global.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as typeof ResizeObserver;
-});
-
 function consentPrecedesPhone() {
   const consent = screen.getByTestId("sms-a2p-consent");
   const phone = screen.getByLabelText("Phone number");

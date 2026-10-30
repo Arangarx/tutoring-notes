@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Search } from "lucide-react";
 
-import { LINK_ROW_LIST_CLASS, LinkRow } from "@/components/LinkRow";
+import { LinkRow, LinkRowList } from "@/components/LinkRow";
 
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
 import { SectionCard } from "@/components/SectionCard";
@@ -141,7 +141,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
           No students match &ldquo;{query.trim()}&rdquo;.
         </p>
       ) : (
-        <ul className={LINK_ROW_LIST_CLASS}>
+        <LinkRowList>
           {filtered.map((s) => {
             const label = rosterPendingDisplayLabel(s);
             return (
@@ -156,7 +156,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
               </li>
             );
           })}
-        </ul>
+        </LinkRowList>
       )}
 
       {/* Desktop add card — below the roster so current students come first */}

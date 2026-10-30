@@ -40,6 +40,17 @@ if (typeof globalThis.structuredClone !== "function") {
     v8.deserialize(v8.serialize(val));
 }
 
+// jsdom has no ResizeObserver. One no-op here, and only when `window`
+// exists, so node-environment suites are unchanged. Behavioral tests
+// (AVTile's callback capture) still replace this for a single case.
+if (typeof window !== "undefined" && typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as typeof ResizeObserver;
+}
+
 // jsdom (as of jest-environment-jsdom@30) does not implement
 // `URL.createObjectURL` / `URL.revokeObjectURL`. The whiteboard
 // asset-insert path uses object URLs to probe image dimensions

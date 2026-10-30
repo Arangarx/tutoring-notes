@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { LINK_ROW_LIST_CLASS, LinkRow } from "@/components/LinkRow";
+import { LinkRow, LinkRowList } from "@/components/LinkRow";
 import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { formatOrganizationListMeta } from "@/lib/org-role-label";
@@ -19,7 +19,7 @@ export default async function StaffOrganizationsPage() {
       description="Members, invitations, and activation for organizations you run."
     >
       <SectionCard realm="admin" title="Your organizations" data-testid="org-staff-index">
-        <ul className={LINK_ROW_LIST_CLASS} role="list">
+        <LinkRowList>
           {organizations.map((org) => (
             <li key={org.id}>
               <LinkRow
@@ -30,7 +30,7 @@ export default async function StaffOrganizationsPage() {
               />
             </li>
           ))}
-        </ul>
+        </LinkRowList>
       </SectionCard>
     </PageShell>
   );

@@ -18,14 +18,6 @@ import { createStudent, retryStudentClaimInvite } from "@/app/admin/students/act
 const createMock = createStudent as jest.Mock;
 const retryMock = retryStudentClaimInvite as jest.Mock;
 
-beforeAll(() => {
-  global.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  };
-});
-
 describe("AddStudentForm", () => {
   beforeEach(() => {
     createMock.mockReset();

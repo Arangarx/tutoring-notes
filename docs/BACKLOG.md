@@ -1656,6 +1656,13 @@ Tutor `WbAVCluster` vs student floating controls.
 **[P2][UX] Missing primitives**  
 Chip, SheetMenuRow, SettingsRow, week grid, sync Badge.
 
+**[P2][UX] SettingsNavList as a LinkRow variant**  
+Evaluate before building. `SettingsNavList` (`src/components/admin/SettingsNavList.tsx`, used on `/admin/settings`) is a second chevron link-row: a full-width link, a title, a secondary line, a trailing `ChevronRight`, and a focus ring. `LinkRow` / `LinkRowList` (`src/components/LinkRow.tsx`) is the card stack on the student roster and both organization lists.
+
+They are not the same chrome. `LinkRow` is one rounded bordered card per row (`w-full`, shadow, optional leading slot, badges, mono meta). `SettingsNavList` is one card around a divided list (`divide-y`), full-bleed on small screens, an accent left border, and a description paragraph. The nav landmark (`aria-label="Settings sections"`) and the bleed stay on the settings shell.
+
+A `variant` on `LinkRow` (`card` | `divided`) could own the shared row so the chevron link is not a second primitive. `SettingsNavList` would keep the nav shell and pass `variant="divided"`. The divided row has no leading slot or badges, and the card row has no divided-list chrome, so the variant has to express those as present or absent rather than forking the row. Not built. Needs Andrew's call before folding them.
+
 **[P2][UX] Tailwind aliases rounded-panel, border-strong**  
 Still `rounded-[10px]` in places.
 

@@ -1,15 +1,5 @@
 /** @jest-environment jsdom */
 
-class ResizeObserverMock {
-  observe = jest.fn();
-  disconnect = jest.fn();
-  unobserve = jest.fn();
-}
-
-beforeAll(() => {
-  global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
-});
-
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { GraphEmbeddable } from "@/components/whiteboard/GraphEmbeddable";
