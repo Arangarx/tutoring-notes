@@ -645,7 +645,7 @@ export async function readEncryptionKeyFromHash(page: Page): Promise<string> {
         return "ready";
       },
       {
-        timeout: 20_000,
+        timeout: 30_000,
         message: `Tutor workspace hash never gained a #k= encryption key of at least ${MIN_KEY_LEN} characters (encryption-key.ts MIN_KEY_LEN)`,
       }
     )

@@ -1315,42 +1315,49 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
     expect(Math.abs(nameMid - badgeMid), `${label} badge midline ≈ name midline`).toBeLessThanOrEqual(4);
   }
 
-  /** Each painted line of the label sits inside the badge, including its rounded corners. */
+  /**
+   * Visual lines of the label, grouped by distinct line tops.
+   * `via` and the organization name are separate text nodes, so a raw
+   * client-rect count is not a line count. Each line's corners must lie
+   * inside the badge's rounded rectangle: the used radius (specified radius
+   * clamped to half the box) is the corner inset. A flat shrink of
+   * radius*0.3 sits inside this badge's vertical padding and rejects an
+   * unclipped moderate radius.
+   */
   async function expectBadgeLabelInside(badge: Locator, label: string) {
     const fit = await badge.evaluate((el) => {
       const textEl = el.querySelector("span");
       if (!(textEl instanceof HTMLElement)) throw new Error("organization badge has no label");
       const badgeRect = el.getBoundingClientRect();
-      const radius = Number.parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
-      const r = Math.min(radius, badgeRect.width / 2, badgeRect.height / 2);
-      const slack = 1;
+      const specified = Number.parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+      const used = Math.min(specified, badgeRect.width / 2, badgeRect.height / 2);
       const range = document.createRange();
       range.selectNodeContents(textEl);
-      const lines = [...range.getClientRects()].map((line) => ({
-        left: line.left,
-        right: line.right,
-        top: line.top,
-        bottom: line.bottom,
-      }));
+      const lines: Array<{ left: number; right: number; top: number; bottom: number }> = [];
+      for (const rect of range.getClientRects()) {
+        const sameLine = lines.find((line) => Math.abs(line.top - rect.top) < 1);
+        if (!sameLine) {
+          lines.push({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom });
+          continue;
+        }
+        sameLine.left = Math.min(sameLine.left, rect.left);
+        sameLine.right = Math.max(sameLine.right, rect.right);
+        sameLine.bottom = Math.max(sameLine.bottom, rect.bottom);
+      }
+      const slack = 1;
       const pointInside = (x: number, y: number) => {
-        const innerLeft = badgeRect.left + r;
-        const innerRight = badgeRect.right - r;
-        const innerTop = badgeRect.top + r;
-        const innerBottom = badgeRect.bottom - r;
+        const innerLeft = badgeRect.left + used;
+        const innerRight = badgeRect.right - used;
+        const innerTop = badgeRect.top + used;
+        const innerBottom = badgeRect.bottom - used;
         const cx = Math.min(Math.max(x, innerLeft), innerRight);
         const cy = Math.min(Math.max(y, innerTop), innerBottom);
         const dx = x - cx;
         const dy = y - cy;
-        return dx * dx + dy * dy <= (r + slack) * (r + slack);
+        return dx * dx + dy * dy <= (used + slack) * (used + slack);
       };
       let outside = 0;
       for (const line of lines) {
-        const boxInside =
-          line.left >= badgeRect.left - slack &&
-          line.right <= badgeRect.right + slack &&
-          line.top >= badgeRect.top - slack &&
-          line.bottom <= badgeRect.bottom + slack;
-        if (!boxInside) outside += 1;
         const corners: Array<[number, number]> = [
           [line.left, line.top],
           [line.right, line.top],
@@ -1361,10 +1368,43 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
           if (!pointInside(x, y)) outside += 1;
         }
       }
-      return { lineCount: lines.length, outside };
+      return { lineCount: lines.length, outside, used, height: badgeRect.height };
     });
-    expect(fit.outside, `${label} organization badge text is clipped`).toBe(0);
+    expect(fit.outside, `${label} organization badge text is clipped by the radius`).toBe(0);
+    expect(
+      fit.used,
+      `${label} wrapped organization badge uses a moderate radius`
+    ).toBeLessThan(fit.height / 2 - 1);
     return fit.lineCount;
+  }
+
+  /**
+   * A short label on the shared name line keeps the Badge pill.
+   * Oracle: the computed radius of the plain Badge on the synced row.
+   */
+  async function expectShortBadgePillRadius(syncedRow: Locator, shortRow: Locator, label: string) {
+    const orgBadge = shortRow.getByTestId("org-badge");
+    const pill = syncedRow.locator("[data-slot='badge']", { hasText: "Synced" });
+    await orgBadge.scrollIntoViewIfNeeded();
+    const org = await orgBadge.evaluate((el) => ({
+      radius: Number.parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0,
+      height: el.getBoundingClientRect().height,
+    }));
+    const pillCount = await pill.count();
+    if (pillCount > 0) {
+      const pillRadius = await pill.first().evaluate(
+        (el) => Number.parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0
+      );
+      expect(org.radius, `${label} short organization badge uses the pill radius`).toBeCloseTo(
+        pillRadius,
+        0
+      );
+      return;
+    }
+    expect(
+      org.radius,
+      `${label} short organization badge radius is at least half its height`
+    ).toBeGreaterThanOrEqual(org.height / 2 - 1);
   }
 
   /** A short label stays content-width: narrower than the title line it sits in. */
@@ -1477,6 +1517,9 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
           await expectNameKeepsVisibleWidth(row, label);
           await expectSyncedBadgeInsideRow(row, label);
           await expectNoHorizontalOverflow(page, label);
+          if (width === 375 || width === 1280) {
+            await expectShortBadgePillRadius(row, shortRow, label);
+          }
         }
       }
     } finally {

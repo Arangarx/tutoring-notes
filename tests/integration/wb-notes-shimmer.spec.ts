@@ -10,7 +10,7 @@ import {
   releaseHold,
   waitUntilParked,
 } from "../helpers/consent-harness";
-import { IN_FLIGHT_NOTES_UI_WAIT_MS } from "@/__tests__/helpers/notes-shimmer-budget";
+import { IN_FLIGHT_NOTES_UI_WAIT_MS } from "../helpers/notes-shimmer-budget";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 

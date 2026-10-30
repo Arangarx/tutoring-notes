@@ -255,11 +255,16 @@ async function cleanupOne(row: RecordedStudent): Promise<void> {
   await deleteDbRows(row, sessionIds);
 }
 
-/** afterEach and afterAll. A failure still reaches this; an empty registry does nothing. */
+/**
+ * afterEach and afterAll. A failure still reaches this; an empty registry does nothing.
+ *
+ * The registry entry is kept. afterEach deletes what is already stored, then the
+ * page can still finish a request and put a blob. afterAll lists the same ids
+ * and deletes that late put. Dropping the entry in afterEach would leave it.
+ */
 export async function cleanupProdShapeRun(): Promise<void> {
   const pending = [...recorded.values()];
   for (const row of pending) {
     await cleanupOne(row);
-    recorded.delete(row.studentId);
   }
 }

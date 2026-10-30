@@ -1,5 +1,5 @@
 import { OUT_OF_TX_HOLD_CAP_MS } from "@/lib/test-seams";
-import { IN_FLIGHT_NOTES_UI_WAIT_MS } from "@/__tests__/helpers/notes-shimmer-budget";
+import { IN_FLIGHT_NOTES_UI_WAIT_MS } from "../../tests/helpers/notes-shimmer-budget";
 
 describe("in-flight notes UI wait vs the out-of-tx hold cap", () => {
   test("the wait budget stays at least 15s under the 30s cap", () => {
