@@ -14,6 +14,7 @@ export function ScheduleSessionTitle({ session }: { session: ScheduledSessionVie
         <p
           className="min-w-0 shrink truncate text-sm font-semibold text-foreground"
           data-testid="schedule-session-name"
+          title={session.studentName}
         >
           {session.studentName}
         </p>

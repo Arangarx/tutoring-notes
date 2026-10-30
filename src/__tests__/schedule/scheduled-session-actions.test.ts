@@ -40,7 +40,7 @@ import {
 } from "@/app/admin/schedule/actions";
 import { formatDateOnlyInput } from "@/lib/date-only";
 import { uniq } from "../helpers/unique-test-token";
-import { getScheduledSessionDateInputForTest } from "./scheduled-session-test-helpers";
+import { getScheduledSessionDateInputForTest } from "../helpers/scheduled-session-test-helpers";
 
 async function createTutor() {
   return db.adminUser.create({

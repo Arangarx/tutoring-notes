@@ -93,11 +93,15 @@ async function expectFullWidthCardLink(
     titleBox!.x + titleBox!.width
   );
 
-  const hrefAtPoint = await page.evaluate(({ x, y }) => {
-    const hit = document.elementFromPoint(x, y);
-    return hit?.closest("a")?.getAttribute("href") ?? null;
-  }, { x: clickX, y: clickY });
-  expect(hrefAtPoint, "right edge of the list is the row link").toBe(expectedHref);
+  const expectRowLinkAtPoint = async (x: number, y: number) => {
+    const hrefAtPoint = await page.evaluate(({ x, y }) => {
+      const hit = document.elementFromPoint(x, y);
+      return hit?.closest("a")?.getAttribute("href") ?? null;
+    }, { x, y });
+    expect(hrefAtPoint, "right edge of the list is the row link").toBe(expectedHref);
+  };
+
+  await expectRowLinkAtPoint(clickX, clickY);
 
   await page.mouse.click(clickX, clickY);
   try {
@@ -107,8 +111,8 @@ async function expectFullWidthCardLink(
     );
   } catch (err) {
     // Next dev full-reloads while it compiles the destination and drops
-    // this click. The right-edge hit was already proven above. Click again
-    // once the list is back.
+    // this click. Re-prove the right-edge hit, then click again once the
+    // list is back.
     if (new URL(page.url()).pathname !== expectedHref) {
       await row.scrollIntoViewIfNeeded();
       const listBoxNow = await list.boundingBox();
@@ -119,6 +123,7 @@ async function expectFullWidthCardLink(
       const retryY = rowBoxNow!.y + rowBoxNow!.height / 2;
       expect(retryX).toBeGreaterThanOrEqual(rowBoxNow!.x);
       expect(retryX).toBeLessThanOrEqual(rowBoxNow!.x + rowBoxNow!.width);
+      await expectRowLinkAtPoint(retryX, retryY);
       await page.mouse.click(retryX, retryY);
       await page.waitForURL(
         (url) => url.pathname === expectedHref,

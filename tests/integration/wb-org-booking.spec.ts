@@ -1413,6 +1413,7 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
             expect(clipped.scrollWidth, `${label} long learner name truncates`).toBeGreaterThan(
               clipped.clientWidth + 1
             );
+            await expect(longName).toHaveAttribute("title", longLearner.fullName);
 
             const fittingRow = rowFor(page, fittingAppointment.id);
             const fittingName = fittingRow.getByTestId("schedule-session-name");
