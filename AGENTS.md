@@ -154,7 +154,7 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   `reaper_skip reason=already_ended|not_idle|appointment_delay`, `reaper_off`, `reaper_mode_invalid raw=<value>`,
   and `[slc] cron=session-cleanup job=<reaper|purge> action=job_error err=<message>`),
   `cns` (consent decisions — one prefix for every consent-resolution log line; always `wbsid=<id>` when a session
-  exists: `action=capabilities_resolved audio=<mode> wb=<persist> notes=<draft> online=<bool> mic=<yes|defer|no> source=snapshot|live`,
+  exists: `action=capabilities_resolved audio=<mode> wb=<persist> notes=<draft> online=<bool|n/a> mic=<yes|defer|no> source=snapshot|live|legacy_unclaimed|fail_closed`,
   `refrozen_at_start changed=<keys|none> created=<bool> before=<toggles|none> after=<toggles>`,
   `refreeze_skipped reason=already_active`, `frozen_at_end source=end|stale|reaper before=none after=<toggles>`,
   `entry_denied surface=start|open_room|resume|join|schedule principal=<type> reason=<EntryBlockReason> mode=online|in_person`,

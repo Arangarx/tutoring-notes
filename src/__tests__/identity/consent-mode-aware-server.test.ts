@@ -425,6 +425,65 @@ describe("resolveSessionCapabilities", () => {
     expect((await resolveSessionCapabilities(session.id)).audio.mode).toBe("none");
   });
 
+  // C1 N5 — snapshot-fallback branches of the resolver. The snapshot is built by hand with NO consentRecordId, so the
+  // oracle is the literal snapshot toggles and not anything the resolver derived.
+  async function seedSnapshotOnlySession(opts: {
+    claimed: boolean;
+    sessionPhase: "PENDING" | "ACTIVE";
+    allowAudioRecording: boolean;
+    sessionMode?: "LIVE" | "IN_PERSON";
+  }) {
+    const tutor = await createTutor();
+    const profileId = opts.claimed ? (await createLearnerProfile((await createAccountHolder()).id)).id : null;
+    const student = await createStudent(tutor.id, profileId);
+    const session = await db.whiteboardSession.create({
+      data: {
+        adminUserId: tutor.id,
+        studentId: student.id,
+        consentAcknowledged: true,
+        eventsBlobUrl: `https://abc.blob.vercel-storage.com/test-${uniq()}.json`,
+        eventsSchemaVersion: 1,
+        sessionMode: opts.sessionMode ?? "IN_PERSON",
+        sessionPhase: opts.sessionPhase,
+        startedAt: new Date(),
+      },
+    });
+    await db.sessionConsentSnapshot.create({
+      data: {
+        whiteboardSessionId: session.id,
+        allowLiveSession: true,
+        allowAudioRecording: opts.allowAudioRecording,
+        allowWhiteboardRecording: false,
+        allowNoteSending: true,
+      },
+    });
+    return session;
+  }
+
+  it("a PENDING session with a snapshot but no live consent record falls back to the snapshot, not to fail-closed", async () => {
+    // Claimed learner, no ConsentRecord exists for the owner, so the live read is empty. The snapshot says audio on,
+    // whiteboard off: fail-closed would answer audio none / persist false for both fields, the snapshot only for one.
+    const session = await seedSnapshotOnlySession({ claimed: true, sessionPhase: "PENDING", allowAudioRecording: true });
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(caps.audio.mode).toBe("full");
+    expect(caps.whiteboard.persist).toBe(false);
+  });
+
+  it("a PENDING session with a snapshot and no learner profile answers from the snapshot, not legacy all-on", async () => {
+    const session = await seedSnapshotOnlySession({ claimed: false, sessionPhase: "PENDING", allowAudioRecording: false });
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(caps.audio.mode).toBe("none");
+    expect(caps.whiteboard.persist).toBe(false);
+    expect(caps.off).toEqual(expect.arrayContaining(["audio", "whiteboard"]));
+  });
+
+  it("an ACTIVE session with a snapshot and no learner profile answers from the snapshot, not legacy all-on", async () => {
+    const session = await seedSnapshotOnlySession({ claimed: false, sessionPhase: "ACTIVE", allowAudioRecording: false });
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(caps.audio.mode).toBe("none");
+    expect(caps.whiteboard.persist).toBe(false);
+  });
+
   it("an unknown session id fails closed", async () => {
     const caps = await resolveSessionCapabilities("no-such-session");
     expect(acceptsAudioSegments(caps)).toBe(false);

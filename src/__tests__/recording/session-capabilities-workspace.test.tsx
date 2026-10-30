@@ -399,12 +399,32 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
       );
     });
 
-    expect(screen.getByTestId("wb-audio-consent-draft-cleared")).toBeInTheDocument();
+    // The marker is set after the async clear() resolves, so wait for it rather than reading it synchronously.
+    expect(await screen.findByTestId("wb-audio-consent-draft-cleared")).toBeInTheDocument();
     expect(mockDraftFindInProgress).not.toHaveBeenCalled();
     expect(mockOutboxEnqueue).not.toHaveBeenCalled();
 
     const lastOpts = capturedRecorderOptions.at(-1);
     expect(lastOpts?.recordingDraft).toBeUndefined();
+  });
+
+  test("C1 N1: snapshot present but audio toggle null (LIVE) is treated as no usable consent: no recorder draft, no recovery scan", async () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        sessionMode="LIVE"
+        initialHasConsentSnapshot={true}
+        initialAllowAudioRecording={null}
+      />
+    );
+
+    // Spec: no readable audio consent means no audio is captured, even in a LIVE session where an off
+    // toggle would keep the tutor-only mixdown. The draft is cleared and never recovered.
+    await waitFor(() => {
+      expect(mockDraftClear).toHaveBeenCalledWith("wbs-consent-test", TUTOR_MIC_STREAM_ID);
+    });
+    expect(mockDraftFindInProgress).not.toHaveBeenCalled();
+    expect(capturedRecorderOptions.at(-1)?.recordingDraft).toBeUndefined();
   });
 
   test("policy=full passes recordingDraft to useAudioRecorder (positive path)", () => {

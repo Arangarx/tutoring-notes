@@ -1611,7 +1611,8 @@ export function WhiteboardWorkspaceClient({
       // toggles are neutral (they cannot change `audio.mode`); the single `sessionCapabilities` prop replaces
       // these three ad hoc props in C3b/C3c.
       deriveSessionCapabilities({
-        hasConsentSnapshot: initialHasConsentSnapshot,
+        // A snapshot with an unreadable audio toggle (null) is not a usable snapshot: treat it as legacy (no audio).
+        hasConsentSnapshot: initialHasConsentSnapshot && initialAllowAudioRecording !== null,
         toggles: { audio: initialAllowAudioRecording === true, whiteboard: true, notes: true },
         sessionMode,
         notesForbidden: false,

@@ -691,6 +691,50 @@ describe("appointments", () => {
   });
 });
 
+describe("org-forced end upload window does not bypass the audio consent gate", () => {
+  it("in person with the organization's audio consent off, the late segment is denied and no recording row lands", async () => {
+    const { org, owner } = await seedOrg("active");
+    const forcedAt = new Date(Date.now() - 60 * 1000);
+    const instructor = await seedMember(org.id, ["instructor"], { removedAt: forcedAt });
+    const { student, profile } = await seedOrgLearner(org.id, owner.id);
+    // The org learner's consent record (seeded audio on) is flipped off: the owner's live record decides, no snapshot.
+    await db.consentRecord.updateMany({
+      where: { learnerProfileId: profile.id },
+      data: { allowAudioRecording: false },
+    });
+    const { session } = await seedTaughtSession({
+      adminUserId: instructor.id,
+      studentId: student.id,
+      endedAt: forcedAt,
+    });
+    await db.whiteboardSession.update({ where: { id: session.id }, data: { sessionMode: "IN_PERSON" } });
+    mockSession(instructor.email, instructor.id);
+    const blobUrl = `https://blob.vercel-storage.com/${uniq("seg")}.webm`;
+    const result = await endWhiteboardSession(
+      session.id,
+      "https://blob.vercel-storage.com/late-events-audio-off.json",
+      {
+        segments: [
+          {
+            blobUrl,
+            mimeType: "audio/webm",
+            sizeBytes: 1200,
+            audioStartedAtMs: 0,
+            streamId: "tutor:mic",
+            segmentId: uniq("segment"),
+            durationSeconds: 2,
+          },
+        ],
+      }
+    );
+    expect(result.registeredSegments).toBe(0);
+    expect(await db.sessionRecording.findFirst({ where: { whiteboardSessionId: session.id, blobUrl } })).toBeNull();
+    expect(await db.sessionRecording.count({ where: { whiteboardSessionId: session.id } })).toBe(0);
+    const ended = await db.whiteboardSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(ended.endedAt?.toISOString()).toBe(forcedAt.toISOString());
+  });
+});
+
 describe("org-forced end still accepts a segment inside the upload window", () => {
   it("a segment row lands after endedAt was already set", async () => {
     const { org, owner } = await seedOrg("active");

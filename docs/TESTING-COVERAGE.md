@@ -20,7 +20,7 @@
 1. **AccountHolder login + 2FA** — logic tested (U/I); **no browser enroll/verify/manage**; AH login still uses **in-memory IP limiter** (cold-start gap).
 2. **Claim wizard UI** — strong **I** on APIs/state; **no E2E** through interstitial → add-new / attach-existing / connect-self / setup.
 3. **Child PIN login + cooldown UX** — **I** on limiter math + durability; **M** for `/students/login` UI countdown and hardware timing.
-4. **Consent / attestation (Phase 3)** — **stub only** (`assertEffectiveConsent` P2a); whiteboard tutor checkbox has **U + partial E**.
+4. **Consent / attestation (Phase 3)** — consent switches and capabilities now go through `deriveSessionCapabilities` / `resolveSessionCapabilities` (**U** truth table in `session-capabilities.test.ts`, **I** server gates); parent/tutor attestation (Phase 3) is not built; whiteboard tutor checkbox has **U + partial E**.
 5. **Full tutor recording lifecycle (in-person)** — FSM/outbox **U**; **E** partial (integration + opt-in rollover); Sarah-class hardware still **M**.
 6. **Parent dashboard + child detail UI** — ownership **I**; pages **M** (no Playwright).
 7. **Marketing `/` + `/features` + nav** — **M** (Phase D copy smokes queued).
@@ -128,7 +128,7 @@
 | `assertOwnsLearnerProfile` | Cross-cutting | I | `assertOwnsLearnerProfile.test.ts` | Denials + `lpr=` logging |
 | Session fixation / cross-cookie admin gate | Cross-cutting | I | `identity-p2a.test.ts` | AH cookie vs NextAuth JWT |
 | Tombstoned AH / learner rejection | Cross-cutting | I | `identity-p2a.test.ts` | — |
-| Consent scope (`assertEffectiveConsent`) | Cross-cutting | U (stub) | `identity-p2a.test.ts` | **Phase 3 stub** — not real lattice |
+| Consent scope (`resolveSessionCapabilities` / `deriveSessionCapabilities`) | Cross-cutting | U, I | `session-capabilities.test.ts`, `consent-mode-aware-server.test.ts`, `consent-guards.test.ts` | Phase 3 attestation records not built |
 | Whiteboard tutor consent checkbox | Cross-cutting | U, E | `createWhiteboardSession.test.ts`, wb smokes | Not parent/tutor attestation records |
 | Capture attestation (in-person) | Cross-cutting | M | — | `interim-capture-attestation` branch — **M** |
 | Recording FSM (`evaluateLifecycle`) | Cross-cutting | U | `lifecycle-machine.test.ts`, `recording-state.test.ts` | Strong unit teeth |
@@ -184,7 +184,7 @@ Prioritize **(hand-test frequency) × (blast radius)**. Target: **Playwright E2E
 ### Phase 3 — Durable limiters + consent
 
 1. **AH login + 2FA IP limiters** → Neon table (same pattern as `LearnerLoginThrottle`) — add **I** cold-start tests, then **E** login throttle.
-2. **Phase 3 consent lattice** — replace P2a stub; add **I** for `assertEffectiveConsent` + **E** for capture attestation modal when branch merges.
+2. **Phase 3 consent lattice** — attestation records are not built; add **I** for them + **E** for the capture attestation modal when the branch merges (capability derivation is already covered, see the consent scope row).
 
 ### Explicit non-goals (stay manual for now)
 

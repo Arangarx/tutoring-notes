@@ -75,7 +75,9 @@ const RESTRICTIVE_ORDER: readonly string[] = ["none", "no", "tutor_only", "defer
 
 /**
  * Pre-consent sessions (no frozen snapshot) never captured audio on the client. The only rule that is not a
- * switch effect; it applies on top of the all-on value and changes nothing else.
+ * switch effect; it applies on top of the all-on value and changes nothing else. Living outside `CONSENT_SWITCHES`
+ * is INTENDED (consent wave plan § 2.2, "legacy behavior preserved": existing sessions are not touched), not an
+ * oversight: there is no switch whose off-effect this is.
  */
 const LEGACY_NO_SNAPSHOT_EFFECT: CapabilityEffect = { audio: { mode: "none" } };
 

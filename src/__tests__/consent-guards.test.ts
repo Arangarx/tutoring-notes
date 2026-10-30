@@ -1,7 +1,7 @@
 /**
  * Consent wave — jest/grep guards and statement-count bounds (docs/handoff/consent-wave-plan.md § 6i).
  *
- * C0 SKELETON: every entry is `it.todo`, owned by the wave named beside it. A todo is replaced by a real test in
+ * Entries still marked `it.todo` are owned by the wave named beside them. A todo is replaced by a real test in
  * the wave that lands the behavior, with red-before / green-after evidence (exhaustive-testing-mandate.mdc).
  * Jest is the right layer here: the oracle is a grep or a statement count, not rendered behavior.
  */
@@ -97,7 +97,6 @@ describe("consent guards (§ 6i)", () => {
   it.todo("C4c: reaper is the fifth caller (G7): one shared stampStaleWhiteboardSessionEnd; no other file writes a stale/forced endedAt or calls stampBoardPurgeIntent/freezeConsentSnapshotTx outside the helper and the two End paths");
   it.todo("C6: replay single decision function: no replay decision site reads consent or snapshot columns outside replay-access.ts");
   it.todo("C7: consent copy covers every switch effect (§ 2.8)");
-  it.todo("C1: capabilities truth table, against the brief's table typed as data in the test");
   it.todo("C2a: isLearnerLane fails closed on unknown stream ids; parseLane classifies every stream-id format in the codebase");
   it("C1: no alias survives: the replaced consent symbols have zero references anywhere in src/, tests/ or scripts/", () => {
     const repoRoot = path.resolve(SRC_ROOT, "..");
