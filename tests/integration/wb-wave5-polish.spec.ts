@@ -14,6 +14,7 @@ import {
   expectedAlignedStudentScroll,
   loginLearnerInContext,
   openTutorAndStudent,
+  readEncryptionKeyFromHash,
   readOverflowMenuItemLeftEdges,
   readViewportSnapshot,
   seedWbLiveSyncSession,
@@ -213,10 +214,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
       const tutorPage = await tutorContext.newPage();
       await loadTutorBoard(tutorPage, session);
       const studentPage = await studentContext.newPage();
-      const encryptionKey = await tutorPage.evaluate(() => {
-        const m = window.location.hash.match(/[#&]k=([^&]+)/);
-        return m?.[1] ? decodeURIComponent(m[1]) : "";
-      });
+      const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
       // Use authenticated /join/[sessionId] path (workstream 1 — /w/ is retired).
       await studentPage.goto(
         `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
@@ -479,10 +477,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         });
         const tutorPage = await tutorContext.newPage();
         await loadTutorBoard(tutorPage, session);
-        const key = await tutorPage.evaluate(() => {
-          const m = window.location.hash.match(/[#&]k=([^&]+)/);
-          return m?.[1] ? decodeURIComponent(m[1]) : "";
-        });
+        const key = await readEncryptionKeyFromHash(tutorPage);
         // Fall back to fresh login if no stored state is available.
         if (!fs.existsSync(_learnerAuthFile10)) {
           await loginLearnerInContext(context, session.learnerHandle, session.learnerPin);

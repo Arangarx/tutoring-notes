@@ -543,10 +543,7 @@ test.describe("Phase-gated capture + timer", { tag: [TAG.WB_SYNC] }, () => {
       });
       await waitForWbE2eBridge(tutorPage, "tutor");
 
-      const encryptionKey = await tutorPage.evaluate(() => {
-        const m = window.location.hash.match(/[#&]k=([^&]+)/);
-        return m?.[1] ? decodeURIComponent(m[1]) : "";
-      });
+      const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
       const studentPage = await studentCtx.newPage();
       await studentPage.goto(
         `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
@@ -663,10 +660,7 @@ test.describe("Waiting-room overlay + Start gating", { tag: [TAG.WB_CHROME, TAG.
       });
       await waitForWbE2eBridge(tutorPage, "tutor");
 
-      const encryptionKey = await tutorPage.evaluate(() => {
-        const m = window.location.hash.match(/[#&]k=([^&]+)/);
-        return m?.[1] ? decodeURIComponent(m[1]) : "";
-      });
+      const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
       const studentPage = await studentCtx.newPage();
       await studentPage.goto(
         `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
@@ -913,10 +907,7 @@ test.describe(
         });
         await waitForWbE2eBridge(tutorPage, "tutor");
 
-        const encryptionKey = await tutorPage.evaluate(() => {
-          const m = window.location.hash.match(/[#&]k=([^&]+)/);
-          return m?.[1] ? decodeURIComponent(m[1]) : "";
-        });
+        const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
         const studentPage = await studentCtx.newPage();
         await studentPage.goto(
           `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
@@ -985,10 +976,7 @@ test.describe("Dual-device takeover", { tag: [TAG.WB_PRESENCE] }, () => {
       });
       await waitForWbE2eBridge(tutorPage, "tutor");
 
-      const encryptionKey = await tutorPage.evaluate(() => {
-        const m = window.location.hash.match(/[#&]k=([^&]+)/);
-        return m?.[1] ? decodeURIComponent(m[1]) : "";
-      });
+      const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
 
       // Device 1 joins first.
       const student1Page = await student1Ctx.newPage();
@@ -1078,10 +1066,7 @@ test.describe("Dual-device takeover", { tag: [TAG.WB_PRESENCE] }, () => {
         });
         await waitForWbE2eBridge(tutorPage, "tutor");
 
-        const encryptionKey = await tutorPage.evaluate(() => {
-          const m = window.location.hash.match(/[#&]k=([^&]+)/);
-          return m?.[1] ? decodeURIComponent(m[1]) : "";
-        });
+        const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
 
         // Device A joins first; tutor sees it.
         const student1Page = await student1Ctx.newPage();
@@ -1212,10 +1197,7 @@ test.describe("/w/ retirement — redirect bridge", { tag: [TAG.WB_PRESENCE] }, 
       await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
         timeout: 90_000,
       });
-      const encryptionKey = await tutorPage.evaluate(() => {
-        const m = window.location.hash.match(/[#&]k=([^&]+)/);
-        return m?.[1] ? decodeURIComponent(m[1]) : "";
-      });
+      const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
 
       // Authenticate learner then navigate to the legacy /w/ URL.
       await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
@@ -1317,10 +1299,7 @@ test.describe(
           ).toBeVisible({ timeout: 90_000 });
           await waitForWbE2eBridge(tutorPage, "tutor");
 
-          const encryptionKey = await tutorPage.evaluate(() => {
-            const m = window.location.hash.match(/[#&]k=([^&]+)/);
-            return m?.[1] ? decodeURIComponent(m[1]) : "";
-          });
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
 
           const studentPage = await studentCtx.newPage();
           await studentPage.goto(
@@ -1393,10 +1372,7 @@ test.describe(
           ).toBeVisible({ timeout: 90_000 });
           await waitForWbE2eBridge(tutorPage, "tutor");
 
-          const encryptionKey = await tutorPage.evaluate(() => {
-            const m = window.location.hash.match(/[#&]k=([^&]+)/);
-            return m?.[1] ? decodeURIComponent(m[1]) : "";
-          });
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
 
           const studentPage = await studentCtx.newPage();
           await studentPage.goto(
@@ -1471,10 +1447,7 @@ test.describe(
           ).toBeVisible({ timeout: 90_000 });
           await waitForWbE2eBridge(tutorPage, "tutor");
 
-          const encryptionKey = await tutorPage.evaluate(() => {
-            const m = window.location.hash.match(/[#&]k=([^&]+)/);
-            return m?.[1] ? decodeURIComponent(m[1]) : "";
-          });
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
 
           const studentPage = await studentCtx.newPage();
           await studentPage.goto(

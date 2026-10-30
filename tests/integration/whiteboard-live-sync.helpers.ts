@@ -614,42 +614,48 @@ export async function waitForSceneElementIdsContaining(
 }
 
 /**
- * Join key for the student URL. The workspace writes `#k=` and the same value
- * to `wb-key:<sessionId>`. On a warm dev server the fragment is sometimes
- * empty by the time the canvas is up; the localStorage shelf still has the
- * key. Hash present on the first read (the common case) returns immediately.
+ * Tutor join key from the workspace URL hash (`#k=`).
+ *
+ * The canvas testid is in the first paint. `useEncryptionKeyInHash` writes
+ * `#k=` in a useEffect after that (`encryption-key.ts`); `ServerLiveKeySeeder`
+ * only seeds in useLayoutEffect when `liveKey` is non-null. A one-shot read
+ * can therefore see an empty fragment. Poll until the hash has a `k` value.
+ *
+ * Real keys are 32-byte AES-GCM serialized as unpadded base64url (~43 chars).
+ * The product floor is `MIN_KEY_LEN` = 16 in `encryption-key.ts`. Never
+ * returns "" — the poll fails if the hash never gains a key of that length.
  */
 export async function readEncryptionKeyFromHash(page: Page): Promise<string> {
+  const minKeyLen = 16;
   let captured = "";
   await expect
     .poll(
       async () => {
         const found = await page.evaluate(() => {
-          const hash = window.location.hash;
-          const fromHash = hash.match(/[#&]k=([^&]+)/);
-          if (fromHash?.[1] && fromHash[1].length >= 16) return fromHash[1];
-          const sessionId =
-            window.location.pathname.split("/").filter(Boolean).at(-2) ?? "";
+          const m = window.location.hash.match(/[#&]k=([^&]+)/);
+          if (!m?.[1]) return "";
           try {
-            const fromLs = sessionId
-              ? window.localStorage.getItem(`wb-key:${sessionId}`)
-              : null;
-            if (fromLs && fromLs.length >= 16) return fromLs;
+            return decodeURIComponent(m[1]);
           } catch {
-            /* private mode */
+            return "";
           }
-          return "";
         });
-        if (!found) return "";
-        captured = decodeURIComponent(found);
+        if (found.length < minKeyLen) return "";
+        captured = found;
         return "ready";
       },
       {
         timeout: 20_000,
-        message: "Workspace encryption key never appeared in hash or localStorage",
+        message:
+          "Tutor workspace hash never gained a #k= encryption key of at least 16 characters (encryption-key.ts MIN_KEY_LEN)",
       }
     )
     .toBe("ready");
+  if (captured.length < minKeyLen) {
+    throw new Error(
+      "readEncryptionKeyFromHash returned without a #k= value of at least 16 characters"
+    );
+  }
   return captured;
 }
 

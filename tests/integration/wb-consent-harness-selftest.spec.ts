@@ -5,8 +5,9 @@
  * Proves the shared infra the matrix will lean on, before any matrix row does:
  *   - blob harness list / delete / fault injection, over HTTP and through the product `deleteBlob`
  *     path where reachable
- *   - the hold / fault / reaper-mode seams, armed through one route bundle and observed from a
- *     DIFFERENT route bundle (SF-B, globalThis-backed state), plus the 3 s in-transaction cap
+ *   - end-to-end smoke of the seam routes (arm via /api/test/seams, hit via /api/test/seams/probe),
+ *     plus the 3 s in-transaction cap. Cross-module proof is the jest isolateModules test in
+ *     src/__tests__/test-seams.test.ts
  *   - the `getUserMedia` spy on Chromium (`hasTouch` + fake media, M11/M12 setup) and the WebKit stub (BL1)
  *   - the cron driver (401 without the secret, 200 with it)
  *   - the relay probe against the local relay, with a positive control (W24)
@@ -15,6 +16,7 @@
  *   npx playwright test tests/integration/wb-consent-harness-selftest.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
+import fs from "node:fs";
 import { test, expect, webkit, devices } from "@playwright/test";
 import { TAG } from "../test-tags";
 import {
@@ -103,7 +105,8 @@ test.describe("consent C0 harness: blob harness", {
   });
 });
 
-test.describe("consent C0 harness: seams across route bundles", {
+// End-to-end smoke of the seam routes (arm via /api/test/seams, hit via /api/test/seams/probe). Cross-module proof is the jest isolateModules test in src/__tests__/test-seams.test.ts.
+test.describe("consent C0 harness: end-to-end smoke of the seam routes", {
   tag: [TAG.WB_CONSENT, TAG.WB_SYNC],
 }, () => {
   test.beforeEach(async ({ request }) => {
@@ -113,7 +116,7 @@ test.describe("consent C0 harness: seams across route bundles", {
     await resetSeams(request);
   });
 
-  test("a hold armed through /api/test/seams parks a call made from /api/test/seams/probe until released", async ({
+  test("smoke: a hold armed via /api/test/seams parks a call made from /api/test/seams/probe until released", async ({
     request,
   }) => {
     const sessionId = `selftest-${Date.now()}`;
@@ -166,7 +169,7 @@ test.describe("consent C0 harness: seams across route bundles", {
     await expect(expectReleasedByTest(request, "selftest:probe:in_tx", sessionId)).rejects.toThrow();
   });
 
-  test("a fault armed through one bundle throws in another, session-scoped, and disarms", async ({ request }) => {
+  test("smoke: a fault armed via /api/test/seams throws on /api/test/seams/probe, session-scoped, and disarms", async ({ request }) => {
     await armFault(request, { name: "selftest:fault", sessionId: "bad" });
     const good = await probeSeam(request, "fault", { sessionId: "good" });
     expect(await good.json()).toEqual({ fault: false });
@@ -240,6 +243,16 @@ test.describe("consent C0 harness: getUserMedia spy", {
   });
 
   test("WebKit (iPhone 13) stub: records constraints and returns a stream without touching hardware (BL1)", async () => {
+    let webkitInstalled = false;
+    try {
+      webkitInstalled = fs.existsSync(webkit.executablePath());
+    } catch {
+      webkitInstalled = false;
+    }
+    test.skip(
+      !webkitInstalled,
+      "Playwright WebKit executable is not installed"
+    );
     const wk = await webkit.launch();
     try {
       // The project `use.permissions` grants microphone; WebKit rejects that grant ("Unknown
