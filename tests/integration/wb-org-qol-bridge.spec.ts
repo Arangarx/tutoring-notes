@@ -27,19 +27,21 @@ import {
   seedWbLiveSyncSession,
 } from "./whiteboard-live-sync.helpers";
 import { seedTestAdmin, seedTestLearner, seedTestStudent } from "../visual/helpers";
+import { expectReasonUnderControl } from "./entry-reason.helpers";
 
 const PARENT_STATE = "tests/integration/.auth/parent.json";
 const LEARNER_STATE = "tests/integration/.auth/learner.json";
 
-/** Desktop student detail renders duplicate mobile+desktop panels — target the visible tabpanel. */
+/**
+ * One Open room per appointment on the student page (W4): the next appointment's
+ * button is the main control and is not repeated in the upcoming list. The page-level
+ * locator is unique, so a second copy would fail this click with a strict-mode error.
+ */
 async function clickOpenScheduledRoom(
   tutorPage: import("@playwright/test").Page,
   scheduledSessionId: string
 ) {
-  await tutorPage
-    .getByTestId(`upcoming-session-row-${scheduledSessionId}`)
-    .getByTestId(`open-scheduled-room-${scheduledSessionId}`)
-    .click();
+  await tutorPage.getByTestId(`open-scheduled-room-${scheduledSessionId}`).click();
 }
 
 /**
@@ -431,7 +433,12 @@ test.describe("org QoL schedule bridge", () => {
         await expect(joinBtn).toBeVisible({ timeout: 15_000 });
         await expect(joinBtn).toBeDisabled();
         await expect(joinBtn).toHaveAttribute("type", "button");
-        await expect(row.getByRole("status")).toHaveCount(0);
+        // Join is an online entry: it stays off, and the family is told why.
+        await expectReasonUnderControl(
+          joinBtn,
+          row.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`),
+          "Live sessions are off in privacy settings."
+        );
         await expect(page).toHaveURL(/\/account\/dashboard/);
 
         const tutorContext = await browser.newContext({
@@ -447,12 +454,15 @@ test.describe("org QoL schedule bridge", () => {
             `open-scheduled-room-${sched.scheduledSessionId}`
           );
           await expect(openBtns.first()).toBeVisible({ timeout: 15_000 });
-          const openCount = await openBtns.count();
-          expect(openCount).toBeGreaterThan(0);
-          for (let i = 0; i < openCount; i++) {
-            await expect(openBtns.nth(i)).toBeDisabled();
-            await expect(openBtns.nth(i)).toHaveAttribute("type", "button");
-          }
+          // Online sessions off blocks ONLINE only (Andrew 2026-10-29, Decision 5): the
+          // tutor can still open the room in person, so Open room is a live submit
+          // control and the reason sits under it. There is exactly one per appointment.
+          await expect(openBtns).toHaveCount(1);
+          await expect(openBtns.first()).toBeEnabled();
+          await expect(openBtns.first()).toHaveAttribute("type", "submit");
+          await expect(
+            tutorPage.getByTestId(`open-scheduled-room-reason-${sched.scheduledSessionId}`)
+          ).toContainText("You can still open the room in person.");
         } finally {
           await tutorContext.close();
         }
@@ -469,6 +479,7 @@ test.describe("org QoL schedule bridge", () => {
       await seedParentAccountHolder();
       const adminUserId = await seedTestAdmin();
       const fx = await seedParentConsentFixture({ adminUserId });
+      await seedConsentRecord(fx.learnerProfileId, fx.adminUserId, fx.accountHolderId);
       const sched = await seedBridgeScheduledSession({
         adminUserId: fx.adminUserId,
         studentId: fx.studentId,
@@ -480,6 +491,69 @@ test.describe("org QoL schedule bridge", () => {
       const joinBtn = page.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`);
       await expect(joinBtn).toBeVisible({ timeout: 15_000 });
       await expect(joinBtn).toBeDisabled();
+      await expectReasonUnderControl(
+        joinBtn,
+        page.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`),
+        "Join opens 15 minutes before the start."
+      );
+      }
+    );
+
+    test(
+      "Join with no privacy preferences on file tells the family to finish them, even inside the window",
+      { tag: [TAG.ORG, TAG.WB_CHROME] },
+      async ({ page }) => {
+        await seedParentAccountHolder();
+        const adminUserId = await seedTestAdmin();
+        const fx = await seedParentConsentFixture({ adminUserId });
+        const sched = await seedBridgeScheduledSession({
+          adminUserId: fx.adminUserId,
+          studentId: fx.studentId,
+          learnerProfileId: fx.learnerProfileId,
+          accountHolderId: fx.accountHolderId,
+          startsInMs: 5 * 60_000,
+        });
+        await page.goto("/account/dashboard");
+        const joinBtn = page.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`);
+        await expect(joinBtn).toBeDisabled({ timeout: 15_000 });
+        await expect(
+          page.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`)
+        ).toHaveAttribute("data-entry-reason", "consent_missing_parent");
+        await expect(
+          page.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`)
+        ).toContainText("Finish privacy preferences for");
+      }
+    );
+
+    test(
+      "Join turns on by itself when the window opens, and the reason line goes away",
+      { tag: [TAG.ORG, TAG.WB_CHROME] },
+      async ({ page }) => {
+        await seedParentAccountHolder();
+        const adminUserId = await seedTestAdmin();
+        const fx = await seedParentConsentFixture({ adminUserId });
+        await seedConsentRecord(fx.learnerProfileId, fx.adminUserId, fx.accountHolderId);
+        const sched = await seedBridgeScheduledSession({
+          adminUserId: fx.adminUserId,
+          studentId: fx.studentId,
+          learnerProfileId: fx.learnerProfileId,
+          accountHolderId: fx.accountHolderId,
+          startsInMs: 2 * 60 * 60_000,
+        });
+        // Install a controllable clock before the page loads, then jump past the open time.
+        await page.clock.install({ time: new Date() });
+        await page.goto("/account/dashboard");
+        const joinBtn = page.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`);
+        await expect(joinBtn).toBeDisabled({ timeout: 15_000 });
+        await expect(
+          page.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`)
+        ).toBeVisible();
+
+        await page.clock.fastForward(105 * 60_000); // 1h45m: inside the 15-minute window
+        await expect(joinBtn).toBeEnabled();
+        await expect(
+          page.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`)
+        ).toHaveCount(0);
       }
     );
   });

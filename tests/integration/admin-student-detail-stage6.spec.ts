@@ -14,6 +14,7 @@ import { encode } from "next-auth/jwt";
 import { TAG } from "../test-tags";
 import { seedTestAdmin } from "../visual/helpers";
 import { openManualNoteForm } from "./open-manual-note-form";
+import { expectReasonUnderControl } from "./entry-reason.helpers";
 
 const COMING_SOON =
   "Recording and uploading audio here is coming soon. For now, record during a whiteboard session.";
@@ -74,7 +75,12 @@ async function linkProfile(
   return profile.id;
 }
 
-async function seedReadyStudent(adminUserId: string, name: string): Promise<string> {
+/** `live_on` = ready to start; `live_off` = online sessions off; `none` = claimed, no ConsentRecord. */
+async function seedReadyStudent(
+  adminUserId: string,
+  name: string,
+  consent: "live_on" | "live_off" | "none" = "live_on"
+): Promise<string> {
   return withPrisma(async (prisma) => {
     const student = await prisma.student.create({
       data: { name, adminUserId, parentEmail: "stage6-ready@test.local" },
@@ -85,19 +91,21 @@ async function seedReadyStudent(adminUserId: string, name: string): Promise<stri
       where: { id: learnerProfileId },
       select: { accountHolderId: true },
     });
-    await prisma.consentRecord.create({
-      data: {
-        learnerProfileId,
-        adminUserId,
-        version: 1,
-        allowLiveSession: true,
-        allowAudioRecording: true,
-        allowWhiteboardRecording: true,
-        allowNoteSending: true,
-        setByAccountHolderId: accountHolder.accountHolderId,
-        captureMethod: "electronic",
-      },
-    });
+    if (consent !== "none") {
+      await prisma.consentRecord.create({
+        data: {
+          learnerProfileId,
+          adminUserId,
+          version: 1,
+          allowLiveSession: consent === "live_on",
+          allowAudioRecording: true,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+          setByAccountHolderId: accountHolder.accountHolderId,
+          captureMethod: "electronic",
+        },
+      });
+    }
     return student.id;
   });
 }
@@ -299,6 +307,102 @@ test.describe("Admin student detail — stage 6", () => {
       await expect(main.getByRole("button", { name: "Start session" })).toBeVisible();
       await expect(page.getByTestId("upcoming-sessions-card")).toBeVisible();
       await expect(page.getByTestId("student-critical-card")).toHaveCount(0);
+    }
+  );
+
+  // --- Org UX W4: every Start / Open room control says why it is limited -------------
+
+  test(
+    "online sessions off: one Open room, still reachable, with the reason under it",
+    { tag: [TAG.ORG, TAG.WB_CHROME] },
+    async ({ page }) => {
+      const adminUserId = await seedTestAdmin();
+      const studentId = await seedReadyStudent(adminUserId, "Online Off Student", "live_off");
+      const appointmentId = await seedUpcoming(adminUserId, studentId);
+
+      await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+      // The appointment has exactly one Open room on the page (promoted, not repeated in the list).
+      const button = page.getByTestId(`open-scheduled-room-${appointmentId}`);
+      await expect(button).toHaveCount(1);
+      await expect(page.getByTestId("student-main-control").getByTestId(`open-scheduled-room-${appointmentId}`)).toBeVisible();
+      // In person is allowed when only online is off (Decision 5).
+      await expect(button).toBeEnabled();
+      await expectReasonUnderControl(
+        button,
+        page.getByTestId(`open-scheduled-room-reason-${appointmentId}`),
+        "Live sessions are off in Online Off Student's privacy settings. You can still open the room in person."
+      );
+    }
+  );
+
+  test(
+    "no privacy preferences yet: the Open room slot is a callout that says why, not a dead button",
+    { tag: [TAG.ORG, TAG.WB_CHROME] },
+    async ({ page }) => {
+      const adminUserId = await seedTestAdmin();
+      const studentId = await seedReadyStudent(adminUserId, "No Record Student", "none");
+      const appointmentId = await seedUpcoming(adminUserId, studentId);
+
+      await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+      const main = page.getByTestId("student-main-control");
+      const callout = main.getByTestId("start-wb-consent-callout");
+      await expect(callout).toBeVisible();
+      await expect(callout).toHaveAttribute("data-entry-reason", "consent_missing_parent");
+      await expect(callout).toContainText("A parent account is connected, but privacy preferences are not complete");
+      // No second, silent control for the same appointment.
+      await expect(page.getByTestId(`open-scheduled-room-${appointmentId}`)).toHaveCount(0);
+      await expect(page.getByTestId("start-whiteboard-session-btn")).toHaveCount(0);
+    }
+  );
+
+  test(
+    "no privacy preferences yet and no appointment: Start session is replaced by the callout",
+    { tag: [TAG.ORG, TAG.WB_CHROME] },
+    async ({ page }) => {
+      const adminUserId = await seedTestAdmin();
+      const studentId = await seedReadyStudent(adminUserId, "No Record Start Student", "none");
+
+      await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+      const callout = page.getByTestId("student-main-control").getByTestId("start-wb-consent-callout");
+      await expect(callout).toBeVisible();
+      await expect(callout).toHaveAttribute("data-entry-reason", "consent_missing_parent");
+      await expect(page.getByTestId("start-whiteboard-session-btn")).toHaveCount(0);
+    }
+  );
+
+  test(
+    "online sessions off and no appointment: Start session stays enabled and says why beside it",
+    { tag: [TAG.ORG, TAG.WB_CHROME] },
+    async ({ page }) => {
+      const adminUserId = await seedTestAdmin();
+      const studentId = await seedReadyStudent(adminUserId, "Start Online Off", "live_off");
+
+      await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+      const start = page.getByTestId("start-whiteboard-session-btn");
+      await expect(start).toBeEnabled();
+      await expectReasonUnderControl(
+        start,
+        page.getByTestId("start-whiteboard-session-reason"),
+        "Live sessions are off in Start Online Off's privacy settings. You can still open the room in person."
+      );
+    }
+  );
+
+  test(
+    "unclaimed student with an appointment: the callout links to Account & sharing",
+    { tag: [TAG.ORG, TAG.WB_CHROME] },
+    async ({ page }) => {
+      const adminUserId = await seedTestAdmin();
+      const studentId = await seedUnclaimed(adminUserId, "Unclaimed Appt Student", "none");
+      const appointmentId = await seedUpcoming(adminUserId, studentId);
+
+      await page.goto(`/admin/students/${studentId}`, { waitUntil: "domcontentloaded" });
+      const callout = page.getByTestId("student-main-control").getByTestId("start-wb-consent-callout");
+      await expect(callout).toBeVisible();
+      await expect(callout).toHaveAttribute("data-entry-reason", "unclaimed");
+      await expect(page.getByTestId(`open-scheduled-room-${appointmentId}`)).toHaveCount(0);
+      await callout.getByRole("link", { name: "Account & sharing" }).click();
+      await expect(page).toHaveURL(new RegExp(`/admin/students/${studentId}/account`));
     }
   );
 

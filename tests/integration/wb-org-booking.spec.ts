@@ -9,6 +9,7 @@ import { TAG } from "../test-tags";
 import { PrismaClient } from "@prisma/client";
 import { encode } from "next-auth/jwt";
 import { uploadReplayEvents } from "./wb-replay-harness.helpers";
+import { expectReasonUnderControl } from "./entry-reason.helpers";
 
 const { applyWbRegressionLocalDatabaseEnv } = require("../../scripts/wb-regression-local-db.cjs");
 applyWbRegressionLocalDatabaseEnv();
@@ -559,6 +560,88 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
       });
       expect(afterInPerson.sessionPhase).toBe("ACTIVE");
       expect(afterInPerson.sessionMode).toBe("IN_PERSON");
+    } finally {
+      await context.close();
+    }
+  });
+
+  // --- Org UX W4: the reason is on screen wherever the control is ---------------------
+
+  async function seedHourAheadAppointment(adminUserId: string, studentId: string) {
+    const startAt = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    return prisma.scheduledSession.create({
+      data: {
+        adminUserId,
+        studentId,
+        date: startAt,
+        startTime: "16:00",
+        endTime: "17:00",
+        startAt,
+        endAt: new Date(startAt.getTime() + 60 * 60 * 1000),
+        plannedDurationMinutes: 60,
+        subject: "Algebra",
+      },
+    });
+  }
+
+  test("online sessions off: Open room is reachable on the org home and the Schedule, each with the reason under it", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedMember(org.id, "Ida Instructor", ["instructor"]);
+    const { student } = await seedLearner(org.id, owner.id, false);
+    const appointment = await seedHourAheadAppointment(instructor.id, student.id);
+    const expected =
+      "Live sessions are off in Mary Ann Lee's privacy settings. You can still open the room in person.";
+
+    const { context, page } = await signIn(browser, instructor);
+    try {
+      for (const route of [`/admin/organization/${org.id}`, "/admin/schedule"]) {
+        await page.goto(route);
+        expect(page.url(), "session cookie was rejected").not.toContain("/login");
+        const button = page.getByTestId(`open-scheduled-room-${appointment.id}`);
+        // Reachable: online-off blocks ONLINE only (Decision 5).
+        await expect(button, route).toBeEnabled();
+        await expectReasonUnderControl(
+          button,
+          page.getByTestId(`open-scheduled-room-reason-${appointment.id}`),
+          expected
+        );
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("no consent record: Open room is off with the reason under it, in person included", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedMember(org.id, "Ida Instructor", ["instructor"]);
+    const { student, profile } = await seedLearner(org.id, owner.id, true);
+    await prisma.consentRecord.deleteMany({ where: { learnerProfileId: profile.id } });
+    const appointment = await seedHourAheadAppointment(instructor.id, student.id);
+
+    const { context, page } = await signIn(browser, instructor);
+    try {
+      await page.goto(`/admin/organization/${org.id}`);
+      expect(page.url(), "session cookie was rejected").not.toContain("/login");
+      const button = page.getByTestId(`open-scheduled-room-${appointment.id}`);
+      await expect(button).toBeDisabled();
+      // Both modes are closed, so the in-person hint must not appear.
+      await expectReasonUnderControl(
+        button,
+        page.getByTestId(`open-scheduled-room-reason-${appointment.id}`),
+        "The parent hasn't finished privacy preferences yet."
+      );
+
+      // Showing the page opened nothing (the server-side refusal is table-tested in jest:
+      // session-entry-parity.integration.test.ts drives the bridge and Start directly).
+      expect(
+        await prisma.whiteboardSession.count({ where: { scheduledSessionId: appointment.id } })
+      ).toBe(0);
     } finally {
       await context.close();
     }
