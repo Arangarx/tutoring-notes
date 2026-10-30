@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { sendClaimInviteEmail } from "@/lib/account-holder-email";
 import { mintStudentClaimInvite, reinviteTargetKind } from "@/lib/claim-invite-service";
+import { resolveEffectiveConsentForStudent } from "@/lib/consent-scope";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { STAFF_HOME_ROLES } from "@/lib/org-appointment-scope";
@@ -235,11 +236,15 @@ export async function loadSchedulerLearner(
   if (!student.learnerProfileId) {
     blockedReason = SCHEDULER_WAITING_ON_FAMILY;
   } else {
-    const consent = await db.consentRecord.findFirst({
-      where: { learnerProfileId: student.learnerProfileId, organizationId },
-      orderBy: { version: "desc" },
-      select: { allowLiveSession: true },
-    });
+    // Through the one resolver: the organization's latest record AND NOT the child's restriction (D5, E17).
+    // The owner comes from the Student row (organization-owned), never inferred here.
+    const consent = await resolveEffectiveConsentForStudent(
+      student.learnerProfileId,
+      { adminUserId: null, organizationId },
+      null,
+      undefined,
+      "loadSchedulerLearner.consent"
+    );
     if (consent && consent.allowLiveSession === false) {
       blockedReason = SCHEDULER_LIVE_SESSIONS_OFF;
     }

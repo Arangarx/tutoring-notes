@@ -8,8 +8,30 @@
  * Run (after un-fixme): npx playwright test tests/integration/consent-entry.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
+import { TEST_ADMIN } from "../visual/helpers";
+import {
+  TEST_2FA_TUTOR,
+  generateTotpCode,
+  loginTutorWithPassword,
+  seedEnrolled2faTutor,
+  submitTotpOnVerifyPage,
+  waitFor2faVerifyChallenge,
+} from "./identity/tutor-2fa-login.helpers";
+
+const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
+
+async function withPrisma<T>(run: (prisma: PrismaClient) => Promise<T>): Promise<T> {
+  assertLocalDatabaseUrlForHarness();
+  const prisma = new PrismaClient();
+  try {
+    return await run(prisma);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 6a. Entry (online switch)
@@ -115,11 +137,140 @@ test.describe("consent 6a: Entry (online switch)", {
       // pending: wave that owns E16
     }
   );
-  // Oracle: DOM on the scheduler card; the 'org-learner.ts' child-floor bug; red today, fixed in C1
-  test.fixme(
+  // Oracle: DOM on the scheduler card; the 'org-learner.ts' child-floor bug; red today, fixed in C1.
+  // Independent oracle (no copy literal, no value read from the implementation): the restricted learner's
+  // card must show EXACTLY the line the card already shows for the plain "org record forbids live" case
+  // (the behavior that was right before this wave), and a learner whose restriction row does not touch live
+  // shows no blocked line at all (positive control: the card is not simply always blocked).
+  test(
     "E17: child restriction forbids live: the org scheduler card shows live sessions off even when the org record allows it",
-    async () => {
-      // pending: wave that owns E17
+    { tag: [TAG.ORG] },
+    async ({ page }) => {
+      test.setTimeout(180_000);
+      const seeded = await seedEnrolled2faTutor();
+      const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const familyName = `E17${stamp.slice(-4)}`;
+      const created: { organizationId: string; profileIds: string[]; holderIds: string[] } = {
+        organizationId: "",
+        profileIds: [],
+        holderIds: [],
+      };
+
+      async function seedCard(
+        prisma: PrismaClient,
+        organizationId: string,
+        givenName: string,
+        organizationRecordAllowsLive: boolean,
+        restriction: { restrictLiveSession: boolean } | null
+      ): Promise<string> {
+        const holder = await prisma.accountHolder.create({
+          data: { email: `pw-e17-${givenName.toLowerCase()}-${stamp}@test.local`, emailVerifiedAt: new Date() },
+          select: { id: true },
+        });
+        created.holderIds.push(holder.id);
+        const profile = await prisma.learnerProfile.create({
+          data: { accountHolderId: holder.id, displayName: `${givenName} ${familyName}` },
+          select: { id: true },
+        });
+        created.profileIds.push(profile.id);
+        const student = await prisma.student.create({
+          data: {
+            name: `${givenName} ${familyName}`,
+            adminUserId: null,
+            organizationId,
+            learnerProfileId: profile.id,
+            organizationLearner: {
+              create: { organizationId, givenName, familyName, createdByAdminUserId: seeded.adminUserId },
+            },
+          },
+          select: { id: true },
+        });
+        await prisma.consentRecord.create({
+          data: {
+            learnerProfileId: profile.id,
+            adminUserId: null,
+            organizationId,
+            version: 1,
+            allowLiveSession: organizationRecordAllowsLive,
+            allowAudioRecording: true,
+            allowWhiteboardRecording: true,
+            allowNoteSending: true,
+            setByAccountHolderId: holder.id,
+            captureMethod: "electronic",
+          },
+        });
+        if (restriction) {
+          await prisma.consentRestriction.create({
+            data: { learnerProfileId: profile.id, ...restriction },
+          });
+        }
+        return student.id;
+      }
+
+      try {
+        const ids = await withPrisma(async (prisma) => {
+          const operator = await prisma.adminUser.findUnique({
+            where: { email: TEST_ADMIN.email },
+            select: { id: true },
+          });
+          if (!operator) throw new Error("Playwright operator is missing from the local database.");
+          await prisma.organizationMember.deleteMany({ where: { adminUserId: seeded.adminUserId } });
+          const org = await prisma.organization.create({
+            data: {
+              name: `PW E17 ${stamp}`,
+              timezone: "America/Denver",
+              status: "active",
+              createdByOperatorId: operator.id,
+              members: {
+                create: [
+                  { adminUserId: operator.id, roles: ["owner"] },
+                  { adminUserId: seeded.adminUserId, roles: ["scheduler"] },
+                ],
+              },
+            },
+            select: { id: true },
+          });
+          created.organizationId = org.id;
+          return {
+            restricted: await seedCard(prisma, org.id, "Rae", true, { restrictLiveSession: true }),
+            orgOff: await seedCard(prisma, org.id, "Tia", false, null),
+            unrestricted: await seedCard(prisma, org.id, "Sam", true, { restrictLiveSession: false }),
+          };
+        });
+
+        await page.context().clearCookies();
+        // Retries the form fill once: the first fill can land before the login form hydrates.
+        await loginTutorWithPassword(page, TEST_2FA_TUTOR);
+        await waitFor2faVerifyChallenge(page);
+        await submitTotpOnVerifyPage(page, generateTotpCode(TEST_2FA_TUTOR.totpSecret));
+        await page.waitForURL((url) => !url.pathname.includes("/2fa"), { timeout: 30_000 });
+        await page.goto(`/admin/organization/${created.organizationId}`);
+
+        const cards = page.getByTestId("org-scheduler-cards");
+        await expect(cards.getByText(`Rae ${familyName}`)).toBeVisible({ timeout: 30_000 });
+
+        const orgOffLine = page.getByTestId(`org-learner-blocked-${ids.orgOff}`);
+        await expect(orgOffLine).toBeVisible();
+        const expectedLine = (await orgOffLine.innerText()).trim();
+        expect(expectedLine.length).toBeGreaterThan(0);
+
+        // The bug: org record allows live, child restricted live. Must show the same line as the org-off case.
+        await expect(page.getByTestId(`org-learner-blocked-${ids.restricted}`)).toHaveText(expectedLine);
+        // Positive control: restriction row exists but does not touch live. No blocked line.
+        await expect(page.getByTestId(`org-learner-blocked-${ids.unrestricted}`)).toHaveCount(0);
+      } finally {
+        await withPrisma(async (prisma) => {
+          // Records reference the organization, so they go first.
+          await prisma.consentRecord.deleteMany({ where: { learnerProfileId: { in: created.profileIds } } });
+          await prisma.consentRestriction.deleteMany({ where: { learnerProfileId: { in: created.profileIds } } });
+          if (created.organizationId) {
+            await prisma.student.deleteMany({ where: { organizationId: created.organizationId } });
+            await prisma.organization.deleteMany({ where: { id: created.organizationId } });
+          }
+          await prisma.learnerProfile.deleteMany({ where: { id: { in: created.profileIds } } });
+          await prisma.accountHolder.deleteMany({ where: { id: { in: created.holderIds } } });
+        });
+      }
     }
   );
   // Oracle: Q9 (PENDING ANDREW, default applied). Online off; create an in-person-intended session; the learner opens '/join' and is refused with the one-line reason ('ENTRY_BLOCK_COPY.live_off'), no room, no A/V. Control: online on …

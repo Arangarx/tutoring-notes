@@ -704,6 +704,77 @@ describe("scheduler and instructor loaders", () => {
     expect(onCard.blockedReason).toBeNull();
   });
 
+  // Consent wave C1 (E17, D5). Oracle: the brief's rule "effective = ceiling AND NOT child restriction", typed
+  // here as literals, not read from consent-scope.ts. The card used to read the raw org record and ignore the child floor.
+  test("E17: a child restriction that forbids live blocks the card even when the organization record allows it", async () => {
+    const { org, owner } = await seedOrg();
+    mockSession(owner.email, owner.id);
+
+    async function seedCard(
+      givenName: string,
+      organizationRecord: { allowLiveSession: boolean } | null,
+      restriction: { restrictLiveSession: boolean } | null
+    ) {
+      const profile = await seedLearnerProfile(`${givenName} Floor`);
+      const student = await db.student.create({
+        data: {
+          name: "Not the card name",
+          adminUserId: null,
+          organizationId: org.id,
+          learnerProfileId: profile.id,
+          organizationLearner: {
+            create: {
+              organizationId: org.id,
+              givenName,
+              familyName: "Floor",
+              brief: "E17",
+              createdByAdminUserId: owner.id,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      if (organizationRecord) {
+        await db.consentRecord.create({
+          data: {
+            learnerProfileId: profile.id,
+            adminUserId: null,
+            organizationId: org.id,
+            version: 1,
+            allowLiveSession: organizationRecord.allowLiveSession,
+            allowAudioRecording: true,
+            allowWhiteboardRecording: true,
+            allowNoteSending: true,
+            setByAccountHolderId: profile.accountHolderId,
+            captureMethod: "electronic",
+          },
+        });
+      }
+      if (restriction) {
+        await db.consentRestriction.create({
+          data: { learnerProfileId: profile.id, ...restriction },
+        });
+      }
+      return loadSchedulerLearner(org.id, student.id);
+    }
+
+    // The bug: org record allows live, the child restricted live. Must read "Live sessions are off".
+    const restricted = await seedCard("Rae", { allowLiveSession: true }, { restrictLiveSession: true });
+    expect(restricted.blockedReason).toBe("Live sessions are off");
+
+    // Positive control: same record, restriction row present but not restricting live. Not blocked.
+    const unrestricted = await seedCard("Sam", { allowLiveSession: true }, { restrictLiveSession: false });
+    expect(unrestricted.blockedReason).toBeNull();
+
+    // Unchanged: org record already off is blocked with no restriction at all.
+    const orgOff = await seedCard("Tia", { allowLiveSession: false }, null);
+    expect(orgOff.blockedReason).toBe("Live sessions are off");
+
+    // Unchanged: a claimed learner with no record is not blocked on this card (the record-missing reason is entry state's, org W4/C5).
+    const noRecord = await seedCard("Uma", null, null);
+    expect(noRecord.blockedReason).toBeNull();
+  });
+
   test("instructor result has no parent email", async () => {
     const { org, admin } = await seedOrg();
     await db.organizationMember.update({
