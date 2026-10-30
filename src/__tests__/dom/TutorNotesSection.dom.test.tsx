@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import TutorNotesSection, {
   noteFieldsAreEmpty,
@@ -132,6 +132,38 @@ describe("TutorNotesSection loading state", () => {
       "tn-notes-generating-wrap"
     );
     expect(screen.getByTestId("tutor-notes-status")).toHaveTextContent("Writing notes…");
+  });
+
+  it("a failed note with no stored content keeps an empty editable form and the error", () => {
+    renderNotes("failed", null);
+
+    const topics = screen.getByLabelText("Topics covered") as HTMLTextAreaElement;
+    expect(topics.value).toBe("");
+    expect(topics.readOnly).toBe(false);
+    expect(screen.getByTestId("tutor-notes-error")).toHaveTextContent(
+      /Note generation failed/i
+    );
+    expect(screen.getByTestId("wb-regenerate-notes")).toBeInTheDocument();
+    fireEvent.change(topics, { target: { value: "Factoring practiced by hand" } });
+    expect(topicsValue()).toBe("Factoring practiced by hand");
+  });
+
+  it("a timed-out note keeps an empty editable form and the timeout notice", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-10-06T15:00:00Z"));
+    renderNotes("pending", null);
+    await act(async () => {
+      jest.setSystemTime(new Date("2026-10-06T15:06:00Z"));
+      jest.advanceTimersByTime(4_000);
+    });
+    expect(screen.getByText(/taking longer than expected/i)).toBeInTheDocument();
+    const topics = screen.getByLabelText("Topics covered") as HTMLTextAreaElement;
+    expect(topics.value).toBe("");
+    expect(topics.readOnly).toBe(false);
+    expect(screen.getByTestId("wb-regenerate-notes")).toBeInTheDocument();
+    fireEvent.change(topics, { target: { value: "Factoring practiced by hand" } });
+    expect(topicsValue()).toBe("Factoring practiced by hand");
+    jest.useRealTimers();
   });
 
   it("a failed replacement shows the stored text and no skeleton", () => {

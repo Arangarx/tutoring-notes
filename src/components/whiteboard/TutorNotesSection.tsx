@@ -204,18 +204,22 @@ export default function TutorNotesSection({
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
   const hasStoredContent = note.found && Boolean(note.content);
-  // The editable form (and the Finish review control nested in it) is only
-  // mounted while generation is in flight, a note with content is ready, or
-  // a failed replacement still has the previous draft to show.
+  // In-flight generation stays read-only. A failure or a timeout leaves the
+  // form mounted and editable, including when nothing was stored.
+  const formInFlight = isActive && !timedOut;
   const notesFormOpen =
-    (isActive || ((isDone || isFailed) && hasStoredContent)) && !timedOut;
+    isFailed || timedOut || formInFlight || (isDone && hasStoredContent);
   // Generating replaces the whole note. Hide the previous draft on screen.
-  // The stored row stays until the worker saves the new text.
-  const visibleFields: StructuredFields = isGeneratingPhase
-    ? { topics: "", assessment: "", nextSteps: "", links: "" }
-    : fields;
+  // The stored row stays until the worker saves the new text. A timeout
+  // stops that replacement so the tutor can type into the empty fields.
+  const visibleFields: StructuredFields =
+    isGeneratingPhase && formInFlight
+      ? { topics: "", assessment: "", nextSteps: "", links: "" }
+      : fields;
   const showInBoxSkeleton =
-    (isPendingPhase || isGeneratingPhase) && noteFieldsAreEmpty(visibleFields);
+    formInFlight &&
+    (isPendingPhase || isGeneratingPhase) &&
+    noteFieldsAreEmpty(visibleFields);
 
   useEffect(() => {
     if (isFailed && note.found && note.error) {
@@ -411,7 +415,7 @@ export default function TutorNotesSection({
 
       {/* Aria-live region for screen readers */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {isActive && activeStatusCopy}
+        {formInFlight && activeStatusCopy}
         {isDone && "Session notes are ready."}
         {isFailed && "Note generation failed."}
         {timedOut && "Note generation timed out."}
@@ -440,10 +444,16 @@ export default function TutorNotesSection({
           boxes on screen. Done and partial show the text and Save. */}
       {notesFormOpen && (
         <div
-          data-testid={isActive ? "tutor-notes-generating" : "tutor-notes-content"}
-          aria-busy={isActive || undefined}
+          data-testid={formInFlight ? "tutor-notes-generating" : "tutor-notes-content"}
+          aria-busy={formInFlight || undefined}
           data-note-phase={
-            isGeneratingPhase ? "generating" : isPendingPhase ? "pending" : undefined
+            formInFlight
+              ? isGeneratingPhase
+                ? "generating"
+                : isPendingPhase
+                  ? "pending"
+                  : undefined
+              : undefined
           }
         >
           {/* Partial transcript badge — done only */}
@@ -475,7 +485,7 @@ export default function TutorNotesSection({
               value={visibleFields.topics}
               onChange={(v) => updateFields((f) => ({ ...f, topics: v }))}
               placeholder="e.g. Quadratics, factoring, FOIL method"
-              isGenerating={isActive}
+              isGenerating={formInFlight}
               showInBoxSkeleton={showInBoxSkeleton}
             />
             <NoteField
@@ -484,7 +494,7 @@ export default function TutorNotesSection({
               value={visibleFields.assessment}
               onChange={(v) => updateFields((f) => ({ ...f, assessment: v }))}
               placeholder="Where the student stands — strengths, struggles, mastery level"
-              isGenerating={isActive}
+              isGenerating={formInFlight}
               showInBoxSkeleton={showInBoxSkeleton}
             />
             <NoteField
@@ -494,7 +504,7 @@ export default function TutorNotesSection({
               onChange={(v) => updateFields((f) => ({ ...f, nextSteps: v }))}
               placeholder="What to do next, including any homework"
               hint="Covers both plan and homework"
-              isGenerating={isActive}
+              isGenerating={formInFlight}
               showInBoxSkeleton={showInBoxSkeleton}
             />
             <NoteField
@@ -503,13 +513,13 @@ export default function TutorNotesSection({
               value={visibleFields.links}
               onChange={(v) => updateFields((f) => ({ ...f, links: v }))}
               placeholder="URLs mentioned (one per line)"
-              isGenerating={isActive}
+              isGenerating={formInFlight}
               showInBoxSkeleton={showInBoxSkeleton}
             />
           </div>
 
           {/* Generating status footer */}
-          {isActive && (
+          {formInFlight && (
             <div
               className="muted tn-notes-status-footer"
               style={{ fontSize: 11, marginTop: 2 }}
@@ -707,7 +717,7 @@ export default function TutorNotesSection({
         </div>
       )}
 
-      {/* Failed, timed out, and empty notes hide the form — Finish review still leaves. */}
+      {/* A done note with no content still hides the form. Failed and timed-out notes keep it. */}
       {showFinishReview && !notesFormOpen ? (
         <div data-testid="wb-review-leave-actions">
           <Link

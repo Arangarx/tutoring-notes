@@ -1,3 +1,4 @@
+import { PrismaClient } from "@prisma/client";
 import { test, expect } from "./fixtures";
 import {
   blobIntegrationEnabled,
@@ -600,3 +601,127 @@ async function expectInBoxSkeleton(
     fieldBox!.y + fieldBox!.height + 2
   );
 }
+
+const { WB_REGRESSION_LOCAL_DATABASE_URL } =
+  require("../../scripts/wb-regression-local-db.cjs") as {
+    WB_REGRESSION_LOCAL_DATABASE_URL: string;
+  };
+
+const NOTE_FIELD_IDS = [
+  "#wb-note-topics",
+  "#wb-note-assessment",
+  "#wb-note-nextsteps",
+  "#wb-note-links",
+] as const;
+
+const HANDWRITTEN_TOPICS = "Factoring practiced by hand";
+
+/**
+ * seed-wsk-watermark only accepts pending or generating. The blur seed writes
+ * the row; this flips that same row to failed with empty content on the local
+ * harness database. seal `{ enqueue: false }` leaves the row alone.
+ */
+async function markSeededNoteFailedEmpty(sessionId: string) {
+  const prisma = new PrismaClient({
+    datasourceUrl: WB_REGRESSION_LOCAL_DATABASE_URL,
+  });
+  try {
+    const updated = await prisma.tutorNote.update({
+      where: { sessionId },
+      data: { status: "failed", content: null, error: "upstream" },
+    });
+    expect(updated.status).toBe("failed");
+    expect(updated.content).toBeNull();
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function openEndedReview(
+  page: import("@playwright/test").Page,
+  studentId: string,
+  whiteboardSessionId: string
+) {
+  await page.goto(
+    `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
+    { waitUntil: "domcontentloaded" }
+  );
+  await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
+    timeout: 90_000,
+  });
+}
+
+async function expectEmptyEditableNoteFields(
+  page: import("@playwright/test").Page
+) {
+  for (const id of NOTE_FIELD_IDS) {
+    const field = page.locator(id);
+    await expect(field).toBeVisible();
+    await expect(field).toBeEditable();
+    await expect(field).toHaveValue("");
+  }
+  const topics = page.locator("#wb-note-topics");
+  await topics.fill(HANDWRITTEN_TOPICS);
+  await expect(topics).toHaveValue(HANDWRITTEN_TOPICS);
+}
+
+test.describe(
+  "manual notes when generation does not produce content",
+  { tag: [TAG.WB_RECORDING] },
+  () => {
+    test.describe.configure({ timeout: 180_000 });
+
+    test("failed note with no stored content keeps an empty editable form beside the error", async ({
+      page,
+    }) => {
+      const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+      await seedBlurNote(page, whiteboardSessionId, {
+        noteStatus: "pending",
+        noteContent: null,
+      });
+      await markSeededNoteFailedEmpty(whiteboardSessionId);
+      await sealWithoutEnqueue(page, whiteboardSessionId);
+
+      const stored = await fetchNotesPipelineState(page, whiteboardSessionId);
+      expect(stored.tutorNoteStatus).toBe("failed");
+      expect(stored.tutorNoteContent).toBeNull();
+
+      await openEndedReview(page, studentId, whiteboardSessionId);
+      await expect(page.getByTestId("tutor-notes-error")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("tutor-notes-error")).toContainText(
+        "Note generation failed"
+      );
+      await expect(page.getByTestId("wb-regenerate-notes")).toBeVisible();
+      await expectEmptyEditableNoteFields(page);
+    });
+
+    test("timed-out generation keeps an empty editable form beside the timeout notice", async ({
+      page,
+    }) => {
+      const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+      await seedBlurNote(page, whiteboardSessionId, {
+        noteStatus: "pending",
+        noteContent: null,
+      });
+      await sealWithoutEnqueue(page, whiteboardSessionId);
+
+      const stored = await fetchNotesPipelineState(page, whiteboardSessionId);
+      expect(stored.tutorNoteStatus).toBe("pending");
+      expect(stored.tutorNoteContent).toBeNull();
+
+      await page.clock.install({ time: new Date("2026-10-06T15:00:00Z") });
+      await openEndedReview(page, studentId, whiteboardSessionId);
+      await expect(page.getByTestId("tutor-notes-section")).toBeVisible({
+        timeout: 30_000,
+      });
+      await page.clock.fastForward(5 * 60_000 + 5_000);
+      await expect(page.getByText(/taking longer than expected/i)).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(page.getByTestId("wb-regenerate-notes")).toBeVisible();
+      await expectEmptyEditableNoteFields(page);
+    });
+  }
+);
