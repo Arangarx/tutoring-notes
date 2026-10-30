@@ -215,8 +215,8 @@
 
 ### 3.1 Single shared blob store across environments
 
-- **Assumption**: One Vercel Blob store serves both Production and Preview deploys. Blob URLs created during Preview testing are referenced by dev DB only; from prod DB's perspective they look like orphans.
-- **Where baked in**: `BLOB_READ_WRITE_TOKEN` is the same token across all envs.
+- **Assumption**: One Vercel Blob store serves both Production and Preview deploys. Blob URLs created during Preview testing are referenced by dev DB only; from prod DB's perspective they look like orphans. `npm run test:prod-shape` (`next start` on :3102) uses this same token, so a successful student-page Start writes a real empty `events.json` at `whiteboard-sessions/{adminUserId}/{studentId}/`. That suite's `afterEach`/`afterAll` lists and deletes only prefixes for student and session ids recorded in that run (`listBlobsByPrefix` + `deleteBlob`) and removes the local DB rows it created. It never lists a tutor-wide prefix.
+- **Where baked in**: `BLOB_READ_WRITE_TOKEN` is the same token across all envs. Prod-shape cleanup: `tests/prod-shape/cleanup-recorded-run.ts`.
 - **What breaks if violated** (or rather, the current safety constraint): `scripts/blob-cleanup.mjs` REQUIRES `PROD_DATABASE_URL` AND `DEV_DATABASE_URL` and only marks a blob as orphan if NEITHER references it. Removing the dual-DB check would risk deleting live dev-environment blobs.
 - **Roadmap**: Phase 2 task 15 (separate Blob store per env) is the cleaner architecture. Until then, dual-DB-check is the safety net.
 - **Migration check**: any new object storage (S3, R2) should either (a) have per-env buckets from day one, or (b) maintain the dual-reference-check pattern.

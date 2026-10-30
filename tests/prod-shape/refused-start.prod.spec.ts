@@ -24,6 +24,7 @@ import {
 } from "../helpers/refused-start";
 import { PROD_SHAPE_NEXTAUTH_SECRET } from "../helpers/prod-shape-secret";
 import { TEST_ADMIN, seedTestAdmin } from "../visual/helpers";
+import { cleanupProdShapeRun, recordProdShapeStudent } from "./cleanup-recorded-run";
 
 /**
  * Same literal the production server was started with (`PROD_SHAPE_NEXTAUTH_SECRET`
@@ -50,6 +51,14 @@ async function signInAsTutor(context: BrowserContext, baseURL: string, adminUser
   await context.addCookies([{ name: "next-auth.session-token", value: token, url: baseURL }]);
 }
 
+test.afterEach(async () => {
+  await cleanupProdShapeRun();
+});
+
+test.afterAll(async () => {
+  await cleanupProdShapeRun();
+});
+
 test.describe("refused waiting-room Start, production build", () => {
   let tutorId: string;
 
@@ -72,6 +81,11 @@ test.describe("refused waiting-room Start, production build", () => {
   for (const testCase of REFUSED_START_CASES) {
     test(`${testCase.situation}: the refusal reads the learner's own line`, async ({ page }) => {
       const seeded = await seedPendingWithoutConsent(testCase.situation, tutorId);
+      recordProdShapeStudent({
+        studentId: seeded.studentId,
+        adminUserId: tutorId,
+        whiteboardSessionId: seeded.whiteboardSessionId,
+      });
       await page.goto(
         `/admin/students/${seeded.studentId}/whiteboard/${seeded.whiteboardSessionId}/workspace`,
         { waitUntil: "domcontentloaded" }
@@ -165,6 +179,7 @@ test.describe("student-page Start session, production build", () => {
   }) => {
     test.setTimeout(180_000);
     const seeded = await seedStudentWithConsent(tutorId);
+    recordProdShapeStudent({ studentId: seeded.studentId, adminUserId: tutorId });
     const flashes: string[] = [];
     await page.exposeFunction("__prodShapeSawStartError", (text: string) => {
       flashes.push(text);
