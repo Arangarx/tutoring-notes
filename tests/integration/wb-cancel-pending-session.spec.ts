@@ -161,12 +161,7 @@ test.describe(
             timeout: 90_000,
           });
           // The workspace writes #k= after hydration; the canvas can paint first.
-          await expect
-            .poll(async () => tutorPage.evaluate(() => window.location.hash), {
-              timeout: 30_000,
-            })
-            .toMatch(/[#&]k=[^&]{16,}/);
-
+          // readEncryptionKeyFromHash polls until the hash key meets MIN_KEY_LEN.
           const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
           const studentPage = await studentContext.newPage();
           await studentPage.goto(

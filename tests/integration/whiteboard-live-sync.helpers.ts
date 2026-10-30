@@ -28,6 +28,7 @@ import {
   studentScrollFromFollowCenter,
   viewportSceneCenterFromScroll,
 } from "../../src/lib/whiteboard/viewport-align";
+import { MIN_KEY_LEN } from "../../src/lib/whiteboard/encryption-key";
 
 /** Screen-pixel tolerance for viewport center / PDF fit (owner: 16px). */
 export const WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX = 16;
@@ -622,11 +623,10 @@ export async function waitForSceneElementIdsContaining(
  * can therefore see an empty fragment. Poll until the hash has a `k` value.
  *
  * Real keys are 32-byte AES-GCM serialized as unpadded base64url (~43 chars).
- * The product floor is `MIN_KEY_LEN` = 16 in `encryption-key.ts`. Never
+ * The product floor is `MIN_KEY_LEN` from `encryption-key.ts`. Never
  * returns "" — the poll fails if the hash never gains a key of that length.
  */
 export async function readEncryptionKeyFromHash(page: Page): Promise<string> {
-  const minKeyLen = 16;
   let captured = "";
   await expect
     .poll(
@@ -640,20 +640,19 @@ export async function readEncryptionKeyFromHash(page: Page): Promise<string> {
             return "";
           }
         });
-        if (found.length < minKeyLen) return "";
+        if (found.length < MIN_KEY_LEN) return "";
         captured = found;
         return "ready";
       },
       {
         timeout: 20_000,
-        message:
-          "Tutor workspace hash never gained a #k= encryption key of at least 16 characters (encryption-key.ts MIN_KEY_LEN)",
+        message: `Tutor workspace hash never gained a #k= encryption key of at least ${MIN_KEY_LEN} characters (encryption-key.ts MIN_KEY_LEN)`,
       }
     )
     .toBe("ready");
-  if (captured.length < minKeyLen) {
+  if (captured.length < MIN_KEY_LEN) {
     throw new Error(
-      "readEncryptionKeyFromHash returned without a #k= value of at least 16 characters"
+      `readEncryptionKeyFromHash returned without a #k= value of at least ${MIN_KEY_LEN} characters`
     );
   }
   return captured;

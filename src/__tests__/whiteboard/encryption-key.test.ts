@@ -29,6 +29,7 @@
 
 import {
   clearEncryptionKeyForSession,
+  MIN_KEY_LEN,
   persistEncryptionKey,
   readPersistedEncryptionKey,
 } from "@/lib/whiteboard/encryption-key";
@@ -100,6 +101,17 @@ describe("readPersistedEncryptionKey", () => {
     ls().setItem("wb-key:sess-1", "tooShort");
     const result = readPersistedEncryptionKey("sess-1", window);
     expect(result).toBeNull();
+  });
+
+  test("the floor is 16: one under MIN_KEY_LEN is a miss, MIN_KEY_LEN itself is kept", () => {
+    expect(MIN_KEY_LEN).toBe(16);
+    const under = "a".repeat(MIN_KEY_LEN - 1);
+    const exact = "b".repeat(MIN_KEY_LEN);
+    window.history.replaceState(null, "", `/p#k=${under}`);
+    expect(readPersistedEncryptionKey("sess-1", window)).toBeNull();
+    ls().clear();
+    window.history.replaceState(null, "", `/p#k=${exact}`);
+    expect(readPersistedEncryptionKey("sess-1", window)).toBe(exact);
   });
 
   test("per-session scoping: sess-A and sess-B persist independently", () => {

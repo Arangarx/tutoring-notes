@@ -82,7 +82,7 @@ import { generateEncryptionKeyBase64Url } from "@/lib/whiteboard/sync-client";
  * inline implementation that used to live in
  * `WhiteboardWorkspaceClient.tsx`.
  */
-const MIN_KEY_LEN = 16;
+export const MIN_KEY_LEN = 16;
 
 /**
  * Per-session localStorage key. The `wb-key:` prefix matches the
