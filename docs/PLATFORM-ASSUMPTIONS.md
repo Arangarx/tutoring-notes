@@ -503,6 +503,15 @@
 - **What breaks if violated**: long-audio transcribe (>25 MB) silently degrades to a friendly error message ("This recording is too large to split automatically"). Long-form transcribe becomes unusable.
 - **Migration check**: any platform that strips binary-dep node modules (some serverless runtimes do) needs ffmpeg shipped separately. AWS Lambda layers are the typical fix.
 
+### 7.2.1 `serverExternalPackages` (`ffmpeg-static`, `@vercel/blob`)
+
+Added in `4ba869fc` (`next.config.ts` `serverExternalPackages: ["ffmpeg-static", "@vercel/blob"]`).
+
+- **Assumption**: Those packages stay out of the webpack server bundle. They, and the `@vercel/blob` dependencies `async-retry`, `retry`, and `undici`, must be present in the deployed `node_modules` via Next file tracing.
+- **Why**: Local Windows `next build && next start` with `put()` bundled threw `TypeError: a is not a function` (suspected webpack ESM/CJS interop with `async-retry`). Not observed on Vercel production: `master` has no externalization, the same `put()` and lockfile, and no production runtime errors for this in 7 days. Root cause unproven.
+- **What breaks if violated**: A tracer that omits the package or those deps fails the externalized `require` at runtime. Keeping the externalization without a named symbol also ships extra deploy surface for a failure that may be local-only.
+- **Migration check**: On a platform that does not trace Next server externals the same way, confirm `ffmpeg-static`, `@vercel/blob`, `async-retry`, `retry`, and `undici` are in the deployed function. Do not drop the externalization until the failing symbol is identified (BACKLOG).
+
 ### 7.3 pdfjs-dist (PDF page picker)
 
 - **Assumption**: `pdfjs-dist` 5.6.x; worker version must match main library version (worker is copied at install via `copy-pdfjs-worker.mjs`).
@@ -869,6 +878,7 @@
 
 - [ ] Node.js ≥20 (add explicit `engines` pin in `package.json` if migrating). (§7.1)
 - [ ] ffmpeg-static binary works on new platform's OS + arch (or ffmpeg shipped separately via Layers / image). (§7.2, §7.4)
+- [ ] Externalized `ffmpeg-static` and `@vercel/blob`, plus `async-retry`, `retry`, and `undici`, are in the deployed `node_modules` via Next file tracing. (§7.2.1)
 - [ ] Excalidraw + socket.io-client major versions unchanged unless re-tested. (§7.5, §7.6)
 
 ### Browser support

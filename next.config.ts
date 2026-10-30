@@ -98,11 +98,13 @@ const nextConfig: NextConfig = {
    * Keep ffmpeg-static out of the webpack bundle so it resolves at runtime
    * from node_modules (required for native binary execution).
    *
-   * `@vercel/blob` stays external too. Webpack's production server bundle
-   * rewrites its `async-retry` import so `put()` throws
-   * `TypeError: a is not a function` under `next start`. The same `put()`
-   * succeeds when Node loads the package from node_modules. Session create
-   * uses that `put()`.
+   * `@vercel/blob` is externalized too. Externalized packages must be present
+   * in deployed node_modules via Next file tracing (incl. deps async-retry,
+   * retry, undici). Reason: local Windows `next build && next start` bundled
+   * put() threw `TypeError: a is not a function` (suspected webpack ESM/CJS
+   * interop with async-retry). NOT observed on Vercel production (master has
+   * no externalization, same put() and lockfile, no production runtime errors
+   * in 7 days). Root cause unproven.
    *
    * outputFileTracingIncludes forces Vercel's file tracer to copy the ffmpeg
    * binary into every serverless function. Without this, Vercel only traces
