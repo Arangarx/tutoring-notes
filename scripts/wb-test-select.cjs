@@ -52,6 +52,10 @@ const PATH_RULES = [
     tags: [TAG.WB_RECORDING],
   },
   {
+    re: /SessionReviewMode|wb-session-review-transcript/,
+    tags: [TAG.WB_RECORDING, TAG.WB_CHROME],
+  },
+  {
     re: /src\/lib\/consent-scope\.ts|src\/lib\/share\/loadWhiteboardReplayIdsForNotes\.ts|src\/components\/notes\/ParentShareNoteCard\.tsx|src\/app\/account\/children\/.*\/notes\/|wb-self-learner-audio-off/,
     tags: [TAG.WB_RECORDING],
   },

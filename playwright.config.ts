@@ -227,6 +227,7 @@ export default defineConfig({
         "**/integration/wb-e5-pdf-board-stroke-bleed-initial-board.spec.ts",
         "**/integration/wb-notes-shimmer.spec.ts",
         "**/integration/wb-finish-review-cta.spec.ts",
+        "**/integration/wb-session-review-transcript.spec.ts",
         "**/integration/wb-roughness-style.spec.ts",
         "**/integration/wb-shift-constrain-shapes.spec.ts",
         "**/integration/wb-org-qol-presence.spec.ts",
