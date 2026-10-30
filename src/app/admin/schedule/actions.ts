@@ -8,6 +8,7 @@ import { DEFAULT_TUTOR_TIMEZONE } from "@/lib/billing/defaults";
 import { getGoogleCalendarConnectionForTutor } from "@/lib/calendar-oauth";
 import { utcBoundsFromWallClock } from "@/lib/calendar/scheduled-session-datetime";
 import { scheduledSessionsOverlap } from "@/lib/calendar/scheduled-session-overlap";
+import { orgAppointmentListScope, orgLearnerFilterForViewer } from "@/lib/org-appointment-scope";
 import { assertOrgRole, orgInstructorAdmitted, orgLog } from "@/lib/org-scope";
 import {
   afterScheduledSessionCreated,
@@ -409,16 +410,31 @@ export type OrganizationAppointmentRow = {
 };
 
 export async function listScheduledSessionsForOrganization(
-  organizationId: string
+  organizationId: string,
+  learnerId?: string
 ): Promise<OrganizationAppointmentRow[]> {
-  await assertOrgRole(organizationId, ["owner", "admin", "scheduler", "instructor"]);
+  const actor = await assertOrgRole(organizationId, ["owner", "admin", "scheduler", "instructor"]);
+  const scope = orgAppointmentListScope(actor.roles);
+  const learnerFilter = orgLearnerFilterForViewer(actor.roles, learnerId);
+  orgLog(organizationId, "appointment_list", {
+    actor: actor.adminId,
+    scope,
+    learner: learnerFilter ? "requested" : "all",
+  });
   const org = await db.organization.findUnique({
     where: { id: organizationId },
     select: { timezone: true, status: true },
   });
   if (!org) notFound();
   const rows = await db.scheduledSession.findMany({
-    where: { student: { organizationId, adminUserId: null } },
+    where: {
+      ...(scope === "instructor" ? { adminUserId: actor.adminId } : {}),
+      student: {
+        organizationId,
+        adminUserId: null,
+        ...(learnerFilter ? { id: learnerFilter } : {}),
+      },
+    },
     orderBy: [{ startAt: "asc" }, { date: "asc" }, { startTime: "asc" }],
     include: {
       student: {
@@ -469,7 +485,7 @@ export async function listOrganizationBookingChoices(organizationId: string): Pr
   instructors: Array<{ id: string; name: string }>;
   timeZone: string;
 }> {
-  await assertOrgRole(organizationId, ["owner", "admin", "scheduler", "instructor"]);
+  await assertOrgRole(organizationId, ["owner", "admin", "scheduler"]);
   const org = await db.organization.findUnique({
     where: { id: organizationId },
     select: { timezone: true },

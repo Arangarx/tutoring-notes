@@ -8,6 +8,7 @@ import {
   listScheduledSessionsForOrganization,
 } from "@/app/admin/schedule/actions";
 import { db } from "@/lib/db";
+import { orgAppointmentListScope, orgLearnerFilterForViewer } from "@/lib/org-appointment-scope";
 import { listSchedulerLearners, loadInstructorTaughtSessions, loadOrgLearnerRecords } from "@/lib/org-learner";
 import { orgStaffErrorSentence } from "@/lib/org-staff-messages";
 import { assertOrgRole, loadOrgStaffHome } from "@/lib/org-scope";
@@ -15,49 +16,43 @@ import { isOperatorEmail } from "@/lib/operator";
 
 export const dynamic = "force-dynamic";
 
-const STAFF_ROLES = ["owner", "admin", "scheduler"] as const;
-
 export default async function StaffOrganizationPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; learner?: string | string[] }>;
 }) {
   const { id } = await params;
   const query = await searchParams;
   const actor = await assertOrgRole(id, ["owner", "admin", "scheduler", "instructor"]);
-  const canStaff = actor.roles.some((role) =>
-    STAFF_ROLES.includes(role as (typeof STAFF_ROLES)[number])
-  );
+  const canStaff = orgAppointmentListScope(actor.roles) === "staff";
   const data = canStaff ? await loadOrgStaffHome(id) : null;
   const orgNameRow = data
     ? null
-    : await db.organization.findUnique({ where: { id }, select: { name: true } });
+    : await db.organization.findUnique({
+        where: { id },
+        select: { name: true, timezone: true },
+      });
   if (!data && !orgNameRow) notFound();
 
   const canManage = data
     ? data.actor.roles.includes("owner") || data.actor.roles.includes("admin")
     : false;
   const isScheduler = data ? data.actor.roles.includes("scheduler") : false;
-  const canBook = actor.roles.some((role) => role === "owner" || role === "admin" || role === "scheduler");
+  const canBook = canStaff;
   const viewerIsInstructor = actor.roles.includes("instructor");
+  const rawLearner = Array.isArray(query.learner) ? query.learner[0] : query.learner;
+  const learnerFilter = orgLearnerFilterForViewer(actor.roles, rawLearner);
   const records = canManage ? await loadOrgLearnerRecords(id) : [];
   const schedulerCards = !canManage && isScheduler ? await listSchedulerLearners(id) : [];
   const [rows, choices] = await Promise.all([
-    listScheduledSessionsForOrganization(id),
-    listOrganizationBookingChoices(id),
+    listScheduledSessionsForOrganization(id, rawLearner),
+    canBook ? listOrganizationBookingChoices(id) : Promise.resolve(null),
   ]);
-  const taught = viewerIsInstructor
-    ? (
-        await Promise.all(
-          choices.students.map(async (student) => {
-            const block = await loadInstructorTaughtSessions(id, student.id);
-            return { studentId: student.id, fullName: block.fullName, sessions: block.sessions };
-          })
-        )
-      ).filter((block) => block.sessions.length > 0)
-    : [];
+  const taught = viewerIsInstructor ? await loadInstructorTaughtSessions(id, learnerFilter) : [];
+  const timeZone = choices?.timeZone ?? orgNameRow?.timezone;
+  if (!timeZone) notFound();
   const error = query.error ? orgStaffErrorSentence(query.error) : null;
 
   return (
@@ -84,13 +79,13 @@ export default async function StaffOrganizationPage({
         />
       ) : null}
       <OrgSchedulePanel
-        timeZone={choices.timeZone}
+        timeZone={timeZone}
         canBook={canBook}
         viewerId={actor.adminId}
         viewerIsInstructor={viewerIsInstructor}
         rows={rows}
-        students={choices.students}
-        instructors={choices.instructors}
+        students={choices?.students ?? []}
+        instructors={choices?.instructors ?? []}
         taught={taught}
       />
     </PageShell>

@@ -309,38 +309,48 @@ export type InstructorTaughtSession = {
   transcriptAvailable: boolean;
 };
 
+export type InstructorTaughtGroup = {
+  studentId: string;
+  fullName: string;
+  sessions: InstructorTaughtSession[];
+};
+
 /**
- * Sessions this instructor taught. The result has no parent email.
- * Stage 4 still has to open the workspace, notes, replay, audio, and transcript pages.
+ * Sessions this instructor taught in the organization, grouped by learner.
+ * Omit `studentId` for every learner they taught. A student id that is missing
+ * or that they did not teach returns no groups — the same empty result, so the
+ * caller cannot tell those cases apart. The result has no parent email.
  */
 export async function loadInstructorTaughtSessions(
   organizationId: string,
-  studentId: string
-): Promise<{ fullName: string; sessions: InstructorTaughtSession[] }> {
+  studentId?: string
+): Promise<InstructorTaughtGroup[]> {
   const actor = await assertOrgRole(organizationId, [
     "owner",
     "admin",
     "scheduler",
     "instructor",
   ]);
-  const student = await db.student.findFirst({
-    where: { id: studentId, organizationId, adminUserId: null },
-    select: {
-      id: true,
-      organizationLearner: { select: { givenName: true, familyName: true } },
-    },
+  const learnerFilter = studentId?.trim() ?? "";
+  orgLog(organizationId, "taught_session_list", {
+    actor: actor.adminId,
+    learner: learnerFilter ? "requested" : "all",
   });
-  if (!student?.organizationLearner) notFound();
-
   const sessions = await db.whiteboardSession.findMany({
     where: {
-      studentId,
       adminUserId: actor.adminId,
+      ...(learnerFilter ? { studentId: learnerFilter } : {}),
       student: { organizationId, adminUserId: null },
     },
     select: {
       id: true,
+      studentId: true,
       eventsBlobUrl: true,
+      student: {
+        select: {
+          organizationLearner: { select: { givenName: true, familyName: true } },
+        },
+      },
       _count: { select: { audioRecordings: true } },
     },
   });
@@ -367,17 +377,26 @@ export async function loadInstructorTaughtSessions(
   }
   const transcripts = new Set(transcriptGroups.map((row) => row.sessionId));
 
-  return {
-    fullName: orgLearnerFullName(
-      student.organizationLearner.givenName,
-      student.organizationLearner.familyName
-    ).studentName,
-    sessions: sessions.map((session) => ({
+  const groups = new Map<string, InstructorTaughtGroup>();
+  for (const session of sessions) {
+    const learner = session.student.organizationLearner;
+    if (!learner) continue;
+    let group = groups.get(session.studentId);
+    if (!group) {
+      group = {
+        studentId: session.studentId,
+        fullName: orgLearnerFullName(learner.givenName, learner.familyName).studentName,
+        sessions: [],
+      };
+      groups.set(session.studentId, group);
+    }
+    group.sessions.push({
       sessionId: session.id,
       noteCount: notesBySession.get(session.id) ?? 0,
       replayAvailable: session.eventsBlobUrl.length > 0,
       audioAvailable: session._count.audioRecordings > 0,
       transcriptAvailable: transcripts.has(session.id),
-    })),
-  };
+    });
+  }
+  return [...groups.values()];
 }

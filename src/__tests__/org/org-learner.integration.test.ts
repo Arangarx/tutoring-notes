@@ -736,8 +736,9 @@ describe("scheduler and instructor loaders", () => {
     });
     mockSession(admin.email, admin.id);
     const result = await loadInstructorTaughtSessions(org.id, student.id);
-    expect(result.sessions).toEqual([]);
+    expect(result).toEqual([]);
     expect(JSON.stringify(result)).not.toContain(marker);
+    expect(JSON.stringify(result)).not.toContain("Drew Cole");
   });
 });
 
