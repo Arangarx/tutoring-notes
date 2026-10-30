@@ -4,7 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { expect, test, type Browser, type BrowserContext } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { TAG } from "../test-tags";
 import { PrismaClient } from "@prisma/client";
 import { encode } from "next-auth/jwt";
@@ -1159,136 +1159,217 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
     }
   });
 
-  test("on a phone-width screen the learner name stays whole while the organization badge shares its line", async ({
-    browser,
-  }) => {
-    test.setTimeout(120_000);
-    const { org, owner } = await seedOrg();
-    const organizationName =
-      "Westbridge Regional Preparatory Academy and Conservatory District";
-    expect(organizationName.length).toBeGreaterThanOrEqual(60);
-    await prisma.organization.update({ where: { id: org.id }, data: { name: organizationName } });
-    const instructor = await seedInstructor(org.id, "Ida Instructor");
-    const learner = await seedLearner(org.id, owner.id);
-    const appointment = await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+  const SCHEDULE_ROW_WIDTHS = [320, 375, 414, 768, 1280] as const;
 
-    const { context, page } = await openSchedule(browser, instructor, { width: 375, height: 812 });
-    try {
-      for (const view of ["month", "agenda"] as const) {
-        if (view === "agenda") await showAgenda(page);
-        const row = rowFor(page, appointment.id);
-        const name = row.getByTestId("schedule-session-name");
-        const badge = row.getByTestId("org-badge");
-        await name.scrollIntoViewIfNeeded();
-        await expect(name).toHaveText(learner.fullName);
-        await expect(badge).toContainText(organizationName);
-        // The name is fully visible: clipped text would make scrollWidth exceed clientWidth.
-        const fit = await name.evaluate((el) => ({
-          scrollWidth: el.scrollWidth,
-          clientWidth: el.clientWidth,
-        }));
-        expect(fit.scrollWidth, `${view} learner name is truncated`).toBeLessThanOrEqual(
-          fit.clientWidth + 1
-        );
-        const nameBox = await name.boundingBox();
-        const badgeBox = await badge.boundingBox();
-        const rowBox = await row.boundingBox();
-        if (!nameBox || !badgeBox || !rowBox) throw new Error(`name or badge missing in ${view} view`);
-        // Inside the row/card: right edges do not pass the row's right edge.
-        expect(nameBox.x + nameBox.width, `${view} learner name stays inside the row`).toBeLessThanOrEqual(
-          rowBox.x + rowBox.width + 1
-        );
-        expect(
-          badgeBox.x + badgeBox.width,
-          `${view} organization badge stays inside the row`
-        ).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
-        // Usable badge width whenever the organization badge is present.
-        expect(badgeBox.width, `${view} organization badge width`).toBeGreaterThanOrEqual(40);
-        // Same line: midline of the badge ≈ midline of the learner name.
-        const nameMid = nameBox.y + nameBox.height / 2;
-        const badgeMid = badgeBox.y + badgeBox.height / 2;
-        expect(Math.abs(nameMid - badgeMid), `${view} midline gap`).toBeLessThanOrEqual(4);
+  /** Visible label box versus a probe drawn in the badge's own font. */
+  async function measureBadge(badge: Locator) {
+    return badge.evaluate((el) => {
+      const textEl = el.querySelector("span");
+      if (!(textEl instanceof HTMLElement)) throw new Error("organization badge has no label");
+      const full = (textEl.textContent ?? "").replace(/\s+/g, " ").trim();
+      const via = "via ";
+      if (!full.startsWith(via) || full.length <= via.length) {
+        throw new Error(`organization badge does not start with the via prefix: ${full}`);
       }
-    } finally {
-      await context.close();
-    }
-  });
+      const orgChar = full.charAt(via.length);
+      const probeText = `${via}${orgChar}\u2026`;
+      const cs = getComputedStyle(textEl);
+      const probe = document.createElement("span");
+      probe.textContent = probeText;
+      probe.style.position = "absolute";
+      probe.style.left = "-9999px";
+      probe.style.top = "0";
+      probe.style.visibility = "hidden";
+      probe.style.whiteSpace = "nowrap";
+      probe.style.font = cs.font;
+      probe.style.letterSpacing = cs.letterSpacing;
+      probe.style.fontKerning = cs.fontKerning;
+      document.body.appendChild(probe);
+      const probeWidth = probe.getBoundingClientRect().width;
+      probe.remove();
+      const badgeCs = getComputedStyle(el);
+      const padding = parseFloat(badgeCs.paddingLeft) + parseFloat(badgeCs.paddingRight);
+      const border =
+        parseFloat(badgeCs.borderLeftWidth) + parseFloat(badgeCs.borderRightWidth);
+      const textClient = textEl.clientWidth;
+      const badgeOffset = el.offsetWidth;
+      return {
+        probeText,
+        probeWidth,
+        textClient,
+        textScroll: textEl.scrollWidth,
+        badgeClient: el.clientWidth,
+        badgeScroll: el.scrollWidth,
+        badgeOffset,
+        padding,
+        border,
+        font: cs.font,
+        requiredBorderBox: Math.ceil(probeWidth + badgeOffset - textClient),
+      };
+    });
+  }
 
-  test("on a 320px screen a long learner name truncates inside the row and the organization badge stays readable", async ({
+  async function expectBadgeKeepsViaPrefix(badge: Locator, label: string) {
+    const measured = await measureBadge(badge);
+    // The visible label must fit "via" + one organization character + an ellipsis.
+    // The probe is rendered in the badge's font; the CSS min-width is not the oracle.
+    expect(
+      measured.textClient,
+      `${label} shows "${measured.probeText}" (text ${measured.textClient}px, probe ${measured.probeWidth}px, badge offset ${measured.badgeOffset}px, pad ${measured.padding}px, border ${measured.border}px, required border-box ${measured.requiredBorderBox}px, font ${measured.font})`
+    ).toBeGreaterThanOrEqual(measured.probeWidth - 1);
+  }
+
+  async function expectTitleFitsRow(page: Page, row: Locator, label: string) {
+    const name = row.getByTestId("schedule-session-name");
+    const badge = row.getByTestId("org-badge");
+    await name.scrollIntoViewIfNeeded();
+    const nameBox = await name.boundingBox();
+    const badgeBox = await badge.boundingBox();
+    const rowBox = await row.boundingBox();
+    if (!nameBox || !badgeBox || !rowBox) throw new Error(`${label} name, badge, or row missing`);
+    // Right edges stay inside the row. +1px absorbs sub-pixel rounding.
+    expect(nameBox.x + nameBox.width, `${label} learner name stays inside the row`).toBeLessThanOrEqual(
+      rowBox.x + rowBox.width + 1
+    );
+    expect(
+      badgeBox.x + badgeBox.width,
+      `${label} organization badge stays inside the row`
+    ).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+    const sync = row.getByText("Synced", { exact: true });
+    if ((await sync.count()) > 0) {
+      const syncBox = await sync.boundingBox();
+      if (!syncBox) throw new Error(`${label} sync badge missing`);
+      expect(syncBox.x + syncBox.width, `${label} sync badge stays inside the row`).toBeLessThanOrEqual(
+        rowBox.x + rowBox.width + 1
+      );
+    }
+    // Same line: midline of the badge ≈ midline of the learner name.
+    const nameMid = nameBox.y + nameBox.height / 2;
+    const badgeMid = badgeBox.y + badgeBox.height / 2;
+    expect(Math.abs(nameMid - badgeMid), `${label} name/badge midline`).toBeLessThanOrEqual(4);
+    const scroll = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(scroll.scrollWidth, `${label} page horizontal scroll`).toBeLessThanOrEqual(
+      scroll.clientWidth + 1
+    );
+    await expectBadgeKeepsViaPrefix(badge, label);
+  }
+
+  test("squeezed schedule rows keep the organization badge inside the row, showing via plus one character", async ({
     browser,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
     const { org, owner } = await seedOrg();
+    const short = await seedOrg();
     const organizationName =
       "Westbridge Regional Preparatory Academy and Conservatory District";
     expect(organizationName.length).toBeGreaterThanOrEqual(60);
+    const shortOrgName = "West";
     await prisma.organization.update({ where: { id: org.id }, data: { name: organizationName } });
+    await prisma.organization.update({ where: { id: short.org.id }, data: { name: shortOrgName } });
     const instructor = await seedInstructor(org.id, "Ida Instructor");
-    const learner = await seedLearner(org.id, owner.id, true, {
+    await prisma.organizationMember.create({
+      data: { organizationId: short.org.id, adminUserId: instructor.id, roles: ["instructor"] },
+    });
+    const fitting = await seedLearner(org.id, owner.id, true, {
+      givenName: "Mary",
+      familyName: "Lee",
+    });
+    const longLearner = await seedLearner(org.id, owner.id, true, {
       givenName: "Alexandria Bartholomew",
       familyName: "Worthington-Smythe",
     });
-    expect(learner.fullName.length).toBeGreaterThanOrEqual(40);
-    const appointment = await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+    expect(longLearner.fullName.length).toBeGreaterThanOrEqual(40);
+    const shortOrgLearner = await seedLearner(short.org.id, short.owner.id, true, {
+      givenName: "Sam",
+      familyName: "Lee",
+    });
+    const fittingAppointment = await seedToday(instructor.id, fitting.student.id, "Algebra", 10);
+    const longAppointment = await seedToday(instructor.id, longLearner.student.id, "Geometry", 12);
+    const shortOrgAppointment = await seedToday(
+      instructor.id,
+      shortOrgLearner.student.id,
+      "Reading",
+      14
+    );
     // A stored Google event id is enough for the schedule mapper to show the
     // "Synced" badge; no Google connection row is required.
     await prisma.scheduledSession.update({
-      where: { id: appointment.id },
-      data: { googleEventId: `evt-${appointment.id}` },
+      where: { id: longAppointment.id },
+      data: { googleEventId: `evt-${longAppointment.id}` },
+    });
+    await prisma.scheduledSession.update({
+      where: { id: shortOrgAppointment.id },
+      data: { googleEventId: `evt-${shortOrgAppointment.id}` },
     });
 
-    const { context, page } = await openSchedule(browser, instructor, { width: 320, height: 812 });
+    const { context, page } = await openSchedule(browser, instructor);
     try {
+      await page.evaluate(() => document.fonts.ready);
       for (const view of ["month", "agenda"] as const) {
         if (view === "agenda") await showAgenda(page);
-        const row = rowFor(page, appointment.id);
-        const name = row.getByTestId("schedule-session-name");
-        const badge = row.getByTestId("org-badge");
-        const sync = row.getByText("Synced", { exact: true });
-        await name.scrollIntoViewIfNeeded();
-        await expect(name).toHaveText(learner.fullName);
-        await expect(badge).toContainText(organizationName);
-        await expect(sync).toBeVisible();
-        const nameBox = await name.boundingBox();
-        const badgeBox = await badge.boundingBox();
-        const syncBox = await sync.boundingBox();
-        const rowBox = await row.boundingBox();
-        if (!nameBox || !badgeBox || !syncBox || !rowBox) {
-          throw new Error(`name, badge, sync badge, or row missing in ${view} view`);
+        for (const width of SCHEDULE_ROW_WIDTHS) {
+          await page.setViewportSize({ width, height: 812 });
+          const label = `${view} @ ${width}px`;
+          const longRow = rowFor(page, longAppointment.id);
+          const longName = longRow.getByTestId("schedule-session-name");
+          await longName.scrollIntoViewIfNeeded();
+          await expect(longName).toHaveText(longLearner.fullName);
+          await expect(longRow.getByTestId("org-badge")).toContainText(organizationName);
+          await expect(longRow.getByText("Synced", { exact: true })).toBeVisible();
+          await expectTitleFitsRow(page, longRow, `${label} long name`);
+
+          if (width === 320) {
+            const clipped = await longName.evaluate((el) => ({
+              scrollWidth: el.scrollWidth,
+              clientWidth: el.clientWidth,
+            }));
+            // The long name does not fit beside the shrunk badge.
+            expect(clipped.scrollWidth, `${label} long learner name truncates`).toBeGreaterThan(
+              clipped.clientWidth + 1
+            );
+
+            const fittingRow = rowFor(page, fittingAppointment.id);
+            const fittingName = fittingRow.getByTestId("schedule-session-name");
+            await fittingName.scrollIntoViewIfNeeded();
+            await expect(fittingName).toHaveText(fitting.fullName);
+            const whole = await fittingName.evaluate((el) => ({
+              scrollWidth: el.scrollWidth,
+              clientWidth: el.clientWidth,
+            }));
+            // This name fits once the badge has shrunk to its floor.
+            expect(
+              whole.scrollWidth,
+              `${label} fitting learner name stays whole`
+            ).toBeLessThanOrEqual(whole.clientWidth + 1);
+            const clippedBadge = await measureBadge(fittingRow.getByTestId("org-badge"));
+            // The badge label is the truncating box. A clipped organization name
+            // makes that box's scrollWidth exceed its clientWidth.
+            expect(
+              clippedBadge.textScroll,
+              `${label} organization badge truncates (badge scroll ${clippedBadge.badgeScroll} client ${clippedBadge.badgeClient}, label scroll ${clippedBadge.textScroll} client ${clippedBadge.textClient})`
+            ).toBeGreaterThan(clippedBadge.textClient);
+            await expectTitleFitsRow(page, fittingRow, `${label} fitting name`);
+          }
+
+          if (width === 1280) {
+            const shortRow = rowFor(page, shortOrgAppointment.id);
+            const shortName = shortRow.getByTestId("schedule-session-name");
+            const sync = shortRow.getByText("Synced", { exact: true });
+            await shortName.scrollIntoViewIfNeeded();
+            await expect(shortRow.getByTestId("org-badge")).toHaveText(`via ${shortOrgName}`);
+            const nameBox = await shortName.boundingBox();
+            const syncBox = await sync.boundingBox();
+            if (!nameBox || !syncBox) throw new Error(`${label} short-org name or sync badge missing`);
+            // Short organization name: the sync badge stays on the title line.
+            const nameMid = nameBox.y + nameBox.height / 2;
+            const syncMid = syncBox.y + syncBox.height / 2;
+            expect(Math.abs(nameMid - syncMid), `${label} sync badge midline`).toBeLessThanOrEqual(4);
+            await expectTitleFitsRow(page, shortRow, `${label} short org`);
+          }
         }
-        // Inside the row/card: right edges do not pass the row's right edge.
-        expect(nameBox.x + nameBox.width, `${view} learner name stays inside the row`).toBeLessThanOrEqual(
-          rowBox.x + rowBox.width + 1
-        );
-        expect(
-          badgeBox.x + badgeBox.width,
-          `${view} organization badge stays inside the row`
-        ).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
-        expect(syncBox.x + syncBox.width, `${view} sync badge stays inside the row`).toBeLessThanOrEqual(
-          rowBox.x + rowBox.width + 1
-        );
-        // Usable badge width whenever the organization badge is present.
-        expect(badgeBox.width, `${view} organization badge width`).toBeGreaterThanOrEqual(40);
-        // Same line: midline of the badge ≈ midline of the learner name.
-        const nameMid = nameBox.y + nameBox.height / 2;
-        const badgeMid = badgeBox.y + badgeBox.height / 2;
-        expect(Math.abs(nameMid - badgeMid), `${view} midline gap`).toBeLessThanOrEqual(4);
-        const scroll = await page.evaluate(() => ({
-          scrollWidth: document.documentElement.scrollWidth,
-          clientWidth: document.documentElement.clientWidth,
-        }));
-        // The page itself does not scroll horizontally.
-        expect(scroll.scrollWidth, `${view} page horizontal scroll`).toBeLessThanOrEqual(
-          scroll.clientWidth + 1
-        );
-        // The name alone does not fit this row: the element clips it with an ellipsis.
-        const fit = await name.evaluate((el) => ({
-          scrollWidth: el.scrollWidth,
-          clientWidth: el.clientWidth,
-        }));
-        expect(fit.scrollWidth, `${view} long learner name truncates`).toBeGreaterThan(
-          fit.clientWidth + 1
-        );
       }
     } finally {
       await context.close();

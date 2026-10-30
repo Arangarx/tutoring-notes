@@ -4,7 +4,7 @@ import type { ScheduledSessionView } from "@/lib/schedule/types";
 
 /**
  * Learner name with the organization badge (org rows) and the calendar sync badge.
- * The badge shrinks first, down to a 40px floor; the name truncates only after that.
+ * The badge shrinks first, down to the floor it owns; the name truncates only after that.
  * The sync badge wraps onto the next line once the name and badge fill the row.
  */
 export function ScheduleSessionTitle({ session }: { session: ScheduledSessionView }) {
@@ -18,10 +18,7 @@ export function ScheduleSessionTitle({ session }: { session: ScheduledSessionVie
           {session.studentName}
         </p>
         {session.source.kind === "org" ? (
-          <OrgBadge
-            organizationName={session.source.organizationName}
-            className="min-w-[40px] shrink-[1000]"
-          />
+          <OrgBadge organizationName={session.source.organizationName} />
         ) : null}
       </div>
       {session.showSyncBadge ? <SessionSyncBadge state={session.syncState} /> : null}
