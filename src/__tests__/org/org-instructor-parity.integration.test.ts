@@ -136,6 +136,12 @@ describe("J6 one membership rule", () => {
     expect(rows.map((row) => row.adminUserId)).toEqual([good.id]);
   });
 
+  it("admission refuses an empty member id instead of matching every instructor", async () => {
+    const { org } = await seedOrg("active");
+    await seedMember(org.id, ["instructor"]);
+    expect(await orgInstructorAdmitted(db, org.id, "")).toBe(false);
+  });
+
   it.each(["pending", "suspended"] as const)(
     "admission still refuses a valid instructor while the organization is %s",
     async (status) => {

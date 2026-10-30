@@ -9,6 +9,7 @@ import { getGoogleCalendarConnectionForTutor } from "@/lib/calendar-oauth";
 import { utcBoundsFromWallClock } from "@/lib/calendar/scheduled-session-datetime";
 import { scheduledSessionsOverlap } from "@/lib/calendar/scheduled-session-overlap";
 import {
+  activeOrgInstructorMemberWhere,
   orgAppointmentListScope,
   orgLearnerFilterForViewer,
   STAFF_HOME_ROLES,
@@ -24,7 +25,8 @@ import type { GoogleCalendarUiState } from "@/lib/schedule/google-calendar-ui-st
 import { sessionSpanMinutes } from "@/lib/schedule/planned-end-time";
 import { toScheduledSessionView } from "@/lib/schedule/scheduled-session-mapper";
 import type { ScheduleStudentOption, ScheduledSessionView } from "@/lib/schedule/types";
-import { appointmentLiveEntryAllowed } from "@/lib/scheduling/upcoming-sessions";
+import { isOrgOwnedStudent, tutorAppointmentsWhere } from "@/lib/scheduling/tutor-appointments";
+import { liveEntryAllowedBatch } from "@/lib/scheduling/upcoming-sessions";
 import {
   assertOwnsStudent,
   requireStudentScope,
@@ -154,14 +156,12 @@ async function overlapWarningFor(
   return overlaps ? "This overlaps another appointment." : null;
 }
 
-function isOrgStudent(student: {
-  adminUserId: string | null;
-  organizationId: string | null;
-}): student is { adminUserId: null; organizationId: string } {
-  return student.organizationId != null && student.adminUserId == null;
-}
-
-/** Lists sessions for the authenticated tutor only (`adminUserId` = scope.adminId). */
+/**
+ * Lists the authenticated tutor's appointments: their own private students, and
+ * organization appointments assigned to them while they are an active instructor
+ * (`tutorAppointmentsWhere`). Org rows carry `source` and `liveEntryAllowed`.
+ * Never selects parent email, brief, consent, or claim fields.
+ */
 export async function listScheduledSessionsForTutor(
   googleState: GoogleCalendarUiState
 ): Promise<ScheduledSessionView[]> {
@@ -170,11 +170,18 @@ export async function listScheduledSessionsForTutor(
     withDbRetry(
       () =>
         db.scheduledSession.findMany({
-          where: {
-            adminUserId: scope.adminId,
-            student: { adminUserId: scope.adminId },
+          where: tutorAppointmentsWhere(scope.adminId),
+          include: {
+            student: {
+              select: {
+                name: true,
+                adminUserId: true,
+                organizationId: true,
+                learnerProfileId: true,
+                organization: { select: { id: true, name: true } },
+              },
+            },
           },
-          include: { student: { select: { name: true } } },
           orderBy: [{ date: "asc" }, { startTime: "asc" }],
         }),
       { label: "listScheduledSessionsForTutor" }
@@ -189,7 +196,13 @@ export async function listScheduledSessionsForTutor(
     ),
   ]);
   const displayTimeZone = admin?.tutorTimezone ?? DEFAULT_TUTOR_TIMEZONE;
-  return rows.map((row) => toScheduledSessionView(row, googleState, displayTimeZone));
+  const views = rows.map((row) => toScheduledSessionView(row, googleState, displayTimeZone));
+  const orgRows = rows.filter((row) => isOrgOwnedStudent(row.student));
+  const orgFlags = await liveEntryAllowedBatch(orgRows);
+  const liveEntryById = new Map(orgRows.map((row, index) => [row.id, orgFlags[index]]));
+  return views.map((view) =>
+    view.source.kind === "org" ? { ...view, liveEntryAllowed: liveEntryById.get(view.id) === true } : view
+  );
 }
 
 export async function listScheduleStudentOptions(): Promise<ScheduleStudentOption[]> {
@@ -220,7 +233,7 @@ export async function createScheduledSession(
   let appointmentAdminId = scope.adminId;
   let utc: { startAt: Date; endAt: Date };
   let organizationId: string | null = null;
-  if (isOrgStudent(student)) {
+  if (isOrgOwnedStudent(student)) {
     organizationId = student.organizationId;
     await assertOrgRole(organizationId, STAFF_HOME_ROLES);
     const instructorId = input.instructorAdminUserId;
@@ -295,14 +308,14 @@ export async function updateScheduledSession(
   let appointmentAdminId = existing.adminUserId;
   let utc: { startAt: Date; endAt: Date };
   let organizationId: string | null = null;
-  if (isOrgStudent(existing.student)) {
+  if (isOrgOwnedStudent(existing.student)) {
     organizationId = existing.student.organizationId;
     await assertOrgRole(organizationId, STAFF_HOME_ROLES);
     const nextStudent = await db.student.findUnique({
       where: { id: input.studentId },
       select: { adminUserId: true, organizationId: true },
     });
-    if (!nextStudent || !isOrgStudent(nextStudent) || nextStudent.organizationId !== organizationId) {
+    if (!nextStudent || !isOrgOwnedStudent(nextStudent) || nextStudent.organizationId !== organizationId) {
       notFound();
     }
     const instructorId = input.instructorAdminUserId;
@@ -372,7 +385,7 @@ export async function deleteScheduledSession(sessionId: string): Promise<void> {
   });
   if (!existing) notFound();
   let organizationId: string | null = null;
-  if (isOrgStudent(existing.student)) {
+  if (isOrgOwnedStudent(existing.student)) {
     organizationId = existing.student.organizationId;
     await assertOrgRole(organizationId, STAFF_HOME_ROLES);
   } else {
@@ -447,6 +460,7 @@ export async function listScheduledSessionsForOrganization(
           adminUserId: true,
           organizationId: true,
           learnerProfileId: true,
+          organization: { select: { id: true, name: true } },
           organizationLearner: { select: { givenName: true, familyName: true } },
         },
       },
@@ -454,34 +468,28 @@ export async function listScheduledSessionsForOrganization(
     },
   });
   const googleState: GoogleCalendarUiState = { connected: false, reconnectRequired: false };
-  return Promise.all(
-    rows.map(async (row) => {
-      const learner = row.student.organizationLearner;
-      const learnerName = learner
-        ? `${learner.givenName.trim()} ${learner.familyName.trim()}`.trim()
-        : row.student.name;
-      const view = {
-        ...toScheduledSessionView(row, googleState, org.timezone),
-        instructorAdminUserId: row.adminUserId,
-      };
-      return {
-        id: row.id,
-        learnerName,
-        instructorName: row.adminUser.displayName?.trim() || row.adminUser.email,
-        instructorAdminUserId: row.adminUserId,
-        whenLabel: `${view.date} ${view.startTime}–${view.endTime}`,
-        subject: row.subject,
-        availability: org.status === "active" ? ("available" as const) : ("unavailable" as const),
-        liveEntryAllowed: await appointmentLiveEntryAllowed({
-          learnerProfileId: row.student.learnerProfileId,
-          studentAdminUserId: row.student.adminUserId,
-          organizationId: row.student.organizationId,
-          appointmentAdminUserId: row.adminUserId,
-        }),
-        view,
-      };
-    })
-  );
+  const liveEntryFlags = await liveEntryAllowedBatch(rows);
+  return rows.map((row, index) => {
+    const learner = row.student.organizationLearner;
+    const learnerName = learner
+      ? `${learner.givenName.trim()} ${learner.familyName.trim()}`.trim()
+      : row.student.name;
+    const view = {
+      ...toScheduledSessionView(row, googleState, org.timezone),
+      instructorAdminUserId: row.adminUserId,
+    };
+    return {
+      id: row.id,
+      learnerName,
+      instructorName: row.adminUser.displayName?.trim() || row.adminUser.email,
+      instructorAdminUserId: row.adminUserId,
+      whenLabel: `${view.date} ${view.startTime}–${view.endTime}`,
+      subject: row.subject,
+      availability: org.status === "active" ? ("available" as const) : ("unavailable" as const),
+      liveEntryAllowed: liveEntryFlags[index] === true,
+      view,
+    };
+  });
 }
 
 export async function listOrganizationBookingChoices(organizationId: string): Promise<{
@@ -502,12 +510,7 @@ export async function listOrganizationBookingChoices(organizationId: string): Pr
       orderBy: [{ givenName: "asc" }, { familyName: "asc" }],
     }),
     db.organizationMember.findMany({
-      where: {
-        organizationId,
-        removedAt: null,
-        roles: { has: "instructor" },
-        adminUser: { approvalStatus: "APPROVED", isTestAccount: false },
-      },
+      where: { organizationId, ...activeOrgInstructorMemberWhere() },
       select: { adminUser: { select: { id: true, displayName: true, email: true } } },
       orderBy: { adminUser: { displayName: "asc" } },
     }),

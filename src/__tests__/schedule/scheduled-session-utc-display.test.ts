@@ -5,7 +5,6 @@ import { Temporal } from "@js-temporal/polyfill";
 
 import { GOOGLE_CALENDAR_DISCONNECTED } from "@/lib/schedule/google-calendar-ui-state";
 import { toScheduledSessionView } from "@/lib/schedule/scheduled-session-mapper";
-import type { ScheduledSession, Student } from "@prisma/client";
 
 describe("toScheduledSessionView UTC display", () => {
   it("formats startAt in the tutor display zone, not denormalized HH:MM", () => {
@@ -32,8 +31,13 @@ describe("toScheduledSessionView UTC display", () => {
       googleEventId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
-      student: { name: "Jordan Test" } satisfies Pick<Student, "name">,
-    } as ScheduledSession & { student: Pick<Student, "name"> };
+      student: {
+        name: "Jordan Test",
+        adminUserId: "admin-1",
+        organizationId: null,
+        organization: null,
+      },
+    } as unknown as Parameters<typeof toScheduledSessionView>[0];
 
     const view = toScheduledSessionView(
       row,

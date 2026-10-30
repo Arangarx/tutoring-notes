@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionCard } from "@/components/SectionCard";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
 import { CreateSessionDialog } from "@/components/admin/schedule/CreateSessionDialog";
-import { SessionSyncBadge } from "@/components/admin/schedule/SessionSyncBadge";
+import { ScheduleSessionActions } from "@/components/admin/schedule/ScheduleSessionActions";
+import { ScheduleSessionTitle } from "@/components/admin/schedule/ScheduleSessionTitle";
 import {
   datesWithSessions,
   localDateToInputValue,
@@ -21,7 +22,7 @@ import {
 } from "@/lib/schedule/mock-data";
 import { SCHEDULE_INTEGRATIONS_SETTINGS_HREF } from "@/lib/schedule/navigation";
 import { cn } from "@/lib/utils";
-import { CalendarDaysIcon, ListIcon, PlayIcon, Settings2Icon } from "lucide-react";
+import { CalendarDaysIcon, ListIcon, Settings2Icon } from "lucide-react";
 
 function ScheduleDayButton({
   modifiers,
@@ -67,15 +68,16 @@ function DayDetailSessionItem({
   onSaved,
 }: SessionItemProps) {
   return (
-    <li className="rounded-[10px] border border-border bg-card p-4" data-testid="schedule-session-item">
+    <li
+      className="rounded-[10px] border border-border bg-card p-4"
+      data-testid="schedule-session-item"
+      data-session-id={session.id}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <StudentAvatar name={session.studentName} size="md" />
           <div className="min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-foreground">{session.studentName}</p>
-              {session.showSyncBadge ? <SessionSyncBadge state={session.syncState} /> : null}
-            </div>
+            <ScheduleSessionTitle session={session} />
             <p className="text-sm text-muted-foreground" data-testid="schedule-session-subject">
               {session.subject}
             </p>
@@ -93,26 +95,13 @@ function DayDetailSessionItem({
             ) : null}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-stretch lg:flex-row lg:items-center">
-          <CreateSessionDialog
-            studentOptions={studentOptions}
-            googleConnected={googleConnected}
-            session={session}
-            defaultDate={session.date}
-            onSaved={onSaved}
-            trigger={
-              <Button type="button" variant="outline" size="sm" className="min-h-9" data-testid="schedule-edit-session">
-                Edit
-              </Button>
-            }
-          />
-          <Button type="button" variant="accent" size="sm" className="min-h-9" asChild>
-            <Link href={`/admin/students/${session.studentId}`} data-testid="schedule-start-session">
-              <PlayIcon aria-hidden />
-              Start session
-            </Link>
-          </Button>
-        </div>
+        <ScheduleSessionActions
+          session={session}
+          studentOptions={studentOptions}
+          googleConnected={googleConnected}
+          onSaved={onSaved}
+          className="sm:flex-col sm:items-stretch lg:flex-row lg:items-center"
+        />
       </div>
     </li>
   );
@@ -130,14 +119,12 @@ function SessionRow({ session, studentOptions, googleConnected, onSaved }: Sessi
     <li
       className="flex flex-col gap-3 rounded-[10px] border border-border bg-card px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
       data-testid="schedule-agenda-row"
+      data-session-id={session.id}
     >
       <div className="flex min-w-0 items-start gap-3">
         <StudentAvatar name={session.studentName} size="md" />
         <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-foreground">{session.studentName}</p>
-            {session.showSyncBadge ? <SessionSyncBadge state={session.syncState} /> : null}
-          </div>
+          <ScheduleSessionTitle session={session} />
           <p className="text-sm text-muted-foreground">
             {session.subject} · {dateLabel} ·{" "}
             <span className="whitespace-nowrap">
@@ -153,26 +140,13 @@ function SessionRow({ session, studentOptions, googleConnected, onSaved }: Sessi
           ) : null}
         </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-        <CreateSessionDialog
-          studentOptions={studentOptions}
-          googleConnected={googleConnected}
-          session={session}
-          defaultDate={session.date}
-          onSaved={onSaved}
-          trigger={
-            <Button type="button" variant="outline" size="sm" className="min-h-9">
-              Edit
-            </Button>
-          }
-        />
-        <Button type="button" variant="accent" size="sm" className="min-h-9" asChild>
-          <Link href={`/admin/students/${session.studentId}`}>
-            <PlayIcon aria-hidden />
-            Start session
-          </Link>
-        </Button>
-      </div>
+      <ScheduleSessionActions
+        session={session}
+        studentOptions={studentOptions}
+        googleConnected={googleConnected}
+        onSaved={onSaved}
+        className="sm:justify-end"
+      />
     </li>
   );
 }

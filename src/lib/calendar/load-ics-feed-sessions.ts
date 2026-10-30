@@ -1,12 +1,17 @@
 import { db } from "@/lib/db";
+import { tutorAppointmentsWhere } from "@/lib/scheduling/tutor-appointments";
 
 import type { IcsFeedSessionInput } from "@/lib/calendar/ics-feed";
 
+/**
+ * The feed lists exactly what the tutor's Schedule lists (`tutorAppointmentsWhere`),
+ * so a removed or waitlisted instructor stops receiving org appointments.
+ */
 export async function loadIcsFeedSessionsForAdmin(
   adminUserId: string
 ): Promise<IcsFeedSessionInput[]> {
   return db.scheduledSession.findMany({
-    where: { adminUserId },
+    where: tutorAppointmentsWhere(adminUserId),
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
     select: {
       id: true,

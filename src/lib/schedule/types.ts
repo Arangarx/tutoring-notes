@@ -20,6 +20,11 @@ export type ScheduleStudentOption = {
   name: string;
 };
 
+/** Where a scheduled session comes from: the tutor's own student, or an organization's learner. */
+export type ScheduledSessionSource =
+  | { kind: "personal" }
+  | { kind: "org"; organizationId: string; organizationName: string };
+
 /** Client-facing scheduled session row for schedule views. */
 export type ScheduledSessionView = {
   id: string;
@@ -42,4 +47,11 @@ export type ScheduledSessionView = {
   plannedDurationMinutes: number;
   /** Set on organization appointments. Absent on the personal tutor schedule. */
   instructorAdminUserId?: string;
+  /** Always set by the mapper. Org rows are read-only on the tutor Schedule. */
+  source: ScheduledSessionSource;
+  /**
+   * Org rows on the tutor Schedule only: whether consent allows opening the room.
+   * Absent on personal rows, which start from the student page.
+   */
+  liveEntryAllowed?: boolean;
 };

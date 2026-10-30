@@ -17,7 +17,7 @@ import { authOptions } from "@/auth-options";
 import { CLAIM_INVITE_TTL_MS, generateRawToken, hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
-import { STAFF_HOME_ROLES } from "@/lib/org-appointment-scope";
+import { activeOrgInstructorMemberWhere, STAFF_HOME_ROLES } from "@/lib/org-appointment-scope";
 import { requireOperator, type OperatorIdentity } from "@/lib/operator";
 import { requireStudentScope } from "@/lib/student-scope";
 import { approveTutor, revokeTutorApproval } from "@/lib/tutor-approval-scope";
@@ -175,30 +175,28 @@ async function lockOrg(tx: Prisma.TransactionClient, organizationId: string): Pr
 type OrgAdmissionClient = Pick<Prisma.TransactionClient, "organization" | "organizationMember">;
 
 /**
- * Booking and opening a new room. Passes only for an active organization,
- * a member with removedAt null, APPROVED, whose roles include instructor.
+ * Booking and opening a new room. Passes only for an active organization and a member
+ * matching `activeOrgInstructorMemberWhere` (removedAt null, instructor role, APPROVED,
+ * not a test account).
  */
 export async function orgInstructorAdmitted(
   client: OrgAdmissionClient,
   organizationId: string,
   adminUserId: string
 ): Promise<boolean> {
+  // An empty id would make the shared fragment match every instructor.
+  if (!adminUserId) return false;
   const org = await client.organization.findUnique({
     where: { id: organizationId },
     select: { status: true },
   });
   if (!org || org.status !== "active") return false;
-  const member = await client.organizationMember.findUnique({
-    where: { organizationId_adminUserId: { organizationId, adminUserId } },
-    select: {
-      removedAt: true,
-      roles: true,
-      adminUser: { select: { approvalStatus: true } },
-    },
+  // The membership rule is the shared fragment, so booking choices, the Schedule
+  // list, and admission cannot drift apart (J6 pins the parity).
+  const count = await client.organizationMember.count({
+    where: { organizationId, ...activeOrgInstructorMemberWhere(adminUserId) },
   });
-  if (!member || member.removedAt != null) return false;
-  if (member.adminUser.approvalStatus !== "APPROVED") return false;
-  return member.roles.includes("instructor");
+  return count > 0;
 }
 
 /** Row lock around the existing Organization SELECT … FOR UPDATE. */

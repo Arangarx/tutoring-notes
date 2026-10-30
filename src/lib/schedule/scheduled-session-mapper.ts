@@ -1,13 +1,29 @@
 import type { ScheduledSession, Student } from "@prisma/client";
+import { isOrgOwnedStudent } from "@/lib/scheduling/tutor-appointments";
 import { formatInstantWallClockFields } from "@/lib/calendar/scheduled-session-datetime";
 import { formatDateOnlyInput } from "@/lib/date-only";
 import type { GoogleCalendarUiState } from "@/lib/schedule/google-calendar-ui-state";
-import type { CalendarSyncState, ScheduledSessionView } from "@/lib/schedule/types";
+import type {
+  CalendarSyncState,
+  ScheduledSessionSource,
+  ScheduledSessionView,
+} from "@/lib/schedule/types";
 import { durationLabelForMinutes, formatTimeDisplay } from "@/lib/schedule/time-format";
 
 type ScheduledSessionRow = ScheduledSession & {
-  student: Pick<Student, "name">;
+  student: Pick<Student, "name" | "adminUserId" | "organizationId"> & {
+    organization: { id: string; name: string } | null;
+  };
 };
+
+function resolveSource(student: ScheduledSessionRow["student"]): ScheduledSessionSource {
+  if (!isOrgOwnedStudent(student)) return { kind: "personal" };
+  return {
+    kind: "org",
+    organizationId: student.organizationId,
+    organizationName: student.organization?.name ?? "",
+  };
+}
 
 export function resolveSyncPresentation(
   googleState: GoogleCalendarUiState,
@@ -53,5 +69,6 @@ export function toScheduledSessionView(
     syncState: sync.syncState as CalendarSyncState,
     location: row.location || undefined,
     notes: row.notes || undefined,
+    source: resolveSource(row.student),
   };
 }

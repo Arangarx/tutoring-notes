@@ -75,7 +75,7 @@ function toRow(row: UpcomingSource, now: Date): UpcomingScheduledSessionRow | nu
   };
 }
 
-export async function appointmentLiveEntryAllowed(input: {
+async function appointmentLiveEntryAllowed(input: {
   learnerProfileId: string | null;
   studentAdminUserId: string | null;
   organizationId: string | null;
@@ -95,13 +95,43 @@ export async function appointmentLiveEntryAllowed(input: {
   return effective?.allowLiveSession === true;
 }
 
-async function liveEntryAllowedFor(row: UpcomingSource): Promise<boolean> {
-  return appointmentLiveEntryAllowed({
-    learnerProfileId: row.student.learnerProfileId,
-    studentAdminUserId: row.student.adminUserId,
-    organizationId: row.student.organizationId,
-    appointmentAdminUserId: row.adminUserId,
-  });
+/** The fields `liveEntryAllowedBatch` needs from an appointment row. */
+export type LiveEntrySource = {
+  studentId: string;
+  adminUserId: string;
+  student: {
+    adminUserId: string | null;
+    organizationId: string | null;
+    learnerProfileId: string | null;
+  };
+};
+
+/**
+ * Whether each appointment's tutor may open a live session, in input order.
+ * One consent lookup per (student, tutor) pair, however many rows share it.
+ * The one place that decides `liveEntryAllowed` for a list of appointments.
+ */
+export async function liveEntryAllowedBatch(
+  sources: readonly LiveEntrySource[]
+): Promise<boolean[]> {
+  const cache = new Map<string, Promise<boolean>>();
+  const flags = await Promise.all(
+    sources.map((source) => {
+      const key = `${source.studentId}:${source.adminUserId}`;
+      let pending = cache.get(key);
+      if (!pending) {
+        pending = appointmentLiveEntryAllowed({
+          learnerProfileId: source.student.learnerProfileId,
+          studentAdminUserId: source.student.adminUserId,
+          organizationId: source.student.organizationId,
+          appointmentAdminUserId: source.adminUserId,
+        });
+        cache.set(key, pending);
+      }
+      return pending;
+    })
+  );
+  return flags.map((flag) => flag === true);
 }
 
 async function withLiveEntry(
@@ -112,18 +142,7 @@ async function withLiveEntry(
     const row = toRow(source, now);
     return row ? [{ source, row }] : [];
   });
-  const cache = new Map<string, Promise<boolean>>();
-  const flags = await Promise.all(
-    kept.map(({ source }) => {
-      const key = `${source.studentId}:${source.adminUserId}`;
-      let pending = cache.get(key);
-      if (!pending) {
-        pending = liveEntryAllowedFor(source);
-        cache.set(key, pending);
-      }
-      return pending;
-    })
-  );
+  const flags = await liveEntryAllowedBatch(kept.map(({ source }) => source));
   return kept.map(({ row }, index) => ({
     ...row,
     liveEntryAllowed: flags[index] === true,

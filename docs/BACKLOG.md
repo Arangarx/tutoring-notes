@@ -2178,6 +2178,18 @@ Status model, Stripe, org MVP, etc. — roadmap waves 4–5.
 **[P3][GTM] Auto-finalize notes when the finalize window ends (Andrew 2026-10-11)**  
 Future. When a removed tutor was allowed to finalize notes and the deadline passes, finalize automatically as if the tutor had accepted the draft and saved it unchanged. Not in the current org finish. Ask organizations whether they want this. See [docs/interviews/ORG-INTERVIEW-GUIDE.md](interviews/ORG-INTERVIEW-GUIDE.md).
 
+**[P2][ORG] ORG-ROLE-DROP-ORPHAN-APPOINTMENTS (org W3 design 2026-10-29)**  
+`setOrgMemberRoles` cancels nothing when an instructor loses the `instructor` role, so their future appointments stay assigned to them. The tutor Schedule and the ICS feed now hide those rows (the shared `activeOrgInstructorMemberWhere` fragment requires the role), but the rows remain in the database and on the organization page with no instructor who can teach them. Decide: block the role change while future appointments exist, or reassign/cancel them. Test the choice with a real-DB case next to J9 in `src/__tests__/schedule/tutor-schedule-and-feed.integration.test.ts`.
+
+**[P3][ORG] Inline "organization-owned student" checks outside the canonical guard (org W3 2026-10-29)**  
+`isOrgOwnedStudent` in `src/lib/scheduling/tutor-appointments.ts` is the one definition (organizationId set, adminUserId null). The same expression is still written inline in fragile files: `src/lib/whiteboard/schedule-bridge.ts:79`, `src/app/admin/students/[id]/whiteboard/actions.ts:173` and `:277`, `src/lib/whiteboard-scope.ts:67`, `src/lib/org-force-end-touch.ts:22`, `src/app/api/whiteboard/[sessionId]/join-timer/route.ts:111` and `:276`. Not touched in W3 (whiteboard and lifecycle surface). Consolidate in small steps, each behind its own tests.
+
+**[P3][ORG] ICS and Google event descriptions are built twice (org W3 2026-10-29)**  
+`buildDescription` in `src/lib/calendar/ics-feed.ts` and `descriptionParts` in `src/lib/calendar/google-calendar-event-payload.ts` assemble the same Subject / location / notes text separately, and the summary helper is shared only in part. The W3 design adds no organization line to either, so they were left alone. Merge into one description builder with one test.
+
+**[P2][ORG][SCHED] Google Calendar reassign uses the new instructor's token against the old event id (org W3 2026-10-29, not verified)**  
+When `updateScheduledSession` reassigns an appointment, the Google patch runs with the NEW instructor's token and the OLD `googleEventId`. Google events belong to the first instructor's calendar, so this probably returns not-found and logs `[gcw] ... action=patch_error` (fail-soft, no crash). Not confirmed against Google. Expected correct behavior: delete the event with the old instructor's token and insert with the new instructor's. Needs a Google-scopes check first (priority #1 external validation).
+
 ---
 
 ## 13. Strategy / positioning / pricing / research

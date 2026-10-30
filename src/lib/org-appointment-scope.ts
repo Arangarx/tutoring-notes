@@ -1,10 +1,20 @@
 import type { OrgRole, Prisma } from "@prisma/client";
 
-/** RED-COMMIT STUB: matches every member row. Replaced in the implementation commit. */
+/**
+ * The one membership rule for "may teach appointments": not removed, holds the
+ * instructor role, and the account is APPROVED and not a test account.
+ * Spread it into an `OrganizationMember` where, with or without a member id.
+ * It does not check the organization's status; booking and entry gates do that.
+ */
 export function activeOrgInstructorMemberWhere(
   adminUserId?: string
 ): Prisma.OrganizationMemberWhereInput {
-  return { ...(adminUserId ? { adminUserId } : {}) };
+  return {
+    ...(adminUserId ? { adminUserId } : {}),
+    removedAt: null,
+    roles: { has: "instructor" },
+    adminUser: { approvalStatus: "APPROVED", isTestAccount: false },
+  };
 }
 
 /** Owner, admin, and scheduler. Instructors are not included. */
