@@ -18,6 +18,7 @@
 
 import fs from "node:fs";
 import { test, expect, webkit, devices } from "@playwright/test";
+import { skipWebKitSelfTestForMissingExecutable } from "@/__tests__/helpers/webkit-selftest-skip";
 import { TAG } from "../test-tags";
 import {
   armFault,
@@ -250,8 +251,11 @@ test.describe("consent C0 harness: getUserMedia spy", {
       webkitInstalled = false;
     }
     test.skip(
-      !webkitInstalled,
-      "Playwright WebKit executable is not installed"
+      skipWebKitSelfTestForMissingExecutable({
+        installed: webkitInstalled,
+        ci: Boolean(process.env.CI),
+      }),
+      "Playwright WebKit executable is not installed locally"
     );
     const wk = await webkit.launch();
     try {
