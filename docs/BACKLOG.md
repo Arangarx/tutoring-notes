@@ -2190,6 +2190,9 @@ Future. When a removed tutor was allowed to finalize notes and the deadline pass
 **[P2][ORG][SCHED] Google Calendar reassign uses the new instructor's token against the old event id (org W3 2026-10-29, not verified)**  
 When `updateScheduledSession` reassigns an appointment, the Google patch runs with the NEW instructor's token and the OLD `googleEventId`. Google events belong to the first instructor's calendar, so this probably returns not-found and logs `[gcw] ... action=patch_error` (fail-soft, no crash). Not confirmed against Google. Expected correct behavior: delete the event with the old instructor's token and insert with the new instructor's. Needs a Google-scopes check first (priority #1 external validation).
 
+**[P3][ORG] Consolidate org test seeders onto `org-seed` (org W3 nits 2026-10-29)**  
+`src/__tests__/helpers/org-seed.ts` is the one seeder for the W3 schedule suites. The same admin / organization / member / learner / appointment setup is still copied in `src/__tests__/org/org-booking-bridge.integration.test.ts`, `src/__tests__/org/org-slice1.integration.test.ts`, and the Playwright W3 spec `tests/integration/wb-org-booking.spec.ts`. Move those onto `org-seed` so a membership or learner-shape change is made once. The Playwright spec opens its own Prisma client; share the seed functions without giving it a second database wrapper.
+
 ---
 
 ## 13. Strategy / positioning / pricing / research

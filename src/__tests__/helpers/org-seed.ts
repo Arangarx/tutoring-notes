@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Real-DB seeds for org schedule tests. One copy for the W3 suites.
  * Oracles built from these seeds are ids and strings only.
  */

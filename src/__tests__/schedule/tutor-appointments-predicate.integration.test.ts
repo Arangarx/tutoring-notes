@@ -212,6 +212,17 @@ const EXCLUDED_CASES: Array<[string, () => Promise<World>]> = [
     },
   ],
   [
+    "a private student's appointment assigned to a different tutor",
+    async () => {
+      // Included only when the row is assigned to the viewer (design §1).
+      const viewer = await seedAdmin("viewer");
+      const other = await seedAdmin("assignee");
+      const student = await seedPersonalStudent(viewer.id, "Pat Private");
+      const row = await seedAppointment({ adminUserId: other.id, studentId: student.id });
+      return { viewerId: viewer.id, included: [await seedControl(viewer.id)], excluded: [row.id] };
+    },
+  ],
+  [
     "a learner of an organization where the tutor is not a member",
     async () => {
       const home = await seedOrg();

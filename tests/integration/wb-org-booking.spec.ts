@@ -848,13 +848,15 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
 
   async function openSchedule(
     browser: Browser,
-    admin: { id: string; email: string; displayName: string | null }
+    admin: { id: string; email: string; displayName: string | null },
+    viewport?: { width: number; height: number }
   ) {
     const session = await signIn(browser, {
       id: admin.id,
       email: admin.email,
       displayName: admin.displayName ?? admin.email,
     });
+    if (viewport) await session.page.setViewportSize(viewport);
     await session.page.goto("/admin/schedule");
     expect(session.page.url(), "session cookie was rejected").not.toContain("/login");
     await expect(session.page.getByTestId("schedule-page")).toBeVisible();
@@ -1151,6 +1153,50 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
         expect(Math.abs(nameMid - badgeMid), `${view} midline gap`).toBeLessThanOrEqual(4);
         // And the badge sits beside the name, not under it.
         expect(badge.x).toBeGreaterThanOrEqual(name.x + name.width - 1);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("on a phone-width screen the learner name stays whole while the organization badge shares its line", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const organizationName =
+      "Westbridge Regional Preparatory Academy and Conservatory District";
+    expect(organizationName.length).toBeGreaterThanOrEqual(60);
+    await prisma.organization.update({ where: { id: org.id }, data: { name: organizationName } });
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const learner = await seedLearner(org.id, owner.id);
+    const appointment = await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+
+    const { context, page } = await openSchedule(browser, instructor, { width: 375, height: 812 });
+    try {
+      for (const view of ["month", "agenda"] as const) {
+        if (view === "agenda") await showAgenda(page);
+        const row = rowFor(page, appointment.id);
+        const name = row.getByTestId("schedule-session-name");
+        const badge = row.getByTestId("org-badge");
+        await name.scrollIntoViewIfNeeded();
+        await expect(name).toHaveText(learner.fullName);
+        await expect(badge).toContainText(organizationName);
+        // The name is fully visible: clipped text would make scrollWidth exceed clientWidth.
+        const fit = await name.evaluate((el) => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }));
+        expect(fit.scrollWidth, `${view} learner name is truncated`).toBeLessThanOrEqual(
+          fit.clientWidth + 1
+        );
+        const nameBox = await name.boundingBox();
+        const badgeBox = await badge.boundingBox();
+        if (!nameBox || !badgeBox) throw new Error(`name or badge missing in ${view} view`);
+        // Same line: midline of the badge ≈ midline of the learner name.
+        const nameMid = nameBox.y + nameBox.height / 2;
+        const badgeMid = badgeBox.y + badgeBox.height / 2;
+        expect(Math.abs(nameMid - badgeMid), `${view} midline gap`).toBeLessThanOrEqual(4);
       }
     } finally {
       await context.close();
