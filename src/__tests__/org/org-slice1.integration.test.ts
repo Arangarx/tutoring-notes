@@ -54,6 +54,7 @@ import {
   isEmailVerifyExemptAdminPath,
   is2faExemptAdminPath,
 } from "@/lib/admin-routing";
+import { upsertAdminByEmail } from "../helpers/org-seed";
 import { uniq } from "../helpers/unique-test-token";
 import type { OrgRole, TutorApprovalStatus } from "@prisma/client";
 
@@ -95,13 +96,7 @@ async function seedUser(opts?: {
 }
 
 async function seedOperator() {
-  const existing = await db.adminUser.findUnique({ where: { email: OPERATOR_EMAIL } });
-  if (existing) return existing;
-  return seedUser({
-    email: OPERATOR_EMAIL,
-    approvalStatus: "APPROVED",
-    role: "TUTOR",
-  });
+  return upsertAdminByEmail(OPERATOR_EMAIL, { role: "TUTOR", approvalStatus: "APPROVED" });
 }
 
 async function asOperator() {

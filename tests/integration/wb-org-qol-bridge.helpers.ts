@@ -68,6 +68,8 @@ export type OrgBookedFamilyFixture = BridgeScheduledFixture & {
   organizationId: string;
   instructorId: string;
   learnerName: string;
+  organizationName: string;
+  instructorName: string;
 };
 
 /**
@@ -86,6 +88,8 @@ export async function seedOrgBookedFamilyAppointment(opts: {
   const prisma = new PrismaClient();
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const learnerName = `OrgFam ${suffix.slice(-6)}`;
+  const organizationName = `Org ${suffix}`;
+  const instructorName = "Org Family Instructor";
   try {
     // The family dashboard lists every upcoming appointment for the shared test parent.
     // Drop earlier org-family rows so one scenario's body never carries another's state.
@@ -96,14 +100,14 @@ export async function seedOrgBookedFamilyAppointment(opts: {
         role: "TUTOR",
         approvalStatus: "APPROVED",
         emailVerifiedAt: new Date("2026-01-01"),
-        displayName: "Org Family Instructor",
+        displayName: instructorName,
         isTestAccount: false,
       },
       select: { id: true },
     });
     const org = await prisma.organization.create({
       data: {
-        name: `Org ${suffix}`,
+        name: organizationName,
         status: opts.orgStatus,
         timezone: "America/Denver",
         statusChangedAt: new Date(),
@@ -159,7 +163,14 @@ export async function seedOrgBookedFamilyAppointment(opts: {
       startsInMs: opts.startsInMs ?? 5 * 60_000,
       subject: ORG_FAMILY_SUBJECT,
     });
-    return { ...sched, organizationId: org.id, instructorId: instructor.id, learnerName };
+    return {
+      ...sched,
+      organizationId: org.id,
+      instructorId: instructor.id,
+      learnerName,
+      organizationName,
+      instructorName,
+    };
   } finally {
     await prisma.$disconnect();
   }

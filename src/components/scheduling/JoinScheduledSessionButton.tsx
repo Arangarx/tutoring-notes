@@ -14,17 +14,30 @@ import {
 } from "@/lib/scheduling/join-window";
 import {
   decisionReason,
-  ENTRY_BLOCK_COPY,
   type EntryBlockReason,
-  type SessionEntryState,
+  type FamilySessionEntryState,
 } from "@/lib/scheduling/session-entry";
 
-/** Server refusals reuse the one copy table (family column), except sign-in. */
-const JOIN_REFUSAL_COPY: Record<JoinScheduledSessionError["error"], string> = {
-  not_signed_in: "Sign in to join this session.",
-  not_yet: ENTRY_BLOCK_COPY.not_yet.family,
-  not_available: ENTRY_BLOCK_COPY.unknown.family,
-};
+const SIGN_IN_TO_JOIN = "Sign in to join this session.";
+
+function refusalCopy(
+  error: JoinScheduledSessionError["error"],
+  notYetCopy: string,
+  unavailableCopy: string
+): string {
+  switch (error) {
+    case "not_signed_in":
+      return SIGN_IN_TO_JOIN;
+    case "not_yet":
+      return notYetCopy;
+    case "not_available":
+      return unavailableCopy;
+    default: {
+      const exhaustive: never = error;
+      return exhaustive;
+    }
+  }
+}
 
 const JOIN_BUTTON_CLASS = "min-h-10 rounded-full whitespace-nowrap";
 
@@ -77,12 +90,18 @@ export function JoinScheduledSessionButton({
   endAtIso,
   entry,
   learnerName,
+  notYetCopy,
+  unavailableCopy,
 }: {
   scheduledSessionId: string;
   startAtIso: string;
   endAtIso: string;
-  entry: SessionEntryState;
+  /** Family-branded entry only. A tutor `SessionEntryState` does not type-check. */
+  entry: FamilySessionEntryState;
   learnerName: string;
+  /** Family column of the one copy table, passed in so this client does not import the tutor lines. */
+  notYetCopy: string;
+  unavailableCopy: string;
 }) {
   const joinWindowOpen = useJoinWindowOpen(startAtIso, endAtIso);
   const [state, formAction] = useActionState(joinScheduledSessionFromForm, null);
@@ -117,7 +136,7 @@ export function JoinScheduledSessionButton({
     );
   }
 
-  const refusal = state ? JOIN_REFUSAL_COPY[state.error] : null;
+  const refusal = state ? refusalCopy(state.error, notYetCopy, unavailableCopy) : null;
 
   return (
     <form action={formAction} className="flex min-w-0 max-w-56 flex-col items-start gap-1">

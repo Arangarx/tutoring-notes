@@ -19,11 +19,8 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
 }));
 
 import { StartWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/StartWhiteboardSession";
-import {
-  CONSENT_RECORD_PARENT_SECTION_HINT,
-  CONSENT_RECORD_TUTOR_MESSAGE,
-} from "@/lib/consent-action-error";
-import type { SessionEntryState } from "@/lib/scheduling/session-entry";
+import { CONSENT_RECORD_PARENT_SECTION_HINT } from "@/lib/consent-action-error";
+import { ENTRY_BLOCK_COPY, type SessionEntryState } from "@/lib/scheduling/session-entry";
 
 function bothBlocked(
   reason: "unclaimed" | "consent_missing_self" | "consent_missing_parent" | "erasure_pending"
@@ -169,7 +166,7 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        CONSENT_RECORD_TUTOR_MESSAGE
+        ENTRY_BLOCK_COPY.consent_missing_parent.tutor
       );
     });
     expect(screen.getByRole("alert")).toHaveTextContent(

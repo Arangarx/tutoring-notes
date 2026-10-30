@@ -3,8 +3,13 @@
  * Do not import consent-scope.ts here — it is server-only.
  */
 
-export const CONSENT_RECORD_TUTOR_MESSAGE =
-  "This student's parent must claim the account and set privacy preferences before you can start a session.";
+import { ENTRY_BLOCK_COPY } from "@/lib/scheduling/session-entry";
+
+/**
+ * Tutor sentence when no consent record exists. The same line the disabled
+ * control shows for a parent-held learner (`ENTRY_BLOCK_COPY`).
+ */
+export const CONSENT_RECORD_TUTOR_MESSAGE = ENTRY_BLOCK_COPY.consent_missing_parent.tutor;
 
 export const CONSENT_RECORD_PARENT_SECTION_HINT =
   "Go to the Parent account section on this student's page to send a claim invite or check connection status.";

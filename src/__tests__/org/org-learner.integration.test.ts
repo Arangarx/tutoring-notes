@@ -51,6 +51,7 @@ import {
   setOrganizationStatus,
 } from "@/lib/org-scope";
 import { studentsWhereForScope } from "@/lib/student-scope";
+import { upsertAdminByEmail } from "../helpers/org-seed";
 
 const OPERATOR_EMAIL = "org-operator@example.com";
 
@@ -85,15 +86,8 @@ beforeEach(() => {
 });
 
 async function seedAdmin(email: string) {
-  return db.adminUser.create({
-    data: {
-      email,
-      role: "TUTOR",
-      approvalStatus: "APPROVED",
-      emailVerifiedAt: new Date("2026-01-01"),
-    },
-    select: { id: true, email: true },
-  });
+  const row = await upsertAdminByEmail(email);
+  return { id: row.id, email: row.email };
 }
 
 async function seedOrg(input?: {

@@ -5,6 +5,7 @@
 import type { Browser } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { PrismaClient } from "@prisma/client";
+import { FAMILY_VISIBLE_REASONS } from "@/lib/scheduling/session-entry";
 import { TAG } from "../test-tags";
 import {
   seedBridgeScheduledSession,
@@ -32,6 +33,35 @@ import { expectReasonUnderControl } from "./entry-reason.helpers";
 
 const PARENT_STATE = "tests/integration/.auth/parent.json";
 const LEARNER_STATE = "tests/integration/.auth/learner.json";
+
+/**
+ * W4 family audience (org-ux-pass-plan § 3): consent_missing_self, consent_missing_parent,
+ * live_off, not_yet, unknown. Imported from `FAMILY_VISIBLE_REASONS` because that export
+ * is this spec list (jest pins the membership).
+ */
+const FAMILY_SAFE_REASONS = new Set<string>(FAMILY_VISIBLE_REASONS);
+
+function reasonCodesIn(body: string, kind: "attributes" | "payload"): string[] {
+  if (kind === "attributes") {
+    return [...body.matchAll(/data-entry-reason="([^"]*)"/g)].map((match) => match[1] ?? "");
+  }
+  return [
+    ...body.matchAll(/"reason"\s*:\s*"([^"]*)"/g),
+    ...body.matchAll(/\\"reason\\"\s*:\s*\\"([^\\"]*)\\"/g),
+  ].map((match) => match[1] ?? "");
+}
+
+function assertFamilyReasonAllowList(
+  label: string,
+  body: string,
+  kind: "attributes" | "payload"
+) {
+  const codes = reasonCodesIn(body, kind);
+  expect(codes.length, `${label} includes at least one entry reason`).toBeGreaterThan(0);
+  for (const code of codes) {
+    expect(FAMILY_SAFE_REASONS.has(code), `${label} reason "${code}" is family-safe`).toBe(true);
+  }
+}
 
 /**
  * One Open room per appointment on the student page (W4): the next appointment's
@@ -591,19 +621,20 @@ test.describe("org QoL schedule bridge", () => {
           const rscText = await rsc.text();
           expect(navigationText.length, "navigation response captured").toBeGreaterThan(1_000);
           expect(rscText, "RSC response carries this appointment").toContain(fx.scheduledSessionId);
+          // Allow-list: every reason code a family receives is in the W4 family set
+          // (`FAMILY_VISIBLE_REASONS`). Org name and instructor name never ship.
+          assertFamilyReasonAllowList("DOM", domHtml, "attributes");
+          assertFamilyReasonAllowList("navigation response", navigationText, "payload");
+          assertFamilyReasonAllowList("RSC response", rscText, "payload");
           for (const [label, body] of [
             ["navigation response", navigationText],
             ["DOM", domHtml],
             ["RSC response", rscText],
           ] as const) {
-            for (const secret of [
-              "org_inactive",
-              "instructor_not_admitted",
-              "This organization isn't active right now.",
-              "You're not an active instructor in this organization.",
-            ]) {
-              expect(body, `${label} must not contain "${secret}"`).not.toContain(secret);
-            }
+            expect(body, `${label} must not contain the org name`).not.toContain(fx.organizationName);
+            expect(body, `${label} must not contain the instructor name`).not.toContain(
+              fx.instructorName
+            );
           }
         }
       );

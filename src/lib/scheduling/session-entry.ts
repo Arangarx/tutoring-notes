@@ -228,28 +228,55 @@ export function entryCardParagraphs(reason: EntryBlockReason, learnerName: strin
 }
 
 /**
- * The only reasons a family ever receives. Every other reason (org suspended,
- * instructor removed, erasure, unclaimed) is internal state the family has no
- * business learning, and its family line is the generic one anyway, so it
- * collapses to `unknown` before it leaves the server.
+ * The only reason codes a family may receive (org UX plan § 3 / W4 family audience).
+ * Every other reason (org suspended, instructor removed, erasure, unclaimed) is
+ * internal state, and its family line is the generic one anyway, so it collapses
+ * to `unknown` before it leaves the server.
  */
-const FAMILY_VISIBLE_REASONS: ReadonlySet<EntryBlockReason> = new Set<EntryBlockReason>([
+export const FAMILY_VISIBLE_REASONS = [
   "consent_missing_self",
   "consent_missing_parent",
   "live_off",
   "not_yet",
   "unknown",
-]);
+] as const satisfies readonly EntryBlockReason[];
 
-export function familySafeReason(reason: EntryBlockReason): EntryBlockReason {
-  return FAMILY_VISIBLE_REASONS.has(reason) ? reason : "unknown";
+export type FamilyVisibleReason = (typeof FAMILY_VISIBLE_REASONS)[number];
+
+const FAMILY_VISIBLE_REASON_SET: ReadonlySet<string> = new Set(FAMILY_VISIBLE_REASONS);
+
+/**
+ * Marks an entry state that has already been collapsed for a family.
+ * Type-only: it is not serialized. A raw `SessionEntryState` (the tutor list)
+ * is not assignable, so a family component cannot be given org reason codes.
+ */
+declare const familyAudienceBrand: unique symbol;
+
+export type FamilyEntryDecision =
+  | { allowed: true }
+  | { allowed: false; reason: FamilyVisibleReason };
+
+export type FamilySessionEntryState = {
+  readonly [familyAudienceBrand]: "family";
+  online: FamilyEntryDecision;
+  inPerson: FamilyEntryDecision;
+};
+
+export function familySafeReason(reason: EntryBlockReason): FamilyVisibleReason {
+  return FAMILY_VISIBLE_REASON_SET.has(reason) ? (reason as FamilyVisibleReason) : "unknown";
 }
 
-/** The entry state as a family may see it: internal reasons collapsed to `unknown`. */
-export function familySafeEntryState(state: SessionEntryState): SessionEntryState {
-  const safe = (decision: EntryDecision): EntryDecision =>
-    decision.allowed ? { allowed: true } : { allowed: false, reason: familySafeReason(decision.reason) };
-  return { online: safe(state.online), inPerson: safe(state.inPerson) };
+/**
+ * The entry state as a family may see it. Internal reasons collapse to `unknown`,
+ * and the result carries the family brand so only this function (and the family
+ * list that calls it) can produce a value a family component accepts.
+ */
+export function familySafeEntryState(state: SessionEntryState): FamilySessionEntryState {
+  const safe = (decision: EntryDecision): FamilyEntryDecision =>
+    decision.allowed
+      ? { allowed: true }
+      : { allowed: false, reason: familySafeReason(decision.reason) };
+  return { online: safe(state.online), inPerson: safe(state.inPerson) } as FamilySessionEntryState;
 }
 
 /** The line for a reason. Unknown reason codes (stale client) render the generic line, never blank. */

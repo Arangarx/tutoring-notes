@@ -18,6 +18,7 @@ import {
   decisionReason,
   entryBlockCopy,
   entryCardParagraphs,
+  FAMILY_VISIBLE_REASONS,
   familySafeEntryState,
   familySafeReason,
   sessionEntryState,
@@ -275,6 +276,12 @@ describe("entry copy (every reason, every audience, never blank)", () => {
 });
 
 describe("family-safe reasons (a family never learns org-internal state)", () => {
+  it("the exported family set is the W4 family audience, nothing else", () => {
+    expect([...FAMILY_VISIBLE_REASONS].sort()).toEqual(
+      ["consent_missing_parent", "consent_missing_self", "live_off", "not_yet", "unknown"].sort()
+    );
+  });
+
   const INTERNAL: EntryBlockReason[] = [
     "org_inactive",
     "instructor_not_admitted",

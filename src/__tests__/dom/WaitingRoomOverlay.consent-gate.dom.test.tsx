@@ -9,10 +9,8 @@ import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import {
-  CONSENT_RECORD_PARENT_SECTION_HINT,
-  CONSENT_RECORD_TUTOR_MESSAGE,
-} from "@/lib/consent-action-error";
+import { CONSENT_RECORD_PARENT_SECTION_HINT } from "@/lib/consent-action-error";
+import { ENTRY_BLOCK_COPY } from "@/lib/scheduling/session-entry";
 
 jest.mock("@/components/ThemeProvider", () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -359,7 +357,7 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        CONSENT_RECORD_TUTOR_MESSAGE
+        ENTRY_BLOCK_COPY.consent_missing_parent.tutor
       );
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -418,7 +416,7 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        CONSENT_RECORD_TUTOR_MESSAGE
+        ENTRY_BLOCK_COPY.consent_missing_parent.tutor
       );
     });
     expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();

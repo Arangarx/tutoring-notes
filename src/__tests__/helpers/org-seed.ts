@@ -8,6 +8,28 @@ import { uniq } from "./unique-test-token";
 
 export type SeedApproval = "APPROVED" | "WAITLISTED" | "REJECTED";
 
+/**
+ * Insert an admin with a fixed email, or return the row already there.
+ * Org suites share one database; a second `create` of `org-operator@example.com`
+ * hits the unique constraint when slice 1 and the learner suite run together.
+ */
+export async function upsertAdminByEmail(
+  email: string,
+  opts?: { approvalStatus?: SeedApproval; isTestAccount?: boolean; role?: "TUTOR" | "ADMIN" }
+) {
+  return db.adminUser.upsert({
+    where: { email },
+    update: {},
+    create: {
+      email,
+      role: opts?.role ?? "TUTOR",
+      approvalStatus: opts?.approvalStatus ?? "APPROVED",
+      emailVerifiedAt: new Date("2026-01-01"),
+      isTestAccount: opts?.isTestAccount ?? false,
+    },
+  });
+}
+
 export async function seedAdmin(
   label: string,
   opts?: { approvalStatus?: SeedApproval; isTestAccount?: boolean }

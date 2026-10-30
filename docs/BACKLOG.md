@@ -1350,8 +1350,6 @@ Deferral ledger; prompt fix landed — recheck PASS.
 
 **[P2][CONSENT] Dead `assertConsentFromLiveRecord` and `LIVE_RECORD_DENIAL_COPY.allowLiveSession` (2026-10-30, org W4 review).** After W4 the schedule bridge refuses through `sessionEntryState`, so `assertConsentFromLiveRecord(…, "allowLiveSession")` and the `allowLiveSession` entry of `LIVE_RECORD_DENIAL_COPY` in `src/lib/consent-scope.ts` have no product caller (only `allowNoteSending` is still used, by the notes email path). Delete the `allowLiveSession` branch and copy in consent wave **C5**, with `assertConsentRecordExists` (no alias survives; `consent-wave-plan.md` § 2.4, SF1). Until then the copy there is not shown to anyone.
 
-**[P1][CONSENT][ORG-W4] Server refusal message vs client format for `consentRecord` (2026-10-30).** `entryRefusalError` now throws `ConsentError("consentRecord", <ENTRY_BLOCK_COPY tutor line>)`, the same words the disabled control shows. `formatConsentActionError` still renders every `consentRecord` error as the older `CONSENT_RECORD_TUTOR_MESSAGE` plus the Parent-account hint, so the Start button's red text and the waiting room keep the old sentence. C3a removes `assertConsentRecordExists` from Start; make `formatConsentActionError` show the thrown message for `consentRecord` in the same wave and delete `CONSENT_RECORD_TUTOR_MESSAGE`.
-
 **[P0][CONSENT] CONSENT-COLLECTION-COMPLETENESS (CC-1/CC-2)**  
 Remainder: Playwright gap **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE**.
 

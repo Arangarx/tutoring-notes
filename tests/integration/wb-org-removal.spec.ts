@@ -435,8 +435,23 @@ test.describe("org removal and suspension", { tag: [TAG.ORG, TAG.WB_CHROME, TAG.
     );
     await expect(tutor.page.getByTestId("wb-session-review-mode")).toBeVisible();
     await expect(tutor.page.getByTestId("tutor-whiteboard-canvas-mount")).toHaveCount(0);
-    await tutor.page.getByTestId("wb-save-note").click();
-    await expect(tutor.page.getByTestId("wb-save-note-confirmation")).toBeVisible();
+    const saveButton = tutor.page.getByTestId("wb-save-note");
+    const confirmation = tutor.page.getByTestId("wb-save-note-confirmation");
+    await saveButton.click();
+    // Cold compile keeps the save in flight; the button reads "Saving…" until the
+    // action returns. Wait for that completion, then require the confirmation.
+    await expect
+      .poll(
+        async () => {
+          if (await confirmation.isVisible()) return "confirmed";
+          const label = (await saveButton.textContent()) ?? "";
+          return label.includes("Saving") ? "saving" : "idle";
+        },
+        { timeout: 20_000 }
+      )
+      .not.toBe("idle");
+    await expect(saveButton).not.toHaveText("Saving…", { timeout: 45_000 });
+    await expect(confirmation).toBeVisible();
     await tutor.page.goto(`/admin/students/${learner.student.id}/notes`);
     await expect(tutor.page.getByText("Status: READY")).toBeVisible();
     await tutor.context.close();

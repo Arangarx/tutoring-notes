@@ -9,7 +9,11 @@
 
 import { db, withDbRetry } from "@/lib/db";
 import { isWithinJoinWindow } from "@/lib/scheduling/join-window";
-import { familySafeEntryState, type SessionEntryState } from "@/lib/scheduling/session-entry";
+import {
+  familySafeEntryState,
+  type FamilySessionEntryState,
+  type SessionEntryState,
+} from "@/lib/scheduling/session-entry";
 import { loadSessionEntryStates } from "@/lib/scheduling/session-entry-loader";
 
 export type UpcomingScheduledSessionRow = {
@@ -22,6 +26,14 @@ export type UpcomingScheduledSessionRow = {
   joinWindowOpen: boolean;
   /** Whether the room can be opened, online and in person, and why not. */
   entry: SessionEntryState;
+};
+
+/**
+ * A row the family list has already collapsed. `entry` is the branded family
+ * state, so this type is not assignable from `listUpcomingForStudent`.
+ */
+export type FamilyUpcomingScheduledSessionRow = Omit<UpcomingScheduledSessionRow, "entry"> & {
+  entry: FamilySessionEntryState;
 };
 
 const upcomingSelect = {
@@ -85,20 +97,26 @@ function toRow(
  * a family never receives org-internal state (suspended org, removed instructor) or
  * tutor-only codes, only the codes `familySafeReason` allows.
  */
-async function withEntry(
+async function withEntry<A extends "tutor" | "family">(
   sources: UpcomingSource[],
   now: Date,
-  audience: "tutor" | "family"
-): Promise<UpcomingScheduledSessionRow[]> {
+  audience: A
+): Promise<A extends "family" ? FamilyUpcomingScheduledSessionRow[] : UpcomingScheduledSessionRow[]> {
   const kept = sources.flatMap((source) => {
     const row = toRow(source, now);
     return row ? [{ source, row }] : [];
   });
   const states = await loadSessionEntryStates(kept.map(({ source }) => source));
-  return kept.map(({ row }, index) => {
+  const rows = kept.map(({ row }, index) => {
     const state = states[index] as SessionEntryState;
-    return { ...row, entry: audience === "family" ? familySafeEntryState(state) : state };
+    return {
+      ...row,
+      entry: audience === "family" ? familySafeEntryState(state) : state,
+    };
   });
+  return rows as A extends "family"
+    ? FamilyUpcomingScheduledSessionRow[]
+    : UpcomingScheduledSessionRow[];
 }
 
 /** Tutor student detail — future appointments for one student. */
@@ -127,7 +145,7 @@ export async function listUpcomingForStudent(
 export async function listUpcomingForLearnerProfiles(
   learnerProfileIds: string[],
   now: Date = new Date()
-): Promise<UpcomingScheduledSessionRow[]> {
+): Promise<FamilyUpcomingScheduledSessionRow[]> {
   if (learnerProfileIds.length === 0) return [];
   const rows = await withDbRetry(
     () =>

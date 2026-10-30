@@ -13,7 +13,7 @@ import userEvent from "@testing-library/user-event";
 
 import { JoinScheduledSessionButton } from "@/components/scheduling/JoinScheduledSessionButton";
 import { OpenScheduledRoomButton } from "@/components/scheduling/OpenScheduledRoomButton";
-import type { SessionEntryState } from "@/lib/scheduling/session-entry";
+import { familySafeEntryState, type SessionEntryState } from "@/lib/scheduling/session-entry";
 
 const mockJoinFromForm = jest.fn();
 const mockOpenRoom = jest.fn();
@@ -43,6 +43,12 @@ const NO_RECORD_PARENT: SessionEntryState = {
   inPerson: { allowed: false, reason: "consent_missing_parent" },
 };
 
+/** Hand-written from the W4 family column. The button does not import the copy table. */
+const FAMILY_COPY = {
+  notYetCopy: "Join opens 15 minutes before the start.",
+  unavailableCopy: "This session isn't available right now.",
+};
+
 function hoursFromNow(startOffsetMs: number, durationMs: number) {
   const start = new Date(Date.now() + startOffsetMs);
   return {
@@ -61,7 +67,8 @@ describe("scheduled session buttons", () => {
     render(
       <JoinScheduledSessionButton
         scheduledSessionId="sched-1"
-        entry={ALLOWED}
+        entry={familySafeEntryState(ALLOWED)}
+        {...FAMILY_COPY}
         learnerName="Maya"
         {...hoursFromNow(2 * 60 * 60 * 1000, 60 * 60 * 1000)}
       />
@@ -82,7 +89,8 @@ describe("scheduled session buttons", () => {
     render(
       <JoinScheduledSessionButton
         scheduledSessionId="sched-2"
-        entry={ALLOWED}
+        entry={familySafeEntryState(ALLOWED)}
+        {...FAMILY_COPY}
         learnerName="Maya"
         {...hoursFromNow(5 * 60 * 1000, 60 * 60 * 1000)}
       />
@@ -110,7 +118,8 @@ describe("scheduled session buttons", () => {
       render(
         <JoinScheduledSessionButton
           scheduledSessionId="sched-timer"
-          entry={ALLOWED}
+          entry={familySafeEntryState(ALLOWED)}
+          {...FAMILY_COPY}
           learnerName="Maya"
           startAtIso={start.toISOString()}
           endAtIso={end.toISOString()}
@@ -132,7 +141,8 @@ describe("scheduled session buttons", () => {
     render(
       <JoinScheduledSessionButton
         scheduledSessionId="sched-blocked"
-        entry={ONLINE_OFF}
+        entry={familySafeEntryState(ONLINE_OFF)}
+        {...FAMILY_COPY}
         learnerName="Maya"
         {...hoursFromNow(5 * 60 * 1000, 60 * 60 * 1000)}
       />
@@ -150,7 +160,8 @@ describe("scheduled session buttons", () => {
     render(
       <JoinScheduledSessionButton
         scheduledSessionId="sched-norecord"
-        entry={NO_RECORD_PARENT}
+        entry={familySafeEntryState(NO_RECORD_PARENT)}
+        {...FAMILY_COPY}
         learnerName="Maya"
         {...hoursFromNow(5 * 60 * 1000, 60 * 60 * 1000)}
       />
