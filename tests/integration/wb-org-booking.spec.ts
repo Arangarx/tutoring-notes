@@ -102,17 +102,25 @@ async function seedOrg() {
   return { org, owner };
 }
 
-async function seedLearner(organizationId: string, createdByAdminUserId: string, allowLiveSession = true) {
+async function seedLearner(
+  organizationId: string,
+  createdByAdminUserId: string,
+  allowLiveSession = true,
+  names?: { givenName: string; familyName: string }
+) {
+  const givenName = names?.givenName ?? "Mary Ann";
+  const familyName = names?.familyName ?? "Lee";
+  const fullName = `${givenName} ${familyName}`;
   const parentEmail = `${uniq("parent-secret")}@example.com`;
   const ah = await prisma.accountHolder.create({
     data: { email: `${uniq("ah")}@example.com`, emailVerifiedAt: new Date() },
   });
   const profile = await prisma.learnerProfile.create({
-    data: { accountHolderId: ah.id, displayName: "Mary Ann Lee", isSelfLearner: false },
+    data: { accountHolderId: ah.id, displayName: fullName, isSelfLearner: false },
   });
   const student = await prisma.student.create({
     data: {
-      name: "Mary Ann Lee",
+      name: fullName,
       adminUserId: null,
       organizationId,
       learnerProfileId: profile.id,
@@ -123,8 +131,8 @@ async function seedLearner(organizationId: string, createdByAdminUserId: string,
     data: {
       studentId: student.id,
       organizationId,
-      givenName: "Mary Ann",
-      familyName: "Lee",
+      givenName,
+      familyName,
       createdByAdminUserId,
     },
   });
@@ -142,7 +150,7 @@ async function seedLearner(organizationId: string, createdByAdminUserId: string,
       captureMethod: "electronic",
     },
   });
-  return { student, profile, parentEmail };
+  return { student, profile, parentEmail, fullName };
 }
 
 async function openNewSession(page: import("@playwright/test").Page) {
@@ -549,6 +557,201 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
       });
       expect(afterInPerson.sessionPhase).toBe("ACTIVE");
       expect(afterInPerson.sessionMode).toBe("IN_PERSON");
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+/**
+ * LEAK-1: an instructor-only member who opens the org page must not learn
+ * other instructors' appointments or learners. Oracles are seeded names.
+ */
+test.describe("instructor scoping on the org page", { tag: [TAG.ORG, TAG.WB_PRESENCE] }, () => {
+  async function seedSplitRoster() {
+    const token = uniq("scope").replace(/[^a-z0-9]/gi, "").slice(-10);
+    const adaLearner = { givenName: `Zada${token}`, familyName: "Quin" };
+    const beaLearner = { givenName: `Zeba${token}`, familyName: "Quinn" };
+    const unaLearner = { givenName: `Zuna${token}`, familyName: "Quill" };
+    const adaInstructorName = `TutorAda ${token}`;
+    const beaInstructorName = `TutorBea ${token}`;
+    const { org, owner } = await seedOrg();
+    const instructorA = await seedMember(org.id, adaInstructorName, ["instructor"]);
+    const instructorB = await seedMember(org.id, beaInstructorName, ["instructor"]);
+    const learnerA = await seedLearner(org.id, owner.id, true, adaLearner);
+    const learnerB = await seedLearner(org.id, owner.id, true, beaLearner);
+    const unbooked = await seedLearner(org.id, owner.id, true, unaLearner);
+    const appointment = {
+      date: new Date("2026-10-20T00:00:00.000Z"),
+      startTime: "16:00",
+      endTime: "17:00",
+      startAt: new Date("2026-10-20T22:00:00.000Z"),
+      endAt: new Date("2026-10-20T23:00:00.000Z"),
+      plannedDurationMinutes: 60,
+    };
+    await prisma.scheduledSession.create({
+      data: {
+        ...appointment,
+        adminUserId: instructorA.id,
+        studentId: learnerA.student.id,
+        subject: "Algebra",
+      },
+    });
+    await prisma.scheduledSession.create({
+      data: {
+        ...appointment,
+        startTime: "18:00",
+        endTime: "19:00",
+        adminUserId: instructorB.id,
+        studentId: learnerB.student.id,
+        subject: "Geometry",
+      },
+    });
+    return {
+      org,
+      owner,
+      instructorA,
+      instructorB,
+      learnerA,
+      learnerB,
+      unbooked,
+      adaInstructorName,
+      beaInstructorName,
+    };
+  }
+
+  async function openOrg(
+    browser: Browser,
+    admin: { id: string; email: string; displayName: string | null },
+    path: string
+  ) {
+    const session = await signIn(browser, {
+      id: admin.id,
+      email: admin.email,
+      displayName: admin.displayName ?? admin.email,
+    });
+    const response = await session.page.goto(path);
+    expect(session.page.url(), "session cookie was rejected").not.toContain("/login");
+    return { ...session, response };
+  }
+
+  test("an instructor sees only their own org appointments", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const seeded = await seedSplitRoster();
+    const { context, page } = await openOrg(
+      browser,
+      seeded.instructorA,
+      `/admin/organization/${seeded.org.id}`
+    );
+    try {
+      await expect(page.getByRole("heading", { name: "Appointments" })).toBeVisible();
+      await expect(page.getByText(seeded.learnerA.fullName)).toBeVisible();
+      await expect(page.getByText(seeded.learnerB.fullName)).toHaveCount(0);
+      await expect(page.getByText(seeded.beaInstructorName)).toHaveCount(0);
+      await expect(page.getByText(seeded.unbooked.fullName)).toHaveCount(0);
+      await expect(page.getByTestId("schedule-new-session")).toHaveCount(0);
+      const html = await page.content();
+      expect(html).toContain(seeded.learnerA.fullName);
+      expect(html).not.toContain(seeded.learnerB.fullName);
+      expect(html).not.toContain(seeded.beaInstructorName);
+      expect(html).not.toContain(seeded.unbooked.fullName);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("an instructor gets no booking dialog or learner choices", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const seeded = await seedSplitRoster();
+    const { context, page } = await openOrg(
+      browser,
+      seeded.instructorA,
+      `/admin/organization/${seeded.org.id}`
+    );
+    try {
+      await expect(page.getByTestId("schedule-new-session")).toHaveCount(0);
+      await expect(page.getByTestId("schedule-create-form")).toHaveCount(0);
+      const html = await page.content();
+      expect(html).not.toContain(seeded.unbooked.fullName);
+      expect(html).not.toContain("<option");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("an instructor gets nothing for another instructor's learner or an invalid id", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const seeded = await seedSplitRoster();
+    const { context, page } = await openOrg(
+      browser,
+      seeded.instructorA,
+      `/admin/organization/${seeded.org.id}?learner=${seeded.learnerA.student.id}`
+    );
+    try {
+      await expect(page.getByRole("heading", { name: "Appointments" })).toBeVisible();
+      await expect(page.getByText(seeded.learnerA.fullName)).toBeVisible();
+      await expect(page.getByText(seeded.learnerB.fullName)).toHaveCount(0);
+      const ownHtml = await page.content();
+      expect(ownHtml).toContain(seeded.learnerA.fullName);
+      expect(ownHtml).not.toContain(seeded.learnerB.fullName);
+
+      const otherUrl = `/admin/organization/${seeded.org.id}?learner=${seeded.learnerB.student.id}`;
+      const otherResponse = await page.goto(otherUrl);
+      expect(otherResponse?.status()).toBe(200);
+      await expect(page.getByRole("heading", { name: "Not found" })).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: "Appointments" })).toBeVisible();
+      await expect(page.getByText("No appointments yet.")).toBeVisible();
+      const otherText = await page.locator("section[aria-label='Appointments']").innerText();
+      const otherHtml = await page.content();
+      expect(otherHtml).not.toContain(seeded.learnerA.fullName);
+      expect(otherHtml).not.toContain(seeded.learnerB.fullName);
+      expect(otherHtml).not.toContain(seeded.unbooked.fullName);
+      expect(otherHtml).not.toContain(seeded.beaInstructorName);
+
+      const invalidResponse = await page.goto(
+        `/admin/organization/${seeded.org.id}?learner=not-a-learner-${uniq("missing")}`
+      );
+      expect(invalidResponse?.status()).toBe(200);
+      await expect(page.getByRole("heading", { name: "Not found" })).toHaveCount(0);
+      await expect(page.getByText("No appointments yet.")).toBeVisible();
+      const invalidText = await page.locator("section[aria-label='Appointments']").innerText();
+      expect(invalidText).toBe(otherText);
+      const invalidHtml = await page.content();
+      expect(invalidHtml).not.toContain(seeded.learnerA.fullName);
+      expect(invalidHtml).not.toContain(seeded.learnerB.fullName);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("a staff member still sees every org appointment", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const seeded = await seedSplitRoster();
+    const { context, page } = await openOrg(
+      browser,
+      seeded.owner,
+      `/admin/organization/${seeded.org.id}`
+    );
+    try {
+      await expect(page.getByText(seeded.learnerA.fullName).first()).toBeVisible();
+      await expect(page.getByText(seeded.learnerB.fullName).first()).toBeVisible();
+      const html = await page.content();
+      expect(html).toContain(seeded.learnerA.fullName);
+      expect(html).toContain(seeded.learnerB.fullName);
+
+      await page.goto(
+        `/admin/organization/${seeded.org.id}?learner=${seeded.learnerB.student.id}`
+      );
+      await expect(page.getByText(seeded.learnerA.fullName).first()).toBeVisible();
+      await expect(page.getByText(seeded.learnerB.fullName).first()).toBeVisible();
+
+      await page.goto(
+        `/admin/organization/${seeded.org.id}?learner=not-a-learner-${uniq("missing")}`
+      );
+      await expect(page.getByText(seeded.learnerA.fullName).first()).toBeVisible();
+      await expect(page.getByText(seeded.learnerB.fullName).first()).toBeVisible();
     } finally {
       await context.close();
     }
