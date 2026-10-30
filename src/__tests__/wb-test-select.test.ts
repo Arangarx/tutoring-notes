@@ -49,3 +49,43 @@ describe("wb-test-select session review transcript", () => {
     }
   });
 });
+
+describe("wb-test-select consent matrix (@wb-consent)", () => {
+  it("maps the consent modules, C0 test infra and consent specs to @wb-consent", () => {
+    const files = [
+      "src/lib/consent-scope.ts",
+      "src/lib/session-capabilities.ts",
+      "src/lib/org/schedule-bridge.ts",
+      "src/lib/whiteboard/stale-session-stamp.ts",
+      "src/lib/test-seams.ts",
+      "src/lib/blob-list.ts",
+      "src/lib/blob-harness.ts",
+      "src/app/api/test/seams/route.ts",
+      "src/app/api/test/blob/state/route.ts",
+      "src/app/api/cron/session-cleanup/route.ts",
+      "src/app/api/whiteboard/[sessionId]/join-timer/route.ts",
+      "tests/helpers/consent-harness.ts",
+      "tests/helpers/get-user-media-spy.ts",
+      "tests/helpers/consent-db-oracle.ts",
+      "tests/helpers/relay-probe.ts",
+      "tests/integration/wb-consent-matrix.spec.ts",
+      "tests/integration/consent-entry.spec.ts",
+      "tests/integration/wb-consent-harness-selftest.spec.ts",
+    ];
+    for (const file of files) {
+      expect(tagsForPaths([file])).toEqual(expect.arrayContaining(["@wb-consent"]));
+    }
+  });
+
+  it("does not tag unrelated whiteboard files as @wb-consent", () => {
+    expect(tagsForPaths(["src/components/whiteboard/chrome/WbModifierHints.tsx"])).not.toContain(
+      "@wb-consent"
+    );
+  });
+
+  it("expands @wb-consent to recording, presence and sync adjacency", () => {
+    expect(expandTags(["@wb-consent"])).toEqual(
+      expect.arrayContaining(["@wb-consent", "@wb-recording", "@wb-presence", "@wb-sync"])
+    );
+  });
+});

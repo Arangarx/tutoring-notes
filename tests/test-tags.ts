@@ -30,6 +30,8 @@ export const TAG = {
   WB_AV: "@wb-av",
   /** Organization booking, roster, and schedule scoping. */
   ORG: "@org",
+  /** Consent matrix: online switch, recording consent, board purge, reaper, mic rows (consent-wave-plan § 6). */
+  WB_CONSENT: "@wb-consent",
 } as const;
 
 export type WbTestTag = (typeof TAG)[keyof typeof TAG];
@@ -47,6 +49,8 @@ export const TAG_ADJACENCY: Readonly<Record<WbTestTag, readonly WbTestTag[]>> = 
   [TAG.WB_AV]: [TAG.WB_SYNC, TAG.WB_PRESENCE],
   /** Booking on the org page reaches join. */
   [TAG.ORG]: [TAG.WB_PRESENCE],
+  /** Consent rules gate recording, entry and live sync (consent-wave-plan § 6). */
+  [TAG.WB_CONSENT]: [TAG.WB_RECORDING, TAG.WB_PRESENCE, TAG.WB_SYNC],
 };
 
 export function expandTags(selected: Iterable<WbTestTag>): WbTestTag[] {

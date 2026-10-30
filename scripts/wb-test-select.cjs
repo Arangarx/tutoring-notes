@@ -26,6 +26,7 @@ const TAG = {
   WB_CHROME: "@wb-chrome",
   WB_AV: "@wb-av",
   ORG: "@org",
+  WB_CONSENT: "@wb-consent",
 };
 
 const TAG_ADJACENCY = {
@@ -39,10 +40,18 @@ const TAG_ADJACENCY = {
   [TAG.WB_CHROME]: [TAG.WB_SYNC],
   [TAG.WB_AV]: [TAG.WB_SYNC, TAG.WB_PRESENCE],
   [TAG.ORG]: [TAG.WB_PRESENCE],
+  [TAG.WB_CONSENT]: [TAG.WB_RECORDING, TAG.WB_PRESENCE, TAG.WB_SYNC],
 };
 
 /** Changed path → tags (union). Order: more specific rules first. */
 const PATH_RULES = [
+  {
+    // Consent matrix (consent-wave-plan § 6): the consent/entry/purge/reaper modules, the
+    // shared C0 test infra (blob harness, seams, helpers, test routes) and the consent specs.
+    // consent-scope.ts also matches the @wb-recording rule below; tags are a union.
+    re: /src\/lib\/consent-scope\.ts|session-capabilities|consent-toggle-copy|schedule-bridge|stale-session-stamp|replay-access|transcript-store|transcribe-sweep|session-cleanup|board-purge|consent-reaper|\/join-timer\/|useLiveAvCoordinator|endWhiteboardSession|src\/lib\/test-seams|src\/lib\/blob-list|src\/lib\/blob-harness|src\/app\/api\/test\/(?:seams|blob)\/|tests\/helpers\/(?:consent-harness|consent-db-oracle|get-user-media-spy|relay-probe)|tests\/integration\/(?:wb-)?consent-/,
+    tags: [TAG.WB_CONSENT],
+  },
   {
     re: /GraphEmbeddable|graph-state|graph-persist|insert-asset/i,
     tags: [TAG.WB_GRAPH],
