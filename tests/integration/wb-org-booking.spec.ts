@@ -1253,7 +1253,8 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
   /** Badge stays on the learner-name line from here up. */
   const SAME_LINE_WIDTHS = [375, 414, 768, 1280] as const;
   const LONG_LEARNER = { givenName: "Mary Ann", familyName: "Lee-Robertson" } as const;
-  const LONG_ORG_NAME = "Westside Community Learning Center";
+  const LONG_ORG_NAME = "Westside Community Learning Center for Extended Academic Partnerships";
+  const SHORT_ORG_NAME = "Lab";
 
   async function expectNoHorizontalOverflow(page: Page, label: string) {
     const scroll = await page.evaluate(() => ({
@@ -1314,6 +1315,101 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
     expect(Math.abs(nameMid - badgeMid), `${label} badge midline ≈ name midline`).toBeLessThanOrEqual(4);
   }
 
+  /** Each painted line of the label sits inside the badge, including its rounded corners. */
+  async function expectBadgeLabelInside(badge: Locator, label: string) {
+    const fit = await badge.evaluate((el) => {
+      const textEl = el.querySelector("span");
+      if (!(textEl instanceof HTMLElement)) throw new Error("organization badge has no label");
+      const badgeRect = el.getBoundingClientRect();
+      const radius = Number.parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+      const r = Math.min(radius, badgeRect.width / 2, badgeRect.height / 2);
+      const slack = 1;
+      const range = document.createRange();
+      range.selectNodeContents(textEl);
+      const lines = [...range.getClientRects()].map((line) => ({
+        left: line.left,
+        right: line.right,
+        top: line.top,
+        bottom: line.bottom,
+      }));
+      const pointInside = (x: number, y: number) => {
+        const innerLeft = badgeRect.left + r;
+        const innerRight = badgeRect.right - r;
+        const innerTop = badgeRect.top + r;
+        const innerBottom = badgeRect.bottom - r;
+        const cx = Math.min(Math.max(x, innerLeft), innerRight);
+        const cy = Math.min(Math.max(y, innerTop), innerBottom);
+        const dx = x - cx;
+        const dy = y - cy;
+        return dx * dx + dy * dy <= (r + slack) * (r + slack);
+      };
+      let outside = 0;
+      for (const line of lines) {
+        const boxInside =
+          line.left >= badgeRect.left - slack &&
+          line.right <= badgeRect.right + slack &&
+          line.top >= badgeRect.top - slack &&
+          line.bottom <= badgeRect.bottom + slack;
+        if (!boxInside) outside += 1;
+        const corners: Array<[number, number]> = [
+          [line.left, line.top],
+          [line.right, line.top],
+          [line.left, line.bottom],
+          [line.right, line.bottom],
+        ];
+        for (const [x, y] of corners) {
+          if (!pointInside(x, y)) outside += 1;
+        }
+      }
+      return { lineCount: lines.length, outside };
+    });
+    expect(fit.outside, `${label} organization badge text is clipped`).toBe(0);
+    return fit.lineCount;
+  }
+
+  /** A short label stays content-width: narrower than the title line it sits in. */
+  async function expectShortBadgeContentWidth(row: Locator, label: string) {
+    const badge = row.getByTestId("org-badge");
+    await badge.scrollIntoViewIfNeeded();
+    const badgeBox = await badge.boundingBox();
+    const lineBox = await badge.locator("..").boundingBox();
+    const rowBox = await row.boundingBox();
+    if (!badgeBox || !lineBox || !rowBox) throw new Error(`${label} badge, title line, or row missing`);
+    expect(badgeBox.width, `${label} badge width <= row width`).toBeLessThanOrEqual(rowBox.width + 1);
+    expect(
+      badgeBox.width,
+      `${label} short organization badge is content-width`
+    ).toBeLessThan(lineBox.width * 0.75);
+  }
+
+  async function expectSyncedBadgeInsideRow(row: Locator, label: string) {
+    const sync = row.getByText("Synced", { exact: true });
+    await expect(sync).toBeVisible();
+    const syncBox = await sync.boundingBox();
+    const rowBox = await row.boundingBox();
+    if (!syncBox || !rowBox) throw new Error(`${label} sync badge or row missing`);
+    expect(syncBox.x, `${label} sync badge left inside the row`).toBeGreaterThanOrEqual(rowBox.x - 1);
+    expect(syncBox.y, `${label} sync badge top inside the row`).toBeGreaterThanOrEqual(rowBox.y - 1);
+    expect(syncBox.x + syncBox.width, `${label} sync badge stays inside the row`).toBeLessThanOrEqual(
+      rowBox.x + rowBox.width + 1
+    );
+    expect(syncBox.y + syncBox.height, `${label} sync badge bottom inside the row`).toBeLessThanOrEqual(
+      rowBox.y + rowBox.height + 1
+    );
+  }
+
+  async function expectNameKeepsVisibleWidth(row: Locator, label: string) {
+    const name = row.getByTestId("schedule-session-name");
+    const nameBox = await name.boundingBox();
+    const lineBox = await name.locator("..").boundingBox();
+    if (!nameBox || !lineBox) throw new Error(`${label} name or title line missing`);
+    const truncated = await name.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    if (!truncated) return;
+    expect(nameBox.width, `${label} truncated name keeps a visible width`).toBeGreaterThanOrEqual(
+      lineBox.width * 0.25
+    );
+  }
+
   test("narrow schedule rows put the organization badge on its own line and show both names", async ({
     browser,
   }) => {
@@ -1328,6 +1424,19 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
       where: { id: appointment.id },
       data: { googleEventId: `evt-${appointment.id}` },
     });
+    const shortOrg = await seedOrg();
+    await prisma.organization.update({
+      where: { id: shortOrg.org.id },
+      data: { name: SHORT_ORG_NAME },
+    });
+    await prisma.organizationMember.create({
+      data: { organizationId: shortOrg.org.id, adminUserId: instructor.id, roles: ["instructor"] },
+    });
+    const shortLearner = await seedLearner(shortOrg.org.id, shortOrg.owner.id, true, {
+      givenName: "Ann",
+      familyName: "Lee",
+    });
+    const shortAppointment = await seedToday(instructor.id, shortLearner.student.id, "Geometry", 11);
 
     const { context, page } = await openSchedule(browser, instructor);
     try {
@@ -1335,6 +1444,7 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
       for (const view of ["month", "agenda"] as const) {
         if (view === "agenda") await showAgenda(page);
         const row = rowFor(page, appointment.id);
+        const shortRow = rowFor(page, shortAppointment.id);
         const name = row.getByTestId("schedule-session-name");
         const badge = row.getByTestId("org-badge");
 
@@ -1345,12 +1455,27 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
         await expect(badge).toHaveText(`via ${LONG_ORG_NAME}`);
         await expect(name).toHaveAttribute("title", learner.fullName);
         await expectBadgeOnOwnLine(page, row, narrow);
+        const longBadgeBox = await badge.boundingBox();
+        const longRowBox = await row.boundingBox();
+        if (!longBadgeBox || !longRowBox) throw new Error(`${narrow} long badge or row missing`);
+        expect(longBadgeBox.width, `${narrow} badge width <= row width`).toBeLessThanOrEqual(
+          longRowBox.width + 1
+        );
+
+        await shortRow.getByTestId("org-badge").scrollIntoViewIfNeeded();
+        await expect(shortRow.getByTestId("org-badge")).toHaveText(`via ${SHORT_ORG_NAME}`);
+        await expectShortBadgeContentWidth(shortRow, narrow);
+
+        const lineCount = await expectBadgeLabelInside(badge, narrow);
+        expect(lineCount, `${narrow} long organization badge wraps to two lines`).toBeGreaterThanOrEqual(2);
 
         for (const width of SAME_LINE_WIDTHS) {
           await page.setViewportSize({ width, height: 812 });
           const label = `${view} @ ${width}px`;
           await name.scrollIntoViewIfNeeded();
           await expectBadgeSharesNameLine(row, label);
+          await expectNameKeepsVisibleWidth(row, label);
+          await expectSyncedBadgeInsideRow(row, label);
           await expectNoHorizontalOverflow(page, label);
         }
       }

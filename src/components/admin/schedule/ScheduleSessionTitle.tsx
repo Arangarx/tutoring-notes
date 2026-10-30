@@ -4,9 +4,10 @@ import type { ScheduledSessionView } from "@/lib/schedule/types";
 
 /**
  * Learner name with the organization badge (org rows) and the calendar sync badge.
- * Below 375px the badge wraps onto its own line so both names can show in full.
- * At 375px and up the badge stays on the name line. The name truncates, with a
- * title tooltip, only on that shared line. The sync badge wraps once the line is full.
+ * Below 375px the badge sits on its own line at content width and wraps when
+ * the organization name is longer than the row. At 375px and up the badge stays
+ * on the name line. The name truncates, with a title tooltip, only on that
+ * shared line. The sync badge wraps once the line is full.
  */
 export function ScheduleSessionTitle({ session }: { session: ScheduledSessionView }) {
   return (
@@ -22,7 +23,7 @@ export function ScheduleSessionTitle({ session }: { session: ScheduledSessionVie
         {session.source.kind === "org" ? (
           <OrgBadge
             organizationName={session.source.organizationName}
-            className="w-full min-[375px]:w-auto"
+            className="max-w-full self-start min-[375px]:self-center"
           />
         ) : null}
       </div>
