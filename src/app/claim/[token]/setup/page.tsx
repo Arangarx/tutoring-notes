@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { resolveEffectiveConsentForStudent } from "@/lib/consent-scope";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
@@ -62,17 +63,18 @@ export default async function ClaimSetupPage({
   }
 
   const isSelfLearner = profile.isSelfLearner;
-  const isOrgLearner = Boolean(invite.student.organizationId);
   const credentialAlreadySet = !!profile.credential;
 
-  const existingConsent = await db.consentRecord.findFirst({
-    where: isOrgLearner
-      ? { learnerProfileId: profile.id, organizationId: invite.student.organizationId }
-      : { learnerProfileId: profile.id, adminUserId: invite.adminUserId },
-    orderBy: { version: "desc" },
-    select: { id: true },
-  });
-  const consentAlreadySaved = !!existingConsent;
+  // One owner rule (E10/E11): the owner comes from the Student row through the resolver, never re-derived
+  // here. "Saved" is any record for that owner (the resolver returns null when none exists).
+  const existingConsent = await resolveEffectiveConsentForStudent(
+    profile.id,
+    invite.student,
+    invite.adminUserId,
+    undefined,
+    "claimSetupPage.consent"
+  );
+  const consentAlreadySaved = existingConsent !== null;
   const selfLearnerNeedsAgreement = isSelfLearner && !consentAlreadySaved;
   const consentComplete = consentAlreadySaved;
   const enforcementEnabled = !isSelfLearner;

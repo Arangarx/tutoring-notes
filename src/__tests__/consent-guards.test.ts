@@ -6,8 +6,80 @@
  * Jest is the right layer here: the oracle is a grep or a statement count, not rendered behavior.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
+const SRC_ROOT = path.resolve(__dirname, "..");
+
+function listProductFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "__tests__" || entry.name === "node_modules") continue;
+      listProductFiles(full, out);
+    } else if (/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(entry.name) && !/\.(test|spec)\./.test(entry.name)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+/** Repo-relative, forward-slash path, so the allowlist below reads the same on Windows. */
+function rel(file: string): string {
+  return path.relative(SRC_ROOT, file).split(path.sep).join("/");
+}
+
+/** A direct read of the ConsentRecord table: find*, count, aggregate, groupBy. Whitespace-tolerant. */
+const DIRECT_CONSENT_RECORD_READ = /\bconsentRecord\s*\.\s*(find\w*|count|aggregate|groupBy)\b/g;
+
+/**
+ * § 6i `consent single resolver` (§ 2.1 table). The complete allowlist, with the reason each is allowed:
+ *   - consent-scope.ts: the one reader.
+ *   - consent-write.ts: a version counter on the write path, not a consent decision.
+ *   - account/children/[id]/consent/page.tsx: the raw record the parent edits.
+ * Not allowlisted (fixed in C1): claim/[token]/setup/page.tsx and child-consent.ts.
+ */
+const CONSENT_READ_ALLOWLIST = new Set([
+  "lib/consent-scope.ts",
+  "lib/consent-write.ts",
+  "app/account/children/[id]/consent/page.tsx",
+]);
+
+/**
+ * Named C6 exception, NOT an allowlist entry: the replay loader still ANDs the live record with the snapshot
+ * until C6 deletes those reads (§ 2.1, § 6i wave split). C6 removes this constant and the guard then fails on
+ * any remaining read.
+ */
+const NAMED_C6_EXCEPTION = new Set(["lib/share/loadWhiteboardReplayIdsForNotes.ts"]);
+
 describe("consent guards (§ 6i)", () => {
-  it.todo("C1: consent single resolver: no product file outside consent-scope.ts / the consent editor reads consent toggle columns or calls consentRecord.find*/count/aggregate (allowlist: consent-scope.ts, consent-write.ts, account/children/[id]/consent/page.tsx; loadWhiteboardReplayIdsForNotes.ts is a named C6 exception)");
+  it("C1: consent single resolver: no product file outside the allowlist calls consentRecord.find*/count/aggregate", () => {
+    const offenders: string[] = [];
+    for (const file of listProductFiles(SRC_ROOT)) {
+      const name = rel(file);
+      if (CONSENT_READ_ALLOWLIST.has(name) || NAMED_C6_EXCEPTION.has(name)) continue;
+      const text = fs.readFileSync(file, "utf8");
+      const hits = text.match(DIRECT_CONSENT_RECORD_READ);
+      if (hits) offenders.push(`${name}: ${hits.join(", ")}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("C1: the guard itself catches a direct read (self-test on a synthetic source line)", () => {
+    for (const line of [
+      "await db.consentRecord.findFirst({ where })",
+      "await tx.consentRecord.findMany()",
+      "client\n    .consentRecord\n    .count()",
+      "db.consentRecord . aggregate({})",
+    ]) {
+      expect(line.match(DIRECT_CONSENT_RECORD_READ)).not.toBeNull();
+    }
+    // Writes and unrelated names are not reads.
+    for (const line of ["db.consentRecord.create({})", "db.consentRecord.deleteMany({})", "resolveRecordedConsentX()"]) {
+      expect(line.match(DIRECT_CONSENT_RECORD_READ)).toBeNull();
+    }
+  });
+
   it.todo("C2a: lane literal guard: no product file outside session-capabilities.ts contains the lane literals or its own parseLane/isLearnerLane");
   it.todo("C4c: reaper is the fifth caller (G7): one shared stampStaleWhiteboardSessionEnd; no other file writes a stale/forced endedAt or calls stampBoardPurgeIntent/freezeConsentSnapshotTx outside the helper and the two End paths");
   it.todo("C6: replay single decision function: no replay decision site reads consent or snapshot columns outside replay-access.ts");

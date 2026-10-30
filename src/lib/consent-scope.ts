@@ -655,6 +655,52 @@ export async function resolveEffectiveRecordedConsent(
   };
 }
 
+/** One owner's latest ConsentRecord, raw (ceiling only: ConsentRestriction is not applied). */
+export type LatestConsentPerOwnerRow = ConsentToggleCeiling & {
+  id: string;
+  version: number;
+  adminUserId: string | null;
+  organizationId: string | null;
+};
+
+/**
+ * Every ConsentRecord the learner has, reduced to the newest row per tutor and per organization
+ * (tutors first, then organizations; ties keep the first row read). The one read behind the child
+ * consent screen, which ANDs the ceilings across owners; moved here from child-consent.ts so no
+ * file outside this module queries the table (consent single resolver guard, § 6i).
+ * Display per owner is C7; this read is behavior-preserving.
+ */
+export async function readLatestConsentPerOwner(
+  learnerProfileId: string,
+  client: ConsentReadClient = db as unknown as ConsentReadClient
+): Promise<LatestConsentPerOwnerRow[]> {
+  const rows = await client.consentRecord.findMany({
+    where: { learnerProfileId },
+    select: {
+      id: true,
+      version: true,
+      adminUserId: true,
+      organizationId: true,
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+    },
+  });
+  const byTutor = new Map<string, LatestConsentPerOwnerRow>();
+  const byOrg = new Map<string, LatestConsentPerOwnerRow>();
+  for (const row of rows) {
+    if (row.adminUserId) {
+      const prev = byTutor.get(row.adminUserId);
+      if (!prev || row.version > prev.version) byTutor.set(row.adminUserId, row);
+    } else if (row.organizationId) {
+      const prev = byOrg.get(row.organizationId);
+      if (!prev || row.version > prev.version) byOrg.set(row.organizationId, row);
+    }
+  }
+  return [...byTutor.values(), ...byOrg.values()];
+}
+
 /**
  * Latest raw toggles for exactly one owner. Does not apply ConsentRestriction.
  * Exactly one of adminUserId or organizationId.

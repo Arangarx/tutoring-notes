@@ -333,6 +333,30 @@ describe("Claim setup page — self-learner agreement until a record exists", ()
     expect(screen.getByTestId("consent-saved-indicator")).toBeInTheDocument();
   });
 
+  // Consent wave C1 (single resolver, E10/E11 family): the owner is the Student row's owner. A private tutor's
+  // record for the same learner, written by the tutor who minted the invite, must NOT satisfy an
+  // organization-owned student's setup. Characterization: green before and after the page moved onto the resolver.
+  it("an organization student is not 'saved' by the inviting tutor's private record for the same learner", async () => {
+    const fx = await createClaimedSetupFixture({ isSelfLearner: true, asOrganization: true, withConsent: false });
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId: fx.profile.id,
+        adminUserId: fx.tutor.id,
+        organizationId: null,
+        version: 1,
+        allowLiveSession: true,
+        allowAudioRecording: true,
+        allowWhiteboardRecording: true,
+        allowNoteSending: true,
+        setByAccountHolderId: fx.ah.id,
+        captureMethod: "presumed",
+      },
+    });
+    await renderSetupPage(fx.rawToken, fx.ah.id);
+    expect(screen.queryByTestId("consent-saved-indicator")).not.toBeInTheDocument();
+    expect(screen.getByTestId("self-learner-agreement")).toBeInTheDocument();
+  });
+
   it("does not show child PIN credential card for self-learner without credential", async () => {
     const fx = await createClaimedSetupFixture({
       isSelfLearner: true,

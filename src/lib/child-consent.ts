@@ -9,6 +9,7 @@
 import { db } from "@/lib/db";
 import {
   effectiveConsentToggles,
+  readLatestConsentPerOwner,
   type ConsentToggleCeiling,
   type ConsentToggleRestriction,
 } from "@/lib/consent-scope";
@@ -100,32 +101,6 @@ export type ChildConsentFacing = {
   restoredByParent: ConsentToggleCeiling;
 };
 
-type LatestRow = ConsentToggleCeiling & {
-  version: number;
-  adminUserId: string | null;
-  organizationId: string | null;
-};
-
-function keepLatest(rows: LatestRow[]): ConsentToggleCeiling[] {
-  const byTutor = new Map<string, LatestRow>();
-  const byOrg = new Map<string, LatestRow>();
-  for (const row of rows) {
-    if (row.adminUserId) {
-      const prev = byTutor.get(row.adminUserId);
-      if (!prev || row.version > prev.version) byTutor.set(row.adminUserId, row);
-    } else if (row.organizationId) {
-      const prev = byOrg.get(row.organizationId);
-      if (!prev || row.version > prev.version) byOrg.set(row.organizationId, row);
-    }
-  }
-  return [...byTutor.values(), ...byOrg.values()].map((row) => ({
-    allowLiveSession: row.allowLiveSession,
-    allowAudioRecording: row.allowAudioRecording,
-    allowWhiteboardRecording: row.allowWhiteboardRecording,
-    allowNoteSending: row.allowNoteSending,
-  }));
-}
-
 function andCeiling(records: ConsentToggleCeiling[]): ConsentToggleCeiling {
   if (records.length === 0) return { ...ALL_OFF };
   return {
@@ -186,22 +161,12 @@ export async function readChildConsentFacing(
   learnerProfileId: string
 ): Promise<ChildConsentFacing> {
   const [records, restriction] = await Promise.all([
-    db.consentRecord.findMany({
-      where: { learnerProfileId },
-      select: {
-        version: true,
-        adminUserId: true,
-        organizationId: true,
-        allowLiveSession: true,
-        allowAudioRecording: true,
-        allowWhiteboardRecording: true,
-        allowNoteSending: true,
-      },
-    }),
+    readLatestConsentPerOwner(learnerProfileId),
     db.consentRestriction.findUnique({ where: { learnerProfileId } }),
   ]);
 
-  const ceiling = andCeiling(keepLatest(records));
+  // Today's AND across owners; C7 changes only how the child screen presents the per-owner list.
+  const ceiling = andCeiling(records);
   const restrictionInput: ConsentToggleRestriction | null = restriction;
   const effective = effectiveConsentToggles(ceiling, restrictionInput);
   const restoredByParent = { ...ALL_OFF };
