@@ -219,7 +219,7 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
 - **Windows PowerShell: multi-line commit messages via temp file, not `-m`.** PowerShell 5.x (the default on Win10/11 without an explicit pwsh install — Andrew's setup) mangles multi-line strings, Unicode escape sequences (`\u2014`), and backtick-escaped characters when passed to `git commit -m "..."`. Safe pattern: Write the message to `.git/COMMIT_MSG_DRAFT.txt`, then `git commit -F .git/COMMIT_MSG_DRAFT.txt`, then delete the temp file in a **sequential** subsequent call (NOT a parallel tool call — a parallel `Delete` races the `commit` and the file vanishes before git reads it; this has bitten us).
 - **Composition over duplication — no bespoke code.** See [`.cursor/rules/composition-no-duplication.mdc`](.cursor/rules/composition-no-duplication.mdc) (standing architectural standard; `alwaysApply`).
 - **Playwright on every fix — no second smoke for the same bug.** Any behavioral, visual, chrome, sync, or multi-peer regression fix ships a Playwright test in the **same branch** (enrolled in `wb-regression` when applicable). Jest/jsdom does not substitute. Narrow environment-only gaps need an explicit `PLAYWRIGHT-GAP` + backlog entry — never silent omission. See [`.cursor/rules/playwright-on-fix.mdc`](.cursor/rules/playwright-on-fix.mdc) (`alwaysApply`).
-- **Selective test execution by tag.** Tagged Playwright suites + `npm run test:wb-affected` for diff-scoped runs on small branches; **full** `test:wb-sync` required before **`master`**. See [`.cursor/rules/test-selection.mdc`](.cursor/rules/test-selection.mdc) and [`tests/test-tags.ts`](tests/test-tags.ts).
+- **Selective test execution by tag.** Tagged Playwright suites + `npm run test:wb-affected` for diff-scoped runs on small branches; **full** `test:wb-sync` + `test:prod-shape` required before **`master`** (`test:prod-shape` writes `.next` and must not run beside `next dev`). See [`.cursor/rules/test-selection.mdc`](.cursor/rules/test-selection.mdc) and [`tests/test-tags.ts`](tests/test-tags.ts).
 - **Andrew smokes once when DONE.** Agents complete Playwright + gates before requesting hardware smoke. See [`.cursor/rules/smoke-when-done.mdc`](.cursor/rules/smoke-when-done.mdc).
 
 ## Hard-won lessons
@@ -655,7 +655,9 @@ CI agent reviewing PRs automatically:
     touched sync/whiteboard surfaces (existing cadence). Large stacked waves on
     the integration branch use the full suite; per-wave relay runs are not required.
   - **Merge to `master`:** **always full** — `npm run test:wb-sync` +
-    `npm run test:regression` + `npx next build`. No selective gate.
+    `npm run test:regression` + `npm run test:prod-shape` + `npx next build`.
+    No selective gate. `test:prod-shape` writes `.next`; do not run it beside
+    `next dev`.
   - **Cadence — merge-boundary, not per-wave (Andrew 2026-06-17).** The
     ~38-min Playwright phase is a **merge gate**, not a per-commit/per-fix-wave
     gate. Waves that **don't touch** whiteboard/sync apply paths (e.g.

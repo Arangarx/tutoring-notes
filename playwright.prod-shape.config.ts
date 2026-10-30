@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { PROD_SHAPE_NEXTAUTH_SECRET } from "./tests/helpers/prod-shape-secret";
 
 const {
   WB_REGRESSION_LOCAL_DATABASE_URL,
@@ -38,7 +39,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set TOTP_ENCRYPTION_KEY=${WB_REGRESSION_TOTP_ENCRYPTION_KEY}&& set NEXTAUTH_URL=http://localhost:${PORT}&& set NEXTAUTH_SECRET=prod-shape-nextauth-secret-not-for-anything-real&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set GOOGLE_CLIENT_ID=prod-shape-google-client-id&& set GOOGLE_CLIENT_SECRET=prod-shape-google-client-secret&& set LEARNER_SESSION_HMAC_SECRET=pw-prod-shape-hmac-secret-2026&& set AH_SESSION_HMAC_SECRET=pw-prod-shape-ah-hmac-secret-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& node scripts/apply-org-learner-guards.cjs&& ${BUILD_STEP}npx next start --port ${PORT}"`,
+      `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set TOTP_ENCRYPTION_KEY=${WB_REGRESSION_TOTP_ENCRYPTION_KEY}&& set NEXTAUTH_URL=http://localhost:${PORT}&& set NEXTAUTH_SECRET=${PROD_SHAPE_NEXTAUTH_SECRET}&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set GOOGLE_CLIENT_ID=prod-shape-google-client-id&& set GOOGLE_CLIENT_SECRET=prod-shape-google-client-secret&& set LEARNER_SESSION_HMAC_SECRET=pw-prod-shape-hmac-secret-2026&& set AH_SESSION_HMAC_SECRET=pw-prod-shape-ah-hmac-secret-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& node scripts/apply-org-learner-guards.cjs&& ${BUILD_STEP}npx next start --port ${PORT}"`,
     url: `http://localhost:${PORT}/login`,
     // next build + start; the build is the long part.
     timeout: 900_000,

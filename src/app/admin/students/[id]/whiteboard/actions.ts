@@ -106,15 +106,18 @@ import { logProductEvent } from "@/lib/observability/product-events";
 /**
  * Create a PENDING session and navigate to its workspace.
  *
- * On success this never returns: `redirect()` throws NEXT_REDIRECT. It RETURNS only when
- * the create is refused for a consent reason (`{ ok: false, reason }`): an expected
- * refusal is data, not a thrown error, because Next redacts a thrown server-action error
- * in a production build and the tutor could not read why. Unexpected failures (ownership,
+ * On success `redirect()` throws NEXT_REDIRECT on the server. The client may still
+ * RESOLVE `undefined`: a redirect carries no flight data, so Next's server-action
+ * reducer can fulfill the call with `undefined` instead of rejecting. Callers must
+ * treat that as navigation in progress, not as a refusal. It RETURNS `{ ok: false,
+ * reason }` only when the create is refused for a consent reason: an expected refusal
+ * is data, not a thrown error, because Next redacts a thrown server-action error in a
+ * production build and the tutor could not read why. Unexpected failures (ownership,
  * erasure, approval, org admission, storage) still throw.
  */
 export async function createWhiteboardSession(
   studentId: string
-): Promise<EntryRefusal> {
+): Promise<EntryRefusal | undefined> {
   const rid = createActionCorrelationId();
 
   const scope = await requireStudentScope();

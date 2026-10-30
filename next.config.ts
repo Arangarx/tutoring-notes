@@ -98,13 +98,19 @@ const nextConfig: NextConfig = {
    * Keep ffmpeg-static out of the webpack bundle so it resolves at runtime
    * from node_modules (required for native binary execution).
    *
+   * `@vercel/blob` stays external too. Webpack's production server bundle
+   * rewrites its `async-retry` import so `put()` throws
+   * `TypeError: a is not a function` under `next start`. The same `put()`
+   * succeeds when Node loads the package from node_modules. Session create
+   * uses that `put()`.
+   *
    * outputFileTracingIncludes forces Vercel's file tracer to copy the ffmpeg
    * binary into every serverless function. Without this, Vercel only traces
    * JS imports and the native binary is silently omitted from the deployment,
    * causing splitAudioIntoWhisperParts to throw "ffmpeg is not available"
    * for any upload over 25 MB.
    */
-  serverExternalPackages: ["ffmpeg-static"],
+  serverExternalPackages: ["ffmpeg-static", "@vercel/blob"],
   outputFileTracingIncludes: {
     "**": ["./node_modules/ffmpeg-static/**"],
   },

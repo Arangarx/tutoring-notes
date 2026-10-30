@@ -67,14 +67,19 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
     setError(null);
     setPending(true);
     try {
-      // createWhiteboardSession calls redirect() on success, which throws a
-      // NEXT_REDIRECT inside the handler. It RETURNS only a refusal (`{ ok: false,
-      // reason }`): returned as data because Next redacts a thrown server-action error
-      // in a production build, so the reason would never reach the tutor.
+      // createWhiteboardSession calls redirect() on success. That throws NEXT_REDIRECT
+      // on the server, but the client reducer can RESOLVE `undefined` when the redirect
+      // has no flight data. It RETURNS a refusal (`{ ok: false, reason }`) only when
+      // create is refused: returned as data because Next redacts a thrown server-action
+      // error in a production build, so the reason would never reach the tutor.
+      // `undefined` is the success path — do not read `.reason` on it (that TypeError
+      // is caught below and flashes a generic error during navigation).
       const refusal = await createWhiteboardSession(studentId);
-      setError(entryRefusalMessage(refusal.reason, props.learnerName));
-      // eslint-disable-next-line no-console
-      console.warn("[createWhiteboardSession] refused", { reason: refusal.reason });
+      if (refusal && !refusal.ok) {
+        setError(entryRefusalMessage(refusal.reason, props.learnerName));
+        // eslint-disable-next-line no-console
+        console.warn("[createWhiteboardSession] refused", { reason: refusal.reason });
+      }
     } catch (err) {
       // NEXT_REDIRECT is the success path — let it propagate so the
       // framework can navigate.

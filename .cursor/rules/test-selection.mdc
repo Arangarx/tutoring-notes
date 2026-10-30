@@ -36,6 +36,7 @@ Canonical registry: [`tests/test-tags.ts`](../../tests/test-tags.ts).
 | `npm run test:wb-affected:run -- --base origin/<parent>` | Execute affected jest + Playwright |
 | `npm run test:wb-playwright:tags -- @wb-graph` | Explicit tag filter |
 | `npm run test:wb-sync` | **Full** wb jest + full wb-regression Playwright (~40 min) |
+| `npm run test:prod-shape` | Production build (`next build && next start` on :3102). Proves the server-action shape `next dev` hides. Writes `.next` — do not run beside `next dev` or any other Playwright webServer. |
 
 Path → tag mapping lives in [`scripts/wb-test-select.cjs`](../../scripts/wb-test-select.cjs).
 
@@ -46,7 +47,7 @@ Path → tag mapping lives in [`scripts/wb-test-select.cjs`](../../scripts/wb-te
 | **Commit on feature branch** | New fix's tagged test(s) must pass. Optionally `test:wb-affected:run` if touch is broader. |
 | **Small branch → parent feature / v1-redesign** | `npm run test:wb-affected:run -- --base origin/<parent>` (+ `npx next build` if build surface). **Err on caution** — if diff is ambiguous or touches `WhiteboardWorkspaceClient`, run extra tags or full `test:wb-sync`. |
 | **Large wave / long-running branch (e.g. v1-redesign) integration** | `test:wb-sync` on **final integrated tip** before merge into that branch (existing AGENTS cadence). |
-| **Any branch → `master`** | **FULL:** `npm run test:wb-sync` + `npm run test:regression` + `npx next build`. No selective gate. |
+| **Any branch → `master`** | **FULL:** `npm run test:wb-sync` + `npm run test:regression` + `npm run test:prod-shape` + `npx next build`. No selective gate. `test:prod-shape` writes `.next` and must not run beside `next dev`. |
 
 **Never** merge to `master` with only affected tags.
 

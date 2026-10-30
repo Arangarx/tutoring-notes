@@ -198,6 +198,26 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
     }
   );
 
+  it("a successful create that resolves undefined does not show an error", async () => {
+    // Next's server-action reducer can resolve a redirect() with no flight data
+    // (`undefined`) instead of rejecting NEXT_REDIRECT. Reading `.reason` on that
+    // throws, and the catch paints an error during navigation. Hand-written: no
+    // alert, and none of the catch's copy.
+    createWhiteboardSessionMock.mockResolvedValueOnce(undefined);
+
+    const user = userEvent.setup();
+    render(<StartWhiteboardSession {...baseProps} />);
+    await user.click(screen.getByTestId("start-whiteboard-session-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("start-whiteboard-session-btn")).toBeEnabled();
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Could not start the session/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unexpected error/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reading ['"]reason['"]/i)).not.toBeInTheDocument();
+  });
+
   it("an unexpected production-redacted server error still shows the Error ID message", async () => {
     // Shape Next gives the client for a thrown server-action error in a production build:
     // a generic message and a digest; name and custom fields are not serialized.
