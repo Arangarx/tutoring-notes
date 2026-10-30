@@ -17,9 +17,11 @@
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { expect } from "@playwright/test";
 
+import { PW_CRON_SECRET } from "./pw-cron-secret";
+
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
-/** `playwright.config.ts` sets `CRON_SECRET` to this same literal on both webServers (never a real secret). */
-export const PW_CRON_SECRET = "playwright-cron-secret";
+/** `playwright.config.ts` sets `CRON_SECRET` from `PW_CRON_SECRET` on both webServers. */
+export { PW_CRON_SECRET };
 
 function testAuth(): Record<string, string> {
   return { authorization: `Bearer ${TEST_SECRET}` };

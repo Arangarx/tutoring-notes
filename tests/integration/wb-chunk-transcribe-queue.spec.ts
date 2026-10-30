@@ -5,9 +5,8 @@
  * a payload that fails validation is 400 (bad message — do not retry).
  */
 import { test, expect } from "@playwright/test";
+import { PW_CRON_SECRET } from "../helpers/pw-cron-secret";
 import { TAG } from "../test-tags";
-
-const CRON_SECRET = "playwright-cron-secret";
 
 test.describe("POST /api/queues/chunk-transcribe", { tag: [TAG.WB_RECORDING] }, () => {
   test("no bearer is 401; bearer with an invalid job body is 400", async ({ request }) => {
@@ -17,7 +16,7 @@ test.describe("POST /api/queues/chunk-transcribe", { tag: [TAG.WB_RECORDING] }, 
     expect(noAuth.status()).toBe(401);
 
     const invalid = await request.post("/api/queues/chunk-transcribe", {
-      headers: { Authorization: `Bearer ${CRON_SECRET}` },
+      headers: { Authorization: `Bearer ${PW_CRON_SECRET}` },
       data: { sessionId: "does-not-exist", chunkBlobUrl: "not-a-url" },
     });
     // Payload validation failure (chunkBlobUrl is not a URL). Not an auth rejection.
