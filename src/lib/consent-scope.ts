@@ -1,10 +1,9 @@
 /**
- * Consent enforcement guards — Gate B2 parent privacy consent.
+ * Consent reads and guards — Gate B2 parent privacy consent.
  *
- * Enforcement is UNCONDITIONAL (the `CONSENT_ENFORCEMENT` flag has been
- * removed). assertEffectiveConsent always enforces: session-scoped snapshot
- * read, permission check, ConsentError throw on denial. A self-learner uses
- * the same effective toggles as everyone else.
+ * This is the one module that reads the ConsentRecord table (guarded by
+ * consent-guards.test.ts). Session enforcement asks `resolveSessionCapabilities`;
+ * a self-learner uses the same effective toggles as everyone else.
  *
  * Schema writes (ConsentRecord, SessionConsentSnapshot) were never flag-gated:
  * we always collect consent data and freeze snapshots at session creation.
@@ -17,6 +16,11 @@
 import type { Prisma } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
+import {
+  deriveSessionCapabilities,
+  type SessionCapabilities,
+  type SessionCapabilityInput,
+} from "@/lib/recording/session-capabilities";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,203 +49,6 @@ export class ConsentError extends Error {
     super(message ?? `${permission} not consented for this session`);
     this.name = "ConsentError";
   }
-}
-
-// ---------------------------------------------------------------------------
-// Permissions that are not shipping in V1 — always pass
-// ---------------------------------------------------------------------------
-
-const NOT_SHIPPING_PERMISSIONS = new Set<ConsentPermission>([
-  "allowMessaging",
-  "allowVideoRecording",
-]);
-
-// ---------------------------------------------------------------------------
-// assertEffectiveConsent (session-scoped)
-// ---------------------------------------------------------------------------
-
-/**
- * Assert that the required consent permission is granted for the given session.
- *
- * Fast-path exits (return void without throwing):
- *   1. Permission is allowMessaging or allowVideoRecording — not shipping in V1.
- *   2. No snapshot (unclaimed learner / pre-B2 session) — tutor-acknowledged fallback.
- *
- * Throw path:
- *   - Snapshot exists + relevant Boolean is false → ConsentError.
- *     Self-learners are included. The snapshot stores effective toggles.
- *
- * Reliability contract: MUST NOT block session continuation even if consent
- * cannot be verified. Unclaimed / pre-consent sessions always get the
- * tutor-acknowledged fallback.
- */
-export async function assertEffectiveConsent(
-  whiteboardSessionId: string,
-  permission: ConsentPermission
-): Promise<void> {
-  if (NOT_SHIPPING_PERMISSIONS.has(permission)) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=not_shipping`
-    );
-    return;
-  }
-
-  const snapshot = await withDbRetry(
-    () =>
-      db.sessionConsentSnapshot.findUnique({
-        where: { whiteboardSessionId },
-      }),
-    { label: "assertEffectiveConsent.snapshot" }
-  );
-
-  if (!snapshot) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=no_snapshot`
-    );
-    return;
-  }
-
-  const granted = snapshot[permission as keyof typeof snapshot] as boolean | undefined;
-
-  if (granted === false) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=denied`
-    );
-    throw new ConsentError(
-      permission,
-      `This session does not have consent for ${permission}.`
-    );
-  }
-
-  console.log(
-    `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=granted`
-  );
-}
-
-// ---------------------------------------------------------------------------
-// resolveModeAwareAudioRecordingConsent (Block B server gates — B-5/B-6/H-6/M-6)
-// ---------------------------------------------------------------------------
-
-export type ModeAwareAudioConsentDenyReason =
-  | "consent_denied_inperson"
-  | "no_snapshot_fail_closed";
-
-export type ModeAwareAudioConsentDecision =
-  | { allow: true }
-  | { allow: false; reason: ModeAwareAudioConsentDenyReason };
-
-/**
- * Mode-aware allow/deny for audio recording, transcription, and segment
- * registration. Single source of truth for server-side Block B gates.
- *
- * Semantics (session's frozen snapshot + activated sessionMode):
- *   - allowAudioRecording=true → allow (any mode)
- *   - allowAudioRecording=false + IN_PERSON → deny (inseparable mic)
- *   - allowAudioRecording=false + LIVE → allow (tutor-only mixdown)
- *   - no snapshot + unclaimed → allow (legacy compat)
- *   - no snapshot + claimed, including a self-learner → read the latest
- *     effective record. Missing snapshot is not itself allow or deny.
- *     No ConsentRecord at all → deny.
- *
- * Does NOT throw ConsentError — callers log and skip/early-return.
- * Generic assertEffectiveConsent no_snapshot→PASS is unchanged.
- */
-function modeAwareAudioDecision(
-  whiteboardSessionId: string,
-  allowAudioRecording: boolean,
-  sessionMode: string
-): ModeAwareAudioConsentDecision {
-  if (allowAudioRecording) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=granted`
-    );
-    return { allow: true };
-  }
-
-  if (sessionMode === "IN_PERSON") {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=consent_denied_inperson mode=${sessionMode}`
-    );
-    return { allow: false, reason: "consent_denied_inperson" };
-  }
-
-  console.log(
-    `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=live_tutor_only mode=${sessionMode}`
-  );
-  return { allow: true };
-}
-
-export async function resolveModeAwareAudioRecordingConsent(
-  whiteboardSessionId: string
-): Promise<ModeAwareAudioConsentDecision> {
-  const row = await withDbRetry(
-    () =>
-      db.whiteboardSession.findUnique({
-        where: { id: whiteboardSessionId },
-        select: {
-          sessionMode: true,
-          consentSnapshot: {
-            select: {
-              allowAudioRecording: true,
-            },
-          },
-          student: {
-            select: {
-              adminUserId: true,
-              organizationId: true,
-              learnerProfileId: true,
-            },
-          },
-        },
-      }),
-    { label: "resolveModeAwareAudioRecordingConsent" }
-  );
-
-  if (!row) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=no_snapshot_fail_closed detail=session_not_found`
-    );
-    return { allow: false, reason: "no_snapshot_fail_closed" };
-  }
-
-  const { sessionMode, consentSnapshot, student } = row;
-  const learnerProfileId = student?.learnerProfileId ?? null;
-
-  if (consentSnapshot) {
-    return modeAwareAudioDecision(
-      whiteboardSessionId,
-      consentSnapshot.allowAudioRecording,
-      sessionMode
-    );
-  }
-
-  if (!learnerProfileId) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=no_snapshot_unclaimed`
-    );
-    return { allow: true };
-  }
-
-  const effective = await resolveEffectiveConsentForStudent(
-    learnerProfileId,
-    student,
-    null,
-    undefined,
-    "resolveModeAwareAudioRecordingConsent.record"
-  );
-
-  if (!effective) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=no_snapshot_fail_closed`
-    );
-    return { allow: false, reason: "no_snapshot_fail_closed" };
-  }
-
-  return modeAwareAudioDecision(
-    whiteboardSessionId,
-    effective.allowAudioRecording,
-    sessionMode
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -701,22 +508,126 @@ export async function readLatestConsentPerOwner(
   return [...byTutor.values(), ...byOrg.values()];
 }
 
+// ---------------------------------------------------------------------------
+// resolveSessionCapabilities (server projection of deriveSessionCapabilities)
+// ---------------------------------------------------------------------------
+
+/** Where the toggles behind a session's capabilities came from. Logged as `source=`. */
+type CapabilitySource = "snapshot" | "live" | "legacy_unclaimed" | "fail_closed";
+
+/** Legacy unclaimed sessions (no snapshot, no learner profile): nothing is restricted, as before. */
+const ALL_CONSENT_ON: ConsentToggleCeiling = {
+  allowLiveSession: true,
+  allowAudioRecording: true,
+  allowWhiteboardRecording: true,
+  allowNoteSending: true,
+};
+
+/** Fail closed with no new constant: every switch off, in person, notes forbidden. */
+const FAIL_CLOSED_INPUT: SessionCapabilityInput = {
+  hasConsentSnapshot: true,
+  toggles: { audio: false, whiteboard: false, notes: false },
+  sessionMode: "IN_PERSON",
+  notesForbidden: true,
+};
+
 /**
- * Latest raw toggles for exactly one owner. Does not apply ConsentRestriction.
- * Exactly one of adminUserId or organizationId.
+ * The one server answer to "what may this session capture, transcribe, draft and replay".
+ * One read of the session; every server gate calls this instead of reading toggles.
+ *
+ * Toggles come from:
+ *   - the frozen snapshot once the session is past PENDING;
+ *   - the LIVE effective record (ceiling AND NOT child restriction) while PENDING, so a parent who
+ *     changes a switch after the tutor opened the room is respected immediately (plan § 2.6). If the
+ *     live record has gone, a frozen snapshot still answers;
+ *   - no snapshot, claimed learner: the live record (a missing snapshot is neither allow nor deny);
+ *   - no snapshot, unclaimed learner: everything on (legacy compatibility, as before);
+ *   - no record at all, or the session is missing: fail closed.
+ *
+ * Pass `client` inside a transaction. Otherwise the session read is retried.
+ * Does not throw on denial: callers log and skip.
  */
-export async function resolveRecordedConsent(
-  input: ConsentRecordLookup
-): Promise<ConsentToggleCeiling | null> {
-  const record = await findLatestConsentRecord(
-    input,
-    db as unknown as ConsentReadClient
-  );
-  if (!record) return null;
-  return {
-    allowLiveSession: record.allowLiveSession,
-    allowAudioRecording: record.allowAudioRecording,
-    allowWhiteboardRecording: record.allowWhiteboardRecording,
-    allowNoteSending: record.allowNoteSending,
+export async function resolveSessionCapabilities(
+  whiteboardSessionId: string,
+  client?: ConsentReadClient
+): Promise<SessionCapabilities> {
+  const readSession = (c: ConsentReadClient) =>
+    c.whiteboardSession.findUnique({
+      where: { id: whiteboardSessionId },
+      select: {
+        sessionPhase: true,
+        sessionMode: true,
+        notesForbidden: true,
+        consentSnapshot: {
+          select: {
+            allowLiveSession: true,
+            allowAudioRecording: true,
+            allowWhiteboardRecording: true,
+            allowNoteSending: true,
+          },
+        },
+        student: {
+          select: { adminUserId: true, organizationId: true, learnerProfileId: true },
+        },
+      },
+    });
+  const row = client
+    ? await readSession(client)
+    : await withDbRetry(() => readSession(db as unknown as ConsentReadClient), {
+        label: "resolveSessionCapabilities.session",
+      });
+
+  const log = (capabilities: SessionCapabilities, source: CapabilitySource, online: boolean | "n/a") => {
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=capabilities_resolved audio=${capabilities.audio.mode} wb=${capabilities.whiteboard.persist} notes=${capabilities.notes.draft} online=${online} mic=${capabilities.mic.acquire} source=${source}`
+    );
+    return capabilities;
   };
+
+  if (!row) {
+    return log(deriveSessionCapabilities(FAIL_CLOSED_INPUT), "fail_closed", "n/a");
+  }
+
+  const learnerProfileId = row.student?.learnerProfileId ?? null;
+  let toggles: ConsentToggleCeiling | null = null;
+  let source: CapabilitySource = "snapshot";
+
+  if (row.consentSnapshot && row.sessionPhase !== "PENDING") {
+    toggles = row.consentSnapshot;
+  } else if (learnerProfileId) {
+    const live = await resolveEffectiveConsentForStudent(
+      learnerProfileId,
+      row.student,
+      null,
+      client,
+      "resolveSessionCapabilities.record"
+    );
+    if (live) {
+      toggles = live;
+      source = "live";
+    } else if (row.consentSnapshot) {
+      toggles = row.consentSnapshot;
+    }
+  } else if (row.consentSnapshot) {
+    toggles = row.consentSnapshot;
+  } else {
+    toggles = ALL_CONSENT_ON;
+    source = "legacy_unclaimed";
+  }
+
+  if (!toggles) {
+    return log(deriveSessionCapabilities(FAIL_CLOSED_INPUT), "fail_closed", "n/a");
+  }
+
+  const capabilities = deriveSessionCapabilities({
+    hasConsentSnapshot: true,
+    toggles: {
+      audio: toggles.allowAudioRecording,
+      whiteboard: toggles.allowWhiteboardRecording,
+      notes: toggles.allowNoteSending,
+    },
+    sessionMode: row.sessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE",
+    notesForbidden: row.notesForbidden,
+  });
+  return log(capabilities, source, toggles.allowLiveSession);
 }

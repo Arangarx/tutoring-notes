@@ -5,11 +5,9 @@
 import React, { createRef } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import {
-  deriveAudioCapturePolicy,
   resolveRemoteRecordingGainLinear,
   shouldAttachRemoteStreamToRecordingMixdown,
-  type AudioCapturePolicy,
-} from "@/lib/recording/audio-capture-policy";
+} from "@/lib/recording/session-capabilities";
 import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 
 const mockUnsubscribe = jest.fn();
@@ -273,73 +271,6 @@ function mockWorkspaceAudio(
     ...overrides,
   };
 }
-
-describe("deriveAudioCapturePolicy", () => {
-  it.each<
-    [
-      string,
-      Parameters<typeof deriveAudioCapturePolicy>[0],
-      AudioCapturePolicy,
-    ]
-  >([
-    [
-      "consented LIVE → full",
-      {
-        allowAudioRecording: true,
-        hasConsentSnapshot: true,
-        sessionMode: "LIVE",
-      },
-      "full",
-    ],
-    [
-      "consented IN_PERSON → full",
-      {
-        allowAudioRecording: true,
-        hasConsentSnapshot: true,
-        sessionMode: "IN_PERSON",
-      },
-      "full",
-    ],
-    [
-      "denied IN_PERSON → none",
-      {
-        allowAudioRecording: false,
-        hasConsentSnapshot: true,
-        sessionMode: "IN_PERSON",
-      },
-      "none",
-    ],
-    [
-      "denied LIVE → tutor_only",
-      {
-        allowAudioRecording: false,
-        hasConsentSnapshot: true,
-        sessionMode: "LIVE",
-      },
-      "tutor_only",
-    ],
-    [
-      "no snapshot LIVE → none",
-      {
-        allowAudioRecording: null,
-        hasConsentSnapshot: false,
-        sessionMode: "LIVE",
-      },
-      "none",
-    ],
-    [
-      "no snapshot IN_PERSON → none",
-      {
-        allowAudioRecording: null,
-        hasConsentSnapshot: false,
-        sessionMode: "IN_PERSON",
-      },
-      "none",
-    ],
-  ])("%s", (_label, input, expected) => {
-    expect(deriveAudioCapturePolicy(input)).toBe(expected);
-  });
-});
 
 describe("remote-surgical mixdown gates E/F (pure helpers)", () => {
   test("Gate E: shouldAttachRemoteStreamToRecordingMixdown — only full attaches", () => {

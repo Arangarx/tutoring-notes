@@ -39,11 +39,11 @@ import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue
 import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import {
-  assertEffectiveConsent,
   assertConsentRecordExists,
   ConsentError,
-  resolveModeAwareAudioRecordingConsent,
+  resolveSessionCapabilities,
 } from "@/lib/consent-scope";
+import { acceptsAudioSegments } from "@/lib/recording/session-capabilities";
 import type { EntryBlockReason, EntryRefusal } from "@/lib/scheduling/session-entry";
 import {
   consentRecordRefusalReason,
@@ -826,8 +826,8 @@ async function acceptOrgForcedEndUpload(
 
   let audioConsentGranted = true;
   if (segments.length > 0) {
-    const audioConsent = await resolveModeAwareAudioRecordingConsent(whiteboardSessionId);
-    if (!audioConsent.allow) audioConsentGranted = false;
+    const capabilities = await resolveSessionCapabilities(whiteboardSessionId);
+    if (!acceptsAudioSegments(capabilities)) audioConsentGranted = false;
   }
   const erasureShortCircuit = await shouldShortCircuitEndSessionForErasure(session.studentId);
 
@@ -1198,13 +1198,11 @@ export async function endWhiteboardSession(
   // Session ALWAYS closes successfully — no lost sessions (reliability invariant).
   let audioConsentGranted = true;
   if (segments.length > 0) {
-    const audioConsent = await resolveModeAwareAudioRecordingConsent(
-      whiteboardSessionId
-    );
-    if (!audioConsent.allow) {
+    const capabilities = await resolveSessionCapabilities(whiteboardSessionId);
+    if (!acceptsAudioSegments(capabilities)) {
       audioConsentGranted = false;
       console.warn(
-        `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} audio_consent_denied reason=${audioConsent.reason} — segments will NOT be registered; session close proceeds`
+        `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} audio_consent_denied reason=audio_mode_none — segments will NOT be registered; session close proceeds`
       );
     }
   }
@@ -1969,12 +1967,10 @@ export async function registerWhiteboardSessionAudioSegmentAction(
     }
 
     // B2 + Block B: mode-aware consent gate (same semantics as end-session).
-    const audioConsent = await resolveModeAwareAudioRecordingConsent(
-      whiteboardSessionId
-    );
-    if (!audioConsent.allow) {
+    const capabilities = await resolveSessionCapabilities(whiteboardSessionId);
+    if (!acceptsAudioSegments(capabilities)) {
       console.log(
-        `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} rejected: consent reason=${audioConsent.reason}`
+        `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} rejected: consent reason=audio_mode_none`
       );
       return {
         ok: false,
@@ -2160,12 +2156,10 @@ export async function enqueueChunkTranscriptionAction(
 
   // Block B: mode-aware consent — IN_PERSON+denied or no-snapshot claimed minor
   // fail-closed; LIVE+denied allows tutor-only mixdown transcription.
-  const audioConsent = await resolveModeAwareAudioRecordingConsent(
-    whiteboardSessionId
-  );
-  if (!audioConsent.allow) {
+  const capabilities = await resolveSessionCapabilities(whiteboardSessionId);
+  if (!acceptsAudioSegments(capabilities)) {
     console.log(
-      `[txc] wbsid=${whiteboardSessionId} action=enqueue_rejected reason=${audioConsent.reason}`
+      `[txc] wbsid=${whiteboardSessionId} action=enqueue_rejected reason=audio_mode_none`
     );
     return;
   }

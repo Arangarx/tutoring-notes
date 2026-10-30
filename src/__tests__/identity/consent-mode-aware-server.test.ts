@@ -111,8 +111,9 @@ jest.mock("@/lib/tutor-approval-scope", () => ({
 import { db } from "@/lib/db";
 import {
   createSessionConsentSnapshot,
-  resolveModeAwareAudioRecordingConsent,
+  resolveSessionCapabilities,
 } from "@/lib/consent-scope";
+import { acceptsAudioSegments } from "@/lib/recording/session-capabilities";
 import {
   endWhiteboardSession,
   enqueueChunkTranscriptionAction,
@@ -202,6 +203,7 @@ type SessionSetupOpts = {
   consentRecordWithoutSnapshot?: boolean;
   isSelfLearner?: boolean;
   claimed?: boolean;
+  sessionPhase?: "PENDING" | "ACTIVE";
 };
 
 async function setupActiveSession(opts: SessionSetupOpts) {
@@ -232,7 +234,7 @@ async function setupActiveSession(opts: SessionSetupOpts) {
       eventsBlobUrl: eventsUrl,
       eventsSchemaVersion: 1,
       sessionMode: opts.sessionMode,
-      sessionPhase: "ACTIVE",
+      sessionPhase: opts.sessionPhase ?? "ACTIVE",
       startedAt: new Date(Date.now() - 60_000),
     },
   });
@@ -289,62 +291,84 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveModeAwareAudioRecordingConsent — unit via real DB
+// resolveSessionCapabilities — the one server answer (real DB). Oracle: the plan's truth table and § 2.2 / § 2.6
+// semantics, written as literal expectations.
 // ---------------------------------------------------------------------------
 
-describe("resolveModeAwareAudioRecordingConsent", () => {
-  it("LIVE + allowAudioRecording=false → allow (tutor-only)", async () => {
+describe("resolveSessionCapabilities", () => {
+  it("LIVE + audio off → tutor_only: the learner's voice is out, the server still accepts the tutor mixdown", async () => {
     const { session } = await setupActiveSession({
       sessionMode: "LIVE",
       allowAudioRecording: false,
       withSnapshot: true,
     });
-    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
-    expect(decision).toEqual({ allow: true });
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(caps.audio.mode).toBe("tutor_only");
+    expect(caps.transcript).toEqual({ tutorVoice: true, learnerVoice: false });
+    expect(acceptsAudioSegments(caps)).toBe(true);
   });
 
-  it("IN_PERSON + allowAudioRecording=false → deny", async () => {
+  it("IN_PERSON + audio off → none: nothing is accepted, no transcript, nothing to draft from", async () => {
     const { session } = await setupActiveSession({
       sessionMode: "IN_PERSON",
       allowAudioRecording: false,
       withSnapshot: true,
     });
-    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
-    expect(decision).toEqual({
-      allow: false,
-      reason: "consent_denied_inperson",
-    });
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(caps.audio.mode).toBe("none");
+    expect(acceptsAudioSegments(caps)).toBe(false);
+    expect(caps.transcript).toEqual({ tutorVoice: false, learnerVoice: false });
+    expect(caps.notes.draft).toBe(false);
+    expect(caps.off).toEqual(["audio"]);
   });
 
-  it("M-6: no snapshot + claimed non-self → deny", async () => {
+  it("audio on → full in both modes", async () => {
+    for (const sessionMode of ["LIVE", "IN_PERSON"] as const) {
+      const { session } = await setupActiveSession({ sessionMode, allowAudioRecording: true, withSnapshot: true });
+      const caps = await resolveSessionCapabilities(session.id);
+      expect(caps.audio.mode).toBe("full");
+      expect(acceptsAudioSegments(caps)).toBe(true);
+    }
+  });
+
+  it("M-6: no snapshot + claimed learner with no record → fails closed (nothing captured, stored or drafted)", async () => {
     const { session } = await setupActiveSession({
       sessionMode: "LIVE",
       allowAudioRecording: true,
       withSnapshot: false,
       claimed: true,
     });
-    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
-    expect(decision).toEqual({
-      allow: false,
-      reason: "no_snapshot_fail_closed",
-    });
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(acceptsAudioSegments(caps)).toBe(false);
+    expect(caps.whiteboard.persist).toBe(false);
+    expect(caps.notes.draft).toBe(false);
+    expect(caps.transcript).toEqual({ tutorVoice: false, learnerVoice: false });
   });
 
-  it("no snapshot + self-learner with no ConsentRecord → deny", async () => {
+  it("no snapshot + self-learner with no ConsentRecord → fails closed", async () => {
     const { session } = await setupActiveSession({
       sessionMode: "LIVE",
       allowAudioRecording: true,
       withSnapshot: false,
       isSelfLearner: true,
     });
-    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
-    expect(decision).toEqual({
-      allow: false,
-      reason: "no_snapshot_fail_closed",
-    });
+    expect(acceptsAudioSegments(await resolveSessionCapabilities(session.id))).toBe(false);
   });
 
-  it("no snapshot + self-learner record with audio off, in person → deny", async () => {
+  it("no snapshot + unclaimed learner → legacy: nothing is restricted", async () => {
+    const { session } = await setupActiveSession({
+      sessionMode: "IN_PERSON",
+      allowAudioRecording: false,
+      withSnapshot: false,
+      claimed: false,
+    });
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(caps.audio.mode).toBe("full");
+    expect(caps.whiteboard.persist).toBe(true);
+    expect(caps.off).toEqual([]);
+  });
+
+  it("no snapshot + self-learner record with audio off, in person → none", async () => {
     const { session } = await setupActiveSession({
       sessionMode: "IN_PERSON",
       allowAudioRecording: false,
@@ -352,14 +376,10 @@ describe("resolveModeAwareAudioRecordingConsent", () => {
       consentRecordWithoutSnapshot: true,
       isSelfLearner: true,
     });
-    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
-    expect(decision).toEqual({
-      allow: false,
-      reason: "consent_denied_inperson",
-    });
+    expect((await resolveSessionCapabilities(session.id)).audio.mode).toBe("none");
   });
 
-  it("no snapshot + self-learner record with audio on is allowed", async () => {
+  it("no snapshot + self-learner record with audio on → full", async () => {
     const { session } = await setupActiveSession({
       sessionMode: "IN_PERSON",
       allowAudioRecording: true,
@@ -367,11 +387,10 @@ describe("resolveModeAwareAudioRecordingConsent", () => {
       consentRecordWithoutSnapshot: true,
       isSelfLearner: true,
     });
-    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
-    expect(decision).toEqual({ allow: true });
+    expect((await resolveSessionCapabilities(session.id)).audio.mode).toBe("full");
   });
 
-  it("snapshot present + self-learner audio off, in person → deny", async () => {
+  it("snapshot present + self-learner audio off, in person → none", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder({ isSelfLearner: true });
     const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
@@ -403,11 +422,123 @@ describe("resolveModeAwareAudioRecordingConsent", () => {
       },
     });
 
-    const decision = await resolveModeAwareAudioRecordingConsent(session.id);
-    expect(decision).toEqual({
-      allow: false,
-      reason: "consent_denied_inperson",
+    expect((await resolveSessionCapabilities(session.id)).audio.mode).toBe("none");
+  });
+
+  it("an unknown session id fails closed", async () => {
+    const caps = await resolveSessionCapabilities("no-such-session");
+    expect(acceptsAudioSegments(caps)).toBe(false);
+    expect(caps.whiteboard.persist).toBe(false);
+  });
+
+  it("notesForbidden stops drafting and transcription even with every toggle on", async () => {
+    const { session } = await setupActiveSession({
+      sessionMode: "LIVE",
+      allowAudioRecording: true,
+      withSnapshot: true,
     });
+    await db.whiteboardSession.update({ where: { id: session.id }, data: { notesForbidden: true } });
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(caps.notes.draft).toBe(false);
+    expect(caps.transcript).toEqual({ tutorVoice: false, learnerVoice: false });
+    expect(caps.audio.mode).toBe("full");
+  });
+
+  it("an ACTIVE session answers from its frozen snapshot, not from a later change to the live record", async () => {
+    const { session, student } = await setupActiveSession({
+      sessionMode: "IN_PERSON",
+      allowAudioRecording: true,
+      withSnapshot: true,
+    });
+    const profileId = (await db.student.findUniqueOrThrow({ where: { id: student.id } })).learnerProfileId!;
+    const ownerId = session.adminUserId;
+    await createConsentRecord(profileId, ownerId, 2, { allowAudioRecording: false });
+
+    expect((await resolveSessionCapabilities(session.id)).audio.mode).toBe("full");
+  });
+
+  // plan § 2.2 / § 2.6: while PENDING (nothing recorded yet) the live record decides, so a parent who flips a
+  // switch after the tutor opened the room is respected immediately. Red on the old snapshot-only gate.
+  it("a PENDING session answers from the LIVE record, not the snapshot frozen at create", async () => {
+    const { session, student } = await setupActiveSession({
+      sessionMode: "IN_PERSON",
+      allowAudioRecording: true,
+      withSnapshot: true,
+      sessionPhase: "PENDING",
+    });
+    expect((await resolveSessionCapabilities(session.id)).audio.mode).toBe("full");
+
+    const profileId = (await db.student.findUniqueOrThrow({ where: { id: student.id } })).learnerProfileId!;
+    await createConsentRecord(profileId, session.adminUserId, 2, { allowAudioRecording: false });
+
+    const caps = await resolveSessionCapabilities(session.id);
+    expect(caps.audio.mode).toBe("none");
+    expect(acceptsAudioSegments(caps)).toBe(false);
+  });
+
+  it("a PENDING session applies the child's restriction to the live record (child floor)", async () => {
+    const { session, student } = await setupActiveSession({
+      sessionMode: "IN_PERSON",
+      allowAudioRecording: true,
+      withSnapshot: true,
+      sessionPhase: "PENDING",
+    });
+    const profileId = (await db.student.findUniqueOrThrow({ where: { id: student.id } })).learnerProfileId!;
+    await db.consentRestriction.create({ data: { learnerProfileId: profileId, restrictAudioRecording: true } });
+
+    expect((await resolveSessionCapabilities(session.id)).audio.mode).toBe("none");
+  });
+
+  it("the consent owner is the Student row's owner: an organization student reads the organization's record", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const profile = await createLearnerProfile(ah.id);
+    const org = await db.organization.create({
+      data: { name: uniq("caps-org"), createdByOperatorId: "caps-op@test.local" },
+      select: { id: true },
+    });
+    const student = await db.student.create({
+      data: { name: "Org Student", adminUserId: null, organizationId: org.id, learnerProfileId: profile.id },
+    });
+    // The organization allows audio; a private tutor's record for the same learner forbids it.
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId: profile.id,
+        organizationId: org.id,
+        version: 1,
+        allowLiveSession: true,
+        allowAudioRecording: true,
+        allowWhiteboardRecording: true,
+        allowNoteSending: true,
+        setByAccountHolderId: ah.id,
+        captureMethod: "electronic",
+      },
+    });
+    await createConsentRecord(profile.id, tutor.id, 1, { allowAudioRecording: false });
+    const session = await db.whiteboardSession.create({
+      data: {
+        adminUserId: tutor.id,
+        studentId: student.id,
+        consentAcknowledged: true,
+        eventsBlobUrl: `https://abc.blob.vercel-storage.com/test-${uniq()}.json`,
+        eventsSchemaVersion: 1,
+        sessionMode: "IN_PERSON",
+        sessionPhase: "PENDING",
+      },
+    });
+
+    expect((await resolveSessionCapabilities(session.id)).audio.mode).toBe("full");
+  });
+
+  it("accepts a transaction client and gives the same answer inside it", async () => {
+    const { session } = await setupActiveSession({
+      sessionMode: "LIVE",
+      allowAudioRecording: false,
+      withSnapshot: true,
+    });
+    const outside = await resolveSessionCapabilities(session.id);
+    const inside = await db.$transaction((tx) => resolveSessionCapabilities(session.id, tx));
+    expect(inside).toEqual(outside);
   });
 });
 

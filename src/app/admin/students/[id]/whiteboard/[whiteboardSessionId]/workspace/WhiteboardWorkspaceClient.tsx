@@ -72,11 +72,11 @@ import {
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
 import {
-  deriveAudioCapturePolicy,
+  deriveSessionCapabilities,
   deriveWbCaptureActive,
   resolveRemoteRecordingGainLinear,
   shouldAttachRemoteStreamToRecordingMixdown,
-} from "@/lib/recording/audio-capture-policy";
+} from "@/lib/recording/session-capabilities";
 import {
   createSessionMsClock,
   type SessionMsClock,
@@ -1607,11 +1607,15 @@ export function WhiteboardWorkspaceClient({
   // M-3: derive policy from locally-selected mode (waiting-room flips) + frozen consent.
   const audioCapturePolicy = useMemo(
     () =>
-      deriveAudioCapturePolicy({
-        allowAudioRecording: initialAllowAudioRecording,
+      // Only `audio.mode` is consumed here today. The page still passes just the audio toggle, so the other two
+      // toggles are neutral (they cannot change `audio.mode`); the single `sessionCapabilities` prop replaces
+      // these three ad hoc props in C3b/C3c.
+      deriveSessionCapabilities({
         hasConsentSnapshot: initialHasConsentSnapshot,
+        toggles: { audio: initialAllowAudioRecording === true, whiteboard: true, notes: true },
         sessionMode,
-      }),
+        notesForbidden: false,
+      }).audio.mode,
     [initialAllowAudioRecording, initialHasConsentSnapshot, sessionMode]
   );
 
@@ -2667,7 +2671,7 @@ export function WhiteboardWorkspaceClient({
   // recording itself is unaffected — the AudioBridge keys off FSM
   // recordingActive, not this.
   const wbCaptureActive = deriveWbCaptureActive({
-    policy: audioCapturePolicy,
+    audioMode: audioCapturePolicy,
     recordingActive,
     isPaused: lifecycle.state === "paused",
     wbEventsActive,

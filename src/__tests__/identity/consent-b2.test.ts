@@ -6,14 +6,12 @@
  * Coverage:
  *   - ConsentRecord create + MAX-version retrieval
  *   - createSessionConsentSnapshot (claimed+consented, claimed+no-record, unclaimed)
- *   - assertEffectiveConsent (flag OFF, granted, denied, no-snapshot, self-learner)
  *   - assertConsentFromLiveRecord (flag OFF, granted, denied, unclaimed, self-learner, no-record)
  *   - Snapshot is skipped when no record; unclaimed always skipped
  *   - Self-learner uses the same effective toggles as everyone else
  *   - Cross-owner guard: parent B cannot write consent for parent A's learner
  *   - Reconnect: defaults all-OFF (D-4 — validated at the form layer; unit tested here via consent route)
  *   - No lost recording: session closes when audio consent denied
- *   - Flag OFF: assertEffectiveConsent always returns void
  *
  * DB: uses tutoring_notes_test via jest.global-setup.ts (db push on run).
  */
@@ -27,7 +25,6 @@ jest.mock("next/navigation", () => ({
 import { db } from "@/lib/db";
 import { uniq } from "../helpers/unique-test-token";
 import {
-  assertEffectiveConsent,
   assertConsentFromLiveRecord,
   createSessionConsentSnapshot,
   effectiveConsentToggles,
@@ -587,153 +584,6 @@ describe("createSessionConsentSnapshot", () => {
     expect(snapshot).not.toBeNull();
     expect(snapshot!.consentRecordId).toBe(record.id);
     expect(snapshot!.allowAudioRecording).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// assertEffectiveConsent (unconditional — CONSENT_ENFORCEMENT flag removed)
-// ---------------------------------------------------------------------------
-
-describe("assertEffectiveConsent", () => {
-  /**
-   * RED-BEFORE / GREEN-AFTER (Concern 2):
-   * Before removing the flag, assertEffectiveConsent would return void when
-   * CONSENT_ENFORCEMENT was unset. After removing, it enforces unconditionally.
-   */
-  it("enforces unconditionally — snapshot allowAudioRecording=false throws ConsentError (no flag needed)", async () => {
-    // No CONSENT_ENFORCEMENT env var set — enforcement is now always on
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    await createConsentRecord(profile.id, tutor.id, 1, { allowAudioRecording: false });
-    await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
-    });
-
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording"))
-      .rejects.toThrow(ConsentError);
-  });
-
-  it("no snapshot → void (unclaimed fallback)", async () => {
-    const tutor = await createTutor();
-    const student = await createStudent(tutor.id, undefined);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).resolves.toBeUndefined();
-  });
-
-  it("snapshot allowAudioRecording=true → void (granted)", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    await createConsentRecord(profile.id, tutor.id, 1, { allowAudioRecording: true });
-    await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
-    });
-
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).resolves.toBeUndefined();
-  });
-
-  it("snapshot allowNoteSending=false → throws ConsentError", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    await createConsentRecord(profile.id, tutor.id, 1, { allowNoteSending: false });
-    await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
-    });
-
-    await expect(assertEffectiveConsent(session.id, "allowNoteSending"))
-      .rejects.toThrow(ConsentError);
-  });
-
-  it("self-learner with audio off on the frozen snapshot is denied", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder({ isSelfLearner: true });
-    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
-    const student = await createStudent(tutor.id, profile.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-    const record = await createConsentRecord(profile.id, tutor.id, 1, {
-      allowAudioRecording: false,
-      allowNoteSending: false,
-    });
-    await db.sessionConsentSnapshot.create({
-      data: {
-        whiteboardSessionId: session.id,
-        allowLiveSession: true,
-        allowAudioRecording: false,
-        allowWhiteboardRecording: true,
-        allowNoteSending: false,
-        consentRecordId: record.id,
-        consentRecordVersion: record.version,
-      },
-    });
-
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).rejects.toMatchObject({
-      name: "ConsentError",
-      permission: "allowAudioRecording",
-    });
-    await expect(assertEffectiveConsent(session.id, "allowNoteSending")).rejects.toMatchObject({
-      permission: "allowNoteSending",
-    });
-  });
-
-  it("self-learner snapshot written from an audio-off record is denied", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder({ isSelfLearner: true });
-    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
-    const student = await createStudent(tutor.id, profile.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    await createConsentRecord(profile.id, tutor.id, 1, {
-      allowAudioRecording: false,
-      allowNoteSending: false,
-    });
-    await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
-    });
-
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).rejects.toBeInstanceOf(
-      ConsentError
-    );
-  });
-
-  it("self-learner with audio on is still allowed", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder({ isSelfLearner: true });
-    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
-    const student = await createStudent(tutor.id, profile.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    await createConsentRecord(profile.id, tutor.id, 1, { allowAudioRecording: true });
-    await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
-    });
-
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).resolves.toBeUndefined();
-  });
-
-  it("allowMessaging → void (not shipping in V1)", async () => {
-    const tutor = await createTutor();
-    const student = await createStudent(tutor.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-    await expect(assertEffectiveConsent(session.id, "allowMessaging")).resolves.toBeUndefined();
-  });
-
-  it("allowVideoRecording → void (not shipping in V1)", async () => {
-    const tutor = await createTutor();
-    const student = await createStudent(tutor.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-    await expect(assertEffectiveConsent(session.id, "allowVideoRecording")).resolves.toBeUndefined();
   });
 });
 

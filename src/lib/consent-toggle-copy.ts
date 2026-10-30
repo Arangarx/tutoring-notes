@@ -3,6 +3,8 @@
  * Product-specific consent UI — not umbrella-derived (see docs/LEGAL-SYNC.md).
  */
 
+import type { OffEffectByMode, SwitchCapability } from "@/lib/recording/session-capabilities";
+
 export const LIVE_SESSION_CONSENT_COPY = {
   label: "Allow live tutoring sessions",
   description:
@@ -41,31 +43,86 @@ export const LIVE_SESSION_SCHEDULING_NOTE =
 export const RECOMMENDED_CONSENT_NOTE =
   "You can turn this off, but most families keep it on so sessions are useful after class ends.";
 
-/** The one switch list. Parent editor, claim setup, and self-learner settings all use it. */
+/**
+ * The one switch table (consent wave plan D5). Each entry carries BOTH halves: the copy the parent editor,
+ * claim setup and self-learner settings render, and the behavior (`offEffect`) that
+ * `deriveSessionCapabilities` applies when the switch is off. Editing behavior and copy is one edit, here.
+ * The online switch has no `offEffect`: its behavior is `sessionEntryState` (org W4, F3).
+ *
+ * `effectWhenOff` (per-mode copy for the notice) and per-audience descriptions land with the copy waves (C7),
+ * which need Andrew's approval of the text; nothing here authors new consent copy.
+ */
+export type ConsentSwitchEntry = {
+  key: "allowLiveSession" | "allowAudioRecording" | "allowWhiteboardRecording" | "allowNoteSending";
+  capability: SwitchCapability;
+  label: string;
+  description: string;
+  emphasis: "critical" | "recommended" | "standard";
+  banner?: string;
+  notice?: string;
+  offEffect?: OffEffectByMode;
+};
+
 export const CONSENT_SWITCHES = [
   {
     key: "allowLiveSession" as const,
+    capability: "online" as const,
     ...LIVE_SESSION_CONSENT_COPY,
     emphasis: "critical" as const,
     banner: LIVE_SESSION_SCHEDULING_NOTE,
   },
   {
     key: "allowAudioRecording" as const,
+    capability: "audio" as const,
     ...AUDIO_RECORDING_CONSENT_COPY,
     emphasis: "recommended" as const,
     notice: RECOMMENDED_CONSENT_NOTE,
+    offEffect: {
+      // Online: the learner's voice is left out of the saved recording; the tutor's mic is still saved.
+      online: {
+        audio: { mode: "tutor_only" },
+        transcript: { learnerVoice: false },
+      },
+      // In person one mic captures everyone, so nothing is saved: no audio, no transcript, nothing to draft from.
+      inPerson: {
+        audio: { mode: "none" },
+        mic: { acquire: "no" },
+        transcript: { tutorVoice: false, learnerVoice: false },
+        notes: { draft: false },
+        replay: { audio: false },
+      },
+      // Waiting room, mode not chosen yet: capture nothing and ask for the mic later.
+      unknown: {
+        audio: { mode: "none" },
+        mic: { acquire: "defer" },
+        transcript: { tutorVoice: false, learnerVoice: false },
+        notes: { draft: false },
+        replay: { audio: false },
+      },
+    },
   },
   {
     key: "allowWhiteboardRecording" as const,
+    capability: "whiteboard" as const,
     ...WHITEBOARD_RECORDING_CONSENT_COPY,
     emphasis: "standard" as const,
+    offEffect: {
+      always: { whiteboard: { persist: false }, replay: { board: false } },
+    },
   },
   {
     key: "allowNoteSending" as const,
+    capability: "notes" as const,
     ...SESSION_NOTES_CONSENT_COPY,
     emphasis: "standard" as const,
+    offEffect: {
+      always: {
+        transcript: { tutorVoice: false, learnerVoice: false },
+        notes: { draft: false },
+      },
+    },
   },
-] as const;
+] as const satisfies readonly ConsentSwitchEntry[];
 
 export const CONSENT_DECLINE_WARNING = {
   title: "Are you sure?",

@@ -42,18 +42,10 @@ jest.mock("@/lib/recording/notes-enqueue", () => ({
   enqueueNotesReduce: (...args: unknown[]) => enqueueNotesReduceMock(...args),
 }));
 
-// Consent scope: configurable per test — must NOT block notes generation.
-let consentShouldDeny = false;
+// Consent scope exposes NO gate function here: triggerNotesGenerationAction must not consult consent
+// (any call into a gate would be a call to undefined and throw). Notes-off gating is consent wave C2.
 jest.mock("@/lib/consent-scope", () => ({
   __esModule: true,
-  assertEffectiveConsent: jest.fn().mockImplementation(async () => {
-    if (consentShouldDeny) {
-      const { ConsentError: CE } = jest.requireActual<
-        typeof import("@/lib/consent-scope")
-      >("@/lib/consent-scope");
-      throw new CE("allowNoteSending", "Consent denied for allowNoteSending");
-    }
-  }),
   ConsentError: class ConsentError extends Error {
     constructor(
       public permission: string,
@@ -78,16 +70,13 @@ const defaultSession = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  consentShouldDeny = false;
   assertOwnsWhiteboardSessionMock.mockResolvedValue(defaultSession);
   dbWbFindUniqueMock.mockResolvedValue({ endedAt: new Date("2026-06-30") });
   enqueueNotesReduceMock.mockResolvedValue(undefined);
 });
 
 describe("triggerNotesGenerationAction — allowNoteSending is not a gate", () => {
-  test("allowNoteSending=false does not block enqueueNotesReduce", async () => {
-    consentShouldDeny = true;
-
+  test("enqueues without consulting any consent gate", async () => {
     const result = await triggerNotesGenerationAction("wb-1");
 
     expect(result).toEqual({ ok: true });
@@ -95,9 +84,7 @@ describe("triggerNotesGenerationAction — allowNoteSending is not a gate", () =
     expect(enqueueNotesReduceMock).toHaveBeenCalledWith("wb-1");
   });
 
-  test("sealed session with consent granted → calls enqueueNotesReduce", async () => {
-    consentShouldDeny = false;
-
+  test("sealed session → calls enqueueNotesReduce", async () => {
     const result = await triggerNotesGenerationAction("wb-1");
 
     expect(result).toEqual({ ok: true });

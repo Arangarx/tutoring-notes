@@ -24,6 +24,19 @@ function listProductFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+function listAllFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === ".next" || entry.name.startsWith("test-results")) continue;
+      listAllFiles(full, out);
+    } else if (/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json|md)$/.test(entry.name)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
 /** Repo-relative, forward-slash path, so the allowlist below reads the same on Windows. */
 function rel(file: string): string {
   return path.relative(SRC_ROOT, file).split(path.sep).join("/");
@@ -86,7 +99,45 @@ describe("consent guards (§ 6i)", () => {
   it.todo("C7: consent copy covers every switch effect (§ 2.8)");
   it.todo("C1: capabilities truth table, against the brief's table typed as data in the test");
   it.todo("C2a: isLearnerLane fails closed on unknown stream ids; parseLane classifies every stream-id format in the codebase");
-  it.todo("C6: no alias survives: deriveAudioCapturePolicy, resolveModeAwareAudioRecordingConsent, assertEffectiveConsent, resolveRecordedConsent, appointmentLiveEntryAllowed have zero references (deriveSessionCapabilities keeps references)");
+  it("C1: no alias survives: the replaced consent symbols have zero references anywhere in src/, tests/ or scripts/", () => {
+    const repoRoot = path.resolve(SRC_ROOT, "..");
+    const REPLACED = [
+      "deriveAudioCapturePolicy",
+      "modeAwareAudioDecision",
+      "resolveModeAwareAudioRecordingConsent",
+      "assertEffectiveConsent",
+      "resolveRecordedConsent",
+      "audio-capture-policy",
+    ];
+    const self = path.resolve(__filename);
+    const offenders: string[] = [];
+    for (const root of ["src", "tests", "scripts"]) {
+      const dir = path.join(repoRoot, root);
+      if (!fs.existsSync(dir)) continue;
+      for (const file of listAllFiles(dir)) {
+        if (path.resolve(file) === self) continue;
+        const text = fs.readFileSync(file, "utf8");
+        for (const name of REPLACED) {
+          if (new RegExp(`(?<![\\w-])${name}(?![\\w-])`).test(text)) {
+            offenders.push(`${path.relative(repoRoot, file).split(path.sep).join("/")}: ${name}`);
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("C1: deriveSessionCapabilities is NOT on the removal list: product code still wraps it", () => {
+    const users = listProductFiles(SRC_ROOT).filter((f) => /\bderiveSessionCapabilities\b/.test(fs.readFileSync(f, "utf8")));
+    expect(users.map(rel).sort()).toEqual(
+      expect.arrayContaining([
+        "app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx",
+        "lib/consent-scope.ts",
+      ])
+    );
+  });
+
+  it.todo("C6: appointmentLiveEntryAllowed has zero references");
   it.todo("C4b/C4c: O1 org stamp loops do O(1) extra work per session: same statement count for 1 and 500 WhiteboardEventBatch rows, zero batch deleteMany, zero blob calls, and a pinned STAMP_MAX_STATEMENTS_PER_SESSION ceiling");
   it.todo("C3a: S14(a) statement order: the End and checkpoint-batch transactions take the session-row lock first, through the snapshot write");
   it.todo("C4b: S14(a2) the intent statement and S14(c) the batch re-check follow the lock");

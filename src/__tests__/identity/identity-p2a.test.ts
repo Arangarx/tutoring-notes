@@ -52,8 +52,6 @@ import {
 import { generateRawToken, hashToken, hmacToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { assertIsSessionParticipant } from "@/lib/session-participant-scope";
-import { assertEffectiveConsent, ConsentError } from "@/lib/consent-scope";
-
 // ---------------------------------------------------------------------------
 // Test env setup
 // ---------------------------------------------------------------------------
@@ -638,18 +636,6 @@ describe("assertIsSessionParticipant (P2a stub)", () => {
     await expect(
       assertIsSessionParticipant("profile-id", "session-id")
     ).rejects.toThrow("NEXT_NOT_FOUND");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// assertEffectiveConsent P2a stub
-// ---------------------------------------------------------------------------
-
-describe("assertEffectiveConsent (P2a stub)", () => {
-  it("returns void (tutor-acknowledged fallback) — never throws ConsentError in P2a", async () => {
-    await expect(
-      assertEffectiveConsent("session-id", "allowAudioRecording")
-    ).resolves.toBeUndefined();
   });
 });
 

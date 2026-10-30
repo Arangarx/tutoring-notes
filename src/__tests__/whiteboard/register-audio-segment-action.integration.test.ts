@@ -40,10 +40,17 @@ jest.mock("@/lib/consent-scope", () => {
   return {
     __esModule: true,
     ...actual,
-    resolveModeAwareAudioRecordingConsent: jest.fn().mockResolvedValue({
-      allow: true,
-      reason: "test",
-    }),
+    // The segment-registration route is under test here, not consent: audio is accepted.
+    resolveSessionCapabilities: jest.fn().mockImplementation(async () =>
+      jest
+        .requireActual<typeof import("@/lib/recording/session-capabilities")>("@/lib/recording/session-capabilities")
+        .deriveSessionCapabilities({
+          hasConsentSnapshot: true,
+          toggles: { audio: true, whiteboard: true, notes: true },
+          sessionMode: "LIVE",
+          notesForbidden: false,
+        })
+    ),
   };
 });
 

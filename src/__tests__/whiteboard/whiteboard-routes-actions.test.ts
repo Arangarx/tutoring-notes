@@ -84,7 +84,7 @@ jest.mock("@/lib/db", () => {
     student: {
       findUniqueOrThrow: jest.fn(),
     },
-    // assertEffectiveConsent (now unconditional) reads sessionConsentSnapshot.
+    // Legacy: consent used to read sessionConsentSnapshot directly; the session gate now joins it (resolveSessionCapabilities).
     // Default null → no-snapshot fallback (consent granted for unclaimed sessions).
     sessionConsentSnapshot: {
       findUnique: jest.fn().mockResolvedValue(null),

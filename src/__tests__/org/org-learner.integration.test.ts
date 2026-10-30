@@ -33,7 +33,7 @@ import path from "node:path";
 import { generateRawToken, hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
 import { createVersionedConsentRecord } from "@/lib/consent-write";
-import { resolveRecordedConsent } from "@/lib/consent-scope";
+import { resolveEffectiveRecordedConsent } from "@/lib/consent-scope";
 import {
   createOrgLearner,
   loadInstructorTaughtSessions,
@@ -836,14 +836,14 @@ describe("org consent write", () => {
       select: { adminUserId: true, organizationId: true, version: true },
     });
     expect(row).toEqual({ adminUserId: null, organizationId: org.id, version: 1 });
-    const resolved = await resolveRecordedConsent({
+    const resolved = await resolveEffectiveRecordedConsent({
       learnerProfileId: profile.id,
       organizationId: org.id,
     });
     expect(resolved?.allowAudioRecording).toBe(false);
     expect(resolved?.allowLiveSession).toBe(true);
     await expect(
-      resolveRecordedConsent({ learnerProfileId: profile.id })
+      resolveEffectiveRecordedConsent({ learnerProfileId: profile.id })
     ).rejects.toThrow("consent_owner_required");
   });
 

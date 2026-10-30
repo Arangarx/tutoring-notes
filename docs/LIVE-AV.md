@@ -291,7 +291,7 @@ fix for a real pilot-blocking bug.
     | Toggle | What it gates | Where enforced |
     |---|---|---|
     | `allowLiveSession` | Student may participate in live sessions (join + WebRTC mic **send**) | `createWhiteboardSession` (flag ON); future learner join handler |
-    | `allowAudioRecording` | Tutor may **persist** student audio (mixdown + segment registration) | Tutor `addRemoteAudio` reconcile (tutor-only); `assertEffectiveConsent` on `registerWhiteboardSessionAudioSegment` / `endWhiteboardSession` |
+    | `allowAudioRecording` | Tutor may **persist** student audio (mixdown + segment registration) | Tutor `addRemoteAudio` reconcile (tutor-only); `resolveSessionCapabilities` (`audio.mode !== "none"`) on `registerWhiteboardSessionAudioSegment` / `endWhiteboardSession` / chunk enqueue |
 
     **Mic-unification contract:** student mic may move onto a
     **publish-only** Web Audio graph (same fan-out pattern as tutor's

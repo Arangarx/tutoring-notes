@@ -86,17 +86,6 @@ jest.mock("@/lib/student-scope", () => ({
   requireStudentScope: () => requireStudentScopeMock(),
   assertOwnsStudent: (id: string) => assertOwnsStudentMock(id),
 }));
-
-jest.mock("@/lib/consent-scope", () => {
-  const actual = jest.requireActual<typeof import("@/lib/consent-scope")>(
-    "@/lib/consent-scope"
-  );
-  return {
-    ...actual,
-    assertEffectiveConsent: jest.fn().mockResolvedValue(undefined),
-  };
-});
-
 import { createWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
 import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";

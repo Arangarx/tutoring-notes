@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import type { UseAudioRecorderReturn } from "@/hooks/useAudioRecorder";
-import type { AudioCapturePolicy } from "@/lib/recording/audio-capture-policy";
+import type { AudioMode } from "@/lib/recording/session-capabilities";
 import RecordingControlPanel from "@/components/recording/RecordingControlPanel";
 import {
   getOrCreateUploadOutbox,
@@ -76,7 +76,7 @@ type Props = {
   userWantsRecording: boolean;
   recordingActive: boolean;
   /** Block B: when "none", never start or resume capture. Defaults to "full". */
-  audioCapturePolicy?: AudioCapturePolicy;
+  audioCapturePolicy?: AudioMode;
   /** Disables standalone Start (etc.) — e.g. until the workspace toolbar arms recording. */
   panelDisabled?: boolean;
   /**

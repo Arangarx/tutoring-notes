@@ -71,8 +71,16 @@ jest.mock("@/lib/tutor-approval-scope", () => ({
 
 jest.mock("@/lib/consent-scope", () => ({
   __esModule: true,
-  assertEffectiveConsent: jest.fn().mockResolvedValue(undefined),
-  resolveModeAwareAudioRecordingConsent: jest.fn().mockResolvedValue({ allow: true }),
+  resolveSessionCapabilities: jest.fn().mockImplementation(async () =>
+    jest
+      .requireActual<typeof import("@/lib/recording/session-capabilities")>("@/lib/recording/session-capabilities")
+      .deriveSessionCapabilities({
+        hasConsentSnapshot: true,
+        toggles: { audio: true, whiteboard: true, notes: true },
+        sessionMode: "LIVE",
+        notesForbidden: false,
+      })
+  ),
   ConsentError: class ConsentError extends Error {
     constructor(public permission: string, message?: string) {
       super(message ?? permission);

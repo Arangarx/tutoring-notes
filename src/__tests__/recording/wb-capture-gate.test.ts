@@ -1,4 +1,4 @@
-import { deriveWbCaptureActive } from "@/lib/recording/audio-capture-policy";
+import { deriveWbCaptureActive } from "@/lib/recording/session-capabilities";
 
 /**
  * p3-clock (disconnect pause/freeze) — the whiteboard-capture gate.
@@ -15,11 +15,11 @@ import { deriveWbCaptureActive } from "@/lib/recording/audio-capture-policy";
  * that the old `wbSignal` wiring got wrong.
  */
 describe("deriveWbCaptureActive", () => {
-  describe("audio modes (policy !== none)", () => {
+  describe("audio modes (audioMode !== none)", () => {
     test("captures while recording", () => {
       expect(
         deriveWbCaptureActive({
-          policy: "full",
+          audioMode: "full",
           recordingActive: true,
           isPaused: false,
           wbEventsActive: true,
@@ -30,7 +30,7 @@ describe("deriveWbCaptureActive", () => {
     test("CONTINUES capturing while FSM is paused (disconnect gap) — the fix", () => {
       expect(
         deriveWbCaptureActive({
-          policy: "full",
+          audioMode: "full",
           recordingActive: false,
           isPaused: true,
           wbEventsActive: true,
@@ -39,7 +39,7 @@ describe("deriveWbCaptureActive", () => {
       // tutor_only (student audio denied) behaves the same for WB capture.
       expect(
         deriveWbCaptureActive({
-          policy: "tutor_only",
+          audioMode: "tutor_only",
           recordingActive: false,
           isPaused: true,
           wbEventsActive: true,
@@ -50,7 +50,7 @@ describe("deriveWbCaptureActive", () => {
     test("does NOT capture while armed (armed is not paused — CF-2.1 gate preserved)", () => {
       expect(
         deriveWbCaptureActive({
-          policy: "tutor_only",
+          audioMode: "tutor_only",
           recordingActive: false,
           isPaused: false,
           wbEventsActive: true,
@@ -61,7 +61,7 @@ describe("deriveWbCaptureActive", () => {
     test("does NOT capture while idle/stopping (neither recording nor paused)", () => {
       expect(
         deriveWbCaptureActive({
-          policy: "full",
+          audioMode: "full",
           recordingActive: false,
           isPaused: false,
           wbEventsActive: false,
@@ -70,11 +70,11 @@ describe("deriveWbCaptureActive", () => {
     });
   });
 
-  describe("policy === none (IN_PERSON / audio denied) — follows wbEventsActive", () => {
+  describe("audioMode === none (IN_PERSON / audio denied) — follows wbEventsActive", () => {
     test("captures when wbEventsActive (CF-2 IN_PERSON replay)", () => {
       expect(
         deriveWbCaptureActive({
-          policy: "none",
+          audioMode: "none",
           recordingActive: false,
           isPaused: false,
           wbEventsActive: true,
@@ -85,7 +85,7 @@ describe("deriveWbCaptureActive", () => {
     test("does not capture when session not active", () => {
       expect(
         deriveWbCaptureActive({
-          policy: "none",
+          audioMode: "none",
           recordingActive: false,
           isPaused: true, // even a paused FSM: none-mode strictly tracks wbEventsActive
           wbEventsActive: false,
@@ -100,7 +100,7 @@ describe("deriveWbCaptureActive", () => {
       // turn capture on the way it does in audio modes.
       expect(
         deriveWbCaptureActive({
-          policy: "none",
+          audioMode: "none",
           recordingActive: false,
           isPaused: true,
           wbEventsActive: true,
