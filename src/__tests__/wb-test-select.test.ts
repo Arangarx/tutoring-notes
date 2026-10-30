@@ -35,3 +35,15 @@ describe("wb-test-select org paths", () => {
     expect(expandTags(["@org"])).toEqual(expect.arrayContaining(["@org", "@wb-presence"]));
   });
 });
+
+describe("wb-test-select session review transcript", () => {
+  it("maps SessionReviewMode and the review transcript spec to @wb-recording and @wb-chrome", () => {
+    const files = [
+      "src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/SessionReviewMode.tsx",
+      "tests/integration/wb-session-review-transcript.spec.ts",
+    ];
+    for (const file of files) {
+      expect(tagsForPaths([file]).sort()).toEqual(["@wb-chrome", "@wb-recording"]);
+    }
+  });
+});

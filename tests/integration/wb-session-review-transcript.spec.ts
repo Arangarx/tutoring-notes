@@ -9,7 +9,7 @@
  *   npx playwright test tests/integration/wb-session-review-transcript.spec.ts --project=wb-regression
  */
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Response } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { TAG } from "../test-tags";
@@ -167,10 +167,79 @@ async function openTutorReview(page: Page, fixture: ReviewFixture): Promise<void
   });
 }
 
+type Box = { x: number; y: number; width: number; height: number };
+
+/** Relational containment: inner sits inside outer, with a few px of slack. */
+function expectBoxInside(inner: Box, outer: Box, slack = 4): void {
+  expect(inner.x).toBeGreaterThanOrEqual(outer.x - slack);
+  expect(inner.y).toBeGreaterThanOrEqual(outer.y - slack);
+  expect(inner.x + inner.width).toBeLessThanOrEqual(outer.x + outer.width + slack);
+  expect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height + slack);
+}
+
 async function expectNoTranscript(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: /transcript/i })).toHaveCount(0);
   await expect(page.getByTestId("wb-review-transcript")).toHaveCount(0);
   await expect(page.getByText(TRANSCRIPT_MARK)).toHaveCount(0);
+}
+
+function isDocumentOrFlight(response: Response): boolean {
+  const contentType = response.headers()["content-type"] ?? "";
+  const requestHeaders = response.request().headers();
+  return (
+    response.request().resourceType() === "document" ||
+    contentType.includes("text/x-component") ||
+    requestHeaders["rsc"] === "1" ||
+    response.url().includes("_rsc")
+  );
+}
+
+/**
+ * DOM absence plus the navigation document, the live HTML, and any RSC flight body.
+ * A transcript string that never mounts still fails if the server sent it.
+ */
+async function gotoAndExpectNoTranscript(
+  page: Page,
+  url: string,
+  readyTestId: string
+): Promise<void> {
+  const flightBodies: string[] = [];
+  const onResponse = async (response: Response) => {
+    if (!isDocumentOrFlight(response)) return;
+    const status = response.status();
+    if (status >= 300 && status < 400) return;
+    try {
+      flightBodies.push(await response.text());
+    } catch {
+      // Body already read, or a response with no body.
+    }
+  };
+  page.on("response", onResponse);
+  try {
+    const navigation = await page.goto(url, { waitUntil: "domcontentloaded" });
+    let navigationText = "";
+    if (navigation && navigation.status() < 300) {
+      try {
+        navigationText = await navigation.text();
+      } catch {
+        navigationText = "";
+      }
+    }
+    await expect(page.getByTestId(readyTestId)).toBeVisible({ timeout: 30_000 });
+    await expectNoTranscript(page);
+    const dom = await page.content();
+    expect(navigationText.includes(TRANSCRIPT_MARK), "navigation response text").toBe(
+      false
+    );
+    expect(dom.includes(TRANSCRIPT_MARK), "page HTML").toBe(false);
+    for (const [index, body] of flightBodies.entries()) {
+      expect(body.includes(TRANSCRIPT_MARK), `RSC/flight response ${index}`).toBe(
+        false
+      );
+    }
+  } finally {
+    page.off("response", onResponse);
+  }
 }
 
 test.describe("review transcript toggle", { tag: [TAG.WB_RECORDING, TAG.WB_CHROME] }, () => {
@@ -194,29 +263,103 @@ test.describe("review transcript toggle", { tag: [TAG.WB_RECORDING, TAG.WB_CHROM
     await expect(page.getByRole("button", { name: "Show transcript" })).toBeVisible();
   });
 
-  test("the notes surface stays above the fold with the transcript collapsed", async ({
+  test("collapsed Show transcript stays in view and opening it grows the aside", async ({
     page,
   }) => {
     test.setTimeout(120_000);
     const fixture = await seedEndedReviewWithTranscript();
     await openTutorReview(page, fixture);
 
+    // Collapsed: the trigger is on screen inside the notes aside, with no scroll.
     await expect(page.getByTestId("wb-review-transcript")).not.toBeVisible();
+    const show = page.getByRole("button", { name: "Show transcript" });
+    await expect(show).toBeVisible();
 
-    const notes = page.getByTestId("wb-review-notes-prominent");
-    const notesBox = await notes.boundingBox();
+    const scrolled = await page.evaluate(() => ({
+      windowY: window.scrollY,
+      asideTop:
+        document.querySelector("[data-testid='wb-review-notes-prominent']")
+          ?.scrollTop ?? -1,
+    }));
+    expect(scrolled.windowY).toBe(0);
+    expect(scrolled.asideTop).toBe(0);
+
+    const showBox = await show.boundingBox();
+    const aside = page.getByTestId("wb-review-notes-prominent");
+    const asideBox = await aside.boundingBox();
     const viewport = page.viewportSize();
-    expect(notesBox, "notes surface has a box").not.toBeNull();
+    expect(showBox, "Show transcript has a box").not.toBeNull();
+    expect(asideBox, "notes aside has a box").not.toBeNull();
     expect(viewport, "viewport is set").not.toBeNull();
-    // Above the fold: the notes surface top sits inside the viewport.
-    expect(notesBox!.y).toBeGreaterThanOrEqual(0);
-    expect(notesBox!.y).toBeLessThan(viewport!.height);
+    expectBoxInside(showBox!, {
+      x: 0,
+      y: 0,
+      width: viewport!.width,
+      height: viewport!.height,
+    });
+    expectBoxInside(showBox!, asideBox!);
 
-    const topics = page.locator("#wb-note-topics");
-    const topicsBox = await topics.boundingBox();
-    expect(topicsBox, "notes field has a box").not.toBeNull();
-    expect(topicsBox!.y).toBeGreaterThanOrEqual(notesBox!.y);
-    expect(topicsBox!.y).toBeLessThan(viewport!.height);
+    const closedScrollHeight = await aside.evaluate((el) => el.scrollHeight);
+    await show.click();
+    await expect(page.getByTestId("wb-review-transcript")).toBeVisible();
+    await expect(page.getByTestId("wb-review-transcript")).toContainText(TRANSCRIPT_MARK);
+    // Opening the long transcript makes the aside's scrollable content taller.
+    await expect
+      .poll(async () => aside.evaluate((el) => el.scrollHeight))
+      .toBeGreaterThan(closedScrollHeight);
+  });
+
+  test("open transcript scrolls inside the docked narrow aside", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const fixture = await seedEndedReviewWithTranscript();
+    await page.goto(
+      `/admin/students/${fixture.studentId}/whiteboard/${fixture.whiteboardSessionId}/workspace?surface=replay`,
+      { waitUntil: "domcontentloaded" }
+    );
+    const aside = page.getByTestId("wb-review-notes-docked");
+    await expect(aside).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("#wb-note-topics")).toHaveValue(NOTE_TOPICS, {
+      timeout: 30_000,
+    });
+
+    const main = page.getByTestId("wb-review-main-frame");
+    const mainBefore = await main.boundingBox();
+    expect(mainBefore, "replay column has a box").not.toBeNull();
+    const closedScrollHeight = await aside.evaluate((el) => el.scrollHeight);
+
+    await page.getByRole("button", { name: "Show transcript" }).click();
+    const transcript = page.getByTestId("wb-review-transcript");
+    await expect(transcript).toBeVisible();
+    await expect
+      .poll(async () => aside.evaluate((el) => el.scrollHeight))
+      .toBeGreaterThan(closedScrollHeight);
+
+    const openMetrics = await aside.evaluate((el) => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    // The long transcript scrolls inside the aside (max-height 40vh) rather than the page.
+    expect(openMetrics.scrollHeight).toBeGreaterThan(openMetrics.clientHeight);
+
+    const mainAfter = await main.boundingBox();
+    const asideBox = await aside.boundingBox();
+    const viewport = page.viewportSize();
+    expect(mainAfter, "replay column still has a box").not.toBeNull();
+    expect(asideBox, "docked aside has a box").not.toBeNull();
+    expect(viewport, "viewport is set").not.toBeNull();
+    // Opening the transcript does not push the replay column down or off screen.
+    expect(Math.abs(mainAfter!.y - mainBefore!.y)).toBeLessThanOrEqual(4);
+    expect(mainAfter!.y).toBeGreaterThanOrEqual(0);
+    expect(mainAfter!.y).toBeLessThan(viewport!.height);
+    expect(asideBox!.y + asideBox!.height).toBeLessThanOrEqual(mainAfter!.y + 4);
+
+    const transcriptBox = await transcript.boundingBox();
+    expect(transcriptBox, "transcript has a box").not.toBeNull();
+    // Transcript content extends past the aside's visible edge.
+    expect(transcriptBox!.y + transcriptBox!.height).toBeGreaterThan(
+      asideBox!.y + asideBox!.height + 4
+    );
   });
 
   test("the student and family replay never shows the transcript control", async ({
@@ -228,23 +371,16 @@ test.describe("review transcript toggle", { tag: [TAG.WB_RECORDING, TAG.WB_CHROM
     try {
       await loginLearnerInContext(context, fixture.learnerHandle, LEARNER_PIN);
       const learnerPage = await context.newPage();
-      await learnerPage.goto(
+      await gotoAndExpectNoTranscript(
+        learnerPage,
         `/join/notes/${fixture.whiteboardSessionId}/whiteboard`,
-        { waitUntil: "domcontentloaded" }
+        "learner-wb-replay-page"
       );
-      await expect(learnerPage.getByTestId("learner-wb-replay-page")).toBeVisible({
-        timeout: 30_000,
-      });
-      await expectNoTranscript(learnerPage);
-
-      await learnerPage.goto(
+      await gotoAndExpectNoTranscript(
+        learnerPage,
         `/s/${fixture.shareToken}/whiteboard/${fixture.whiteboardSessionId}`,
-        { waitUntil: "domcontentloaded" }
+        "wb-share-replay-page"
       );
-      await expect(learnerPage.getByTestId("wb-share-replay-page")).toBeVisible({
-        timeout: 30_000,
-      });
-      await expectNoTranscript(learnerPage);
     } finally {
       await context.close();
     }
