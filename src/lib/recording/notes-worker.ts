@@ -49,6 +49,7 @@ import {
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 import { REDUCE_MODEL } from "@/lib/ai-models";
 import { holdPoint } from "@/lib/test-seams";
+import { gateNotesDraft } from "@/lib/recording/consent-gates";
 import { TUTOR_MIC_STREAM_ID, parseLane } from "@/lib/recording/session-capabilities";
 
 /**
@@ -224,6 +225,12 @@ export async function processLiveReduceJob(
   sessionId: string
 ): Promise<LiveReduceResult> {
   console.log(`[tnt] wbsid=${sessionId} action=live_reduce_start`);
+
+  // --- 0. Consent gate (wave C2): notes off / no audio / org no-notes -> no draft, no row. -----------
+  const liveGate = await gateNotesDraft(sessionId, "live_reduce");
+  if (!liveGate.allow) {
+    return { outcome: "skipped", reason: liveGate.reason };
+  }
 
   // --- 1. Watermark check: skip if draft is already current -----------------
   const note = await getTutorNoteBySessionId(sessionId);
@@ -450,11 +457,23 @@ export async function processNotesReduceJob(
     }
   }
 
+
   if (!session.endedAt) {
     console.warn(
       `[tnt] wbsid=${sessionId} action=reduce_abort reason=session_not_sealed`
     );
     return { outcome: "skipped", reason: "session_not_sealed" };
+  }
+
+  // Consent gate (wave C2): notes off, org no-notes, or in-person audio off (nothing to draft from). Terminal:
+  // an existing pending/generating row becomes `skipped` so the notes sweep (oldest 10 pending/generating) cannot
+  // starve on it and the review card stops spinning. With no row, none is created (so no placeholder note, N5).
+  const notesGate = await gateNotesDraft(sessionId, "reduce");
+  if (!notesGate.allow) {
+    if (note && (note.status === "pending" || note.status === "generating")) {
+      await updateTutorNote(sessionId, { status: "skipped", error: notesGate.reason });
+    }
+    return { outcome: "skipped", reason: notesGate.reason };
   }
 
   const sealedAt = session.endedAt;

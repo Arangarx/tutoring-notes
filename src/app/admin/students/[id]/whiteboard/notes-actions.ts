@@ -34,8 +34,11 @@ import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue
 import {
   getTutorNoteBySessionId,
   getTranscriptChunksBySessionId,
+  updateTranscriptChunkStatus,
   updateTutorNote,
 } from "@/lib/recording/transcript-store";
+import { gateNotesDraft, gateTranscription } from "@/lib/recording/consent-gates";
+import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
 import type { TutorNote } from "@prisma/client";
 import { TRANSCRIBE_SWEEP_MAX_ATTEMPTS } from "@/lib/recording/transcribe-sweep-config";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
@@ -52,21 +55,25 @@ import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
  * Fire-and-forget from the client — this action itself returns fast.
  * The actual chunk work runs in fire-and-forget sub-workers.
  *
+ * Consent (wave C2): each chunk's STORED lane is read off the row and passed explicitly, and gated; a chunk the
+ * session's capabilities refuse is marked `refused` (terminal) instead of being kicked, so it never returns.
+ *
  * Trust: assertOwnsWhiteboardSession before touching transcription infra.
  */
 export async function kickSessionChunksAction(
   whiteboardSessionId: string
-): Promise<{ kicked: number }> {
+): Promise<{ kicked: number; refused: number }> {
   const kickSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
   // B1 cost gate: WAITLISTED tutors cannot trigger transcription kicks.
   await assertTutorApproved(kickSession.adminUserId);
 
   const chunks = await getTranscriptChunksBySessionId(whiteboardSessionId);
 
-  // Kick non-done, non-permanently-failed chunks (under max attempts).
+  // Kick non-settled, non-permanently-failed chunks (under max attempts). `done` and `refused` are settled.
   const toKick = chunks.filter(
     (c) =>
       c.status !== "done" &&
+      c.status !== "refused" &&
       !(c.status === "failed" && c.attempts >= TRANSCRIBE_SWEEP_MAX_ATTEMPTS)
   );
 
@@ -74,16 +81,30 @@ export async function kickSessionChunksAction(
     `[txc] wbsid=${whiteboardSessionId} action=session_sweep_kick eligible=${toKick.length} total=${chunks.length}`
   );
 
+  let kicked = 0;
+  let refused = 0;
   for (const chunk of toKick) {
+    const decision = await gateTranscription(whiteboardSessionId, chunk.streamId, "kick");
+    if (!decision.allow) {
+      await updateTranscriptChunkStatus(whiteboardSessionId, chunk.id, "refused", {
+        error: decision.reason,
+      });
+      refused += 1;
+      continue;
+    }
     // Fire-and-forget per chunk — reuses existing enqueue mechanism with durability.
     await enqueueChunkTranscribe({
       sessionId: whiteboardSessionId,
       chunkBlobUrl: chunk.chunkBlobUrl,
       recordingTimeOffsetMs: chunk.recordingTimeOffsetMs,
+      streamId: chunk.streamId,
+      speakerId: chunk.speakerId,
+      surface: "kick",
     });
+    kicked += 1;
   }
 
-  return { kicked: toKick.length };
+  return { kicked, refused };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +152,11 @@ export async function triggerNotesGenerationAction(
         `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_skip reason=session_not_sealed`
       );
       return { ok: false, error: "Session is not sealed yet" };
+    }
+
+    // Consent (wave C2): notes off, org no-notes, or nothing to draft from (in-person audio off).
+    if (!(await gateNotesDraft(whiteboardSessionId, "trigger")).allow) {
+      return { ok: false, error: NOTES_SKIPPED_COPY };
     }
 
     await enqueueNotesReduce(whiteboardSessionId);
@@ -207,6 +233,11 @@ export async function regenerateNotesAction(
     }
     // B1 cost gate: WAITLISTED tutors cannot regenerate notes (OpenAI spend).
     await assertTutorApproved(regenSession.adminUserId);
+
+    // Consent (wave C2): refuse BEFORE the note is reset to pending, so a refused regenerate leaves the row as it was.
+    if (!(await gateNotesDraft(whiteboardSessionId, "regenerate")).allow) {
+      return { ok: false, error: NOTES_SKIPPED_COPY };
+    }
 
     const existing = await getTutorNoteBySessionId(whiteboardSessionId);
     if (existing && (existing.status === "generating")) {

@@ -83,6 +83,9 @@ describe("POST /api/queues/chunk-transcribe", () => {
       sessionId: VALID_PAYLOAD.sessionId,
       chunkBlobUrl: VALID_PAYLOAD.chunkBlobUrl,
       recordingTimeOffsetMs: undefined,
+      streamId: undefined,
+      speakerId: undefined,
+      surface: "queue",
     });
   });
 
@@ -184,6 +187,49 @@ describe("POST /api/queues/chunk-transcribe", () => {
     );
   });
 
+  // -------------------------------------------------------------------------
+  // 8b. Lane identity survives the queue hop (consent wave C2, plan § 2.3)
+  // -------------------------------------------------------------------------
+  test("streamId and speakerId in the payload reach the worker (the schema used to strip them)", async () => {
+    mockProcessChunkTranscribeJob.mockResolvedValue("done");
+
+    await POST(
+      makeRequest({ ...VALID_PAYLOAD, streamId: "speaker:learner-1:transcript", speakerId: "learner-1" })
+    );
+
+    expect(mockProcessChunkTranscribeJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        streamId: "speaker:learner-1:transcript",
+        speakerId: "learner-1",
+        surface: "queue",
+      })
+    );
+  });
+
+  test("a payload without a lane is passed through lane-less: the route never invents tutor:mic", async () => {
+    mockProcessChunkTranscribeJob.mockResolvedValue("done");
+
+    await POST(makeRequest(VALID_PAYLOAD));
+
+    const arg = mockProcessChunkTranscribeJob.mock.calls[0][0] as { streamId?: string };
+    expect(arg.streamId).toBeUndefined();
+  });
+
+  test("worker refused (consent forbids this lane) → 200, never a retryable 500", async () => {
+    mockProcessChunkTranscribeJob.mockResolvedValue("refused");
+
+    const res = await POST(makeRequest({ ...VALID_PAYLOAD, streamId: "speaker:learner-1:transcript" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({ ok: true, outcome: "refused" });
+  });
+
+  test("empty streamId → 400", async () => {
+    const res = await POST(makeRequest({ ...VALID_PAYLOAD, streamId: "" }));
+    expect(res.status).toBe(400);
+    expect(mockProcessChunkTranscribeJob).not.toHaveBeenCalled();
+  });
   // -------------------------------------------------------------------------
   // 9. Negative recordingTimeOffsetMs is rejected
   // -------------------------------------------------------------------------

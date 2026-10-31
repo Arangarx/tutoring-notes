@@ -23,6 +23,7 @@ import "server-only";
  *  (c) NO SILENT LOSS.
  *      Every outcome writes a row/status. Status transitions:
  *      [new] → pending → transcribing → done | failed
+ *      pending | failed → refused (terminal; consent capabilities forbid the lane or notes)
  *
  * Log prefix: [txc]  Per-session ID on every line.
  */
@@ -32,12 +33,13 @@ import {
   getTranscriptChunkByBlobUrl,
   upsertTranscriptChunk,
   getTranscriptChunksBySessionId,
+  updateTranscriptChunkStatus,
 } from "@/lib/recording/transcript-store";
 import { transcribeChunk } from "@/lib/recording/transcribe-chunk";
 import { extractChunkMap } from "@/lib/recording/extract-chunk";
 import { db } from "@/lib/db";
 import { isTutorApproved } from "@/lib/tutor-approval-scope";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
+import { gateTranscription, type LaneGateSurface } from "@/lib/recording/consent-gates";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,11 +54,23 @@ export type ChunkTranscribeInput = {
    * sum of prior completed TranscriptChunk.durationMs for this session.
    */
   recordingTimeOffsetMs?: number;
-  /** Capture stream id — defaults to tutor:mic when omitted. */
+  /**
+   * Capture lane (`streamId`). Only used to CREATE a row. When a row already exists its stored lane wins and a
+   * differing input is logged as `lane_mismatch`. There is no default: with neither a stored row nor an input
+   * lane the worker cannot tell which lane this is, so it declines (`worker_skip reason=lane_unknown`).
+   */
   streamId?: string;
-  /** Optional per-speaker label for future per-lane transcription. */
+  /** Per-speaker label. Like `streamId`, only used to create a row; the stored value wins afterwards. */
   speakerId?: string | null;
+  /** Which entry called the worker, for the refusal log line. Defaults to `chunk`. */
+  surface?: Exclude<LaneGateSurface, "segment">;
 };
+
+/**
+ * `refused`: consent capabilities forbid this lane or notes (terminal: the row, if any, is marked `refused`).
+ * `skipped`: nothing to do (already done, in flight, tutor unapproved, or lane unknown).
+ */
+export type ChunkTranscribeOutcome = "done" | "failed" | "skipped" | "refused";
 
 // ---------------------------------------------------------------------------
 // Offset derivation
@@ -92,17 +106,16 @@ async function deriveRecordingTimeOffsetMs(sessionId: string): Promise<number> {
  *
  * @returns 'done' if successfully transcribed (or was already done),
  *          'failed' if a non-retryable failure was persisted to the row,
- *          'skipped' if the chunk was already done (idempotent no-op).
+ *          'refused' if the session's consent capabilities forbid this chunk's lane (terminal),
+ *          'skipped' for an idempotent no-op (already done, in flight, unapproved tutor, unknown lane).
  */
 export async function processChunkTranscribeJob(
   input: ChunkTranscribeInput
-): Promise<"done" | "failed" | "skipped"> {
+): Promise<ChunkTranscribeOutcome> {
   const { sessionId, chunkBlobUrl } = input;
-  const streamId = input.streamId ?? TUTOR_MIC_STREAM_ID;
-  const speakerId = input.speakerId ?? null;
 
   console.log(
-    `[txc] wbsid=${sessionId} action=worker_start chunkBlobUrl=${chunkBlobUrl} streamId=${streamId}`
+    `[txc] wbsid=${sessionId} action=worker_start chunkBlobUrl=${chunkBlobUrl} streamId=${input.streamId ?? "n/a"}`
   );
 
   // --- 0. B1 cost gate — skip WAITLISTED tutor sessions ----------------------
@@ -133,11 +146,53 @@ export async function processChunkTranscribeJob(
     return "skipped";
   }
 
+  if (existing?.status === "refused") {
+    // Terminal: a refusal is never re-litigated by a retry or a sweep.
+    console.log(
+      `[txc] wbsid=${sessionId} action=worker_skip reason=already_refused chunkId=${existing.id}`
+    );
+    return "refused";
+  }
+
   if (existing?.status === "transcribing") {
     console.log(
       `[txc] wbsid=${sessionId} action=worker_skip reason=already_transcribing chunkId=${existing.id}`
     );
     return "skipped";
+  }
+
+  // --- 1b. Lane identity (consent wave C2, plan § 2.3) ---------------------------
+  // The STORED row's lane wins over the input: a retry, a kick or a sweep must never relabel a chunk. With no row
+  // the input names the lane; with neither there is no safe default (a missing lane used to become `tutor:mic`).
+  if (
+    existing &&
+    input.streamId !== undefined &&
+    input.streamId !== existing.streamId
+  ) {
+    console.log(
+      `[cns] wbsid=${sessionId} action=lane_mismatch stored=${existing.streamId} input=${input.streamId}`
+    );
+  }
+  const streamId = existing ? existing.streamId : input.streamId;
+  if (streamId === undefined) {
+    console.log(
+      `[txc] wbsid=${sessionId} action=worker_skip reason=lane_unknown chunkBlobUrl=${chunkBlobUrl}`
+    );
+    return "skipped";
+  }
+  const speakerId = existing ? existing.speakerId : (input.speakerId ?? null);
+
+  // --- 1c. Consent gate (re-check at the last entry) ------------------------------
+  // Refusal is terminal. If the row exists it is marked `refused` (lane untouched), so the sweep, which selects only
+  // pending/transcribing/retryable-failed rows, cannot loop on it. If no row exists none is created.
+  const decision = await gateTranscription(sessionId, streamId, input.surface ?? "chunk");
+  if (!decision.allow) {
+    if (existing) {
+      await updateTranscriptChunkStatus(sessionId, existing.id, "refused", {
+        error: decision.reason,
+      });
+    }
+    return "refused";
   }
 
   // --- 2. Resolve recording-time offset ---------------------------------------

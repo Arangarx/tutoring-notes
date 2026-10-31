@@ -29,6 +29,8 @@ export type TranscribeSweepResult = {
   processed: number;
   done: number;
   skipped: number;
+  /** Chunks the consent gate refused this run (terminal `refused`; they leave the sweep). */
+  refused: number;
   failed: number;
   timedOut: boolean;
   notesScanned: number;
@@ -59,6 +61,7 @@ export async function runTranscribeSweep(
     processed: 0,
     done: 0,
     skipped: 0,
+    refused: 0,
     failed: 0,
     timedOut: false,
     notesScanned: 0,
@@ -80,7 +83,7 @@ export async function runTranscribeSweep(
   }
 
   console.log(
-    `[txc] action=sweep_done scanned=${result.scanned} processed=${result.processed} done=${result.done} skipped=${result.skipped} failed=${result.failed} timedOut=${result.timedOut}`
+    `[txc] action=sweep_done scanned=${result.scanned} processed=${result.processed} done=${result.done} skipped=${result.skipped} refused=${result.refused} failed=${result.failed} timedOut=${result.timedOut}`
   );
 
   // Notes sweep — retry pending TutorNote rows for sealed sessions.
@@ -172,16 +175,23 @@ async function processSweepChunk(
     `[txc] wbsid=${chunk.sessionId} action=sweep_pick chunkId=${chunk.id} status=${chunk.status} attempts=${chunk.attempts}`
   );
 
+  // The STORED lane goes to the worker explicitly (consent wave C2): a swept learner chunk must keep its lane so the
+  // worker's gate can refuse it. The worker also prefers the row's lane, so this is belt and braces.
   const outcome = await processChunkTranscribeJob({
     sessionId: chunk.sessionId,
     chunkBlobUrl: chunk.chunkBlobUrl,
     recordingTimeOffsetMs: chunk.recordingTimeOffsetMs,
+    streamId: chunk.streamId,
+    speakerId: chunk.speakerId,
+    surface: "sweep",
   });
 
   if (outcome === "done") {
     result.done += 1;
   } else if (outcome === "skipped") {
     result.skipped += 1;
+  } else if (outcome === "refused") {
+    result.refused += 1;
   } else {
     result.failed += 1;
   }

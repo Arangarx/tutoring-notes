@@ -14,6 +14,7 @@ describe("transcript-types", () => {
       "transcribing",
       "done",
       "failed",
+      "refused",
     ]);
   });
 
@@ -24,6 +25,7 @@ describe("transcript-types", () => {
       "done",
       "failed",
       "partial",
+      "skipped",
     ]);
   });
 
@@ -32,6 +34,9 @@ describe("transcript-types", () => {
     expect(isTranscriptChunkStatus("generating")).toBe(false);
     expect(isTutorNoteStatus("partial")).toBe(true);
     expect(isTutorNoteStatus("transcribing")).toBe(false);
+    expect(isTranscriptChunkStatus("refused")).toBe(true);
+    expect(isTutorNoteStatus("skipped")).toBe(true);
+    expect(isTutorNoteStatus("refused")).toBe(false);
   });
 
   test("serializeChunkExtraction round-trips via parseChunkExtraction", () => {

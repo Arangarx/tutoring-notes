@@ -54,6 +54,17 @@ jest.mock("@/lib/recording/transcript-store", () => ({
   upsertTutorNotePending: jest.fn(),
 }));
 
+// The consent gate has its own tests (consent-gates.test.ts, wb-consent-matrix N-rows); allow here so this file keeps
+// testing the bridge. Refusals of regenerate/trigger are covered in whiteboard/triggerNotesGeneration-consent.test.ts.
+const mockGateNotesDraft = jest.fn();
+jest.mock("@/lib/recording/consent-gates", () => ({
+  gateNotesDraft: (...args: unknown[]) => mockGateNotesDraft(...args),
+  gateTranscription: jest.fn().mockResolvedValue({ allow: true }),
+}));
+beforeEach(() => {
+  mockGateNotesDraft.mockResolvedValue({ allow: true });
+});
+
 jest.mock("@/lib/env", () => ({
   env: { OPENAI_API_KEY: "test-key" },
 }));
@@ -75,6 +86,8 @@ jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 
 jest.mock("@/lib/whiteboard-scope", () => ({
   assertOwnsWhiteboardSession: jest.fn(),
+  // Stale-mock fix (was missing, so every action here returned ok:false at the org-edit check, pre-C2 as well).
+  orgBoardEditsAllowed: jest.fn().mockResolvedValue(true),
 }));
 
 // ---------------------------------------------------------------------------
@@ -264,6 +277,7 @@ describe("(vi) TutorNote content: nextSteps carries plan+homework, no homework f
 describe("(v) regenerate preserves prior TutorNote content on failure", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGateNotesDraft.mockResolvedValue({ allow: true });
     setupReduceWorkerMocks();
   });
 
@@ -310,6 +324,18 @@ describe("(v) regenerate preserves prior TutorNote content on failure", () => {
       SESSION_ID,
       expect.objectContaining({ status: "pending" })
     );
+  });
+  it("regenerateNotesAction refuses when notes are off: visible reason, prior note untouched, nothing re-run (N3)", async () => {
+    mockAssertOwns.mockResolvedValue({ id: SESSION_ID, studentId: STUDENT_ID, adminUserId: ADMIN_ID });
+    mockGetNote.mockResolvedValue({ status: "done", sessionId: SESSION_ID });
+    mockGateNotesDraft.mockResolvedValue({ allow: false, reason: "notes_off" });
+
+    const result = await regenerateNotesAction(SESSION_ID);
+
+    expect(result).toEqual({ ok: false, error: "Notes are off for this session" });
+    expect(mockGateNotesDraft).toHaveBeenCalledWith(SESSION_ID, "regenerate");
+    // The prior note is not reset to pending, so it is not lost when regeneration is refused.
+    expect(mockUpdateNote).not.toHaveBeenCalled();
   });
 });
 

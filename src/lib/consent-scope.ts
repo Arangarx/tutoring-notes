@@ -551,6 +551,18 @@ export async function resolveSessionCapabilities(
   whiteboardSessionId: string,
   client?: ConsentReadClient
 ): Promise<SessionCapabilities> {
+  return (await resolveSessionCapabilityContext(whiteboardSessionId, client)).capabilities;
+}
+
+/**
+ * `resolveSessionCapabilities` plus the org `notesForbidden` flag it already reads. The per-lane server gates need
+ * the flag only to NAME a refusal (`notes_forbidden` vs `notes_off`); the capabilities already treat the two alike.
+ * A missing session fails closed and reports `notesForbidden: true`, like the capabilities it derives from.
+ */
+export async function resolveSessionCapabilityContext(
+  whiteboardSessionId: string,
+  client?: ConsentReadClient
+): Promise<{ capabilities: SessionCapabilities; notesForbidden: boolean }> {
   const readSession = (c: ConsentReadClient) =>
     c.whiteboardSession.findUnique({
       where: { id: whiteboardSessionId },
@@ -577,15 +589,20 @@ export async function resolveSessionCapabilities(
         label: "resolveSessionCapabilities.session",
       });
 
-  const log = (capabilities: SessionCapabilities, source: CapabilitySource, online: boolean | "n/a") => {
+  const log = (
+    capabilities: SessionCapabilities,
+    source: CapabilitySource,
+    online: boolean | "n/a",
+    notesForbidden: boolean
+  ) => {
     console.log(
       `[cns] wbsid=${whiteboardSessionId} action=capabilities_resolved audio=${capabilities.audio.mode} wb=${capabilities.whiteboard.persist} notes=${capabilities.notes.draft} online=${online} mic=${capabilities.mic.acquire} source=${source}`
     );
-    return capabilities;
+    return { capabilities, notesForbidden };
   };
 
   if (!row) {
-    return log(deriveSessionCapabilities(FAIL_CLOSED_INPUT), "fail_closed", "n/a");
+    return log(deriveSessionCapabilities(FAIL_CLOSED_INPUT), "fail_closed", "n/a", true);
   }
 
   const learnerProfileId = row.student?.learnerProfileId ?? null;
@@ -616,7 +633,7 @@ export async function resolveSessionCapabilities(
   }
 
   if (!toggles) {
-    return log(deriveSessionCapabilities(FAIL_CLOSED_INPUT), "fail_closed", "n/a");
+    return log(deriveSessionCapabilities(FAIL_CLOSED_INPUT), "fail_closed", "n/a", true);
   }
 
   const capabilities = deriveSessionCapabilities({
@@ -629,5 +646,5 @@ export async function resolveSessionCapabilities(
     sessionMode: row.sessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE",
     notesForbidden: row.notesForbidden,
   });
-  return log(capabilities, source, toggles.allowLiveSession);
+  return log(capabilities, source, toggles.allowLiveSession, row.notesForbidden);
 }

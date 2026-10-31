@@ -26,6 +26,8 @@ const STALE_CHUNK = {
   sessionId: "wbsid-sweep",
   chunkBlobUrl: "https://blob.vercel-storage.com/sessions/test/chunk-1.webm",
   recordingTimeOffsetMs: 0,
+  streamId: "tutor:mic",
+  speakerId: null,
   status: "pending",
   attempts: 0,
   updatedAt: new Date("2026-06-07T10:00:00.000Z"),
@@ -69,6 +71,9 @@ describe("runTranscribeSweep", () => {
       sessionId: STALE_CHUNK.sessionId,
       chunkBlobUrl: STALE_CHUNK.chunkBlobUrl,
       recordingTimeOffsetMs: STALE_CHUNK.recordingTimeOffsetMs,
+      streamId: STALE_CHUNK.streamId,
+      speakerId: null,
+      surface: "sweep",
     });
     expect(result).toMatchObject({
       scanned: 2,
@@ -112,5 +117,35 @@ describe("runTranscribeSweep", () => {
     const result = await runTranscribeSweep();
 
     expect(result.failed).toBe(1);
+  });
+
+  test("passes each row's STORED lane explicitly (a learner chunk is never relabeled by the sweep) — A8", async () => {
+    const learner = {
+      ...STALE_CHUNK,
+      id: "chunk-learner",
+      streamId: "speaker:learner-1:transcript",
+      speakerId: "learner-1",
+    };
+    mockFindStaleTranscriptChunksForSweep.mockResolvedValue([STALE_CHUNK, learner]);
+
+    await runTranscribeSweep();
+
+    expect(mockProcessChunkTranscribeJob).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        streamId: "speaker:learner-1:transcript",
+        speakerId: "learner-1",
+        surface: "sweep",
+      })
+    );
+  });
+
+  test("counts refused outcomes separately from failures (a refusal is terminal, not an error)", async () => {
+    mockFindStaleTranscriptChunksForSweep.mockResolvedValue([STALE_CHUNK]);
+    mockProcessChunkTranscribeJob.mockResolvedValue("refused");
+
+    const result = await runTranscribeSweep();
+
+    expect(result).toMatchObject({ scanned: 1, processed: 1, refused: 1, failed: 0, done: 0 });
   });
 });

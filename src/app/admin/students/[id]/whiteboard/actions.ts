@@ -43,6 +43,12 @@ import {
   resolveSessionCapabilities,
 } from "@/lib/consent-scope";
 import { TUTOR_MIC_STREAM_ID, acceptsAudioSegments } from "@/lib/recording/session-capabilities";
+import {
+  gateAudioSegment,
+  gateNotesDraft,
+  gateTranscription,
+} from "@/lib/recording/consent-gates";
+import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
 import type { EntryBlockReason, EntryRefusal } from "@/lib/scheduling/session-entry";
 import {
   consentRecordRefusalReason,
@@ -1635,6 +1641,11 @@ export async function generateNotesFromWhiteboardSessionAction(
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
   const studentId = session.studentId;
 
+  // Consent (wave C2): notes off, org no-notes, or in-person audio off. Refused before any blob is fetched or Whisper billed.
+  if (!(await gateNotesDraft(whiteboardSessionId, "generate")).allow) {
+    return { ok: false, error: NOTES_SKIPPED_COPY, debugId: rid };
+  }
+
   // Load all audio recordings for this whiteboard session.
   const audioRows = await withDbRetry(
     () =>
@@ -1891,7 +1902,14 @@ export async function generateNotesFromWhiteboardSessionAction(
 
 export type RegisterWhiteboardSessionAudioSegmentResult =
   | { ok: true; recordingId: string; orderIndex: number; deduped?: boolean }
-  | { ok: false; error: string; debugId?: string; sessionEnded?: true };
+  | {
+      ok: false;
+      error: string;
+      debugId?: string;
+      sessionEnded?: true;
+      /** Consent capabilities forbid this lane (or all audio). Final: the outbox marks the row terminal and logs `refused`, not an error. */
+      refused?: true;
+    };
 
 /**
  * After `uploadAudioDirect` stores a segment in Blob, the workspace calls this
@@ -1965,16 +1983,19 @@ export async function registerWhiteboardSessionAudioSegmentAction(
       };
     }
 
-    // B2 + Block B: mode-aware consent gate (same semantics as end-session).
-    const capabilities = await resolveSessionCapabilities(whiteboardSessionId);
-    if (!acceptsAudioSegments(capabilities)) {
+    // B2 + Block B + wave C2: mode- and lane-aware consent gate. In-person audio off refuses every lane; online audio
+    // off keeps the tutor mixdown and refuses a learner lane (an unknown lane fails closed as a learner lane).
+    const streamId = segment.streamId ?? TUTOR_MIC_STREAM_ID;
+    const audioGate = await gateAudioSegment(whiteboardSessionId, streamId, "segment");
+    if (!audioGate.allow) {
       console.log(
-        `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} rejected: consent reason=audio_mode_none`
+        `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} rejected: consent reason=${audioGate.reason} streamId=${streamId}`
       );
       return {
         ok: false,
         error: "Audio recording consent is not granted for this session.",
         debugId: rid,
+        refused: true,
       };
     }
 
@@ -1997,8 +2018,6 @@ export async function registerWhiteboardSessionAudioSegmentAction(
         deduped: true,
       };
     }
-
-    const streamId = segment.streamId ?? TUTOR_MIC_STREAM_ID;
 
     let row: { id: string; orderIndex: number } | null = null;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -2153,13 +2172,10 @@ export async function enqueueChunkTranscriptionAction(
     return;
   }
 
-  // Block B: mode-aware consent — IN_PERSON+denied or no-snapshot claimed minor
-  // fail-closed; LIVE+denied allows tutor-only mixdown transcription.
-  const capabilities = await resolveSessionCapabilities(whiteboardSessionId);
-  if (!acceptsAudioSegments(capabilities)) {
-    console.log(
-      `[txc] wbsid=${whiteboardSessionId} action=enqueue_rejected reason=audio_mode_none`
-    );
+  // Block B + wave C2: mode- and lane-aware consent. In-person audio off, notes off and the org no-notes flag refuse
+  // every lane; online audio off keeps tutor-mixdown transcription and refuses a learner lane. A refusal creates no
+  // row and returns quietly (the gate logs `[txc] refused` and, for a learner lane, `[cns] learner_lane_refused`).
+  if (!(await gateTranscription(whiteboardSessionId, streamId, "chunk")).allow) {
     return;
   }
 

@@ -33,6 +33,16 @@ jest.mock("@/lib/recording/transcript-store", () => ({
   upsertTutorNotePending: jest.fn(),
 }));
 
+// The consent gate has its own tests (consent-gates.test.ts, wb-consent-matrix N-rows). Allow by default here; the
+// refusal tests below drive it explicitly.
+const mockGateNotesDraft = jest.fn();
+jest.mock("@/lib/recording/consent-gates", () => ({
+  gateNotesDraft: (...args: unknown[]) => mockGateNotesDraft(...args),
+}));
+beforeEach(() => {
+  mockGateNotesDraft.mockResolvedValue({ allow: true });
+});
+
 jest.mock("@/lib/env", () => ({
   env: { OPENAI_API_KEY: "test-key" },
 }));
@@ -513,5 +523,20 @@ describe("(e) Copy — 'Preparing your notes...' (not 'Waiting for transcript…
   it("component source does NOT contain old copy 'Waiting for transcript…'", () => {
     const src = fs.readFileSync(tntPath, "utf8");
     expect(src).not.toContain("Waiting for transcript\u2026");
+  });
+});
+
+describe("processLiveReduceJob — consent gate (wave C2)", () => {
+  it("notes refused: skipped before any chunk read, no row, no LLM", async () => {
+    jest.clearAllMocks(); // this file does not clear between tests; assert on this test's calls only
+    mockGateNotesDraft.mockResolvedValue({ allow: false, reason: "notes_off" });
+
+    const result = await processLiveReduceJob(SESSION_ID);
+
+    expect(result).toEqual({ outcome: "skipped", reason: "notes_off" });
+    expect(mockGetChunks).not.toHaveBeenCalled();
+    expect(mockUpsertNotePending).not.toHaveBeenCalled();
+    expect(mockUpdateNote).not.toHaveBeenCalled();
+    expect(mockChatCreate).not.toHaveBeenCalled();
   });
 });

@@ -600,7 +600,7 @@ model TranscriptChunk {
    */
   transcript            String    @default("")
   /**
-   * pending | transcribing | done | failed — see TranscriptChunkStatus in transcript-types.ts
+   * pending | transcribing | done | failed | refused (terminal: consent refusal) — see TranscriptChunkStatus in transcript-types.ts
    */
   status                String
   /**
@@ -670,7 +670,7 @@ model TutorNote {
   id          String    @id @default(cuid())
   sessionId   String    @unique
   /**
-   * pending | generating | done | failed | partial — see TutorNoteStatus in transcript-types.ts
+   * pending | generating | done | failed | partial | skipped (terminal: notes off) — see TutorNoteStatus in transcript-types.ts
    */
   status      String
   /**

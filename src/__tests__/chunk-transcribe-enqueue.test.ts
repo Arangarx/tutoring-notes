@@ -47,6 +47,7 @@ jest.mock("@/lib/public-url", () => ({
 // ---------------------------------------------------------------------------
 
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -56,6 +57,8 @@ const JOB = {
   sessionId: "wbsid-enqueue-test",
   chunkBlobUrl: "https://blob.vercel-storage.com/sessions/test/chunk-1.webm",
   recordingTimeOffsetMs: 12000,
+  // An enqueue always names its lane (consent wave C2): there is no tutor:mic default any more.
+  streamId: TUTOR_MIC_STREAM_ID,
 };
 
 // ---------------------------------------------------------------------------

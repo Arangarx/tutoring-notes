@@ -78,7 +78,13 @@ function logTnt(
   console.log(`${TNT_LOG} wbsid=${sessionId} action=${action}${suffix}`);
 }
 
-/** Idempotent upsert on (sessionId, chunkBlobUrl) — safe for at-least-once queue delivery. */
+/**
+ * Idempotent upsert on (sessionId, chunkBlobUrl) — safe for at-least-once queue delivery.
+ *
+ * Lane identity (streamId, speakerId) is write-once: it is set when the row is CREATED and never changes on update.
+ * streamId defaults to the tutor lane only when it creates a row; the paths that refuse by lane (kick, sweep, worker)
+ * read the stored lane off the row and pass it explicitly instead of relying on that default.
+ */
 export async function upsertTranscriptChunk(
   input: UpsertTranscriptChunkInput
 ): Promise<TranscriptChunk> {
@@ -116,11 +122,12 @@ export async function upsertTranscriptChunk(
           transcribedAt: rest.transcribedAt ?? undefined,
           attempts: rest.attempts ?? 0,
         },
+        // The update branch NEVER writes streamId or speakerId (consent wave C2, plan § 2.3 / D8): a lane is set at
+        // create and is immutable. Writing it here let a retried learner chunk be relabeled tutor:mic by any caller
+        // that omitted the lane, which would then pass the tutor-lane gate.
         update: {
           recordingTimeOffsetMs,
           status,
-          streamId,
-          speakerId,
           ...(rest.transcript !== undefined ? { transcript: rest.transcript } : {}),
           ...(rest.durationMs !== undefined ? { durationMs: rest.durationMs } : {}),
           ...(rest.error !== undefined ? { error: rest.error } : {}),

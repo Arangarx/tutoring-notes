@@ -27,9 +27,14 @@ import {
 } from "@/lib/recording/transcript-store";
 import { processChunkTranscribeJob, type ChunkTranscribeInput } from "@/lib/recording/transcription-worker";
 import { getPublicBaseUrl } from "@/lib/public-url";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 
 export type { ChunkTranscribeInput };
+
+/**
+ * An enqueue always names the lane. The worker's `streamId` is optional (the stored row wins there), but a job that
+ * CREATES a pending row must say which lane it is: there is no `tutor:mic` default any more (consent wave C2).
+ */
+export type ChunkEnqueueInput = ChunkTranscribeInput & { streamId: string };
 
 function fireAndForgetWorker(job: ChunkTranscribeInput): void {
   // Use `after()` so Vercel keeps the function alive until the worker completes.
@@ -87,9 +92,8 @@ function fireAndForgetWorker(job: ChunkTranscribeInput): void {
  * Safe to call from server actions and API routes. Never throws — errors
  * are logged and swallowed to keep the upload-confirm path non-blocking.
  */
-export async function enqueueChunkTranscribe(job: ChunkTranscribeInput): Promise<void> {
-  const { sessionId, chunkBlobUrl } = job;
-  const streamId = job.streamId ?? TUTOR_MIC_STREAM_ID;
+export async function enqueueChunkTranscribe(job: ChunkEnqueueInput): Promise<void> {
+  const { sessionId, chunkBlobUrl, streamId } = job;
   const speakerId = job.speakerId ?? null;
 
   console.log(

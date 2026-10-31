@@ -1,9 +1,11 @@
 /**
  * @jest-environment node
  *
- * Notes generation must NOT be gated on allowNoteSending — audio capture is
- * already gated upstream by allowAudioRecording; a "sending"-named permission
- * silently killing AI notes is a footgun (Andrew 2026-06-30).
+ * History: 2026-06-30 (77dde18b) notes generation was UNGATED from allowNoteSending, because a "sending"-named
+ * permission silently killed AI notes. The consent wave (docs/handoff/consent-wave-plan.md § 2.3, C2) re-gates it on the
+ * session's CAPABILITIES (notes toggle off, org no-notes, or in-person audio off): the switch is now "Allow session
+ * notes" (SESSION_NOTES_CONSENT_COPY), and a refusal returns the visible reason instead of silently doing nothing.
+ * The gate itself is tested in consent-gates.test.ts and the N-rows of wb-consent-matrix.spec.ts; here it is mocked.
  */
 
 jest.mock("next/navigation", () => ({
@@ -42,8 +44,13 @@ jest.mock("@/lib/recording/notes-enqueue", () => ({
   enqueueNotesReduce: (...args: unknown[]) => enqueueNotesReduceMock(...args),
 }));
 
-// Consent scope exposes NO gate function here: triggerNotesGenerationAction must not consult consent
-// (any call into a gate would be a call to undefined and throw). Notes-off gating is consent wave C2.
+const gateNotesDraftMock = jest.fn();
+jest.mock("@/lib/recording/consent-gates", () => ({
+  __esModule: true,
+  gateNotesDraft: (...args: unknown[]) => gateNotesDraftMock(...args),
+  gateTranscription: jest.fn(),
+}));
+
 jest.mock("@/lib/consent-scope", () => ({
   __esModule: true,
   ConsentError: class ConsentError extends Error {
@@ -73,15 +80,26 @@ beforeEach(() => {
   assertOwnsWhiteboardSessionMock.mockResolvedValue(defaultSession);
   dbWbFindUniqueMock.mockResolvedValue({ endedAt: new Date("2026-06-30") });
   enqueueNotesReduceMock.mockResolvedValue(undefined);
+  gateNotesDraftMock.mockResolvedValue({ allow: true });
 });
 
-describe("triggerNotesGenerationAction — allowNoteSending is not a gate", () => {
-  test("enqueues without consulting any consent gate", async () => {
+describe("triggerNotesGenerationAction — notes capability gate", () => {
+  test("enqueues when the notes gate allows", async () => {
     const result = await triggerNotesGenerationAction("wb-1");
 
     expect(result).toEqual({ ok: true });
     expect(enqueueNotesReduceMock).toHaveBeenCalledTimes(1);
     expect(enqueueNotesReduceMock).toHaveBeenCalledWith("wb-1");
+  });
+
+  test("notes off for the session: refused with the visible reason and nothing is enqueued (N3)", async () => {
+    gateNotesDraftMock.mockResolvedValue({ allow: false, reason: "notes_off" });
+
+    const result = await triggerNotesGenerationAction("wb-1");
+
+    expect(result).toEqual({ ok: false, error: "Notes are off for this session" });
+    expect(gateNotesDraftMock).toHaveBeenCalledWith("wb-1", "trigger");
+    expect(enqueueNotesReduceMock).not.toHaveBeenCalled();
   });
 
   test("sealed session → calls enqueueNotesReduce", async () => {

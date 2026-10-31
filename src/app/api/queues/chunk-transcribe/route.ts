@@ -25,7 +25,10 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { processChunkTranscribeJob } from "@/lib/recording/transcription-worker";
+import {
+  processChunkTranscribeJob,
+  type ChunkTranscribeOutcome,
+} from "@/lib/recording/transcription-worker";
 
 // ---------------------------------------------------------------------------
 // Payload schema
@@ -35,6 +38,10 @@ const ChunkTranscribePayloadSchema = z.object({
   sessionId: z.string().min(1, "sessionId is required"),
   chunkBlobUrl: z.string().url("chunkBlobUrl must be a valid URL"),
   recordingTimeOffsetMs: z.number().int().nonnegative().optional(),
+  // Lane identity (consent wave C2). The schema used to strip these, so a queued learner chunk reached the worker with
+  // no lane and was relabeled `tutor:mic`. Optional because the stored row's lane wins over the payload's.
+  streamId: z.string().min(1).optional(),
+  speakerId: z.string().min(1).nullable().optional(),
 });
 
 export type ChunkTranscribePayload = z.infer<typeof ChunkTranscribePayloadSchema>;
@@ -80,7 +87,7 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const { sessionId, chunkBlobUrl, recordingTimeOffsetMs } = parsed.data;
+  const { sessionId, chunkBlobUrl, recordingTimeOffsetMs, streamId, speakerId } = parsed.data;
 
   console.log(
     `[txc] wbsid=${sessionId} action=route_received chunkBlobUrl=${chunkBlobUrl} offsetMs=${recordingTimeOffsetMs ?? "n/a"}`
@@ -91,12 +98,15 @@ export async function POST(req: Request): Promise<Response> {
   // Transient failures return 'failed' and the chunk row is marked; we return 500
   // so the queue retries delivery (the worker's idempotency guard prevents
   // double-processing if the first attempt partially succeeded).
-  let outcome: "done" | "failed" | "skipped";
+  let outcome: ChunkTranscribeOutcome;
   try {
     outcome = await processChunkTranscribeJob({
       sessionId,
       chunkBlobUrl,
       recordingTimeOffsetMs,
+      streamId,
+      speakerId,
+      surface: "queue",
     });
   } catch (err: unknown) {
     // Unexpected error in the worker (should not happen — worker catches internally,
@@ -125,6 +135,7 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // outcome === 'done' or 'skipped' — ack the delivery.
+  // outcome === 'done', 'skipped' or 'refused' — ack the delivery. A refusal (consent capabilities forbid the lane
+  // or notes) is final, so it is a 200 the queue must NOT retry, never a 500.
   return NextResponse.json({ ok: true, outcome }, { status: 200 });
 }

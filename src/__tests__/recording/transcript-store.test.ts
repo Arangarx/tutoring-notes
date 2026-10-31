@@ -87,15 +87,15 @@ describe("transcript-store", () => {
           streamId: "tutor:mic",
           speakerId: null,
         }),
-        update: expect.objectContaining({
-          streamId: "tutor:mic",
-          speakerId: null,
-        }),
       })
     );
+    // Lane identity is write-once (consent wave C2, A9): the update branch never carries it.
+    const call = mockUpsert.mock.calls[0][0] as { update: Record<string, unknown> };
+    expect(call.update).not.toHaveProperty("streamId");
+    expect(call.update).not.toHaveProperty("speakerId");
   });
 
-  test("upsertTranscriptChunk persists explicit streamId and speakerId", async () => {
+  test("upsertTranscriptChunk persists explicit streamId and speakerId on create only", async () => {
     const row = {
       id: "tc-2",
       sessionId: "wbs-1",
@@ -127,12 +127,11 @@ describe("transcript-store", () => {
           streamId: "student:peer-abc:mic",
           speakerId: "peer-abc",
         }),
-        update: expect.objectContaining({
-          streamId: "student:peer-abc:mic",
-          speakerId: "peer-abc",
-        }),
       })
     );
+    const call = mockUpsert.mock.calls[0][0] as { update: Record<string, unknown> };
+    expect(call.update).not.toHaveProperty("streamId");
+    expect(call.update).not.toHaveProperty("speakerId");
   });
 
   test("getTranscriptChunksBySessionId orders by recordingTimeOffsetMs", async () => {

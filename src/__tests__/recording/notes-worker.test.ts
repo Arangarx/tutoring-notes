@@ -37,6 +37,16 @@ jest.mock("@/lib/recording/transcript-store", () => ({
   upsertTutorNotePending: jest.fn(),
 }));
 
+// The consent gate has its own tests (consent-gates.test.ts, wb-consent-matrix N-rows). Allow by default here; the
+// refusal tests below drive it explicitly.
+const mockGateNotesDraft = jest.fn();
+jest.mock("@/lib/recording/consent-gates", () => ({
+  gateNotesDraft: (...args: unknown[]) => mockGateNotesDraft(...args),
+}));
+beforeEach(() => {
+  mockGateNotesDraft.mockResolvedValue({ allow: true });
+});
+
 jest.mock("@/lib/env", () => ({
   env: { OPENAI_API_KEY: "test-key" },
 }));
@@ -453,5 +463,51 @@ describe("processNotesReduceJob — notes:reduce:before_resolve", () => {
       else process.env.PLAYWRIGHT_TEST = previousPlaywright;
       await job.catch(() => undefined);
     }
+  });
+});
+
+describe("processNotesReduceJob — consent gate (wave C2, N5/N6)", () => {
+  it("notes refused with a pending row: the row becomes skipped (terminal), no LLM call", async () => {
+    mockGateNotesDraft.mockResolvedValue({ allow: false, reason: "notes_off" });
+    mockGetNote.mockResolvedValue({ status: "pending", sessionId: SESSION_ID });
+
+    const result = await processNotesReduceJob(SESSION_ID);
+
+    expect(result).toEqual({ outcome: "skipped", reason: "notes_off" });
+    expect(mockUpdateNote).toHaveBeenCalledWith(SESSION_ID, { status: "skipped", error: "notes_off" });
+    expect(mockChatCreate).not.toHaveBeenCalled();
+    expect(mockGetChunks).not.toHaveBeenCalled();
+  });
+
+  it("notes refused while generating: also settled to skipped (the sweep must not keep reselecting it)", async () => {
+    mockGateNotesDraft.mockResolvedValue({ allow: false, reason: "notes_forbidden" });
+    mockGetNote.mockResolvedValue({ status: "generating", sessionId: SESSION_ID });
+
+    await processNotesReduceJob(SESSION_ID);
+
+    expect(mockUpdateNote).toHaveBeenCalledWith(SESSION_ID, { status: "skipped", error: "notes_forbidden" });
+  });
+
+  it("notes refused with NO row: nothing is created, so no placeholder note exists (N5)", async () => {
+    mockGateNotesDraft.mockResolvedValue({ allow: false, reason: "no_audio" });
+    mockGetNote.mockResolvedValue(null);
+
+    const result = await processNotesReduceJob(SESSION_ID);
+
+    expect(result).toEqual({ outcome: "skipped", reason: "no_audio" });
+    expect(mockUpsertNotePending).not.toHaveBeenCalled();
+    expect(mockUpdateNote).not.toHaveBeenCalled();
+    expect(mockChatCreate).not.toHaveBeenCalled();
+  });
+
+  it("an already-skipped row is settled: the worker returns skipped without re-running anything", async () => {
+    mockGateNotesDraft.mockResolvedValue({ allow: false, reason: "notes_off" });
+    mockGetNote.mockResolvedValue({ status: "skipped", sessionId: SESSION_ID });
+
+    const result = await processNotesReduceJob(SESSION_ID);
+
+    expect(result.outcome).toBe("skipped");
+    expect(mockUpdateNote).not.toHaveBeenCalled();
+    expect(mockChatCreate).not.toHaveBeenCalled();
   });
 });

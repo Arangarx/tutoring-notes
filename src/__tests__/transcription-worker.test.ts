@@ -21,11 +21,20 @@ const mockUpsertTranscriptChunk = jest.fn();
 const mockGetTranscriptChunksBySessionId = jest.fn();
 const mockTranscribeChunk = jest.fn();
 const mockFetchPrivateBlobBytes = jest.fn();
+const mockUpdateTranscriptChunkStatus = jest.fn();
+const mockGateTranscription = jest.fn();
 
 jest.mock("@/lib/recording/transcript-store", () => ({
   getTranscriptChunkByBlobUrl: (...args: unknown[]) => mockGetTranscriptChunkByBlobUrl(...args),
   upsertTranscriptChunk: (...args: unknown[]) => mockUpsertTranscriptChunk(...args),
   getTranscriptChunksBySessionId: (...args: unknown[]) => mockGetTranscriptChunksBySessionId(...args),
+  updateTranscriptChunkStatus: (...args: unknown[]) => mockUpdateTranscriptChunkStatus(...args),
+}));
+
+// The consent gate has its own tests (consent-gates.test.ts, wb-consent-matrix). Here it allows by default so these
+// tests keep exercising the transcription pipeline; the refusal and lane tests at the bottom drive it explicitly.
+jest.mock("@/lib/recording/consent-gates", () => ({
+  gateTranscription: (...args: unknown[]) => mockGateTranscription(...args),
 }));
 
 jest.mock("@/lib/recording/transcribe-chunk", () => ({
@@ -88,6 +97,7 @@ function setupHappyPath() {
 describe("processChunkTranscribeJob", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGateTranscription.mockResolvedValue({ allow: true });
   });
 
   afterEach(async () => {
@@ -106,6 +116,7 @@ describe("processChunkTranscribeJob", () => {
     const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
 
@@ -141,6 +152,7 @@ describe("processChunkTranscribeJob", () => {
     const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
 
@@ -161,6 +173,7 @@ describe("processChunkTranscribeJob", () => {
     const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
 
@@ -177,6 +190,8 @@ describe("processChunkTranscribeJob", () => {
         id: `chunk-${status}`,
         status,
         attempts: status === "failed" ? 1 : 0,
+        streamId: TUTOR_MIC_STREAM_ID,
+        speakerId: null,
       });
       mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
       mockUpsertTranscriptChunk.mockResolvedValue({ id: "chunk-row", status: "done" });
@@ -186,6 +201,7 @@ describe("processChunkTranscribeJob", () => {
       const outcome = await processChunkTranscribeJob({
         sessionId: SESSION_ID,
         chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
         recordingTimeOffsetMs: 0,
       });
 
@@ -200,6 +216,7 @@ describe("processChunkTranscribeJob", () => {
     const first = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
     expect(first).toBe("done");
@@ -211,6 +228,7 @@ describe("processChunkTranscribeJob", () => {
     const second = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
     expect(second).toBe("skipped");
@@ -229,6 +247,7 @@ describe("processChunkTranscribeJob", () => {
     const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
 
@@ -250,6 +269,7 @@ describe("processChunkTranscribeJob", () => {
     const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
 
@@ -270,6 +290,7 @@ describe("processChunkTranscribeJob", () => {
     const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
 
@@ -293,6 +314,7 @@ describe("processChunkTranscribeJob", () => {
     const outcome1 = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
     expect(outcome1).toBe("failed");
@@ -308,6 +330,7 @@ describe("processChunkTranscribeJob", () => {
     const outcome2 = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL_2,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 30000,
     });
     expect(outcome2).toBe("done");
@@ -331,6 +354,7 @@ describe("processChunkTranscribeJob", () => {
     await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       // No recordingTimeOffsetMs — should be derived as 30000 + 25000 = 55000.
     });
 
@@ -347,7 +371,11 @@ describe("processChunkTranscribeJob", () => {
     mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
     mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
 
-    await processChunkTranscribeJob({ sessionId: SESSION_ID, chunkBlobUrl: CHUNK_URL });
+    await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
+    });
 
     const transcribingCall = mockUpsertTranscriptChunk.mock.calls.find(
       (c) => c[0].status === "transcribing"
@@ -371,6 +399,7 @@ describe("processChunkTranscribeJob", () => {
     await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 99000, // Explicit value from producer.
     });
 
@@ -405,6 +434,7 @@ describe("processChunkTranscribeJob", () => {
     await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
 
@@ -422,6 +452,7 @@ describe("processChunkTranscribeJob", () => {
     await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
       recordingTimeOffsetMs: 0,
     });
 
@@ -451,21 +482,173 @@ describe("processChunkTranscribeJob", () => {
     }
   });
 
-  test("defaults streamId to tutor:mic and speakerId to null when omitted", async () => {
-    setupHappyPath();
+  // -------------------------------------------------------------------------
+  // 11. Lane identity + consent gate (consent wave C2, plan § 2.3 / A8 / A9)
+  // -------------------------------------------------------------------------
+  const LEARNER_LANE = "speaker:learner-1:transcript";
 
+  test("a stored row's lane wins over the input lane, and a differing input logs lane_mismatch", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+      id: "stored-learner",
+      status: "pending",
+      attempts: 0,
+      streamId: LEARNER_LANE,
+      speakerId: "learner-1",
+    });
+    mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
+    mockUpsertTranscriptChunk.mockResolvedValue({ id: "stored-learner", status: "done" });
+    mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
+    mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
+    const log = jest.spyOn(console, "log").mockImplementation(() => undefined);
+
+    // The caller (a tampered or stale producer) claims tutor:mic for what is stored as a learner chunk.
     await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+      streamId: TUTOR_MIC_STREAM_ID,
+      speakerId: null,
+    });
+
+    // The gate is asked about the STORED lane, never the claimed one.
+    expect(mockGateTranscription).toHaveBeenCalledWith(SESSION_ID, LEARNER_LANE, "chunk");
+    for (const call of mockUpsertTranscriptChunk.mock.calls) {
+      expect(call[0]).toMatchObject({ streamId: LEARNER_LANE, speakerId: "learner-1" });
+    }
+    const lines = log.mock.calls.map((c) => String(c[0]));
+    expect(lines).toContain(
+      `[cns] wbsid=${SESSION_ID} action=lane_mismatch stored=${LEARNER_LANE} input=${TUTOR_MIC_STREAM_ID}`
+    );
+  });
+
+  test("no lane_mismatch is logged when the input lane matches the stored lane, or the input has none", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+      id: "stored",
+      status: "pending",
+      attempts: 0,
+      streamId: LEARNER_LANE,
+      speakerId: "learner-1",
+    });
+    mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
+    mockUpsertTranscriptChunk.mockResolvedValue({ id: "stored", status: "done" });
+    mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
+    mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
+    const log = jest.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await processChunkTranscribeJob({ sessionId: SESSION_ID, chunkBlobUrl: CHUNK_URL, recordingTimeOffsetMs: 0 });
+    await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+      streamId: LEARNER_LANE,
+    });
+
+    const lines = log.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("action=lane_mismatch"))).toBe(false);
+  });
+
+  test("a stored row with no input lane keeps its lane (the old default would have relabeled it tutor:mic)", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+      id: "stored",
+      status: "failed",
+      attempts: 1,
+      streamId: LEARNER_LANE,
+      speakerId: "learner-1",
+    });
+    mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
+    mockUpsertTranscriptChunk.mockResolvedValue({ id: "stored", status: "done" });
+    mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
+    mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
+
+    await processChunkTranscribeJob({ sessionId: SESSION_ID, chunkBlobUrl: CHUNK_URL, recordingTimeOffsetMs: 0 });
+
+    expect(mockGateTranscription).toHaveBeenCalledWith(SESSION_ID, LEARNER_LANE, "chunk");
+    for (const call of mockUpsertTranscriptChunk.mock.calls) {
+      expect(call[0]).toMatchObject({ streamId: LEARNER_LANE, speakerId: "learner-1" });
+    }
+  });
+
+  test("no stored row and no input lane: skipped (lane_unknown), nothing written, nothing fetched, no default lane", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue(null);
+    const log = jest.spyOn(console, "log").mockImplementation(() => undefined);
+
+    const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
       chunkBlobUrl: CHUNK_URL,
       recordingTimeOffsetMs: 0,
     });
 
-    const transcribingCall = mockUpsertTranscriptChunk.mock.calls.find(
-      (c) => c[0].status === "transcribing"
+    expect(outcome).toBe("skipped");
+    expect(mockGateTranscription).not.toHaveBeenCalled();
+    expect(mockUpsertTranscriptChunk).not.toHaveBeenCalled();
+    expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
+    expect(mockTranscribeChunk).not.toHaveBeenCalled();
+    expect(log.mock.calls.map((c) => String(c[0]))).toContainEqual(
+      expect.stringContaining("action=worker_skip reason=lane_unknown")
     );
-    expect(transcribingCall![0]).toMatchObject({
-      streamId: TUTOR_MIC_STREAM_ID,
-      speakerId: null,
+  });
+
+  test("a refused chunk with a stored row is marked refused (terminal), keeps its lane, and is never fetched or transcribed", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+      id: "stored-learner",
+      status: "pending",
+      attempts: 0,
+      streamId: LEARNER_LANE,
+      speakerId: "learner-1",
     });
+    mockGateTranscription.mockResolvedValue({ allow: false, reason: "audio_off" });
+
+    const outcome = await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+      surface: "sweep",
+    });
+
+    expect(outcome).toBe("refused");
+    expect(mockGateTranscription).toHaveBeenCalledWith(SESSION_ID, LEARNER_LANE, "sweep");
+    expect(mockUpdateTranscriptChunkStatus).toHaveBeenCalledWith(SESSION_ID, "stored-learner", "refused", {
+      error: "audio_off",
+    });
+    // The refusal is a status-only update: the lane columns are not written.
+    expect(mockUpsertTranscriptChunk).not.toHaveBeenCalled();
+    expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
+    expect(mockTranscribeChunk).not.toHaveBeenCalled();
+  });
+
+  test("a refused chunk with no stored row creates no row at all", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue(null);
+    mockGateTranscription.mockResolvedValue({ allow: false, reason: "audio_off" });
+
+    const outcome = await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+      streamId: LEARNER_LANE,
+      surface: "queue",
+    });
+
+    expect(outcome).toBe("refused");
+    expect(mockUpsertTranscriptChunk).not.toHaveBeenCalled();
+    expect(mockUpdateTranscriptChunkStatus).not.toHaveBeenCalled();
+    expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
+  });
+
+  test("an already-refused row is a terminal no-op: returns refused without re-gating, fetching or writing", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+      id: "refused-row",
+      status: "refused",
+      attempts: 0,
+      streamId: LEARNER_LANE,
+      speakerId: "learner-1",
+    });
+
+    const outcome = await processChunkTranscribeJob({ sessionId: SESSION_ID, chunkBlobUrl: CHUNK_URL });
+
+    expect(outcome).toBe("refused");
+    expect(mockGateTranscription).not.toHaveBeenCalled();
+    expect(mockUpsertTranscriptChunk).not.toHaveBeenCalled();
+    expect(mockUpdateTranscriptChunkStatus).not.toHaveBeenCalled();
+    expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
   });
 });

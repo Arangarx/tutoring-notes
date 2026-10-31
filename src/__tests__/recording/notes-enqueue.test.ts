@@ -17,6 +17,16 @@ jest.mock("@/lib/recording/transcript-store", () => ({
   upsertTutorNotePending: jest.fn(),
 }));
 
+// The consent gate has its own tests (consent-gates.test.ts, wb-consent-matrix N-rows). Allow by default here; the
+// refusal tests below drive it explicitly.
+const mockGateNotesDraft = jest.fn();
+jest.mock("@/lib/recording/consent-gates", () => ({
+  gateNotesDraft: (...args: unknown[]) => mockGateNotesDraft(...args),
+}));
+beforeEach(() => {
+  mockGateNotesDraft.mockResolvedValue({ allow: true });
+});
+
 jest.mock("@/lib/recording/notes-worker", () => ({
   processNotesReduceJob: jest.fn(),
 }));
@@ -150,6 +160,29 @@ describe("enqueueNotesReduce — resilience", () => {
     await drain();
 
     // Worker should still be fired despite the upsert error
+    expect(mockProcessJob).toHaveBeenCalledWith(SESSION_ID);
+  });
+});
+
+describe("enqueueNotesReduce — consent gate (wave C2, N1/N2/N3)", () => {
+  it("notes refused: no pending row is created and the worker is never fired", async () => {
+    mockGateNotesDraft.mockResolvedValue({ allow: false, reason: "notes_off" });
+
+    await enqueueNotesReduce(SESSION_ID);
+    await drain();
+
+    expect(mockGateNotesDraft).toHaveBeenCalledWith(SESSION_ID, "enqueue");
+    expect(mockUpsertPending).not.toHaveBeenCalled();
+    expect(mockProcessJob).not.toHaveBeenCalled();
+  });
+
+  it("a thrown gate lookup does not lose the notes: it falls through and the worker re-checks", async () => {
+    mockGateNotesDraft.mockRejectedValue(new Error("db blip"));
+
+    await enqueueNotesReduce(SESSION_ID);
+    await drain();
+
+    expect(mockUpsertPending).toHaveBeenCalledWith(SESSION_ID);
     expect(mockProcessJob).toHaveBeenCalledWith(SESSION_ID);
   });
 });

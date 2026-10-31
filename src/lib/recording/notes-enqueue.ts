@@ -26,6 +26,7 @@ import {
   getTranscriptChunksBySessionId,
 } from "@/lib/recording/transcript-store";
 import { processNotesReduceJob, processLiveReduceJob } from "@/lib/recording/notes-worker";
+import { gateNotesDraft } from "@/lib/recording/consent-gates";
 
 /** Max time to poll for chunk completion inside the after() callback (ms). */
 const AFTER_POLL_DEADLINE_MS = 4.5 * 60 * 1000; // 4.5 min
@@ -159,10 +160,23 @@ export async function enqueueLiveReduce(sessionId: string): Promise<void> {
  * Idempotent: if a TutorNote row already exists and is done/partial, no-ops.
  * If it's failed, resets to pending so the retry can proceed.
  *
+ * Consent (wave C2): when notes are off for the session (toggle, org no-notes, or in-person audio off) no row is
+ * created and nothing is fired. If the gate itself cannot be read, the pending row is still created and the worker's
+ * own re-check decides, so a transient read failure never loses a note that is allowed.
+ *
  * Safe to call from server actions. Never throws.
  */
 export async function enqueueNotesReduce(sessionId: string): Promise<void> {
   console.log(`[tnt] wbsid=${sessionId} action=enqueue`);
+
+  try {
+    if (!(await gateNotesDraft(sessionId, "enqueue")).allow) return;
+  } catch (err: unknown) {
+    // Unreadable gate: keep going. The worker re-checks, so this can only delay a refusal, never lose an allowed note.
+    console.error(
+      `[tnt] wbsid=${sessionId} action=enqueue_gate_error err=${err instanceof Error ? err.message : String(err)}`
+    );
+  }
 
   try {
     const existing = await getTutorNoteBySessionId(sessionId);

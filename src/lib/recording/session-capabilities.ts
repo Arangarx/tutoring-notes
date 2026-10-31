@@ -137,8 +137,9 @@ export function deriveSessionCapabilities(input: SessionCapabilityInput): Sessio
 }
 
 /**
- * Server gate: may an audio segment or chunk be registered, stored or transcribed? Online with audio off keeps
- * the tutor-only mixdown (`tutor_only`), so only `none` refuses. C2 narrows this per lane.
+ * Server gate: may ANY audio segment or chunk be registered, stored or transcribed? Online with audio off keeps
+ * the tutor-only mixdown (`tutor_only`), so only `none` refuses. This is the lane-blind question the end-session
+ * paths ask; the per-lane server gates (C2) are `decideAudioSegment` and `decideTranscription` below.
  */
 export function acceptsAudioSegments(capabilities: SessionCapabilities): boolean {
   return capabilities.audio.mode !== "none";
@@ -258,4 +259,66 @@ export function parseLane(streamId: string): Lane {
  */
 export function isLearnerLane(streamId: string): boolean {
   return parseLane(streamId).kind !== "tutor";
+}
+
+// ---------------------------------------------------------------------------
+// Per-lane server gate decisions (consent wave plan § 2.3, C2). Pure: the server wrapper
+// (`consent-gates.ts`) resolves the capabilities and logs; these functions only decide.
+// ---------------------------------------------------------------------------
+
+/** Why audio was refused. Online audio-off still keeps the tutor mixdown, so a refusal is always `audio_off`. */
+export type AudioRefusalReason = "audio_off";
+
+/** Why transcription was refused; the `[txc] refused reason=` token. */
+export type TranscriptionRefusalReason = "audio_off" | "notes_off" | "notes_forbidden";
+
+/** Why a notes draft was refused; the `[tnt] skip reason=` token. */
+export type NotesRefusalReason = "notes_off" | "no_audio" | "notes_forbidden";
+
+export type GateDecision<Reason extends string> = { allow: true } | { allow: false; reason: Reason };
+
+/**
+ * May an audio segment on `streamId` be registered or stored?
+ *  - `none` (in person, audio off) refuses every lane.
+ *  - A learner lane (an UNKNOWN stream id counts as one: it fails closed) is allowed only when audio is `full`.
+ *  - The tutor lane is allowed in `full` and `tutor_only`.
+ */
+export function decideAudioSegment(
+  capabilities: SessionCapabilities,
+  streamId: string
+): GateDecision<AudioRefusalReason> {
+  const mode = capabilities.audio.mode;
+  if (mode === "none") return { allow: false, reason: "audio_off" };
+  if (isLearnerLane(streamId) && mode !== "full") return { allow: false, reason: "audio_off" };
+  return { allow: true };
+}
+
+/**
+ * May a chunk on `streamId` be transcribed? Notes off (toggle, or the org "no notes" flag) refuses every lane;
+ * in-person audio off refuses every lane; otherwise the lane's own voice flag decides, so a learner lane needs
+ * `transcript.learnerVoice` (true only when audio is `full`).
+ */
+export function decideTranscription(
+  capabilities: SessionCapabilities,
+  notesForbidden: boolean,
+  streamId: string
+): GateDecision<TranscriptionRefusalReason> {
+  if (notesForbidden) return { allow: false, reason: "notes_forbidden" };
+  if (capabilities.audio.mode === "none") return { allow: false, reason: "audio_off" };
+  if (!capabilities.notes.draft) return { allow: false, reason: "notes_off" };
+  const learner = isLearnerLane(streamId);
+  const voiceAllowed = learner ? capabilities.transcript.learnerVoice : capabilities.transcript.tutorVoice;
+  if (!voiceAllowed) return { allow: false, reason: learner ? "audio_off" : "notes_off" };
+  return { allow: true };
+}
+
+/** May a tutor-notes draft be created, generated or retried? `no_audio` is in-person audio off (nothing to draft from). */
+export function decideNotesDraft(
+  capabilities: SessionCapabilities,
+  notesForbidden: boolean
+): GateDecision<NotesRefusalReason> {
+  if (notesForbidden) return { allow: false, reason: "notes_forbidden" };
+  if (capabilities.audio.mode === "none") return { allow: false, reason: "no_audio" };
+  if (!capabilities.notes.draft) return { allow: false, reason: "notes_off" };
+  return { allow: true };
 }
