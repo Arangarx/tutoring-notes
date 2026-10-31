@@ -41,6 +41,7 @@ import {
   type TutorNoteStatusResult,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -202,6 +203,8 @@ export default function TutorNotesSection({
     : "Preparing your notes...";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
+  // Terminal: notes are off for this session. Not active (so the poll stops), no form, no Regenerate.
+  const isSkipped = note.found && note.status === "skipped";
   // A finished, failed, or timed-out note can be saved by hand. Session
   // deletion stays on a finished note: it removes the session, not the draft.
   const canSaveManualNote = isDone || isFailed || timedOut;
@@ -298,6 +301,9 @@ export default function TutorNotesSection({
 
     setRegenerating(true);
     setRegenError(null);
+    // The earlier Save belongs to the draft being replaced. Without this the stale
+    // "Saved — visible to parent" returns when the new draft finishes.
+    setSavedInShell(false);
     startTimeRef.current = Date.now();
     setTimedOut(false);
 
@@ -665,6 +671,13 @@ export default function TutorNotesSection({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Skipped: notes are off for this session. One line, terminal (the poll never restarts). */}
+      {isSkipped && (
+        <div className="muted" style={{ fontSize: 13 }} data-testid="tutor-notes-skipped">
+          {NOTES_SKIPPED_COPY}
         </div>
       )}
 
