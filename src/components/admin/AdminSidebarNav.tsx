@@ -20,6 +20,7 @@ export type AdminSidebarNavProps = {
   isImpersonating?: boolean;
   showDevTools?: boolean;
   showOrgStaffHome?: boolean;
+  orgStaffHomeHref?: string;
   userEmail?: string;
   userDisplayName?: string | null;
 };
@@ -36,6 +37,7 @@ export function AdminSidebarNav({
   isImpersonating = false,
   showDevTools = false,
   showOrgStaffHome = false,
+  orgStaffHomeHref,
   userEmail = "",
   userDisplayName,
 }: AdminSidebarNavProps) {
@@ -47,6 +49,7 @@ export function AdminSidebarNav({
       sessionMode,
       showDevTools,
       showOrgStaffHome,
+      orgStaffHomeHref,
     })
   );
 

@@ -493,6 +493,15 @@ export async function hasStaffHomeMembership(adminUserId: string): Promise<boole
   return count > 0;
 }
 
+export async function staffHomeOrganizationIds(adminUserId: string): Promise<string[]> {
+  const rows = await db.organizationMember.findMany({
+    where: activeStaffHomeWhere(adminUserId),
+    select: { organizationId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((row) => row.organizationId);
+}
+
 /**
  * Sign-in landing for organization staff.
  * One organization opens its members and invitations page.
@@ -500,13 +509,29 @@ export async function hasStaffHomeMembership(adminUserId: string): Promise<boole
  * A private tutor, or an instructor who is not also owner, admin, or scheduler, returns null.
  */
 export async function staffHomeLandingPath(adminUserId: string): Promise<string | null> {
-  const rows = await db.organizationMember.findMany({
-    where: activeStaffHomeWhere(adminUserId),
-    select: { organizationId: true },
-    orderBy: { createdAt: "asc" },
-  });
-  if (rows.length === 0) return null;
-  if (rows.length === 1) return `/admin/organization/${rows[0].organizationId}`;
+  const ids = await staffHomeOrganizationIds(adminUserId);
+  if (ids.length === 0) return null;
+  if (ids.length === 1) return `/admin/organization/${ids[0]}`;
+  return "/admin/organization";
+}
+
+/**
+ * Where the Organization tab goes.
+ * No staff-home membership: null (the tab is hidden).
+ * One organization: that page, with no list in between.
+ * More than one: the last organization this account opened, or the list
+ * when none has been opened yet.
+ */
+export async function organizationNavHref(
+  adminUserId: string,
+  rememberedOrganizationId: string | null
+): Promise<string | null> {
+  const ids = await staffHomeOrganizationIds(adminUserId);
+  if (ids.length === 0) return null;
+  if (ids.length === 1) return `/admin/organization/${ids[0]}`;
+  if (rememberedOrganizationId && ids.includes(rememberedOrganizationId)) {
+    return `/admin/organization/${rememberedOrganizationId}`;
+  }
   return "/admin/organization";
 }
 

@@ -184,6 +184,42 @@ test.describe("organization and roster link rows", () => {
     );
   });
 
+  test("Organization tab returns to the org you were in", { tag: [TAG.ORG] }, async ({ page }) => {
+    test.setTimeout(180_000);
+    const adminId = await playwrightAdminId();
+    const name = uniq("PW Last Org");
+    const org = await prisma.organization.create({
+      data: {
+        name,
+        status: "active",
+        timezone: "America/Denver",
+        createdByOperatorId: TEST_ADMIN.email,
+        members: { create: { adminUserId: adminId, roles: ["owner", "admin"] } },
+      },
+    });
+    await prisma.organization.create({
+      data: {
+        name: uniq("PW Other Org"),
+        status: "active",
+        timezone: "America/Denver",
+        createdByOperatorId: TEST_ADMIN.email,
+        members: { create: { adminUserId: adminId, roles: ["owner"] } },
+      },
+    });
+
+    await page.goto(`/admin/organization/${org.id}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+
+    await page.goto("/admin/students", { waitUntil: "domcontentloaded" });
+    const orgTab = page.locator("aside").getByRole("link", { name: "Organization", exact: true });
+    await expect(orgTab).toBeVisible();
+    await orgTab.click();
+
+    await expect(page).toHaveURL(new RegExp(`/admin/organization/${org.id}$`));
+    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+    await expect(page.getByTestId("org-staff-index")).toHaveCount(0);
+  });
+
   test("student roster rows keep their click target", { tag: [TAG.ORG, TAG.WB_CHROME] }, async ({
     page,
   }) => {

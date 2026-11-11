@@ -27,6 +27,7 @@ export function AdminNav({
   isImpersonating = false,
   showDevTools = false,
   showOrgStaffHome = false,
+  orgStaffHomeHref,
   layout = "full",
 }: AdminNavProps) {
   const adminLinks = buildAdminNavLinks(
@@ -36,6 +37,7 @@ export function AdminNav({
       sessionMode,
       showDevTools,
       showOrgStaffHome,
+      orgStaffHomeHref,
     })
   );
   const pathname = usePathname();

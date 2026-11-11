@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { AdminNav } from "@/components/AdminNav";
 import { AdminSidebarNav } from "@/components/admin/AdminSidebarNav";
@@ -7,7 +8,11 @@ import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { getAdminSessionMode } from "@/lib/admin-routing";
 import { isDevToolsEnabled } from "@/lib/dev-fixtures";
 import { getAdminByEmail } from "@/lib/auth-db";
-import { hasStaffHomeMembership } from "@/lib/org-scope";
+import { organizationNavHref } from "@/lib/org-scope";
+import {
+  LAST_ORGANIZATION_COOKIE,
+  readLastOrganizationCookie,
+} from "@/lib/last-organization";
 import { SeedTutorTimezoneFromSystem } from "@/components/admin/SeedTutorTimezoneFromSystem";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getBuildIdentity } from "@/lib/build-identity";
@@ -37,12 +42,20 @@ export default async function AdminLayout({
 
   const userEmail = session?.user?.email ?? "";
   const admin = userEmail ? await getAdminByEmail(userEmail) : null;
-  const showOrgStaffHome =
-    !!admin &&
+  let orgStaffHomeHref: string | null = null;
+  if (
+    admin &&
     admin.approvalStatus === "APPROVED" &&
     !admin.isTestAccount &&
-    !isImpersonating &&
-    (await hasStaffHomeMembership(admin.id));
+    !isImpersonating
+  ) {
+    const rememberedOrgId = readLastOrganizationCookie(
+      (await cookies()).get(LAST_ORGANIZATION_COOKIE)?.value,
+      admin.id
+    );
+    orgStaffHomeHref = await organizationNavHref(admin.id, rememberedOrgId);
+  }
+  const showOrgStaffHome = orgStaffHomeHref != null;
 
   const navProps = {
     showOperatorLinks,
@@ -51,6 +64,7 @@ export default async function AdminLayout({
     isImpersonating,
     showDevTools,
     showOrgStaffHome,
+    orgStaffHomeHref: orgStaffHomeHref ?? undefined,
     userEmail,
     userDisplayName: admin?.displayName ?? session?.user?.name ?? null,
   };

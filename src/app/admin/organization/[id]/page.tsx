@@ -1,17 +1,19 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { OrgLearnerPanel } from "@/components/org/OrgLearnerPanel";
 import { OrgSchedulePanel } from "@/components/org/OrgSchedulePanel";
 import { OrgStaffHome } from "@/components/org/OrgStaffHome";
+import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/PageShell";
 import {
   listOrganizationBookingChoices,
   listScheduledSessionsForOrganization,
 } from "@/app/admin/schedule/actions";
 import { db } from "@/lib/db";
-import { orgAppointmentListScope, orgLearnerFilterForViewer } from "@/lib/org-appointment-scope";
+import { orgAppointmentListScope, orgLearnerFilterForViewer, STAFF_HOME_ROLES } from "@/lib/org-appointment-scope";
 import { listSchedulerLearners, loadInstructorTaughtSessions, loadOrgLearnerRecords } from "@/lib/org-learner";
 import { orgStaffErrorSentence } from "@/lib/org-staff-messages";
-import { assertOrgRole, loadOrgStaffHome } from "@/lib/org-scope";
+import { assertOrgRole, loadOrgStaffHome, staffHomeOrganizationIds } from "@/lib/org-scope";
 import { isOperatorEmail } from "@/lib/operator";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +56,9 @@ export default async function StaffOrganizationPage({
   const timeZone = choices?.timeZone ?? orgNameRow?.timezone;
   if (!timeZone) notFound();
   const error = query.error ? orgStaffErrorSentence(query.error) : null;
+  const staffOrgIds = actor.roles.some((role) => STAFF_HOME_ROLES.includes(role))
+    ? await staffHomeOrganizationIds(actor.adminId)
+    : [];
 
   return (
     <PageShell
@@ -63,6 +68,13 @@ export default async function StaffOrganizationPage({
         canStaff ? "Members, invitations, and learners." : "Your appointments and sessions."
       }
     >
+      {staffOrgIds.length > 1 ? (
+        <Button variant="link" size="sm" asChild>
+          <Link href="/admin/organization" data-testid="org-switcher">
+            All organizations
+          </Link>
+        </Button>
+      ) : null}
       {data ? (
         <OrgStaffHome
           data={data}

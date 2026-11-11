@@ -23,6 +23,8 @@ export type BuildAdminNavLinksOpts = {
   showDevTools?: boolean;
   /** Owner, admin, or scheduler. Instructors do not get this link. */
   showOrgStaffHome?: boolean;
+  /** Last organization for this account, or the list when none is remembered. */
+  orgStaffHomeHref?: string;
   /**
    * AdminNav: `"always"`.
    * AdminSidebarNav: `"when-real-admin-home"`.
@@ -55,7 +57,7 @@ export function buildAdminNavLinks(opts: BuildAdminNavLinksOpts): AdminNavLink[]
     ...(includeDashboard ? [{ href: "/admin", label: "Dashboard" }] : []),
     ...(sessionMode === "tutor-experience" ? TUTOR_LINKS : []),
     ...(opts.showOrgStaffHome
-      ? [{ href: "/admin/organization", label: "Organization" }]
+      ? [{ href: opts.orgStaffHomeHref ?? "/admin/organization", label: "Organization" }]
       : []),
     ...(opts.showOperatorLinks
       ? [

@@ -16,8 +16,11 @@ import {
   shouldRedirectToTutorEmailVerify,
 } from "@/lib/admin-routing";
 import {
-  applySignupIntentCookieToResponse,
-} from "@/lib/signup-intent";
+  LAST_ORGANIZATION_COOKIE,
+  lastOrganizationCookieValue,
+  organizationIdFromPath,
+} from "@/lib/last-organization";
+import { applySignupIntentCookieToResponse } from "@/lib/signup-intent";
 import { isPlaywrightHarnessActive } from "@/lib/playwright-harness";
 import {
   productionCanonicalRedirect,
@@ -376,6 +379,24 @@ export async function middleware(req: NextRequest) {
     const secret = process.env.NEXTAUTH_SECRET;
     if (secret) {
       await applySignupIntentCookieToResponse(response, secret);
+    }
+  }
+
+  const openedOrganizationId = organizationIdFromPath(pathname);
+  if (openedOrganizationId) {
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    if (token?.sub) {
+      response.cookies.set(
+        LAST_ORGANIZATION_COOKIE,
+        lastOrganizationCookieValue(token.sub, openedOrganizationId),
+        {
+          httpOnly: true,
+          sameSite: "lax",
+          path: "/",
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 60 * 60 * 24 * 400,
+        }
+      );
     }
   }
 
