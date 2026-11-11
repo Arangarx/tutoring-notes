@@ -1136,6 +1136,26 @@ test.describe("whiteboard QoL surfaces", () => {
     }
   );
 
+  test(
+    "session menu closes when the window widens enough to hide More",
+    { tag: [TAG.WB_CHROME] },
+    async ({ page }) => {
+      test.setTimeout(120_000);
+      await openTutorBoard(page);
+
+      await page.setViewportSize({ width: 1000, height: 800 });
+      const sessionBtn = page.getByRole("button", { name: "More session options" });
+      await expect(sessionBtn).toBeVisible();
+      await sessionBtn.click();
+      const menu = page.getByTestId("wb-topbar-overflow-dropdown");
+      await expect(menu).toBeVisible();
+
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await expect(menu).not.toBeVisible();
+      await expect(sessionBtn).not.toBeVisible();
+    }
+  );
+
   /**
    * PLAYWRIGHT-GAP: iOS soft keyboard covering the phone expression tray.
    * Playwright cannot show the iOS keyboard or shrink visualViewport the way

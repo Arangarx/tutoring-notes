@@ -1007,6 +1007,20 @@ export function WhiteboardWorkspaceClient({
   useEffect(() => {
     setOpenMenu(null);
   }, [layoutMode]);
+  // Desktop width hides More with a viewport query and does not change layoutMode.
+  // Close the session menu when that button is no longer on screen.
+  const sessionOptionsBtnRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const closeSessionMenuIfTriggerHidden = () => {
+      const btn = sessionOptionsBtnRef.current;
+      if (!btn) return;
+      if (getComputedStyle(btn).display === "none") {
+        setOpenMenu((current) => (current === "topbar-more" ? null : current));
+      }
+    };
+    window.addEventListener("resize", closeSessionMenuIfTriggerHidden);
+    return () => window.removeEventListener("resize", closeSessionMenuIfTriggerHidden);
+  }, []);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
   // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
@@ -5824,6 +5838,7 @@ export function WhiteboardWorkspaceClient({
       <button
         type="button"
         className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn mynk-wb-session-options-btn"
+        ref={sessionOptionsBtnRef}
         title="More session options"
         aria-label="More session options"
         aria-expanded={topbarMoreOpen}
