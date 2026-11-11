@@ -1028,6 +1028,82 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
     }
   });
 
+  test("an admitted instructor opens an org learner from the Students list", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const marker = uniq("detail").replace(/[^a-z0-9]/gi, "").slice(-8);
+    const learner = await seedLearner(org.id, owner.id, true, {
+      givenName: `Gale${marker}`,
+      familyName: `Lee${marker}`,
+    });
+    await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+
+    const { context, page } = await signIn(browser, {
+      id: instructor.id,
+      email: instructor.email,
+      displayName: instructor.displayName,
+    });
+    try {
+      await page.goto("/admin/students");
+      expect(page.url(), "session cookie was rejected").not.toContain("/login");
+      const row = page.getByRole("link", { name: learner.fullName });
+      await expect(row).toHaveCount(1);
+      const detailPath = `/admin/students/${learner.student.id}`;
+      await row.click();
+      try {
+        await page.waitForURL((url) => url.pathname === detailPath, { timeout: 8_000 });
+      } catch {
+        // Next dev can drop the first click while it compiles the destination.
+        if (new URL(page.url()).pathname !== detailPath) {
+          await row.click();
+          await page.waitForURL((url) => url.pathname === detailPath, { timeout: 30_000 });
+        }
+      }
+      const heading = page.getByRole("heading", { level: 1 });
+      await expect(heading).toHaveText(learner.fullName, { timeout: 30_000 });
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Not found", exact: true })
+      ).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("an instructor with no membership on the organization cannot open that learner", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const other = await seedOrg();
+    const outsider = await seedInstructor(other.org.id, "Otto Outsider");
+    const marker = uniq("closed").replace(/[^a-z0-9]/gi, "").slice(-8);
+    const learner = await seedLearner(org.id, owner.id, true, {
+      givenName: `Gale${marker}`,
+      familyName: `Lee${marker}`,
+    });
+
+    const { context, page } = await signIn(browser, {
+      id: outsider.id,
+      email: outsider.email,
+      displayName: outsider.displayName,
+    });
+    try {
+      await page.goto(`/admin/students/${learner.student.id}`);
+      expect(page.url(), "session cookie was rejected").not.toContain("/login");
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Not found", exact: true })
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(
+        page.getByRole("heading", { level: 1, name: learner.fullName, exact: true })
+      ).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("the instructor cannot edit or delete an org appointment from Schedule", async ({ browser }) => {
     test.setTimeout(180_000);
     const { org, owner } = await seedOrg();

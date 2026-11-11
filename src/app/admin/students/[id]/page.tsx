@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { orgInstructorAdmitted } from "@/lib/org-scope";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
 import { UpcomingSessionsCard } from "@/components/scheduling/UpcomingSessionsCard";
 import { OpenScheduledRoomButton } from "@/components/scheduling/OpenScheduledRoomButton";
@@ -75,7 +76,14 @@ export default async function StudentDetailPage({
   });
 
   if (!student) notFound();
-  if (!canAccessStudentRow(scope, student)) notFound();
+  // Keep canAccessStudentRow unchanged: it also gates rename, delete, and share.
+  // An admitted instructor may read this page for an org-owned learner.
+  const admittedOrgInstructor =
+    scope.kind === "admin" &&
+    student.adminUserId === null &&
+    student.organizationId !== null &&
+    (await orgInstructorAdmitted(db, student.organizationId, scope.adminId));
+  if (!canAccessStudentRow(scope, student) && !admittedOrgInstructor) notFound();
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const [endedUnsavedSessions, endedUnsavedTotalCount] = await Promise.all([
