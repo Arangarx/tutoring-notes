@@ -90,6 +90,10 @@ jest.mock("@/lib/whiteboard-scope", () => ({
   orgBoardEditsAllowed: jest.fn().mockResolvedValue(true),
 }));
 
+jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
+  assertStudentNotErased: jest.fn().mockResolvedValue(undefined),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports
 // ---------------------------------------------------------------------------

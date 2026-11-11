@@ -1072,6 +1072,78 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
     }
   });
 
+  test("an admitted instructor sees the erasure shell for a suspended org learner", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const marker = uniq("erasure").replace(/[^a-z0-9]/gi, "").slice(-8);
+    const learner = await seedLearner(org.id, owner.id, true, {
+      givenName: `Gale${marker}`,
+      familyName: `Lee${marker}`,
+    });
+    const profile = await prisma.learnerProfile.findUniqueOrThrow({
+      where: { id: learner.profile.id },
+      select: { accountHolderId: true },
+    });
+    const tombstonedAt = new Date();
+    await prisma.learnerProfile.update({
+      where: { id: learner.profile.id },
+      data: { tombstonedAt },
+    });
+    await prisma.accountHolder.update({
+      where: { id: profile.accountHolderId },
+      data: { tombstonedAt },
+    });
+    await prisma.erasureJob.create({
+      data: {
+        scopeKind: "learner_profile",
+        scopeId: learner.profile.id,
+        status: "requested",
+        requestedByPrincipal: `admin:${owner.id}`,
+        purgeEligibleAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+    await prisma.whiteboardSession.create({
+      data: {
+        adminUserId: instructor.id,
+        studentId: learner.student.id,
+        consentAcknowledged: true,
+        eventsBlobUrl: "https://blob.example.com/org-erasure-open.json",
+        sessionPhase: "ACTIVE",
+      },
+    });
+
+    const { context, page } = await signIn(browser, {
+      id: instructor.id,
+      email: instructor.email,
+      displayName: instructor.displayName,
+    });
+    try {
+      await page.goto(`/admin/students/${learner.student.id}`);
+      expect(page.url(), "session cookie was rejected").not.toContain("/login");
+      const heading = page.getByRole("heading", { level: 1, name: learner.fullName, exact: true });
+      const shell = page.getByTestId("student-erasure-suspended-shell");
+      await expect(heading.or(shell)).toBeVisible({ timeout: 30_000 });
+      // The detail heading is the pre-fix leak: the suspended shell replaces it.
+      await expect(heading).toHaveCount(0);
+      await expect(shell).toBeVisible();
+      await expect(shell.getByTestId("student-critical-card")).toContainText(
+        "This student's account is being deleted. Sessions are off."
+      );
+      await expect(shell.getByRole("link", { name: /back to roster/i })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Cancel and delete" })).toHaveCount(0);
+      const moreActions = page.getByRole("button", { name: "More actions" });
+      if ((await moreActions.count()) > 0) {
+        await moreActions.click();
+      }
+      await expect(page.getByRole("button", { name: "Delete student" })).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("an instructor with no membership on the organization cannot open that learner", async ({
     browser,
   }) => {

@@ -42,6 +42,7 @@ import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
 import type { TutorNote } from "@prisma/client";
 import { TRANSCRIBE_SWEEP_MAX_ATTEMPTS } from "@/lib/recording/transcribe-sweep-config";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 
 // ---------------------------------------------------------------------------
 // (a) End-session sweep — kick non-done chunks for this session
@@ -478,6 +479,10 @@ export async function deleteWhiteboardSessionAndDataAction(
       );
       return { ok: false, error: "Not authorized to delete this session." };
     }
+
+    // Same content-access guard notes writes use. notFound() throws into the
+    // catch below, which is this action's existing refusal, before any delete.
+    await assertStudentNotErased(session.studentId);
 
     const noteId = sessionDetail.noteId;
 

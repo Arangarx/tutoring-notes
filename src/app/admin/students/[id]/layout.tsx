@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { orgInstructorAdmitted } from "@/lib/org-scope";
 import { canAccessStudentRow, getStudentScope } from "@/lib/student-scope";
 import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
 import { deriveStudentErasureDisplayState, isStudentAccessSuspended } from "@/lib/erasure/student-erasure-display";
@@ -52,9 +53,28 @@ export default async function StudentDetailLayout({
     },
   });
 
-  if (!student || !canAccessStudentRow(scope, student)) {
+  if (!student) {
     // Let the page.tsx notFound() handler fire — don't short-circuit here.
     return <>{children}</>;
+  }
+
+  if (!canAccessStudentRow(scope, student)) {
+    // Org learners are not row-owned by the instructor. An admitted instructor
+    // still gets this same shell while access is suspended. Anyone else,
+    // including a removed tutor, falls through so notes and a taught
+    // whiteboard stay reachable. Do not notFound() here.
+    const organizationId = student.organizationId;
+    if (
+      scope.kind !== "admin" ||
+      organizationId == null ||
+      student.adminUserId != null
+    ) {
+      return <>{children}</>;
+    }
+    const admitted = await orgInstructorAdmitted(db, organizationId, scope.adminId);
+    if (!admitted) {
+      return <>{children}</>;
+    }
   }
 
   const lp = student.learnerProfile;
