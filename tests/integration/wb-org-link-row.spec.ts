@@ -5,6 +5,7 @@
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
+import { LAST_ORGANIZATION_COOKIE } from "../../src/lib/last-organization";
 import { TAG } from "../test-tags";
 import { TEST_ADMIN } from "../visual/helpers";
 
@@ -207,15 +208,77 @@ test.describe("organization and roster link rows", () => {
       },
     });
 
+    // Compile the pages this flow clicks. A document reload would render the
+    // admin layout again, which is the hole in a page.goto of Students.
+    await page.context().clearCookies({ name: LAST_ORGANIZATION_COOKIE });
+    await page.goto("/admin/students", { waitUntil: "domcontentloaded" });
+    await page.goto("/admin/organization", { waitUntil: "domcontentloaded" });
     await page.goto(`/admin/organization/${org.id}`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
 
-    await page.goto("/admin/students", { waitUntil: "domcontentloaded" });
-    const orgTab = page.locator("aside").getByRole("link", { name: "Organization", exact: true });
-    await expect(orgTab).toBeVisible();
-    await orgTab.click();
+    const orgPath = new RegExp(`/admin/organization/${org.id}$`);
+    const rowSelector = `[data-testid="org-staff-link-${org.id}"]`;
+    const openedOnSameLayout = async () => {
+      await page.context().clearCookies({ name: LAST_ORGANIZATION_COOKIE });
+      await page.goto("/admin/organization", { waitUntil: "domcontentloaded" });
+      const orgTab = page.locator("aside").getByRole("link", { name: "Organization", exact: true });
+      await expect(orgTab).toHaveAttribute("href", "/admin/organization");
+      // A click before hydration is a document load. That re-renders the layout
+      // on the next request and hides the stale Organization href.
+      await page.waitForFunction((selector) => {
+        const el = document.querySelector(selector);
+        if (!el) return false;
+        return Object.keys(el).some(
+          (key) => key.startsWith("__reactFiber") || key.startsWith("__reactProps")
+        );
+      }, rowSelector);
+      await page.evaluate(() => {
+        document.documentElement.dataset.tnLayout = "stay";
+      });
+      await page.locator(rowSelector).click();
+      await expect(page).toHaveURL(orgPath);
+      await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+      return (await page.locator("html").getAttribute("data-tn-layout")) === "stay";
+    };
 
-    await expect(page).toHaveURL(new RegExp(`/admin/organization/${org.id}$`));
+    // Dev may full-reload once while a route compiles. That reload reads the
+    // cookie and hides the bug, so repeat the open until the layout stays mounted.
+    let stayed = await openedOnSameLayout();
+    if (!stayed) stayed = await openedOnSameLayout();
+    expect(stayed, "organization opened without reloading the admin layout").toBe(true);
+
+    const remembered = (await page.context().cookies()).find(
+      (cookie) => cookie.name === LAST_ORGANIZATION_COOKIE
+    );
+    expect(remembered?.value).toContain(org.id);
+
+    const hrefOnOrg = await page
+      .locator("aside")
+      .getByRole("link", { name: "Organization", exact: true })
+      .getAttribute("href");
+
+    const students = page.locator("aside").getByRole("link", { name: "Students", exact: true });
+    await students.click();
+    try {
+      await page.waitForURL(/\/admin\/students$/, { timeout: 8_000 });
+    } catch (err) {
+      if ((await page.locator("html").getAttribute("data-tn-layout")) !== "stay") throw err;
+      await students.click();
+      await page.waitForURL(/\/admin\/students$/, { timeout: 15_000 });
+    }
+    await expect(page).toHaveURL(/\/admin\/students$/);
+    await expect(page.locator("html")).toHaveAttribute("data-tn-layout", "stay");
+
+    const hrefOnStudents = await page
+      .locator("aside")
+      .getByRole("link", { name: "Organization", exact: true })
+      .getAttribute("href");
+    expect(hrefOnStudents, `href on the organization page was ${hrefOnOrg}`).toBe(
+      `/admin/organization/${org.id}`
+    );
+
+    await page.locator("aside").getByRole("link", { name: "Organization", exact: true }).click();
+    await expect(page).toHaveURL(orgPath);
     await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
     await expect(page.getByTestId("org-staff-index")).toHaveCount(0);
   });
