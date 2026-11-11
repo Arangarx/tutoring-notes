@@ -22,12 +22,15 @@ import { AddStudentForm } from "@/components/admin/AddStudentForm";
 import { rosterPendingDisplayLabel } from "@/lib/roster-invite-target";
 import { SITE_ROLE_ROSTER_LEARNER } from "@/lib/site-role-labels";
 import { StudentErasurePendingBadge } from "@/components/admin/StudentErasureStatus";
+import { OrgBadge } from "@/components/org/OrgBadge";
 import type { StudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
 
 export type StudentRosterItem = {
   id: string;
   name: string;
   parentEmail: string | null;
+  /** Set when this row is an organization learner the instructor is booked to teach. */
+  organizationName?: string | null;
   learnerProfileId: string | null;
   createdAt: string;
   erasureState: StudentErasureDisplayState;
@@ -150,7 +153,14 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
                   href={`/admin/students/${s.id}`}
                   leading={<StudentAvatar name={label} size="md" />}
                   title={label}
-                  badges={<StudentErasurePendingBadge state={s.erasureState} />}
+                  badges={
+                    <>
+                      {s.organizationName ? (
+                        <OrgBadge organizationName={s.organizationName} />
+                      ) : null}
+                      <StudentErasurePendingBadge state={s.erasureState} />
+                    </>
+                  }
                   meta={`Added ${new Date(s.createdAt).toLocaleDateString()}`}
                 />
               </li>

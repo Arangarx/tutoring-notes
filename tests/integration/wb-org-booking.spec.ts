@@ -987,6 +987,47 @@ test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TA
     }
   });
 
+  test("a scheduler-booked learner appears once on the instructor's Students list with the organization badge", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const instructor = await seedInstructor(org.id, "Ida Instructor");
+    const marker = uniq("roster").replace(/[^a-z0-9]/gi, "").slice(-8);
+    const learner = await seedLearner(org.id, owner.id, true, {
+      givenName: `Gale${marker}`,
+      familyName: `Lee${marker}`,
+    });
+    await seedToday(instructor.id, learner.student.id, "Algebra", 10);
+    const personal = await prisma.student.create({
+      data: { name: `Pat ${uniq("personal")}`, adminUserId: instructor.id },
+    });
+
+    const { context, page } = await signIn(browser, {
+      id: instructor.id,
+      email: instructor.email,
+      displayName: instructor.displayName,
+    });
+    try {
+      await page.goto("/admin/students");
+      expect(page.url(), "session cookie was rejected").not.toContain("/login");
+      const row = page.getByRole("link", { name: learner.fullName });
+      await expect(row).toHaveCount(1);
+      await expect(row.getByTestId("org-badge")).toHaveText(`via ${org.name}`);
+
+      const personalRow = page.getByRole("link", { name: personal.name });
+      await expect(personalRow).toHaveCount(1);
+      await expect(personalRow.getByTestId("org-badge")).toHaveCount(0);
+      const stored = await prisma.student.findUnique({
+        where: { id: personal.id },
+        select: { organizationId: true, adminUserId: true },
+      });
+      expect(stored).toMatchObject({ organizationId: null, adminUserId: instructor.id });
+    } finally {
+      await context.close();
+    }
+  });
+
   test("the instructor cannot edit or delete an org appointment from Schedule", async ({ browser }) => {
     test.setTimeout(180_000);
     const { org, owner } = await seedOrg();
