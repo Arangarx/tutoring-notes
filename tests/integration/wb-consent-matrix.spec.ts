@@ -622,6 +622,34 @@ test.describe("consent 6f: Notes", {
       expect(await prisma.tutorNote.count({ where: { sessionId: id } })).toBe(0);
     }
   );
+  // Oracle: the visible skipped sentence on the legacy review URL, read as soon as the notes card is on screen.
+  // The status poll is 3s, so a first paint of "Preparing your notes..." cannot pass a check that gives up before that.
+  test(
+    "N2c: notes off, no TutorNote row: the legacy review page shows notes are off on first paint",
+    { tag: [TAG.WB_CONSENT, TAG.WB_RECORDING] },
+    async ({ page, request, baseURL }) => {
+      test.setTimeout(180_000);
+      const { id, studentId } = await seedSession({ audio: true, notes: false });
+      expect(
+        await invoke(request, "registerSegment", id, {
+          blobUrl: await seedBlob(request, baseURL!, studentId),
+          mimeType: "audio/webm",
+          sizeBytes: 14,
+          streamId: TUTOR_LANE,
+          audioStartedAtMs: 0,
+        })
+      ).toMatchObject({ ok: true });
+      await sealSession(id);
+      expect(await prisma.tutorNote.count({ where: { sessionId: id } })).toBe(0);
+
+      await page.goto(`/admin/students/${studentId}/whiteboard/${id}`, { waitUntil: "domcontentloaded" });
+      const card = page.getByTestId("tutor-notes-section");
+      await expect(card).toBeVisible({ timeout: 30_000 });
+      await expect(card).not.toContainText("Preparing your notes", { timeout: 500 });
+      await expect(page.getByTestId("tutor-notes-skipped")).toHaveText(NOTES_OFF_COPY, { timeout: 2_000 });
+      expect(await prisma.tutorNote.count({ where: { sessionId: id } })).toBe(0);
+    }
+  );
   // Oracle: Server action result
   test(
     "N3: notes off: manual generate-notes call is refused",
