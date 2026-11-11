@@ -278,6 +278,59 @@ describe("TutorNotesSection skipped notes (consent wave C2: notes off settles th
     expect(screen.queryByTestId("tutor-notes-skipped")).not.toBeInTheDocument();
     expect(screen.getByTestId("tutor-notes-generating")).toBeInTheDocument();
   });
+
+  it("no row because notes are off, with audio: the skipped line at once, never 'Preparing', never polled", async () => {
+    jest.useFakeTimers();
+    render(
+      <TutorNotesSection
+        whiteboardSessionId="wbs-off"
+        studentId="stu-1"
+        hasAudio={true}
+        initialNote={{ found: false, notesOff: true }}
+      />
+    );
+    expect(screen.getByTestId("tutor-notes-skipped")).toHaveTextContent("Notes are off for this session");
+    expect(screen.queryByText(/Preparing your notes/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tutor-notes-generating")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("wb-regenerate-notes")).not.toBeInTheDocument();
+    await act(async () => {
+      jest.advanceTimersByTime(6 * 60_000);
+    });
+    expect(getTutorNoteStatusAction).not.toHaveBeenCalled();
+    expect(screen.queryByText(/taking longer than expected/i)).not.toBeInTheDocument();
+  });
+
+  it("no row yet with notes on and audio: still in flight (the trigger race), and the poll runs", async () => {
+    jest.useFakeTimers();
+    (getTutorNoteStatusAction as jest.Mock).mockResolvedValue({ found: false });
+    render(
+      <TutorNotesSection whiteboardSessionId="wbs-on" studentId="stu-1" hasAudio={true} initialNote={{ found: false }} />
+    );
+    expect(screen.getByTestId("tutor-notes-status")).toHaveTextContent("Preparing your notes...");
+    expect(screen.queryByTestId("tutor-notes-skipped")).not.toBeInTheDocument();
+    await act(async () => {
+      jest.advanceTimersByTime(3_500);
+    });
+    expect(getTutorNoteStatusAction).toHaveBeenCalled();
+  });
+
+  it("a poll that reports notes off settles the card on the skipped line and stops polling", async () => {
+    jest.useFakeTimers();
+    (getTutorNoteStatusAction as jest.Mock).mockResolvedValue({ found: false, notesOff: true });
+    render(
+      <TutorNotesSection whiteboardSessionId="wbs-flip" studentId="stu-1" hasAudio={true} initialNote={{ found: false }} />
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(3_500);
+    });
+    expect(screen.getByTestId("tutor-notes-skipped")).toBeInTheDocument();
+    expect(screen.queryByText(/Preparing your notes/)).not.toBeInTheDocument();
+    const calls = (getTutorNoteStatusAction as jest.Mock).mock.calls.length;
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+    });
+    expect((getTutorNoteStatusAction as jest.Mock).mock.calls.length).toBe(calls);
+  });
 });
 
 describe("TutorNotesSection regenerate clears the earlier Save confirmation", () => {

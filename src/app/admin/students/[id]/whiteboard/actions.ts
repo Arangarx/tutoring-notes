@@ -37,13 +37,11 @@ import { parseDateOnlyInput } from "@/lib/date-only";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import { assertConsentRecordExists, ConsentError } from "@/lib/consent-scope";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 import {
-  assertConsentRecordExists,
-  ConsentError,
-  resolveSessionCapabilities,
-} from "@/lib/consent-scope";
-import { TUTOR_MIC_STREAM_ID, acceptsAudioSegments } from "@/lib/recording/session-capabilities";
-import {
+  filterStorableAudioSegments,
+  filterTranscribableRecordings,
   gateAudioSegment,
   gateNotesDraft,
   gateTranscription,
@@ -829,11 +827,7 @@ async function acceptOrgForcedEndUpload(
     }
   }
 
-  let audioConsentGranted = true;
-  if (segments.length > 0) {
-    const capabilities = await resolveSessionCapabilities(whiteboardSessionId);
-    if (!acceptsAudioSegments(capabilities)) audioConsentGranted = false;
-  }
+  const storableSegments = await filterStorableAudioSegments(whiteboardSessionId, segments);
   const erasureShortCircuit = await shouldShortCircuitEndSessionForErasure(session.studentId);
 
   const existing = await db.whiteboardSession.findUnique({
@@ -849,12 +843,12 @@ async function acceptOrgForcedEndUpload(
         data: { eventsBlobUrl: finalEventsBlobUrl },
       });
     }
-    if (segments.length > 0 && audioConsentGranted && !erasureShortCircuit) {
+    if (storableSegments.length > 0 && !erasureShortCircuit) {
       registeredSegments = await insertEndSessionSegments(tx, {
         whiteboardSessionId,
         adminUserId: session.adminUserId,
         studentId: session.studentId,
-        segments,
+        segments: storableSegments,
       });
     }
   });
@@ -1197,19 +1191,14 @@ export async function endWhiteboardSession(
     }
   }
 
-  // B2 + Block B: mode-aware audio consent BEFORE the transaction.
-  // IN_PERSON+denied or no-snapshot claimed minor → skip segment registration.
-  // LIVE+denied → register tutor-only mixdown (client already excluded student).
-  // Session ALWAYS closes successfully — no lost sessions (reliability invariant).
-  let audioConsentGranted = true;
-  if (segments.length > 0) {
-    const capabilities = await resolveSessionCapabilities(whiteboardSessionId);
-    if (!acceptsAudioSegments(capabilities)) {
-      audioConsentGranted = false;
-      console.warn(
-        `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} audio_consent_denied reason=audio_mode_none — segments will NOT be registered; session close proceeds`
-      );
-    }
+  // B2 + C2: per-lane audio consent BEFORE the transaction. In person with audio
+  // off drops every segment; online with audio off (tutor_only) keeps only the
+  // tutor lane. Session ALWAYS closes successfully — no lost sessions (reliability invariant).
+  const storableSegments = await filterStorableAudioSegments(whiteboardSessionId, segments);
+  if (storableSegments.length < segments.length) {
+    console.warn(
+      `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} audio_consent_dropped dropped=${segments.length - storableSegments.length} kept=${storableSegments.length} — refused segments will NOT be registered; session close proceeds`
+    );
   }
 
   // E6 / H-2: skip segment registration + content blob persist when erasure
@@ -1331,16 +1320,16 @@ export async function endWhiteboardSession(
           //      the in-flight race where two tabs both reach end
           //      with overlapping payloads — extremely unlikely in
           //      practice but cheap to defend).
-          // B2: audioConsentGranted=false skips registration entirely;
+          // B2 + C2: only the consent-filtered segments are registered;
           // E6: erasureShortCircuit skips registration + content persist;
           // session close + token revocation still proceed.
           let newSegments = 0;
-          if (segments.length > 0 && audioConsentGranted && !erasureShortCircuit) {
+          if (storableSegments.length > 0 && !erasureShortCircuit) {
             newSegments = await insertEndSessionSegments(tx, {
               whiteboardSessionId,
               adminUserId: session.adminUserId,
               studentId: session.studentId,
-              segments,
+              segments: storableSegments,
             });
           }
 
@@ -1646,16 +1635,17 @@ export async function generateNotesFromWhiteboardSessionAction(
     return { ok: false, error: NOTES_SKIPPED_COPY, debugId: rid };
   }
 
-  // Load all audio recordings for this whiteboard session.
-  const audioRows = await withDbRetry(
+  // Load the recordings whose lane may be transcribed: with audio off online, a learner lane never reaches Whisper.
+  const storedRows = await withDbRetry(
     () =>
       db.sessionRecording.findMany({
         where: { whiteboardSessionId },
-        select: { id: true, blobUrl: true, mimeType: true, createdAt: true },
+        select: { id: true, blobUrl: true, mimeType: true, createdAt: true, streamId: true },
         orderBy: { createdAt: "asc" },
       }),
     { label: "generateNotesFromWB.audioRows" }
   );
+  const audioRows = await filterTranscribableRecordings(whiteboardSessionId, storedRows);
 
   if (audioRows.length === 0) {
     return {

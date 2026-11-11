@@ -210,8 +210,9 @@ async function handleSegmentUploaded(row: OutboxRow): Promise<void> {
   }
 
   if (result.refused) {
-    // Consent refusal (wave C2): final, not an outage. Returning without a throw settles the row terminally (the
-    // outbox marks registerOk), so it is never retried as "failed forever", and it logs `refused`, not an error.
+    // Consent refusal (wave C2), not an outage. Returning without a throw marks the row registerOk, so it is not retried
+    // mid-session and logs `refused`, not an error. The row still rides along in the End payload; End re-checks every
+    // segment's lane and drops this one, so it is never stored.
     console.log(
       `[obx] obx=${shortObx} action=register_mid_session_refused wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId}`
     );

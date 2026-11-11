@@ -187,12 +187,15 @@ export default function TutorNotesSection({
   const startTimeRef = useRef<number>(Date.now());
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Terminal: notes are off for this session — a `skipped` row, or no row because notes off never creates one.
+  // Not active (so the poll stops), no form, no Regenerate.
+  const isSkipped = note.found ? note.status === "skipped" : note.notesOff === true;
   // Active = notes are in-flight. Includes the "not yet created" case (race between
   // fire-and-forget triggerNotesGenerationAction and immediate review page load):
   // if there's audio but no TutorNote row yet, we poll until the row appears.
   const isActive =
     (note.found && (note.status === "pending" || note.status === "generating")) ||
-    (!note.found && hasAudio);
+    (!note.found && hasAudio && !isSkipped);
   const isPendingPhase =
     isActive &&
     (!note.found || note.status === "pending");
@@ -203,8 +206,6 @@ export default function TutorNotesSection({
     : "Preparing your notes...";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
-  // Terminal: notes are off for this session. Not active (so the poll stops), no form, no Regenerate.
-  const isSkipped = note.found && note.status === "skipped";
   // A finished, failed, or timed-out note can be saved by hand. Session
   // deletion stays on a finished note: it removes the session, not the draft.
   const canSaveManualNote = isDone || isFailed || timedOut;
@@ -263,10 +264,9 @@ export default function TutorNotesSection({
         setNote(result);
 
         // Continue polling while in-flight (pending/generating or row not created yet).
-        const stillActive =
-          !result.found ||
-          result.status === "pending" ||
-          result.status === "generating";
+        const stillActive = result.found
+          ? result.status === "pending" || result.status === "generating"
+          : !result.notesOff;
         if (stillActive) {
           scheduleNextPoll();
         }

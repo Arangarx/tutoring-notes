@@ -137,15 +137,6 @@ export function deriveSessionCapabilities(input: SessionCapabilityInput): Sessio
 }
 
 /**
- * Server gate: may ANY audio segment or chunk be registered, stored or transcribed? Online with audio off keeps
- * the tutor-only mixdown (`tutor_only`), so only `none` refuses. This is the lane-blind question the end-session
- * paths ask; the per-lane server gates (C2) are `decideAudioSegment` and `decideTranscription` below.
- */
-export function acceptsAudioSegments(capabilities: SessionCapabilities): boolean {
-  return capabilities.audio.mode !== "none";
-}
-
-/**
  * p3-clock (disconnect pause/freeze): should the whiteboard event recorder
  * be capturing strokes right now?
  *

@@ -260,6 +260,7 @@ describe("generateNotesFromWhiteboardSessionAction", () => {
     dbMock.sessionRecording.findMany.mockResolvedValue([
       {
         id: "rec-1",
+        streamId: "tutor:mic",
         blobUrl: "https://blob.vercel-storage.com/audio.webm",
         mimeType: "audio/webm",
         createdAt: new Date("2026-04-01T17:00:00Z"),
@@ -281,6 +282,7 @@ describe("generateNotesFromWhiteboardSessionAction", () => {
     dbMock.sessionRecording.findMany.mockResolvedValue([
       {
         id: "rec-1",
+        streamId: "tutor:mic",
         blobUrl: "https://blob.vercel-storage.com/audio.webm",
         mimeType: "audio/webm",
         createdAt: new Date("2026-04-01T17:30:00Z"),
@@ -320,6 +322,7 @@ describe("generateNotesFromWhiteboardSessionAction", () => {
     dbMock.sessionRecording.findMany.mockResolvedValue([
       {
         id: "rec-1",
+        streamId: "tutor:mic",
         blobUrl: "https://blob.vercel-storage.com/audio.webm",
         mimeType: "audio/webm",
         createdAt: new Date("2026-04-01T17:30:00Z"),
@@ -346,6 +349,68 @@ describe("generateNotesFromWhiteboardSessionAction", () => {
       expect(result.warning).toMatch(/couldn't auto-organize/i);
       expect(result.warningKind).toBe("ai-fallback");
     }
+  });
+
+  // Consent C2 at the manual generate path: the oracle is which recordings were downloaded and sent to Whisper.
+  describe("per-lane transcription gate", () => {
+    const TUTOR_URL = "https://blob.vercel-storage.com/tutor.webm";
+    const PEER_URL = "https://blob.vercel-storage.com/peer.webm";
+    const SPEAKER_URL = "https://blob.vercel-storage.com/speaker.webm";
+    const recordings = [
+      { id: "rec-tutor", blobUrl: TUTOR_URL, streamId: "tutor:mic" },
+      { id: "rec-peer", blobUrl: PEER_URL, streamId: "student:peer-p1:mic" },
+      { id: "rec-speaker", blobUrl: SPEAKER_URL, streamId: "speaker:learner-1:transcript" },
+    ].map((r, i) => ({ ...r, mimeType: "audio/webm", createdAt: new Date(Date.UTC(2026, 3, 1, 17, i)) }));
+
+    function seedLiveSession(audio: boolean) {
+      dbMock.whiteboardSession.findUnique.mockResolvedValue({
+        sessionPhase: "ACTIVE",
+        sessionMode: "LIVE",
+        notesForbidden: false,
+        consentSnapshot: {
+          allowLiveSession: true,
+          allowAudioRecording: audio,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+        },
+        student: { adminUserId: "admin-1", organizationId: null, learnerProfileId: null },
+      });
+      dbMock.sessionRecording.findMany.mockResolvedValue(recordings);
+      dbMock.student.findUniqueOrThrow.mockResolvedValue({ name: "Alice" });
+      dbMock.sessionNote.findFirst.mockResolvedValue({ template: null });
+      dbMock.sessionRecording.update.mockResolvedValue({});
+      global.fetch = jest
+        .fn()
+        .mockImplementation(async () => new Response(Buffer.from("audio-bytes"), { status: 200 })) as unknown as FetchFn;
+      transcribeAudioMock.mockResolvedValue({ transcript: "We factored quadratics", durationSeconds: 60 });
+      generateSessionNoteMock.mockResolvedValue({
+        topics: "Quadratics",
+        homework: "",
+        assessment: "",
+        plan: "",
+        links: "",
+        promptVersion: "v6",
+      });
+    }
+
+    const transcribedIds = () =>
+      transcribeAudioMock.mock.calls.map((c) => (c[3] as { sessionRecordingId: string }).sessionRecordingId);
+    const downloadedUrls = () => (global.fetch as unknown as jest.Mock).mock.calls.map((c) => String(c[0]));
+
+    it("audio off online (tutor_only), notes on: only the tutor recording is downloaded and transcribed", async () => {
+      seedLiveSession(false);
+      const result = await generateNotesFromWhiteboardSessionAction("ws-1");
+      expect(result.ok).toBe(true);
+      expect(transcribedIds()).toEqual(["rec-tutor"]);
+      expect(downloadedUrls()).toEqual([TUTOR_URL]);
+    });
+
+    it("audio on: every lane is transcribed", async () => {
+      seedLiveSession(true);
+      const result = await generateNotesFromWhiteboardSessionAction("ws-1");
+      expect(result.ok).toBe(true);
+      expect(transcribedIds().sort()).toEqual(["rec-peer", "rec-speaker", "rec-tutor"]);
+    });
   });
 });
 

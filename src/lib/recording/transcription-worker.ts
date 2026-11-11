@@ -39,7 +39,7 @@ import { transcribeChunk } from "@/lib/recording/transcribe-chunk";
 import { extractChunkMap } from "@/lib/recording/extract-chunk";
 import { db } from "@/lib/db";
 import { isTutorApproved } from "@/lib/tutor-approval-scope";
-import { gateTranscription, type LaneGateSurface } from "@/lib/recording/consent-gates";
+import { gateTranscription, type TranscriptionGateSurface } from "@/lib/recording/consent-gates";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,7 +63,7 @@ export type ChunkTranscribeInput = {
   /** Per-speaker label. Like `streamId`, only used to create a row; the stored value wins afterwards. */
   speakerId?: string | null;
   /** Which entry called the worker, for the refusal log line. Defaults to `chunk`. */
-  surface?: Exclude<LaneGateSurface, "segment">;
+  surface?: TranscriptionGateSurface;
 };
 
 /**

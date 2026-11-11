@@ -8,7 +8,7 @@ import "server-only";
  * instead of reading toggles. Each resolves the session's capabilities once (`resolveSessionCapabilityContext`),
  * applies the PURE decision from `session-capabilities.ts`, and logs a refusal under the registered prefixes:
  *
- *   [cns] wbsid=<id> action=learner_lane_refused surface=segment|chunk|queue|kick|sweep streamId=<id>
+ *   [cns] wbsid=<id> action=learner_lane_refused surface=segment|end|chunk|queue|kick|sweep|generate streamId=<id>
  *   [txc] wbsid=<id> action=refused reason=audio_off|notes_off|notes_forbidden surface=<surface> streamId=<id>
  *   [tnt] wbsid=<id> action=skip reason=notes_off|no_audio|notes_forbidden surface=<surface>
  *
@@ -28,11 +28,18 @@ import {
   type TranscriptionRefusalReason,
 } from "@/lib/recording/session-capabilities";
 
-/** Where a lane refusal happened. `segment` = segment registration; the rest are the transcription entries. */
-export type LaneGateSurface = "segment" | "chunk" | "queue" | "kick" | "sweep";
+/**
+ * Where a lane refusal happened. `segment` = mid-session segment registration and `end` = the segments End registers;
+ * the rest are the transcription entries (`generate` = the manual generate-notes action).
+ */
+export type LaneGateSurface = "segment" | "end" | "chunk" | "queue" | "kick" | "sweep" | "generate";
 
-/** Where a notes refusal happened. */
+/** The transcription entries that gate one chunk at a time. */
+export type TranscriptionGateSurface = Exclude<LaneGateSurface, "segment" | "end" | "generate">;
+
+/** Where a notes refusal happened. `status` = the review card's note-status read. */
 export type NotesGateSurface =
+  | "status"
   | "generate"
   | "trigger"
   | "regenerate"
@@ -60,23 +67,63 @@ export async function gateAudioSegment(
   return decision;
 }
 
+/**
+ * End: keep only the segments that may be stored, resolving the capabilities once. A refused segment is dropped, never
+ * inserted, so a segment refused mid-session (which the outbox re-sends at End) or one a tampered client posts only at
+ * End cannot land. The session still closes either way.
+ */
+export async function filterStorableAudioSegments<S extends { streamId: string }>(
+  sessionId: string,
+  segments: ReadonlyArray<S>
+): Promise<S[]> {
+  if (segments.length === 0) return [];
+  const { capabilities } = await resolveSessionCapabilityContext(sessionId);
+  return segments.filter((s) => {
+    const decision = decideAudioSegment(capabilities, s.streamId);
+    if (!decision.allow && isLearnerLane(s.streamId)) logLearnerLaneRefused(sessionId, "end", s.streamId);
+    return decision.allow;
+  });
+}
+
+function logTranscriptionRefused(
+  sessionId: string,
+  surface: LaneGateSurface,
+  streamId: string,
+  decision: GateDecision<TranscriptionRefusalReason>
+): void {
+  if (decision.allow) return;
+  console.log(
+    `[txc] wbsid=${sessionId} action=refused reason=${decision.reason} surface=${surface} streamId=${streamId}`
+  );
+  if (isLearnerLane(streamId) && decision.reason === "audio_off") {
+    logLearnerLaneRefused(sessionId, surface, streamId);
+  }
+}
+
 /** May a chunk on `streamId` be transcribed? Called at every transcription entry and again inside the worker. */
 export async function gateTranscription(
   sessionId: string,
   streamId: string,
-  surface: Exclude<LaneGateSurface, "segment">
+  surface: TranscriptionGateSurface
 ): Promise<GateDecision<TranscriptionRefusalReason>> {
   const { capabilities, notesForbidden } = await resolveSessionCapabilityContext(sessionId);
   const decision = decideTranscription(capabilities, notesForbidden, streamId);
-  if (!decision.allow) {
-    console.log(
-      `[txc] wbsid=${sessionId} action=refused reason=${decision.reason} surface=${surface} streamId=${streamId}`
-    );
-    if (isLearnerLane(streamId) && decision.reason === "audio_off") {
-      logLearnerLaneRefused(sessionId, surface, streamId);
-    }
-  }
+  logTranscriptionRefused(sessionId, surface, streamId, decision);
   return decision;
+}
+
+/** The manual generate path: keep only the recordings whose lane may be transcribed, resolving the capabilities once. */
+export async function filterTranscribableRecordings<R extends { streamId: string }>(
+  sessionId: string,
+  recordings: ReadonlyArray<R>
+): Promise<R[]> {
+  if (recordings.length === 0) return [];
+  const { capabilities, notesForbidden } = await resolveSessionCapabilityContext(sessionId);
+  return recordings.filter((r) => {
+    const decision = decideTranscription(capabilities, notesForbidden, r.streamId);
+    logTranscriptionRefused(sessionId, "generate", r.streamId, decision);
+    return decision.allow;
+  });
 }
 
 /** May a tutor-notes draft be created, generated or retried for this session? */

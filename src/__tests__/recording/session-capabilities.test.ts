@@ -5,7 +5,7 @@
  * read back from `CONSENT_SWITCHES[*].offEffect` to compute an expectation (that would pass by construction).
  */
 import {
-  acceptsAudioSegments,
+  decideAudioSegment,
   deriveSessionCapabilities,
   mergeRestrictive,
   type CapabilityFields,
@@ -313,19 +313,25 @@ describe("mergeRestrictive", () => {
 // ---------------------------------------------------------------------------
 // The server's audio gate (replaces the old mode-aware allow/deny).
 // ---------------------------------------------------------------------------
-describe("acceptsAudioSegments", () => {
+describe("decideAudioSegment (the server's audio gate)", () => {
+  const tutorAllowed = (c: SessionCapabilities) => decideAudioSegment(c, "tutor:mic").allow;
+  const learnerAllowed = (c: SessionCapabilities) => decideAudioSegment(c, "student:peer-p1:mic").allow;
+
   it.each([
-    ["full", true],
-    ["tutor_only", true],
-    ["none", false],
-  ] as const)("audio mode %s -> %s", (mode, expected) => {
-    expect(acceptsAudioSegments({ ...derive(T(true, true, true), "LIVE"), audio: { mode } })).toBe(expected);
+    ["full", true, true],
+    ["tutor_only", true, false],
+    ["none", false, false],
+  ] as const)("audio mode %s -> tutor %s, learner %s", (mode, tutor, learner) => {
+    const c = { ...derive(T(true, true, true), "LIVE"), audio: { mode } };
+    expect(tutorAllowed(c)).toBe(tutor);
+    expect(learnerAllowed(c)).toBe(learner);
   });
 
-  it("matches the product rule end to end: online keeps the tutor mixdown, in person with audio off refuses", () => {
-    expect(acceptsAudioSegments(derive(T(false, true, true), "LIVE"))).toBe(true);
-    expect(acceptsAudioSegments(derive(T(false, true, true), "IN_PERSON"))).toBe(false);
-    expect(acceptsAudioSegments(derive(T(true, true, true), "IN_PERSON"))).toBe(true);
+  it("matches the product rule end to end: online keeps only the tutor mixdown, in person with audio off refuses", () => {
+    expect(tutorAllowed(derive(T(false, true, true), "LIVE"))).toBe(true);
+    expect(learnerAllowed(derive(T(false, true, true), "LIVE"))).toBe(false);
+    expect(tutorAllowed(derive(T(false, true, true), "IN_PERSON"))).toBe(false);
+    expect(tutorAllowed(derive(T(true, true, true), "IN_PERSON"))).toBe(true);
   });
 });
 

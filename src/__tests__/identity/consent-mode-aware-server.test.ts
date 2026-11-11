@@ -113,7 +113,7 @@ import {
   createSessionConsentSnapshot,
   resolveSessionCapabilities,
 } from "@/lib/consent-scope";
-import { acceptsAudioSegments } from "@/lib/recording/session-capabilities";
+import { TUTOR_MIC_STREAM_ID, decideAudioSegment } from "@/lib/recording/session-capabilities";
 import {
   endWhiteboardSession,
   enqueueChunkTranscriptionAction,
@@ -305,7 +305,7 @@ describe("resolveSessionCapabilities", () => {
     const caps = await resolveSessionCapabilities(session.id);
     expect(caps.audio.mode).toBe("tutor_only");
     expect(caps.transcript).toEqual({ tutorVoice: true, learnerVoice: false });
-    expect(acceptsAudioSegments(caps)).toBe(true);
+    expect(decideAudioSegment(caps, TUTOR_MIC_STREAM_ID).allow).toBe(true);
   });
 
   it("IN_PERSON + audio off → none: nothing is accepted, no transcript, nothing to draft from", async () => {
@@ -316,7 +316,7 @@ describe("resolveSessionCapabilities", () => {
     });
     const caps = await resolveSessionCapabilities(session.id);
     expect(caps.audio.mode).toBe("none");
-    expect(acceptsAudioSegments(caps)).toBe(false);
+    expect(decideAudioSegment(caps, TUTOR_MIC_STREAM_ID).allow).toBe(false);
     expect(caps.transcript).toEqual({ tutorVoice: false, learnerVoice: false });
     expect(caps.notes.draft).toBe(false);
     expect(caps.off).toEqual(["audio"]);
@@ -327,7 +327,7 @@ describe("resolveSessionCapabilities", () => {
       const { session } = await setupActiveSession({ sessionMode, allowAudioRecording: true, withSnapshot: true });
       const caps = await resolveSessionCapabilities(session.id);
       expect(caps.audio.mode).toBe("full");
-      expect(acceptsAudioSegments(caps)).toBe(true);
+      expect(decideAudioSegment(caps, TUTOR_MIC_STREAM_ID).allow).toBe(true);
     }
   });
 
@@ -339,7 +339,7 @@ describe("resolveSessionCapabilities", () => {
       claimed: true,
     });
     const caps = await resolveSessionCapabilities(session.id);
-    expect(acceptsAudioSegments(caps)).toBe(false);
+    expect(decideAudioSegment(caps, TUTOR_MIC_STREAM_ID).allow).toBe(false);
     expect(caps.whiteboard.persist).toBe(false);
     expect(caps.notes.draft).toBe(false);
     expect(caps.transcript).toEqual({ tutorVoice: false, learnerVoice: false });
@@ -352,7 +352,7 @@ describe("resolveSessionCapabilities", () => {
       withSnapshot: false,
       isSelfLearner: true,
     });
-    expect(acceptsAudioSegments(await resolveSessionCapabilities(session.id))).toBe(false);
+    expect(decideAudioSegment(await resolveSessionCapabilities(session.id), TUTOR_MIC_STREAM_ID).allow).toBe(false);
   });
 
   it("no snapshot + unclaimed learner → legacy: nothing is restricted", async () => {
@@ -486,7 +486,7 @@ describe("resolveSessionCapabilities", () => {
 
   it("an unknown session id fails closed", async () => {
     const caps = await resolveSessionCapabilities("no-such-session");
-    expect(acceptsAudioSegments(caps)).toBe(false);
+    expect(decideAudioSegment(caps, TUTOR_MIC_STREAM_ID).allow).toBe(false);
     expect(caps.whiteboard.persist).toBe(false);
   });
 
@@ -532,7 +532,7 @@ describe("resolveSessionCapabilities", () => {
 
     const caps = await resolveSessionCapabilities(session.id);
     expect(caps.audio.mode).toBe("none");
-    expect(acceptsAudioSegments(caps)).toBe(false);
+    expect(decideAudioSegment(caps, TUTOR_MIC_STREAM_ID).allow).toBe(false);
   });
 
   it("a PENDING session applies the child's restriction to the live record (child floor)", async () => {

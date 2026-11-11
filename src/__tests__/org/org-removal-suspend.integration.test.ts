@@ -733,6 +733,45 @@ describe("org-forced end upload window does not bypass the audio consent gate", 
     const ended = await db.whiteboardSession.findUniqueOrThrow({ where: { id: session.id } });
     expect(ended.endedAt?.toISOString()).toBe(forcedAt.toISOString());
   });
+
+  it("online with audio consent off, the late tutor segment lands and the learner-lane segment does not", async () => {
+    const { org, owner } = await seedOrg("active");
+    const forcedAt = new Date(Date.now() - 60 * 1000);
+    const instructor = await seedMember(org.id, ["instructor"], { removedAt: forcedAt });
+    const { student, profile } = await seedOrgLearner(org.id, owner.id);
+    await db.consentRecord.updateMany({
+      where: { learnerProfileId: profile.id },
+      data: { allowAudioRecording: false },
+    });
+    const { session } = await seedTaughtSession({
+      adminUserId: instructor.id,
+      studentId: student.id,
+      endedAt: forcedAt,
+    });
+    mockSession(instructor.email, instructor.id);
+    const segment = (streamId: string) => ({
+      blobUrl: `https://blob.vercel-storage.com/${uniq("seg")}.webm`,
+      mimeType: "audio/webm",
+      sizeBytes: 1200,
+      audioStartedAtMs: 0,
+      streamId,
+      segmentId: uniq("segment"),
+      durationSeconds: 2,
+    });
+    const tutor = segment("tutor:mic");
+    const learner = segment("student:peer-p1:mic");
+    const result = await endWhiteboardSession(
+      session.id,
+      "https://blob.vercel-storage.com/late-events-tutor-only.json",
+      { segments: [tutor, learner] }
+    );
+    expect(result.registeredSegments).toBe(1);
+    const rows = await db.sessionRecording.findMany({
+      where: { whiteboardSessionId: session.id },
+      select: { blobUrl: true, streamId: true },
+    });
+    expect(rows).toEqual([{ blobUrl: tutor.blobUrl, streamId: "tutor:mic" }]);
+  });
 });
 
 describe("org-forced end still accepts a segment inside the upload window", () => {

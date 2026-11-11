@@ -175,7 +175,8 @@ export async function triggerNotesGenerationAction(
 // ---------------------------------------------------------------------------
 
 export type TutorNoteStatusResult =
-  | { found: false }
+  /** No row. `notesOff`: notes are refused for this session, so no row will ever come (terminal, not in-flight). */
+  | { found: false; notesOff?: boolean }
   | {
       found: true;
       status: string;
@@ -184,6 +185,23 @@ export type TutorNoteStatusResult =
       error: string | null;
       generatedAt: string | null;
     };
+
+/** The one TutorNote → status mapping. Caller has asserted ownership. Never creates a row. */
+async function readTutorNoteStatus(whiteboardSessionId: string): Promise<TutorNoteStatusResult> {
+  const note = await getTutorNoteBySessionId(whiteboardSessionId);
+  if (!note) {
+    const draft = await gateNotesDraft(whiteboardSessionId, "status");
+    return draft.allow ? { found: false } : { found: false, notesOff: true };
+  }
+  return {
+    found: true,
+    status: note.status,
+    content: note.content ?? null,
+    isPartial: note.isPartial,
+    error: note.error ?? null,
+    generatedAt: note.generatedAt?.toISOString() ?? null,
+  };
+}
 
 /**
  * Fetch the current TutorNote status for a session.
@@ -195,20 +213,7 @@ export async function getTutorNoteStatusAction(
   whiteboardSessionId: string
 ): Promise<TutorNoteStatusResult> {
   await assertOwnsWhiteboardSession(whiteboardSessionId);
-
-  const note = await getTutorNoteBySessionId(whiteboardSessionId);
-  if (!note) {
-    return { found: false };
-  }
-
-  return {
-    found: true,
-    status: note.status,
-    content: note.content ?? null,
-    isPartial: note.isPartial,
-    error: note.error ?? null,
-    generatedAt: note.generatedAt?.toISOString() ?? null,
-  };
+  return readTutorNoteStatus(whiteboardSessionId);
 }
 
 // ---------------------------------------------------------------------------
@@ -610,24 +615,14 @@ export async function loadSessionReviewPayload(
     throw new Error(`Session ${whiteboardSessionId} not found`);
   }
 
-  const [note, transcriptChunks] = await Promise.all([
-    getTutorNoteBySessionId(whiteboardSessionId),
+  const [initialNote, transcriptChunks] = await Promise.all([
+    readTutorNoteStatus(whiteboardSessionId),
     db.transcriptChunk.findMany({
       where: { sessionId: whiteboardSessionId, transcript: { not: "" } },
       orderBy: { recordingTimeOffsetMs: "asc" },
       select: { transcript: true },
     }),
   ]);
-  const initialNote: TutorNoteStatusResult = note
-    ? {
-        found: true,
-        status: note.status,
-        content: note.content ?? null,
-        isPartial: note.isPartial,
-        error: note.error ?? null,
-        generatedAt: note.generatedAt?.toISOString() ?? null,
-      }
-    : { found: false };
 
   console.log(
     `[nsi] wbsid=${whiteboardSessionId} action=load_review_payload hasAudio=${detail.audioRecordings.length > 0} noteFound=${initialNote.found}`

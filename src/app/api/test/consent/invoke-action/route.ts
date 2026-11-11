@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guardPlaywrightTestRoute } from "@/lib/playwright-test-route";
 import {
   enqueueChunkTranscriptionAction,
+  finalizeWhiteboardSessionFromBackend,
   generateNotesFromWhiteboardSessionAction,
   registerWhiteboardSessionAudioSegmentAction,
 } from "@/app/admin/students/[id]/whiteboard/actions";
@@ -52,6 +53,13 @@ export async function POST(req: NextRequest) {
         args as Parameters<typeof enqueueChunkTranscriptionAction>[1]
       );
       return NextResponse.json({ result: null });
+    case "endSession":
+      return NextResponse.json({
+        result: await finalizeWhiteboardSessionFromBackend(
+          sessionId,
+          args as Parameters<typeof finalizeWhiteboardSessionFromBackend>[1]
+        ),
+      });
     case "kick":
       return NextResponse.json({ result: await kickSessionChunksAction(sessionId) });
     case "generateNotes":

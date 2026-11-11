@@ -82,7 +82,7 @@ const testSecret = () => process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-
 /** Run one consent-gated server action as the signed-in tutor; returns the action's own return value. */
 async function invoke(
   request: APIRequestContext,
-  action: "registerSegment" | "enqueueChunk" | "kick" | "generateNotes" | "triggerNotes" | "regenerateNotes",
+  action: "registerSegment" | "enqueueChunk" | "endSession" | "kick" | "generateNotes" | "triggerNotes" | "regenerateNotes",
   sessionId: string,
   args?: Record<string, unknown>
 ): Promise<Record<string, unknown> | null> {
@@ -326,6 +326,43 @@ test.describe("consent 6c: Audio", {
       expect(await recordingsOf(inPerson.id)).toEqual([]);
     }
   );
+  // Oracle: DB rows after End. End re-checks every segment's lane: the outbox re-sends a segment refused mid-session, and a
+  // tampered client can post one only at End, so the per-lane rule must hold at End too, not just at mid-session registration.
+  test(
+    "A5 (End): audio off, online: End stores the tutor segment and drops the learner-lane segment",
+    async ({ request, baseURL }) => {
+      const { id, studentId } = await seedSession({ audio: false, mode: "LIVE" });
+      const segment = async (streamId: string, audioStartedAtMs: number) => ({
+        blobUrl: await seedBlob(request, baseURL!, studentId),
+        mimeType: "audio/webm",
+        sizeBytes: 14,
+        audioStartedAtMs,
+        streamId,
+        segmentId: `pw-end-${streamId}`,
+        durationSeconds: 2,
+      });
+      const tutor = await segment(TUTOR_LANE, 0);
+      const learner = await segment(LEARNER_SEGMENT_LANE, 1);
+
+      const ended = await invoke(request, "endSession", id, { extraSegments: [tutor, learner] });
+      expect(ended, "the session still closes").toMatchObject({ ok: true });
+
+      const rows = await recordingsOf(id);
+      expect(rows.filter((r) => r.streamId === LEARNER_SEGMENT_LANE), "no learner-lane row").toEqual([]);
+      expect(rows.some((r) => r.blobUrl === learner.blobUrl), "the learner blob is not stored under any lane").toBe(false);
+      expect(rows.map((r) => ({ streamId: r.streamId, blobUrl: r.blobUrl }))).toEqual([
+        { streamId: TUTOR_LANE, blobUrl: tutor.blobUrl },
+      ]);
+      expect((await prisma.whiteboardSession.findUniqueOrThrow({ where: { id } })).endedAt).not.toBeNull();
+
+      // Allow path: audio on, the same End stores both lanes.
+      const on = await seedSession({ audio: true, mode: "LIVE" });
+      const onTutor = { ...tutor, blobUrl: await seedBlob(request, baseURL!, on.studentId) };
+      const onLearner = { ...learner, blobUrl: await seedBlob(request, baseURL!, on.studentId) };
+      expect(await invoke(request, "endSession", on.id, { extraSegments: [onTutor, onLearner] })).toMatchObject({ ok: true });
+      expect((await recordingsOf(on.id)).map((r) => r.streamId).sort()).toEqual([LEARNER_SEGMENT_LANE, TUTOR_LANE].sort());
+    }
+  );
   // Oracle: Queue route status; no 'TranscriptChunk'
   test(
     "A6: audio off: server transcription refuses a learner-lane chunk already in the outbox",
@@ -547,6 +584,42 @@ test.describe("consent 6f: Notes", {
       const replay = await request.get(`/api/audio/admin/${recording.id}`);
       expect(replay.status()).toBe(200);
       expect((await replay.body()).length).toBe(audioText.length);
+    }
+  );
+  // Oracle: the review card's visible copy, read at first paint, with no TutorNote row in the database. Notes off never creates
+  // a row, so a card that treats "no row + audio" as in-flight would spin "Preparing your notes..." for its 5-minute timeout.
+  test(
+    "N2b: notes off, audio on: the review card says notes are off at once, with no spinner and no Regenerate",
+    async ({ page, request, baseURL }) => {
+      test.setTimeout(180_000);
+      const { id, studentId } = await seedSession({ audio: true, notes: false });
+      expect(
+        await invoke(request, "registerSegment", id, {
+          blobUrl: await seedBlob(request, baseURL!, studentId),
+          mimeType: "audio/webm",
+          sizeBytes: 14,
+          streamId: TUTOR_LANE,
+          audioStartedAtMs: 0,
+        })
+      ).toMatchObject({ ok: true });
+      await sealSession(id);
+      expect(await prisma.tutorNote.count({ where: { sessionId: id } })).toBe(0);
+
+      await page.goto(`/admin/students/${studentId}/whiteboard/${id}/workspace`, { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({ timeout: 90_000 });
+      const card = page.getByTestId("tutor-notes-section");
+      await expect(card).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("tutor-notes-skipped")).toHaveText(NOTES_OFF_COPY, { timeout: 2_000 });
+      await expect(card).not.toContainText("Preparing your notes");
+      await expect(page.getByTestId("tutor-notes-generating")).toHaveCount(0);
+      await expect(page.getByTestId("tn-note-field-skeleton")).toHaveCount(0);
+      await expect(page.getByTestId("wb-regenerate-notes")).toHaveCount(0);
+
+      // Still terminal after a poll interval would have fired, and still no row was created to say so.
+      await page.waitForTimeout(4_000);
+      await expect(page.getByTestId("tutor-notes-skipped")).toHaveText(NOTES_OFF_COPY);
+      await expect(card).not.toContainText("Preparing your notes");
+      expect(await prisma.tutorNote.count({ where: { sessionId: id } })).toBe(0);
     }
   );
   // Oracle: Server action result
