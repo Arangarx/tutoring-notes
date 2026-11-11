@@ -241,7 +241,7 @@ async function setupActiveSession(opts: SessionSetupOpts) {
 
   if (opts.withSnapshot && profileId) {
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profileId, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
   }
 

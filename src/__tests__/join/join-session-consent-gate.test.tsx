@@ -169,12 +169,7 @@ async function createJoinFixture(opts: JoinFixtureOpts) {
       { allowLiveSession: opts.allowLiveSession ?? true }
     );
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(
-        tx,
-        session.id,
-        opts.learnerProfileId!,
-        tutor.id
-      );
+      await createSessionConsentSnapshot(tx, session.id);
     });
   }
 

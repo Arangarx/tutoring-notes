@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardPlaywrightTestRoute } from "@/lib/playwright-test-route";
 import {
+  endStaleWhiteboardSession,
+  endWhiteboardSession,
   enqueueChunkTranscriptionAction,
   finalizeWhiteboardSessionFromBackend,
   generateNotesFromWhiteboardSessionAction,
@@ -60,6 +62,14 @@ export async function POST(req: NextRequest) {
           args as Parameters<typeof finalizeWhiteboardSessionFromBackend>[1]
         ),
       });
+    case "endWhiteboardSession": {
+      const a = args as { finalEventsBlobUrl?: string; opts?: Parameters<typeof endWhiteboardSession>[2] };
+      return NextResponse.json({
+        result: await endWhiteboardSession(sessionId, a.finalEventsBlobUrl ?? "", a.opts),
+      });
+    }
+    case "endStaleWhiteboardSession":
+      return NextResponse.json({ result: await endStaleWhiteboardSession(sessionId) });
     case "kick":
       return NextResponse.json({ result: await kickSessionChunksAction(sessionId) });
     case "generateNotes":

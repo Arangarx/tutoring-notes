@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { holdPoint } from "@/lib/test-seams";
 
 /**
  * The stale end stamp: set endedAt, participant leftAt, revoke join tokens.
@@ -23,6 +24,7 @@ export async function stampStaleWhiteboardSessionEnd(
       durationSeconds: existing.durationSeconds ?? 0,
     };
   }
+  await holdPoint("end:tx:before_update", whiteboardSessionId);
   const durationSeconds = Math.max(
     0,
     Math.floor((now.getTime() - existing.startedAt.getTime()) / 1000)

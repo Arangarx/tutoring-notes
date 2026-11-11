@@ -97,63 +97,114 @@ export function effectiveConsentToggles(
 // createSessionConsentSnapshot
 // ---------------------------------------------------------------------------
 
+export type FreezeConsentSnapshotResult =
+  | { outcome: "unclaimed" }
+  | { outcome: "no_record" }
+  | {
+      outcome: "frozen";
+      created: boolean;
+      before: ConsentToggleCeiling | null;
+      after: ConsentToggleCeiling;
+      consentRecordId: string;
+      consentRecordVersion: number;
+      learnerProfileId: string;
+    };
+
 /**
- * Compute and insert a SessionConsentSnapshot for the given session.
+ * The one writer of SessionConsentSnapshot (plan § 2.6). Reads the session's learner and
+ * owner through `tx`, resolves the live effective consent, and UPSERTS the snapshot row:
+ * creates it if missing, else overwrites the record pointer, the four switches and `frozenAt`.
+ * Writes nothing and returns `unclaimed` / `no_record` when there is nothing to freeze.
+ *
+ * Callers: session create, Start (after its conditional update) and the End paths (a PENDING
+ * session, after the `count === 1` gate). Call INSIDE the caller's transaction.
+ * `now` is always real server time, never a back-dated reaper instant (SF-F).
+ */
+export async function freezeConsentSnapshotTx(
+  tx: Prisma.TransactionClient,
+  whiteboardSessionId: string,
+  now: Date
+): Promise<FreezeConsentSnapshotResult> {
+  const sessionRow = await tx.whiteboardSession.findUnique({
+    where: { id: whiteboardSessionId },
+    select: {
+      adminUserId: true,
+      student: {
+        select: { adminUserId: true, organizationId: true, learnerProfileId: true },
+      },
+    },
+  });
+  const learnerProfileId = sessionRow?.student?.learnerProfileId ?? null;
+  if (!sessionRow || !learnerProfileId) return { outcome: "unclaimed" };
+
+  const effective = await resolveEffectiveConsentForStudent(
+    learnerProfileId,
+    sessionRow.student,
+    sessionRow.adminUserId,
+    tx
+  );
+  if (!effective) return { outcome: "no_record" };
+
+  const after: ConsentToggleCeiling = {
+    allowLiveSession: effective.allowLiveSession,
+    allowAudioRecording: effective.allowAudioRecording,
+    allowWhiteboardRecording: effective.allowWhiteboardRecording,
+    allowNoteSending: effective.allowNoteSending,
+  };
+  const previous = await tx.sessionConsentSnapshot.findUnique({
+    where: { whiteboardSessionId },
+    select: {
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+    },
+  });
+  const frozen = {
+    ...after,
+    consentRecordId: effective.id,
+    consentRecordVersion: effective.version,
+    frozenAt: now,
+  };
+  await tx.sessionConsentSnapshot.upsert({
+    where: { whiteboardSessionId },
+    create: { whiteboardSessionId, ...frozen },
+    update: frozen,
+  });
+
+  return {
+    outcome: "frozen",
+    created: previous === null,
+    before: previous,
+    after,
+    consentRecordId: effective.id,
+    consentRecordVersion: effective.version,
+    learnerProfileId,
+  };
+}
+
+/**
+ * Freeze the consent snapshot for a session being created.
  *
  * Must be called INSIDE the same db.$transaction as the WhiteboardSession row
- * insert so the session and snapshot are atomic.
- *
- * Returns the snapshot row, or null if it was skipped (unclaimed / no record).
+ * insert so the session and snapshot are atomic. Skips (logs, never throws)
+ * an unclaimed learner or one with no effective record.
  *
  * effective = ceiling AND NOT child_restriction, including a self-learner.
  */
 export async function createSessionConsentSnapshot(
-  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
-  whiteboardSessionId: string,
-  learnerProfileId: string | null,
-  adminUserId: string
+  tx: Prisma.TransactionClient,
+  whiteboardSessionId: string
 ): Promise<void> {
-  if (!learnerProfileId) {
+  const result = await freezeConsentSnapshotTx(tx, whiteboardSessionId, new Date());
+  if (result.outcome !== "frozen") {
     console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=snapshot_skipped reason=unclaimed`
+      `[cns] wbsid=${whiteboardSessionId} action=snapshot_skipped reason=${result.outcome}`
     );
     return;
   }
-
-  const sessionRow = await tx.whiteboardSession.findUnique({
-    where: { id: whiteboardSessionId },
-    select: {
-      student: { select: { adminUserId: true, organizationId: true } },
-    },
-  });
-  const effective = await resolveEffectiveConsentForStudent(
-    learnerProfileId,
-    sessionRow?.student ?? null,
-    adminUserId,
-    tx
-  );
-
-  if (!effective) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=snapshot_skipped reason=no_record`
-    );
-    return;
-  }
-
-  await tx.sessionConsentSnapshot.create({
-    data: {
-      whiteboardSessionId,
-      allowLiveSession: effective.allowLiveSession,
-      allowAudioRecording: effective.allowAudioRecording,
-      allowWhiteboardRecording: effective.allowWhiteboardRecording,
-      allowNoteSending: effective.allowNoteSending,
-      consentRecordId: effective.id,
-      consentRecordVersion: effective.version,
-    },
-  });
-
   console.log(
-    `[cns] wbsid=${whiteboardSessionId} action=consent_frozen consentRecordId=${effective.id} version=${effective.version} learnerProfileId=${learnerProfileId} allowLiveSession=${effective.allowLiveSession} allowAudio=${effective.allowAudioRecording} allowWB=${effective.allowWhiteboardRecording} allowNotes=${effective.allowNoteSending}`
+    `[cns] wbsid=${whiteboardSessionId} action=consent_frozen consentRecordId=${result.consentRecordId} version=${result.consentRecordVersion} learnerProfileId=${result.learnerProfileId} allowLiveSession=${result.after.allowLiveSession} allowAudio=${result.after.allowAudioRecording} allowWB=${result.after.allowWhiteboardRecording} allowNotes=${result.after.allowNoteSending}`
   );
 }
 

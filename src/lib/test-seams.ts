@@ -44,6 +44,11 @@ import { isPlaywrightTestEnvEnabled } from "@/lib/playwright-test-route";
 export const IN_TX_HOLD_CAP_MS = 3_000;
 /** A hold parked outside any transaction. */
 export const OUT_OF_TX_HOLD_CAP_MS = 30_000;
+/**
+ * Explicit `timeout` on every transaction that contains an `inTx` hold point (Start, End).
+ * Prisma's default is 5 s; a parked hold (capped at `IN_TX_HOLD_CAP_MS`) must sit well inside it.
+ */
+export const SEAM_BEARING_TX_TIMEOUT_MS = 10_000;
 
 /**
  * Every hold point in the product, with whether it sits inside a DB

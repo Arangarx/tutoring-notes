@@ -74,6 +74,7 @@ import {
 } from "@/lib/billing/defaults";
 import { computeBillingFreezeFields } from "@/lib/billing/freeze-at-close";
 import { logProductEvent } from "@/lib/observability/product-events";
+import { holdPoint, SEAM_BEARING_TX_TIMEOUT_MS } from "@/lib/test-seams";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -1243,6 +1244,7 @@ export async function endWhiteboardSession(
               billedDurationMin: true,
             },
           });
+          await holdPoint("end:tx:before_update", whiteboardSessionId);
           const durationSeconds = existing
             ? Math.max(
                 0,
@@ -1341,7 +1343,7 @@ export async function endWhiteboardSession(
             data: { revokedAt: now },
           });
           return { row, newSegments, billingFreeze };
-        }),
+        }, { timeout: SEAM_BEARING_TX_TIMEOUT_MS }),
       { label: "endWhiteboardSession" }
     );
     updated = txResult.row;
@@ -1471,8 +1473,9 @@ export async function endStaleWhiteboardSession(
   try {
     updated = await withDbRetry(
       () =>
-        db.$transaction((tx) =>
-          stampStaleWhiteboardSessionEnd(tx, whiteboardSessionId, now)
+        db.$transaction(
+          (tx) => stampStaleWhiteboardSessionEnd(tx, whiteboardSessionId, now),
+          { timeout: SEAM_BEARING_TX_TIMEOUT_MS }
         ),
       { label: "endStaleWhiteboardSession" }
     );

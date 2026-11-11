@@ -238,7 +238,7 @@ export async function createWhiteboardSessionCore({
             select: { id: true, studentId: true },
           });
           // No-op for unclaimed / no-record sessions; never throws.
-          await createSessionConsentSnapshot(tx, row.id, learnerProfileId, adminUserId);
+          await createSessionConsentSnapshot(tx, row.id);
           if (learnerProfileId) {
             await tx.sessionParticipant.createMany({
               data: [{ whiteboardSessionId: row.id, learnerProfileId }],

@@ -28,6 +28,7 @@ import {
   assertConsentFromLiveRecord,
   createSessionConsentSnapshot,
   effectiveConsentToggles,
+  freezeConsentSnapshotTx,
   ConsentError,
 } from "@/lib/consent-scope";
 
@@ -201,7 +202,7 @@ describe("createSessionConsentSnapshot", () => {
     const session = await createWhiteboardSessionRow(tutor.id, student.id);
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, null, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -218,7 +219,7 @@ describe("createSessionConsentSnapshot", () => {
     const session = await createWhiteboardSessionRow(tutor.id, student.id);
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -242,7 +243,7 @@ describe("createSessionConsentSnapshot", () => {
     });
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -268,7 +269,7 @@ describe("createSessionConsentSnapshot", () => {
     const r2 = await createConsentRecord(profile.id, tutor.id, 2, { allowAudioRecording: true });
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -300,7 +301,7 @@ describe("createSessionConsentSnapshot", () => {
     });
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -390,7 +391,7 @@ describe("createSessionConsentSnapshot", () => {
         }
 
         await db.$transaction(async (tx) => {
-          await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+          await createSessionConsentSnapshot(tx, session.id);
         });
 
         const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -428,7 +429,7 @@ describe("createSessionConsentSnapshot", () => {
     });
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -457,7 +458,7 @@ describe("createSessionConsentSnapshot", () => {
     });
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -487,7 +488,7 @@ describe("createSessionConsentSnapshot", () => {
     });
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -531,7 +532,7 @@ describe("createSessionConsentSnapshot", () => {
     const session = await createWhiteboardSessionRow(tutor.id, student.id);
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -575,7 +576,7 @@ describe("createSessionConsentSnapshot", () => {
     const session = await createWhiteboardSessionRow(tutor.id, student.id);
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     const snapshot = await db.sessionConsentSnapshot.findUnique({
@@ -736,9 +737,9 @@ describe("Cross-tenant: parent B cannot write consent for parent A's learner", (
     const sessionB = await createWhiteboardSessionRow(tutorB.id, studentB.id);
 
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, sessionA.id, profile.id, tutorA.id);
+      await createSessionConsentSnapshot(tx, sessionA.id);
       // B has no record — snapshot skipped
-      await createSessionConsentSnapshot(tx, sessionB.id, profile.id, tutorB.id);
+      await createSessionConsentSnapshot(tx, sessionB.id);
     });
 
     const snapshotA = await db.sessionConsentSnapshot.findUnique({ where: { whiteboardSessionId: sessionA.id } });
@@ -747,6 +748,112 @@ describe("Cross-tenant: parent B cannot write consent for parent A's learner", (
     expect(snapshotA).not.toBeNull();
     expect(snapshotA!.allowAudioRecording).toBe(true);
     expect(snapshotB).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// freezeConsentSnapshotTx — the one snapshot writer (plan § 2.6, C3a End half)
+// ---------------------------------------------------------------------------
+
+describe("freezeConsentSnapshotTx", () => {
+  async function claimedSession() {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const profile = await createLearnerProfile(ah.id);
+    const student = await createStudent(tutor.id, profile.id);
+    const session = await createWhiteboardSessionRow(tutor.id, student.id);
+    return { tutor, profile, session };
+  }
+
+  it("creates the row from the live record when none exists, stamped with the passed now", async () => {
+    const { tutor, profile, session } = await claimedSession();
+    const record = await createConsentRecord(profile.id, tutor.id, 1, { allowWhiteboardRecording: false });
+    const now = new Date("2026-03-04T05:06:07.000Z");
+
+    const result = await db.$transaction((tx) => freezeConsentSnapshotTx(tx, session.id, now));
+
+    expect(result).toMatchObject({ outcome: "frozen", created: true, before: null });
+    const rows = await db.sessionConsentSnapshot.findMany({ where: { whiteboardSessionId: session.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      consentRecordId: record.id,
+      consentRecordVersion: 1,
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: false,
+      allowNoteSending: true,
+    });
+    expect(rows[0].frozenAt.toISOString()).toBe(now.toISOString());
+  });
+
+  it("overwrites an existing row with the newest record (one row, no second insert)", async () => {
+    const { tutor, profile, session } = await claimedSession();
+    await createConsentRecord(profile.id, tutor.id, 1);
+    await db.$transaction((tx) => createSessionConsentSnapshot(tx, session.id));
+    const r2 = await createConsentRecord(profile.id, tutor.id, 2, {
+      allowAudioRecording: false,
+      allowWhiteboardRecording: false,
+    });
+    const now = new Date("2026-05-06T07:08:09.000Z");
+
+    const result = await db.$transaction((tx) => freezeConsentSnapshotTx(tx, session.id, now));
+
+    expect(result).toMatchObject({
+      outcome: "frozen",
+      created: false,
+      before: { allowAudioRecording: true, allowWhiteboardRecording: true },
+      after: { allowAudioRecording: false, allowWhiteboardRecording: false },
+    });
+    const rows = await db.sessionConsentSnapshot.findMany({ where: { whiteboardSessionId: session.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      consentRecordId: r2.id,
+      consentRecordVersion: 2,
+      allowAudioRecording: false,
+      allowWhiteboardRecording: false,
+    });
+    expect(rows[0].frozenAt.toISOString()).toBe(now.toISOString());
+  });
+
+  it("applies the child restriction (effective = ceiling AND NOT restriction)", async () => {
+    const { tutor, profile, session } = await claimedSession();
+    await createConsentRecord(profile.id, tutor.id, 1);
+    await db.consentRestriction.create({
+      data: { learnerProfileId: profile.id, restrictWhiteboardRecording: true },
+    });
+
+    await db.$transaction((tx) => freezeConsentSnapshotTx(tx, session.id, new Date()));
+
+    const row = await db.sessionConsentSnapshot.findUniqueOrThrow({ where: { whiteboardSessionId: session.id } });
+    expect(row.allowWhiteboardRecording).toBe(false);
+    expect(row.allowAudioRecording).toBe(true);
+  });
+
+  it("returns no_record and leaves an existing row untouched when the record is gone", async () => {
+    const { tutor, profile, session } = await claimedSession();
+    const record = await createConsentRecord(profile.id, tutor.id, 1);
+    await db.$transaction((tx) => createSessionConsentSnapshot(tx, session.id));
+    const before = await db.sessionConsentSnapshot.findUniqueOrThrow({ where: { whiteboardSessionId: session.id } });
+    await db.consentRecord.delete({ where: { id: record.id } });
+
+    const result = await db.$transaction((tx) =>
+      freezeConsentSnapshotTx(tx, session.id, new Date(Date.now() + 60_000))
+    );
+
+    expect(result).toEqual({ outcome: "no_record" });
+    const after = await db.sessionConsentSnapshot.findUniqueOrThrow({ where: { whiteboardSessionId: session.id } });
+    expect(after).toEqual(before);
+  });
+
+  it("returns unclaimed and writes nothing for a session whose student has no learner", async () => {
+    const tutor = await createTutor();
+    const student = await createStudent(tutor.id);
+    const session = await createWhiteboardSessionRow(tutor.id, student.id);
+
+    const result = await db.$transaction((tx) => freezeConsentSnapshotTx(tx, session.id, new Date()));
+
+    expect(result).toEqual({ outcome: "unclaimed" });
+    expect(await db.sessionConsentSnapshot.count({ where: { whiteboardSessionId: session.id } })).toBe(0);
   });
 });
 
@@ -764,7 +871,7 @@ describe("SessionConsentSnapshot — onDelete Restrict (legal record)", () => {
 
     await createConsentRecord(profile.id, tutor.id, 1);
     await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+      await createSessionConsentSnapshot(tx, session.id);
     });
 
     // Attempting to delete the session should fail due to Restrict FK
