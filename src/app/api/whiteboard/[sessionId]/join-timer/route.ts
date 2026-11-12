@@ -6,6 +6,76 @@ import { getLearnerSession } from "@/lib/learner-session";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { findSessionParticipantRow } from "@/lib/session-participant-scope";
 import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
+import {
+  LEARNER_VIEW_SNAPSHOT_SELECT,
+  resolveLearnerSessionView,
+  type LearnerViewSession,
+} from "@/lib/whiteboard/learner-session-view";
+
+/** One session read per poll, the same for both auth branches. The frozen snapshot rides along (no second query). */
+const JOIN_TIMER_SESSION_SELECT = {
+  id: true,
+  studentId: true,
+  activeMs: true,
+  lastActiveAt: true,
+  sessionPhase: true,
+  sessionMode: true,
+  notesForbidden: true,
+  endedAt: true,
+  adminUserId: true,
+  consentSnapshot: { select: LEARNER_VIEW_SNAPSHOT_SELECT },
+  student: {
+    select: {
+      organizationId: true,
+      adminUserId: true,
+      learnerProfileId: true,
+      learnerProfile: { select: { isSelfLearner: true } },
+    },
+  },
+} as const;
+
+type JoinTimerPrincipal = "join_token" | "learner";
+
+/**
+ * The live body for a session that has not ended, or the `online_off` eviction when the family's online switch
+ * keeps a learner device out (Q9). Access was decided before this is called; this only shapes the answer.
+ */
+async function liveSessionResponse(
+  row: LearnerViewSession & { activeMs: number | null; lastActiveAt: Date | null; endedAt: Date | null },
+  principal: JoinTimerPrincipal
+): Promise<Response> {
+  const view = await resolveLearnerSessionView(row);
+  if (view.onlineOff) {
+    console.info(`[slc] wbsid=${row.id} action=join_timer_online_off principal=${principal}`);
+    return NextResponse.json(
+      { live: false as const, reason: "online_off" as const },
+      { status: 200, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+  const organizationId =
+    row.student.organizationId != null && row.student.adminUserId == null
+      ? row.student.organizationId
+      : null;
+  const notice = await readOrgForceEndNotice({
+    organizationId,
+    sessionAdminUserId: row.adminUserId,
+    endedAt: row.endedAt,
+    audience: "student",
+  });
+  return NextResponse.json(
+    {
+      live: true as const,
+      activeMs: row.activeMs ?? 0,
+      lastActiveAt: row.lastActiveAt?.toISOString() ?? null,
+      sessionPhase: (row.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE",
+      sessionMode: view.sessionMode,
+      sessionCapabilities: view.sessionCapabilities,
+      forceEndAt: notice?.forceEndAt ?? null,
+      pillSentence: notice?.pillSentence ?? null,
+    },
+    { headers: { "Cache-Control": "no-store" } }
+  );
+}
 
 /**
  * Read-only live timer for the student join page.
@@ -90,14 +160,7 @@ export async function GET(
       () =>
         db.whiteboardSession.findUnique({
           where: { id: sessionId },
-          select: {
-            activeMs: true,
-            lastActiveAt: true,
-            sessionPhase: true,
-            endedAt: true,
-            adminUserId: true,
-            student: { select: { organizationId: true, adminUserId: true } },
-          },
+          select: JOIN_TIMER_SESSION_SELECT,
         }),
       { label: "joinTimer.findSession" }
     );
@@ -107,27 +170,16 @@ export async function GET(
         { status: 200, headers: { "Cache-Control": "no-store" } }
       );
     }
-    const organizationId =
-      row?.student.organizationId != null && row.student.adminUserId == null
-        ? row.student.organizationId
-        : null;
-    const notice = row
-      ? await readOrgForceEndNotice({
-          organizationId,
-          sessionAdminUserId: row.adminUserId,
-          endedAt: row.endedAt,
-          audience: "student",
-        })
-      : null;
+    if (row) return liveSessionResponse(row, "join_token");
 
     return NextResponse.json(
       {
         live: true as const,
-        activeMs: row?.activeMs ?? 0,
-        lastActiveAt: row?.lastActiveAt?.toISOString() ?? null,
-        sessionPhase: (row?.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE",
-        forceEndAt: notice?.forceEndAt ?? null,
-        pillSentence: notice?.pillSentence ?? null,
+        activeMs: 0,
+        lastActiveAt: null,
+        sessionPhase: "ACTIVE" as const,
+        forceEndAt: null,
+        pillSentence: null,
       },
       { headers: { "Cache-Control": "no-store" } }
     );
@@ -243,14 +295,7 @@ export async function GET(
     () =>
       db.whiteboardSession.findUnique({
         where: { id: sessionId },
-        select: {
-          activeMs: true,
-          lastActiveAt: true,
-          sessionPhase: true,
-          endedAt: true,
-          adminUserId: true,
-          student: { select: { organizationId: true, adminUserId: true } },
-        },
+        select: JOIN_TIMER_SESSION_SELECT,
       }),
     { label: "joinTimer.findSessionLearner" }
   );
@@ -272,26 +317,5 @@ export async function GET(
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  const organizationId =
-    row.student.organizationId != null && row.student.adminUserId == null
-      ? row.student.organizationId
-      : null;
-  const notice = await readOrgForceEndNotice({
-    organizationId,
-    sessionAdminUserId: row.adminUserId,
-    endedAt: row.endedAt,
-    audience: "student",
-  });
-
-  return NextResponse.json(
-    {
-      live: true as const,
-      activeMs: row.activeMs ?? 0,
-      lastActiveAt: row.lastActiveAt?.toISOString() ?? null,
-      sessionPhase: (row.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE",
-      forceEndAt: notice?.forceEndAt ?? null,
-      pillSentence: notice?.pillSentence ?? null,
-    },
-    { headers: { "Cache-Control": "no-store" } }
-  );
+  return liveSessionResponse(row, "learner");
 }

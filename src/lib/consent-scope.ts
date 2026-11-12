@@ -18,6 +18,7 @@ import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import {
   deriveSessionCapabilities,
+  type CapabilitySessionMode,
   type SessionCapabilities,
   type SessionCapabilityInput,
 } from "@/lib/recording/session-capabilities";
@@ -643,13 +644,34 @@ const FAIL_CLOSED_INPUT: SessionCapabilityInput = {
  *   - no record at all, or the session is missing: fail closed.
  *
  * Pass `client` inside a transaction. Otherwise the session read is retried.
+ * `opts.sessionMode` replaces the stored mode: the stored column defaults to LIVE before Start, so a PENDING
+ * reader that must not assume a mode passes `UNKNOWN`.
  * Does not throw on denial: callers log and skip.
  */
 export async function resolveSessionCapabilities(
   whiteboardSessionId: string,
-  client?: ConsentReadClient
+  client?: ConsentReadClient,
+  opts?: { sessionMode?: CapabilitySessionMode }
 ): Promise<SessionCapabilities> {
-  return (await resolveSessionCapabilityContext(whiteboardSessionId, client)).capabilities;
+  return (await resolveSessionCapabilityContext(whiteboardSessionId, client, opts)).capabilities;
+}
+
+/** The capabilities a session's toggles give in `sessionMode`. The one projection behind every resolver answer. */
+export function capabilitiesFromConsentToggles(
+  toggles: ConsentToggleCeiling,
+  sessionMode: CapabilitySessionMode,
+  notesForbidden: boolean
+): SessionCapabilities {
+  return deriveSessionCapabilities({
+    hasConsentSnapshot: true,
+    toggles: {
+      audio: toggles.allowAudioRecording,
+      whiteboard: toggles.allowWhiteboardRecording,
+      notes: toggles.allowNoteSending,
+    },
+    sessionMode,
+    notesForbidden,
+  });
 }
 
 /**
@@ -659,7 +681,8 @@ export async function resolveSessionCapabilities(
  */
 export async function resolveSessionCapabilityContext(
   whiteboardSessionId: string,
-  client?: ConsentReadClient
+  client?: ConsentReadClient,
+  opts?: { sessionMode?: CapabilitySessionMode }
 ): Promise<{ capabilities: SessionCapabilities; notesForbidden: boolean }> {
   const readSession = (c: ConsentReadClient) =>
     c.whiteboardSession.findUnique({
@@ -734,15 +757,10 @@ export async function resolveSessionCapabilityContext(
     return log(deriveSessionCapabilities(FAIL_CLOSED_INPUT), "fail_closed", "n/a", true);
   }
 
-  const capabilities = deriveSessionCapabilities({
-    hasConsentSnapshot: true,
-    toggles: {
-      audio: toggles.allowAudioRecording,
-      whiteboard: toggles.allowWhiteboardRecording,
-      notes: toggles.allowNoteSending,
-    },
-    sessionMode: row.sessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE",
-    notesForbidden: row.notesForbidden,
-  });
+  const capabilities = capabilitiesFromConsentToggles(
+    toggles,
+    opts?.sessionMode ?? (row.sessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE"),
+    row.notesForbidden
+  );
   return log(capabilities, source, toggles.allowLiveSession, row.notesForbidden);
 }
