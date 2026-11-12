@@ -3095,3 +3095,77 @@ describe("useLiveAV — mic acquire gate skips getUserMedia", () => {
     }
   );
 });
+
+// C3c: `wantAudio: false` is not a mic request. It reaches the bundle getUserMedia itself (audio false, the touch
+// facingMode video), not requestCam (which enumerates devices first and never sends facingMode).
+describe("useLiveAV — requestMicAndCam({ wantAudio: false }) is the camera-only bundle", () => {
+  const originalMatchMedia = window.matchMedia;
+  beforeEach(() => {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("pointer: coarse"),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+  });
+
+  test.each(["yes", "defer", "no"] as const)(
+    "micAcquire %s, touch: one getUserMedia with audio false and the front-camera video (the bundle, not requestCam)",
+    async (micAcquire) => {
+      const getUM = jest.fn(async (constraints: MediaStreamConstraints) => {
+        const audio = constraintsRequestAudio(constraints) ? 1 : 0;
+        const video = constraintsRequestVideo(constraints) ? 1 : 0;
+        return makeFakeStream(audio, video).stream as unknown as MediaStream;
+      });
+      const props = makeBaseProps({ _getUserMedia: getUM, micAcquire });
+      const { result, unmount } = renderHook(() => useLiveAV(props));
+      await act(async () => {
+        await result.current.requestMicAndCam({ wantAudio: false });
+      });
+      expect(getUM).toHaveBeenCalledTimes(1);
+      expect(getUM.mock.calls[0]![0]).toEqual({ audio: false, video: { facingMode: { ideal: "user" } } });
+      expect(result.current.localVideoStream).not.toBeNull();
+      expect(result.current.localAudioStream).toBeNull();
+      unmount();
+    }
+  );
+
+  test("a camera-only bundle in flight does not swallow a later request that wants the mic", async () => {
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((r) => {
+      releaseFirst = r;
+    });
+    const getUM = jest.fn(async (constraints: MediaStreamConstraints) => {
+      if (getUM.mock.calls.length === 1) await firstGate;
+      const audio = constraintsRequestAudio(constraints) ? 1 : 0;
+      const video = constraintsRequestVideo(constraints) ? 1 : 0;
+      return makeFakeStream(audio, video).stream as unknown as MediaStream;
+    });
+    const props = makeBaseProps({ _getUserMedia: getUM, micAcquire: "yes" });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    let cameraOnly!: Promise<void>;
+    let withMic!: Promise<void>;
+    await act(async () => {
+      cameraOnly = result.current.requestMicAndCam({ wantAudio: false });
+      withMic = result.current.requestMicAndCam();
+      await Promise.resolve();
+      releaseFirst();
+      await cameraOnly;
+      await withMic;
+    });
+    expect(getUM.mock.calls.map(([c]) => [constraintsRequestAudio(c), constraintsRequestVideo(c)])).toEqual([
+      [false, true],
+      [true, false],
+    ]);
+    expect(result.current.localAudioStream).not.toBeNull();
+    expect(result.current.localVideoStream).not.toBeNull();
+    unmount();
+  });
+});

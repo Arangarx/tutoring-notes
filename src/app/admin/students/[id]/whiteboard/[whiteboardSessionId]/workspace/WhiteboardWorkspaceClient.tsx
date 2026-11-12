@@ -79,6 +79,7 @@ import {
   shouldAttachRemoteStreamToRecordingMixdown,
   studentMicStreamId,
   type CapabilitySessionMode,
+  type MicAcquire,
   type SessionCapabilities,
   type SessionConsentInput,
 } from "@/lib/recording/session-capabilities";
@@ -263,8 +264,22 @@ import { hydrateRemoteImageFilesForScene } from "@/lib/whiteboard/hydrate-remote
 import type { HydrateRemoteImageFilesResult } from "@/lib/whiteboard/hydrate-remote-files";
 import {
   joinUnavailableCopy,
+  joinUnavailableReasonFromServer,
   type JoinUnavailableReason,
 } from "@/lib/whiteboard/join-unavailable-copy";
+
+/** The `join-timer` poll body (both auth branches). */
+type JoinTimerAnswer = {
+  live?: boolean;
+  reason?: string;
+  activeMs?: number;
+  lastActiveAt?: string | null;
+  sessionPhase?: string;
+  sessionMode?: string;
+  sessionCapabilities?: SessionCapabilities;
+  forceEndAt?: string | null;
+  pillSentence?: string | null;
+};
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import type {
   WhiteboardWireBroadcastExtras,
@@ -334,6 +349,10 @@ type Props = {
   initialSessionPhase?: "PENDING" | "ACTIVE";
   /** Session mode (LIVE | IN_PERSON) — passed through for future use. */
   sessionMode?: string;
+  /** Learner device: the mode at page load (UNKNOWN until Start). Kept apart from the tutor's waiting-room mode. */
+  learnerSessionMode?: CapabilitySessionMode;
+  /** Learner device: what the session allows at page load. Drives only the learner's mic gate, never capture. */
+  learnerSessionCapabilities?: SessionCapabilities | null;
   /** ISO timestamp of PENDING→ACTIVE flip, or null. */
   activatedAt?: string | null;
   /**
@@ -514,6 +533,8 @@ export function WhiteboardWorkspaceClient({
   tutorName = "your tutor",
   initialSessionPhase = "ACTIVE",
   sessionMode: initialSessionMode,
+  learnerSessionMode = "UNKNOWN",
+  learnerSessionCapabilities = null,
   activatedAt: _activatedAt,
   initialConsentInput = NO_SNAPSHOT_CONSENT_INPUT,
   allowLiveSession = null,
@@ -1420,6 +1441,54 @@ export function WhiteboardWorkspaceClient({
     setOrgForceEnd({ atMs, sentence: data.pillSentence });
   };
 
+  // Learner device (C3c): the server's mode + capabilities for this session. Separate from the tutor's
+  // waiting-room mode and capture capabilities so nothing here can arm a recorder on the learner device.
+  const [learnerView, setLearnerView] = useState<{
+    sessionMode: CapabilitySessionMode;
+    sessionCapabilities: SessionCapabilities | null;
+  }>(() => ({ sessionMode: learnerSessionMode, sessionCapabilities: learnerSessionCapabilities }));
+
+  /** One join-timer answer (either auth branch). Phase, mode and capabilities land in one render. */
+  const adoptJoinTimerAnswer = (data: JoinTimerAnswer) => {
+    if (data.live === false) {
+      const reason = joinUnavailableReasonFromServer(data.reason);
+      setJoinUnavailableReason(reason);
+      wjgLog("session_ended", { reason });
+      return;
+    }
+    readOrgForceEndNotice(data);
+    const treatAsLive =
+      data.live === true ||
+      (data.live === undefined && typeof data.activeMs === "number");
+    if (!treatAsLive) return;
+    if (typeof data.activeMs === "number") setStudentServerActiveMs(data.activeMs);
+    if (data.lastActiveAt !== undefined) {
+      setStudentServerLastActiveAtMs(
+        data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
+      );
+    }
+    // PENDING→ACTIVE transition: update local phase when the server reports ACTIVE.
+    if (data.sessionPhase === "ACTIVE") {
+      setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
+    }
+    setLearnerView((prev) => {
+      const sessionMode =
+        data.sessionMode === "LIVE" || data.sessionMode === "IN_PERSON" || data.sessionMode === "UNKNOWN"
+          ? data.sessionMode
+          : prev.sessionMode;
+      const sessionCapabilities = data.sessionCapabilities ?? prev.sessionCapabilities;
+      if (
+        sessionMode === prev.sessionMode &&
+        JSON.stringify(sessionCapabilities) === JSON.stringify(prev.sessionCapabilities)
+      ) {
+        return prev;
+      }
+      return { sessionMode, sessionCapabilities };
+    });
+  };
+  const adoptJoinTimerAnswerRef = useRef(adoptJoinTimerAnswer);
+  adoptJoinTimerAnswerRef.current = adoptJoinTimerAnswer;
+
   // Student clock tick (drives student timer display)
   useEffect(() => {
     if (role !== "student") return;
@@ -1449,44 +1518,7 @@ export function WhiteboardWorkspaceClient({
           }
           return;
         }
-        const data = (await res.json()) as {
-          live?: boolean;
-          reason?: string;
-          activeMs?: number;
-          lastActiveAt?: string | null;
-          sessionPhase?: string;
-          forceEndAt?: string | null;
-          pillSentence?: string | null;
-        };
-        if (data.live === false) {
-          const r = data.reason;
-          const mapped: JoinUnavailableReason =
-            r === "token_expired"
-              ? "token_expired"
-              : r === "token_revoked"
-                ? "token_revoked"
-                : r === "session_ended"
-                  ? "session_ended"
-                  : "link_invalid";
-          setJoinUnavailableReason(mapped);
-          wjgLog("session_ended", { reason: mapped });
-          return;
-        }
-        readOrgForceEndNotice(data);
-        const treatAsLive =
-          data.live === true ||
-          (data.live === undefined && typeof data.activeMs === "number");
-        if (!treatAsLive) return;
-        if (typeof data.activeMs === "number") setStudentServerActiveMs(data.activeMs);
-        if (data.lastActiveAt !== undefined) {
-          setStudentServerLastActiveAtMs(
-            data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
-          );
-        }
-        // PENDING→ACTIVE transition: update local phase when the server reports ACTIVE.
-        if (data.sessionPhase === "ACTIVE") {
-          setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
-        }
+        adoptJoinTimerAnswerRef.current((await res.json()) as JoinTimerAnswer);
       } catch (err) {
         console.warn(
           `[wjg] wjg=${studentWjgId} wbsid=${whiteboardSessionId} action=join_timer_poll_error`,
@@ -1521,38 +1553,7 @@ export function WhiteboardWorkspaceClient({
           }
           return;
         }
-        const data = (await res.json()) as {
-          live?: boolean;
-          reason?: string;
-          activeMs?: number;
-          lastActiveAt?: string | null;
-          sessionPhase?: string;
-          forceEndAt?: string | null;
-          pillSentence?: string | null;
-        };
-        if (data.live === false) {
-          const r = data.reason;
-          const mapped: JoinUnavailableReason =
-            r === "session_ended" ? "session_ended" : "link_invalid";
-          setJoinUnavailableReason(mapped);
-          wjgLog("session_ended", { reason: mapped });
-          return;
-        }
-        readOrgForceEndNotice(data);
-        const treatAsLive =
-          data.live === true ||
-          (data.live === undefined && typeof data.activeMs === "number");
-        if (!treatAsLive) return;
-        if (typeof data.activeMs === "number") setStudentServerActiveMs(data.activeMs);
-        if (data.lastActiveAt !== undefined) {
-          setStudentServerLastActiveAtMs(
-            data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
-          );
-        }
-        // PENDING→ACTIVE transition: update local phase when the server reports ACTIVE.
-        if (data.sessionPhase === "ACTIVE") {
-          setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
-        }
+        adoptJoinTimerAnswerRef.current((await res.json()) as JoinTimerAnswer);
       } catch (err) {
         console.warn(
           `[wjg] wjg=${studentWjgId} wbsid=${whiteboardSessionId} action=join_timer_poll_error`,
@@ -1644,9 +1645,12 @@ export function WhiteboardWorkspaceClient({
   const sessionCapabilitiesRef = useRef(sessionCapabilities);
   sessionCapabilitiesRef.current = sessionCapabilities;
   const initialHasConsentSnapshot = initialConsentInput.hasConsentSnapshot;
-  // The learner's mic gate is C3c; until then the learner device keeps today's behavior.
-  const micAcquireForRole = role === "tutor" ? tutorMicAcquire : "yes";
-  const tutorMicLocked = role === "tutor" && micRequestBlockedReason(tutorMicAcquire) !== null;
+  // A learner page without server capabilities (token-only DOM harness) keeps the pre-consent mic.
+  const micAcquireForRole: MicAcquire =
+    role === "tutor" ? tutorMicAcquire : (learnerView.sessionCapabilities?.mic.acquire ?? "yes");
+  const micLocked = micRequestBlockedReason(micAcquireForRole) !== null;
+  const tutorMicLocked = role === "tutor" && micLocked;
+  const studentMicLocked = role === "student" && micLocked;
 
   const audioConsentBannerMessage = useMemo(() => {
     if (role !== "tutor") return null;
@@ -2362,6 +2366,7 @@ export function WhiteboardWorkspaceClient({
     studentHasConnectedOnceRef,
     joinUnavailableReason,
     hasLeft,
+    studentMicAcquire: micAcquireForRole,
     openMenu,
     hasCamPermission: liveAv.hasCamPermission,
     tutorMicAcquireSettled:
@@ -5916,7 +5921,7 @@ export function WhiteboardWorkspaceClient({
     const undoRedoDisabled = role === "student" ? !studentConnected : endingBusy;
     const micDisabled =
       role === "student"
-        ? studentAvPickerDisabled || liveAv.hasMicPermission === "denied"
+        ? studentAvPickerDisabled || liveAv.hasMicPermission === "denied" || studentMicLocked
         : endingBusy || liveAv.hasMicPermission === "denied" || tutorMicLocked;
     const camDisabled =
       role === "student"
@@ -6746,7 +6751,8 @@ export function WhiteboardWorkspaceClient({
       }
       onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
       disabled={
-        !clientMounted || (role === "student" ? studentAvPickerDisabled : endingBusy || tutorMicLocked)
+        !clientMounted ||
+        (role === "student" ? studentAvPickerDisabled || studentMicLocked : endingBusy || tutorMicLocked)
       }
     />
   );
@@ -6825,6 +6831,8 @@ export function WhiteboardWorkspaceClient({
       orientation={orientation}
       role={role}
       toolbarHidden={toolbarHidden}
+      sessionMode={role === "student" ? learnerView.sessionMode : capabilityMode}
+      micAcquire={micAcquireForRole}
       onChromeClick={(e) => {
         const target = e.target as HTMLElement;
         if (!target.closest?.(".mynk-wb-end-confirm-wrap")) {
@@ -6977,7 +6985,7 @@ export function WhiteboardWorkspaceClient({
               void liveAv.setMicDeviceBySlot(slot, { force: true })
             }
             onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
-            disabled={studentAvPickerDisabled}
+            disabled={studentAvPickerDisabled || studentMicLocked}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}

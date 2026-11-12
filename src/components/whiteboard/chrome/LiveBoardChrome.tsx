@@ -3,6 +3,7 @@
 import type { MouseEvent, ReactNode } from "react";
 import type { WbLayoutMode, WbOrientation } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import type { WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
+import type { CapabilitySessionMode, MicAcquire } from "@/lib/recording/session-capabilities";
 
 /** Presentational slot props for the live board chrome frame (§7.5.1 shell). */
 export interface LiveBoardChromeSlots {
@@ -27,6 +28,10 @@ export interface LiveBoardChromeProps extends LiveBoardChromeSlots {
   /** When `"replay"`, sets `data-mode` and replay-specific body class names. */
   chromeMode?: WbChromeMode;
   onChromeClick?: (e: MouseEvent<HTMLDivElement>) => void;
+  /** The session mode this device's capabilities follow (`data-session-mode`). */
+  sessionMode?: CapabilitySessionMode;
+  /** This device's mic gate (`data-mic-acquire`). */
+  micAcquire?: MicAcquire;
 }
 
 /**
@@ -41,6 +46,8 @@ export function LiveBoardChrome({
   toolbarHidden,
   chromeMode = "live",
   onChromeClick,
+  sessionMode,
+  micAcquire,
   nonVisualMounts,
   topBar,
   toolStrip,
@@ -59,6 +66,8 @@ export function LiveBoardChrome({
       data-orientation={orientation}
       data-role={role}
       data-toolbar-hidden={toolbarHidden ? "true" : "false"}
+      data-session-mode={sessionMode}
+      data-mic-acquire={micAcquire}
       onClick={onChromeClick}
     >
       {nonVisualMounts}

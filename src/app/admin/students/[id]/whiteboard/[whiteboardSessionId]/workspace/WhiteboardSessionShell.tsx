@@ -10,7 +10,11 @@
 import { useCallback, useState } from "react";
 import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 import type { EntryBlockReason } from "@/lib/scheduling/session-entry";
-import type { SessionConsentInput } from "@/lib/recording/session-capabilities";
+import type {
+  CapabilitySessionMode,
+  SessionCapabilities,
+  SessionConsentInput,
+} from "@/lib/recording/session-capabilities";
 import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
 import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
 import { SessionReviewMode } from "./SessionReviewMode";
@@ -74,6 +78,10 @@ export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
   initialLastActiveAtIso: string | null;
   /** Session phase at SSR time — allows the client to start in PENDING state. */
   initialSessionPhase?: "PENDING" | "ACTIVE";
+  /** Mode at SSR time: UNKNOWN until Start. */
+  sessionMode?: CapabilitySessionMode;
+  /** What this session allows at SSR time; the learner's mic gate reads `mic.acquire`. */
+  sessionCapabilities?: SessionCapabilities;
   /**
    * identity-peerid workstream: session-scoped opaque identity token
    * (authenticated /join/[sessionId] path only). Computed server-side as
@@ -107,6 +115,8 @@ export function WhiteboardSessionShell(props: WhiteboardSessionShellProps) {
         initialActiveMs={props.initialActiveMs}
         initialLastActiveAtIso={props.initialLastActiveAtIso}
         initialSessionPhase={props.initialSessionPhase}
+        learnerSessionMode={props.sessionMode}
+        learnerSessionCapabilities={props.sessionCapabilities}
         identityKey={props.identityKey}
         learnerProfileId={props.learnerProfileId}
       />

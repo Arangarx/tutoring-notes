@@ -8,6 +8,7 @@ import {
 
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
 import type { UseLiveAVReturn } from "@/hooks/useLiveAV";
+import type { MicAcquire } from "@/lib/recording/session-capabilities";
 import type { WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
 import { isTouchPrimaryDevice } from "@/components/whiteboard/chrome/useWbLayoutMode";
 
@@ -56,6 +57,8 @@ export type UseLiveAvCoordinatorArgs = {
   joinUnavailableReason: string | null;
   /** Student has left the session (blocks A/V bootstrap). */
   hasLeft: boolean;
+  /** The learner's mic gate value. Only `yes` asks for the mic; the camera is asked for regardless. */
+  studentMicAcquire: MicAcquire;
   /** Currently-open chrome menu (student overflow triggers device refresh). */
   openMenu: string | null;
   /** Browser camera permission state (drives camera-on-by-default). */
@@ -98,6 +101,7 @@ export function useLiveAvCoordinator({
   studentHasConnectedOnceRef,
   joinUnavailableReason,
   hasLeft,
+  studentMicAcquire,
   openMenu,
   hasCamPermission,
   tutorMicAcquireSettled,
@@ -115,6 +119,8 @@ export function useLiveAvCoordinator({
     if (!studentSyncClient) return;
     if (joinUnavailableReason !== null || hasLeft) return;
 
+    // Defer / no: the camera still comes up; the mic waits for `yes` (this effect re-runs when it flips).
+    const wantAudio = studentMicAcquire === "yes";
     const bootstrapAv = () => {
       void (async () => {
         if (
@@ -125,14 +131,14 @@ export function useLiveAvCoordinator({
           // Desktop webcams fail OverconstrainedError on facingMode:user and
           // break mic+cam entirely (Andrew 2026-06-24 wife desktop smoke).
           if (isTouchPrimaryDevice()) {
-            await liveAvRef.current.requestMicAndCam();
+            await liveAvRef.current.requestMicAndCam(wantAudio ? undefined : { wantAudio: false });
           } else {
-            await liveAvRef.current.requestMic();
+            if (wantAudio) await liveAvRef.current.requestMic();
             await liveAvRef.current.requestCam();
           }
           return;
         }
-        if (!liveAvRef.current.localAudioStream) {
+        if (wantAudio && !liveAvRef.current.localAudioStream) {
           await liveAvRef.current.requestMic();
         }
         if (!liveAvRef.current.localVideoStream) {
@@ -151,7 +157,7 @@ export function useLiveAvCoordinator({
     return () => {
       offConnect();
     };
-  }, [role, studentSyncClient, joinUnavailableReason, hasLeft, liveAvRef]);
+  }, [role, studentSyncClient, joinUnavailableReason, hasLeft, liveAvRef, studentMicAcquire]);
 
   // Refresh device lists when student opens overflow (touch has no top-bar
   // ▾ popover).

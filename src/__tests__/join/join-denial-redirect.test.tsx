@@ -73,6 +73,18 @@ jest.mock("@/components/whiteboard/ServerLiveKeySeeder", () => ({
   ),
 }));
 
+// The learner view's online decision; its import chain reaches `jose` (ESM), which jest does not transform.
+jest.mock("@/lib/scheduling/session-entry-loader", () => ({
+  __esModule: true,
+  loadSessionEntryInputs: jest.fn(async () => ({
+    erasureSuspended: false,
+    org: null,
+    claimed: true,
+    isSelfLearner: false,
+    consent: { allowLiveSession: true },
+  })),
+}));
+
 import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { NOT_MY_SESSION_PATH } from "@/lib/join-scope";

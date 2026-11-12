@@ -186,6 +186,11 @@ export type AvAcquireError =
  */
 export type AvPermissionState = "unknown" | "prompt" | "granted" | "denied";
 
+export type RequestMicAndCamOptions = {
+  /** Omitted or true: a mic request, subject to the mic gate. False: the camera only. */
+  wantAudio?: boolean;
+};
+
 /**
  * Minimal `PermissionStatus` surface this hook touches. Real
  * browser type is `PermissionStatus`; we narrow to the methods we
@@ -393,8 +398,10 @@ export type UseLiveAVReturn = {
    * Single `getUserMedia` for audio + video. Prefer on student join so the
    * mesh's first offer includes both tracks (avoids mobile late-add-video
    * renegotiation races where the tutor can miss student video).
+   * `wantAudio: false` is not a mic request: the same bundle asks for the
+   * camera only, and the mic gate is not consulted.
    */
-  requestMicAndCam: () => Promise<void>;
+  requestMicAndCam: (opts?: RequestMicAndCamOptions) => Promise<void>;
   /**
    * True while EITHER `requestMic()` or `requestCam()` is in flight.
    */
@@ -894,6 +901,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const micInFlightRef = useRef<Promise<void> | null>(null);
   const camInFlightRef = useRef<Promise<void> | null>(null);
   const avBundleInFlightRef = useRef<Promise<void> | null>(null);
+  const avBundleWantsAudioRef = useRef(true);
   // Shared with useAudioRecorder (tutor first-acquire) — invariant 14.
   // Concurrent recorder GUM + requestCam latched silent Brio mic (AUDIO-1 #3).
   const deviceAcquireMutexRef = sharedDeviceAcquireMutex;
@@ -1457,8 +1465,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     [videoConstraints, enumerateDevicesCore]
   );
 
-  const requestMicAndCam = useCallback(async (): Promise<void> => {
-    if (micBlocked("requestMicAndCam")) {
+  const requestMicAndCam = useCallback(async (opts?: RequestMicAndCamOptions): Promise<void> => {
+    const wantAudio = opts?.wantAudio !== false;
+    if (wantAudio && micBlocked("requestMicAndCam")) {
       if (!localVideoStreamRef.current) await requestCam();
       return;
     }
@@ -1466,8 +1475,14 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       if (!localVideoStreamRef.current) await requestCam();
       return;
     }
-    if (localAudioStreamRef.current && localVideoStreamRef.current) return;
-    if (avBundleInFlightRef.current) return avBundleInFlightRef.current;
+    if ((!wantAudio || localAudioStreamRef.current) && localVideoStreamRef.current) return;
+    if (avBundleInFlightRef.current) {
+      // A camera-only bundle in flight does not answer a request that wants the mic: wait for it, then ask.
+      if (!wantAudio || avBundleWantsAudioRef.current) return avBundleInFlightRef.current;
+      await avBundleInFlightRef.current;
+      if (localAudioStreamRef.current && localVideoStreamRef.current) return;
+      if (avBundleInFlightRef.current) return avBundleInFlightRef.current;
+    }
 
     const getUM = resolveGetUserMedia();
     if (!getUM) {
@@ -1486,15 +1501,15 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
     startAcquiring();
     if (!unmountedRef.current) {
-      setError(null);
+      if (wantAudio) setError(null);
       setVideoError(null);
     }
-    log.log("requestMicAndCam start");
+    log.log(wantAudio ? "requestMicAndCam start" : "requestMicAndCam start wantAudio=false");
 
     // Which kinds this bundle actually requested; set inside the mutex and read
     // by the catch block for error attribution. Before the mutex is ours both
-    // are true (a failure before the re-check is a whole-bundle failure).
-    let bundleNeedAudio = true;
+    // wanted kinds count (a failure before the re-check is a whole-bundle failure).
+    let bundleNeedAudio = wantAudio;
     let bundleNeedVideo = true;
     const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
       try {
@@ -1502,7 +1517,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         // mutex is ours. requestCam / requestMic may have landed a track while
         // this bundle waited; asking for it again would create a second live
         // track (extra m-line, and "camera off" would leave the first one on).
-        const needAudio = !localAudioStreamRef.current;
+        const needAudio = wantAudio && !localAudioStreamRef.current;
         const needVideo = !localVideoStreamRef.current;
         bundleNeedAudio = needAudio;
         bundleNeedVideo = needVideo;
@@ -1624,6 +1639,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       }
     });
     avBundleInFlightRef.current = inFlight;
+    avBundleWantsAudioRef.current = wantAudio;
     return inFlight;
   }, [audioConstraints, externalAudioStream, enumerateDevicesCore, requestCam, videoConstraints, learnerProfileId, persistLearnerMicChoice, wireStudentPublishPath, micBlocked]);
 

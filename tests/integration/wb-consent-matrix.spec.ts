@@ -45,8 +45,10 @@ import {
   micBlockedLines,
   openTutorRoom,
   seedConsentSession,
+  setFamilySwitches,
   startFromWaitingRoom,
 } from "../helpers/consent-tutor-room";
+import { installGetUserMediaSpy, readGetUserMediaSpy } from "../helpers/get-user-media-spy";
 
 // Lane literals are the stored wire format (session-capabilities.ts helpers build the same strings); tests state them as data.
 const TUTOR_LANE = "tutor:mic";
@@ -177,10 +179,66 @@ test.describe("consent 6a: Entry (online switch)", {
     }
   );
   // Oracle: Q9, B4 channel. Run for both client branches (SF-I): a join-token learner and a signed-in learner session, because each has its own 'JoinUnavailableReason' map ('WhiteboardWorkspaceClient.tsx' 1446–1454 and 1516–1521) an …
-  test.fixme(
+  // C3c. Signed-in learner arm here; the join-token arm is the jest DOM render in StudentLiveWorkspaceClient.dom.test.tsx
+  // (no page renders the token client) plus the route tests for both branches. The family's switch is saved as a new
+  // live-record version (consent-tutor-room `setFamilySwitches`; the family settings action itself is E13's wave).
+  // The in-person tutor shows no sync pill, so the drop is read on the learner: its sync client disconnects and its
+  // presence heartbeats to the relay stop.
+  test(
     "E19: online off: a learner already connected during PENDING is disconnected with a message when the tutor Starts in person",
-    async () => {
-      // pending: wave that owns E19
+    async ({ browser }) => {
+      test.setTimeout(300_000);
+      const s = await seedConsentSession({ switches: {} });
+      const pair = await openTutorAndStudent(browser, s, {
+        ensureFollow: false,
+        prepareContext: (ctx) => installGetUserMediaSpy(ctx, "passthrough"),
+      });
+      try {
+        const learner = pair.studentPage;
+        const lines: string[] = [];
+        learner.on("console", (m) => lines.push(m.text()));
+        const presenceSends = () => lines.filter((l) => /kind=presence send/.test(l)).length;
+        await expect(pair.tutorPage.getByTestId("wb-sync-pill")).toHaveText(/student connected/i);
+        await expect.poll(presenceSends, { timeout: 15_000 }).toBeGreaterThan(0);
+        await setFamilySwitches(s, { allowLiveSession: false }, { snapshot: false });
+        await chooseMode(pair.tutorPage, "IN_PERSON");
+        await startFromWaitingRoom(pair.tutorPage);
+
+        await expect(learner.getByRole("heading", { name: "You were disconnected" })).toBeVisible({ timeout: 10_000 });
+        await expect(learner.getByText("Live sessions are off in privacy settings.")).toBeVisible();
+        await expect(learner.getByText("This link isn't usable anymore")).toHaveCount(0);
+        await expect
+          .poll(() => lines.some((l) => /\[wjg\].*action=sync_disconnect/.test(l)), { timeout: 10_000 })
+          .toBe(true);
+        const gumAfter = (await readGetUserMediaSpy(learner)).calls.length;
+        const sendsAfter = presenceSends();
+        await learner.waitForTimeout(8_000);
+        expect(presenceSends()).toBe(sendsAfter);
+        expect((await readGetUserMediaSpy(learner)).calls.length).toBe(gumAfter);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
+    }
+  );
+  test(
+    "E19 control: online on, in-person Start keeps the connected learner",
+    async ({ browser }) => {
+      test.setTimeout(300_000);
+      const s = await seedConsentSession({ switches: {} });
+      const pair = await openTutorAndStudent(browser, s, { ensureFollow: false });
+      try {
+        await chooseMode(pair.tutorPage, "IN_PERSON");
+        await startFromWaitingRoom(pair.tutorPage);
+        await expect(pair.studentPage.getByTestId("wb-waiting-overlay")).not.toBeVisible({ timeout: 10_000 });
+        await pair.studentPage.waitForTimeout(8_000);
+        await expect(pair.studentPage.getByText("You were disconnected")).toHaveCount(0);
+        await expect(pair.studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible();
+        await expect(pair.tutorPage.getByTestId("wb-sync-pill")).toHaveText(/student connected/i);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
 });

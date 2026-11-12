@@ -8,7 +8,7 @@
  * Run (after un-fixme): npx playwright test tests/integration/wb-consent-mic.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { test, expect, webkit, type Page } from "@playwright/test";
+import { test, expect, webkit, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import { installGetUserMediaSpy, readGetUserMediaSpy } from "../helpers/get-user-media-spy";
@@ -40,6 +40,89 @@ const segmentLanes = async (id: string) =>
   );
 
 const overlay = (page: Page) => page.getByTestId("wb-waiting-overlay");
+
+// ---------------------------------------------------------------------------
+// C3c learner rows: the learner device's mic follows the session's capabilities.
+// ---------------------------------------------------------------------------
+
+/** The learner's live chrome root; `data-session-mode` / `data-mic-acquire` are what this device was told. */
+const learnerChrome = (page: Page) => page.getByTestId("mynk-wb-chrome");
+
+/** Every RTCPeerConnection the page builds (M12's inbound-RTP oracle reads them). */
+async function capturePeerConnections(ctx: BrowserContext) {
+  await ctx.addInitScript(() => {
+    const Native = window.RTCPeerConnection;
+    const made: RTCPeerConnection[] = [];
+    (window as unknown as { __c3cPcs: RTCPeerConnection[] }).__c3cPcs = made;
+    window.RTCPeerConnection = class extends Native {
+      constructor(config?: RTCConfiguration) {
+        super(config);
+        made.push(this);
+      }
+    } as typeof RTCPeerConnection;
+  });
+}
+
+/**
+ * Tutor + learner in one session, the `getUserMedia` spy on both. Chromium learner: `hasTouch` (touch-primary, the
+ * bundle path) unless `desktop`, real fake-media tracks. WebKit learner: iPhone 13, stubbed spy (BL1).
+ */
+async function openLearnerPair(
+  browser: Browser,
+  s: ConsentRoomSession,
+  opts: { learner: "touch" | "desktop" | "webkit"; capturePcs?: boolean }
+) {
+  const pair = await openTutorAndStudent(browser, s, {
+    ensureFollow: false,
+    ...(opts.learner === "touch" ? { studentHasTouch: true } : {}),
+    ...(opts.learner === "webkit" ? { studentBrowser: "webkit" as const } : {}),
+    prepareContext: async (ctx) => {
+      const isWebkit = ctx.browser()?.browserType().name() === "webkit";
+      if (!isWebkit) await ctx.grantPermissions(["microphone", "camera"]);
+      await installGetUserMediaSpy(ctx, isWebkit ? "stub" : "passthrough");
+      if (opts.capturePcs && !isWebkit) await capturePeerConnections(ctx);
+    },
+  });
+  const learnerLines: string[] = [];
+  pair.studentPage.on("console", (m) => learnerLines.push(m.text()));
+  return { ...pair, learnerLines };
+}
+
+const learnerSpy = (page: Page) => readGetUserMediaSpy(page);
+const learnerVideoCalls = async (page: Page) => (await learnerSpy(page)).videoCalls;
+
+/** The tutor's received audio from remote peers: inbound-rtp `bytesReceived` summed over every open PC. */
+async function tutorInboundAudioBytes(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const pcs = (window as unknown as { __c3cPcs?: RTCPeerConnection[] }).__c3cPcs ?? [];
+    let total = 0;
+    for (const pc of pcs) {
+      if (pc.connectionState === "closed") continue;
+      const stats = await pc.getStats();
+      stats.forEach((r: { type?: string; kind?: string; bytesReceived?: number }) => {
+        if (r.type === "inbound-rtp" && r.kind === "audio") total += r.bytesReceived ?? 0;
+      });
+    }
+    return total;
+  });
+}
+
+/** Bytes of learner audio the tutor received over ~1.5 s. */
+async function tutorAudioBytesFlowing(page: Page): Promise<number> {
+  const a = await tutorInboundAudioBytes(page);
+  await page.waitForTimeout(1_500);
+  return (await tutorInboundAudioBytes(page)) - a;
+}
+
+/** Remote `<audio>` elements on the tutor whose stream holds a live, unmuted audio track. */
+async function tutorLiveRemoteAudioTracks(page: Page): Promise<number> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLAudioElement>('audio[data-testid^="av-tile-audio-"]')).filter((el) => {
+      const src = el.srcObject as MediaStream | null;
+      return !!src && src.getAudioTracks().some((t) => t.readyState === "live" && !t.muted && t.enabled);
+    }).length
+  );
+}
 
 /** The camera comes on by itself when permission is already granted; otherwise the tutor taps the camera chip. */
 async function ensureCameraRequested(page: Page) {
@@ -212,10 +295,21 @@ test.describe("consent 6d: Mic openers (B4, D7)", {
     }
   );
   // Oracle: Learner spy count of audio constraints = 0; camera acquired
-  test.fixme(
+  // C3c: a desktop learner joining an in-person audio-off session after Start (the desktop bootstrap: mic, then camera).
+  test(
     "M7: in person, audio off: the learner-side bootstrap opens no audio",
-    async () => {
-      // pending: wave that owns M7
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: AUDIO_OFF, phase: "ACTIVE", mode: "IN_PERSON" });
+      const pair = await openLearnerPair(browser, s, { learner: "desktop" });
+      try {
+        await expect.poll(() => learnerVideoCalls(pair.studentPage), { timeout: 10_000 }).toBeGreaterThan(0);
+        await pair.studentPage.waitForTimeout(3_000);
+        expect(await audioRequests(pair.studentPage)).toBe(0);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Positive control: spy count ≥ 1; no segments
@@ -269,52 +363,220 @@ test.describe("consent 6d: Mic openers (B4, D7)", {
     }
   );
   // Oracle: Spy-only (BL1). Stubbed 'getUserMedia' on the WebKit project records the constraints; no real tracks exist there (the fake-media flags are Chromium-only, 'playwright.config.ts' 41–45), so the oracle is the count of audio …
-  test.fixme(
+  test(
     "M10: WebKit (iPhone 13) student: no audio request in an in-person audio-off session",
-    async () => {
-      // pending: wave that owns M10
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: AUDIO_OFF, phase: "ACTIVE", mode: "IN_PERSON" });
+      const pair = await openLearnerPair(browser, s, { learner: "webkit" });
+      try {
+        await expect.poll(() => learnerVideoCalls(pair.studentPage), { timeout: 10_000 }).toBeGreaterThan(0);
+        await pair.studentPage.waitForTimeout(3_000);
+        expect(await audioRequests(pair.studentPage)).toBe(0);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: B4, C3c; red today. Chromium with 'hasTouch: true' and the fake-media flags, in 'wb-regression' (BL1, re-review 3; not WebKit: no fake media there). The learner is a touch-primary device ('isTouchPrimaryDevice()', 'useLi …
-  test.fixme(
+  test(
     "M11: learner, audio off, mode not yet known (PENDING): the touch bundle requests video only, then audio after Start says online",
-    async () => {
-      // pending: wave that owns M11
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: AUDIO_OFF });
+      const pair = await openLearnerPair(browser, s, { learner: "touch" });
+      try {
+        const learner = pair.studentPage;
+        await expect(learnerChrome(learner)).toHaveAttribute("data-session-mode", "UNKNOWN");
+        await expect(learnerChrome(learner)).toHaveAttribute("data-mic-acquire", "defer");
+        await expect.poll(() => learnerVideoCalls(learner), { timeout: 10_000 }).toBeGreaterThan(0);
+        const first = (await learnerSpy(learner)).calls[0]!;
+        // The touch bundle itself (front camera), with no audio: not a fallback through requestCam.
+        expect(first.wantsAudio).toBe(false);
+        expect(first.constraints?.audio).toBe(false);
+        expect(first.constraints?.video).toEqual({ facingMode: { ideal: "user" } });
+        await learner.waitForTimeout(2_000);
+        expect(await audioRequests(learner)).toBe(0);
+
+        await chooseMode(pair.tutorPage, "LIVE");
+        await startFromWaitingRoom(pair.tutorPage);
+        await expect(learnerChrome(learner)).toHaveAttribute("data-session-mode", "LIVE", { timeout: 10_000 });
+        await expect(learnerChrome(learner)).toHaveAttribute("data-mic-acquire", "yes");
+        await expect.poll(() => audioRequests(learner), { timeout: 10_000 }).toBeGreaterThan(0);
+        await learner.waitForTimeout(2_000);
+        // One mic request after the flip. `requestMic` itself may issue more than one audio-only `getUserMedia` (a
+        // plain one, then the picked device), as it does today with audio on; the camera is not asked for again.
+        expect(pair.learnerLines.filter((l) => /requestMic start/.test(l))).toHaveLength(1);
+        const { calls } = await learnerSpy(learner);
+        expect(calls.filter((c) => c.wantsAudio && c.wantsVideo)).toHaveLength(0);
+        expect(calls.filter((c) => c.wantsVideo)).toHaveLength(1);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: B4; the risk the deferral creates. Same Chromium + 'hasTouch' + fake-media setup as M11 (BL1), with the same 10 s 'expect.poll' window (SF-I), because inbound RTP bytes need real tracks that WebKit cannot supply here. Th …
-  test.fixme(
+  test(
     "M12: learner: after a deferred mic acquire the tutor actually hears the learner",
-    async () => {
-      // pending: wave that owns M12
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: AUDIO_OFF });
+      const pair = await openLearnerPair(browser, s, { learner: "touch", capturePcs: true });
+      try {
+        const tutor = pair.tutorPage;
+        await expect(learnerChrome(pair.studentPage)).toHaveAttribute("data-mic-acquire", "defer");
+        await expect.poll(() => learnerVideoCalls(pair.studentPage), { timeout: 10_000 }).toBeGreaterThan(0);
+        await chooseMode(tutor, "LIVE");
+        // Deferred: nothing of the learner's voice reaches the tutor before Start.
+        expect(await tutorAudioBytesFlowing(tutor)).toBe(0);
+        expect(await tutorLiveRemoteAudioTracks(tutor)).toBe(0);
+
+        await startFromWaitingRoom(tutor);
+        await expect.poll(() => tutorAudioBytesFlowing(tutor), { timeout: 10_000 }).toBeGreaterThan(0);
+        await expect.poll(() => tutorLiveRemoteAudioTracks(tutor), { timeout: 10_000 }).toBeGreaterThan(0);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: B4. Spy-only on WebKit (BL1): stubbed 'getUserMedia', count of audio constraints, no track bytes; the same assertion also runs on the Chromium 'hasTouch' setup of M11, with the 10 s poll window (SF-I). The learner is con …
-  test.fixme(
-    "M13: learner, audio off, in person: zero audio getUserMedia calls across PENDING, Start, ACTIVE and End",
-    async () => {
-      // pending: wave that owns M13
-    }
-  );
+  for (const learnerKind of ["touch", "webkit"] as const) {
+    test(
+      `M13: learner, audio off, in person: zero audio getUserMedia calls across PENDING, Start, ACTIVE and End (${learnerKind === "touch" ? "Chromium hasTouch" : "WebKit, spy-only"})`,
+      async ({ browser }) => {
+        test.setTimeout(300_000);
+        const s = await seedConsentSession({ switches: AUDIO_OFF });
+        const pair = await openLearnerPair(browser, s, { learner: learnerKind });
+        try {
+          const learner = pair.studentPage;
+          await expect.poll(() => learnerVideoCalls(learner), { timeout: 10_000 }).toBeGreaterThan(0);
+          expect(await audioRequests(learner)).toBe(0);
+
+          await chooseMode(pair.tutorPage, "IN_PERSON");
+          await startFromWaitingRoom(pair.tutorPage);
+          await expect(learnerChrome(learner)).toHaveAttribute("data-session-mode", "IN_PERSON", { timeout: 10_000 });
+          await expect(learnerChrome(learner)).toHaveAttribute("data-mic-acquire", "no");
+          await learner.waitForTimeout(3_000);
+          expect(await audioRequests(learner)).toBe(0);
+
+          await endFromWorkspace(pair.tutorPage);
+          await expect(learner.getByText("Session has ended")).toBeVisible({ timeout: 10_000 });
+          expect(await audioRequests(learner)).toBe(0);
+        } finally {
+          await pair.close();
+          await s.cleanup();
+        }
+      }
+    );
+  }
   // Oracle: B4 (d). After Start, reload the learner. The shell's first render already has the right mode and capabilities (DOM 'data-' attributes the shell exposes, and the same A/V decision: no extra audio call for in-person audio- …
-  test.fixme(
+  // With the join-timer poll blocked after the reload, only the page's own props can carry the mode and capabilities.
+  test(
     "M14: learner reloads or opens /join after Start: mode and capabilities arrive in the first render",
-    async () => {
-      // pending: wave that owns M14
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: AUDIO_OFF });
+      const pair = await openLearnerPair(browser, s, { learner: "touch" });
+      try {
+        const learner = pair.studentPage;
+        await chooseMode(pair.tutorPage, "IN_PERSON");
+        await startFromWaitingRoom(pair.tutorPage);
+        await expect(learnerChrome(learner)).toHaveAttribute("data-session-mode", "IN_PERSON", { timeout: 10_000 });
+
+        await learner.route("**/join-timer**", (route) => route.abort());
+        await learner.reload({ waitUntil: "domcontentloaded" });
+        await expect(learner.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({ timeout: 90_000 });
+        await expect(learnerChrome(learner)).toHaveAttribute("data-session-mode", "IN_PERSON");
+        await expect(learnerChrome(learner)).toHaveAttribute("data-mic-acquire", "no");
+        await expect.poll(() => learnerVideoCalls(learner), { timeout: 10_000 }).toBeGreaterThan(0);
+        await learner.waitForTimeout(2_000);
+        expect(await audioRequests(learner)).toBe(0);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: B4 control. On touch, audio recording on: exactly one 'getUserMedia' call carrying both kinds, issued at connect, before Start (as today, 'useLiveAV.ts' 1494–1497). Proves the 'wantAudio' split does not touch the path th …
-  test.fixme(
+  // CHARACTERIZATION (green before C3c): audio on keeps today's single bundled call. Today the connect also issues one
+  // audio-only call ahead of the bundle (observed on the pre-C3c tip); it is pinned so a change to either shows up.
+  test(
     "M15: learner, audio on: behavior is unchanged — one bundled call carrying audio and video at connect",
-    async () => {
-      // pending: wave that owns M15
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: {} });
+      const pair = await openLearnerPair(browser, s, { learner: "touch" });
+      try {
+        const learner = pair.studentPage;
+        await expect.poll(async () => (await learnerSpy(learner)).calls.length, { timeout: 10_000 }).toBeGreaterThan(0);
+        await learner.waitForTimeout(3_000);
+        const { calls } = await learnerSpy(learner);
+        expect(calls.filter((c) => c.wantsAudio && c.wantsVideo)).toHaveLength(1);
+        expect(calls.filter((c) => c.wantsAudio && !c.wantsVideo)).toHaveLength(1);
+        expect(calls.filter((c) => !c.wantsAudio)).toHaveLength(0);
+        await expect(overlay(learner)).toBeVisible();
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: SF-D, re-review 3; red today, both roles. Learner on Chromium with 'hasTouch' (M11's setup), audio off. Click every manual acquire path by the real control: the top-bar mic button ('handleTopBarMic'), the 'AVPermissionsP …
-  test.fixme(
+  // Learner arms (C3c): mode not yet known = defer (waiting room), in person = no (after Start). The mic button is
+  // disabled and clicking it opens nothing; the device picker stays usable and its request reaches the hook's gate,
+  // which logs the blocked request (the C3b M4 pattern).
+  test(
     "M16: learner, audio off, mode not yet known or in person: the manual mic controls cannot acquire a mic",
-    async () => {
-      // pending: C3c owns the learner arms (mode PENDING = defer, in person = no). The tutor arm is live below (C3b).
+    async ({ browser }) => {
+      test.setTimeout(300_000);
+      const s = await seedConsentSession({ switches: AUDIO_OFF });
+      const pair = await openLearnerPair(browser, s, { learner: "touch" });
+      try {
+        const learner = pair.studentPage;
+        await expect(learnerChrome(learner)).toHaveAttribute("data-mic-acquire", "defer");
+        const chip = overlay(learner).getByTestId("wb-topbar-mic-toggle");
+        await expect(chip).toBeDisabled();
+        await chip.click({ force: true });
+        const picker = overlay(learner).getByTestId("audio-device-select");
+        await expect.poll(() => picker.locator("option").count(), { timeout: 15_000 }).toBeGreaterThan(1);
+        await expect(picker).toBeEnabled();
+        await picker.selectOption({ index: 1 });
+        await expect
+          .poll(() => micBlockedLines(pair.learnerLines, "defer").length, { timeout: 5_000 })
+          .toBeGreaterThan(0);
+        await learner.waitForTimeout(1_500);
+        expect(await audioRequests(learner)).toBe(0);
+
+        await chooseMode(pair.tutorPage, "IN_PERSON");
+        await startFromWaitingRoom(pair.tutorPage);
+        await expect(learnerChrome(learner)).toHaveAttribute("data-mic-acquire", "no", { timeout: 10_000 });
+        const topBarMic = learner.locator(".mynk-wb-topbar").getByTestId("wb-topbar-mic-toggle");
+        await expect(topBarMic).toBeDisabled();
+        await topBarMic.click({ force: true });
+        // The overflow sheet only shows on narrow layouts (a phone held upright).
+        await learner.setViewportSize({ width: 700, height: 900 });
+        await learner.getByTestId("wb-student-topbar-overflow").click();
+        const overflowMic = learner.getByTestId("wb-overflow-mic");
+        await expect(overflowMic).toBeDisabled();
+        await overflowMic.click({ force: true });
+        const overflowPicker = learner
+          .locator(".mynk-wb-overflow-av-pickers")
+          .getByTestId("audio-device-select")
+          .first();
+        await expect(overflowPicker).toBeEnabled();
+        await overflowPicker.selectOption({ index: 1 });
+        await expect
+          .poll(() => micBlockedLines(pair.learnerLines, "no").length, { timeout: 5_000 })
+          .toBeGreaterThan(0);
+        await learner.waitForTimeout(1_500);
+        expect(await audioRequests(learner)).toBe(0);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // M16 tutor arm (C3b): the gate is symmetric (§ 4.1 item 2). In-person audio-off session: every manual tutor mic

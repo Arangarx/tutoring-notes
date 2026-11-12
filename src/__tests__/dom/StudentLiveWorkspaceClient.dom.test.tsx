@@ -438,3 +438,32 @@ describe("WhiteboardWorkspaceClient role=student — behavior (RW-B1)", () => {
     });
   });
 });
+
+// E19 token arm (consent wave C3c, Q9). No page renders the student client with a join token (the /w/ path only
+// redirects to /join), so this branch's client is exercised here; the learner-session arm runs in Playwright
+// (wb-consent-online-off.spec.ts). Oracle: the § 2.5 family copy, typed, and the sync client is let go.
+describe("WhiteboardWorkspaceClient role=student — join-timer says the room is unavailable (token arm)", () => {
+  function answerJoinTimer(body: Record<string, unknown>) {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/join-timer")) {
+        return { ok: true, json: async () => body } as Response;
+      }
+      return { ok: false, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+  }
+
+  it("online_off: shows the disconnected card with the privacy-settings line and drops the sync connection", async () => {
+    answerJoinTimer({ live: false, reason: "online_off" });
+    await renderStudentWorkspace();
+    expect(await screen.findByText("You were disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Live sessions are off in privacy settings.")).toBeInTheDocument();
+    await waitFor(() => expect(mockDisconnect).toHaveBeenCalled());
+  });
+
+  it("an unknown reason is not shown as a bad link", async () => {
+    answerJoinTimer({ live: false, reason: "some_future_reason" });
+    await renderStudentWorkspace();
+    expect(await screen.findByText("This session isn't available right now.")).toBeInTheDocument();
+    expect(screen.queryByText("This link isn't usable anymore")).not.toBeInTheDocument();
+  });
+});

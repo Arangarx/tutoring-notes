@@ -41,6 +41,10 @@ import {
   assertIsSessionParticipant,
   verifyIsSessionParticipant,
 } from "@/lib/session-participant-scope";
+import {
+  LEARNER_VIEW_SNAPSHOT_SELECT,
+  resolveLearnerSessionView,
+} from "@/lib/whiteboard/learner-session-view";
 import { WhiteboardSessionShell } from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell";
 import { JoinAuthGate } from "./JoinAuthGate";
 import { JoinHashRestorer } from "./JoinHashRestorer";
@@ -75,17 +79,23 @@ export default async function JoinSessionPage({
     select: {
       id: true,
       studentId: true,
+      adminUserId: true,
       endedAt: true,
       sessionPhase: true,
+      sessionMode: true,
+      notesForbidden: true,
       activeMs: true,
       lastActiveAt: true,
       liveKeyEnc: true,
+      consentSnapshot: { select: LEARNER_VIEW_SNAPSHOT_SELECT },
       adminUser: {
         select: { displayName: true, email: true },
       },
       student: {
         select: {
           name: true,
+          adminUserId: true,
+          organizationId: true,
           learnerProfileId: true,
           learnerProfile: {
             select: {
@@ -295,7 +305,10 @@ export default async function JoinSessionPage({
   // into #k= during first client render, so no join link is needed. Legacy
   // sessions return null and keep the link-fragment path.
   const liveKey = readServerLiveKey(session.id, session.liveKeyEnc);
-  const turnIceServers = await getTurnIceServers(`wbsid=${session.id} role=student`);
+  const [turnIceServers, learnerView] = await Promise.all([
+    getTurnIceServers(`wbsid=${session.id} role=student`),
+    resolveLearnerSessionView(session),
+  ]);
 
   // JoinHashRestorer runs before the student shell so the #k= fragment is
   // in place when the shell's key-read effect fires.
@@ -315,6 +328,8 @@ export default async function JoinSessionPage({
         initialSessionPhase={
           (session.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE"
         }
+        sessionMode={learnerView.sessionMode}
+        sessionCapabilities={learnerView.sessionCapabilities}
         identityKey={identityKey}
         learnerProfileId={effectiveLearnerProfileId}
       />
