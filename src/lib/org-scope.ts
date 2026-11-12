@@ -21,6 +21,7 @@ import { activeOrgInstructorMemberWhere, STAFF_HOME_ROLES } from "@/lib/org-appo
 import { requireOperator, type OperatorIdentity } from "@/lib/operator";
 import { requireStudentScope } from "@/lib/student-scope";
 import { approveTutor, revokeTutorApproval } from "@/lib/tutor-approval-scope";
+import { scheduleBoardPurgeAfterResponse } from "@/lib/whiteboard/board-purge";
 import { stampStaleWhiteboardSessionEnd } from "@/lib/whiteboard/stale-session-stamp";
 
 export type OrgLiveSessionEndChoice = "finish" | "now" | "no-notes";
@@ -203,7 +204,7 @@ export async function orgInstructorAdmitted(
  * Row lock around the existing Organization SELECT … FOR UPDATE.
  * `opts.timeout` is the interactive transaction timeout in ms (Prisma default 5 s when omitted). A caller whose
  * transaction does more than the lock itself passes an explicit one: the org Start path passes 10 s
- * (consent wave C3a, SF-E); the 30 s org-stamp callers are C4b.
+ * (consent wave C3a, SF-E); the org stamp loops pass `ORG_STAMP_TX_TIMEOUT_MS`.
  */
 export async function withOrgRowLock<T>(
   organizationId: string,
@@ -217,6 +218,30 @@ export async function withOrgRowLock<T>(
     },
     opts?.timeout !== undefined ? { timeout: opts.timeout } : undefined
   );
+}
+
+/** Transaction timeout for the org actions that end every open session in one locked transaction. */
+export const ORG_STAMP_TX_TIMEOUT_MS = 30_000;
+
+/** Stamps each open session ended ("forced"); returns the ids whose board purge was requested. */
+async function stampOrgSessions(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  open: ReadonlyArray<{ id: string }>,
+  stampedAt: Date,
+  notesForbidden: boolean
+): Promise<string[]> {
+  const startedAt = Date.now();
+  const purgeIds: string[] = [];
+  for (const session of open) {
+    const stamped = await stampStaleWhiteboardSessionEnd(tx, session.id, stampedAt, notesForbidden, "forced");
+    if (stamped?.purgeBoard) purgeIds.push(session.id);
+  }
+  orgLog(organizationId, "stamp_loop", {
+    sessions: String(open.length),
+    ms: String(Date.now() - startedAt),
+  });
+  return purgeIds;
 }
 
 async function lockMembers(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {
@@ -680,16 +705,20 @@ export async function setOrganizationStatus(
 ): Promise<void> {
   const operator = await requireOperator();
   const effectiveChoice = status === "pending" ? "finish" : choice;
-  await withOrgRowLock(organizationId, async (tx) => {
-    const stampedAt = new Date();
-    await tx.organization.update({
-      where: { id: organizationId },
-      data: { status, statusChangedAt: stampedAt },
-    });
-    if (
-      status !== "active" &&
-      (effectiveChoice === "now" || effectiveChoice === "no-notes")
-    ) {
+  const purgeIds = await withOrgRowLock(
+    organizationId,
+    async (tx) => {
+      const stampedAt = new Date();
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { status, statusChangedAt: stampedAt },
+      });
+      if (
+        status === "active" ||
+        (effectiveChoice !== "now" && effectiveChoice !== "no-notes")
+      ) {
+        return [];
+      }
       const open = await tx.whiteboardSession.findMany({
         where: {
           endedAt: null,
@@ -697,16 +726,11 @@ export async function setOrganizationStatus(
         },
         select: { id: true },
       });
-      for (const session of open) {
-        await stampStaleWhiteboardSessionEnd(
-          tx,
-          session.id,
-          stampedAt,
-          effectiveChoice === "no-notes"
-        );
-      }
-    }
-  });
+      return stampOrgSessions(tx, organizationId, open, stampedAt, effectiveChoice === "no-notes");
+    },
+    { timeout: ORG_STAMP_TX_TIMEOUT_MS }
+  );
+  scheduleBoardPurgeAfterResponse(purgeIds);
   orgLog(organizationId, "status_set", { actor: actorLabel(operator), status });
 }
 
@@ -1070,7 +1094,7 @@ export async function removeOrgMember(
     select: { id: true },
   });
   const keepAppointmentIds = new Set(protectedAppointments.map((row) => row.id));
-  const now = await withOrgRowLock(organizationId, async (tx) => {
+  const { now, purgeIds } = await withOrgRowLock(organizationId, async (tx) => {
     const stampedAt = new Date();
     await lockMembers(tx, organizationId);
     const target = await tx.organizationMember.findUnique({
@@ -1099,26 +1123,23 @@ export async function removeOrgMember(
       where: { id: target.id },
       data: { removedAt: stampedAt },
     });
-    if (choice === "now" || choice === "no-notes") {
-      const open = await tx.whiteboardSession.findMany({
-        where: {
-          adminUserId: targetAdminUserId,
-          endedAt: null,
-          student: { organizationId, adminUserId: null },
-        },
-        select: { id: true },
-      });
-      for (const session of open) {
-        await stampStaleWhiteboardSessionEnd(
-          tx,
-          session.id,
-          stampedAt,
-          choice === "no-notes"
-        );
-      }
+    if (choice !== "now" && choice !== "no-notes") {
+      return { now: stampedAt, purgeIds: [] as string[] };
     }
-    return stampedAt;
-  });
+    const open = await tx.whiteboardSession.findMany({
+      where: {
+        adminUserId: targetAdminUserId,
+        endedAt: null,
+        student: { organizationId, adminUserId: null },
+      },
+      select: { id: true },
+    });
+    return {
+      now: stampedAt,
+      purgeIds: await stampOrgSessions(tx, organizationId, open, stampedAt, choice === "no-notes"),
+    };
+  }, { timeout: ORG_STAMP_TX_TIMEOUT_MS });
+  scheduleBoardPurgeAfterResponse(purgeIds);
   const future = await db.scheduledSession.findMany({
     where: {
       adminUserId: targetAdminUserId,

@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { orgForceEndIsDue } from "@/lib/org-session-access";
+import { scheduleBoardPurgeAfterResponse } from "@/lib/whiteboard/board-purge";
 import { stampStaleWhiteboardSessionEnd } from "@/lib/whiteboard/stale-session-stamp";
 
 /**
@@ -30,8 +31,9 @@ export async function touchOrgForceEndIfDue(sessionId: string): Promise<void> {
   if (!due) return;
   const now = new Date();
   const stamped = await db.$transaction((tx) =>
-    stampStaleWhiteboardSessionEnd(tx, sessionId, now)
+    stampStaleWhiteboardSessionEnd(tx, sessionId, now, false, "forced")
   );
+  if (stamped?.purgeBoard) scheduleBoardPurgeAfterResponse([sessionId]);
   if (stamped) {
     console.info(
       `[slc] wbsid=${sessionId} action=session_ended phase=force_end endedAt=${stamped.endedAt.toISOString()}`

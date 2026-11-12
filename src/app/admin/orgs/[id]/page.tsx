@@ -7,6 +7,8 @@ import { orgStaffErrorSentence } from "@/lib/org-staff-messages";
 import { requireOperator } from "@/lib/operator";
 
 export const dynamic = "force-dynamic";
+/** Suspend can end every open session in one 30 s transaction (`ORG_STAMP_TX_TIMEOUT_MS`). */
+export const maxDuration = 60;
 
 export default async function OperatorOrganizationPage({
   params,

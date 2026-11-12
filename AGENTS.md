@@ -150,6 +150,8 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   consent-wave actions (docs/handoff/consent-wave-plan.md § 8, landing with their waves):
   `board_purge_intent source=end|stale|forced|reaper`, `board_purge_pass1_done|board_purge_pass2_done rows=<n> blobs=<n>`,
   `board_purge_done`, `board_purge_blob_failed urlHash=<h>`, `board_purge_skipped reason=capability_unreadable|capability_persist`,
+  `board_purge_after_failed err=<message>` (the post-response `after()` purge threw or could not be scheduled; the sweep retries), `board_purge_sweep_error err=<message>`,
+  `[slc] cron=session-cleanup action=auth_rejected`,
   `board_purge_stuck ageMin=<n>`, `would_reap|reaped phase=<pending|active> idleSince=<iso>`,
   `reaper_skip reason=already_ended|not_idle|appointment_delay`, `reaper_off`, `reaper_mode_invalid raw=<value>`,
   and `[slc] cron=session-cleanup job=<reaper|purge> action=job_error err=<message>`),
@@ -181,7 +183,7 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   writes   `[tap] tap=<adminUserId|operatorId> action=approved|rejected|revoked|allowlist_add|allowlist_signup_approved|assert_rejected ...`).
   `ics` (ICS subscription feed — `src/app/api/calendar/ics/[token]/route.ts` + `src/lib/calendar/ics-access-log.ts`; every fetch/denial/error writes `[ics] ics=<token:8> action=feed_served|denied|error adminUserId=<id>` when known).
   `gcw` (Google Calendar write — `src/lib/calendar/google-calendar-write.ts`; every insert/patch/delete attempt writes `[gcw] adminUserId=<id> sessionId=<id> action=insert_start|insert_success|insert_error|insert_linked|patch_start|patch_success|patch_error|delete_start|delete_success|delete_error|invalid_grant|persist_error` with optional `googleEventId=<id>`).
-  `org` (organization membership — `src/lib/org-scope.ts`; writes `[org] org=<organizationId> action=<action> actor=<adminUserId|email> inv=<inviteId:8>`. Never log the invite token.)
+  `org` (organization membership — `src/lib/org-scope.ts`; writes `[org] org=<organizationId> action=<action> actor=<adminUserId|email> inv=<inviteId:8>`; the "end now" stamp loops write `[org] org=<id> action=stamp_loop sessions=<n> ms=<n>`. Never log the invite token.)
   `wvl` (whiteboard view lock — a blocked pan/zoom on a locked student; writes `[wvl] action=blocked kind=wheel|pointer2|gesture|key`, rate-limited).
  See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the

@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { freezeConsentSnapshotAtEndTx } from "@/lib/consent-scope";
 import { holdPoint } from "@/lib/test-seams";
+import { stampBoardPurgeIntent, type BoardPurgeIntentSource } from "@/lib/whiteboard/board-purge";
 import { lockWhiteboardSessionRowTx } from "@/lib/whiteboard/session-row-lock";
 
 /**
@@ -13,6 +14,10 @@ import { lockWhiteboardSessionRowTx } from "@/lib/whiteboard/session-row-lock";
  * this call ends it gets its consent snapshot frozen from the live record (consent plan R1),
  * only after the conditional update changed the row.
  *
+ * When the frozen capability says whiteboard off, the board purge intent is stamped after the freeze
+ * (rows are left to the purge so the org loops stay O(1) per session). `purgeBoard` tells the caller to
+ * schedule the purge once its transaction commits.
+ *
  * Clock (SF-F): `endedAt`, `durationSeconds` and participant `leftAt` use the passed `endedAt`
  * (a reaper may pass a back-dated instant); the snapshot `frozenAt` and token `revokedAt` use
  * real server time taken once the row lock is held, so `frozenAt` is never earlier than the
@@ -22,8 +27,9 @@ export async function stampStaleWhiteboardSessionEnd(
   tx: Prisma.TransactionClient,
   whiteboardSessionId: string,
   endedAt: Date,
-  notesForbidden = false
-): Promise<{ endedAt: Date; durationSeconds: number } | null> {
+  notesForbidden = false,
+  intentSource: BoardPurgeIntentSource = "stale"
+): Promise<{ endedAt: Date; durationSeconds: number; purgeBoard: boolean } | null> {
   await lockWhiteboardSessionRowTx(tx, whiteboardSessionId);
   const serverNow = new Date();
   const existing = await tx.whiteboardSession.findUnique({
@@ -35,6 +41,7 @@ export async function stampStaleWhiteboardSessionEnd(
     return {
       endedAt: existing.endedAt,
       durationSeconds: existing.durationSeconds ?? 0,
+      purgeBoard: false,
     };
   }
   await holdPoint("end:tx:before_update", whiteboardSessionId);
@@ -59,11 +66,16 @@ export async function stampStaleWhiteboardSessionEnd(
     return {
       endedAt: raced.endedAt,
       durationSeconds: raced.durationSeconds ?? 0,
+      purgeBoard: false,
     };
   }
   if (existing.sessionPhase === "PENDING") {
     await freezeConsentSnapshotAtEndTx(tx, whiteboardSessionId, serverNow, "stale");
   }
+  const { purge: purgeBoard } = await stampBoardPurgeIntent(tx, whiteboardSessionId, {
+    deleteRows: false,
+    source: intentSource,
+  });
   await tx.sessionParticipant.updateMany({
     where: { whiteboardSessionId, leftAt: null },
     data: { leftAt: endedAt },
@@ -72,5 +84,5 @@ export async function stampStaleWhiteboardSessionEnd(
     where: { whiteboardSessionId, revokedAt: null },
     data: { revokedAt: serverNow },
   });
-  return { endedAt, durationSeconds };
+  return { endedAt, durationSeconds, purgeBoard };
 }

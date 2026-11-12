@@ -6,7 +6,7 @@
 >
 > **Capability-contract rule (Andrew, 2026-06-06):** Tie-ins to Vercel-specific functionality are fine while we run on Vercel. Every such dependency MUST be documented here (or in a feature design doc cross-registered here) as: **Vercel X provides capability Y; generic/AWS equivalent = Z.** Include delivery semantics, size/timeout limits, and plan-availability caveats where uncertain — say "verify at build time" rather than assert. This is the standard extension of the maintenance rule above; see §1.7 for the template and §11 for design-stage recording re-architecture entries.
 >
-> **Last audited**: 2026-08-28 (§1.6 transcribe-sweep cadence `*/15 * * * *`; §2.4b scale-to-zero 300s; TXC-SWEEP-METRICS + NEON-SCALE-TO-ZERO-REVISIT). Prior: 2026-06-07 (Slice 3 smoke fixes: `after()` §1.8, workspace maxDuration=300; Vercel Cron transcription sweep + DB-as-queue transport). Prior full audit: 2026-06-06 (capability-contract rule + recording re-arch design-stage deps).
+> **Last audited**: 2026-11-12 (§1.10 session-cleanup cron, board-purge budgets, whiteboard token `validUntil`, org stamp `maxDuration = 60`). Prior: 2026-08-28 (§1.6 transcribe-sweep cadence `*/15 * * * *`; §2.4b scale-to-zero 300s; TXC-SWEEP-METRICS + NEON-SCALE-TO-ZERO-REVISIT). Prior: 2026-06-07 (Slice 3 smoke fixes: `after()` §1.8, workspace maxDuration=300; Vercel Cron transcription sweep + DB-as-queue transport). Prior full audit: 2026-06-06 (capability-contract rule + recording re-arch design-stage deps).
 
 ---
 
@@ -110,6 +110,25 @@
 - **Blob API reliance**: `processErasureJob` enumerates and `deleteBlob`s per family scope; large families depend on Vercel Blob list/delete throughput and the route's `maxDuration = 300` (§1.1) to finish a batch within one invocation. Per-job progress is persisted on `ErasureJob.blobsDeletedJson`; transient Blob API errors leave the job resumable on the next cron tick.
 - **What breaks if violated**: jobs stuck in `requested` past grace never purge without cron or CLI resume; missing secrets → 401 on worker route; Blob rate limits → prolonged `blobs_purging` (access still denied via tombstone).
 - **Migration check**: replicate schedule + authenticated HTTP trigger; set `ERASURE_WORKER_SECRET` (or equivalent) for non-cron callers; confirm batch size × per-job blob count fits target platform timeout.
+
+### 1.10 Vercel Cron — session cleanup (whiteboard-off board purge)
+
+- **Capability provided**: Scheduled GA HTTP trigger, as §1.6.
+- **Why we depend on it**: Consent wave C4b. When a family turned whiteboard recording off, End (and the stale / forced stamp) writes `WhiteboardSession.boardPurgeRequestedAt`. The purge runs right after the response (`after()`, §1.8) and again from this cron, in two passes. Pass 2 is due `BOARD_PURGE_SECOND_PASS_DELAY_MS` after pass 1, so a board write that was in flight at End is also deleted. Deletes go by blob prefix only (`whiteboard-sessions/<studentId>/<sessionId>/`, `whiteboard-checkpoints/<sessionId>/`), never by a URL read from a row.
+- **Where baked in**:
+  - `vercel.json` — `crons` entry: `7,22,37,52 * * * *` → `/api/cron/session-cleanup`. Offset from transcribe-sweep's `*/15` so the two never start in the same minute. `transcribe-sweep` and its entry are unchanged.
+  - `src/app/api/cron/session-cleanup/route.ts` — `runtime = "nodejs"`, `maxDuration = 300`, `verifyCronSecret` (`CRON_SECRET`, as §1.6; 401 otherwise). Today it runs one job, the purge sweep, inside its own try/catch. A throwing job logs `[slc] cron=session-cleanup job=purge action=job_error` and makes the route return 500 naming the job. The stamped intents are durable, so the next run retries.
+  - `src/lib/session-cleanup-config.ts` — every tunable below; `src/__tests__/api/cron-session-cleanup-budget.test.ts` checks they fit `maxDuration`.
+- **Budgets** (all measured from `routeStart`, the route's first statement):
+  - `SESSION_REAPER_TIME_BUDGET_MS = 60 s` — reserved for the reaper job (lands in C4c; not run yet).
+  - `BOARD_PURGE_SWEEP_MIN_WINDOW_MS = 170 s` — the purge's guaranteed window. Not a timer: the sweep runs until the route deadline `routeStart + maxDuration − SESSION_CLEANUP_MARGIN_MS`, checked between candidates (at most `BOARD_PURGE_SWEEP_BATCH_LIMIT = 25` per run).
+  - `SESSION_CLEANUP_MARGIN_MS = 60 s` — kept free so a candidate in flight at the deadline can finish.
+  - Reaper + purge window + margin ≤ 300 s.
+- **Upload token lifetime**: `BLOB_UPLOAD_TOKEN_LIFETIME_MS = 10 min`, sent as `validUntil` on every whiteboard upload token (events, snapshot, asset) by `src/app/api/upload/blob/route.ts`. Audio tokens are unchanged (platform default). Derivation: the 25 MiB asset cap at ~0.35 Mbit/s sustained upload takes about 600 s. For a multipart upload the token must cover the whole upload, from the start to the last part. `BOARD_PURGE_SECOND_PASS_DELAY_MS` = token lifetime + the recorder's 1 s persist interval (`WHITEBOARD_SERVER_PERSIST_INTERVAL_MS`) + a 2 min margin. Whether Vercel Blob really refuses a PUT after `validUntil` is not reproducible in the harness (BACKLOG `BLOB-VALIDUNTIL-REAL`).
+- **Crons do not run on Preview.** On a Preview deployment only the `after()` pass runs. Pass 2, and any retry after a failed pass, never happens there. Production is the only environment where the purge completes.
+- **Org action routes — function duration**: `setOrganizationStatus` (suspend, "end now") and `removeOrgMember` ("end now") stamp every affected open session inside one org-locked transaction with `ORG_STAMP_TX_TIMEOUT_MS = 30 s` (`src/lib/org-scope.ts`). The pages that host those server actions export `maxDuration = 60`: `src/app/admin/orgs/[id]/page.tsx` and `src/app/admin/organization/[id]/page.tsx`. The 30 s transaction must not outlive a 15 s platform default. Keep `maxDuration` ≥ 60 on any page that hosts these actions. Each loop logs `[org] org=<id> action=stamp_loop sessions=<n> ms=<n>`.
+- **What breaks if violated**: no cron → a whiteboard-off board is deleted once (the `after()` pass) and never re-checked, so a write in flight at End survives. A token lifetime longer than the second-pass delay has the same effect. Missing `CRON_SECRET` → 401 and no sweep. An org page under 30 s → the stamp transaction is cut off mid-loop and rolls back.
+- **Migration check**: replicate the schedule + authenticated trigger. Keep pass-2 delay > token lifetime on the new blob store. Re-check the per-invocation ceiling against the budgets above.
 
 ### 1.8 Next.js `after()` — deferred post-response work
 

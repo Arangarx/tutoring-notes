@@ -103,6 +103,8 @@ beforeEach(() => {
     const tx = {
       whiteboardEventBatch: { upsert: dbWhiteboardEventBatchUpsert },
       $executeRaw: dbExecuteRaw,
+      // The session row lock (S14(c)); the session is still live under it.
+      $queryRaw: async () => [{ endedAt: null }],
     };
     dbExecuteRaw.mockResolvedValue(1);
     return fn(tx);

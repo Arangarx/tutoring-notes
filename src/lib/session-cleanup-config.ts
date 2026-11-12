@@ -1,7 +1,7 @@
 /**
  * Tunables for the board purge and the `/api/cron/session-cleanup` route (consent wave C4b, plan § 3.3).
  * One file so the token lifetime and the second-pass delay cannot disagree, and so the K3 guard can check
- * the budgets against the route's `maxDuration`. Derivations: docs/PLATFORM-ASSUMPTIONS.md § 1.9.
+ * the budgets against the route's `maxDuration`. Derivations: docs/PLATFORM-ASSUMPTIONS.md § 1.10.
  *
  * No server-only imports: the whiteboard recorder imports the persist interval from here.
  */

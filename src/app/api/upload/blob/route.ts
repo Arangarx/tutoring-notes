@@ -5,6 +5,7 @@ import {
   isBlobHarnessActive,
 } from "@/lib/blob-harness";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
+import { BLOB_UPLOAD_TOKEN_LIFETIME_MS } from "@/lib/session-cleanup-config";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { orgForcedEndUploadOpen } from "@/lib/org-session-access";
@@ -247,6 +248,8 @@ export async function POST(request: Request): Promise<Response> {
           allowedContentTypes: policy.allowed,
           maximumSizeInBytes: policy.maxBytes,
           addRandomSuffix: true,
+          // The board purge's second pass waits longer than this (BOARD_PURGE_SECOND_PASS_DELAY_MS).
+          validUntil: Date.now() + BLOB_UPLOAD_TOKEN_LIFETIME_MS,
           tokenPayload: JSON.stringify({
             kind,
             whiteboardSessionId,

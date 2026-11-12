@@ -17,6 +17,8 @@ import { assertOrgRole, loadOrgStaffHome, staffHomeOrganizationIds } from "@/lib
 import { isOperatorEmail } from "@/lib/operator";
 
 export const dynamic = "force-dynamic";
+/** Removing a member can end their open sessions in one 30 s transaction (`ORG_STAMP_TX_TIMEOUT_MS`). */
+export const maxDuration = 60;
 
 export default async function StaffOrganizationPage({
   params,

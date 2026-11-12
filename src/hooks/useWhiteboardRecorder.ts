@@ -104,6 +104,7 @@ import {
   type SaveCheckpointResult,
 } from "@/lib/whiteboard/checkpoint-store";
 import { consumeSkipIndexedDbResumeAfterGate } from "@/lib/whiteboard/resume-prompt-flags";
+import { WHITEBOARD_SERVER_PERSIST_INTERVAL_MS } from "@/lib/session-cleanup-config";
 import { fetchSessionEndStatus } from "@/lib/whiteboard/ended-session-device-copies";
 import type {
   WhiteboardSyncClient,
@@ -156,9 +157,6 @@ const DIFF_INTERVAL_MS = 100;
 
 /** IndexedDB checkpoint cadence. */
 const IDB_CHECKPOINT_INTERVAL_MS = 30_000;
-
-/** WS-B: ~1s server-side event-batch persist cadence. */
-const SERVER_PERSIST_INTERVAL_MS = 1_000;
 
 /**
  * Minimal contract the recorder needs from the live-sync client.
@@ -1269,7 +1267,7 @@ export function useWhiteboardRecorder(
   useEffect(() => {
     const id = setInterval(() => {
       void runServerPersist();
-    }, SERVER_PERSIST_INTERVAL_MS);
+    }, WHITEBOARD_SERVER_PERSIST_INTERVAL_MS);
     return () => clearInterval(id);
   }, [runServerPersist]);
 

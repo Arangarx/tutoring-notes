@@ -42,7 +42,9 @@ import {
   assertConsentRecordExists,
   ConsentError,
   freezeConsentSnapshotAtEndTx,
+  resolveFrozenSessionCapabilities,
 } from "@/lib/consent-scope";
+import { scheduleBoardPurgeAfterResponse, stampBoardPurgeIntent } from "@/lib/whiteboard/board-purge";
 import { TUTOR_MIC_STREAM_ID, type SessionCapabilities } from "@/lib/recording/session-capabilities";
 import {
   filterStorableAudioSegments,
@@ -806,9 +808,10 @@ async function acceptOrgForcedEndUpload(
     select: { endedAt: true, durationSeconds: true, eventsBlobUrl: true },
   });
   const endedAt = existing?.endedAt ?? session.endedAt;
+  const boardKept = (await resolveFrozenSessionCapabilities(whiteboardSessionId))?.whiteboard.persist !== false;
   let registeredSegments = 0;
   await db.$transaction(async (tx) => {
-    if (!erasureShortCircuit) {
+    if (!erasureShortCircuit && boardKept) {
       await tx.whiteboardSession.update({
         where: { id: whiteboardSessionId },
         data: { eventsBlobUrl: finalEventsBlobUrl },
@@ -912,10 +915,13 @@ export async function finalizeWhiteboardSessionFromBackend(
   const startedAtIso =
     startedAtRow?.startedAt.toISOString() ?? new Date().toISOString();
 
-  const assembled = await assembleBackendEventLog(
-    whiteboardSessionId,
-    startedAtIso
-  );
+  // Whiteboard off (frozen at Start): no board log is assembled or chosen; End keeps the row's URL.
+  const frozen = await resolveFrozenSessionCapabilities(whiteboardSessionId);
+  const assembled =
+    frozen?.whiteboard.persist === false
+      ? null
+      : await assembleBackendEventLog(whiteboardSessionId, startedAtIso);
+  const batchCount = assembled?.batchCount ?? 0;
 
   const recordingRows = await withDbRetry(
     () =>
@@ -953,21 +959,23 @@ export async function finalizeWhiteboardSessionFromBackend(
   const segments = [...segmentByUrl.values()];
 
   console.log(
-    `[fzb] fzb=${whiteboardSessionId} action=assemble batches=${assembled.batchCount} segments=${segments.length}`
+    `[fzb] fzb=${whiteboardSessionId} action=assemble batches=${batchCount} segments=${segments.length}${assembled ? "" : " board=off"}`
   );
 
   const candidateScores: Array<{ url: string; score: number }> = [];
-  const assembledScore = assembled.log.events.length;
-  if (assembledScore > 0) {
-    candidateScores.push({ url: "__assembled__", score: assembledScore });
-  }
-  if (session.eventsBlobUrl) {
-    const existingScore = await countEventsInBlobUrl(session.eventsBlobUrl);
-    candidateScores.push({ url: session.eventsBlobUrl, score: existingScore });
-  }
-  if (opts?.finalEventsBlobUrl) {
-    const clientScore = await countEventsInBlobUrl(opts.finalEventsBlobUrl);
-    candidateScores.push({ url: opts.finalEventsBlobUrl, score: clientScore });
+  const assembledScore = assembled?.log.events.length ?? 0;
+  if (assembled) {
+    if (assembledScore > 0) {
+      candidateScores.push({ url: "__assembled__", score: assembledScore });
+    }
+    if (session.eventsBlobUrl) {
+      const existingScore = await countEventsInBlobUrl(session.eventsBlobUrl);
+      candidateScores.push({ url: session.eventsBlobUrl, score: existingScore });
+    }
+    if (opts?.finalEventsBlobUrl) {
+      const clientScore = await countEventsInBlobUrl(opts.finalEventsBlobUrl);
+      candidateScores.push({ url: opts.finalEventsBlobUrl, score: clientScore });
+    }
   }
 
   let finalEventsBlobUrl = session.eventsBlobUrl;
@@ -976,7 +984,7 @@ export async function finalizeWhiteboardSessionFromBackend(
     { url: session.eventsBlobUrl, score: 0 }
   );
 
-  if (best.url === "__assembled__" && assembledScore > 0) {
+  if (assembled && best.url === "__assembled__" && assembledScore > 0) {
     try {
       const eventsBody = JSON.stringify(assembled.log);
       const assembledPath = `whiteboard-sessions/${session.adminUserId}/${session.studentId}/${Date.now()}-events.json`;
@@ -1037,7 +1045,7 @@ export async function finalizeWhiteboardSessionFromBackend(
   }
 
   console.log(
-    `[fzb] fzb=${whiteboardSessionId} action=end batches=${assembled.batchCount} segments=${segments.length} newSegments=${endResult.registeredSegments}`
+    `[fzb] fzb=${whiteboardSessionId} action=end batches=${batchCount} segments=${segments.length} newSegments=${endResult.registeredSegments}`
   );
 
   void kickSessionChunksAction(whiteboardSessionId).catch((sweepErr: unknown) => {
@@ -1221,6 +1229,7 @@ export async function endWhiteboardSession(
               roundingMode: true,
               tutorTimezone: true,
               billedDurationMin: true,
+              eventsBlobUrl: true,
             },
           });
           if (!existing) throw new Error("Whiteboard session row not found under lock.");
@@ -1287,6 +1296,20 @@ export async function endWhiteboardSession(
           if (existing.sessionPhase === "PENDING") {
             await freezeConsentSnapshotAtEndTx(tx, whiteboardSessionId, new Date(), "end");
           }
+          // Whiteboard off: the board URLs this End wrote go back to the row's pre-end value, and the
+          // purge intent is stamped. The purge deletes by prefix, never by these URLs.
+          let purgeBoard = false;
+          const frozen = await resolveFrozenSessionCapabilities(whiteboardSessionId, tx);
+          if (frozen && !frozen.whiteboard.persist) {
+            await tx.whiteboardSession.update({
+              where: { id: whiteboardSessionId },
+              data: { eventsBlobUrl: existing.eventsBlobUrl, snapshotBlobUrl: null },
+            });
+            ({ purge: purgeBoard } = await stampBoardPurgeIntent(tx, whiteboardSessionId, {
+              deleteRows: true,
+              source: "end",
+            }));
+          }
           const row = { id: whiteboardSessionId, endedAt: now, durationSeconds };
 
           await tx.sessionParticipant.updateMany({
@@ -1333,6 +1356,7 @@ export async function endWhiteboardSession(
             newSegments,
             billingFreeze,
             phase: existing.sessionPhase,
+            purgeBoard,
           };
         }, { timeout: SEAM_BEARING_TX_TIMEOUT_MS }),
       { label: "endWhiteboardSession" }
@@ -1344,6 +1368,7 @@ export async function endWhiteboardSession(
       registeredSegments = txResult.newSegments;
       billingFreeze = txResult.billingFreeze;
       endedFromPhase = txResult.phase;
+      if (txResult.purgeBoard) scheduleBoardPurgeAfterResponse([whiteboardSessionId]);
     }
   } catch (err) {
     console.error(
@@ -1488,6 +1513,7 @@ export async function endStaleWhiteboardSession(
   if (!updated) {
     throw new Error("Could not end the whiteboard session. Please try again.");
   }
+  if (updated.purgeBoard) scheduleBoardPurgeAfterResponse([whiteboardSessionId]);
 
   console.info(
     `[slc] wbsid=${whiteboardSessionId} action=session_ended phase=${priorPhase.toLowerCase()}`

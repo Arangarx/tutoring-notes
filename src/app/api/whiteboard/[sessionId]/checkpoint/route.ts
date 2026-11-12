@@ -6,6 +6,7 @@ import { orgForcedEndUploadOpen } from "@/lib/org-session-access";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import { holdPoint } from "@/lib/test-seams";
+import { resolveFrozenSessionCapabilities } from "@/lib/consent-scope";
 
 /**
  * Whiteboard session live-persist + legacy checkpoint upload.
@@ -78,9 +79,11 @@ async function assertActiveSession(
       sessionAdminUserId: session.adminUserId,
       endedAt: session.endedAt,
     });
-    if (!uploadOpen) {
+    // The forced-end window saves a board the family kept; a whiteboard-off (or unreadable) board is refused.
+    const keepsBoard = uploadOpen && (await resolveFrozenSessionCapabilities(sessionId))?.whiteboard.persist === true;
+    if (!keepsBoard) {
       console.log(
-        `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} ignoring checkpoint for ended session`
+        `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} ignoring checkpoint for ended session uploadOpen=${uploadOpen}`
       );
       return NextResponse.json(
         { error: "Session already ended." },
@@ -185,9 +188,17 @@ async function handleBatchPersist(
 
   await holdPoint("checkpoint:batch:before_txn", sessionId);
 
-  await withDbRetry(
+  const written = await withDbRetry(
     () =>
       db.$transaction(async (tx) => {
+        // First statement: the session row lock, re-reading endedAt, so a batch that passed the gate before
+        // a whiteboard-off End committed cannot write a row after it.
+        const [locked] = await tx.$queryRaw<{ endedAt: Date | null }[]>`
+          SELECT "endedAt" FROM "WhiteboardSession" WHERE id = ${sessionId} FOR NO KEY UPDATE`;
+        if (locked?.endedAt) {
+          const frozen = await resolveFrozenSessionCapabilities(sessionId, tx);
+          if (frozen?.whiteboard.persist !== true) return false;
+        }
         await tx.whiteboardEventBatch.upsert({
           where: {
             whiteboardSessionId_batchSeq: {
@@ -221,9 +232,16 @@ async function handleBatchPersist(
               "lastPersistedToIndex" = GREATEST("lastPersistedToIndex", ${parsed.toEventIndex})
           WHERE "id" = ${sessionId}
         `;
+        return true;
       }),
     { label: "wbCheckpoint.batchUpsert" }
   );
+  if (!written) {
+    console.log(
+      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} batchSeq=${parsed.batchSeq} refused: ended under lock, board not kept`
+    );
+    return NextResponse.json({ error: "Session already ended.", debugId: rid }, { status: 409 });
+  }
 
   console.log(
     `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} batchSeq=${parsed.batchSeq} from=${parsed.fromEventIndex} to=${parsed.toEventIndex} schemaVersion=${parsed.schemaVersion}`
