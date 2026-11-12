@@ -208,6 +208,37 @@ export async function createSessionConsentSnapshot(
   );
 }
 
+/** `live:on,audio:off,wb:on,notes:on` — the `[cns]` before/after token. */
+export function formatConsentToggles(t: ConsentToggleCeiling | null): string {
+  if (!t) return "none";
+  const f = (v: boolean) => (v ? "on" : "off");
+  return `live:${f(t.allowLiveSession)},audio:${f(t.allowAudioRecording)},wb:${f(t.allowWhiteboardRecording)},notes:${f(t.allowNoteSending)}`;
+}
+
+/**
+ * End of a session that never started (still PENDING under the session row lock): the live
+ * effective record at End becomes the frozen snapshot (plan R1, § 2.6). Call only AFTER the End's
+ * conditional update changed exactly one row, inside the same transaction.
+ * `serverNow` is real server time, never the back-dated `endedAt` a reaper passes (SF-F).
+ */
+export async function freezeConsentSnapshotAtEndTx(
+  tx: Prisma.TransactionClient,
+  whiteboardSessionId: string,
+  serverNow: Date,
+  source: "end" | "stale"
+): Promise<void> {
+  const result = await freezeConsentSnapshotTx(tx, whiteboardSessionId, serverNow);
+  if (result.outcome !== "frozen") {
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=snapshot_skipped reason=${result.outcome} source=${source}`
+    );
+    return;
+  }
+  console.log(
+    `[cns] wbsid=${whiteboardSessionId} action=frozen_at_end source=${source} created=${result.created} before=${formatConsentToggles(result.before)} after=${formatConsentToggles(result.after)} consentRecordId=${result.consentRecordId} version=${result.consentRecordVersion}`
+  );
+}
+
 const CONSENT_RECORD_REQUIRED_MESSAGE =
   "Parent privacy preferences must be set before starting a session. Ask the parent to complete claim setup or update consent from their account.";
 

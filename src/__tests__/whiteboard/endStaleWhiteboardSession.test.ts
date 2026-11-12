@@ -39,6 +39,7 @@ const txSessionParticipantUpdateManyMock = jest.fn();
 const dbWhiteboardFindUniqueMock = jest.fn();
 const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
   fn({
+    $queryRaw: jest.fn().mockResolvedValue([{ id: "wb_42" }]),
     whiteboardSession: {
       findUnique: txWhiteboardFindUniqueMock,
       update: txWhiteboardUpdateMock,

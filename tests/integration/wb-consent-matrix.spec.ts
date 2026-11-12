@@ -21,7 +21,13 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
-import { PW_CRON_SECRET, runCron, seedHarnessBlobs } from "../helpers/consent-harness";
+import {
+  PW_CRON_SECRET,
+  invokeConsentAction,
+  runCron,
+  seedHarnessBlobs,
+  type ConsentInvokeAction,
+} from "../helpers/consent-harness";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 
 // Lane literals are the stored wire format (session-capabilities.ts helpers build the same strings); tests state them as data.
@@ -77,19 +83,14 @@ async function seedBlob(request: APIRequestContext, baseURL: string, studentId: 
   return `${new URL(baseURL).origin}/api/test/blob/object/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-const testSecret = () => process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
-
 /** Run one consent-gated server action as the signed-in tutor; returns the action's own return value. */
 async function invoke(
   request: APIRequestContext,
-  action: "registerSegment" | "enqueueChunk" | "endSession" | "kick" | "generateNotes" | "triggerNotes" | "regenerateNotes",
+  action: ConsentInvokeAction,
   sessionId: string,
   args?: Record<string, unknown>
 ): Promise<Record<string, unknown> | null> {
-  const res = await request.post("/api/test/consent/invoke-action", {
-    data: { action, sessionId, args },
-    headers: { authorization: `Bearer ${testSecret()}` },
-  });
+  const res = await invokeConsentAction(request, action, sessionId, args);
   expect(res.status(), await res.text()).toBe(200);
   return ((await res.json()) as { result: Record<string, unknown> | null }).result;
 }

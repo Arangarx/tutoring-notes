@@ -122,6 +122,78 @@ export async function backdateBoardPurgeFirstPass(sessionId: string, ms: number)
   });
 }
 
+export type ConsentSwitches = {
+  allowLiveSession: boolean;
+  allowAudioRecording: boolean;
+  allowWhiteboardRecording: boolean;
+  allowNoteSending: boolean;
+};
+
+/**
+ * The family saves a change: a new ConsentRecord version (latest + 1) for one learner and tutor,
+ * which is the row shape the family consent save writes. Unlisted switches stay on.
+ */
+export async function saveFamilyConsentVersion(
+  learnerProfileId: string,
+  adminUserId: string,
+  switches: Partial<ConsentSwitches>
+): Promise<{ id: string; version: number }> {
+  return withPrisma(async (prisma) => {
+    const profile = await prisma.learnerProfile.findUniqueOrThrow({
+      where: { id: learnerProfileId },
+      select: { accountHolderId: true },
+    });
+    const latest = await prisma.consentRecord.aggregate({
+      where: { learnerProfileId, adminUserId },
+      _max: { version: true },
+    });
+    return prisma.consentRecord.create({
+      data: {
+        learnerProfileId,
+        adminUserId,
+        version: (latest._max.version ?? 0) + 1,
+        allowLiveSession: switches.allowLiveSession ?? true,
+        allowAudioRecording: switches.allowAudioRecording ?? true,
+        allowWhiteboardRecording: switches.allowWhiteboardRecording ?? true,
+        allowNoteSending: switches.allowNoteSending ?? true,
+        setByAccountHolderId: profile.accountHolderId,
+        captureMethod: "electronic",
+      },
+      select: { id: true, version: true },
+    });
+  });
+}
+
+/** Cleanup for `saveFamilyConsentVersion`: the shared harness learner must end on its seeded version. */
+export async function dropFamilyConsentVersionsAbove(
+  learnerProfileId: string,
+  adminUserId: string,
+  version: number
+): Promise<void> {
+  await withPrisma((prisma) =>
+    prisma.consentRecord.deleteMany({
+      where: { learnerProfileId, adminUserId, version: { gt: version } },
+    })
+  );
+}
+
+/** Every SessionConsentSnapshot row for a session (the unique key means 0 or 1; the test still counts). */
+export async function readConsentSnapshots(sessionId: string) {
+  return withPrisma((prisma) =>
+    prisma.sessionConsentSnapshot.findMany({ where: { whiteboardSessionId: sessionId } })
+  );
+}
+
+/** Backends in this database currently blocked waiting on a lock (Postgres's own view, not the app's). */
+export async function countBackendsWaitingOnLock(): Promise<number> {
+  return withPrisma(async (prisma) => {
+    const rows = await prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*)::bigint AS n FROM pg_stat_activity
+      WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+    return Number(rows[0]?.n ?? 0);
+  });
+}
+
 /** True when the C4b columns exist (lets a spec skip a row until its wave lands). */
 export async function boardPurgeColumnsExist(): Promise<boolean> {
   return withPrisma((prisma) => columnExists(prisma, "WhiteboardSession", "boardPurgeFirstPassAt"));

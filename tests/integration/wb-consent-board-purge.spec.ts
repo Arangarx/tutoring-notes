@@ -11,6 +11,27 @@
 import { test, expect } from "@playwright/test";
 import { TAG } from "../test-tags";
 import { findScenePayloadEvents, openRelayClient, probeRelayRoom } from "../helpers/relay-probe";
+import { PrismaClient } from "@prisma/client";
+import {
+  armHold,
+  expectReleasedByTest,
+  invokeConsentAction,
+  releaseHold,
+  resetSeams,
+  waitUntilParked,
+} from "../helpers/consent-harness";
+import {
+  countBackendsWaitingOnLock,
+  dropFamilyConsentVersionsAbove,
+  readConsentSnapshots,
+  saveFamilyConsentVersion,
+} from "../helpers/consent-db-oracle";
+import { seedWbPendingLiveSyncSession } from "./whiteboard-live-sync.helpers";
+
+const prisma = new PrismaClient();
+test.afterAll(async () => {
+  await prisma.$disconnect();
+});
 
 // ---------------------------------------------------------------------------
 // 6e. Whiteboard
@@ -119,10 +140,76 @@ test.describe("consent 6e: Whiteboard", {
     }
   );
   // Oracle: C3a End half. Rewritten by SF2, arm → park → release; plain-owned tutor, red evidence on the seam-only commit (SF-A, SF-B). (a) Sequential: second End returns idempotent; 'endedAt' and snapshot 'frozenAt' unchanged (no s …
-  test.fixme(
+  // PENDING sessions on the plain-owned harness tutor, so End writes the snapshot and no org lock is held while parked.
+  test(
     "W18: double End is a no-op, including when the two Ends overlap, and writes no second snapshot",
-    async () => {
-      // pending: wave that owns W18
+    async ({ request }) => {
+      const seeded = await seedWbPendingLiveSyncSession();
+      const { learnerProfileId, adminUserId } = seeded;
+      const end = (sessionId: string) =>
+        invokeConsentAction(request, "endWhiteboardSession", sessionId, { finalEventsBlobUrl: "" });
+      const readEnd = (sessionId: string) =>
+        prisma.whiteboardSession.findUniqueOrThrow({ where: { id: sessionId }, select: { endedAt: true } });
+      await dropFamilyConsentVersionsAbove(learnerProfileId, adminUserId, 1);
+      try {
+        // (a) Sequential: the second End is refused and moves nothing.
+        const seqId = seeded.whiteboardSessionId;
+        const firstEnd = await end(seqId);
+        expect(firstEnd.status(), await firstEnd.text()).toBe(200);
+        const endedOnce = await readEnd(seqId);
+        const snapOnce = await readConsentSnapshots(seqId);
+        expect(endedOnce.endedAt).not.toBeNull();
+        expect(snapOnce).toHaveLength(1);
+        await saveFamilyConsentVersion(learnerProfileId, adminUserId, { allowWhiteboardRecording: false });
+        expect((await end(seqId)).ok()).toBe(false);
+        expect(await readEnd(seqId)).toEqual(endedOnce);
+        expect(await readConsentSnapshots(seqId)).toEqual(snapOnce);
+
+        // (b) Overlapping: A parks inside its End transaction; B is fired while A is parked.
+        const id = (await seedWbPendingLiveSyncSession()).whiteboardSessionId;
+        await armHold(request, { name: "end:tx:before_update", sessionId: id, parkFirstN: 1 });
+        const endA = end(id);
+        await waitUntilParked(request, "end:tx:before_update", id);
+        let bSettled = false;
+        const endB = end(id).finally(() => {
+          bSettled = true;
+        });
+        // B has either finished (no lock to wait on) or is blocked on A's row lock.
+        await expect
+          .poll(async () => bSettled || (await countBackendsWaitingOnLock()) > 0, { timeout: 2_000 })
+          .toBe(true);
+        const flipStartMs = Date.now();
+        const flipped = await saveFamilyConsentVersion(learnerProfileId, adminUserId, {
+          allowWhiteboardRecording: false,
+          allowAudioRecording: false,
+        });
+        await releaseHold(request, "end:tx:before_update", id);
+        const [resA, resB] = await Promise.all([endA, endB]);
+        await expectReleasedByTest(request, "end:tx:before_update", id);
+
+        // Exactly one End wins, and it is A (the one holding the row).
+        expect([resA.ok(), resB.ok()], `A ${resA.status()} / B ${resB.status()}`).toEqual([true, false]);
+        const winner = (await resA.json()) as { result: { endedAt: string } };
+        const row = await readEnd(id);
+        expect(row.endedAt?.toISOString()).toBe(winner.result.endedAt);
+        expect(
+          await prisma.productEvent.count({ where: { whiteboardSessionId: id, kind: "SESSION_ENDED" } })
+        ).toBeLessThanOrEqual(1);
+
+        // One snapshot row, read when A committed: after the flip.
+        const snaps = await readConsentSnapshots(id);
+        expect(snaps).toHaveLength(1);
+        expect(snaps[0]).toMatchObject({
+          consentRecordId: flipped.id,
+          consentRecordVersion: flipped.version,
+          allowWhiteboardRecording: false,
+          allowAudioRecording: false,
+        });
+        expect(snaps[0].frozenAt.getTime()).toBeGreaterThanOrEqual(flipStartMs);
+      } finally {
+        await resetSeams(request);
+        await dropFamilyConsentVersionsAbove(learnerProfileId, adminUserId, 1);
+      }
     }
   );
   // Oracle: C4b (migration + 'stampBoardPurgeIntent'). (a) Sequential: intent timestamps unchanged on the second End. (b) Overlapping, same seam as W18: 'boardPurgeRequestedAt' is A's (set only if null), not B's and not the post-par …

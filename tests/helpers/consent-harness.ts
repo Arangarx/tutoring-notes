@@ -232,6 +232,37 @@ export async function probeSeam(
 }
 
 // ---------------------------------------------------------------------------
+// Server actions (`/api/test/consent/invoke-action`)
+// ---------------------------------------------------------------------------
+
+export type ConsentInvokeAction =
+  | "registerSegment"
+  | "enqueueChunk"
+  | "endSession"
+  | "endWhiteboardSession"
+  | "endStaleWhiteboardSession"
+  | "kick"
+  | "generateNotes"
+  | "triggerNotes"
+  | "regenerateNotes";
+
+/**
+ * Runs one server action as the signed-in tutor (the `request` fixture's cookies). Returns the raw
+ * response: an action that throws is a non-2xx, so a refusal is observable without catching.
+ */
+export function invokeConsentAction(
+  request: APIRequestContext,
+  action: ConsentInvokeAction,
+  sessionId: string,
+  args?: Record<string, unknown>
+): Promise<APIResponse> {
+  return request.post("/api/test/consent/invoke-action", {
+    data: { action, sessionId, args },
+    headers: testAuth(),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Cron driver
 // ---------------------------------------------------------------------------
 

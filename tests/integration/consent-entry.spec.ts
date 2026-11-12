@@ -20,6 +20,13 @@ import {
   submitTotpOnVerifyPage,
   waitFor2faVerifyChallenge,
 } from "./identity/tutor-2fa-login.helpers";
+import { invokeConsentAction } from "../helpers/consent-harness";
+import {
+  dropFamilyConsentVersionsAbove,
+  readConsentSnapshots,
+  saveFamilyConsentVersion,
+} from "../helpers/consent-db-oracle";
+import { seedWbPendingLiveSyncSession } from "./whiteboard-live-sync.helpers";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
@@ -345,12 +352,60 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     }
   );
   // Oracle: C3a End half. Parametrized over tutor End ('endWhiteboardSession') and the shared stale stamp ('endStaleWhiteboardSession'; the reaper's snapshot arm is G2). Family sets whiteboard off after create; End. Oracle: the winn …
-  test.fixme(
-    "S7: PENDING session ended without Start: the live record at End decides, and the End path writes the snapshot",
-    async () => {
-      // pending: wave that owns S7
+  // The snapshot seeded at create says everything is on. After the family's save, only the End path can make the row
+  // point at the new record version, so the oracle is the stored row (record id, switches, frozenAt) and endedAt.
+  for (const endPath of ["endWhiteboardSession", "endStaleWhiteboardSession"] as const) {
+    for (const whiteboardOn of [false, true]) {
+      test(
+        `S7: PENDING session ended without Start: the live record at End decides, and the End path writes the snapshot (${endPath}, whiteboard ${whiteboardOn ? "on (control)" : "off"})`,
+        async ({ request }) => {
+          const s = await seedWbPendingLiveSyncSession();
+          const id = s.whiteboardSessionId;
+          await dropFamilyConsentVersionsAbove(s.learnerProfileId, s.adminUserId, 1);
+          const endArgs = endPath === "endWhiteboardSession" ? { finalEventsBlobUrl: "" } : undefined;
+          try {
+            const saved = await saveFamilyConsentVersion(s.learnerProfileId, s.adminUserId, {
+              allowWhiteboardRecording: whiteboardOn,
+            });
+            const endStartMs = Date.now();
+            const first = await invokeConsentAction(request, endPath, id, endArgs);
+            expect(first.status(), await first.text()).toBe(200);
+
+            const ended = await withPrisma((p) =>
+              p.whiteboardSession.findUniqueOrThrow({ where: { id }, select: { endedAt: true } })
+            );
+            expect(ended.endedAt).not.toBeNull();
+            const rows = await readConsentSnapshots(id);
+            expect(rows).toHaveLength(1);
+            expect(rows[0]).toMatchObject({
+              consentRecordId: saved.id,
+              consentRecordVersion: saved.version,
+              allowWhiteboardRecording: whiteboardOn,
+              allowLiveSession: true,
+              allowAudioRecording: true,
+              allowNoteSending: true,
+            });
+            expect(rows[0].frozenAt.getTime()).toBeGreaterThanOrEqual(endStartMs);
+
+            // A second End after another family change writes no second snapshot and does not move endedAt.
+            await saveFamilyConsentVersion(s.learnerProfileId, s.adminUserId, {
+              allowWhiteboardRecording: !whiteboardOn,
+              allowAudioRecording: false,
+            });
+            const second = await invokeConsentAction(request, endPath, id, endArgs);
+            expect(second.ok()).toBe(false);
+            expect(await readConsentSnapshots(id)).toEqual(rows);
+            const after = await withPrisma((p) =>
+              p.whiteboardSession.findUniqueOrThrow({ where: { id }, select: { endedAt: true } })
+            );
+            expect(after.endedAt).toEqual(ended.endedAt);
+          } finally {
+            await dropFamilyConsentVersionsAbove(s.learnerProfileId, s.adminUserId, 1);
+          }
+        }
+      );
     }
-  );
+  }
   // Oracle: C4b (migration + 'stampBoardPurgeIntent'). Same two callers as S7. After End with whiteboard off: 'boardPurgeRequestedAt' is set, and the sweep predicate selects that same snapshot row. Control: whiteboard on, no intent. …
   test.fixme(
     "S7b: PENDING session ended without Start: the purge intent is written from that snapshot, and the sweep selects it",

@@ -295,7 +295,7 @@ describe("consent guards (§ 6i)", () => {
 
   it.todo("C6: appointmentLiveEntryAllowed has zero references");
   it.todo("C4b/C4c: O1 org stamp loops do O(1) extra work per session: same statement count for 1 and 500 WhiteboardEventBatch rows, zero batch deleteMany, zero blob calls, and a pinned STAMP_MAX_STATEMENTS_PER_SESSION ceiling");
-  it.todo("C3a: S14(a) statement order: the End and checkpoint-batch transactions take the session-row lock first, through the snapshot write");
+  // C3a S14(a) (End statement order through the snapshot write) lives in whiteboard/end-statement-order.test.ts.
   it.todo("C4b: S14(a2) the intent statement and S14(c) the batch re-check follow the lock");
   it.todo("C3c: M17 join-timer ACTIVE poll cost: one snapshot read, no live-record read");
   it.todo("each wave: [cns] / [slc] / [txc] / [tnt] log lines are emitted (§ 8 observability)");

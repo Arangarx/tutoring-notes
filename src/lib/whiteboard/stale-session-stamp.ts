@@ -1,21 +1,34 @@
 import type { Prisma } from "@prisma/client";
+import { freezeConsentSnapshotAtEndTx } from "@/lib/consent-scope";
 import { holdPoint } from "@/lib/test-seams";
+import { lockWhiteboardSessionRowTx } from "@/lib/whiteboard/session-row-lock";
 
 /**
  * The stale end stamp: set endedAt, participant leftAt, revoke join tokens.
  * Leaves eventsBlobUrl. A second call does not move endedAt.
  * `notesForbidden` is the org "End it now, and no notes" flag, written in
  * the same update as endedAt. Callers that omit it leave the column false.
+ *
+ * Takes the session row lock first and reads the phase under it. A session still PENDING when
+ * this call ends it gets its consent snapshot frozen from the live record (consent plan R1),
+ * only after the conditional update changed the row.
+ *
+ * Clock (SF-F): `endedAt`, `durationSeconds` and participant `leftAt` use the passed `endedAt`
+ * (a reaper may pass a back-dated instant); the snapshot `frozenAt` and token `revokedAt` use
+ * real server time taken once the row lock is held, so `frozenAt` is never earlier than the
+ * consent version it froze.
  */
 export async function stampStaleWhiteboardSessionEnd(
   tx: Prisma.TransactionClient,
   whiteboardSessionId: string,
-  now: Date,
+  endedAt: Date,
   notesForbidden = false
 ): Promise<{ endedAt: Date; durationSeconds: number } | null> {
+  await lockWhiteboardSessionRowTx(tx, whiteboardSessionId);
+  const serverNow = new Date();
   const existing = await tx.whiteboardSession.findUnique({
     where: { id: whiteboardSessionId },
-    select: { startedAt: true, endedAt: true, durationSeconds: true },
+    select: { startedAt: true, endedAt: true, durationSeconds: true, sessionPhase: true },
   });
   if (!existing) return null;
   if (existing.endedAt) {
@@ -27,12 +40,12 @@ export async function stampStaleWhiteboardSessionEnd(
   await holdPoint("end:tx:before_update", whiteboardSessionId);
   const durationSeconds = Math.max(
     0,
-    Math.floor((now.getTime() - existing.startedAt.getTime()) / 1000)
+    Math.floor((endedAt.getTime() - existing.startedAt.getTime()) / 1000)
   );
   const updated = await tx.whiteboardSession.updateMany({
     where: { id: whiteboardSessionId, endedAt: null },
     data: {
-      endedAt: now,
+      endedAt,
       durationSeconds,
       ...(notesForbidden ? { notesForbidden: true } : {}),
     },
@@ -48,13 +61,16 @@ export async function stampStaleWhiteboardSessionEnd(
       durationSeconds: raced.durationSeconds ?? 0,
     };
   }
+  if (existing.sessionPhase === "PENDING") {
+    await freezeConsentSnapshotAtEndTx(tx, whiteboardSessionId, serverNow, "stale");
+  }
   await tx.sessionParticipant.updateMany({
     where: { whiteboardSessionId, leftAt: null },
-    data: { leftAt: now },
+    data: { leftAt: endedAt },
   });
   await tx.whiteboardJoinToken.updateMany({
     where: { whiteboardSessionId, revokedAt: null },
-    data: { revokedAt: now },
+    data: { revokedAt: serverNow },
   });
-  return { endedAt: now, durationSeconds };
+  return { endedAt, durationSeconds };
 }

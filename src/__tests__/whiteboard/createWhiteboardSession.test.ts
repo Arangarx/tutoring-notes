@@ -35,12 +35,16 @@ const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) 
   const tx = {
     whiteboardSession: {
       create: (...args: unknown[]) => dbCreateMock(...args),
-      findUnique: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn().mockResolvedValue({
+        adminUserId: "admin-1",
+        student: { adminUserId: "admin-1", organizationId: null, learnerProfileId: "lp-1" },
+      }),
     },
     consentRecord: { findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args) },
     consentRestriction: { findUnique: jest.fn().mockResolvedValue(null) },
     sessionConsentSnapshot: {
-      create: (...args: unknown[]) => dbSessionConsentSnapshotCreateMock(...args),
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: (...args: unknown[]) => dbSessionConsentSnapshotCreateMock(...args),
     },
     sessionParticipant: {
       createMany: (...args: unknown[]) => dbSessionParticipantCreateManyMock(...args),
@@ -229,12 +233,15 @@ describe("createWhiteboardSession — CC-1 consent record gate", () => {
 
     expect(putMock).toHaveBeenCalledTimes(1);
     expect(dbCreateMock).toHaveBeenCalledTimes(1);
-    expect(dbSessionConsentSnapshotCreateMock).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        allowLiveSession: false,
-        consentRecordId: "cr-all-off",
-      }),
-    });
+    expect(dbSessionConsentSnapshotCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { whiteboardSessionId: "wb-all-off" },
+        create: expect.objectContaining({
+          allowLiveSession: false,
+          consentRecordId: "cr-all-off",
+        }),
+      })
+    );
   });
 
   test("self-learner without ConsentRecord → resolves {ok:false, consent_missing_self}, no Blob, no row", async () => {

@@ -22,6 +22,7 @@ import { registeredAdminId } from "@/lib/whiteboard/require-registered-admin";
 import { assertOwnsWhiteboardSession, type AuthorisedWhiteboardSession } from "@/lib/whiteboard-scope";
 import { orgForcedEndUploadOpen } from "@/lib/org-session-access";
 import { stampStaleWhiteboardSessionEnd } from "@/lib/whiteboard/stale-session-stamp";
+import { lockWhiteboardSessionRowTx } from "@/lib/whiteboard/session-row-lock";
 import type { Prisma } from "@prisma/client";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { mapWithConcurrency, transcribeAudio } from "@/lib/transcribe";
@@ -37,7 +38,11 @@ import { parseDateOnlyInput } from "@/lib/date-only";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
-import { assertConsentRecordExists, ConsentError } from "@/lib/consent-scope";
+import {
+  assertConsentRecordExists,
+  ConsentError,
+  freezeConsentSnapshotAtEndTx,
+} from "@/lib/consent-scope";
 import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
 import {
   filterStorableAudioSegments,
@@ -1141,9 +1146,11 @@ export async function endWhiteboardSession(
   const rid = createActionCorrelationId();
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
-  if (session.endedAt) {
+  // A second End on an ended session: the org forced-end late upload, else rejected. Reached
+  // either here or after the transaction when a concurrent End won the conditional update.
+  const settleOnEndedSession = async (ended: typeof session) => {
     const late = await acceptOrgForcedEndUpload(
-      session,
+      ended,
       rid,
       whiteboardSessionId,
       finalEventsBlobUrl,
@@ -1151,10 +1158,12 @@ export async function endWhiteboardSession(
     );
     if (late) return late;
     console.warn(
-      `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} REJECTED: already ended at ${session.endedAt.toISOString()}`
+      `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} REJECTED: already ended at ${ended.endedAt?.toISOString() ?? "unknown"}`
     );
     throw new Error("This whiteboard session has already ended.");
-  }
+  };
+
+  if (session.endedAt) return settleOnEndedSession(session);
 
   const phaseRow = await withDbRetry(
     () =>
@@ -1222,16 +1231,21 @@ export async function endWhiteboardSession(
       }),
     { label: "endWhiteboardSession.adminTimezone" }
   );
-  let updated: { id: string; endedAt: Date | null; durationSeconds: number | null };
+  let updated: { id: string; endedAt: Date | null; durationSeconds: number | null } | null = null;
   let registeredSegments = 0;
   let billingFreeze: ReturnType<typeof computeBillingFreezeFields> = null;
+  let endedFromPhase = priorPhase;
+  let lostEndRace = false;
   try {
     const txResult = await withDbRetry(
       () =>
         db.$transaction(async (tx) => {
+          await lockWhiteboardSessionRowTx(tx, whiteboardSessionId);
           const existing = await tx.whiteboardSession.findUnique({
             where: { id: whiteboardSessionId },
             select: {
+              endedAt: true,
+              sessionPhase: true,
               startedAt: true,
               activatedAt: true,
               sessionMode: true,
@@ -1244,6 +1258,8 @@ export async function endWhiteboardSession(
               billedDurationMin: true,
             },
           });
+          if (!existing) throw new Error("Whiteboard session row not found under lock.");
+          if (existing.endedAt) return { alreadyEnded: true as const };
           await holdPoint("end:tx:before_update", whiteboardSessionId);
           const durationSeconds = existing
             ? Math.max(
@@ -1278,8 +1294,8 @@ export async function endWhiteboardSession(
             }
           }
 
-          const row = await tx.whiteboardSession.update({
-            where: { id: whiteboardSessionId },
+          const ended = await tx.whiteboardSession.updateMany({
+            where: { id: whiteboardSessionId, endedAt: null },
             data: {
               endedAt: now,
               eventsBlobUrl: erasureShortCircuit
@@ -1301,8 +1317,12 @@ export async function endWhiteboardSession(
                   }
                 : {}),
             },
-            select: { id: true, endedAt: true, durationSeconds: true },
           });
+          if (ended.count !== 1) return { alreadyEnded: true as const };
+          if (existing.sessionPhase === "PENDING") {
+            await freezeConsentSnapshotAtEndTx(tx, whiteboardSessionId, new Date(), "end");
+          }
+          const row = { id: whiteboardSessionId, endedAt: now, durationSeconds };
 
           await tx.sessionParticipant.updateMany({
             where: { whiteboardSessionId, leftAt: null },
@@ -1342,13 +1362,24 @@ export async function endWhiteboardSession(
             },
             data: { revokedAt: now },
           });
-          return { row, newSegments, billingFreeze };
+          return {
+            alreadyEnded: false as const,
+            row,
+            newSegments,
+            billingFreeze,
+            phase: existing.sessionPhase,
+          };
         }, { timeout: SEAM_BEARING_TX_TIMEOUT_MS }),
       { label: "endWhiteboardSession" }
     );
-    updated = txResult.row;
-    registeredSegments = txResult.newSegments;
-    billingFreeze = txResult.billingFreeze;
+    if (txResult.alreadyEnded) {
+      lostEndRace = true;
+    } else {
+      updated = txResult.row;
+      registeredSegments = txResult.newSegments;
+      billingFreeze = txResult.billingFreeze;
+      endedFromPhase = txResult.phase;
+    }
   } catch (err) {
     console.error(
       `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} db.transaction failed:`,
@@ -1356,9 +1387,12 @@ export async function endWhiteboardSession(
     );
     throw new Error("Could not finalize the whiteboard session. Please try again.");
   }
+  if (lostEndRace || !updated) {
+    return settleOnEndedSession(await assertOwnsWhiteboardSession(whiteboardSessionId));
+  }
 
   console.info(
-    `[slc] wbsid=${whiteboardSessionId} action=session_ended phase=${priorPhase.toLowerCase()}`
+    `[slc] wbsid=${whiteboardSessionId} action=session_ended phase=${endedFromPhase.toLowerCase()}`
   );
   console.log(
     `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s segmentsInPayload=${segments.length} newSegments=${registeredSegments}`
@@ -1370,7 +1404,7 @@ export async function endWhiteboardSession(
     studentId: session.studentId,
     whiteboardSessionId,
     metadata: {
-      priorPhase,
+      priorPhase: endedFromPhase,
       path: "normal",
     },
   });

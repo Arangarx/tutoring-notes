@@ -35,9 +35,10 @@ const dbWhiteboardFindUniqueMock = jest.fn();
 const dbAdminUserFindUniqueMock = jest.fn();
 const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
   fn({
+    $queryRaw: jest.fn().mockResolvedValue([{ id: "wb_42" }]),
     whiteboardSession: {
       findUnique: txWhiteboardFindUniqueMock,
-      update: txWhiteboardUpdateMock,
+      updateMany: txWhiteboardUpdateMock,
     },
     whiteboardJoinToken: {
       updateMany: txTokenUpdateManyMock,
@@ -169,6 +170,8 @@ function setupActiveSession(
   dbWhiteboardFindUniqueMock.mockResolvedValue({ sessionPhase: "ACTIVE" });
   dbAdminUserFindUniqueMock.mockResolvedValue({ tutorTimezone: "America/Denver" });
   txWhiteboardFindUniqueMock.mockResolvedValue({
+    endedAt: null,
+    sessionPhase: "ACTIVE",
     startedAt,
     activatedAt: billing.activatedAt ?? activatedAt,
     sessionMode: billing.sessionMode ?? "LIVE",
@@ -180,13 +183,7 @@ function setupActiveSession(
     tutorTimezone: billing.tutorTimezone ?? null,
     billedDurationMin: billing.billedDurationMin ?? null,
   });
-  txWhiteboardUpdateMock.mockImplementation(
-    async (args: { data: { endedAt: Date } }) => ({
-      id: "wb_42",
-      endedAt: args.data.endedAt,
-      durationSeconds: 1800,
-    })
-  );
+  txWhiteboardUpdateMock.mockResolvedValue({ count: 1 });
   txTokenUpdateManyMock.mockResolvedValue({ count: 2 });
   txSessionParticipantUpdateManyMock.mockResolvedValue({ count: 1 });
   txSessionRecordingFindManyMock.mockResolvedValue([]);
@@ -228,7 +225,7 @@ describe("endWhiteboardSession — events-only end (no segments)", () => {
     expect(dbTransactionMock).toHaveBeenCalledTimes(1);
     expect(txWhiteboardUpdateMock).toHaveBeenCalledTimes(1);
     const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
-    expect(updateArgs.where).toEqual({ id: "wb_42" });
+    expect(updateArgs.where).toEqual({ id: "wb_42", endedAt: null });
     expect(updateArgs.data.endedAt).toBeInstanceOf(Date);
     expect(updateArgs.data.eventsBlobUrl).toBe(FINAL_EVENTS_URL);
     expect(txTokenUpdateManyMock).toHaveBeenCalledWith(
