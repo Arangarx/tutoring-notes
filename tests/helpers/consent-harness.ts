@@ -301,3 +301,61 @@ export async function runCron(
   }
   return { status: res.status(), body, text };
 }
+
+// ---------------------------------------------------------------------------
+// Stale-session reaper (C4c): the cron route with a chosen mode, and what it reports per session
+// ---------------------------------------------------------------------------
+
+export type ReaperOutcome = {
+  id: string;
+  action: "reaped" | "would_reap" | "skip" | "error";
+  reason?: string;
+};
+
+export type ReaperRunBody = {
+  ok?: boolean;
+  failedJob?: string;
+  reaper: {
+    mode: "off" | "dry_run" | "enforce";
+    candidates: number;
+    reaped: number;
+    wouldReap: number;
+    skipped: number;
+    errors: number;
+    stoppedAtDeadline: boolean;
+    outcomes: ReaperOutcome[];
+  } | null;
+  purge: unknown;
+};
+
+/**
+ * Arms `CONSENT_REAPER_MODE` for the next run (`null` = unset, a string is the raw env value, typos included),
+ * then calls the cron route. The arm is one-shot, so a later run without this helper sees the environment.
+ */
+export async function runReaperCron(
+  request: APIRequestContext,
+  mode: string | null = "enforce",
+  opts?: { timeout?: number }
+): Promise<CronResult & { reaperBody: ReaperRunBody }> {
+  await armReaperMode(request, mode);
+  const r = await runCron(request, "/api/cron/session-cleanup", opts);
+  return { ...r, reaperBody: r.body as ReaperRunBody };
+}
+
+export function reaperOutcomeFor(body: ReaperRunBody, sessionId: string): ReaperOutcome | undefined {
+  return body.reaper?.outcomes.find((o) => o.id === sessionId);
+}
+
+/** A batch the way the recorder posts it (`useWhiteboardRecorder` WS-B), through the real checkpoint route. */
+export function postBoardBatch(request: APIRequestContext, sessionId: string, batchSeq: number) {
+  return request.post(`/api/whiteboard/${sessionId}/checkpoint`, {
+    data: {
+      batchSeq,
+      fromEventIndex: batchSeq - 1,
+      toEventIndex: batchSeq,
+      eventsJson: JSON.stringify([{ t: batchSeq * 10, type: "add", id: `pw-late-${batchSeq}` }]),
+      boardDocumentJson: { pages: [{ id: "p1", elements: [`pw-late-${batchSeq}`] }] },
+      schemaVersion: 1,
+    },
+  });
+}

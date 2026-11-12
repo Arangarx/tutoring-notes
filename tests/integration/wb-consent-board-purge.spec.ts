@@ -33,6 +33,7 @@ import {
   failBlobDeletesMatching,
   invokeConsentAction,
   listHarnessBlobs,
+  postBoardBatch,
   releaseHold,
   resetBlobHarness,
   resetSeams,
@@ -314,20 +315,6 @@ async function seedOrgBoardSession(
   };
 }
 
-/** A batch the way the recorder posts it (`useWhiteboardRecorder` WS-B), through the real checkpoint route. */
-function postBatch(request: APIRequestContext, sessionId: string, batchSeq: number) {
-  return request.post(`/api/whiteboard/${sessionId}/checkpoint`, {
-    data: {
-      batchSeq,
-      fromEventIndex: batchSeq - 1,
-      toEventIndex: batchSeq,
-      eventsJson: JSON.stringify([{ t: batchSeq * 10, type: "add", id: `pw-late-${batchSeq}` }]),
-      boardDocumentJson: { pages: [{ id: "p1", elements: [`pw-late-${batchSeq}`] }] },
-      schemaVersion: 1,
-    },
-  });
-}
-
 // ---------------------------------------------------------------------------
 // 6e. Whiteboard
 // ---------------------------------------------------------------------------
@@ -440,7 +427,7 @@ test.describe("consent 6e: Whiteboard", {
         expect(after.eventsBlobUrl).toBe(b.placeholderUrl);
         expect(after.snapshotBlobUrl).toBeNull();
         // A late batch is refused inside the upload window too.
-        const batch = await postBatch(request, b.whiteboardSessionId, 9);
+        const batch = await postBoardBatch(request, b.whiteboardSessionId, 9);
         expect(batch.status()).toBe(409);
 
         await sweepPassTwo(request, b.whiteboardSessionId);
@@ -538,7 +525,7 @@ test.describe("consent 6e: Whiteboard", {
           await blockAfterPurge(request, b.whiteboardSessionId);
           await armHold(request, { name: "checkpoint:batch:before_txn", sessionId: b.whiteboardSessionId });
           // The batch passes the active-session check, then parks before its transaction.
-          const batch = postBatch(request, b.whiteboardSessionId, 1);
+          const batch = postBoardBatch(request, b.whiteboardSessionId, 1);
           await waitUntilParked(request, "checkpoint:batch:before_txn", b.whiteboardSessionId);
           const end = await invokeConsentAction(request, "endWhiteboardSession", b.whiteboardSessionId, {
             finalEventsBlobUrl: b.placeholderUrl,

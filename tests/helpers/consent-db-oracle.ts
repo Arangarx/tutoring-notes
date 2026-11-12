@@ -194,6 +194,66 @@ export async function countBackendsWaitingOnLock(): Promise<number> {
   });
 }
 
+export const HOUR_MS = 60 * 60_000;
+
+/**
+ * Makes a session look idle by writing the SAME columns the reaper's idle predicate reads, straight to Postgres
+ * (test data, never the code under test): `createdAt`, `activatedAt` / `lastActiveAt` (only where already set),
+ * and every batch, recording and participant join of the session. `startedAt` is `startedAtAgoMs` ago (default
+ * 10 min before the activity). Returns the two instants so a test asserts against its own seed.
+ */
+export async function makeSessionIdle(
+  sessionId: string,
+  opts?: { idleMs?: number; startedAtAgoMs?: number }
+): Promise<{ lastActivityAt: Date; startedAt: Date }> {
+  const idleMs = opts?.idleMs ?? 25 * HOUR_MS;
+  const lastActivityAt = new Date(Date.now() - idleMs);
+  const startedAt = new Date(Date.now() - (opts?.startedAtAgoMs ?? idleMs + 10 * 60_000));
+  await withPrisma(async (prisma) => {
+    const row = await prisma.whiteboardSession.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { activatedAt: true, lastActiveAt: true },
+    });
+    await prisma.whiteboardSession.update({
+      where: { id: sessionId },
+      data: {
+        createdAt: lastActivityAt,
+        startedAt,
+        ...(row.activatedAt ? { activatedAt: lastActivityAt } : {}),
+        ...(row.lastActiveAt ? { lastActiveAt: lastActivityAt } : {}),
+      },
+    });
+    await prisma.whiteboardEventBatch.updateMany({
+      where: { whiteboardSessionId: sessionId },
+      data: { createdAt: lastActivityAt },
+    });
+    await prisma.sessionRecording.updateMany({
+      where: { whiteboardSessionId: sessionId },
+      data: { createdAt: lastActivityAt },
+    });
+    await prisma.sessionParticipant.updateMany({
+      where: { whiteboardSessionId: sessionId },
+      data: { joinedAt: lastActivityAt },
+    });
+  });
+  return { lastActivityAt, startedAt };
+}
+
+/**
+ * The local regression database accumulates open sessions older than the reaper's bar from earlier runs.
+ * The reaper scans oldest first in bounded batches, so a spec that needs ITS seeds in the first batch ends
+ * those leftovers first (a plain `endedAt` write, no snapshot or purge). Call once from `beforeAll`.
+ */
+export async function endLeftoverIdleSessions(olderThanMs = 24 * HOUR_MS): Promise<number> {
+  return withPrisma(async (prisma) => {
+    const r = await prisma.whiteboardSession.updateMany({
+      where: { endedAt: null, createdAt: { lt: new Date(Date.now() - olderThanMs) } },
+      data: { endedAt: new Date() },
+    });
+    return r.count;
+  });
+}
+
 /** True when the C4b columns exist (lets a spec skip a row until its wave lands). */
 export async function boardPurgeColumnsExist(): Promise<boolean> {
   return withPrisma((prisma) => columnExists(prisma, "WhiteboardSession", "boardPurgeFirstPassAt"));

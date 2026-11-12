@@ -10,9 +10,15 @@
  */
 
 const sweepMock = jest.fn();
+const reaperMock = jest.fn();
 jest.mock("@/lib/whiteboard/board-purge", () => ({
   __esModule: true,
   runBoardPurgeSweep: (...args: unknown[]) => sweepMock(...args),
+}));
+jest.mock("@/lib/whiteboard/stale-session-reaper", () => ({
+  __esModule: true,
+  resolveReaperModeForRun: () => "dry_run",
+  runStaleSessionReaper: (...args: unknown[]) => reaperMock(...args),
 }));
 jest.mock("@/lib/cron-auth", () => ({
   __esModule: true,
@@ -30,6 +36,8 @@ const call = (auth = "Bearer ok") =>
   GET(new Request("http://localhost/api/cron/session-cleanup", { headers: { authorization: auth } }));
 
 beforeEach(() => {
+  reaperMock.mockReset();
+  reaperMock.mockResolvedValue({ mode: "dry_run", candidates: 0, reaped: 0, wouldReap: 0, skipped: 0, errors: 0 });
   sweepMock.mockReset();
   sweepMock.mockResolvedValue({ candidates: 0, pass1: 0, pass2: 0, failed: 0, skipped: 0, stuck: 0, stoppedAtDeadline: false });
   jest.spyOn(console, "error").mockImplementation(() => undefined);
@@ -94,5 +102,69 @@ describe("K5 unit half: the purge job's failure is isolated", () => {
     const res = await call("Bearer nope");
     expect(res.status).toBe(401);
     expect(sweepMock).not.toHaveBeenCalled();
+    expect(reaperMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("C4c K3(b) unit half: the reaper's deadline is its own capped share of the route's start", () => {
+  it("hands the reaper routeStart + SESSION_REAPER_TIME_BUDGET_MS, and the purge the full route deadline", async () => {
+    const before = Date.now();
+    await call();
+    const after = Date.now();
+    const { deadline: reaperDeadline } = reaperMock.mock.calls[0][0] as { deadline: number };
+    const { deadline: purgeDeadline } = sweepMock.mock.calls[0][0] as { deadline: number };
+    expect(reaperDeadline).toBeGreaterThanOrEqual(before + SESSION_REAPER_TIME_BUDGET_MS);
+    expect(reaperDeadline).toBeLessThanOrEqual(after + SESSION_REAPER_TIME_BUDGET_MS);
+    expect(purgeDeadline).toBeGreaterThanOrEqual(before + maxDuration * 1000 - SESSION_CLEANUP_MARGIN_MS);
+    expect(purgeDeadline).toBeLessThanOrEqual(after + maxDuration * 1000 - SESSION_CLEANUP_MARGIN_MS);
+    expect(purgeDeadline).toBeGreaterThan(reaperDeadline);
+  });
+
+  it("a slow reaper cannot move the purge's deadline: both are fixed when the route starts", async () => {
+    const realNow = Date.now;
+    const before = realNow();
+    let calls = 0;
+    // The reaper "runs" for 200 s: every clock read after the route's first statement is 200 s on.
+    jest.spyOn(Date, "now").mockImplementation(() => (calls++ === 0 ? realNow() : realNow() + 200_000));
+    await call();
+    const { deadline: purgeDeadline } = sweepMock.mock.calls[0][0] as { deadline: number };
+    expect(purgeDeadline).toBeLessThanOrEqual(realNow() + maxDuration * 1000 - SESSION_CLEANUP_MARGIN_MS);
+    expect(purgeDeadline).toBeGreaterThanOrEqual(before + maxDuration * 1000 - SESSION_CLEANUP_MARGIN_MS);
+  });
+});
+
+describe("C4c K1 / K2 unit halves: each job's failure is isolated from the other", () => {
+  it("a throwing reaper: the purge still runs and the 500 names the reaper", async () => {
+    reaperMock.mockRejectedValue(new Error("reaper boom"));
+    const res = await call();
+    expect(res.status).toBe(500);
+    expect(sweepMock).toHaveBeenCalledTimes(1);
+    const body = (await res.json()) as { failedJob: string };
+    expect(body.failedJob).toBe("reaper");
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("[slc] cron=session-cleanup job=reaper action=job_error err=reaper boom")
+    );
+  });
+
+  it("a throwing purge: the reaper has already run, and the 500 names the purge", async () => {
+    sweepMock.mockRejectedValue(new Error("purge boom"));
+    const res = await call();
+    expect(res.status).toBe(500);
+    expect(reaperMock).toHaveBeenCalledTimes(1);
+    expect((await res.json()) as { failedJob: string }).toMatchObject({ failedJob: "purge" });
+  });
+
+  it("runs the reaper before the purge", async () => {
+    const order: string[] = [];
+    reaperMock.mockImplementation(async () => {
+      order.push("reaper");
+      return {};
+    });
+    sweepMock.mockImplementation(async () => {
+      order.push("purge");
+      return {};
+    });
+    await call();
+    expect(order).toEqual(["reaper", "purge"]);
   });
 });

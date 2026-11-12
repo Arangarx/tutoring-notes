@@ -29,8 +29,18 @@ export const BOARD_PURGE_SWEEP_BATCH_LIMIT = 25;
 /** An intent older than this and still unpurged is logged `board_purge_stuck` on every run. */
 export const BOARD_PURGE_STUCK_AFTER_MS = 24 * 60 * 60_000;
 
-/** Cap on the reaper's share of a session-cleanup run (the reaper job lands in C4c). */
+/** Cap on the reaper's share of a session-cleanup run (the reaper is the route's first job, C4c). */
 export const SESSION_REAPER_TIME_BUDGET_MS = 60_000;
+
+/**
+ * A session with no activity for this long is a reaper candidate (consent plan § 3.9). Equals the join-token
+ * lifetime (`JOIN_TOKEN_LIFETIME_MS`, 24 h, whiteboard `actions.ts`): by then every join link the tutor issued is
+ * already dead, so ending the session removes nothing a participant could still use.
+ */
+export const SESSION_REAPER_IDLE_AFTER_MS = 24 * 60 * 60_000;
+
+/** Max open sessions the reaper looks at per run (oldest first); the rest wait for the next run. */
+export const SESSION_REAPER_BATCH_LIMIT = 50;
 
 /** The purge's guaranteed minimum window inside a run. Not a timer: the purge runs to the route deadline. */
 export const BOARD_PURGE_SWEEP_MIN_WINDOW_MS = 170_000;

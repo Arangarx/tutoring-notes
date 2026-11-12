@@ -8,8 +8,51 @@
  * Run (after un-fixme): npx playwright test tests/integration/wb-consent-reaper.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { test } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
+import {
+  armHold,
+  expectReleasedByTest,
+  invokeConsentAction,
+  postBoardBatch,
+  reaperOutcomeFor,
+  releaseHold,
+  resetSeams,
+  runReaperCron,
+  waitUntilParked,
+  type CronResult,
+  type ReaperRunBody,
+} from "../helpers/consent-harness";
+import { endLeftoverIdleSessions, makeSessionIdle } from "../helpers/consent-db-oracle";
+import { seedStartFixture } from "../helpers/consent-start-fixture";
+
+const prisma = new PrismaClient();
+
+test.beforeAll(async () => {
+  // The reaper scans oldest-first in bounded batches; old leftovers in the shared local DB must not crowd out this file's seeds.
+  await endLeftoverIdleSessions();
+});
+test.afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+/** An ACTIVE session (whiteboard on or off per the snapshot) whose every activity column is `idleMs` old. */
+async function seedIdleActive(opts: { whiteboard: boolean; idleMs?: number; startedAtAgoMs?: number }) {
+  const f = await seedStartFixture({ record: { allowWhiteboardRecording: opts.whiteboard }, snapshot: true });
+  await prisma.whiteboardSession.update({
+    where: { id: f.whiteboardSessionId },
+    data: { sessionPhase: "ACTIVE", activatedAt: new Date() },
+  });
+  const seeded = await makeSessionIdle(f.whiteboardSessionId, opts);
+  return { ...f, ...seeded };
+}
+
+const readEnded = (id: string) =>
+  prisma.whiteboardSession.findUniqueOrThrow({
+    where: { id },
+    select: { endedAt: true, boardPurgeRequestedAt: true, durationSeconds: true },
+  });
 
 // ---------------------------------------------------------------------------
 // 6k. Stale-session reaper (R3)
@@ -95,10 +138,73 @@ test.describe("consent 6k: Stale-session reaper (R3)", {
     }
   );
   // Oracle: B2, arm → park → release. Seed an ACTIVE session idle 25 h; arm 'reaper:between_scan_and_stamp'; fire the cron (the reaper scans, selects the session, parks); wait until parked; record activity through a real path (a che …
-  test.fixme(
+  test(
     "G12: the reaper does not end a session that became active between its scan and its stamp",
-    async () => {
-      // pending: wave that owns G12
+    async ({ request }) => {
+      test.setTimeout(120_000);
+      const s = await seedIdleActive({ whiteboard: true });
+      const hold = { name: "reaper:between_scan_and_stamp", sessionId: s.whiteboardSessionId } as const;
+      try {
+        await armHold(request, hold);
+        // Fire the cron WITHOUT awaiting: the reaper scans, decides this session is idle, and parks at the seam.
+        const cron: Promise<CronResult & { reaperBody: ReaperRunBody }> = runReaperCron(request, "enforce");
+        cron.catch(() => undefined);
+        await waitUntilParked(request, hold.name, hold.sessionId);
+
+        // Activity through a real path (the recorder's checkpoint POST) while the reaper is parked.
+        const batch = await postBoardBatch(request, s.whiteboardSessionId, 1);
+        expect(batch.status(), await batch.text()).toBe(200);
+
+        await releaseHold(request, hold.name, hold.sessionId);
+        const res = await cron;
+        expect(res.status, res.text).toBe(200);
+
+        const row = await readEnded(s.whiteboardSessionId);
+        expect(row.endedAt, "a session with a batch landed after the scan must stay open").toBeNull();
+        expect(row.boardPurgeRequestedAt).toBeNull();
+        expect(reaperOutcomeFor(res.reaperBody, s.whiteboardSessionId)).toMatchObject({
+          action: "skip",
+          reason: "not_idle",
+        });
+        await expectReleasedByTest(request, hold.name, hold.sessionId);
+      } finally {
+        await resetSeams(request);
+        await s.cleanup();
+      }
+    }
+  );
+  // Second arm of G12: the tutor ends the session while the reaper is parked.
+  test(
+    "G12 (second arm): a session the tutor ended while the reaper was parked is skipped, and endedAt is the tutor's, unmoved",
+    async ({ request }) => {
+      test.setTimeout(120_000);
+      const s = await seedIdleActive({ whiteboard: true });
+      const hold = { name: "reaper:between_scan_and_stamp", sessionId: s.whiteboardSessionId } as const;
+      try {
+        await armHold(request, hold);
+        const cron: Promise<CronResult & { reaperBody: ReaperRunBody }> = runReaperCron(request, "enforce");
+        cron.catch(() => undefined);
+        await waitUntilParked(request, hold.name, hold.sessionId);
+
+        const ended = await invokeConsentAction(request, "endStaleWhiteboardSession", s.whiteboardSessionId);
+        expect(ended.status(), await ended.text()).toBe(200);
+        const tutorEndedAt = (await readEnded(s.whiteboardSessionId)).endedAt;
+        expect(tutorEndedAt).not.toBeNull();
+
+        await releaseHold(request, hold.name, hold.sessionId);
+        const res = await cron;
+        expect(res.status, res.text).toBe(200);
+
+        expect((await readEnded(s.whiteboardSessionId)).endedAt?.getTime()).toBe(tutorEndedAt!.getTime());
+        expect(reaperOutcomeFor(res.reaperBody, s.whiteboardSessionId)).toMatchObject({
+          action: "skip",
+          reason: "already_ended",
+        });
+        await expectReleasedByTest(request, hold.name, hold.sessionId);
+      } finally {
+        await resetSeams(request);
+        await s.cleanup();
+      }
     }
   );
   // Oracle: B2, null-'endAt' rule. Three seeds, all idle 25 h: linked 'ScheduledSession' with 'endAt' null (reaped: no throw, no skip), linked with 'endAt' in the future (not reaped until it passes), no link (reaped). 'delayUntil =  …

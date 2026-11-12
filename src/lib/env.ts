@@ -153,6 +153,13 @@ const EnvSchema = z.object({
       )
       .optional()
   ),
+  /**
+   * Stale-session reaper mode (consent wave C4c): `off | dry_run | enforce`. Deliberately a raw string, not an
+   * enum: `resolveReaperMode` (stale-session-reaper.ts) owns the parse so unset, empty and a typo all fall back
+   * to `dry_run` (never `enforce`) and a typo is logged, instead of failing the whole app's env parse.
+   * Only `enforce` ends sessions. See docs/PLATFORM-ASSUMPTIONS.md § 1.10.
+   */
+  CONSENT_REAPER_MODE: z.string().optional(),
 });
 
 const parsed = EnvSchema.safeParse({
@@ -186,6 +193,7 @@ const parsed = EnvSchema.safeParse({
   LEARNER_SESSION_HMAC_SECRET: process.env.LEARNER_SESSION_HMAC_SECRET,
   ADMIN_TFA_DEVICE_HMAC_SECRET: process.env.ADMIN_TFA_DEVICE_HMAC_SECRET,
   AH_TOTP_ENCRYPTION_KEY: process.env.AH_TOTP_ENCRYPTION_KEY,
+  CONSENT_REAPER_MODE: process.env.CONSENT_REAPER_MODE,
 });
 
 if (!parsed.success) {

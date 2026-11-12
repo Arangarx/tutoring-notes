@@ -31,7 +31,7 @@ export type SessionStartedMetadata = {
 
 export type SessionEndedMetadata = {
   priorPhase: string;
-  path: "normal" | "stale";
+  path: "normal" | "stale" | "reaper";
 };
 
 export type ProductEventMetadata =
