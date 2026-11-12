@@ -21,45 +21,9 @@ import {
   waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
-
-const VAD_METER_HIGH = 0.5;
-const VAD_METER_LOW = 0;
-
-async function injectVadOverrides(page: import("@playwright/test").Page) {
-  await page.addInitScript(() => {
-    const w = window as unknown as {
-      __VAD_MIN_SEGMENT_SECONDS_OVERRIDE?: number;
-      __VAD_SILENCE_HOLD_MS_OVERRIDE?: number;
-      __VAD_SILENCE_RMS_THRESHOLD_OVERRIDE?: number;
-      __VAD_MAX_SEGMENT_SECONDS_OVERRIDE?: number;
-      __VAD_TEST_METER_LEVEL__?: number;
-    };
-    w.__VAD_MIN_SEGMENT_SECONDS_OVERRIDE = 1;
-    w.__VAD_SILENCE_HOLD_MS_OVERRIDE = 800;
-    w.__VAD_SILENCE_RMS_THRESHOLD_OVERRIDE = 0.15;
-    w.__VAD_MAX_SEGMENT_SECONDS_OVERRIDE = 120;
-    w.__VAD_TEST_METER_LEVEL__ = 0.5;
-  });
-}
-
-async function setVadTestMeterLevel(
-  page: import("@playwright/test").Page,
-  level: number
-) {
-  await page.evaluate((lvl) => {
-    (window as unknown as { __VAD_TEST_METER_LEVEL__?: number }).__VAD_TEST_METER_LEVEL__ =
-      lvl;
-  }, level);
-}
-
-async function driveVadSilenceCut(page: import("@playwright/test").Page) {
-  await setVadTestMeterLevel(page, VAD_METER_HIGH);
-  await page.waitForTimeout(1_200);
-  await setVadTestMeterLevel(page, VAD_METER_LOW);
-  await page.waitForTimeout(1_000);
-}
 
 async function fetchRecordingCount(
   page: import("@playwright/test").Page,

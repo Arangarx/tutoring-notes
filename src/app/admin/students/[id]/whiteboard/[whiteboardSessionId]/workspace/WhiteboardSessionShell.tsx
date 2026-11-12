@@ -10,6 +10,7 @@
 import { useCallback, useState } from "react";
 import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 import type { EntryBlockReason } from "@/lib/scheduling/session-entry";
+import type { SessionConsentInput } from "@/lib/recording/session-capabilities";
 import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
 import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
 import { SessionReviewMode } from "./SessionReviewMode";
@@ -39,13 +40,11 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   initialSessionPhase?: "PENDING" | "ACTIVE";
   sessionMode?: string;
   activatedAt?: string | null;
-  /** Frozen session consent: null = no snapshot (unclaimed / no ConsentRecord). */
-  initialAllowAudioRecording?: boolean | null;
+  /** Page-load consent behind the capabilities (no snapshot = legacy no-audio input). */
+  initialConsentInput?: SessionConsentInput;
   allowLiveSession?: boolean | null;
   /** Why neither mode can start (no consent record, unclaimed, ...). Null/omitted = Start is not blocked by the entry rule. */
   startBlockedReason?: EntryBlockReason | null;
-  /** True when SessionConsentSnapshot exists for this session. */
-  initialHasConsentSnapshot?: boolean;
   /** Claimed student's LearnerProfile id — per-speaker lane attribution. */
   studentLearnerProfileId?: string | null;
   /**
@@ -134,10 +133,9 @@ function TutorWhiteboardSessionShell({
   initialSessionPhase,
   sessionMode,
   activatedAt,
-  initialAllowAudioRecording,
+  initialConsentInput,
   allowLiveSession = null,
   startBlockedReason = null,
-  initialHasConsentSnapshot,
   studentLearnerProfileId,
   initialIntent,
   initialReviewSurface,
@@ -185,10 +183,9 @@ function TutorWhiteboardSessionShell({
         initialSessionPhase={initialSessionPhase}
         sessionMode={sessionMode}
         activatedAt={activatedAt}
-        initialAllowAudioRecording={initialAllowAudioRecording}
+        initialConsentInput={initialConsentInput}
         allowLiveSession={allowLiveSession}
         startBlockedReason={startBlockedReason}
-        initialHasConsentSnapshot={initialHasConsentSnapshot}
         studentLearnerProfileId={studentLearnerProfileId}
         initialIntent={initialIntent}
         initialPersistedState={initialPersistedState}

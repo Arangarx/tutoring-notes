@@ -120,6 +120,23 @@ export function saveSessionSceneDraft(
   }
 }
 
+/** Session ids with a draft (either form) in this tab's `sessionStorage`. */
+export function listSessionSceneDraftIds(): string[] {
+  if (typeof sessionStorage === "undefined") return [];
+  const ids = new Set<string>();
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i) ?? "";
+      for (const prefix of [KEY_PREFIX, BOARD_KEY_PREFIX]) {
+        if (key.startsWith(prefix)) ids.add(key.slice(prefix.length));
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [...ids];
+}
+
 export function clearSessionSceneDraft(whiteboardSessionId: string): void {
   if (typeof sessionStorage === "undefined") return;
   try {

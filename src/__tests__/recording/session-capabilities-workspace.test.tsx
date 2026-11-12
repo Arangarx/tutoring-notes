@@ -5,10 +5,16 @@
 import React, { createRef } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import {
+  NO_SNAPSHOT_CONSENT_INPUT,
   TUTOR_MIC_STREAM_ID,
   resolveRemoteRecordingGainLinear,
   shouldAttachRemoteStreamToRecordingMixdown,
+  type SessionConsentInput,
 } from "@/lib/recording/session-capabilities";
+
+function snapshotConsent({ audio }: { audio: boolean }): SessionConsentInput {
+  return { hasConsentSnapshot: true, toggles: { audio, whiteboard: true, notes: true }, notesForbidden: false };
+}
 
 const mockUnsubscribe = jest.fn();
 const mockSubscribe = jest.fn(() => mockUnsubscribe);
@@ -387,8 +393,7 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
-        initialHasConsentSnapshot={false}
-        initialAllowAudioRecording={null}
+        initialConsentInput={NO_SNAPSHOT_CONSENT_INPUT}
       />
     );
 
@@ -408,31 +413,11 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     expect(lastOpts?.recordingDraft).toBeUndefined();
   });
 
-  test("C1 N1: snapshot present but audio toggle null (LIVE) is treated as no usable consent: no recorder draft, no recovery scan", async () => {
-    render(
-      <WhiteboardWorkspaceClient
-        {...baseWorkspaceProps}
-        sessionMode="LIVE"
-        initialHasConsentSnapshot={true}
-        initialAllowAudioRecording={null}
-      />
-    );
-
-    // Spec: no readable audio consent means no audio is captured, even in a LIVE session where an off
-    // toggle would keep the tutor-only mixdown. The draft is cleared and never recovered.
-    await waitFor(() => {
-      expect(mockDraftClear).toHaveBeenCalledWith("wbs-consent-test", TUTOR_MIC_STREAM_ID);
-    });
-    expect(mockDraftFindInProgress).not.toHaveBeenCalled();
-    expect(capturedRecorderOptions.at(-1)?.recordingDraft).toBeUndefined();
-  });
-
   test("policy=full passes recordingDraft to useAudioRecorder (positive path)", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
-        initialHasConsentSnapshot={true}
-        initialAllowAudioRecording={true}
+        initialConsentInput={snapshotConsent({ audio: true })}
       />
     );
 
@@ -448,8 +433,7 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
         initialSessionPhase="ACTIVE"
-        initialHasConsentSnapshot={true}
-        initialAllowAudioRecording={false}
+        initialConsentInput={snapshotConsent({ audio: false })}
         sessionMode="IN_PERSON"
       />
     );
@@ -469,8 +453,7 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
         {...baseWorkspaceProps}
         syncUrl="wss://wb.example.com"
         initialSessionPhase="ACTIVE"
-        initialHasConsentSnapshot={true}
-        initialAllowAudioRecording={false}
+        initialConsentInput={snapshotConsent({ audio: false })}
         sessionMode="LIVE"
       />
     );
@@ -497,8 +480,7 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
         initialSessionPhase="PENDING"
-        initialHasConsentSnapshot={false}
-        initialAllowAudioRecording={null}
+        initialConsentInput={NO_SNAPSHOT_CONSENT_INPUT}
       />
     );
 
@@ -515,8 +497,7 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
         initialSessionPhase="PENDING"
-        initialHasConsentSnapshot={true}
-        initialAllowAudioRecording={false}
+        initialConsentInput={snapshotConsent({ audio: false })}
         sessionMode="IN_PERSON"
       />
     );
@@ -534,8 +515,7 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
         initialSessionPhase="ACTIVE"
-        initialHasConsentSnapshot={true}
-        initialAllowAudioRecording={false}
+        initialConsentInput={snapshotConsent({ audio: false })}
         sessionMode="LIVE"
       />
     );
@@ -552,8 +532,7 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
         initialSessionPhase="PENDING"
-        initialHasConsentSnapshot={true}
-        initialAllowAudioRecording={false}
+        initialConsentInput={snapshotConsent({ audio: false })}
         sessionMode="LIVE"
       />
     );
@@ -567,8 +546,7 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
-        initialHasConsentSnapshot={true}
-        initialAllowAudioRecording={true}
+        initialConsentInput={snapshotConsent({ audio: true })}
       />
     );
 
@@ -582,8 +560,7 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
         role="student"
-        initialHasConsentSnapshot={false}
-        initialAllowAudioRecording={null}
+        initialConsentInput={NO_SNAPSHOT_CONSENT_INPUT}
       />
     );
 

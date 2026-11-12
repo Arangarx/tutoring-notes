@@ -281,6 +281,40 @@ export async function clearCheckpoint(
   }
 }
 
+/** Every row of this kind owned by the tutor, across all of their students. */
+function tutorRange(kind: Checkpoint["kind"], adminUserId: string): IDBKeyRange {
+  return IDBKeyRange.bound([kind, adminUserId, ""], [kind, adminUserId, "\uffff"]);
+}
+
+/**
+ * Every checkpoint of a kind this tutor owns on this device (all students). Empty if none or IndexedDB is
+ * unavailable. Used by the load-time sweep of leftovers from sessions that ended elsewhere.
+ */
+export async function listCheckpointsForTutor(
+  kind: Checkpoint["kind"],
+  adminUserId: string
+): Promise<Pick<Checkpoint, "sessionId" | "studentId">[]> {
+  if (!hasIndexedDB()) return [];
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).index("by-owner").openCursor(tutorRange(kind, adminUserId));
+      const rows: Pick<Checkpoint, "sessionId" | "studentId">[] = [];
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) return resolve(rows);
+        const row = cursor.value as Checkpoint;
+        rows.push({ sessionId: row.sessionId, studentId: row.studentId });
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error ?? new Error("cursor-failed"));
+    });
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Sweep eviction: drop the oldest checkpoint owned by this tutor for
  * the given kind, never touching other tutors' data. Returns true if
@@ -296,9 +330,7 @@ async function evictOldestForOwner(
   return new Promise<boolean>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const store = tx.objectStore(STORE);
-    const idx = store.index("by-owner");
-    const range = IDBKeyRange.bound([kind, adminUserId, ""], [kind, adminUserId, "\uffff"]);
-    const req = idx.openCursor(range);
+    const req = store.index("by-owner").openCursor(tutorRange(kind, adminUserId));
     let oldest: { key: string; updatedAt: string } | null = null;
     req.onsuccess = () => {
       const cursor = req.result;

@@ -13,9 +13,23 @@ import { TAG } from "../test-tags";
 import { findScenePayloadEvents, openRelayClient, probeRelayRoom } from "../helpers/relay-probe";
 import { PrismaClient } from "@prisma/client";
 import {
+  checkpointKey,
+  chooseMode,
+  endFromWorkspace,
+  openTutorRoom,
+  readCheckpointKeys,
+  readSceneDraftKeys,
+  sceneDraftKeys,
+  seedCheckpointRow,
+  seedConsentSession,
+  startFromWaitingRoom,
+} from "../helpers/consent-tutor-room";
+import { seedStartFixture } from "../helpers/consent-start-fixture";
+import {
   armHold,
   expectReleasedByTest,
   invokeConsentAction,
+  listHarnessBlobs,
   releaseHold,
   resetSeams,
   waitUntilParked,
@@ -26,7 +40,12 @@ import {
   readConsentSnapshots,
   saveFamilyConsentVersion,
 } from "../helpers/consent-db-oracle";
-import { seedWbPendingLiveSyncSession } from "./whiteboard-live-sync.helpers";
+import {
+  drawTestStrokeOnRole,
+  openTutorAndStudent,
+  seedWbPendingLiveSyncSession,
+  waitForWbE2eBridge,
+} from "./whiteboard-live-sync.helpers";
 
 const prisma = new PrismaClient();
 test.afterAll(async () => {
@@ -119,17 +138,111 @@ test.describe("consent 6e: Whiteboard", {
     }
   );
   // Oracle: Rewritten for Q6 (default applied; if Andrew picks the alternative, this test inverts to "never written"). IndexedDB contents via 'page.evaluate', three arms: (a) during the session a checkpoint row exists for the sessio …
-  test.fixme(
+  // Arms (a) + (b): one in-person whiteboard-off session on the tutor device. (a) is the positive control that makes (b)
+  // non-vacuous. At End the client also uploads no board (no events log, no snapshot image under the session prefix).
+  test(
     "W15: whiteboard off: the on-device checkpoint is kept during the session and deleted at End, and a leftover one is cleared at the next workspace load",
-    async () => {
-      // pending: wave that owns W15
+    { tag: [TAG.WB_AV, TAG.WB_RECORDING] },
+    async ({ browser, request }) => {
+      test.setTimeout(300_000);
+      const s = await seedConsentSession({ switches: { allowWhiteboardRecording: false } });
+      const room = await openTutorRoom(browser, s);
+      try {
+        const own = { adminUserId: s.adminUserId, studentId: s.studentId, sessionId: s.whiteboardSessionId };
+        await chooseMode(room.page, "IN_PERSON");
+        await startFromWaitingRoom(room.page);
+        await drawTestStrokeOnRole(room.page, "tutor", `w15-${Date.now()}`, 120, 120, 320, 220);
+        await expect
+          .poll(async () => (await readCheckpointKeys(room.page)).includes(checkpointKey(own)), { timeout: 60_000 })
+          .toBe(true);
+        await endFromWorkspace(room.page);
+        await expect
+          .poll(async () => (await readCheckpointKeys(room.page)).includes(checkpointKey(own)), { timeout: 15_000 })
+          .toBe(false);
+        const uploaded = (await listHarnessBlobs(request, `whiteboard-sessions/${s.studentId}/${s.whiteboardSessionId}/`)).map(
+          (o) => o.key
+        );
+        // The store appends a random suffix to the name (`<ts>-events.json-<rand>`), so match the stem.
+        expect(uploaded.filter((k) => /-events\.json|-snapshot\.png/.test(k))).toEqual([]);
+      } finally {
+        await room.close();
+        await s.cleanup();
+      }
+    }
+  );
+  // Arm (c) + the persist=true control + W16's device half, all on one mount: leftovers for three sessions that ended
+  // ELSEWHERE (other students of the same tutor, so today's same-student resume hygiene never reaches them):
+  //   off   — snapshot whiteboard off          → persist false → cleared (checkpoint and per-tab scene draft)
+  //   on    — snapshot whiteboard on           → persist true  → kept
+  //   blind — no snapshot, no consent record   → capability unreadable (fail closed) → kept (W16 device half)
+  // Learner device arm: the learner never writes a checkpoint for the session (none exists on the learner device).
+  test(
+    "W15 (c) + W16 (device half): a leftover copy of a whiteboard-off session that ended elsewhere is cleared at the next workspace load; persisted and unreadable-capability copies are kept",
+    { tag: [TAG.WB_RECORDING] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const ended = { sessionPhase: "ACTIVE" as const, endedAt: new Date(Date.now() - 60 * 60_000) };
+      const off = await seedStartFixture({ record: { allowWhiteboardRecording: false }, snapshot: true });
+      const on = await seedStartFixture({ record: {}, snapshot: true });
+      const blind = await seedStartFixture({ record: null });
+      const s = await seedConsentSession({ switches: {} });
+      for (const f of [off, on, blind]) {
+        await prisma.whiteboardSession.update({ where: { id: f.whiteboardSessionId }, data: ended });
+      }
+      const room = await openTutorRoom(browser, s);
+      try {
+        const cp = (f: typeof off) => ({ adminUserId: f.adminUserId, studentId: f.studentId, sessionId: f.whiteboardSessionId });
+        for (const f of [off, on, blind]) {
+          await expect
+            .poll(() => seedCheckpointRow(room.page, cp(f)).then(() => true, () => false), { timeout: 30_000 })
+            .toBe(true);
+        }
+        await room.page.evaluate((ids) => {
+          for (const id of ids) {
+            sessionStorage.setItem(`wn_wb_session_board_v1:${id}`, JSON.stringify({ v: 1, pageList: [], pages: {} }));
+            sessionStorage.setItem(`wn_wb_session_elements_v1:${id}`, "[]");
+          }
+        }, [off, on, blind].map((f) => f.whiteboardSessionId));
+
+        await room.page.reload({ waitUntil: "domcontentloaded" });
+        await expect(room.page.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({ timeout: 90_000 });
+        await waitForWbE2eBridge(room.page, "tutor");
+
+        await expect
+          .poll(async () => (await readCheckpointKeys(room.page)).includes(checkpointKey(cp(off))), { timeout: 20_000 })
+          .toBe(false);
+        const keys = await readCheckpointKeys(room.page);
+        expect(keys).toContain(checkpointKey(cp(on)));
+        expect(keys).toContain(checkpointKey(cp(blind)));
+        const drafts = await readSceneDraftKeys(room.page);
+        for (const k of sceneDraftKeys(off.whiteboardSessionId)) expect(drafts).not.toContain(k);
+        for (const k of [...sceneDraftKeys(on.whiteboardSessionId), ...sceneDraftKeys(blind.whiteboardSessionId)]) {
+          expect(drafts).toContain(k);
+        }
+      } finally {
+        await room.close();
+        await s.cleanup();
+        for (const f of [off, on, blind]) await f.cleanup();
+      }
+
+      const live = await seedConsentSession({ switches: { allowWhiteboardRecording: false } });
+      const pair = await openTutorAndStudent(browser, live, { ensureFollow: false, autoStart: true });
+      try {
+        await drawTestStrokeOnRole(pair.studentPage, "student", `w15-student-${Date.now()}`, 120, 120, 320, 220);
+        await pair.studentPage.waitForTimeout(35_000);
+        expect(await readCheckpointKeys(pair.studentPage)).toEqual([]);
+      } finally {
+        await pair.close();
+        await live.cleanup();
+      }
     }
   );
   // Oracle: Fault: snapshot unreadable → no server deletes, intent retained, retry later. The device-side half: with the capability unreadable the load-time cleanup does not delete the local checkpoint (deleting on an unknown answer …
+  // Server half (purge intent / deletes) is C4b. The device half is live above (C3b).
   test.fixme(
     "W16: unknown capability does not purge, and a whiteboard-off session's local copy is not cleared on an unreadable capability",
     async () => {
-      // pending: wave that owns W16
+      // pending: C4b owns the server half (no server deletes on an unreadable capability)
     }
   );
   // Oracle: Characterization (green before; regression guard). Seeded old row: 'boardPurgeRequestedAt' null; sweep leaves blobs and rows. Green before because nothing purges these rows today

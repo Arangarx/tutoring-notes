@@ -40,6 +40,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { uploadAudioDirect } from "@/lib/recording/upload";
+import type { MicAcquire } from "@/lib/recording/session-capabilities";
+import { logMicRequestBlocked, micRequestBlockedReason } from "@/lib/recording/mic-acquire-gate";
 import { formatUserFacingActionError } from "@/lib/action-correlation";
 import { createMicAudioGraph, type MicAudioGraph } from "@/lib/mic-recorder-audio";
 import { chooseMimeType, fileExtension } from "@/lib/recording/mime";
@@ -182,6 +184,12 @@ export type UseAudioRecorderOptions = {
    * segment boundaries anchor to this clock instead of wall-clock segment timer.
    */
   getAudioMs?: () => number;
+  /**
+   * `capabilities.mic.acquire` (consent wave § 4.1). Unless `"yes"`, `acquireMic` and the device swaps return
+   * without calling `getUserMedia`; a flip away from `"yes"` releases an open mic, a flip to `"yes"` opens it.
+   * Default `"yes"` (the Record tab).
+   */
+  micAcquire?: MicAcquire;
 };
 
 export type UseAudioRecorderReturn = {
@@ -375,7 +383,16 @@ export function useAudioRecorder({
   avLogSessionId,
   recordingDraft,
   getAudioMs,
+  micAcquire = "yes",
 }: UseAudioRecorderOptions): UseAudioRecorderReturn {
+  const micAcquireRef = useRef<MicAcquire>(micAcquire);
+  micAcquireRef.current = micAcquire;
+  const micBlocked = (source: string): boolean => {
+    const reason = micRequestBlockedReason(micAcquireRef.current);
+    if (!reason) return false;
+    logMicRequestBlocked({ sessionId: avLogSessionId, reason, source });
+    return true;
+  };
   const [recordState, setRecordState] = useState<RecordState>("idle");
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [error, setError] = useState<string | null>(null);
@@ -600,6 +617,31 @@ export function useAudioRecorder({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Capability flips after mount (consent wave § 4.1): away from "yes" releases the mic before Start (tracks end,
+  // meter stops); to "yes" opens it the way the mount effect would. Chained through the device mutex so a release
+  // lands after any acquire already in flight (RACE-4).
+  const prevMicAcquireRef = useRef<MicAcquire>(micAcquire);
+  useEffect(() => {
+    const prev = prevMicAcquireRef.current;
+    prevMicAcquireRef.current = micAcquire;
+    if (prev === micAcquire) return;
+    if (micAcquire !== "yes") {
+      void chainDeviceAcquire(sharedDeviceAcquireMutex, async () => {
+        if (micAcquireRef.current === "yes" || !streamRef.current) return;
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") return;
+        console.info(
+          `[avx] avx=${avLogSessionId ?? "none"} action=mic_released reason=${micAcquireRef.current}`
+        );
+        teardownMicStream();
+        setRecordState((s) => (s === "ready" || s === "acquiring" ? "idle" : s));
+      });
+      return;
+    }
+    if (streamRef.current || permissionState === "denied") return;
+    void acquireMic({ deviceId: loadStoredDeviceId() || undefined, forRecording: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micAcquire]);
 
   // Cleanup on unmount.
   useEffect(() => {
@@ -1040,9 +1082,12 @@ export function useAudioRecorder({
    * first-acquire cannot race live-A/V `requestCam` (AUDIO-1 #4).
    */
   async function acquireMic(opts: { deviceId?: string; forRecording: boolean }) {
-    return chainDeviceAcquire(sharedDeviceAcquireMutex, () =>
-      acquireMicUnlocked(opts)
-    );
+    if (micBlocked("acquireMic")) return;
+    // Checked again once the mutex is ours: the mode may have flipped while this acquire was queued (RACE-4).
+    return chainDeviceAcquire(sharedDeviceAcquireMutex, async () => {
+      if (micBlocked("acquireMic")) return;
+      await acquireMicUnlocked(opts);
+    });
   }
 
   async function acquireMicUnlocked(opts: {
@@ -1306,6 +1351,7 @@ export function useAudioRecorder({
    * live-A/V side.
    */
   async function swapMicDevice(deviceId: string): Promise<void> {
+    if (micBlocked("swapMicDevice")) return;
     const graph = graphRef.current;
     if (!graph?.swapLocalMicSource) {
       if (!streamRef.current) {
@@ -1420,6 +1466,7 @@ export function useAudioRecorder({
   }
 
   async function swapMicDeviceBySlot(slotIndex: number): Promise<void> {
+    if (micBlocked("swapMicDeviceBySlot")) return;
     const entry = devicesRef.current[slotIndex];
     if (!entry) {
       setError(

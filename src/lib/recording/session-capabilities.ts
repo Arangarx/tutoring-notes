@@ -58,6 +58,16 @@ export type SessionCapabilityInput = {
   notesForbidden: boolean;
 };
 
+/** Everything behind the capabilities except the mode (the workspace's page-load consent; the waiting room adds the mode). */
+export type SessionConsentInput = Omit<SessionCapabilityInput, "sessionMode">;
+
+/** No frozen snapshot: the legacy rule applies (no audio); the toggles are not read. */
+export const NO_SNAPSHOT_CONSENT_INPUT: SessionConsentInput = {
+  hasConsentSnapshot: false,
+  toggles: { audio: false, whiteboard: true, notes: true },
+  notesForbidden: false,
+};
+
 const ALL_ON: CapabilityFields = {
   audio: { mode: "full" },
   mic: { acquire: "yes" },

@@ -104,6 +104,7 @@ import {
   type SaveCheckpointResult,
 } from "@/lib/whiteboard/checkpoint-store";
 import { consumeSkipIndexedDbResumeAfterGate } from "@/lib/whiteboard/resume-prompt-flags";
+import { fetchSessionEndStatus } from "@/lib/whiteboard/ended-session-device-copies";
 import type {
   WhiteboardSyncClient,
   WhiteboardWireBroadcastExtras,
@@ -138,17 +139,7 @@ void _audioOwnerKey;
  * from the student list — local IDB is not cleared by server actions.
  */
 async function fetchSessionEndedOnServer(sessionId: string): Promise<boolean> {
-  try {
-    const res = await fetch(
-      `/api/whiteboard/${encodeURIComponent(sessionId)}/session-ended`,
-      { credentials: "same-origin" }
-    );
-    if (!res.ok) return false;
-    const j = (await res.json()) as { ended?: boolean };
-    return j.ended === true;
-  } catch {
-    return false;
-  }
+  return (await fetchSessionEndStatus(sessionId)).ended;
 }
 
 /**

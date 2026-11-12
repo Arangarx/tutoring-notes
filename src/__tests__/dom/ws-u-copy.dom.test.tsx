@@ -208,6 +208,7 @@ jest.mock("@/lib/whiteboard/session-scene-draft", () => ({
   loadTutorSessionRecoveryDraft: jest.fn(() => null),
   clearSessionSceneDraft: jest.fn(),
   saveSessionBoardDocument: jest.fn(),
+  listSessionSceneDraftIds: jest.fn(() => []),
 }));
 
 jest.mock("@/hooks/useLiveAV", () => {
@@ -449,8 +450,11 @@ const tutorProps = {
   initialLastActiveAtIso: null,
   syncUrl: null as string | null,
   initialUserWantsRecording: false,
-  initialHasConsentSnapshot: true,
-  initialAllowAudioRecording: true,
+  initialConsentInput: {
+    hasConsentSnapshot: true,
+    toggles: { audio: true, whiteboard: true, notes: true },
+    notesForbidden: false,
+  },
 };
 
 const studentProps = {

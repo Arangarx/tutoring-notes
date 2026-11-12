@@ -37,6 +37,7 @@
 
 import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { SessionConsentInput } from "@/lib/recording/session-capabilities";
 
 // ----- Heavy / unrelated modules: minimal stubs ------------------
 
@@ -543,6 +544,10 @@ const baseProps = {
   initialUserWantsRecording: false,
 };
 
+function snapshotConsent(audio: boolean): SessionConsentInput {
+  return { hasConsentSnapshot: true, toggles: { audio, whiteboard: true, notes: true }, notesForbidden: false };
+}
+
 /** WbTopBarMicControl hidden meter host — sole consumer of workspaceAudio.meterBarRef. */
 function countMeterBarRefHosts(root: ParentNode = document): number {
   return root.querySelectorAll(".mynk-wb-mic-meter-hidden").length;
@@ -555,8 +560,7 @@ async function renderWorkspace(
       joinToken: string;
       initialSessionPhase: "PENDING" | "ACTIVE";
       sessionMode: "LIVE" | "IN_PERSON";
-      initialHasConsentSnapshot: boolean;
-      initialAllowAudioRecording: boolean | null;
+      initialConsentInput: SessionConsentInput;
     }
   > = {}
 ) {
@@ -828,8 +832,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     };
 
     await renderWorkspace({
-      initialHasConsentSnapshot: true,
-      initialAllowAudioRecording: true,
+      initialConsentInput: snapshotConsent(true),
       sessionMode: "LIVE",
     });
 
@@ -866,8 +869,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     };
 
     await renderWorkspace({
-      initialHasConsentSnapshot: true,
-      initialAllowAudioRecording: false,
+      initialConsentInput: snapshotConsent(false),
       sessionMode: "LIVE",
     });
 
@@ -1269,8 +1271,7 @@ describe("WS-U-FRAGILE 2.4/2.5 — tutor top-bar presentation", () => {
     await renderWorkspace({
       initialSessionPhase: "ACTIVE",
       initialUserWantsRecording: true,
-      initialHasConsentSnapshot: true,
-      initialAllowAudioRecording: true,
+      initialConsentInput: snapshotConsent(true),
       sessionMode: "LIVE",
     });
 
@@ -1290,8 +1291,7 @@ describe("WS-U-FRAGILE 2.4/2.5 — tutor top-bar presentation", () => {
     await renderWorkspace({
       initialSessionPhase: "ACTIVE",
       initialUserWantsRecording: true,
-      initialHasConsentSnapshot: true,
-      initialAllowAudioRecording: true,
+      initialConsentInput: snapshotConsent(true),
       sessionMode: "IN_PERSON",
       syncUrl: "",
     });
@@ -1307,8 +1307,7 @@ describe("WS-U-FRAGILE 2.4/2.5 — tutor top-bar presentation", () => {
     await renderWorkspace({
       initialSessionPhase: "ACTIVE",
       initialUserWantsRecording: true,
-      initialHasConsentSnapshot: true,
-      initialAllowAudioRecording: true,
+      initialConsentInput: snapshotConsent(true),
       sessionMode: "LIVE",
     });
 

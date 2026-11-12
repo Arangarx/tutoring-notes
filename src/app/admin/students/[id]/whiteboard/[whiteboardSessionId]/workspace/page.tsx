@@ -13,6 +13,10 @@ import { readServerLiveKey } from "@/lib/whiteboard/live-key";
 import { ServerLiveKeySeeder } from "@/components/whiteboard/ServerLiveKeySeeder";
 import { LiveIceServersProvider } from "@/components/av/LiveIceServersProvider";
 import { getTurnIceServers } from "@/lib/av/turn-ice-servers";
+import {
+  NO_SNAPSHOT_CONSENT_INPUT,
+  type SessionConsentInput,
+} from "@/lib/recording/session-capabilities";
 
 /**
  * Tutor-side live whiteboard workspace.
@@ -115,9 +119,12 @@ export default async function WhiteboardWorkspacePage({
           adminUser: {
             select: { displayName: true, email: true },
           },
+          notesForbidden: true,
           consentSnapshot: {
             select: {
               allowAudioRecording: true,
+              allowWhiteboardRecording: true,
+              allowNoteSending: true,
               allowLiveSession: true,
               consentRecordId: true,
             },
@@ -130,9 +137,20 @@ export default async function WhiteboardWorkspacePage({
 
   const syncEnabled = Boolean(env.WHITEBOARD_SYNC_URL);
 
-  const initialHasConsentSnapshot = detail.consentSnapshot != null;
-  const initialAllowAudioRecording =
-    detail.consentSnapshot?.allowAudioRecording ?? null;
+  // Page-load consent for the workspace's capabilities (the waiting room supplies the mode; Start's refrozen
+  // answer replaces this once Start returns). No snapshot keeps the legacy no-audio rule.
+  const snapshot = detail.consentSnapshot;
+  const initialConsentInput: SessionConsentInput = snapshot
+    ? {
+        hasConsentSnapshot: true,
+        toggles: {
+          audio: snapshot.allowAudioRecording,
+          whiteboard: snapshot.allowWhiteboardRecording,
+          notes: snapshot.allowNoteSending,
+        },
+        notesForbidden: detail.notesForbidden,
+      }
+    : NO_SNAPSHOT_CONSENT_INPUT;
 
   // Waiting room: when the one entry rule blocks BOTH modes (no consent record, unclaimed learner), the Start
   // control is disabled with the reason, before any click (consent wave C3a, decision 6). Online-only blocks
@@ -189,10 +207,9 @@ export default async function WhiteboardWorkspacePage({
       activatedAt={detail.activatedAt?.toISOString() ?? null}
       syncEnabled={syncEnabled}
       initialMode={detail.endedAt ? "review" : "live"}
-      initialAllowAudioRecording={initialAllowAudioRecording}
+      initialConsentInput={initialConsentInput}
       allowLiveSession={detail.consentSnapshot?.allowLiveSession ?? null}
       startBlockedReason={startBlockedReason}
-      initialHasConsentSnapshot={initialHasConsentSnapshot}
       studentLearnerProfileId={detail.student.learnerProfileId}
       initialIntent={initialIntent}
       initialReviewSurface={initialReviewSurface}

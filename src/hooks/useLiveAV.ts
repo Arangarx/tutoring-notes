@@ -86,6 +86,8 @@ import {
   type SignalingOptions,
 } from "@/lib/av/signaling";
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
+import type { MicAcquire } from "@/lib/recording/session-capabilities";
+import { logMicRequestBlocked, micRequestBlockedReason } from "@/lib/recording/mic-acquire-gate";
 import {
   disposeStreamTracks as disposeAvStreamTracks,
   fingerprintMediaTrackSettings,
@@ -280,6 +282,11 @@ export type UseLiveAVOptions = {
    * preference is re-applied without remounting the hook.
    */
   learnerAvGeneration?: number;
+  /**
+   * `capabilities.mic.acquire` (consent wave § 4.1). Unless `"yes"`, every mic opener here (`requestMic`,
+   * `requestMicAndCam`, the device swaps) returns without calling `getUserMedia`. Default `"yes"`.
+   */
+  micAcquire?: MicAcquire;
   /** Test-only override of `navigator.mediaDevices.getUserMedia`. */
   _getUserMedia?: (
     constraints: MediaStreamConstraints
@@ -781,6 +788,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     swapMicDeviceBySlot: swapMicBySlotFromRecorder,
     learnerProfileId,
     learnerAvGeneration,
+    micAcquire = "yes",
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
@@ -788,6 +796,19 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   } = opts;
 
   const sid = sessionId ?? "?";
+
+  // Read through a ref so the mic openers keep stable identities when the capability changes.
+  const micAcquireRef = useRef<MicAcquire>(micAcquire);
+  micAcquireRef.current = micAcquire;
+  const micBlocked = useCallback(
+    (source: string): boolean => {
+      const reason = micRequestBlockedReason(micAcquireRef.current);
+      if (!reason) return false;
+      logMicRequestBlocked({ sessionId, reason, source });
+      return true;
+    },
+    [sessionId]
+  );
   // Stable per session. A fresh object literal here every render (the prior
   // `opts.log ?? {…}` form) churned `log`'s identity → `enumerateDevicesCore`
   // (deps [log]) → `refreshVideoDevices` → the mount/devicechange/focus effect
@@ -1100,6 +1121,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   const requestMic = useCallback(
     async (): Promise<void> => {
+      if (micBlocked("requestMic")) return;
       if (localAudioStreamRef.current) return; // already acquired (own or external)
       if (externalAudioStream) return; // external stream will wire via effect
       if (micInFlightRef.current) return micInFlightRef.current;
@@ -1261,6 +1283,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       persistLearnerMicChoice,
       clearPersistedLearnerMicChoice,
       wireStudentPublishPath,
+      micBlocked,
     ]
   );
 
@@ -1435,6 +1458,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   );
 
   const requestMicAndCam = useCallback(async (): Promise<void> => {
+    if (micBlocked("requestMicAndCam")) {
+      if (!localVideoStreamRef.current) await requestCam();
+      return;
+    }
     if (externalAudioStream) {
       if (!localVideoStreamRef.current) await requestCam();
       return;
@@ -1598,7 +1625,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     });
     avBundleInFlightRef.current = inFlight;
     return inFlight;
-  }, [audioConstraints, externalAudioStream, enumerateDevicesCore, requestCam, videoConstraints, learnerProfileId, persistLearnerMicChoice, wireStudentPublishPath]);
+  }, [audioConstraints, externalAudioStream, enumerateDevicesCore, requestCam, videoConstraints, learnerProfileId, persistLearnerMicChoice, wireStudentPublishPath, micBlocked]);
 
   // ---------------------------------------------------------------
   // Effect: pre-select learner's persisted mic device on mount / rejoin
@@ -2854,6 +2881,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       slotIndex: number,
       opts?: { force?: boolean }
     ): Promise<void> => {
+      if (micBlocked("setMicDeviceBySlot")) return;
       const entry = audioDevicesRef.current[slotIndex];
       if (!entry) {
         log.warn(`event=set-mic-slot ignored invalid_slot=${slotIndex}`);
@@ -3070,11 +3098,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       log,
       enumerateDevicesCore,
       persistLearnerMicChoice,
+      micBlocked,
     ]
   );
 
   const setMicDevice = useCallback(
     async (deviceId: string): Promise<void> => {
+      if (micBlocked("setMicDevice")) return;
       const slots = audioDevicesRef.current;
       const slotIdx = slots.findIndex((d) => d.deviceId === deviceId);
       if (slotIdx >= 0) {
@@ -3205,6 +3235,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       log,
       setMicDeviceBySlot,
       persistLearnerMicChoice,
+      micBlocked,
     ]
   );
 

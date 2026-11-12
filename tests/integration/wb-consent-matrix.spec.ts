@@ -18,7 +18,7 @@
  * Run (after un-fixme): npx playwright test tests/integration/wb-consent-matrix.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect, type APIRequestContext, type BrowserContext } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import {
@@ -28,7 +28,25 @@ import {
   seedHarnessBlobs,
   type ConsentInvokeAction,
 } from "../helpers/consent-harness";
-import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
+import {
+  drawTestStrokeOnRole,
+  openTutorAndStudent,
+  seedWbLiveSyncSession,
+  waitForSceneElementIdsContaining,
+  waitForWbE2eBridge,
+} from "./whiteboard-live-sync.helpers";
+import { blobIntegrationEnabled, blobIntegrationSkipMessage } from "../helpers/blob-gate";
+import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
+import {
+  audioRequests,
+  chooseMode,
+  endFromWorkspace,
+  laneCreateLines,
+  micBlockedLines,
+  openTutorRoom,
+  seedConsentSession,
+  startFromWaitingRoom,
+} from "../helpers/consent-tutor-room";
 
 // Lane literals are the stored wire format (session-capabilities.ts helpers build the same strings); tests state them as data.
 const TUTOR_LANE = "tutor:mic";
@@ -266,24 +284,79 @@ test.describe("consent 6c: Audio", {
     }
   );
   // Oracle: No lane recorder before the Start response is adopted
-  test.fixme(
+  // Audio ON (the only mode where a learner lane may ever exist): during PENDING the learner is connected and sending
+  // audio, but no lane recorder is created until the tutor adopts Start's capabilities. Positive control: it is
+  // created after Start, so the PENDING silence is not vacuous.
+  test(
     "A2b: learner lane is not created before capability is known",
-    async () => {
-      // pending: wave that owns A2b
+    { tag: [TAG.WB_AV] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: { allowAudioRecording: true } });
+      const tutorLines: string[] = [];
+      let contexts = 0;
+      const pair = await openTutorAndStudent(browser, s, {
+        ensureFollow: false,
+        // The tutor context is prepared first; only its console carries the lane recorder.
+        prepareContext: async (ctx: BrowserContext) => {
+          if (contexts++ === 0) ctx.on("console", (m) => tutorLines.push(m.text()));
+        },
+      });
+      try {
+        await chooseMode(pair.tutorPage, "LIVE");
+        await pair.tutorPage.waitForTimeout(8_000);
+        expect(laneCreateLines(tutorLines)).toEqual([]);
+        await startFromWaitingRoom(pair.tutorPage);
+        await expect.poll(() => laneCreateLines(tutorLines).length, { timeout: 30_000 }).toBeGreaterThan(0);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Spy count of audio 'getUserMedia' = 0; no segments
-  test.fixme(
+  // The recorder is driven through a speech → silence cut while ACTIVE, so an open mic would have produced a segment.
+  test(
     "A3: audio off, in person: no audio is saved and the mic is never opened",
-    async () => {
-      // pending: wave that owns A3
+    { tag: [TAG.WB_AV] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: { allowAudioRecording: false } });
+      const room = await openTutorRoom(browser, s, { prepare: (_ctx, page) => injectVadOverrides(page) });
+      try {
+        await chooseMode(room.page, "IN_PERSON");
+        await startFromWaitingRoom(room.page);
+        await room.page.waitForTimeout(2_000);
+        await driveVadSilenceCut(room.page);
+        await endFromWorkspace(room.page);
+        expect(await audioRequests(room.page)).toBe(0);
+        expect(await recordingsOf(s.whiteboardSessionId)).toEqual([]);
+        expect(await chunksOf(s.whiteboardSessionId)).toEqual([]);
+      } finally {
+        await room.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Same spy
-  test.fixme(
+  // No click: the waiting room's own preview (the recorder's mount-time acquire) is what is blocked, and it says so.
+  test(
     "A4: audio off, in person: waiting-room mic preview does not open the mic",
-    async () => {
-      // pending: wave that owns A4
+    { tag: [TAG.WB_AV] },
+    async ({ browser }) => {
+      test.setTimeout(180_000);
+      const s = await seedConsentSession({ switches: { allowAudioRecording: false }, mode: "IN_PERSON" });
+      const room = await openTutorRoom(browser, s);
+      try {
+        await chooseMode(room.page, "IN_PERSON");
+        await room.page.waitForTimeout(6_000);
+        expect(await audioRequests(room.page)).toBe(0);
+        expect(micBlockedLines(room.consoleLines).length).toBeGreaterThan(0);
+        await expect(room.page.getByTestId("wb-waiting-overlay")).toBeVisible();
+      } finally {
+        await room.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: HTTP status + DB
@@ -407,10 +480,35 @@ test.describe("consent 6c: Audio", {
     }
   );
   // Oracle: Rows
-  test.fixme(
+  // Positive control for the in-person gate: with audio on, the room's voices are one tutor-mic lane that is saved
+  // and transcribed (never refused), and no learner lane exists.
+  test(
     "A7: audio on, in person: voices are captured on the tutor mic and transcribed",
-    async () => {
-      // pending: wave that owns A7
+    { tag: [TAG.WB_AV] },
+    async ({ browser }) => {
+      test.setTimeout(300_000);
+      test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
+      const s = await seedConsentSession({ switches: { allowAudioRecording: true } });
+      const room = await openTutorRoom(browser, s, { prepare: (_ctx, page) => injectVadOverrides(page) });
+      try {
+        await chooseMode(room.page, "IN_PERSON");
+        await expect.poll(() => audioRequests(room.page), { timeout: 20_000 }).toBeGreaterThan(0);
+        await startFromWaitingRoom(room.page);
+        await room.page.waitForTimeout(2_000);
+        await driveVadSilenceCut(room.page);
+        await endFromWorkspace(room.page);
+        const id = s.whiteboardSessionId;
+        await expect.poll(async () => (await recordingsOf(id)).length, { timeout: 60_000 }).toBeGreaterThan(0);
+        for (const r of await recordingsOf(id)) expect(r.streamId).toBe(TUTOR_LANE);
+        await expect.poll(async () => (await chunksOf(id)).length, { timeout: 60_000 }).toBeGreaterThan(0);
+        for (const c of await chunksOf(id)) {
+          expect(c.streamId).toBe(TUTOR_LANE);
+          expect(c.status).not.toBe("refused");
+        }
+      } finally {
+        await room.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Stored 'streamId' / 'speakerId' unchanged after sweep and after 'kickSessionChunksAction'; refused row status terminal
@@ -497,10 +595,32 @@ test.describe("consent 6e: Whiteboard", {
     }
   );
   // Oracle: Relay peer state; scene after reload
-  test.fixme(
+  // CHARACTERIZATION (C3b keeps it green): "whiteboard off" only stops storing the board after the session; during
+  // the session the live board, a tutor reload and a student rejoin all still carry the strokes.
+  test(
     "W2: whiteboard off: board works live, including a reload and a student rejoin",
-    async () => {
-      // pending: wave that owns W2
+    async ({ browser }) => {
+      test.setTimeout(300_000);
+      const s = await seedConsentSession({ switches: { allowWhiteboardRecording: false } });
+      const pair = await openTutorAndStudent(browser, s, { ensureFollow: false, autoStart: true });
+      try {
+        const id = `w2-tutor-${Date.now()}`;
+        await drawTestStrokeOnRole(pair.tutorPage, "tutor", id, 120, 120, 320, 220);
+        await waitForSceneElementIdsContaining(pair.studentPage, "student", id, 20_000);
+
+        await pair.tutorPage.reload({ waitUntil: "domcontentloaded" });
+        await expect(pair.tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({ timeout: 90_000 });
+        await waitForWbE2eBridge(pair.tutorPage, "tutor");
+        await waitForSceneElementIdsContaining(pair.tutorPage, "tutor", id, 45_000);
+
+        await pair.studentPage.reload({ waitUntil: "domcontentloaded" });
+        await expect(pair.studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({ timeout: 90_000 });
+        await waitForWbE2eBridge(pair.studentPage, "student");
+        await waitForSceneElementIdsContaining(pair.studentPage, "student", id, 45_000);
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Audio scrubber 200

@@ -8,7 +8,7 @@
  * Run (after un-fixme): npx playwright test tests/integration/consent-entry.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import { TEST_ADMIN } from "../visual/helpers";
@@ -37,7 +37,17 @@ import {
   readConsentSnapshots,
   saveFamilyConsentVersion,
 } from "../helpers/consent-db-oracle";
-import { seedWbPendingLiveSyncSession, waitForWbE2eBridge } from "./whiteboard-live-sync.helpers";
+import { openTutorAndStudent, seedWbPendingLiveSyncSession, waitForWbE2eBridge } from "./whiteboard-live-sync.helpers";
+import { blobIntegrationEnabled } from "../helpers/blob-gate";
+import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
+import {
+  chooseMode,
+  endFromWorkspace,
+  laneCreateLines,
+  seedConsentSession,
+  setFamilySwitches,
+  startFromWaitingRoom,
+} from "../helpers/consent-tutor-room";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
@@ -455,10 +465,68 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     }
   );
   // Oracle: Blob store listing has no learner-lane object; no 'speaker:*' row in 'SessionRecording' or 'TranscriptChunk'; client adopted the response
-  test.fixme(
+  // The page loads with audio on (a learner lane would be armed from page-load capabilities); the family turns audio off
+  // before Start. Start refreezes audio off, and the tutor client must act on THAT answer: no learner lane recorder, no
+  // learner-lane row, no blob outside the tutor lane; the tutor banner names the adopted mode.
+  test(
     "S3: consent flipped between page load and Start: Start returns the refrozen capabilities and no learner lane or blob is created",
-    async () => {
-      // pending: wave that owns S3
+    { tag: [TAG.WB_AV, TAG.WB_RECORDING] },
+    async ({ browser, request }) => {
+      test.setTimeout(300_000);
+      const s = await seedConsentSession({ switches: { allowAudioRecording: true } });
+      const tutorLines: string[] = [];
+      let contexts = 0;
+      const pair = await openTutorAndStudent(browser, s, {
+        ensureFollow: false,
+        // Tutor context is prepared first; only the tutor runs lane recorders.
+        prepareContext: async (ctx: BrowserContext) => {
+          if (contexts++ === 0) {
+            ctx.on("console", (m) => tutorLines.push(m.text()));
+            await injectVadOverrides(ctx);
+          }
+        },
+      });
+      try {
+        const id = s.whiteboardSessionId;
+        await chooseMode(pair.tutorPage, "LIVE");
+        await setFamilySwitches(s, { allowAudioRecording: false }, { snapshot: false });
+        const blobsBefore = blobIntegrationEnabled() ? new Set((await listHarnessBlobs(request)).map((o) => o.key)) : null;
+
+        await startFromWaitingRoom(pair.tutorPage);
+        await expect(pair.tutorPage.getByTestId("wb-audio-consent-banner")).toContainText("Student audio not recorded");
+        await pair.tutorPage.waitForTimeout(2_000);
+        await driveVadSilenceCut(pair.tutorPage);
+        await pair.tutorPage.waitForTimeout(6_000);
+        await endFromWorkspace(pair.tutorPage);
+
+        expect(laneCreateLines(tutorLines)).toEqual([]);
+        const rows = await withPrisma((p) =>
+          p.sessionRecording.findMany({ where: { whiteboardSessionId: id }, select: { streamId: true, blobUrl: true } })
+        );
+        const chunks = await withPrisma((p) =>
+          p.transcriptChunk.findMany({ where: { sessionId: id }, select: { streamId: true, chunkBlobUrl: true } })
+        );
+        for (const r of rows) expect(r.streamId).toBe("tutor:mic");
+        for (const c of chunks) expect(c.streamId ?? "tutor:mic").toBe("tutor:mic");
+        if (blobsBefore) {
+          // The session's concat audio is assembled from the recordings above (all tutor:mic), so it is tutor audio.
+          const { concatBlobUrl } = await withPrisma((p) =>
+            p.whiteboardSession.findUniqueOrThrow({ where: { id }, select: { concatBlobUrl: true } })
+          );
+          const tutorUrls = [...rows.map((r) => r.blobUrl), ...chunks.map((c) => c.chunkBlobUrl), concatBlobUrl].map(
+            (u) => decodeURIComponent(u ?? "")
+          );
+          const stray = (await listHarnessBlobs(request))
+            .map((o) => o.key)
+            .filter((k) => !blobsBefore.has(k))
+            .filter((k) => !/-events\.json|-snapshot\.png/.test(k) && !k.includes("/assets/"))
+            .filter((k) => !tutorUrls.some((u) => u.includes(k)));
+          expect(stray).toEqual([]);
+        }
+      } finally {
+        await pair.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Response vs DB row

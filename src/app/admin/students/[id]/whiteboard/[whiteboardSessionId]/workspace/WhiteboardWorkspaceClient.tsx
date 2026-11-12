@@ -71,12 +71,16 @@ import {
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
 import {
+  NO_SNAPSHOT_CONSENT_INPUT,
   TUTOR_MIC_STREAM_ID,
   deriveSessionCapabilities,
   deriveWbCaptureActive,
   resolveRemoteRecordingGainLinear,
   shouldAttachRemoteStreamToRecordingMixdown,
   studentMicStreamId,
+  type CapabilitySessionMode,
+  type SessionCapabilities,
+  type SessionConsentInput,
 } from "@/lib/recording/session-capabilities";
 import {
   createSessionMsClock,
@@ -291,6 +295,7 @@ import {
   loadTutorSessionRecoveryDraft,
   saveSessionBoardDocument,
 } from "@/lib/whiteboard/session-scene-draft";
+import { clearEndedUnkeptBoardCopies } from "@/lib/whiteboard/ended-session-device-copies";
 import {
   WhiteboardWorkspaceAudioBridge,
   type WhiteboardWorkspaceAudioBridgeHandle,
@@ -331,16 +336,14 @@ type Props = {
   /** ISO timestamp of PENDING→ACTIVE flip, or null. */
   activatedAt?: string | null;
   /**
-   * Frozen session audio-recording consent from SessionConsentSnapshot.
-   * null = no snapshot (unclaimed / no ConsentRecord). Consumed in Block B Commit 2+.
+   * Consent behind the page-load capabilities (everything but the mode, which the waiting room picks).
+   * Default: no snapshot (legacy, no audio). Replaced by Start's refrozen capabilities once Start answers.
    */
-  initialAllowAudioRecording?: boolean | null;
+  initialConsentInput?: SessionConsentInput;
   /** Effective allowLiveSession from the session consent snapshot. Null shows Online. */
   allowLiveSession?: boolean | null;
   /** Tutor waiting room: why neither mode can start (no consent record, unclaimed). Disables Start and shows the reason. */
   startBlockedReason?: EntryBlockReason | null;
-  /** True when SessionConsentSnapshot exists for this session. Consumed in Block B Commit 2+. */
-  initialHasConsentSnapshot?: boolean;
   /**
    * Claimed student's LearnerProfile id (tutor path). Required for per-speaker
    * transcription lane attribution — omitted when student is unclaimed.
@@ -511,10 +514,9 @@ export function WhiteboardWorkspaceClient({
   initialSessionPhase = "ACTIVE",
   sessionMode: initialSessionMode,
   activatedAt: _activatedAt,
-  initialAllowAudioRecording = null,
+  initialConsentInput = NO_SNAPSHOT_CONSENT_INPUT,
   allowLiveSession = null,
   startBlockedReason = null,
-  initialHasConsentSnapshot = false,
   studentLearnerProfileId = null,
   identityKey,
   learnerProfileId,
@@ -1621,21 +1623,29 @@ export function WhiteboardWorkspaceClient({
     initialSessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE"
   );
 
-  // M-3: derive policy from locally-selected mode (waiting-room flips) + frozen consent.
-  const audioCapturePolicy = useMemo(
-    () =>
-      // Only `audio.mode` is consumed here today. The page still passes just the audio toggle, so the other two
-      // toggles are neutral (they cannot change `audio.mode`); the single `sessionCapabilities` prop replaces
-      // these three ad hoc props in C3b/C3c.
-      deriveSessionCapabilities({
-        // A snapshot with an unreadable audio toggle (null) is not a usable snapshot: treat it as legacy (no audio).
-        hasConsentSnapshot: initialHasConsentSnapshot && initialAllowAudioRecording !== null,
-        toggles: { audio: initialAllowAudioRecording === true, whiteboard: true, notes: true },
-        sessionMode,
-        notesForbidden: false,
-      }).audio.mode,
-    [initialAllowAudioRecording, initialHasConsentSnapshot, sessionMode]
-  );
+  // Consent wave C3b (§ 4.1): the waiting room's mode is UNKNOWN until the tutor picks one (the overlay's default
+  // highlight is not a choice). Once Start answers, its refrozen capabilities are adopted and nothing derived from
+  // page-load consent arms anything after that.
+  const [modeChosen, setModeChosen] = useState(initialSessionPhase !== "PENDING");
+  const [adoptedCapabilities, setAdoptedCapabilities] = useState<SessionCapabilities | null>(null);
+  const capabilityMode: CapabilitySessionMode = phaseActive || modeChosen ? sessionMode : "UNKNOWN";
+  const { sessionCapabilities, micAcquire: tutorMicAcquire } = useMemo(() => {
+    if (adoptedCapabilities) {
+      return { sessionCapabilities: adoptedCapabilities, micAcquire: adoptedCapabilities.mic.acquire };
+    }
+    // Capture, banner and board policy follow the selected mode (M-3); the mic waits for an explicit choice.
+    return {
+      sessionCapabilities: deriveSessionCapabilities({ ...initialConsentInput, sessionMode }),
+      micAcquire: deriveSessionCapabilities({ ...initialConsentInput, sessionMode: capabilityMode }).mic.acquire,
+    };
+  }, [adoptedCapabilities, initialConsentInput, sessionMode, capabilityMode]);
+  const audioCapturePolicy = sessionCapabilities.audio.mode;
+  const sessionCapabilitiesRef = useRef(sessionCapabilities);
+  sessionCapabilitiesRef.current = sessionCapabilities;
+  const initialHasConsentSnapshot = initialConsentInput.hasConsentSnapshot;
+  // The learner's mic gate is C3c; until then the learner device keeps today's behavior.
+  const micAcquireForRole = role === "tutor" ? tutorMicAcquire : "yes";
+  const tutorMicLocked = role === "tutor" && tutorMicAcquire !== "yes";
 
   const audioConsentBannerMessage = useMemo(() => {
     if (role !== "tutor") return null;
@@ -2138,6 +2148,7 @@ export function WhiteboardWorkspaceClient({
     // timer stays at e.g. "12:34". Uses the server-truth value from SSR.
     initialElapsedSeconds: Math.floor(initialActiveMs / 1000),
     getAudioMs: () => getAudioMsRef.current(),
+    micAcquire: micAcquireForRole,
   });
   const workspaceAudioRef = useRef(workspaceAudio);
   workspaceAudioRef.current = workspaceAudio;
@@ -2273,6 +2284,7 @@ export function WhiteboardWorkspaceClient({
       role === "tutor" ? workspaceAudio.swapMicDeviceBySlot : undefined,
     learnerProfileId: role === "student" ? learnerProfileId : undefined,
     learnerAvGeneration: role === "student" ? studentAvGeneration : undefined,
+    micAcquire: micAcquireForRole,
   });
 
   // Stable handle to the latest liveAv return so reconcile effects and A/V
@@ -2935,8 +2947,11 @@ export function WhiteboardWorkspaceClient({
       return null;
     }
   }, []);
+  // A learner lane exists only once capability is known: ACTIVE (Start's adopted answer, or the frozen snapshot on
+  // reload), never in the waiting room (A2b).
   const perSpeakerLanesEnabled =
     role === "tutor" &&
+    phaseActive &&
     audioCapturePolicy === "full" &&
     studentLearnerProfileId != null &&
     studentLearnerProfileId.length > 0;
@@ -3450,6 +3465,16 @@ export function WhiteboardWorkspaceClient({
     flushThrottledFrameNow();
     flushDocumentBroadcastNow();
   };
+
+  // Consent Q6: once per workspace load, drop this device's copies of ended whiteboard-off sessions (any student).
+  useEffect(() => {
+    if (role !== "tutor" || !adminUserId) return;
+    let cancelled = false;
+    void clearEndedUnkeptBoardCopies(adminUserId, whiteboardSessionId, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [role, adminUserId, whiteboardSessionId]);
 
   useEffect(() => {
     if (recorder.checkpointStatus !== "error" || !recorder.checkpointError) {
@@ -4448,7 +4473,14 @@ export function WhiteboardWorkspaceClient({
         return;
       }
       setSessionStartError(null);
+      // Adopt Start's refrozen answer in the same render that flips the phase, so nothing (recorder, mic, lane
+      // recorder, checkpoint) ever arms on ACTIVE from the page-load capabilities.
+      setAdoptedCapabilities(started.capabilities);
+      setSessionMode(started.sessionMode);
       setSessionPhase("ACTIVE");
+      console.info(
+        `[cns] wbsid=${whiteboardSessionId} action=capabilities_adopted audio=${started.capabilities.audio.mode} wb=${started.capabilities.whiteboard.persist} mic=${started.capabilities.mic.acquire} mode=${started.sessionMode.toLowerCase()}`
+      );
       console.info(
         `[wtr] wbsid=${whiteboardSessionId} role=${role} action=live_entered mode=${mode.toLowerCase()}`
       );
@@ -4600,14 +4632,24 @@ export function WhiteboardWorkspaceClient({
       // patience clock.
       setEndingState("ending");
       await recorder.flushServerPersist();
-      const eventsJson = recorder.buildFinalEventsJson();
-      const upload = await uploadWhiteboardEvents({
-        whiteboardSessionId,
-        studentId,
-        eventsJson,
-      });
-      if (!upload.ok) {
-        throw new Error(upload.error);
+      // Whiteboard off (consent § 3): the board is not stored after the session, so the client uploads no events
+      // log and no snapshot image. The server finalize does not depend on either (both are optional inputs).
+      const boardPersists = sessionCapabilitiesRef.current.whiteboard.persist;
+      if (!boardPersists) {
+        console.info(
+          `[slc] wbsid=${whiteboardSessionId} action=board_upload_skipped reason=whiteboard_off`
+        );
+      }
+      let upload: Awaited<ReturnType<typeof uploadWhiteboardEvents>> | null = null;
+      if (boardPersists) {
+        upload = await uploadWhiteboardEvents({
+          whiteboardSessionId,
+          studentId,
+          eventsJson: recorder.buildFinalEventsJson(),
+        });
+        if (!upload.ok) {
+          throw new Error(upload.error);
+        }
       }
 
       // Step 5b — best-effort snapshot PNG. Phase 1c (Pillar 4
@@ -4618,6 +4660,7 @@ export function WhiteboardWorkspaceClient({
       // when `snapshotBlobUrl` is null. See snapshot-png.ts header
       // for the reliability rationale.
       let snapshotBlobUrl: string | undefined;
+      if (boardPersists) {
       try {
         const snap = await generateSessionSnapshotPng(
           excalidrawAPIRef.current,
@@ -4650,13 +4693,14 @@ export function WhiteboardWorkspaceClient({
           (snapErr as Error)?.message ?? snapErr
         );
       }
+      }
 
       // Step 6 — WS-C server finalize: assemble from backend + delegate to
       // endWhiteboardSession (consent/erasure/token revoke inherited).
       const finalizeResult = await finalizeWhiteboardSessionFromBackend(
         whiteboardSessionId,
         {
-          finalEventsBlobUrl: upload.ok ? upload.blobUrl : undefined,
+          finalEventsBlobUrl: upload?.ok ? upload.blobUrl : undefined,
           snapshotBlobUrl,
           extraSegments: segments,
         }
@@ -5872,7 +5916,7 @@ export function WhiteboardWorkspaceClient({
     const micDisabled =
       role === "student"
         ? studentAvPickerDisabled || liveAv.hasMicPermission === "denied"
-        : endingBusy || liveAv.hasMicPermission === "denied";
+        : endingBusy || liveAv.hasMicPermission === "denied" || tutorMicLocked;
     const camDisabled =
       role === "student"
         ? studentAvPickerDisabled ||
@@ -6700,7 +6744,9 @@ export function WhiteboardWorkspaceClient({
         void liveAv.setMicDeviceBySlot(slot, { force: true })
       }
       onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
-      disabled={!clientMounted || (role === "student" ? studentAvPickerDisabled : endingBusy)}
+      disabled={
+        !clientMounted || (role === "student" ? studentAvPickerDisabled : endingBusy || tutorMicLocked)
+      }
     />
   );
 
@@ -7098,7 +7144,7 @@ export function WhiteboardWorkspaceClient({
             onPickMicSlot={(slot) =>
               void liveAv.setMicDeviceBySlot(slot, { force: true })
             }
-            disabled={!clientMounted || endingBusy}
+            disabled={!clientMounted || endingBusy || tutorMicLocked}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}
@@ -7817,7 +7863,10 @@ export function WhiteboardWorkspaceClient({
         isStarting={isStarting}
         startError={sessionStartError}
         onStart={() => void activateSessionLive(sessionMode)}
-        onSessionModeChange={(m) => setSessionMode(m)}
+        onSessionModeChange={(m) => {
+          setSessionMode(m);
+          setModeChosen(true);
+        }}
         allowLiveSession={allowLiveSession}
         startBlockedMessage={
           role === "tutor" && startBlockedReason
