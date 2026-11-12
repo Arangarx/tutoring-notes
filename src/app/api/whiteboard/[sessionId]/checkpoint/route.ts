@@ -5,6 +5,7 @@ import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { orgForcedEndUploadOpen } from "@/lib/org-session-access";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import { holdPoint } from "@/lib/test-seams";
 
 /**
  * Whiteboard session live-persist + legacy checkpoint upload.
@@ -181,6 +182,8 @@ async function handleBatchPersist(
       { status: 400 }
     );
   }
+
+  await holdPoint("checkpoint:batch:before_txn", sessionId);
 
   await withDbRetry(
     () =>

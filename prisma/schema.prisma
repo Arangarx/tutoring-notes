@@ -536,6 +536,17 @@ model WhiteboardSession {
   /// the server sends anywhere but the authenticated participant's page.
   liveKeyEnc String?
 
+  /// Consent wave C4b — board purge for a whiteboard-off session. The intent: set inside the End
+  /// transaction (or the shared stale stamp) only when the frozen capability says the board is not
+  /// kept. Null on every session that predates the wave, so those are never purged.
+  boardPurgeRequestedAt DateTime?
+  /// Pass 1 done. Pass 2 is due `BOARD_PURGE_SECOND_PASS_DELAY_MS` after this stamp.
+  boardPurgeFirstPassAt DateTime?
+  /// Stamped on every purge attempt; the sweep orders by it so a failing row rotates to the back.
+  boardPurgeAttemptedAt DateTime?
+  /// Both passes done.
+  boardPurgedAt         DateTime?
+
   createdAt  DateTime    @default(now())
   costEvents CostEvent[]
   productEvents ProductEvent[]
@@ -543,6 +554,7 @@ model WhiteboardSession {
   @@index([adminUserId])
   @@index([studentId])
   @@index([noteId])
+  @@index([boardPurgeRequestedAt])
 }
 
 /// ~1s batched whiteboard event persistence (WS-B, wave 0).
