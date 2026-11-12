@@ -215,6 +215,22 @@ export function formatConsentToggles(t: ConsentToggleCeiling | null): string {
   return `live:${f(t.allowLiveSession)},audio:${f(t.allowAudioRecording)},wb:${f(t.allowWhiteboardRecording)},notes:${f(t.allowNoteSending)}`;
 }
 
+/** The `[cns]` `changed=` token: which switches differ between two freezes (`live,audio,wb,notes`), or `none`. */
+export function changedConsentToggleKeys(
+  before: ConsentToggleCeiling | null,
+  after: ConsentToggleCeiling
+): string {
+  if (!before) return "none";
+  const keys: Array<[keyof ConsentToggleCeiling, string]> = [
+    ["allowLiveSession", "live"],
+    ["allowAudioRecording", "audio"],
+    ["allowWhiteboardRecording", "wb"],
+    ["allowNoteSending", "notes"],
+  ];
+  const changed = keys.filter(([k]) => before[k] !== after[k]).map(([, label]) => label);
+  return changed.length > 0 ? changed.join(",") : "none";
+}
+
 /**
  * End of a session that never started (still PENDING under the session row lock): the live
  * effective record at End becomes the frozen snapshot (plan R1, § 2.6). Call only AFTER the End's

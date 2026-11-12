@@ -199,15 +199,24 @@ export async function orgInstructorAdmitted(
   return count > 0;
 }
 
-/** Row lock around the existing Organization SELECT … FOR UPDATE. */
+/**
+ * Row lock around the existing Organization SELECT … FOR UPDATE.
+ * `opts.timeout` is the interactive transaction timeout in ms (Prisma default 5 s when omitted). A caller whose
+ * transaction does more than the lock itself passes an explicit one: the org Start path passes 10 s
+ * (consent wave C3a, SF-E); the 30 s org-stamp callers are C4b.
+ */
 export async function withOrgRowLock<T>(
   organizationId: string,
-  fn: (tx: Prisma.TransactionClient) => Promise<T>
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  opts?: { timeout?: number }
 ): Promise<T> {
-  return db.$transaction(async (tx) => {
-    await lockOrg(tx, organizationId);
-    return fn(tx);
-  });
+  return db.$transaction(
+    async (tx) => {
+      await lockOrg(tx, organizationId);
+      return fn(tx);
+    },
+    opts?.timeout !== undefined ? { timeout: opts.timeout } : undefined
+  );
 }
 
 async function lockMembers(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {

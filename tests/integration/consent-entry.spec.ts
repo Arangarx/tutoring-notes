@@ -8,7 +8,7 @@
  * Run (after un-fixme): npx playwright test tests/integration/consent-entry.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import { TEST_ADMIN } from "../visual/helpers";
@@ -20,13 +20,24 @@ import {
   submitTotpOnVerifyPage,
   waitFor2faVerifyChallenge,
 } from "./identity/tutor-2fa-login.helpers";
-import { invokeConsentAction } from "../helpers/consent-harness";
 import {
+  armHold,
+  expectReleasedByTest,
+  invokeConsentAction,
+  listHarnessBlobs,
+  releaseHold,
+  resetSeams,
+  waitUntilParked,
+} from "../helpers/consent-harness";
+import { seedStartFixture, type StartFixture } from "../helpers/consent-start-fixture";
+import type { SessionCapabilities } from "../../src/lib/recording/session-capabilities";
+import {
+  countBackendsWaitingOnLock,
   dropFamilyConsentVersionsAbove,
   readConsentSnapshots,
   saveFamilyConsentVersion,
 } from "../helpers/consent-db-oracle";
-import { seedWbPendingLiveSyncSession } from "./whiteboard-live-sync.helpers";
+import { seedWbPendingLiveSyncSession, waitForWbE2eBridge } from "./whiteboard-live-sync.helpers";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
@@ -40,6 +51,51 @@ async function withPrisma<T>(run: (prisma: PrismaClient) => Promise<T>): Promise
   }
 }
 
+
+const START_HOLD = "start:tx:between_consent_read_and_update" as const;
+const END_HOLD = "end:tx:before_update" as const;
+
+/** Spec-typed literal (org UX W4 copy spec): the tutor line for a parent-held learner with no record. */
+const NO_RECORD_PARENT_LINE = "The parent hasn't finished privacy preferences yet.";
+
+type StartResult =
+  | {
+      ok: true;
+      phase: "active";
+      sessionMode: "LIVE" | "IN_PERSON";
+      capabilities: SessionCapabilities;
+    }
+  | { ok: false; reason: string };
+
+/** Runs the real `startWhiteboardSession` action as the signed-in tutor (the response is the action's own return value). */
+async function startVia(
+  request: APIRequestContext,
+  sessionId: string,
+  sessionMode?: "LIVE" | "IN_PERSON"
+): Promise<StartResult> {
+  const res = await invokeConsentAction(request, "startSession", sessionId, sessionMode ? { sessionMode } : {});
+  expect(res.status(), await res.text()).toBe(200);
+  return ((await res.json()) as { result: StartResult }).result;
+}
+
+/** The session row's phase fields, read straight from Postgres. */
+function sessionRow(id: string) {
+  return withPrisma((p) =>
+    p.whiteboardSession.findUniqueOrThrow({
+      where: { id },
+      select: { sessionPhase: true, activatedAt: true, endedAt: true },
+    })
+  );
+}
+
+/** Opens the tutor workspace for a PENDING session and waits until the waiting room is hydrated. */
+async function openWorkspaceWaitingRoom(page: Page, f: StartFixture): Promise<void> {
+  await page.goto(`/admin/students/${f.studentId}/whiteboard/${f.whiteboardSessionId}/workspace`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible({ timeout: 90_000 });
+  await waitForWbE2eBridge(page, "tutor");
+}
 // ---------------------------------------------------------------------------
 // 6a. Entry (online switch)
 // ---------------------------------------------------------------------------
@@ -303,17 +359,92 @@ test.describe("consent 6b: Start and refreeze (B5)", {
   tag: [TAG.WB_CONSENT, TAG.WB_PRESENCE, TAG.WB_SYNC],
 }, () => {
   // Oracle: Arm → park → release (B3). Arm 'start:tx:between_consent_read_and_update' with 'parkFirstN: 1'; fire Start A (it parks inside its transaction, before its update); wait until parked; flip a consent toggle through the real …
-  test.fixme(
+  test(
     "S1: double Start (two tabs): the second Start does not refreeze an ACTIVE session",
-    async () => {
-      // pending: wave that owns S1
+    async ({ request }) => {
+      test.setTimeout(90_000);
+      // Plain-owned tutor (SF-B): a parked Start must not hold an org lock.
+      const f = await seedStartFixture({ record: {}, snapshot: false });
+      const id = f.whiteboardSessionId;
+      try {
+        await armHold(request, { name: START_HOLD, sessionId: id, parkFirstN: 1 });
+        const startA = startVia(request, id);
+        void startA.catch(() => undefined);
+        await waitUntilParked(request, START_HOLD, id);
+
+        // The family flips audio off while A is parked after its read. B passes the seam, wins, goes ACTIVE.
+        await saveFamilyConsentVersion(f.learnerProfileId, f.adminUserId, { allowAudioRecording: false });
+        const b = await startVia(request, id);
+        expect(b.ok).toBe(true);
+        const afterB = await readConsentSnapshots(id);
+        expect(afterB).toHaveLength(1);
+        expect(afterB[0]).toMatchObject({
+          allowLiveSession: true,
+          allowAudioRecording: false,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+          consentRecordVersion: 2,
+        });
+        expect((await sessionRow(id)).sessionPhase).toBe("ACTIVE");
+
+        await releaseHold(request, START_HOLD, id);
+        const a = await startA;
+
+        // A's conditional update matched zero rows, so A must not have re-frozen: the row is exactly B's
+        // (frozenAt included), and A answers with B's frozen capabilities, not its own stale read.
+        expect(a.ok).toBe(true);
+        expect(await readConsentSnapshots(id)).toEqual(afterB);
+        if (a.ok && b.ok) {
+          expect(a.capabilities).toEqual(b.capabilities);
+          // Independent oracle: audio off, online (LIVE) means the learner's voice is left out.
+          expect(b.capabilities.audio.mode).toBe("tutor_only");
+          expect(b.capabilities.transcript.learnerVoice).toBe(false);
+        }
+        await expectReleasedByTest(request, START_HOLD, id);
+      } finally {
+        await resetSeams(request);
+        await f.cleanup();
+      }
     }
   );
   // Oracle: C3a Start half, behavior only. Capabilities unchanged; lanes unchanged. The "next session" sentence is S2b (C7), not this row
-  test.fixme(
+  test(
     "S2: ACTIVE session: a consent flip changes nothing mid-session",
-    async () => {
-      // pending: wave that owns S2
+    async ({ request }) => {
+      test.setTimeout(90_000);
+      const f = await seedStartFixture({ record: {}, snapshot: true });
+      const id = f.whiteboardSessionId;
+      try {
+        const first = await startVia(request, id, "LIVE");
+        expect(first.ok).toBe(true);
+        if (!first.ok) return;
+        // Everything is on, so every capability and both transcript lanes are on.
+        expect(first.capabilities).toMatchObject({
+          audio: { mode: "full" },
+          whiteboard: { persist: true },
+          notes: { draft: true },
+          transcript: { tutorVoice: true, learnerVoice: true },
+          replay: { audio: true, board: true },
+        });
+        const rowBefore = await readConsentSnapshots(id);
+
+        // The family turns every switch off mid-session.
+        await saveFamilyConsentVersion(f.learnerProfileId, f.adminUserId, {
+          allowLiveSession: false,
+          allowAudioRecording: false,
+          allowWhiteboardRecording: false,
+          allowNoteSending: false,
+        });
+        const second = await startVia(request, id, "LIVE");
+        expect(second.ok).toBe(true);
+        if (!second.ok) return;
+        // Capabilities and lanes are what was frozen at Start, not the new record.
+        expect(second.capabilities).toEqual(first.capabilities);
+        expect(await readConsentSnapshots(id)).toEqual(rowBefore);
+        expect((await sessionRow(id)).sessionPhase).toBe("ACTIVE");
+      } finally {
+        await f.cleanup();
+      }
     }
   );
   // Oracle: C7. DOM text typed in the spec, the § 7a line "Changes apply to the next session, not one already started", on the in-session notice and the consent editors. Not folded into V1/V2: those assert which recordings are off,  …
@@ -331,19 +462,81 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     }
   );
   // Oracle: Response vs DB row
-  test.fixme(
+  test(
     "S4: Start returns capabilities equal to the snapshot row it just wrote",
-    async () => {
-      // pending: wave that owns S4
+    async ({ request }) => {
+      test.setTimeout(90_000);
+      // Created with everything on (snapshot v1); the family then turns audio and the board off BEFORE Start.
+      const f = await seedStartFixture({ record: {}, snapshot: true });
+      const id = f.whiteboardSessionId;
+      try {
+        const saved = await saveFamilyConsentVersion(f.learnerProfileId, f.adminUserId, {
+          allowAudioRecording: false,
+          allowWhiteboardRecording: false,
+        });
+        const started = await startVia(request, id, "LIVE");
+        expect(started.ok).toBe(true);
+        if (!started.ok) return;
+
+        const rows = await readConsentSnapshots(id);
+        expect(rows).toHaveLength(1);
+        // The row Start wrote is the live record at Start...
+        expect(rows[0]).toMatchObject({
+          consentRecordId: saved.id,
+          consentRecordVersion: saved.version,
+          allowAudioRecording: false,
+          allowWhiteboardRecording: false,
+          allowNoteSending: true,
+          allowLiveSession: true,
+        });
+        // ...and the response is that row, read through the spec's own switch-to-capability table.
+        expect(started.capabilities.audio.mode).toBe(rows[0].allowAudioRecording ? "full" : "tutor_only");
+        expect(started.capabilities.transcript.learnerVoice).toBe(rows[0].allowAudioRecording);
+        expect(started.capabilities.whiteboard.persist).toBe(rows[0].allowWhiteboardRecording);
+        expect(started.capabilities.replay.board).toBe(rows[0].allowWhiteboardRecording);
+        expect(started.capabilities.notes.draft).toBe(rows[0].allowNoteSending);
+        expect(started.sessionMode).toBe("LIVE");
+      } finally {
+        await f.cleanup();
+      }
     }
   );
   // Oracle: Arm → park → release (B3), plain-owned tutor (SF-B), red recorded on the seam-only commit (SF-A). Online Start with live on; arm 'start:tx:between_consent_read_and_update'; fire Start (parks after its first 'sessionEntry …
-  test.fixme(
-    "S5: Start refuses online when live is off even if the refusal read and the update interleave",
-    async () => {
-      // pending: wave that owns S5
-    }
-  );
+  for (const preSnapshot of [false, true]) {
+    test(
+      `S5: Start refuses online when live is off even if the refusal read and the update interleave (${preSnapshot ? "session with a create-time snapshot" : "legacy session, no snapshot"})`,
+      async ({ request }) => {
+        test.setTimeout(90_000);
+        const f = await seedStartFixture({ record: {}, snapshot: preSnapshot });
+        const id = f.whiteboardSessionId;
+        try {
+          const snapshotBefore = await readConsentSnapshots(id);
+          await armHold(request, { name: START_HOLD, sessionId: id, parkFirstN: 1 });
+          const start = startVia(request, id, "LIVE");
+          void start.catch(() => undefined);
+          await waitUntilParked(request, START_HOLD, id);
+
+          // Live was on at Start's read. The family turns it off while Start is parked.
+          await saveFamilyConsentVersion(f.learnerProfileId, f.adminUserId, { allowLiveSession: false });
+          await releaseHold(request, START_HOLD, id);
+          const result = await start;
+
+          // The refusal is returned data naming the reason, and the whole transaction rolled back.
+          expect(result).toEqual({ ok: false, reason: "live_off" });
+          const row = await sessionRow(id);
+          expect(row.sessionPhase).toBe("PENDING");
+          expect(row.activatedAt).toBeNull();
+          expect(await readConsentSnapshots(id)).toEqual(snapshotBefore);
+          const blobs = await listHarnessBlobs(request, "");
+          expect(blobs.filter((b) => b.key.includes(id))).toHaveLength(0);
+          await expectReleasedByTest(request, START_HOLD, id);
+        } finally {
+          await resetSeams(request);
+          await f.cleanup();
+        }
+      }
+    );
+  }
   // Oracle: Re-premised by re-review 2 (R1). New code cannot create an unclaimed-learner session ('assertConsentRecordExists' refuses it), so the test seeds a legacy PENDING row directly through the DB oracle helper (a 'WhiteboardSe …
   test.fixme(
     "S6: legacy PENDING session with no snapshot: family claims and turns whiteboard off, tutor Starts, session ends: the board is purged",
@@ -414,10 +607,85 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     }
   );
   // Oracle: Arm → park → release (B3), deterministic, no "repeated N times". Two scripted orderings, on a plain-owned tutor. (a) Start parked, End runs: arm 'start:tx:between_consent_read_and_update'; fire Start (parks); wait until  …
-  test.fixme(
+  test(
     "S8: Start racing End on a PENDING session: exactly one wins, and the snapshot equals the live record at the moment the winning transaction committed",
-    async () => {
-      // pending: wave that owns S8
+    async ({ request }) => {
+      test.setTimeout(120_000);
+      const endArgs = { finalEventsBlobUrl: "" };
+
+      // (a) Start parked, End runs to completion, then Start is released: Start must not activate an ended session,
+      // and the snapshot is the End-time read of the live record (Start did not touch it).
+      const a = await seedStartFixture({ record: {}, snapshot: false });
+      try {
+        await armHold(request, { name: START_HOLD, sessionId: a.whiteboardSessionId, parkFirstN: 1 });
+        const start = startVia(request, a.whiteboardSessionId, "LIVE");
+        void start.catch(() => undefined);
+        await waitUntilParked(request, START_HOLD, a.whiteboardSessionId);
+
+        const end = await invokeConsentAction(request, "endWhiteboardSession", a.whiteboardSessionId, endArgs);
+        expect(end.status(), await end.text()).toBe(200);
+        // The family flips a switch AFTER End committed: neither Start nor the snapshot may see it.
+        await saveFamilyConsentVersion(a.learnerProfileId, a.adminUserId, { allowWhiteboardRecording: false });
+        await releaseHold(request, START_HOLD, a.whiteboardSessionId);
+        await start;
+
+        const row = await sessionRow(a.whiteboardSessionId);
+        expect(row.endedAt).not.toBeNull();
+        expect(row.sessionPhase).not.toBe("ACTIVE");
+        expect(row.activatedAt).toBeNull();
+        const rows = await readConsentSnapshots(a.whiteboardSessionId);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          consentRecordVersion: 1,
+          allowWhiteboardRecording: true,
+          allowAudioRecording: true,
+          allowLiveSession: true,
+          allowNoteSending: true,
+        });
+        await expectReleasedByTest(request, START_HOLD, a.whiteboardSessionId);
+      } finally {
+        await resetSeams(request);
+        await a.cleanup();
+      }
+
+      // (b) End parked (holding the row lock), Start fired, End released. One coherent outcome. This arm does
+      // NOT prove lock order (S14 does): both orderings end in a state the oracle accepts.
+      const b = await seedStartFixture({ record: {}, snapshot: false });
+      try {
+        await armHold(request, { name: END_HOLD, sessionId: b.whiteboardSessionId, parkFirstN: 1 });
+        const end = invokeConsentAction(request, "endWhiteboardSession", b.whiteboardSessionId, endArgs);
+        void end.catch(() => undefined);
+        await waitUntilParked(request, END_HOLD, b.whiteboardSessionId);
+        const start = startVia(request, b.whiteboardSessionId, "LIVE");
+        void start.catch(() => undefined);
+        // Give Start the chance to reach the row lock End holds (Postgres's own view; bounded, never a sleep).
+        await expect
+          .poll(() => countBackendsWaitingOnLock(), { timeout: 2_500 })
+          .toBeGreaterThanOrEqual(1)
+          .catch(() => undefined);
+        await releaseHold(request, END_HOLD, b.whiteboardSessionId);
+        const [endRes] = await Promise.all([end, start]);
+        expect(endRes.status()).toBe(200);
+
+        const row = await sessionRow(b.whiteboardSessionId);
+        const rows = await readConsentSnapshots(b.whiteboardSessionId);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          consentRecordVersion: 1,
+          allowLiveSession: true,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+        });
+        const endedNotActive =
+          row.endedAt !== null && row.sessionPhase !== "ACTIVE" && row.activatedAt === null;
+        const activeNotEnded = row.endedAt === null && row.sessionPhase === "ACTIVE";
+        expect(endedNotActive || activeNotEnded, JSON.stringify(row)).toBe(true);
+        await expectReleasedByTest(request, END_HOLD, b.whiteboardSessionId);
+      } finally {
+        await resetSeams(request);
+        await b.cleanup();
+      }
     }
   );
   // Oracle: CHARACTERIZATION (relabeled by re-review 3), green today by design on its Start-after-End arm; ADDED by B3, veto-able. Sequential, no seam: End a PENDING session, then Start it → not activated, no 'startAt', snapshot unt …
@@ -428,10 +696,66 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     }
   );
   // Oracle: SF1, RED today, arm → park → release, plain-owned tutor (SF-B). Seed a PENDING session with an effective record; arm 'start:tx:between_consent_read_and_update'; fire Start (it passes step 2's read and parks); wait until  …
-  test.fixme(
-    "S13: Start rolls back when the freeze finds no record: the session stays PENDING, no snapshot row, no startAt",
-    async () => {
-      // pending: wave that owns S13
+  for (const preSnapshot of [false, true]) {
+    test(
+      `S13: Start rolls back when the freeze finds no record: the session stays PENDING, no snapshot row, no startAt (${preSnapshot ? "session with a create-time snapshot" : "legacy session, no snapshot"})`,
+      async ({ request }) => {
+        test.setTimeout(90_000);
+        const f = await seedStartFixture({ record: {}, snapshot: preSnapshot });
+        const id = f.whiteboardSessionId;
+        try {
+          const snapshotBefore = await readConsentSnapshots(id);
+          await armHold(request, { name: START_HOLD, sessionId: id, parkFirstN: 1 });
+          const start = startVia(request, id, "LIVE");
+          void start.catch(() => undefined);
+          await waitUntilParked(request, START_HOLD, id);
+
+          // The effective record disappears (a direct row write, not an implementation call).
+          await withPrisma((p) => p.consentRecord.deleteMany({ where: { learnerProfileId: f.learnerProfileId } }));
+          await releaseHold(request, START_HOLD, id);
+          const result = await start;
+
+          expect(result).toEqual({ ok: false, reason: "consent_missing_parent" });
+          const row = await sessionRow(id);
+          expect(row.sessionPhase).toBe("PENDING");
+          expect(row.activatedAt).toBeNull();
+          expect(await readConsentSnapshots(id)).toEqual(snapshotBefore);
+          const blobs = await listHarnessBlobs(request, "");
+          expect(blobs.filter((b) => b.key.includes(id))).toHaveLength(0);
+          await expectReleasedByTest(request, START_HOLD, id);
+        } finally {
+          await resetSeams(request);
+          await f.cleanup();
+        }
+      }
+    );
+  }
+
+  test(
+    "S13 control: the same parked Start with the record left in place activates and writes the snapshot",
+    async ({ request }) => {
+      test.setTimeout(90_000);
+      const f = await seedStartFixture({ record: {}, snapshot: false });
+      const id = f.whiteboardSessionId;
+      try {
+        await armHold(request, { name: START_HOLD, sessionId: id, parkFirstN: 1 });
+        const start = startVia(request, id, "LIVE");
+        void start.catch(() => undefined);
+        await waitUntilParked(request, START_HOLD, id);
+        await releaseHold(request, START_HOLD, id);
+        const result = await start;
+
+        expect(result.ok).toBe(true);
+        const row = await sessionRow(id);
+        expect(row.sessionPhase).toBe("ACTIVE");
+        expect(row.activatedAt).not.toBeNull();
+        const rows = await readConsentSnapshots(id);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ consentRecordVersion: 1, allowLiveSession: true });
+      } finally {
+        await resetSeams(request);
+        await f.cleanup();
+      }
     }
   );
   // Oracle: GREEN today by design (SF6 split). Seed a legacy PENDING session with no 'ConsentRecord' (the create-time gate prevents it for new sessions, so the DB oracle helper seeds it). Online Start: the server refuses ('CONSENT_R …
@@ -442,10 +766,20 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     }
   );
   // Oracle: RED today (SF6 split). Same seed. The Start control is disabled and shows the reason text (decision 6) in the DOM beside it; asserted by 'toHaveText' on the reason element. Red because the control today either stays sile …
-  test.fixme(
+  test(
     "S9b: no consent record, online Start: the reason is visible on the Start control",
-    async () => {
-      // pending: wave that owns S9b
+    async ({ page }) => {
+      test.setTimeout(150_000);
+      const f = await seedStartFixture({ record: null });
+      try {
+        await openWorkspaceWaitingRoom(page, f);
+        // Online (the default mode). The control is disabled AND the reason is in the DOM beside it.
+        await expect(page.getByTestId("wb-waiting-overlay")).toHaveAttribute("data-session-mode", "LIVE");
+        await expect(page.getByTestId("wb-start-session")).toBeDisabled();
+        await expect(page.getByTestId("wb-waiting-start-blocked")).toContainText(NO_RECORD_PARENT_LINE);
+      } finally {
+        await f.cleanup();
+      }
     }
   );
   // Oracle: GREEN today by design. Same as S9a, mode in person
@@ -456,10 +790,29 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     }
   );
   // Oracle: RED today. Same as S9b, mode in person
-  test.fixme(
+  test(
     "S10b: no consent record, in-person Start: the reason is visible on the Start control",
-    async () => {
-      // pending: wave that owns S10b
+    async ({ page }) => {
+      test.setTimeout(150_000);
+      const f = await seedStartFixture({ record: null });
+      const control = await seedStartFixture({ record: {}, snapshot: true });
+      try {
+        await openWorkspaceWaitingRoom(page, f);
+        await page.getByTestId("wb-session-mode-in-person").click();
+        await expect(page.getByTestId("wb-waiting-overlay")).toHaveAttribute("data-session-mode", "IN_PERSON");
+        // In person needs no student connection, so the only thing that can disable Start is the missing record.
+        await expect(page.getByTestId("wb-start-session")).toBeDisabled();
+        await expect(page.getByTestId("wb-waiting-start-blocked")).toContainText(NO_RECORD_PARENT_LINE);
+
+        // Control: the same click path with a record in place leaves Start enabled and shows no blocked line.
+        await openWorkspaceWaitingRoom(page, control);
+        await page.getByTestId("wb-session-mode-in-person").click();
+        await expect(page.getByTestId("wb-start-session")).toBeEnabled();
+        await expect(page.getByTestId("wb-waiting-start-blocked")).toHaveCount(0);
+      } finally {
+        await f.cleanup();
+        await control.cleanup();
+      }
     }
   );
 });

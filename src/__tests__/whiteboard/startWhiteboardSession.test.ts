@@ -2,6 +2,9 @@
  * @jest-environment node
  */
 
+// Order of the statements the Start transaction runs, recorded across mocks (consent wave C3a, S14(b)).
+const callOrder: string[] = [];
+
 const dbUpdateManyMock = jest.fn();
 const dbSessionFindUniqueMock = jest.fn();
 const dbStudentFindUniqueMock = jest.fn();
@@ -9,19 +12,33 @@ const dbAdminUserFindUniqueMock = jest.fn();
 const dbErasureJobFindFirstMock = jest.fn();
 const dbConsentRecordFindFirstMock = jest.fn();
 const dbLearnerProfileFindUniqueMock = jest.fn();
+const dbSnapshotFindUniqueMock = jest.fn();
+const dbSnapshotUpsertMock = jest.fn();
 
-jest.mock("@/lib/db", () => ({
-  __esModule: true,
-  db: {
+jest.mock("@/lib/db", () => {
+  const db = {
     whiteboardSession: {
-      updateMany: (...args: unknown[]) => dbUpdateManyMock(...args),
+      updateMany: (...args: unknown[]) => {
+        callOrder.push("updateMany");
+        return dbUpdateManyMock(...args);
+      },
       findUnique: (...args: unknown[]) => dbSessionFindUniqueMock(...args),
+    },
+    sessionConsentSnapshot: {
+      findUnique: (...args: unknown[]) => dbSnapshotFindUniqueMock(...args),
+      upsert: (...args: unknown[]) => {
+        callOrder.push("snapshotUpsert");
+        return dbSnapshotUpsertMock(...args);
+      },
     },
     student: {
       findUnique: (...args: unknown[]) => dbStudentFindUniqueMock(...args),
     },
     consentRecord: {
-      findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args),
+      findFirst: (...args: unknown[]) => {
+        callOrder.push("consentRead");
+        return dbConsentRecordFindFirstMock(...args);
+      },
     },
     consentRestriction: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -35,9 +52,12 @@ jest.mock("@/lib/db", () => ({
     adminUser: {
       findUnique: (...args: unknown[]) => dbAdminUserFindUniqueMock(...args),
     },
-  },
-  withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
-}));
+    // The interactive transaction: the callback runs against the same mocks. A throw propagates, exactly as
+    // Prisma rolls back and rethrows.
+    $transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(db),
+  };
+  return { __esModule: true, db, withDbRetry: <T,>(fn: () => Promise<T>) => fn() };
+});
 
 const assertOwnsWhiteboardSessionMock = jest.fn();
 jest.mock("@/lib/whiteboard-scope", () => ({
@@ -62,7 +82,26 @@ const ownedSession = {
   consentAcknowledged: true,
 };
 
-function mockConsentRecordExists(allowLiveSession = true) {
+const CLAIMED_STUDENT = {
+  adminUserId: "admin_1",
+  organizationId: null,
+  learnerProfileId: "lp-1",
+};
+
+/** The session row every in-transaction read shares (phase, mode, student and any frozen snapshot). */
+function mockSessionRow(over: Record<string, unknown> = {}) {
+  dbSessionFindUniqueMock.mockResolvedValue({
+    sessionPhase: "PENDING",
+    sessionMode: "LIVE",
+    notesForbidden: false,
+    adminUserId: "admin_1",
+    consentSnapshot: null,
+    student: CLAIMED_STUDENT,
+    ...over,
+  });
+}
+
+function mockConsentRecordExists(over: Record<string, boolean> = {}) {
   dbStudentFindUniqueMock.mockResolvedValue({
     name: "Maya",
     erasedAt: null,
@@ -78,18 +117,25 @@ function mockConsentRecordExists(allowLiveSession = true) {
   });
   dbConsentRecordFindFirstMock.mockResolvedValue({
     id: "cr-1",
-    allowLiveSession,
+    version: 3,
+    allowLiveSession: true,
     allowAudioRecording: true,
     allowWhiteboardRecording: true,
     allowNoteSending: true,
     learnerProfile: { isSelfLearner: false },
+    ...over,
   });
 }
 
 beforeEach(() => {
+  callOrder.length = 0;
   dbUpdateManyMock.mockReset();
   dbSessionFindUniqueMock.mockReset();
-  dbSessionFindUniqueMock.mockResolvedValue({ sessionPhase: "PENDING" });
+  mockSessionRow();
+  dbSnapshotFindUniqueMock.mockReset();
+  dbSnapshotFindUniqueMock.mockResolvedValue(null);
+  dbSnapshotUpsertMock.mockReset();
+  dbSnapshotUpsertMock.mockResolvedValue({});
   mockLogProductEvent.mockReset();
   assertOwnsWhiteboardSessionMock.mockReset();
   dbStudentFindUniqueMock.mockReset();
@@ -107,7 +153,7 @@ beforeEach(() => {
 });
 
 describe("startWhiteboardSession", () => {
-  it("flips PENDING→ACTIVE for an owned session", async () => {
+  it("flips PENDING→ACTIVE for an owned session and freezes the snapshot", async () => {
     assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
     dbUpdateManyMock.mockResolvedValue({ count: 1 });
 
@@ -131,7 +177,8 @@ describe("startWhiteboardSession", () => {
         }),
       })
     );
-    expect(result).toEqual({ ok: true, phase: "active" });
+    expect(result).toMatchObject({ ok: true, phase: "active", sessionMode: "LIVE" });
+    expect(dbSnapshotUpsertMock).toHaveBeenCalledTimes(1);
     expect(mockLogProductEvent).toHaveBeenCalledWith({
       kind: "SESSION_STARTED",
       adminUserId: ownedSession.adminUserId,
@@ -141,16 +188,18 @@ describe("startWhiteboardSession", () => {
     });
   });
 
-  it("is idempotent when already active or ended", async () => {
+  it("is idempotent when already active or ended, and never touches the snapshot", async () => {
     assertOwnsWhiteboardSessionMock.mockResolvedValue({
       ...ownedSession,
       endedAt: new Date("2026-04-24T11:00:00Z"),
     });
+    mockSessionRow({ sessionPhase: "ENDED" });
     dbUpdateManyMock.mockResolvedValue({ count: 0 });
 
     const result = await startWhiteboardSession("wb_42");
 
-    expect(result).toEqual({ ok: true, phase: "active" });
+    expect(result).toMatchObject({ ok: true, phase: "active" });
+    expect(dbSnapshotUpsertMock).not.toHaveBeenCalled();
     expect(mockLogProductEvent).toHaveBeenCalledWith({
       kind: "SESSION_STARTED",
       adminUserId: ownedSession.adminUserId,
@@ -158,6 +207,107 @@ describe("startWhiteboardSession", () => {
       whiteboardSessionId: ownedSession.id,
       metadata: { mode: "LIVE", noop: true },
     });
+  });
+
+  // S4 (spec): the frozen row is the record's switches, and the returned capabilities follow them.
+  it("freezes the record's switches and returns the capabilities they imply (audio and board off)", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbUpdateManyMock.mockResolvedValue({ count: 1 });
+    mockConsentRecordExists({ allowAudioRecording: false, allowWhiteboardRecording: false });
+
+    const result = await startWhiteboardSession("wb_42", "LIVE");
+
+    expect(dbSnapshotUpsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          allowLiveSession: true,
+          allowAudioRecording: false,
+          allowWhiteboardRecording: false,
+          allowNoteSending: true,
+          consentRecordId: "cr-1",
+          consentRecordVersion: 3,
+        }),
+      })
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      capabilities: {
+        audio: { mode: "tutor_only" },
+        whiteboard: { persist: false },
+        notes: { draft: true },
+      },
+    });
+  });
+
+  // S14(b): the consent read comes first, the conditional update second, the freeze last.
+  it("runs the statements in order: consent read, then the update, then the snapshot write", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbUpdateManyMock.mockResolvedValue({ count: 1 });
+
+    await startWhiteboardSession("wb_42");
+
+    const firstRead = callOrder.indexOf("consentRead");
+    const update = callOrder.indexOf("updateMany");
+    const write = callOrder.indexOf("snapshotUpsert");
+    expect(firstRead).toBeGreaterThanOrEqual(0);
+    expect(update).toBeGreaterThan(firstRead);
+    expect(write).toBeGreaterThan(update);
+    // The freeze re-reads the record after the update, so a read also follows it.
+    expect(callOrder.lastIndexOf("consentRead")).toBeGreaterThan(update);
+  });
+
+  // S13 (spec): a record deleted between the first read and the freeze refuses the Start; the refusal throws
+  // inside the transaction, so Prisma rolls the activation back (the real rollback is proven in the DB spec).
+  it("refuses with the parent line when the record vanishes before the freeze, and writes no snapshot", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbUpdateManyMock.mockResolvedValue({ count: 1 });
+    let reads = 0;
+    dbConsentRecordFindFirstMock.mockImplementation(async () => {
+      reads += 1;
+      return reads === 1
+        ? {
+            id: "cr-1",
+            version: 3,
+            allowLiveSession: true,
+            allowAudioRecording: true,
+            allowWhiteboardRecording: true,
+            allowNoteSending: true,
+            learnerProfile: { isSelfLearner: false },
+          }
+        : null;
+    });
+
+    await expect(startWhiteboardSession("wb_42")).resolves.toEqual({
+      ok: false,
+      reason: "consent_missing_parent",
+    });
+    expect(dbSnapshotUpsertMock).not.toHaveBeenCalled();
+    expect(mockLogProductEvent).not.toHaveBeenCalled();
+  });
+
+  // S5 (spec): live sessions turned off between the first read and the freeze refuse an online Start.
+  it("refuses a LIVE start with live_off when the family turns live off before the freeze", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbUpdateManyMock.mockResolvedValue({ count: 1 });
+    let reads = 0;
+    dbConsentRecordFindFirstMock.mockImplementation(async () => {
+      reads += 1;
+      return {
+        id: "cr-1",
+        version: reads === 1 ? 3 : 4,
+        allowLiveSession: reads === 1,
+        allowAudioRecording: true,
+        allowWhiteboardRecording: true,
+        allowNoteSending: true,
+        learnerProfile: { isSelfLearner: false },
+      };
+    });
+
+    await expect(startWhiteboardSession("wb_42", "LIVE")).resolves.toEqual({
+      ok: false,
+      reason: "live_off",
+    });
+    expect(mockLogProductEvent).not.toHaveBeenCalled();
   });
 
   // An expected refusal is RETURNED as data. Next redacts a thrown server-action error in
@@ -242,7 +392,7 @@ describe("startWhiteboardSession — online sessions off (server enforces the en
   beforeEach(() => {
     assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
     dbUpdateManyMock.mockResolvedValue({ count: 1 });
-    mockConsentRecordExists(false);
+    mockConsentRecordExists({ allowLiveSession: false });
   });
 
   it("refuses a LIVE start called directly, with the live-sessions reason, and flips nothing", async () => {
@@ -264,16 +414,17 @@ describe("startWhiteboardSession — online sessions off (server enforces the en
 
   it("still starts an IN_PERSON session (Decision 5: the switch governs online only)", async () => {
     const result = await startWhiteboardSession("wb_42", "IN_PERSON");
-    expect(result).toEqual({ ok: true, phase: "active" });
+    expect(result).toMatchObject({ ok: true, phase: "active" });
     expect(dbUpdateManyMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not throw for a session that is already past PENDING (idempotent end/active stay safe)", async () => {
-    dbSessionFindUniqueMock.mockResolvedValue({ sessionPhase: "ACTIVE" });
+    mockSessionRow({ sessionPhase: "ACTIVE" });
     dbUpdateManyMock.mockResolvedValue({ count: 0 });
-    await expect(startWhiteboardSession("wb_42", "LIVE")).resolves.toEqual({
+    await expect(startWhiteboardSession("wb_42", "LIVE")).resolves.toMatchObject({
       ok: true,
       phase: "active",
     });
+    expect(dbSnapshotUpsertMock).not.toHaveBeenCalled();
   });
 });

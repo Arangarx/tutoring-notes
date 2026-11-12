@@ -53,6 +53,11 @@ export type WaitingRoomOverlayProps = {
   isStarting: boolean;
   /** Tutor-only: consent or other start failure copy (mirrors StartWhiteboardSession). */
   startError?: string | null;
+  /**
+   * Tutor-only: why Start cannot work at all (no consent record, unclaimed learner). Disables Start and shows
+   * the reason beside it, before any click (consent wave decision 6: a disabled Start always says why).
+   */
+  startBlockedMessage?: string | null;
   /** Called when the tutor clicks Start. */
   onStart: () => void | Promise<void>;
   /** Called when the tutor changes the LIVE ↔ IN_PERSON toggle. */
@@ -143,6 +148,7 @@ export function WaitingRoomOverlay({
   canStart,
   isStarting,
   startError,
+  startBlockedMessage = null,
   onStart,
   onSessionModeChange,
   allowLiveSession = null,
@@ -312,6 +318,15 @@ export function WaitingRoomOverlay({
                   {startHintText}
                 </p>
               )}
+              {startBlockedMessage ? (
+                <p
+                  role="status"
+                  className="mynk-wtr-start-error text-sm whitespace-pre-wrap text-destructive break-words"
+                  data-testid="wb-waiting-start-blocked"
+                >
+                  {startBlockedMessage}
+                </p>
+              ) : null}
               {startError ? (
                 <p
                   role="alert"
@@ -325,7 +340,7 @@ export function WaitingRoomOverlay({
                 type="button"
                 className="mynk-wtr-start-btn"
                 onClick={() => { void onStart(); }}
-                disabled={!canStart || isStarting}
+                disabled={!canStart || isStarting || Boolean(startBlockedMessage)}
                 data-testid="wb-start-session"
                 aria-label={isStarting ? "Starting session…" : "Start session"}
               >

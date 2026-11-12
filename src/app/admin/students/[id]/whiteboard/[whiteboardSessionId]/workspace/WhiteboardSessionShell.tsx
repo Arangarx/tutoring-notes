@@ -9,6 +9,7 @@
 
 import { useCallback, useState } from "react";
 import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
+import type { EntryBlockReason } from "@/lib/scheduling/session-entry";
 import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
 import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
 import { SessionReviewMode } from "./SessionReviewMode";
@@ -41,6 +42,8 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   /** Frozen session consent: null = no snapshot (unclaimed / no ConsentRecord). */
   initialAllowAudioRecording?: boolean | null;
   allowLiveSession?: boolean | null;
+  /** Why neither mode can start (no consent record, unclaimed, ...). Null/omitted = Start is not blocked by the entry rule. */
+  startBlockedReason?: EntryBlockReason | null;
   /** True when SessionConsentSnapshot exists for this session. */
   initialHasConsentSnapshot?: boolean;
   /** Claimed student's LearnerProfile id — per-speaker lane attribution. */
@@ -133,6 +136,7 @@ function TutorWhiteboardSessionShell({
   activatedAt,
   initialAllowAudioRecording,
   allowLiveSession = null,
+  startBlockedReason = null,
   initialHasConsentSnapshot,
   studentLearnerProfileId,
   initialIntent,
@@ -183,6 +187,7 @@ function TutorWhiteboardSessionShell({
         activatedAt={activatedAt}
         initialAllowAudioRecording={initialAllowAudioRecording}
         allowLiveSession={allowLiveSession}
+        startBlockedReason={startBlockedReason}
         initialHasConsentSnapshot={initialHasConsentSnapshot}
         studentLearnerProfileId={studentLearnerProfileId}
         initialIntent={initialIntent}

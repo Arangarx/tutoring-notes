@@ -29,6 +29,9 @@ import {
   type SessionEntryState,
 } from "@/lib/scheduling/session-entry";
 
+/** The shared db or a transaction: every read the entry rule needs goes through one of these. */
+type EntryReadClient = typeof db | Prisma.TransactionClient;
+
 /** What the loader needs to know about one appointment (or one tutor + student pair). */
 export type SessionEntrySource = {
   studentId: string;
@@ -59,32 +62,40 @@ export async function orgAdmissionFailureReason(
 
 async function loadOrgInput(
   organizationId: string,
-  adminUserId: string
+  adminUserId: string,
+  client: EntryReadClient
 ): Promise<{ active: boolean; instructorAdmitted: boolean }> {
   // One admission rule (org active + active instructor member). Only when it fails
   // do we read the status again, to say which of the two it was.
-  if (await orgInstructorAdmitted(db, organizationId, adminUserId)) {
+  if (await orgInstructorAdmitted(client, organizationId, adminUserId)) {
     return { active: true, instructorAdmitted: true };
   }
-  const reason = await orgAdmissionFailureReason(db, organizationId);
+  const reason = await orgAdmissionFailureReason(client, organizationId);
   return { active: reason !== "org_inactive", instructorAdmitted: false };
 }
 
-async function loadInputs(source: SessionEntrySource): Promise<SessionEntryInputs> {
+/**
+ * The inputs `sessionEntryState` decides over, read through `client` (default: the shared db). Start passes its
+ * transaction so the consent read and the later write see one consistent world (consent plan § 2.6 step 1).
+ */
+export async function loadSessionEntryInputs(
+  source: SessionEntrySource,
+  client: EntryReadClient = db
+): Promise<SessionEntryInputs> {
   const { student } = source;
   const orgOwned = student.organizationId != null && student.adminUserId == null;
   const learnerProfileId = student.learnerProfileId;
   const [erasure, org, consent] = await Promise.all([
     isWhiteboardSessionBlockedByErasure(source.studentId),
     orgOwned
-      ? loadOrgInput(student.organizationId as string, source.adminUserId)
+      ? loadOrgInput(student.organizationId as string, source.adminUserId, client)
       : Promise.resolve(null),
     learnerProfileId
       ? resolveEffectiveConsentForStudent(
           learnerProfileId,
           { adminUserId: student.adminUserId, organizationId: student.organizationId },
           source.adminUserId,
-          undefined,
+          client === db ? undefined : (client as Prisma.TransactionClient),
           "sessionEntryState"
         )
       : Promise.resolve(null),
@@ -111,7 +122,7 @@ export async function loadSessionEntryStates(
       const key = `${source.studentId}:${source.adminUserId}`;
       let pending = cache.get(key);
       if (!pending) {
-        pending = loadInputs(source).then(sessionEntryState);
+        pending = loadSessionEntryInputs(source).then(sessionEntryState);
         cache.set(key, pending);
       }
       return pending;

@@ -7,6 +7,8 @@ import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
 import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persisted-state";
 import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
+import { tutorControlState } from "@/lib/scheduling/session-entry";
+import { loadSessionEntryState } from "@/lib/scheduling/session-entry-loader";
 import { readServerLiveKey } from "@/lib/whiteboard/live-key";
 import { ServerLiveKeySeeder } from "@/components/whiteboard/ServerLiveKeySeeder";
 import { LiveIceServersProvider } from "@/components/av/LiveIceServersProvider";
@@ -101,7 +103,14 @@ export default async function WhiteboardWorkspacePage({
           activatedAt: true,
           liveKeyEnc: true,
           student: {
-            select: { id: true, name: true, learnerProfileId: true },
+            select: {
+              id: true,
+              name: true,
+              learnerProfileId: true,
+              adminUserId: true,
+              organizationId: true,
+              learnerProfile: { select: { isSelfLearner: true } },
+            },
           },
           adminUser: {
             select: { displayName: true, email: true },
@@ -124,6 +133,20 @@ export default async function WhiteboardWorkspacePage({
   const initialHasConsentSnapshot = detail.consentSnapshot != null;
   const initialAllowAudioRecording =
     detail.consentSnapshot?.allowAudioRecording ?? null;
+
+  // Waiting room: when the one entry rule blocks BOTH modes (no consent record, unclaimed learner), the Start
+  // control is disabled with the reason, before any click (consent wave C3a, decision 6). Online-only blocks
+  // stay with `allowLiveSession` (the waiting room offers in person).
+  const startBlockedReason =
+    detail.sessionPhase === "PENDING" && !detail.endedAt
+      ? tutorControlState(
+          await loadSessionEntryState({
+            studentId: detail.student.id,
+            adminUserId: session.adminUserId,
+            student: detail.student,
+          })
+        ).disabledReason
+      : null;
 
   const initialPersistedState =
     detail.sessionPhase === "ACTIVE" && !detail.endedAt
@@ -168,6 +191,7 @@ export default async function WhiteboardWorkspacePage({
       initialMode={detail.endedAt ? "review" : "live"}
       initialAllowAudioRecording={initialAllowAudioRecording}
       allowLiveSession={detail.consentSnapshot?.allowLiveSession ?? null}
+      startBlockedReason={startBlockedReason}
       initialHasConsentSnapshot={initialHasConsentSnapshot}
       studentLearnerProfileId={detail.student.learnerProfileId}
       initialIntent={initialIntent}

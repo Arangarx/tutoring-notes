@@ -9,6 +9,8 @@ const studentFindUniqueMock = jest.fn();
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
+    $transaction: (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ whiteboardSession: { updateMany: (...args: unknown[]) => updateManyMock(...args) } }),
     student: {
       findUnique: (...args: unknown[]) => studentFindUniqueMock(...args),
     },
@@ -35,12 +37,17 @@ jest.mock("@/lib/erasure/active-erasure-scope", () => ({
   ErasureAccessSuspendedError: class ErasureAccessSuspendedError extends Error {},
 }));
 
-jest.mock("@/lib/consent-scope", () => ({
+// The transaction body is covered by startWhiteboardSession.test.ts; this file only proves the billing fields
+// reach the conditional update, so the body is a pass-through that runs the update it is handed.
+jest.mock("@/lib/whiteboard/start-session-tx", () => ({
   __esModule: true,
-  assertConsentRecordExists: jest.fn().mockResolvedValue(undefined),
-  resolveEffectiveConsentForStudent: jest.fn(async () => ({ allowLiveSession: true })),
-  ConsentError: class ConsentError extends Error {
-    permission = "consentRecord";
+  StartRefusedSignal: class StartRefusedSignal extends Error {},
+  startSessionTx: async (
+    tx: { whiteboardSession: { updateMany: (a: unknown) => Promise<{ count: number }> } },
+    input: { pendingUpdate: unknown }
+  ) => {
+    const updated = await tx.whiteboardSession.updateMany(input.pendingUpdate);
+    return { count: updated.count, noopReason: "not_pending", sessionMode: "IN_PERSON", capabilities: {} };
   },
 }));
 

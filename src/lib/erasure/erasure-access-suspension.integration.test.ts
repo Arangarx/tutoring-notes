@@ -331,7 +331,7 @@ describe("ER-3 — startWhiteboardSession erasure guard (BLOCKER G)", () => {
     });
 
     const result = await startWhiteboardSession(session.id);
-    expect(result).toEqual({ ok: true, phase: "active" });
+    expect(result).toMatchObject({ ok: true, phase: "active" });
   });
 });
 

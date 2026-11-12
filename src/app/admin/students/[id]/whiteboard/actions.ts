@@ -43,7 +43,7 @@ import {
   ConsentError,
   freezeConsentSnapshotAtEndTx,
 } from "@/lib/consent-scope";
-import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/session-capabilities";
+import { TUTOR_MIC_STREAM_ID, type SessionCapabilities } from "@/lib/recording/session-capabilities";
 import {
   filterStorableAudioSegments,
   filterTranscribableRecordings,
@@ -52,12 +52,14 @@ import {
   gateTranscription,
 } from "@/lib/recording/consent-gates";
 import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
-import type { EntryBlockReason, EntryRefusal } from "@/lib/scheduling/session-entry";
+import type { EntryRefusal } from "@/lib/scheduling/session-entry";
 import {
-  consentRecordRefusalReason,
-  loadSessionEntryState,
-  orgAdmissionFailureReason,
-} from "@/lib/scheduling/session-entry-loader";
+  startSessionTx,
+  StartRefusedSignal,
+  type StartSessionMode,
+  type StartSessionTxInput,
+  type StartTxOutcome,
+} from "@/lib/whiteboard/start-session-tx";
 import { orgInstructorAdmitted, withOrgRowLock } from "@/lib/org-scope";
 import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
 import {
@@ -241,7 +243,18 @@ export async function openScheduledWhiteboardSession(
  * read why. Unexpected failures (ownership, erasure, org admission, DB) still throw.
  */
 export type StartWhiteboardSessionResult =
-  | { ok: true; phase: "active" }
+  | {
+      ok: true;
+      phase: "active";
+      /** The mode stored on the session row after this Start. */
+      sessionMode: StartSessionMode;
+      /**
+       * Derived from the snapshot row as it now stands (consent plan § 2.6 step 5): the refrozen row for the Start
+       * that activated the session, the existing frozen row on a no-op. Returned for the client to adopt (C3b arms
+       * the recorder from it; C3a only returns it).
+       */
+      capabilities: SessionCapabilities;
+    }
   | EntryRefusal;
 
 /**
@@ -286,33 +299,8 @@ export async function startWhiteboardSession(
       }),
     { label: "startWhiteboardSession.studentForConsent" }
   );
-  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
-
-  try {
-    await assertConsentRecordExists(learnerProfileId, session.adminUserId, {
-      studentId: session.studentId,
-    });
-  } catch (err) {
-    if (err instanceof ConsentError && err.permission === "consentRecord") {
-      console.warn(
-        `[startWhiteboardSession] wbsid=${whiteboardSessionId} REJECTED: no_consent_record`
-      );
-    }
-    // The refusal is RETURNED, with the reason for this learner (self / parent / unclaimed),
-    // so the tutor reads the same line the control shows. Anything else is unexpected: rethrow.
-    const reason = await consentRecordRefusalReason(
-      err,
-      studentForConsent
-        ? {
-            studentId: session.studentId,
-            adminUserId: session.adminUserId,
-            student: studentForConsent,
-          }
-        : null
-    );
-    if (!reason) throw err;
-    return { ok: false, reason };
-  }
+  // The session was just proven owned, so its student exists; a missing row is an unexpected failure (thrown).
+  if (!studentForConsent) throw new Error("Student not found.");
 
   const adminBillingDefaults = await withDbRetry(
     () =>
@@ -328,106 +316,76 @@ export async function startWhiteboardSession(
   );
 
   const requestedMode = sessionMode ?? "LIVE";
-  // The one entry rule (org UX W4 / consent plan D3), called in place: the server
-  // refuses a mode the rule does not allow, whatever the client sent or showed.
-  // Missing record / unclaimed already threw above (`assertConsentRecordExists`,
-  // moved into this rule by consent wave C3a). Org inactive / instructor removed
-  // stay the admission no-op inside the org lock (pinned by org-removal tests).
-  const entryState = studentForConsent
-    ? await loadSessionEntryState({
-        studentId: session.studentId,
-        adminUserId: session.adminUserId,
-        student: studentForConsent,
-      })
-    : null;
-  const entryDecision = entryState?.[requestedMode === "IN_PERSON" ? "inPerson" : "online"];
-  const entryRefusal =
-    entryDecision && !entryDecision.allowed ? entryDecision.reason : null;
-  // Set (not thrown) when the rule refuses a still-PENDING session: the callbacks below
-  // return a zero-count no-op, nothing is written, and Start returns the refusal as data.
-  const refused: { reason: EntryBlockReason | null } = { reason: null };
   const orgOwned =
-    studentForConsent?.organizationId != null && studentForConsent.adminUserId == null;
-  const pendingUpdate = {
-    where: {
-      id: whiteboardSessionId,
+    studentForConsent.organizationId != null && studentForConsent.adminUserId == null;
+  const txInput: StartSessionTxInput = {
+    whiteboardSessionId,
+    adminUserId: session.adminUserId,
+    source: {
+      studentId: session.studentId,
       adminUserId: session.adminUserId,
-      sessionPhase: "PENDING" as const,
-      endedAt: null,
+      student: studentForConsent,
     },
-    data: {
-      sessionPhase: "ACTIVE" as const,
-      activatedAt: new Date(),
-      ...(sessionMode ? { sessionMode } : {}),
-      roundingIncrementMin:
-        adminBillingDefaults?.defaultRoundingIncrementMin ??
-        DEFAULT_ROUNDING_INCREMENT_MIN,
-      roundingMode:
-        adminBillingDefaults?.defaultRoundingMode ?? DEFAULT_ROUNDING_MODE,
-      tutorTimezone: adminBillingDefaults?.tutorTimezone ?? null,
+    requestedMode,
+    pendingUpdate: {
+      where: {
+        id: whiteboardSessionId,
+        adminUserId: session.adminUserId,
+        sessionPhase: "PENDING" as const,
+        endedAt: null,
+      },
+      data: {
+        sessionPhase: "ACTIVE" as const,
+        activatedAt: new Date(),
+        ...(sessionMode ? { sessionMode } : {}),
+        roundingIncrementMin:
+          adminBillingDefaults?.defaultRoundingIncrementMin ??
+          DEFAULT_ROUNDING_INCREMENT_MIN,
+        roundingMode:
+          adminBillingDefaults?.defaultRoundingMode ?? DEFAULT_ROUNDING_MODE,
+        tutorTimezone: adminBillingDefaults?.tutorTimezone ?? null,
+      },
     },
   };
-  // Why a Start that changed nothing changed nothing (logged below). `not_pending`
-  // = the session was already ACTIVE / ended; the org codes = the admission no-op.
-  let noopReason: "not_pending" | "org_inactive" | "instructor_not_admitted" = "not_pending";
-  const result = orgOwned
-    ? await withOrgRowLock(studentForConsent.organizationId as string, async (tx) => {
-        const admitted = await orgInstructorAdmitted(
-          tx,
-          studentForConsent.organizationId as string,
-          session.adminUserId
-        );
-        if (!admitted) {
-          noopReason = await orgAdmissionFailureReason(
-            tx,
-            studentForConsent.organizationId as string
-          );
-          return { count: 0 };
-        }
-        if (entryRefusal) {
-          const phase = await tx.whiteboardSession.findUnique({
-            where: { id: whiteboardSessionId },
-            select: { sessionPhase: true },
-          });
-          if (phase?.sessionPhase === "PENDING") {
-            refused.reason = entryRefusal;
-            return { count: 0 };
-          }
-        }
-        await holdPoint("start:tx:between_consent_read_and_update", whiteboardSessionId);
-        return tx.whiteboardSession.updateMany(pendingUpdate);
-      })
-    : await (async () => {
-        if (entryRefusal) {
-          const phase = await db.whiteboardSession.findUnique({
-            where: { id: whiteboardSessionId },
-            select: { sessionPhase: true },
-          });
-          if (phase?.sessionPhase === "PENDING") {
-            refused.reason = entryRefusal;
-            return { count: 0 };
-          }
-        }
-        await holdPoint("start:tx:between_consent_read_and_update", whiteboardSessionId);
-        return withDbRetry(() => db.whiteboardSession.updateMany(pendingUpdate), {
-          label: "startWhiteboardSession",
-        });
-      })();
 
-  if (refused.reason) {
-    console.warn(
-      `[slc] wbsid=${whiteboardSessionId} action=session_start_refused mode=${requestedMode} reason=${refused.reason}`
-    );
-    return { ok: false, reason: refused.reason };
+  // One transaction on both paths (consent plan § 2.6, SF-B): the plain path is a new db.$transaction, the org
+  // path runs inside the org row lock. Both carry the explicit 10 s timeout the hold seam sits well inside.
+  // The entry rule (consent record, online switch, org admission) runs INSIDE it, twice (before the update and
+  // over the frozen values after it), so the check and the write cannot interleave.
+  let outcome: StartTxOutcome;
+  try {
+    outcome = orgOwned
+      ? await withOrgRowLock(
+          studentForConsent.organizationId as string,
+          (tx) => startSessionTx(tx, txInput),
+          { timeout: SEAM_BEARING_TX_TIMEOUT_MS }
+        )
+      : await withDbRetry(
+          () =>
+            db.$transaction((tx) => startSessionTx(tx, txInput), {
+              timeout: SEAM_BEARING_TX_TIMEOUT_MS,
+            }),
+          { label: "startWhiteboardSession" }
+        );
+  } catch (err) {
+    if (err instanceof StartRefusedSignal) {
+      // The transaction has unwound: the session is still PENDING and no snapshot row was written or changed.
+      // The refusal is RETURNED, never thrown (a thrown server-action error is redacted in production).
+      console.warn(
+        `[slc] wbsid=${whiteboardSessionId} action=session_start_refused mode=${requestedMode} reason=${err.reason}`
+      );
+      return { ok: false, reason: err.reason };
+    }
+    throw err;
   }
 
-  if (result.count > 0) {
+  if (outcome.count > 0) {
     console.info(
       `[slc] wbsid=${whiteboardSessionId} action=session_started phase=active`
     );
   } else {
     console.info(
-      `[slc] wbsid=${whiteboardSessionId} action=session_start_noop reason=${noopReason}`
+      `[slc] wbsid=${whiteboardSessionId} action=session_start_noop reason=${outcome.noopReason}`
     );
   }
 
@@ -438,11 +396,16 @@ export async function startWhiteboardSession(
     whiteboardSessionId,
     metadata: {
       mode: sessionMode ?? "LIVE",
-      noop: result.count === 0,
+      noop: outcome.count === 0,
     },
   });
 
-  return { ok: true, phase: "active" };
+  return {
+    ok: true,
+    phase: "active",
+    sessionMode: outcome.sessionMode,
+    capabilities: outcome.capabilities,
+  };
 }
 
 // -------------------------------------------------------------------

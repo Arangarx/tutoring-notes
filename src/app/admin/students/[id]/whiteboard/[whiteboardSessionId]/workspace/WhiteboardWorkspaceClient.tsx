@@ -43,7 +43,7 @@
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
 import { formatDurationMs as formatDuration } from "@/lib/time/format-duration-ms";
 import { setCaptureDeferActive } from "@/lib/deploy/capture-defer-registry";
-import { entryRefusalMessage } from "@/lib/scheduling/session-entry";
+import { entryRefusalMessage, type EntryBlockReason } from "@/lib/scheduling/session-entry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHydrated } from "@/hooks/useHydrated";
 import { createPortal } from "react-dom";
@@ -337,6 +337,8 @@ type Props = {
   initialAllowAudioRecording?: boolean | null;
   /** Effective allowLiveSession from the session consent snapshot. Null shows Online. */
   allowLiveSession?: boolean | null;
+  /** Tutor waiting room: why neither mode can start (no consent record, unclaimed). Disables Start and shows the reason. */
+  startBlockedReason?: EntryBlockReason | null;
   /** True when SessionConsentSnapshot exists for this session. Consumed in Block B Commit 2+. */
   initialHasConsentSnapshot?: boolean;
   /**
@@ -511,6 +513,7 @@ export function WhiteboardWorkspaceClient({
   activatedAt: _activatedAt,
   initialAllowAudioRecording = null,
   allowLiveSession = null,
+  startBlockedReason = null,
   initialHasConsentSnapshot = false,
   studentLearnerProfileId = null,
   identityKey,
@@ -7816,6 +7819,11 @@ export function WhiteboardWorkspaceClient({
         onStart={() => void activateSessionLive(sessionMode)}
         onSessionModeChange={(m) => setSessionMode(m)}
         allowLiveSession={allowLiveSession}
+        startBlockedMessage={
+          role === "tutor" && startBlockedReason
+            ? entryRefusalMessage(startBlockedReason, studentName)
+            : null
+        }
         micControlNode={overlayMicNode}
         camControlNode={overlayCamNode}
         micPickerNode={overlayMicPickerNode}
