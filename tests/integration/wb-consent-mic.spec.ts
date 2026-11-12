@@ -324,7 +324,7 @@ test.describe("consent 6d: Mic openers (B4, D7)", {
     "M16 (tutor arm): in person, audio off: the tutor's manual mic controls cannot acquire a mic; online audio off still can",
     async ({ browser }) => {
       test.setTimeout(240_000);
-      await withTutorRoom(browser, { switches: AUDIO_OFF }, async ({ page, consoleLines }) => {
+      await withTutorRoom(browser, { switches: AUDIO_OFF }, async ({ page }) => {
         await chooseMode(page, "IN_PERSON");
         await expect(overlay(page).getByTestId("wb-topbar-mic-toggle")).toBeDisabled();
         await startFromWaitingRoom(page);
@@ -334,7 +334,6 @@ test.describe("consent 6d: Mic openers (B4, D7)", {
         await page.waitForTimeout(1_500);
         expect(await audioRequests(page)).toBe(0);
         // A disabled control dispatches no click, so nothing reaches the hook to log here; M4 owns the hook's log.
-        expect(micBlockedLines(consoleLines).filter((l) => !l.includes("reason=no") && !l.includes("reason=defer"))).toEqual([]);
       });
       await withTutorRoom(browser, { switches: AUDIO_OFF }, async ({ page }) => {
         await chooseMode(page, "LIVE");

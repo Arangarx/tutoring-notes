@@ -3042,3 +3042,56 @@ describe("useLiveAV — student publish-path mic boost (WS-M)", () => {
     unmount();
   });
 });
+
+function constraintsRequestAudio(constraints: MediaStreamConstraints | undefined): boolean {
+  const audio = constraints?.audio;
+  return audio === true || (typeof audio === "object" && audio !== null);
+}
+
+function constraintsRequestVideo(constraints: MediaStreamConstraints | undefined): boolean {
+  const video = constraints?.video;
+  return video === true || (typeof video === "object" && video !== null);
+}
+
+describe("useLiveAV — mic acquire gate skips getUserMedia", () => {
+  test.each(["no", "defer"] as const)(
+    "micAcquire %s: requestMic and setMicDevice do not call getUserMedia; requestMicAndCam asks for the camera only",
+    async (micAcquire) => {
+      const getUM = jest.fn(async (constraints: MediaStreamConstraints) => {
+        const audio = constraintsRequestAudio(constraints) ? 1 : 0;
+        const video = constraintsRequestVideo(constraints) ? 1 : 0;
+        return makeFakeStream(audio, video).stream as unknown as MediaStream;
+      });
+
+      const micProps = makeBaseProps({ _getUserMedia: getUM, micAcquire });
+      const micHook = renderHook(() => useLiveAV(micProps));
+      await act(async () => {
+        await micHook.result.current.requestMic();
+      });
+      expect(getUM).not.toHaveBeenCalled();
+      micHook.unmount();
+
+      getUM.mockClear();
+      const bundleProps = makeBaseProps({ _getUserMedia: getUM, micAcquire });
+      const bundleHook = renderHook(() => useLiveAV(bundleProps));
+      await act(async () => {
+        await bundleHook.result.current.requestMicAndCam();
+      });
+      expect(getUM.mock.calls.length).toBeGreaterThan(0);
+      for (const [constraints] of getUM.mock.calls) {
+        expect(constraintsRequestAudio(constraints)).toBe(false);
+      }
+      expect(getUM.mock.calls.some(([constraints]) => constraintsRequestVideo(constraints))).toBe(true);
+      bundleHook.unmount();
+
+      getUM.mockClear();
+      const deviceProps = makeBaseProps({ _getUserMedia: getUM, micAcquire });
+      const deviceHook = renderHook(() => useLiveAV(deviceProps));
+      await act(async () => {
+        await deviceHook.result.current.setMicDevice("mic-blocked-id");
+      });
+      expect(getUM).not.toHaveBeenCalled();
+      deviceHook.unmount();
+    }
+  );
+});

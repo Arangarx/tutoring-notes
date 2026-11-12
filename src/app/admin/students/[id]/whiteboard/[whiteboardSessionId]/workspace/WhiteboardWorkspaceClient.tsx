@@ -82,6 +82,7 @@ import {
   type SessionCapabilities,
   type SessionConsentInput,
 } from "@/lib/recording/session-capabilities";
+import { micRequestBlockedReason } from "@/lib/recording/mic-acquire-gate";
 import {
   createSessionMsClock,
   type SessionMsClock,
@@ -1645,7 +1646,7 @@ export function WhiteboardWorkspaceClient({
   const initialHasConsentSnapshot = initialConsentInput.hasConsentSnapshot;
   // The learner's mic gate is C3c; until then the learner device keeps today's behavior.
   const micAcquireForRole = role === "tutor" ? tutorMicAcquire : "yes";
-  const tutorMicLocked = role === "tutor" && tutorMicAcquire !== "yes";
+  const tutorMicLocked = role === "tutor" && micRequestBlockedReason(tutorMicAcquire) !== null;
 
   const audioConsentBannerMessage = useMemo(() => {
     if (role !== "tutor") return null;
