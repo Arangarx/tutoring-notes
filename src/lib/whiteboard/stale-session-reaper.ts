@@ -11,6 +11,7 @@ import {
   readReaperModeOverride,
   SEAM_BEARING_TX_TIMEOUT_MS,
 } from "@/lib/test-seams";
+import { lockWhiteboardSessionRowTx } from "@/lib/whiteboard/session-row-lock";
 import { stampStaleWhiteboardSessionEnd } from "@/lib/whiteboard/stale-session-stamp";
 
 /**
@@ -230,11 +231,26 @@ export async function runStaleSessionReaper(opts: {
       if (opts.mode === "dry_run") continue;
 
       await holdPoint("reaper:between_scan_and_stamp", id);
-      // C4c commit 1: the NAIVE form. Stamps from the scan-time decision with no re-check under the lock.
-      await db.$transaction(
-        (tx) => stampStaleWhiteboardSessionEnd(tx, id, verdict.lastActivityAt, false, "reaper"),
+      // The scan-time verdict is a hint, not the decision. Under the row lock (first statement, the same lock
+      // End and the checkpoint route order against) the row may be gone or already ended, and the predicate is
+      // evaluated AGAIN on fresh reads (READ COMMITTED), so activity or a tutor End that landed between the scan
+      // and here wins. The existing helper is then called unchanged with the re-read last-activity instant.
+      const decision = await db.$transaction(
+        async (tx): Promise<SessionIdleVerdict> => {
+          const exists = await lockWhiteboardSessionRowTx(tx, id);
+          if (!exists) return { kind: "gone" };
+          const locked = await evaluateSessionIdle(tx, id, now);
+          if (locked.kind !== "idle") return locked;
+          await stampStaleWhiteboardSessionEnd(tx, id, locked.lastActivityAt, false, "reaper");
+          return locked;
+        },
         { timeout: SEAM_BEARING_TX_TIMEOUT_MS }
       );
+      if (decision.kind !== "idle") {
+        result.skipped += 1;
+        result.outcomes.push({ id, action: "skip", reason: skipReason(decision) });
+        continue;
+      }
       result.reaped += 1;
       result.outcomes.push({ id, action: "reaped" });
     } catch (err) {
