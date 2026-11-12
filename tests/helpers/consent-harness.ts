@@ -239,6 +239,7 @@ export type ConsentInvokeAction =
   | "registerSegment"
   | "enqueueChunk"
   | "endSession"
+  | "startSession"
   | "endWhiteboardSession"
   | "endStaleWhiteboardSession"
   | "kick"

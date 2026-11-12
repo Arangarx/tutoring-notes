@@ -7,6 +7,7 @@ import {
   finalizeWhiteboardSessionFromBackend,
   generateNotesFromWhiteboardSessionAction,
   registerWhiteboardSessionAudioSegmentAction,
+  startWhiteboardSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
 import {
   kickSessionChunksAction,
@@ -67,6 +68,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         result: await endWhiteboardSession(sessionId, a.finalEventsBlobUrl ?? "", a.opts),
       });
+    }
+    case "startSession": {
+      const a = args as { sessionMode?: "LIVE" | "IN_PERSON" };
+      return NextResponse.json({ result: await startWhiteboardSession(sessionId, a.sessionMode) });
     }
     case "endStaleWhiteboardSession":
       return NextResponse.json({ result: await endStaleWhiteboardSession(sessionId) });

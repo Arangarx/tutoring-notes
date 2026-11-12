@@ -394,6 +394,7 @@ export async function startWhiteboardSession(
             return { count: 0 };
           }
         }
+        await holdPoint("start:tx:between_consent_read_and_update", whiteboardSessionId);
         return tx.whiteboardSession.updateMany(pendingUpdate);
       })
     : await (async () => {
@@ -407,6 +408,7 @@ export async function startWhiteboardSession(
             return { count: 0 };
           }
         }
+        await holdPoint("start:tx:between_consent_read_and_update", whiteboardSessionId);
         return withDbRetry(() => db.whiteboardSession.updateMany(pendingUpdate), {
           label: "startWhiteboardSession",
         });
