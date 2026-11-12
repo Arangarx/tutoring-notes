@@ -50,6 +50,15 @@ describe("wb-test-select session review transcript", () => {
   });
 });
 
+describe("wb-test-select blob token mint (W19)", () => {
+  it("maps the upload-token route and whiteboard-scope to @wb-assets, which expands to @wb-sync", () => {
+    for (const file of ["src/app/api/upload/blob/route.ts", "src/lib/whiteboard-scope.ts"]) {
+      expect(tagsForPaths([file])).toEqual(["@wb-assets"]);
+    }
+    expect(expandTags(["@wb-assets"])).toEqual(expect.arrayContaining(["@wb-assets", "@wb-sync"]));
+  });
+});
+
 describe("wb-test-select consent matrix (@wb-consent)", () => {
   it("maps the consent modules, C0 test infra and consent specs to @wb-consent", () => {
     const files = [

@@ -74,7 +74,8 @@ async function attachShareReplaySnapshot(args: {
 }): Promise<void> {
   const blobUrl = await uploadHarnessBlob({
     request: args.request,
-    pathname: `whiteboard-sessions/${args.adminUserId}/${args.studentId}/pw-parent-share-snapshot.png`,
+    // Tutor token mint (W19) requires `whiteboard-sessions/<studentId>/<sessionId>/`, as the real client uses.
+    pathname: `whiteboard-sessions/${args.studentId}/${args.whiteboardSessionId}/pw-parent-share-snapshot.png`,
     body: SHARE_REPLAY_SNAPSHOT_MARKER,
     contentType: "image/png",
     clientPayload: {

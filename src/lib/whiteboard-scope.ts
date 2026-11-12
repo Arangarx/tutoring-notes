@@ -15,6 +15,7 @@
 
 import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
+import { resolveSessionCapabilities } from "@/lib/consent-scope";
 import { resolveOrgSessionAccess } from "@/lib/org-session-access";
 import { canAccessStudentRow, requireStudentScope } from "@/lib/student-scope";
 import { verifyIsSessionParticipant } from "@/lib/session-participant-scope";
@@ -122,6 +123,47 @@ export function orgNotesSaveAllowed(session: {
 }
 
 /**
+ * The one prefix every client-direct whiteboard upload (events, snapshot, assets) for a session
+ * must live under: `whiteboard-sessions/<studentId>/<sessionId>/` (trailing slash).
+ *
+ * The trailing slash and the `<studentId>/<sessionId>` order matter. This prefix must NOT match
+ * the server-written concatenated-audio path
+ * `whiteboard-sessions/<adminUserId>/<studentId>/<sessionId>-concat.webm` (concat-audio.ts), nor any
+ * other `whiteboard-sessions/<adminUserId>/<studentId>/...` blob: the board purge deletes by this prefix.
+ */
+export function isPathUnderWhiteboardSessionPrefix(
+  pathname: string,
+  studentId: string,
+  whiteboardSessionId: string
+): boolean {
+  return pathname.startsWith(`whiteboard-sessions/${studentId}/${whiteboardSessionId}/`);
+}
+
+/**
+ * Tutor (cookie-session) token mint for whiteboard-events / whiteboard-snapshot / whiteboard-asset.
+ * Caller has already asserted ownership, org read-only and tutor approval. Refuses when:
+ *  - `pathname` is not under the session's own prefix (so "everything the client uploaded for this
+ *    board is under one prefix" holds, and the prefix-only board purge is complete); or
+ *  - the session has ended AND its whiteboard capability does not persist (a board that must not be
+ *    kept cannot be recreated by a fresh token). An ended session that still persists its board may
+ *    mint; a token minted before End may also still PUT after it (that window is the purge's pass 2).
+ */
+export async function assertTutorSessionAllowsWhiteboardUpload(
+  session: Pick<AuthorisedWhiteboardSession, "id" | "studentId" | "endedAt">,
+  pathname: string
+): Promise<void> {
+  if (!isPathUnderWhiteboardSessionPrefix(pathname, session.studentId, session.id)) {
+    throw new Error("Invalid upload path for this session.");
+  }
+  if (session.endedAt) {
+    const capabilities = await resolveSessionCapabilities(session.id);
+    if (!capabilities.whiteboard.persist) {
+      throw new Error("This whiteboard session has ended.");
+    }
+  }
+}
+
+/**
  * Validates a `WhiteboardJoinToken` for *client-direct* Vercel Blob
  * `whiteboard-asset` uploads from the anonymous `/w/[joinToken]` page.
  * Pathname must be under our namespaced `whiteboard-sessions/{studentId}/{sessionId}/…`
@@ -161,8 +203,7 @@ export async function assertJoinTokenAllowsWhiteboardAssetUpload(
     throw new Error("This whiteboard session has ended.");
   }
   const { studentId } = row.whiteboardSession;
-  const expected = `whiteboard-sessions/${studentId}/${whiteboardSessionId}/`;
-  if (!pathname.startsWith(expected)) {
+  if (!isPathUnderWhiteboardSessionPrefix(pathname, studentId, whiteboardSessionId)) {
     throw new Error("Invalid upload path for this session.");
   }
   return { studentId: row.whiteboardSession.studentId };
@@ -200,8 +241,7 @@ export async function assertLearnerSessionAllowsWhiteboardAssetUpload(
   if (!session) throw new Error("Session not found.");
   if (session.endedAt) throw new Error("This whiteboard session has ended.");
 
-  const expected = `whiteboard-sessions/${session.studentId}/${whiteboardSessionId}/`;
-  if (!pathname.startsWith(expected)) {
+  if (!isPathUnderWhiteboardSessionPrefix(pathname, session.studentId, whiteboardSessionId)) {
     throw new Error("Invalid upload path for this session.");
   }
   return { studentId: session.studentId };

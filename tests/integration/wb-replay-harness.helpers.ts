@@ -89,7 +89,8 @@ export async function uploadReplayEvents(args: {
 }): Promise<string> {
   const blobUrl = await uploadHarnessBlob({
     request: args.request,
-    pathname: `whiteboard-sessions/${args.adminUserId}/${args.studentId}/pw-replay-events.json`,
+    // Tutor token mint (W19) requires `whiteboard-sessions/<studentId>/<sessionId>/`, as the real client uses.
+    pathname: `whiteboard-sessions/${args.studentId}/${args.whiteboardSessionId}/pw-replay-events.json`,
     body: args.eventsJson ?? replayEventsFixture(),
     contentType: "application/json",
     clientPayload: {

@@ -105,6 +105,11 @@ const PATH_RULES = [
     tags: [TAG.WB_ASSETS],
   },
   {
+    // Tutor/join/learner token mint for client-direct whiteboard blobs (consent wave W19).
+    re: /src\/app\/api\/upload\/blob\/|src\/lib\/whiteboard-scope\.ts/,
+    tags: [TAG.WB_ASSETS],
+  },
+  {
     re: /sync-client|whiteboard\/sync|wb-e2e-scene|apply-reconciled|wb-relay/i,
     tags: [TAG.WB_SYNC, TAG.WB_STROKES],
   },

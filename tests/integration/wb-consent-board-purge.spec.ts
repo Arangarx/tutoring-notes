@@ -8,7 +8,7 @@
  * Run (after un-fixme): npx playwright test tests/integration/wb-consent-board-purge.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "@playwright/test";
 import { TAG } from "../test-tags";
 import { findScenePayloadEvents, openRelayClient, probeRelayRoom } from "../helpers/relay-probe";
 import { PrismaClient } from "@prisma/client";
@@ -24,7 +24,7 @@ import {
   seedConsentSession,
   startFromWaitingRoom,
 } from "../helpers/consent-tutor-room";
-import { seedStartFixture } from "../helpers/consent-start-fixture";
+import { seedStartFixture, type StartFixture } from "../helpers/consent-start-fixture";
 import {
   armHold,
   expectReleasedByTest,
@@ -333,10 +333,128 @@ test.describe("consent 6e: Whiteboard", {
     }
   );
   // Oracle: HTTP error from the token route, two arms (prefix; 'endedAt'); prerequisite of C4b, ships first as C4a (R2); red on today's code for both arms
-  test.fixme(
-    "W19: tutor-path whiteboard upload outside the session prefix, or after End on a whiteboard-off session, is refused at token mint",
-    async () => {
-      // pending: wave that owns W19
+  // Seeds three tutor-owned sessions (rows written straight to Postgres, never through the code under test):
+  //   live      whiteboard off, not ended   -> a live session mints even with the board off (persist is not the gate)
+  //   offEnded  whiteboard off, ended       -> mint refused (the board must not be recreated)
+  //   onEnded   whiteboard on,  ended       -> mint still allowed (its board persists; a late write is W12/C4b's business)
+  // Refusal oracle = the HTTP response of the real token route: non-2xx and no client token in the body.
+  // The tutor path has two branches (whiteboard-asset; whiteboard-events/-snapshot), so every arm runs on all three kinds.
+  // Three tests so each arm is red on its own (a failing prefix arm must not hide the endedAt arm).
+  const W19_KINDS = [
+    { kind: "whiteboard-events", file: "1-events.json" },
+    { kind: "whiteboard-snapshot", file: "1-snapshot.png" },
+    { kind: "whiteboard-asset", file: "assets/1-image.png" },
+  ] as const;
+  type W19Kind = (typeof W19_KINDS)[number]["kind"];
+  type W19Sessions = { live: StartFixture; offEnded: StartFixture; onEnded: StartFixture };
+
+  async function withW19Sessions(run: (s: W19Sessions) => Promise<void>): Promise<void> {
+    const ended = { sessionPhase: "ACTIVE" as const, endedAt: new Date(Date.now() - 60 * 60_000) };
+    const live = await seedStartFixture({ record: { allowWhiteboardRecording: false }, snapshot: true });
+    const offEnded = await seedStartFixture({ record: { allowWhiteboardRecording: false }, snapshot: true });
+    const onEnded = await seedStartFixture({ record: {}, snapshot: true });
+    try {
+      await prisma.whiteboardSession.update({ where: { id: live.whiteboardSessionId }, data: { sessionPhase: "ACTIVE" } });
+      for (const f of [offEnded, onEnded]) {
+        await prisma.whiteboardSession.update({ where: { id: f.whiteboardSessionId }, data: ended });
+      }
+      await run({ live, offEnded, onEnded });
+    } finally {
+      for (const f of [live, offEnded, onEnded]) await f.cleanup();
+    }
+  }
+
+  async function mintW19(
+    request: APIRequestContext,
+    f: StartFixture,
+    kind: W19Kind,
+    pathname: string
+  ): Promise<{ status: number; token: boolean; text: string }> {
+    const res = await request.post("/api/upload/blob", {
+      data: {
+        type: "blob.generate-client-token",
+        payload: {
+          pathname,
+          clientPayload: JSON.stringify({ kind, whiteboardSessionId: f.whiteboardSessionId, studentId: f.studentId }),
+          multipart: false,
+        },
+      },
+    });
+    const text = await res.text();
+    return { status: res.status(), token: /"putToken"|"clientToken"/.test(text), text };
+  }
+
+  const w19Own = (f: StartFixture, file: string) => `whiteboard-sessions/${f.studentId}/${f.whiteboardSessionId}/${file}`;
+
+  test(
+    "W19: tutor-path whiteboard upload outside the session prefix is refused at token mint",
+    { tag: [TAG.WB_ASSETS] },
+    async ({ request }) => {
+      test.setTimeout(120_000);
+      await withW19Sessions(async ({ live, onEnded }) => {
+        for (const { kind, file } of W19_KINDS) {
+          // another tenant's namespace
+          const foreign = await mintW19(request, live, kind, "whiteboard-sessions/other/other/x");
+          expect(foreign.status, `${kind} foreign prefix must be refused`).toBeGreaterThanOrEqual(400);
+          expect(foreign.token, `${kind} foreign prefix must not receive a token`).toBe(false);
+          // right student, another session's prefix
+          const otherSession = await mintW19(
+            request,
+            live,
+            kind,
+            `whiteboard-sessions/${live.studentId}/${onEnded.whiteboardSessionId}/${file}`
+          );
+          expect(otherSession.status, `${kind} other session's prefix must be refused`).toBeGreaterThanOrEqual(400);
+          expect(otherSession.token, `${kind} other session's prefix must not receive a token`).toBe(false);
+          // concat-audio shape (concat-audio.ts): the trailing slash keeps it off the session prefix
+          const concat = await mintW19(
+            request,
+            live,
+            kind,
+            `whiteboard-sessions/${live.adminUserId}/${live.studentId}/${live.whiteboardSessionId}-concat.webm`
+          );
+          expect(concat.status, `${kind} concat-audio path must be refused`).toBeGreaterThanOrEqual(400);
+          expect(concat.token, `${kind} concat-audio path must not receive a token`).toBe(false);
+          // the admin/student namespace the old test helpers used is not the session prefix either
+          const adminNs = await mintW19(request, live, kind, `whiteboard-sessions/${live.adminUserId}/${live.studentId}/${file}`);
+          expect(adminNs.status, `${kind} admin/student namespace must be refused`).toBeGreaterThanOrEqual(400);
+          expect(adminNs.token, `${kind} admin/student namespace must not receive a token`).toBe(false);
+        }
+      });
+    }
+  );
+
+  test(
+    "W19: tutor-path whiteboard upload after End on a whiteboard-off session is refused at token mint",
+    { tag: [TAG.WB_ASSETS] },
+    async ({ request }) => {
+      test.setTimeout(120_000);
+      await withW19Sessions(async ({ offEnded }) => {
+        for (const { kind, file } of W19_KINDS) {
+          // own prefix, session ended, whiteboard persist false
+          const afterEnd = await mintW19(request, offEnded, kind, w19Own(offEnded, file));
+          expect(afterEnd.status, `${kind} ended whiteboard-off session must be refused`).toBeGreaterThanOrEqual(400);
+          expect(afterEnd.token, `${kind} ended whiteboard-off session must not receive a token`).toBe(false);
+        }
+      });
+    }
+  );
+
+  test(
+    "W19 (controls): a live session, and an ended whiteboard-on session, still mint on the correct session prefix",
+    { tag: [TAG.WB_ASSETS] },
+    async ({ request }) => {
+      test.setTimeout(120_000);
+      await withW19Sessions(async ({ live, onEnded }) => {
+        for (const { kind, file } of W19_KINDS) {
+          const liveOk = await mintW19(request, live, kind, w19Own(live, file));
+          expect(liveOk.status, `${kind} live session, own prefix: ${liveOk.text}`).toBe(200);
+          expect(liveOk.token, `${kind} live session must receive a token`).toBe(true);
+          const onEndedOk = await mintW19(request, onEnded, kind, w19Own(onEnded, file));
+          expect(onEndedOk.status, `${kind} ended whiteboard-on session, own prefix: ${onEndedOk.text}`).toBe(200);
+          expect(onEndedOk.token, `${kind} ended whiteboard-on session must still receive a token`).toBe(true);
+        }
+      });
     }
   );
   // Oracle: Kill the 'after()' work (fault injection); intent present; sweep pass 1, backdate seam, sweep pass 2 stamps 'boardPurgedAt'

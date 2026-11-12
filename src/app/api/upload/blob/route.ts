@@ -12,6 +12,7 @@ import {
   assertJoinTokenAllowsWhiteboardAssetUpload,
   assertLearnerSessionAllowsWhiteboardAssetUpload,
   assertOwnsWhiteboardSession,
+  assertTutorSessionAllowsWhiteboardUpload,
   type AuthorisedWhiteboardSession,
 } from "@/lib/whiteboard-scope";
 import { getLearnerSession } from "@/lib/learner-session";
@@ -68,6 +69,25 @@ async function rejectOrgReadOnlyUpload(session: AuthorisedWhiteboardSession): Pr
   if (!open) {
     throw new Error("This whiteboard session is read-only.");
   }
+}
+
+/**
+ * The one tutor (cookie-session) token-mint gate for every whiteboard kind (events, snapshot, asset):
+ * ownership, org read-only, B1 tutor approval, then the W19 guards (pathname under this session's
+ * own `whiteboard-sessions/<studentId>/<sessionId>/` prefix; no mint after End when the board does
+ * not persist). The prefix must not match the concat path
+ * `whiteboard-sessions/<adminUserId>/<studentId>/<sessionId>-concat.webm` (concat-audio.ts).
+ */
+async function authoriseTutorWhiteboardUpload(
+  whiteboardSessionId: string,
+  pathname: string
+): Promise<AuthorisedWhiteboardSession> {
+  const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+  await rejectOrgReadOnlyUpload(session);
+  // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
+  await assertTutorApproved(session.adminUserId);
+  await assertTutorSessionAllowsWhiteboardUpload(session, pathname);
+  return session;
 }
 
 const POLICY: Record<
@@ -207,11 +227,8 @@ export async function POST(request: Request): Promise<Response> {
             if (payload?.joinToken) {
               throw new Error("joinToken is only valid for whiteboard-asset uploads.");
             }
-            const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
-            await rejectOrgReadOnlyUpload(session);
+            const session = await authoriseTutorWhiteboardUpload(whiteboardSessionId, pathname);
             studentIdForToken = session.studentId;
-            // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
-            await assertTutorApproved(session.adminUserId);
             console.log(
               `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
             );
@@ -220,11 +237,8 @@ export async function POST(request: Request): Promise<Response> {
           if (payload?.joinToken) {
             throw new Error("joinToken is only valid for whiteboard-asset uploads.");
           }
-          const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
-          await rejectOrgReadOnlyUpload(session);
+          const session = await authoriseTutorWhiteboardUpload(whiteboardSessionId, pathname);
           studentIdForToken = session.studentId;
-          // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
-          await assertTutorApproved(session.adminUserId);
           console.log(
             `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
           );
