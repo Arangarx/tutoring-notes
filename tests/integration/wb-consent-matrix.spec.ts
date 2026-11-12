@@ -827,17 +827,25 @@ test.describe("consent 6e: Whiteboard", {
         },
         { timeout: 90_000 }
       );
-      const { audioSec, totalSec } = await page.evaluate(() => {
-        const el = document.querySelector('[data-testid="wb-replay-audio"]') as HTMLAudioElement;
-        const label = document.querySelector(".mynk-wb-replay-timeline__elapsed")?.textContent ?? "";
-        const total = (label.split("/")[1] ?? "").trim();
-        const bits = total.split(":").map(Number);
-        const sec = bits.length === 3 ? bits[0]! * 3600 + bits[1]! * 60 + bits[2]! : bits.length === 2 ? bits[0]! * 60 + bits[1]! : 0;
-        return { audioSec: el.duration, totalSec: sec };
-      });
+      const audioSec = await page.evaluate(
+        () => (document.querySelector('[data-testid="wb-replay-audio"]') as HTMLAudioElement).duration
+      );
       expect(Math.abs(audioSec - fixtureSec), `audio ${audioSec}s vs fixture ${fixtureSec}s`).toBeLessThan(0.5);
-      // The scrubber spans the audio, not the empty log (the label is whole seconds).
-      expect(Math.abs(totalSec - fixtureSec), `scrubber ${totalSec}s vs fixture ${fixtureSec}s`).toBeLessThanOrEqual(1.5);
+      // The scrubber spans the audio, not the empty log (the label is whole seconds). Polled: the label can
+      // render the log's 0 s before the audio duration reaches the timeline.
+      const scrubberTotalSec = () =>
+        page.evaluate(() => {
+          const label = document.querySelector(".mynk-wb-replay-timeline__elapsed")?.textContent ?? "";
+          const total = (label.split("/")[1] ?? "").trim();
+          const bits = total.split(":").map(Number);
+          return bits.length === 3 ? bits[0]! * 3600 + bits[1]! * 60 + bits[2]! : bits.length === 2 ? bits[0]! * 60 + bits[1]! : 0;
+        });
+      await expect
+        .poll(async () => Math.abs((await scrubberTotalSec()) - fixtureSec), {
+          message: "scrubber total vs fixture audio length",
+          timeout: 15_000,
+        })
+        .toBeLessThanOrEqual(1.5);
     }
   );
 });
