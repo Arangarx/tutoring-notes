@@ -7,7 +7,7 @@
  * under test.
  */
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { seedOpenWhiteboardSession, seedTestAdmin } from "../visual/helpers";
@@ -96,28 +96,28 @@ export async function seedPendingWithoutConsent(
 }
 
 /**
- * After the tutor pressed the waiting-room Start: the refusal line for this learner's
- * situation is shown, the generic failure copy is not, and enforcement is unchanged (still in
- * the waiting room, the session still PENDING in the database).
+ * The refusal line for this learner's situation, the generic failure copy absent.
+ * `surface` is either the post-click error or the disabled-Start reason.
  */
-export async function expectRefusedStartShown(
-  page: Page,
+async function expectLearnerRefusalCopy(
+  surface: Locator,
   testCase: RefusedStartCase,
   seeded: SeededPendingSession
 ): Promise<void> {
-  const error = page.getByTestId("wb-waiting-start-error");
-  await expect(error).toBeVisible({ timeout: 30_000 });
-  await expect(error).toContainText(testCase.line(seeded.learnerName));
+  await expect(surface).toBeVisible({ timeout: 30_000 });
+  await expect(surface).toContainText(testCase.line(seeded.learnerName));
   if (testCase.parentHint) {
-    await expect(error).toContainText("Parent account section");
+    await expect(surface).toContainText("Parent account section");
   } else {
-    await expect(error).not.toContainText("Parent account");
-    await expect(error).not.toContainText("The parent hasn't");
-    await expect(error).not.toContainText("hasn't connected their Mynk account");
+    await expect(surface).not.toContainText("Parent account");
+    await expect(surface).not.toContainText("The parent hasn't");
+    await expect(surface).not.toContainText("hasn't connected their Mynk account");
   }
-  await expect(error).not.toContainText("Error ID");
-  await expect(error).not.toContainText("Couldn't start the session");
-  await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible();
+  await expect(surface).not.toContainText("Error ID");
+  await expect(surface).not.toContainText("Couldn't start the session");
+}
+
+async function expectSessionStillPending(seeded: SeededPendingSession): Promise<void> {
   const prisma = new PrismaClient();
   try {
     const row = await prisma.whiteboardSession.findUniqueOrThrow({
@@ -128,4 +128,34 @@ export async function expectRefusedStartShown(
   } finally {
     await prisma.$disconnect();
   }
+}
+
+/**
+ * After the tutor pressed the waiting-room Start: the refusal line for this learner's
+ * situation is shown, the generic failure copy is not, and enforcement is unchanged (still in
+ * the waiting room, the session still PENDING in the database).
+ */
+export async function expectRefusedStartShown(
+  page: Page,
+  testCase: RefusedStartCase,
+  seeded: SeededPendingSession
+): Promise<void> {
+  await expectLearnerRefusalCopy(page.getByTestId("wb-waiting-start-error"), testCase, seeded);
+  await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible();
+  await expectSessionStillPending(seeded);
+}
+
+/**
+ * C3a: Start is disabled on load and already shows this learner's refusal line.
+ * The session stays PENDING because nothing was clicked.
+ */
+export async function expectDisabledStartShowsLearnerLine(
+  page: Page,
+  testCase: RefusedStartCase,
+  seeded: SeededPendingSession
+): Promise<void> {
+  await expect(page.getByTestId("wb-start-session")).toBeDisabled();
+  await expectLearnerRefusalCopy(page.getByTestId("wb-waiting-start-blocked"), testCase, seeded);
+  await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible();
+  await expectSessionStillPending(seeded);
 }

@@ -35,7 +35,7 @@ import {
 import { expectReasonUnderControl } from "./entry-reason.helpers";
 import {
   REFUSED_START_CASES,
-  expectRefusedStartShown,
+  expectDisabledStartShowsLearnerLine,
   seedPendingWithoutConsent,
 } from "../helpers/refused-start";
 
@@ -902,12 +902,10 @@ test.describe("org QoL schedule bridge", () => {
 });
 
 /**
- * A refused Start tells the tutor the same sentence the disabled control shows for that
- * learner's situation (self-learner / parent-held / unclaimed), and only parent-held and
- * unclaimed learners get the "Parent account" hint. Real browser, real server action: the
- * session is seeded PENDING straight into the database (the create path would refuse first),
- * the tutor presses the waiting-room Start in person, the server refuses. Expected strings
- * are the W4 copy spec's, written by hand.
+ * A disabled waiting-room Start shows the learner's own line (self-learner / parent-held /
+ * unclaimed), and only parent-held and unclaimed learners get the "Parent account" hint.
+ * The session is seeded PENDING straight into the database. Start is disabled on load and
+ * the reason is already visible (C3a). Expected strings are the W4 copy spec's, written by hand.
  */
 test.describe(
   "refused waiting-room Start names the learner's situation",
@@ -925,13 +923,9 @@ test.describe(
           { waitUntil: "domcontentloaded" }
         );
         await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible({ timeout: 90_000 });
-        // Hydrated: a click before hydration is lost, and no refusal would ever show.
         await waitForWbE2eBridge(page, "tutor");
-        const start = page.getByTestId("wb-start-session");
-        await expect(start).toBeEnabled({ timeout: 30_000 });
-        await start.click();
 
-        await expectRefusedStartShown(page, testCase, seeded);
+        await expectDisabledStartShowsLearnerLine(page, testCase, seeded);
       });
     }
   }
