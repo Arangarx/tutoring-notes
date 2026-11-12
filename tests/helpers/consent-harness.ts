@@ -70,7 +70,7 @@ export async function deleteHarnessBlob(
 /** Write objects straight into the harness store (e.g. legacy checkpoint blobs under a prefix). */
 export async function seedHarnessBlobs(
   request: APIRequestContext,
-  items: { key: string; text: string }[]
+  items: { key: string; text: string; contentType?: string }[]
 ): Promise<void> {
   await okJson(
     await request.post("/api/test/blob/state", { data: { seed: items }, headers: testAuth() }),
@@ -245,11 +245,16 @@ export type ConsentInvokeAction =
   | "kick"
   | "generateNotes"
   | "triggerNotes"
-  | "regenerateNotes";
+  | "regenerateNotes"
+  | "loadReviewPayload"
+  | "runBoardPurge"
+  | "setOrganizationStatus"
+  | "removeOrgMember";
 
 /**
  * Runs one server action as the signed-in tutor (the `request` fixture's cookies). Returns the raw
  * response: an action that throws is a non-2xx, so a refusal is observable without catching.
+ * The org actions (`setOrganizationStatus`, `removeOrgMember`) take the organization id as `sessionId`.
  */
 export function invokeConsentAction(
   request: APIRequestContext,

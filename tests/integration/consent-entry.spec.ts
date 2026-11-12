@@ -21,12 +21,15 @@ import {
   waitFor2faVerifyChallenge,
 } from "./identity/tutor-2fa-login.helpers";
 import {
+  armFault,
   armHold,
   expectReleasedByTest,
   invokeConsentAction,
   listHarnessBlobs,
   releaseHold,
   resetSeams,
+  runCron,
+  seedHarnessBlobs,
   waitUntilParked,
 } from "../helpers/consent-harness";
 import { seedStartFixture, type StartFixture } from "../helpers/consent-start-fixture";
@@ -606,10 +609,72 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     );
   }
   // Oracle: Re-premised by re-review 2 (R1). New code cannot create an unclaimed-learner session ('assertConsentRecordExists' refuses it), so the test seeds a legacy PENDING row directly through the DB oracle helper (a 'WhiteboardSe …
-  test.fixme(
+  // The claimed learner and its whiteboard-off record are seeded directly with the legacy row (a pre-gate session the family
+  // claimed later). The `[cns] refrozen_at_start created=true` line is not read here; the new snapshot row is the oracle.
+  test(
     "S6: legacy PENDING session with no snapshot: family claims and turns whiteboard off, tutor Starts, session ends: the board is purged",
-    async () => {
-      // pending: wave that owns S6
+    async ({ request }) => {
+      test.setTimeout(120_000);
+      const f = await seedStartFixture({ record: { allowWhiteboardRecording: false }, snapshot: false });
+      const id = f.whiteboardSessionId;
+      const prefix = `whiteboard-sessions/${f.studentId}/${id}/`;
+      try {
+        expect(await readConsentSnapshots(id), "precondition: legacy row, no snapshot").toEqual([]);
+        const started = await startVia(request, id, "LIVE");
+        expect(started.ok).toBe(true);
+        const snaps = await readConsentSnapshots(id);
+        expect(snaps).toHaveLength(1);
+        expect(snaps[0]).toMatchObject({ allowWhiteboardRecording: false });
+
+        // Board data present before End (positive control).
+        await withPrisma((p) =>
+          p.whiteboardEventBatch.create({
+            data: {
+              whiteboardSessionId: id,
+              batchSeq: 1,
+              fromEventIndex: 0,
+              toEventIndex: 1,
+              eventsJson: [{ t: 0, type: "add", id: "pw-s6" }],
+              boardDocumentJson: { pages: [] },
+              schemaVersion: 1,
+            },
+          })
+        );
+        await seedHarnessBlobs(request, [
+          { key: `${prefix}1-events.json`, text: "{}", contentType: "application/json" },
+          { key: `${prefix}assets/1-image.png`, text: "pw-s6-image", contentType: "image/png" },
+        ]);
+        expect((await listHarnessBlobs(request, prefix)).length).toBe(2);
+
+        // Started, so End needs a URL: the one the row already names.
+        const { eventsBlobUrl } = await withPrisma((p) =>
+          p.whiteboardSession.findUniqueOrThrow({ where: { id }, select: { eventsBlobUrl: true } })
+        );
+        const end = await invokeConsentAction(request, "endWhiteboardSession", id, { finalEventsBlobUrl: eventsBlobUrl });
+        expect(end.status(), await end.text()).toBe(200);
+        await expect
+          .poll(
+            () =>
+              withPrisma(async (p) =>
+                (await p.whiteboardSession.findUniqueOrThrow({ where: { id }, select: { boardPurgeFirstPassAt: true } }))
+                  .boardPurgeFirstPassAt !== null
+              ),
+            { timeout: 20_000 }
+          )
+          .toBe(true);
+        await withPrisma((p) =>
+          p.whiteboardSession.update({
+            where: { id },
+            data: { boardPurgeFirstPassAt: new Date(Date.now() - 2 * 60 * 60_000) },
+          })
+        );
+        const sweep = await runCron(request, "/api/cron/session-cleanup");
+        expect(sweep.status, sweep.text).toBe(200);
+        expect(await withPrisma((p) => p.whiteboardEventBatch.count({ where: { whiteboardSessionId: id } }))).toBe(0);
+        expect(await listHarnessBlobs(request, prefix)).toEqual([]);
+      } finally {
+        await f.cleanup();
+      }
     }
   );
   // Oracle: C3a End half. Parametrized over tutor End ('endWhiteboardSession') and the shared stale stamp ('endStaleWhiteboardSession'; the reaper's snapshot arm is G2). Family sets whiteboard off after create; End. Oracle: the winn …
@@ -668,12 +733,49 @@ test.describe("consent 6b: Start and refreeze (B5)", {
     }
   }
   // Oracle: C4b (migration + 'stampBoardPurgeIntent'). Same two callers as S7. After End with whiteboard off: 'boardPurgeRequestedAt' is set, and the sweep predicate selects that same snapshot row. Control: whiteboard on, no intent. …
-  test.fixme(
-    "S7b: PENDING session ended without Start: the purge intent is written from that snapshot, and the sweep selects it",
-    async () => {
-      // pending: wave that owns S7b
+  for (const endPath of ["endWhiteboardSession", "endStaleWhiteboardSession"] as const) {
+    for (const whiteboardOn of [false, true]) {
+      test(
+        `S7b: PENDING session ended without Start: the purge intent is written from that snapshot, and the sweep selects it (${endPath}, whiteboard ${whiteboardOn ? "on (control)" : "off"})`,
+        async ({ request }) => {
+          const s = await seedWbPendingLiveSyncSession();
+          const id = s.whiteboardSessionId;
+          await dropFamilyConsentVersionsAbove(s.learnerProfileId, s.adminUserId, 1);
+          const endArgs = endPath === "endWhiteboardSession" ? { finalEventsBlobUrl: "" } : undefined;
+          const purgeRow = () =>
+            withPrisma((p) =>
+              p.whiteboardSession.findUniqueOrThrow({
+                where: { id },
+                select: { boardPurgeRequestedAt: true, boardPurgeFirstPassAt: true },
+              })
+            );
+          try {
+            await saveFamilyConsentVersion(s.learnerProfileId, s.adminUserId, { allowWhiteboardRecording: whiteboardOn });
+            // Keep the End-time purge from running, so only the sweep can select the row.
+            await armFault(request, { name: "end:after_purge", sessionId: id });
+            const end = await invokeConsentAction(request, endPath, id, endArgs);
+            expect(end.status(), await end.text()).toBe(200);
+            const [snap] = await readConsentSnapshots(id);
+            expect(snap).toMatchObject({ allowWhiteboardRecording: whiteboardOn });
+
+            const intent = await purgeRow();
+            if (whiteboardOn) {
+              expect(intent.boardPurgeRequestedAt).toBeNull();
+              return;
+            }
+            expect(intent.boardPurgeRequestedAt).not.toBeNull();
+            expect(intent.boardPurgeFirstPassAt).toBeNull();
+            const sweep = await runCron(request, "/api/cron/session-cleanup");
+            expect(sweep.status, sweep.text).toBe(200);
+            expect((await purgeRow()).boardPurgeFirstPassAt, "the sweep selected this row from its snapshot").not.toBeNull();
+          } finally {
+            await resetSeams(request);
+            await dropFamilyConsentVersionsAbove(s.learnerProfileId, s.adminUserId, 1);
+          }
+        }
+      );
     }
-  );
+  }
   // Oracle: Arm → park → release (B3), deterministic, no "repeated N times". Two scripted orderings, on a plain-owned tutor. (a) Start parked, End runs: arm 'start:tx:between_consent_read_and_update'; fire Start (parks); wait until  …
   test(
     "S8: Start racing End on a PENDING session: exactly one wins, and the snapshot equals the live record at the moment the winning transaction committed",

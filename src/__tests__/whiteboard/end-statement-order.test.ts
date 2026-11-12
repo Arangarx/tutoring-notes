@@ -20,17 +20,45 @@ type Stmt = { op: string; args?: unknown; sql?: string };
 
 const SID = "wb_s14";
 let log: Stmt[] = [];
-let world: { phase: "PENDING" | "ACTIVE"; endedAt: Date | null; updateCount: 0 | 1 } = {
+const PRE_END_EVENTS_URL = "https://abc.blob.vercel-storage.com/placeholder-events.json";
+const FINAL_EVENTS_URL = "https://abc.blob.vercel-storage.com/final-events.json";
+
+let world: {
+  phase: "PENDING" | "ACTIVE";
+  endedAt: Date | null;
+  updateCount: 0 | 1;
+  /** Whiteboard switch of the family's live record (what a PENDING End freezes). */
+  liveWhiteboard: boolean;
+  /** Whiteboard switch of the snapshot already frozen at Start (ACTIVE). */
+  startWhiteboard: boolean;
+} = {
   phase: "PENDING",
   endedAt: null,
   updateCount: 1,
+  liveWhiteboard: true,
+  startWhiteboard: true,
 };
+
+/** The whiteboard switch of the snapshot as it stands now: the End-time freeze if one was written, else Start's. */
+function frozenWhiteboard(): boolean {
+  const freeze = log.find((s) => s.op === "sessionConsentSnapshot.upsert");
+  const create = (freeze?.args as { create?: { allowWhiteboardRecording?: boolean } } | undefined)?.create;
+  return create?.allowWhiteboardRecording ?? world.startWhiteboard;
+}
 
 function respond(op: string, args: unknown): unknown {
   const a = (args ?? {}) as { data?: { endedAt?: Date } };
   switch (op) {
     case "whiteboardSession.findUnique":
       return {
+        eventsBlobUrl: PRE_END_EVENTS_URL,
+        notesForbidden: false,
+        consentSnapshot: {
+          allowLiveSession: true,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: frozenWhiteboard(),
+          allowNoteSending: true,
+        },
         id: SID,
         adminUserId: "admin_1",
         studentId: "stu_1",
@@ -61,7 +89,7 @@ function respond(op: string, args: unknown): unknown {
         version: 2,
         allowLiveSession: true,
         allowAudioRecording: true,
-        allowWhiteboardRecording: false,
+        allowWhiteboardRecording: world.liveWhiteboard,
         allowNoteSending: true,
       };
     case "consentRestriction.findUnique":
@@ -171,7 +199,14 @@ function classify(s: Stmt): string | null {
   if (s.op === "whiteboardSession.updateMany" && args.where && "endedAt" in args.where && args.where.endedAt === null) {
     return "conditional_update";
   }
-  if (s.op === "whiteboardSession.update") return "unconditional_update";
+  if (s.op === "whiteboardSession.updateMany" && args.where && "boardPurgeRequestedAt" in args.where) {
+    return (args.where as { boardPurgeRequestedAt?: unknown }).boardPurgeRequestedAt === null ? "intent" : "intent_unconditional";
+  }
+  if (s.op === "whiteboardSession.update") {
+    const data = (s.args as { data?: Record<string, unknown> }).data ?? {};
+    return "eventsBlobUrl" in data && !("endedAt" in data) ? "url_restore" : "unconditional_update";
+  }
+  if (s.op === "whiteboardEventBatch.deleteMany") return "batch_delete";
   const [model, method] = s.op.split(".");
   if (model === "sessionConsentSnapshot" && SNAPSHOT_WRITES.has(method)) return "snapshot_write";
   return null;
@@ -185,7 +220,7 @@ type EndPath = { name: string; run: () => Promise<unknown> };
 const END_PATHS: EndPath[] = [
   {
     name: "endWhiteboardSession",
-    run: () => endWhiteboardSession(SID, "https://abc.blob.vercel-storage.com/final-events.json"),
+    run: () => endWhiteboardSession(SID, FINAL_EVENTS_URL),
   },
   {
     name: "stampStaleWhiteboardSessionEnd",
@@ -195,7 +230,7 @@ const END_PATHS: EndPath[] = [
 
 beforeEach(() => {
   log = [];
-  world = { phase: "PENDING", endedAt: null, updateCount: 1 };
+  world = { phase: "PENDING", endedAt: null, updateCount: 1, liveWhiteboard: true, startWhiteboard: true };
   jest.spyOn(console, "log").mockImplementation(() => undefined);
   jest.spyOn(console, "info").mockImplementation(() => undefined);
   jest.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -254,5 +289,86 @@ describe("SF-F clock rule: the shared stamp with a back-dated endedAt (the reape
     expect(revokedAt.getTime()).toBeGreaterThanOrEqual(callStart);
     const frozenAt = argsOf("sessionConsentSnapshot.upsert").create!.frozenAt as Date;
     expect(frozenAt.getTime()).toBeGreaterThanOrEqual(callStart);
+  });
+});
+
+/**
+ * S14(a2), C4b (plan § 3.2): the purge intent comes AFTER the snapshot write, so it reads the capability
+ * this End froze. End (not the stale stamp) also puts the URL columns back and deletes the batch rows in
+ * the same transaction; the stale stamp leaves rows to the purge (its org loops stay O(1) per session).
+ * Expected orders are the plan's, typed here.
+ */
+const PATH_TAIL: Record<string, string[]> = {
+  endWhiteboardSession: ["url_restore", "batch_delete", "intent"],
+  stampStaleWhiteboardSessionEnd: ["intent"],
+};
+
+describe.each(END_PATHS)("S14(a2) purge intent order: $name", ({ name, run }) => {
+  it("PENDING, family turned whiteboard off: the intent follows the snapshot write", async () => {
+    world.liveWhiteboard = false;
+    await run();
+    expect(order()).toEqual(["lock", "phase_read", "seam", "conditional_update", "snapshot_write", ...PATH_TAIL[name]]);
+  });
+
+  it("ACTIVE, Start froze whiteboard off: the intent follows the conditional update (no second freeze)", async () => {
+    world.phase = "ACTIVE";
+    world.startWhiteboard = false;
+    await run();
+    expect(order()).toEqual(["lock", "phase_read", "seam", "conditional_update", ...PATH_TAIL[name]]);
+  });
+
+  it("whiteboard on: no intent, no URL restore, no batch delete", async () => {
+    world.phase = "ACTIVE";
+    await run();
+    expect(order()).toEqual(["lock", "phase_read", "seam", "conditional_update"]);
+  });
+
+  it("the conditional update changed no row (another End won): no intent", async () => {
+    world.liveWhiteboard = false;
+    world.updateCount = 0;
+    await run().catch(() => undefined);
+    expect(order()).toEqual(["lock", "phase_read", "seam", "conditional_update"]);
+  });
+
+  it("the intent is written before the participants update and is stamped with server time", async () => {
+    world.phase = "ACTIVE";
+    world.startWhiteboard = false;
+    const callStart = Date.now();
+    await run();
+    const intentAt = log.findIndex((s) => classify(s) === "intent");
+    const participantsAt = log.findIndex((s) => s.op === "sessionParticipant.updateMany");
+    expect(intentAt).toBeGreaterThan(-1);
+    expect(participantsAt).toBeGreaterThan(intentAt);
+    const stamped = (log[intentAt].args as { data: { boardPurgeRequestedAt: Date } }).data.boardPurgeRequestedAt;
+    expect(stamped.getTime()).toBeGreaterThanOrEqual(callStart);
+  });
+});
+
+describe("Andrew 2026-11-12 URL rule: End, whiteboard off", () => {
+  it("the first End write is unchanged (it still records the client's URL), and the corrective write puts the pre-End URL back with no snapshot", async () => {
+    world.phase = "ACTIVE";
+    world.startWhiteboard = false;
+    await endWhiteboardSession(SID, FINAL_EVENTS_URL, {
+      snapshotBlobUrl: "https://abc.blob.vercel-storage.com/snap.png",
+    });
+    expect(argsOf("whiteboardSession.updateMany").data!.eventsBlobUrl).toBe(FINAL_EVENTS_URL);
+    const restore = log.find((s) => classify(s) === "url_restore");
+    expect(restore).toBeDefined();
+    expect((restore!.args as { data: unknown }).data).toEqual({
+      eventsBlobUrl: PRE_END_EVENTS_URL,
+      snapshotBlobUrl: null,
+    });
+  });
+
+  it("a back-dated stale stamp writes the intent with server time, not the back-dated endedAt", async () => {
+    world.phase = "ACTIVE";
+    world.startWhiteboard = false;
+    const backDated = new Date(Date.now() - 6 * 60 * 60_000);
+    const callStart = Date.now();
+    await stampStaleWhiteboardSessionEnd(recordingTx as Prisma.TransactionClient, SID, backDated);
+    const intent = log.find((s) => classify(s) === "intent");
+    expect(intent).toBeDefined();
+    const at = (intent!.args as { data: { boardPurgeRequestedAt: Date } }).data.boardPurgeRequestedAt;
+    expect(at.getTime()).toBeGreaterThanOrEqual(callStart);
   });
 });

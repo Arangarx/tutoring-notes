@@ -294,9 +294,9 @@ describe("consent guards (§ 6i)", () => {
   });
 
   it.todo("C6: appointmentLiveEntryAllowed has zero references");
-  it.todo("C4b/C4c: O1 org stamp loops do O(1) extra work per session: same statement count for 1 and 500 WhiteboardEventBatch rows, zero batch deleteMany, zero blob calls, and a pinned STAMP_MAX_STATEMENTS_PER_SESSION ceiling");
-  // C3a S14(a) (End statement order through the snapshot write) lives in whiteboard/end-statement-order.test.ts.
-  it.todo("C4b: S14(a2) the intent statement and S14(c) the batch re-check follow the lock");
+  // C4b O1 (org stamp loops O(1) per session, against the real test database) lives in org/org-stamp-loop.integration.test.ts.
+  // C3a S14(a) and C4b S14(a2) (End statement order through the purge intent) live in whiteboard/end-statement-order.test.ts;
+  // C4b S14(c) (the checkpoint batch re-check under the lock) lives in api/checkpoint-batch-lock.test.ts.
   it.todo("C3c: M17 join-timer ACTIVE poll cost: one snapshot read, no live-record read");
   it.todo("each wave: [cns] / [slc] / [txc] / [tnt] log lines are emitted (§ 8 observability)");
   it.todo("W21 (run in C0's gate and again in C4b, unmodified): blob-inventory.test.ts, process-erasure-job.test.ts, erasure-lifecycle.integration.test.ts, erasure-access-suspension.integration.test.ts, share-link-erasure-guard.integration.test.ts");

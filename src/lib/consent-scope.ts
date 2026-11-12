@@ -622,6 +622,14 @@ const ALL_CONSENT_ON: ConsentToggleCeiling = {
   allowNoteSending: true,
 };
 
+/** The four consent switches, as a Prisma select on a snapshot or record. */
+const CONSENT_TOGGLES_SELECT = {
+  allowLiveSession: true,
+  allowAudioRecording: true,
+  allowWhiteboardRecording: true,
+  allowNoteSending: true,
+} as const;
+
 /** Fail closed with no new constant: every switch off, in person, notes forbidden. */
 const FAIL_CLOSED_INPUT: SessionCapabilityInput = {
   hasConsentSnapshot: true,
@@ -675,6 +683,37 @@ export function capabilitiesFromConsentToggles(
 }
 
 /**
+ * The capabilities the session's FROZEN snapshot gives, or null when there is no snapshot (or no session).
+ * The board purge reads only this: a missing snapshot is "unknown", never "persist is false", so the
+ * purge can never delete on a fail-closed or live-record answer (plan § 3.3 step 1).
+ */
+export async function resolveFrozenSessionCapabilities(
+  whiteboardSessionId: string,
+  client?: ConsentReadClient
+): Promise<SessionCapabilities | null> {
+  const readSession = (c: ConsentReadClient) =>
+    c.whiteboardSession.findUnique({
+      where: { id: whiteboardSessionId },
+      select: {
+        sessionMode: true,
+        notesForbidden: true,
+        consentSnapshot: { select: CONSENT_TOGGLES_SELECT },
+      },
+    });
+  const row = client
+    ? await readSession(client)
+    : await withDbRetry(() => readSession(db as unknown as ConsentReadClient), {
+        label: "resolveFrozenSessionCapabilities.session",
+      });
+  if (!row?.consentSnapshot) return null;
+  return capabilitiesFromConsentToggles(
+    row.consentSnapshot,
+    row.sessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE",
+    row.notesForbidden
+  );
+}
+
+/**
  * `resolveSessionCapabilities` plus the org `notesForbidden` flag it already reads. The per-lane server gates need
  * the flag only to NAME a refusal (`notes_forbidden` vs `notes_off`); the capabilities already treat the two alike.
  * A missing session fails closed and reports `notesForbidden: true`, like the capabilities it derives from.
@@ -691,14 +730,7 @@ export async function resolveSessionCapabilityContext(
         sessionPhase: true,
         sessionMode: true,
         notesForbidden: true,
-        consentSnapshot: {
-          select: {
-            allowLiveSession: true,
-            allowAudioRecording: true,
-            allowWhiteboardRecording: true,
-            allowNoteSending: true,
-          },
-        },
+        consentSnapshot: { select: CONSENT_TOGGLES_SELECT },
         student: {
           select: { adminUserId: true, organizationId: true, learnerProfileId: true },
         },

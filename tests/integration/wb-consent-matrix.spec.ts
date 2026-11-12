@@ -24,10 +24,14 @@ import { TAG } from "../test-tags";
 import {
   PW_CRON_SECRET,
   invokeConsentAction,
+  listHarnessBlobs,
   runCron,
   seedHarnessBlobs,
   type ConsentInvokeAction,
 } from "../helpers/consent-harness";
+import { replayEventsFixture, uploadHarnessBlob } from "./wb-replay-harness.helpers";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   drawTestStrokeOnRole,
   openTutorAndStudent,
@@ -646,10 +650,52 @@ test.describe("consent 6e: Whiteboard", {
   tag: [TAG.WB_CONSENT, TAG.WB_SYNC, TAG.WB_STROKES],
 }, () => {
   // Oracle: Replay HTTP 200 per principal
-  test.fixme(
+  // Tutor principal here, after End and after the cleanup cron has run (whiteboard on writes no purge intent, so the store and
+  // the batch rows are untouched). The family principal's read of the same stored board is
+  // parent-child-notes-whiteboard-replay.spec.ts (it needs the seeded parent sign-in state).
+  test(
     "W1: whiteboard on: strokes persist and replay is available to tutor and family",
-    async () => {
-      // pending: wave that owns W1
+    async ({ request, baseURL }) => {
+      const { id, studentId } = await seedSession({ audio: true });
+      await prisma.sessionConsentSnapshot.update({
+        where: { whiteboardSessionId: id },
+        data: { allowWhiteboardRecording: true },
+      });
+      const prefix = `whiteboard-sessions/${studentId}/${id}/`;
+      const origin = new URL(baseURL!).origin;
+      const url = (key: string) => `${origin}/api/test/blob/object/${key.split("/").map(encodeURIComponent).join("/")}`;
+      const eventsKey = `${prefix}1-events.json`;
+      const snapshotKey = `${prefix}1-snapshot.png`;
+      await seedHarnessBlobs(request, [
+        { key: eventsKey, text: replayEventsFixture(), contentType: "application/json" },
+        { key: snapshotKey, text: "pw-w1-snapshot", contentType: "image/png" },
+      ]);
+      await prisma.whiteboardEventBatch.create({
+        data: {
+          whiteboardSessionId: id,
+          batchSeq: 1,
+          fromEventIndex: 0,
+          toEventIndex: 1,
+          eventsJson: [{ t: 0, type: "add", id: "pw-w1" }],
+          boardDocumentJson: { pages: [] },
+          schemaVersion: 1,
+        },
+      });
+      await invoke(request, "endWhiteboardSession", id, {
+        finalEventsBlobUrl: url(eventsKey),
+        opts: { snapshotBlobUrl: url(snapshotKey) },
+      });
+      await runCron(request, "/api/cron/session-cleanup");
+
+      const events = await request.get(`/api/whiteboard/${id}/events`);
+      expect(events.status()).toBe(200);
+      expect(((await events.json()) as { events: unknown[] }).events).toHaveLength(
+        JSON.parse(replayEventsFixture()).events.length
+      );
+      const snapshot = await request.get(`/api/whiteboard/${id}/snapshot`);
+      expect(snapshot.status()).toBe(200);
+      expect(await prisma.whiteboardEventBatch.count({ where: { whiteboardSessionId: id } })).toBe(1);
+      expect((await listHarnessBlobs(request, prefix)).map((o) => o.key).sort()).toEqual([eventsKey, snapshotKey].sort());
     }
   );
   // Oracle: Relay peer state; scene after reload
@@ -682,18 +728,116 @@ test.describe("consent 6e: Whiteboard", {
     }
   );
   // Oracle: Audio scrubber 200
-  test.fixme(
+  // Characterization: the board purge deletes by the whiteboard prefixes only, so the audio survives End and both sweeps.
+  test(
     "W9: whiteboard off: audio replay still works",
-    async () => {
-      // pending: wave that owns W9
+    async ({ request, baseURL }) => {
+      const { id, studentId } = await seedSession({ audio: true });
+      await prisma.sessionConsentSnapshot.update({
+        where: { whiteboardSessionId: id },
+        data: { allowWhiteboardRecording: false },
+      });
+      const audioText = "pw-w9-audio-bytes-0123456789";
+      expect(
+        await invoke(request, "registerSegment", id, {
+          blobUrl: await seedBlob(request, baseURL!, studentId, audioText),
+          mimeType: "audio/webm",
+          sizeBytes: audioText.length,
+          streamId: TUTOR_LANE,
+          audioStartedAtMs: 0,
+        })
+      ).toMatchObject({ ok: true });
+      const { eventsBlobUrl } = await prisma.whiteboardSession.findUniqueOrThrow({ where: { id }, select: { eventsBlobUrl: true } });
+      await invoke(request, "endWhiteboardSession", id, { finalEventsBlobUrl: eventsBlobUrl });
+      // Status not asserted: the route is new in this wave. Run it twice so a second pass would have had its chance.
+      await runCron(request, "/api/cron/session-cleanup");
+      await prisma.whiteboardSession.updateMany({
+        where: { id, boardPurgeFirstPassAt: { not: null } },
+        data: { boardPurgeFirstPassAt: MIN_AGO(120) },
+      });
+      await runCron(request, "/api/cron/session-cleanup");
+
+      const [recording] = await recordingsOf(id);
+      expect(recording).toBeDefined();
+      const replay = await request.get(`/api/audio/admin/${recording.id}`);
+      expect(replay.status()).toBe(200);
+      expect((await replay.body()).length).toBe(audioText.length);
     }
   );
   // Oracle: Characterization (green before; regression guard). Scrubber max ≈ fixture audio duration (independent oracle: the fixture file's length)
-  test.fixme(
+  test(
     "W20: audio-only replay with the empty placeholder log scrubs to the audio length",
-    { tag: [TAG.WB_ASSETS] },
-    async () => {
-      // pending: wave that owns W20
+    { tag: [TAG.WB_ASSETS, TAG.WB_RECORDING] },
+    async ({ page, request, baseURL }) => {
+      test.setTimeout(180_000);
+      const { id, studentId } = await seedSession({ audio: true });
+      const row = await prisma.whiteboardSession.findUniqueOrThrow({ where: { id }, select: { adminUserId: true } });
+      await prisma.sessionConsentSnapshot.update({
+        where: { whiteboardSessionId: id },
+        data: { allowWhiteboardRecording: false },
+      });
+      // The create-time placeholder: an empty log outside the session prefix.
+      const origin = new URL(baseURL!).origin;
+      const placeholderKey = `whiteboard-sessions/${row.adminUserId}/${studentId}/${Date.now()}-events.json`;
+      const placeholderUrl = `${origin}/api/test/blob/object/${placeholderKey.split("/").map(encodeURIComponent).join("/")}`;
+      await seedHarnessBlobs(request, [
+        {
+          key: placeholderKey,
+          text: JSON.stringify({ schemaVersion: 1, startedAt: "2026-11-12T18:00:00.000Z", durationMs: 0, events: [] }),
+          contentType: "application/json",
+        },
+      ]);
+      await prisma.whiteboardSession.update({
+        where: { id },
+        data: { eventsBlobUrl: placeholderUrl },
+      });
+
+      // Independent oracle: the fixture's own length, from its RIFF header (data bytes / byte rate).
+      const wav = readFileSync(path.join(__dirname, "..", "fixtures", "pw-fake-mic.wav"));
+      const byteRate = wav.readUInt32LE(28);
+      const dataAt = wav.indexOf("data", 12, "ascii");
+      const fixtureSec = wav.readUInt32LE(dataAt + 4) / byteRate;
+      expect(fixtureSec).toBeGreaterThan(1);
+
+      const blobUrl = await uploadHarnessBlob({
+        request,
+        pathname: `audio/${row.adminUserId}/${studentId}/pw-w20.wav`,
+        body: wav,
+        contentType: "audio/wav",
+        clientPayload: { kind: "audio", studentId },
+      });
+      await invoke(request, "registerSegment", id, {
+        blobUrl,
+        mimeType: "audio/wav",
+        sizeBytes: wav.length,
+        streamId: TUTOR_LANE,
+        audioStartedAtMs: 0,
+      });
+      await invoke(request, "endWhiteboardSession", id, { finalEventsBlobUrl: placeholderUrl });
+      await runCron(request, "/api/cron/session-cleanup");
+
+      await page.goto(`/admin/students/${studentId}/whiteboard/${id}/workspace`, { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({ timeout: 60_000 });
+      await page.getByTestId("wb-review-enter-replay").click();
+      await expect(page.getByTestId("wb-replay-in-frame")).toBeVisible({ timeout: 30_000 });
+      await page.waitForFunction(
+        () => {
+          const el = document.querySelector('[data-testid="wb-replay-audio"]') as HTMLAudioElement | null;
+          return el != null && Number.isFinite(el.duration) && el.duration > 0;
+        },
+        { timeout: 90_000 }
+      );
+      const { audioSec, totalSec } = await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="wb-replay-audio"]') as HTMLAudioElement;
+        const label = document.querySelector(".mynk-wb-replay-timeline__elapsed")?.textContent ?? "";
+        const total = (label.split("/")[1] ?? "").trim();
+        const bits = total.split(":").map(Number);
+        const sec = bits.length === 3 ? bits[0]! * 3600 + bits[1]! * 60 + bits[2]! : bits.length === 2 ? bits[0]! * 60 + bits[1]! : 0;
+        return { audioSec: el.duration, totalSec: sec };
+      });
+      expect(Math.abs(audioSec - fixtureSec), `audio ${audioSec}s vs fixture ${fixtureSec}s`).toBeLessThan(0.5);
+      // The scrubber spans the audio, not the empty log (the label is whole seconds).
+      expect(Math.abs(totalSec - fixtureSec), `scrubber ${totalSec}s vs fixture ${fixtureSec}s`).toBeLessThanOrEqual(1.5);
     }
   );
 });

@@ -15,7 +15,7 @@ import { guardPlaywrightTestRoute } from "@/lib/playwright-test-route";
  *   GET    ?prefix=<p>                  -> { objects: [{ key, size }] }   (independent oracle for purge tests)
  *   DELETE ?key=<k>                     -> { existed }                    (test cleanup, not product delete)
  *   POST   { failNextDeletes?, failDeleteMatching?, seed? } -> inject delete faults / seed objects
- *          (`seed: [{ key, text }]` writes objects directly, e.g. legacy
+ *          (`seed: [{ key, text, contentType? }]` writes objects directly, e.g. legacy
  *          `whiteboard-checkpoints/<sessionId>/…` blobs for purge tests)
  *
  * Gate: `guardPlaywrightTestRoute` (never in production, needs the test secret)
@@ -53,10 +53,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   const body = (await req.json().catch(() => ({}))) as {
     failNextDeletes?: number;
     failDeleteMatching?: string;
-    seed?: { key: string; text: string }[];
+    seed?: { key: string; text: string; contentType?: string }[];
   };
   for (const item of body.seed ?? []) {
-    harnessStorePut(item.key, Buffer.from(item.text, "utf8"), "application/octet-stream");
+    harnessStorePut(item.key, Buffer.from(item.text, "utf8"), item.contentType ?? "application/octet-stream");
   }
   if (typeof body.failNextDeletes === "number") {
     harnessFailNextDeletes(body.failNextDeletes);

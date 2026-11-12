@@ -11,9 +11,12 @@ import {
 } from "@/app/admin/students/[id]/whiteboard/actions";
 import {
   kickSessionChunksAction,
+  loadSessionReviewPayload,
   regenerateNotesAction,
   triggerNotesGenerationAction,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { removeOrgMember, setOrganizationStatus, type OrgLiveSessionEndChoice } from "@/lib/org-scope";
+import { runBoardPurge } from "@/lib/whiteboard/board-purge";
 
 /**
  * Test-env-only: invoke one of the consent-gated SERVER ACTIONS over HTTP as the signed-in tutor (consent wave C2).
@@ -83,6 +86,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ result: await triggerNotesGenerationAction(sessionId) });
     case "regenerateNotes":
       return NextResponse.json({ result: await regenerateNotesAction(sessionId) });
+    case "loadReviewPayload":
+      return NextResponse.json({ result: await loadSessionReviewPayload(sessionId) });
+    case "runBoardPurge":
+      return NextResponse.json({ result: await runBoardPurge(sessionId) });
+    case "setOrganizationStatus": {
+      // `sessionId` carries the organization id for the org actions.
+      const a = args as { status: Parameters<typeof setOrganizationStatus>[1]; choice?: OrgLiveSessionEndChoice };
+      await setOrganizationStatus(sessionId, a.status, a.choice);
+      return NextResponse.json({ result: null });
+    }
+    case "removeOrgMember": {
+      const a = args as { targetAdminUserId: string; choice?: OrgLiveSessionEndChoice };
+      await removeOrgMember(sessionId, a.targetAdminUserId, a.choice);
+      return NextResponse.json({ result: null });
+    }
     default:
       return NextResponse.json({ error: `unknown action ${body.action}` }, { status: 400 });
   }
