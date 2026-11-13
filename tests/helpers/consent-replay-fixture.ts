@@ -36,6 +36,9 @@ export const REPLAY_SNAPSHOT_MARKER = "consent-c6-replay-snapshot-oracle-v1";
 /** An element id inside the fixture events log (`replayEventsFixture`): a served events body must contain it. */
 export const REPLAY_EVENTS_MARKER = "pw-replay-rect";
 
+/** Spec copy shown in place of a board that was never saved (whiteboard recording was off). Written from the plan, not read from the component. */
+export const BOARD_NOT_SAVED_LINE = "The board was not saved because whiteboard recording was off.";
+
 export const FAMILY_PASSWORD = "ReplayFamilyPw!4567";
 export const LEARNER_PIN = "482916";
 

@@ -13,6 +13,7 @@ import { loginLearnerInContext } from "./whiteboard-live-sync.helpers";
 import { uploadHarnessBlob, uploadReplayEvents } from "./wb-replay-harness.helpers";
 import { readHarnessMailUrl } from "@/lib/playwright-harness-mail";
 import { seedTestAdmin } from "../visual/helpers";
+import { BOARD_NOT_SAVED_LINE } from "../helpers/consent-replay-fixture";
 
 const CURRENT_PIN = "482916";
 const NEXT_PIN = "159357";
@@ -346,7 +347,9 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
     }
   });
 
-  test("learner replay is limited to that child and to sessions that allow whiteboard recording", {
+  // Spec (consent C6): replay follows what the session's frozen snapshot recorded. A session whose whiteboard recording was off
+  // still replays its audio; the page says the board was not saved. Another child's session stays 404.
+  test("learner replay is limited to that child; a session with whiteboard recording off replays audio only", {
     tag: [TAG.WB_RECORDING],
   }, async ({ browser }) => {
     test.setTimeout(180_000);
@@ -410,12 +413,13 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
       await expect(
         page.getByTestId("child-session-notes").getByText(deniedTopics)
       ).toBeVisible({ timeout: 15_000 });
-      await expect(
-        page.getByRole("link", { name: "Watch the whiteboard recording" })
-      ).toHaveCount(0);
+      const audioOnlyLink = page.getByRole("link", { name: "Watch the whiteboard recording" });
+      await expect(audioOnlyLink).toHaveCount(1);
+      await expect(audioOnlyLink).toHaveAttribute("href", deniedUrl);
       const response = await page.goto(deniedUrl, { waitUntil: "domcontentloaded" });
-      expect(response?.status()).toBe(404);
-      await expect(page.getByTestId("wb-replay-in-frame")).toHaveCount(0);
+      expect(response?.status()).toBe(200);
+      // This child has no audio file attached, so the page is the not-saved notice; the player with audio is covered by consent-entry RP1.
+      await expect(page.getByTestId("wb-board-not-saved")).toHaveText(BOARD_NOT_SAVED_LINE);
     } finally {
       await deniedContext.close();
     }
@@ -483,7 +487,7 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
     }
   });
 
-  test("learner replay APIs deny strangers and serve the owning child's audio", {
+  test("learner replay APIs deny strangers, and a whiteboard-off session serves audio but not the board", {
     tag: [TAG.WB_RECORDING],
   }, async ({ browser, page }) => {
     test.setTimeout(180_000);
@@ -592,9 +596,17 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
     });
     try {
       await loginLearnerInContext(deniedContext, denied.handle, CURRENT_PIN);
-      expect((await deniedContext.request.get(deniedEvents)).status()).toBe(404);
-      expect((await deniedContext.request.get(deniedConcat)).status()).toBe(404);
-      expect((await deniedContext.request.get(deniedRecording)).status()).toBe(404);
+      // Whiteboard recording was off, audio on: the board events stay unreadable (they were uploaded, so the 404 is the decision),
+      // the audio still plays.
+      const deniedEventsRes = await deniedContext.request.get(deniedEvents);
+      expect(deniedEventsRes.status()).toBe(404);
+      expect(await deniedEventsRes.text()).not.toContain("pw-replay-rect");
+      const deniedConcatRes = await deniedContext.request.get(deniedConcat);
+      expect(deniedConcatRes.status()).toBe(200);
+      expect(await deniedConcatRes.text()).toBe(AUDIO_MARKER);
+      const deniedRecordingRes = await deniedContext.request.get(deniedRecording);
+      expect(deniedRecordingRes.status()).toBe(200);
+      expect(await deniedRecordingRes.text()).toBe(AUDIO_MARKER);
     } finally {
       await deniedContext.close();
     }

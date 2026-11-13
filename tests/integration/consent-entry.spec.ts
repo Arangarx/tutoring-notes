@@ -35,6 +35,7 @@ import {
 } from "../helpers/consent-harness";
 import { seedStartFixture, type StartFixture } from "../helpers/consent-start-fixture";
 import {
+  BOARD_NOT_SAVED_LINE,
   expectReads,
   openFamilyContext,
   readReplay,
@@ -1670,8 +1671,6 @@ test.describe("consent 6g: Replay per principal (B7, D4)", {
   const SHAPES = ["full", "audio_only", "board_only", "none"] as const;
   const PRINCIPALS = ["share", "learner"] as const;
   const PRINCIPAL_LABEL = { share: "share link", learner: "learner" } as const;
-  const NOT_SAVED_LINE = "The board was not saved because whiteboard recording was off.";
-
   /** Every list that renders note cards, with the principal that reads it (parent notes and share are one family). */
   function listSurfaces(f: ReplayFixture): Array<{ name: string; principal: Principal; path: string }> {
     return [
@@ -1711,7 +1710,7 @@ test.describe("consent 6g: Replay per principal (B7, D4)", {
       await page.goto(replayPagePath(f, principal), { waitUntil: "domcontentloaded" });
       await expect(page.getByTestId("wb-replay-in-frame")).toBeVisible({ timeout: 90_000 });
       await expect(page.getByTestId("wb-board-not-saved")).toHaveCount(access.board ? 0 : 1);
-      if (!access.board) await expect(page.getByTestId("wb-board-not-saved")).toHaveText(NOT_SAVED_LINE);
+      if (!access.board) await expect(page.getByTestId("wb-board-not-saved")).toHaveText(BOARD_NOT_SAVED_LINE);
       await expect(page.getByTestId("wb-replay-audio")).toHaveCount(access.audio ? 1 : 0);
     } finally {
       await page.close();

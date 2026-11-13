@@ -12,6 +12,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import { TAG } from "../test-tags";
 import { findScenePayloadEvents, openRelayClient, probeRelayRoom } from "../helpers/relay-probe";
 import { PrismaClient } from "@prisma/client";
+import { BOARD_NOT_SAVED_LINE } from "../helpers/consent-replay-fixture";
 import {
   checkpointKey,
   chooseMode,
@@ -187,7 +188,7 @@ test.describe("consent 6e: Whiteboard", {
         await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({ timeout: 60_000 });
         const notice = page.getByTestId("wb-review-board-thumbnail-wrap").getByTestId("wb-board-not-saved");
         await expect(notice).toBeVisible({ timeout: 30_000 });
-        await expect(notice).toHaveText("The board was not saved because whiteboard recording was off.");
+        await expect(notice).toHaveText(BOARD_NOT_SAVED_LINE);
 
         // Positive control: the same screen for whiteboard on shows no such line.
         await page.goto(hero(on), { waitUntil: "domcontentloaded" });
