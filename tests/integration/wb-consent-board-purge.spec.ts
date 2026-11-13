@@ -24,6 +24,24 @@ import {
   seedConsentSession,
   startFromWaitingRoom,
 } from "../helpers/consent-tutor-room";
+import {
+  boardKeys,
+  CLEANUP,
+  EMPTY_LOG,
+  endWithBoard,
+  harnessUrl,
+  keysUnder,
+  readPurgeRow,
+  seedBoard,
+  seedBoardSession,
+  seedIdle,
+  seedOrgBoardSession,
+  sweep,
+  sweepPassTwo,
+  waitForFirstPass,
+  type BoardFixture,
+  type OrgBoard,
+} from "../helpers/consent-board-fixture";
 import { seedStartFixture, type StartFixture } from "../helpers/consent-start-fixture";
 import {
   armFault,
@@ -34,10 +52,12 @@ import {
   invokeConsentAction,
   listHarnessBlobs,
   postBoardBatch,
+  reaperOutcomeFor,
   releaseHold,
   resetBlobHarness,
   resetSeams,
   runCron,
+  runReaperCron,
   seedHarnessBlobs,
   waitUntilParked,
 } from "../helpers/consent-harness";
@@ -68,251 +88,9 @@ test.afterAll(async () => {
 // C4b purge helpers. Every oracle is the database row or the harness store listing, never the code's own report.
 // ---------------------------------------------------------------------------
 
-const CLEANUP = "/api/cron/session-cleanup" as const;
-/** Far past any pass-2 delay the plan allows (the platform's default upload token lives one hour). */
-const PAST_PASS_2_DELAY_MS = 2 * 60 * 60_000;
-/** Same origin the server builds harness URLs from (`NEXTAUTH_URL` on the wb-regression webServer). */
-const HARNESS_ORIGIN = "http://localhost:3100";
-
-function harnessUrl(key: string): string {
-  return `${HARNESS_ORIGIN}/api/test/blob/object/${key.split("/").map(encodeURIComponent).join("/")}`;
-}
-
-/** The shape `create-session-core.ts` writes at create (`emptyEventsJson`). */
-const EMPTY_LOG = JSON.stringify({ schemaVersion: 1, startedAt: "2026-11-12T18:00:00.000Z", durationMs: 0, events: [] });
-
-type BoardFixture = StartFixture & { sessionPrefix: string; checkpointPrefix: string; placeholderUrl: string };
-
-/**
- * An isolated tutor-owned session whose snapshot says whiteboard on/off, with the create-time placeholder
- * events log the product writes OUTSIDE the session prefix (`whiteboard-sessions/<adminUserId>/<studentId>/`).
- */
-async function seedBoardSession(
-  request: APIRequestContext,
-  whiteboard: boolean,
-  phase: "ACTIVE" | "PENDING" = "ACTIVE"
-): Promise<BoardFixture> {
-  const f = await seedStartFixture({ record: { allowWhiteboardRecording: whiteboard }, snapshot: true });
-  const placeholderKey = `whiteboard-sessions/${f.adminUserId}/${f.studentId}/${Date.now()}-events.json`;
-  await seedHarnessBlobs(request, [{ key: placeholderKey, text: EMPTY_LOG, contentType: "application/json" }]);
-  const now = Date.now();
-  await prisma.whiteboardSession.update({
-    where: { id: f.whiteboardSessionId },
-    data: {
-      eventsBlobUrl: harnessUrl(placeholderKey),
-      ...(phase === "ACTIVE"
-        ? { sessionPhase: "ACTIVE", activatedAt: new Date(now), startedAt: new Date(now - 10 * 60_000) }
-        : {}),
-    },
-  });
-  return {
-    ...f,
-    sessionPrefix: `whiteboard-sessions/${f.studentId}/${f.whiteboardSessionId}/`,
-    checkpointPrefix: `whiteboard-checkpoints/${f.whiteboardSessionId}/`,
-    placeholderUrl: harnessUrl(placeholderKey),
-  };
-}
-
-type BoardKeys = { events: string; snapshot: string; image: string; pdfPage: string; checkpoint: string };
-
-/** A board's worth of data: batch rows, the client's events log and snapshot, an image, a PDF page, a legacy checkpoint. */
-async function seedBoard(request: APIRequestContext, b: BoardFixture, batches = 2): Promise<BoardKeys> {
-  await prisma.whiteboardEventBatch.createMany({
-    data: Array.from({ length: batches }, (_, i) => ({
-      whiteboardSessionId: b.whiteboardSessionId,
-      batchSeq: i + 1,
-      fromEventIndex: i,
-      toEventIndex: i + 1,
-      eventsJson: [{ t: i * 10, type: "add", id: `pw-el-${i}` }],
-      boardDocumentJson: { pages: [{ id: "p1", elements: [`pw-el-${i}`] }] },
-      schemaVersion: 1,
-    })),
-  });
-  const keys: BoardKeys = {
-    events: `${b.sessionPrefix}1-events.json`,
-    snapshot: `${b.sessionPrefix}1-snapshot.png`,
-    image: `${b.sessionPrefix}assets/1-image.png`,
-    pdfPage: `${b.sessionPrefix}assets/pdf-1-page-1.png`,
-    checkpoint: `${b.checkpointPrefix}1-checkpoint.json`,
-  };
-  await seedHarnessBlobs(request, [
-    { key: keys.events, text: replayEventsFixture(), contentType: "application/json" },
-    { key: keys.snapshot, text: "pw-board-snapshot-png", contentType: "image/png" },
-    { key: keys.image, text: "pw-board-image-png", contentType: "image/png" },
-    { key: keys.pdfPage, text: "pw-board-pdf-page-png", contentType: "image/png" },
-    { key: keys.checkpoint, text: replayEventsFixture(), contentType: "application/json" },
-  ]);
-  return keys;
-}
-
-/** End the way the client does: the uploaded events log and snapshot URLs ride on the End call. */
-function endWithBoard(request: APIRequestContext, b: BoardFixture, keys: BoardKeys) {
-  return invokeConsentAction(request, "endWhiteboardSession", b.whiteboardSessionId, {
-    finalEventsBlobUrl: harnessUrl(keys.events),
-    opts: { snapshotBlobUrl: harnessUrl(keys.snapshot) },
-  });
-}
-
-const readPurgeRow = (id: string) =>
-  prisma.whiteboardSession.findUniqueOrThrow({
-    where: { id },
-    select: {
-      endedAt: true,
-      eventsBlobUrl: true,
-      snapshotBlobUrl: true,
-      boardPurgeRequestedAt: true,
-      boardPurgeFirstPassAt: true,
-      boardPurgeAttemptedAt: true,
-      boardPurgedAt: true,
-    },
-  });
-
-async function keysUnder(request: APIRequestContext, prefix: string): Promise<string[]> {
-  return (await listHarnessBlobs(request, prefix)).map((o) => o.key);
-}
-
-/** Everything a client could have written for this board (session prefix + legacy checkpoint prefix). */
-async function boardKeys(request: APIRequestContext, b: BoardFixture): Promise<string[]> {
-  return [...(await keysUnder(request, b.sessionPrefix)), ...(await keysUnder(request, b.checkpointPrefix))];
-}
-
-async function sweep(request: APIRequestContext) {
-  const r = await runCron(request, CLEANUP);
-  expect(r.status, r.text).toBe(200);
-  return r;
-}
-
-async function waitForFirstPass(id: string, timeout = 20_000) {
-  await expect
-    .poll(async () => (await readPurgeRow(id)).boardPurgeFirstPassAt !== null, {
-      timeout,
-      message: `boardPurgeFirstPassAt for ${id}`,
-    })
-    .toBe(true);
-}
-
-/** Pass 2 through the real sweep: the data seam moves pass 1 into the past, then the cron route runs. */
-async function sweepPassTwo(request: APIRequestContext, id: string) {
-  expect(await backdateBoardPurgeFirstPass(id, PAST_PASS_2_DELAY_MS), "pass 1 must have stamped first").toBe(1);
-  await sweep(request);
-}
-
 /** Keeps the End `after()` purge from running (W22's crash), so a test can read the state before any pass. */
 async function blockAfterPurge(request: APIRequestContext, id: string) {
   await armFault(request, { name: "end:after_purge", sessionId: id });
-}
-
-type OrgBoard = BoardFixture & { organizationId: string; ownerAdminUserId: string };
-
-/**
- * An org-owned session (student owned by the org, consent recorded by the org) taught by `teacherId`,
- * in an org the signed-in harness tutor owns. Rows written straight to Postgres.
- */
-async function seedOrgBoardSession(
-  request: APIRequestContext,
-  opts: { whiteboard: boolean; teacherId?: string; orgStatusChangedAt?: Date; orgStatus?: "active" | "suspended" }
-): Promise<OrgBoard> {
-  const harnessTutor = await seedTestAdmin();
-  const teacherId = opts.teacherId ?? harnessTutor;
-  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const org = await prisma.organization.create({
-    data: {
-      name: `C4b org ${stamp}`,
-      status: opts.orgStatus ?? "active",
-      timezone: "America/Denver",
-      statusChangedAt: opts.orgStatusChangedAt ?? new Date(),
-      createdByOperatorId: "playwright@test.local",
-      members: {
-        create: [
-          { adminUserId: harnessTutor, roles: ["owner", "instructor"] as ("owner" | "instructor")[] },
-          ...(teacherId !== harnessTutor
-            ? [{ adminUserId: teacherId, roles: ["instructor"] as ("owner" | "instructor")[] }]
-            : []),
-        ],
-      },
-    },
-    select: { id: true },
-  });
-  const holder = await prisma.accountHolder.create({
-    data: {
-      email: `pw-c4b-${stamp}@test.local`,
-      emailVerifiedAt: new Date("2026-01-01"),
-      familyId: `c4b${stamp.replace(/[^a-z0-9]/g, "")}`.slice(0, 20),
-    },
-    select: { id: true },
-  });
-  const profile = await prisma.learnerProfile.create({
-    data: { accountHolderId: holder.id, displayName: `C4b Org Learner ${stamp}` },
-    select: { id: true },
-  });
-  const student = await prisma.student.create({
-    data: { name: `C4b Org Student ${stamp}`, adminUserId: null, organizationId: org.id, learnerProfileId: profile.id },
-    select: { id: true },
-  });
-  await prisma.organizationLearner.create({
-    data: {
-      studentId: student.id,
-      organizationId: org.id,
-      givenName: "C4b",
-      familyName: "Learner",
-      createdByAdminUserId: harnessTutor,
-    },
-  });
-  const switches = {
-    allowLiveSession: true,
-    allowAudioRecording: true,
-    allowWhiteboardRecording: opts.whiteboard,
-    allowNoteSending: true,
-  };
-  const record = await prisma.consentRecord.create({
-    data: {
-      learnerProfileId: profile.id,
-      adminUserId: null,
-      organizationId: org.id,
-      version: 1,
-      ...switches,
-      setByAccountHolderId: holder.id,
-      captureMethod: "electronic",
-    },
-    select: { id: true, version: true },
-  });
-  const now = Date.now();
-  const placeholderKey = `whiteboard-sessions/${teacherId}/${student.id}/${now}-events.json`;
-  await seedHarnessBlobs(request, [{ key: placeholderKey, text: EMPTY_LOG, contentType: "application/json" }]);
-  const session = await prisma.whiteboardSession.create({
-    data: {
-      adminUserId: teacherId,
-      studentId: student.id,
-      consentAcknowledged: true,
-      eventsBlobUrl: harnessUrl(placeholderKey),
-      sessionPhase: "ACTIVE",
-      startedAt: new Date(now - 10 * 60_000),
-      activatedAt: new Date(now - 10 * 60_000),
-      lastActiveAt: new Date(now),
-    },
-    select: { id: true },
-  });
-  await prisma.sessionConsentSnapshot.create({
-    data: {
-      whiteboardSessionId: session.id,
-      ...switches,
-      consentRecordId: record.id,
-      consentRecordVersion: record.version,
-    },
-  });
-  return {
-    adminUserId: teacherId,
-    ownerAdminUserId: harnessTutor,
-    organizationId: org.id,
-    studentId: student.id,
-    learnerProfileId: profile.id,
-    whiteboardSessionId: session.id,
-    sessionPrefix: `whiteboard-sessions/${student.id}/${session.id}/`,
-    checkpointPrefix: `whiteboard-checkpoints/${session.id}/`,
-    placeholderUrl: harnessUrl(placeholderKey),
-    // Org rows are left in place, like the other org specs; nothing else reads this org.
-    cleanup: async () => {},
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -616,7 +394,7 @@ test.describe("consent 6e: Whiteboard", {
     }
   );
   // Oracle: Arm A: the End call fails after the upload (nothing from the client is trusted; the blob is under the prefix). Arm B: the tab closes and no End ever arrives: the reaper (§ 3.9, depends on C4c, APPROVED) ends the session  …
-  // Arm A only. Arm B (closed tab, the reaper ends it) lands with C4c.
+  // Arm A here; arm B (closed tab, the reaper ends it) is the next test.
   test(
     "W13: whiteboard off: a client-uploaded events.json survives neither a failed End nor a closed tab",
     async ({ request }) => {
@@ -643,9 +421,32 @@ test.describe("consent 6e: Whiteboard", {
       }
     }
   );
-  // Oracle: Parametrized over the five stamp callers ('org-scope' ×2, 'org-force-end-touch', 'endStaleWhiteboardSession', the reaper); intent columns + listing
-  // The reaper arm lands with C4c.
-  for (const caller of ["endStaleWhiteboardSession", "setOrganizationStatus", "removeOrgMember", "orgForceEndTouch"] as const) {
+  // Arm B: the tab closes and no End ever arrives. The reaper (the only thing that can) ends the idle session, and the
+  // board it left behind is purged like any other whiteboard-off end.
+  test(
+    "W13 (arm B): whiteboard off: a closed tab that never sent End is ended by the reaper and its client-uploaded board is cleared",
+    async ({ request }) => {
+      test.setTimeout(120_000);
+      const b = await seedIdle(request, { whiteboard: false, board: true });
+      try {
+        expect(await boardKeys(request, b), "positive control: the board is there before the reap").not.toEqual([]);
+        expect((await readPurgeRow(b.whiteboardSessionId)).endedAt).toBeNull();
+
+        const run = await runReaperCron(request, "enforce");
+        expect(run.status, run.text).toBe(200);
+        expect(reaperOutcomeFor(run.reaperBody, b.whiteboardSessionId)?.action).toBe("reaped");
+        expect((await readPurgeRow(b.whiteboardSessionId)).boardPurgeRequestedAt).not.toBeNull();
+
+        await waitForFirstPass(b.whiteboardSessionId);
+        await sweepPassTwo(request, b.whiteboardSessionId);
+        expect(await boardKeys(request, b)).toEqual([]);
+        expect((await readPurgeRow(b.whiteboardSessionId)).boardPurgedAt).not.toBeNull();
+      } finally {
+        await b.cleanup();
+      }
+    }
+  );  // Oracle: Parametrized over the five stamp callers ('org-scope' ×2, 'org-force-end-touch', 'endStaleWhiteboardSession', the reaper); intent columns + listing
+  for (const caller of ["endStaleWhiteboardSession", "setOrganizationStatus", "removeOrgMember", "orgForceEndTouch", "reaper"] as const) {
     test(
       `W14: whiteboard off: stale end, forced end and org forced end each write a purge intent and purge (${caller})`,
       { tag: [TAG.ORG] },
@@ -667,7 +468,9 @@ test.describe("consent 6e: Whiteboard", {
               ).id
             : undefined;
         const b =
-          caller === "endStaleWhiteboardSession"
+          caller === "reaper"
+            ? await seedIdle(request, { whiteboard: false, board: true })
+            : caller === "endStaleWhiteboardSession"
             ? await seedBoardSession(request, false)
             : await seedOrgBoardSession(request, {
                 whiteboard: false,
@@ -677,7 +480,8 @@ test.describe("consent 6e: Whiteboard", {
                   : {}),
               });
         try {
-          await seedBoard(request, b);
+          // `seedIdle` already wrote the reaper arm's board.
+          if (caller !== "reaper") await seedBoard(request, b);
           const before = await boardKeys(request, b);
           expect(before.length).toBeGreaterThan(0);
 
@@ -696,6 +500,10 @@ test.describe("consent 6e: Whiteboard", {
               choice: "now",
             });
             expect(r.status(), await r.text()).toBe(200);
+          } else if (caller === "reaper") {
+            const run = await runReaperCron(request, "enforce");
+            expect(run.status, run.text).toBe(200);
+            expect(reaperOutcomeFor(run.reaperBody, b.whiteboardSessionId)?.action).toBe("reaped");
           } else {
             // Any request that reads the timer anchor runs the due force-end.
             await request.get(`/api/whiteboard/${b.whiteboardSessionId}/timer-anchor`);

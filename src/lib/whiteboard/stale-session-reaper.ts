@@ -11,6 +11,10 @@ import {
   readReaperModeOverride,
   SEAM_BEARING_TX_TIMEOUT_MS,
 } from "@/lib/test-seams";
+import { resolveFrozenSessionCapabilities, resolveSessionCapabilities } from "@/lib/consent-scope";
+import { logProductEvent } from "@/lib/observability/product-events";
+import { enqueueReplayConcatAfterFinalize } from "@/lib/recording/concat-audio-enqueue";
+import { assembleSessionEvents } from "@/lib/whiteboard/assemble-session-events";
 import { lockWhiteboardSessionRowTx } from "@/lib/whiteboard/session-row-lock";
 import { stampStaleWhiteboardSessionEnd } from "@/lib/whiteboard/stale-session-stamp";
 
@@ -155,6 +159,85 @@ function skipReason(verdict: Exclude<SessionIdleVerdict, { kind: "idle" }>): str
   return verdict.kind === "gone" || verdict.kind === "ended" ? "already_ended" : verdict.kind;
 }
 
+function idleHours(now: Date, lastActivityAt: Date): number {
+  return Math.floor((now.getTime() - lastActivityAt.getTime()) / 3_600_000);
+}
+
+function recordSkip(
+  result: StaleSessionReaperResult,
+  id: string,
+  verdict: Exclude<SessionIdleVerdict, { kind: "idle" }>
+): void {
+  const reason = skipReason(verdict);
+  result.skipped += 1;
+  result.outcomes.push({ id, action: "skip", reason });
+  console.info(`[slc] wbsid=${id} action=reaper_skip reason=${reason}`);
+}
+
+/**
+ * Post-commit work for a session this run just ended (enforce only). Runs strictly AFTER the stamp
+ * transaction committed, and none of it can undo the end: a failure logs and leaves the placeholder log.
+ *
+ *  - `SESSION_ENDED` product event, `path: "reaper"`.
+ *  - For a session whose whiteboard was recorded (frozen persist true, or legacy with no snapshot): the SAME
+ *    assembly End uses (`assembleSessionEvents`), then a CONDITIONAL `eventsBlobUrl` update (only if the row
+ *    still holds the placeholder this run read), then the replay concat enqueue.
+ *  - No notes drafting and no billing: a reaped session is not a finished lesson.
+ */
+async function afterReap(id: string, priorPhase: "PENDING" | "ACTIVE"): Promise<void> {
+  try {
+    const row = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id },
+          select: { adminUserId: true, studentId: true, eventsBlobUrl: true },
+        }),
+      { label: "reaper.after.row" }
+    );
+    if (!row) return;
+
+    await logProductEvent({
+      kind: "SESSION_ENDED",
+      adminUserId: row.adminUserId,
+      studentId: row.studentId,
+      whiteboardSessionId: id,
+      metadata: { priorPhase, path: "reaper" },
+    });
+
+    const frozen = await resolveFrozenSessionCapabilities(id);
+    if (frozen?.whiteboard.persist === false) return;
+
+    const assembled = await assembleSessionEvents({
+      whiteboardSessionId: id,
+      adminUserId: row.adminUserId,
+      studentId: row.studentId,
+      currentEventsBlobUrl: row.eventsBlobUrl,
+    });
+    if (!assembled.ok) {
+      console.warn(`[slc] wbsid=${id} action=reaper_assemble_failed err=${assembled.error}`);
+      return;
+    }
+    if (assembled.eventsBlobUrl !== row.eventsBlobUrl && /^https?:\/\//i.test(assembled.eventsBlobUrl)) {
+      const updated = await withDbRetry(
+        () =>
+          db.whiteboardSession.updateMany({
+            where: { id, eventsBlobUrl: row.eventsBlobUrl },
+            data: { eventsBlobUrl: assembled.eventsBlobUrl },
+          }),
+        { label: "reaper.after.eventsBlobUrl" }
+      );
+      if (updated.count === 0) {
+        console.info(`[slc] wbsid=${id} action=reaper_events_url_kept reason=row_changed`);
+      }
+    }
+    if (assembled.segments.length > 0) enqueueReplayConcatAfterFinalize(id);
+  } catch (err) {
+    console.warn(
+      `[slc] wbsid=${id} action=reaper_after_error err=${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
 export type ReaperSessionOutcome = {
   id: string;
   action: "reaped" | "would_reap" | "skip" | "error";
@@ -193,7 +276,10 @@ export async function runStaleSessionReaper(opts: {
     stoppedAtDeadline: false,
     outcomes: [],
   };
-  if (opts.mode === "off") return result;
+  if (opts.mode === "off") {
+    console.info(`[slc] action=reaper_off`);
+    return result;
+  }
 
   // Cheap NECESSARY pre-filter only (each column is one the idle predicate also reads); the decision is
   // `evaluateSessionIdle`. Oldest first, bounded.
@@ -224,11 +310,19 @@ export async function runStaleSessionReaper(opts: {
       faultPoint("reaper:session", id);
       const verdict = await withDbRetry(() => evaluateSessionIdle(db, id, now), { label: "reaper.scan.idle" });
       if (verdict.kind !== "idle") {
-        result.skipped += 1;
-        result.outcomes.push({ id, action: "skip", reason: skipReason(verdict) });
+        recordSkip(result, id, verdict);
         continue;
       }
-      if (opts.mode === "dry_run") continue;
+      if (opts.mode === "dry_run") {
+        // Evaluate and log only. No row lock, no stamp, no write of any kind.
+        const persist = (await resolveSessionCapabilities(id)).whiteboard.persist;
+        result.wouldReap += 1;
+        result.outcomes.push({ id, action: "would_reap" });
+        console.info(
+          `[slc] wbsid=${id} action=would_reap phase=${verdict.phase.toLowerCase()} idleSince=${verdict.lastActivityAt.toISOString()} idleHours=${idleHours(now, verdict.lastActivityAt)} persist=${persist} appt=${verdict.appointment}`
+        );
+        continue;
+      }
 
       await holdPoint("reaper:between_scan_and_stamp", id);
       // The scan-time verdict is a hint, not the decision. Under the row lock (first statement, the same lock
@@ -247,12 +341,15 @@ export async function runStaleSessionReaper(opts: {
         { timeout: SEAM_BEARING_TX_TIMEOUT_MS }
       );
       if (decision.kind !== "idle") {
-        result.skipped += 1;
-        result.outcomes.push({ id, action: "skip", reason: skipReason(decision) });
+        recordSkip(result, id, decision);
         continue;
       }
       result.reaped += 1;
       result.outcomes.push({ id, action: "reaped" });
+      console.info(
+        `[slc] wbsid=${id} action=reaped phase=${decision.phase.toLowerCase()} idleSince=${decision.lastActivityAt.toISOString()} idleHours=${idleHours(now, decision.lastActivityAt)}`
+      );
+      await afterReap(id, decision.phase);
     } catch (err) {
       result.errors += 1;
       result.outcomes.push({ id, action: "error" });

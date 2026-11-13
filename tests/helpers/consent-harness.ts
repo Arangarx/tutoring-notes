@@ -242,6 +242,7 @@ export type ConsentInvokeAction =
   | "startSession"
   | "endWhiteboardSession"
   | "endStaleWhiteboardSession"
+  | "issueJoinToken"
   | "kick"
   | "generateNotes"
   | "triggerNotes"
@@ -315,6 +316,7 @@ export type ReaperOutcome = {
 export type ReaperRunBody = {
   ok?: boolean;
   failedJob?: string;
+  failedJobs?: Array<{ job: "reaper" | "purge"; error: string }>;
   reaper: {
     mode: "off" | "dry_run" | "enforce";
     candidates: number;

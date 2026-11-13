@@ -3,13 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { put } from "@vercel/blob";
-import {
-  harnessRequestOrigin,
-  harnessServerPut,
-  isAllowedBlobUrl,
-  isBlobHarnessActive,
-} from "@/lib/blob-harness";
+import { isAllowedBlobUrl } from "@/lib/blob-harness";
 import {
   createWhiteboardSessionCore,
   type CreateWhiteboardSessionCoreResult,
@@ -68,10 +62,7 @@ import {
   ErasureAccessSuspendedError,
   isWhiteboardSessionBlockedByErasure,
 } from "@/lib/erasure/active-erasure-scope";
-import {
-  assembleBackendEventLog,
-  countEventsInBlobUrl,
-} from "@/lib/whiteboard/assemble-persisted-state";
+import { assembleSessionEvents } from "@/lib/whiteboard/assemble-session-events";
 import {
   kickSessionChunksAction,
   triggerNotesGenerationAction,
@@ -904,116 +895,21 @@ export async function finalizeWhiteboardSessionFromBackend(
     }
   }
 
-  const startedAtRow = await withDbRetry(
-    () =>
-      db.whiteboardSession.findUnique({
-        where: { id: whiteboardSessionId },
-        select: { startedAt: true },
-      }),
-    { label: "finalizeFromBackend.startedAt" }
-  );
-  const startedAtIso =
-    startedAtRow?.startedAt.toISOString() ?? new Date().toISOString();
-
-  // Whiteboard off (frozen at Start): no board log is assembled or chosen; End keeps the row's URL.
-  const frozen = await resolveFrozenSessionCapabilities(whiteboardSessionId);
-  const assembled =
-    frozen?.whiteboard.persist === false
-      ? null
-      : await assembleBackendEventLog(whiteboardSessionId, startedAtIso);
-  const batchCount = assembled?.batchCount ?? 0;
-
-  const recordingRows = await withDbRetry(
-    () =>
-      db.sessionRecording.findMany({
-        where: { whiteboardSessionId },
-        orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
-        select: {
-          id: true,
-          blobUrl: true,
-          mimeType: true,
-          sizeBytes: true,
-          streamId: true,
-          createdAt: true,
-        },
-      }),
-    { label: "finalizeFromBackend.recordings" }
-  );
-
-  const segmentByUrl = new Map<string, EndSessionSegment>();
-  for (const row of recordingRows) {
-    segmentByUrl.set(row.blobUrl, {
-      blobUrl: row.blobUrl,
-      mimeType: row.mimeType,
-      sizeBytes: row.sizeBytes,
-      streamId: row.streamId,
-      segmentId: row.id,
-      audioStartedAtMs: row.createdAt.getTime(),
-    });
+  // Assembly + best-of selection + blob put live in one shared lib function (also used by the stale-session
+  // reaper); a failed put maps to the same { ok:false } End has always returned.
+  const assembledEvents = await assembleSessionEvents({
+    whiteboardSessionId,
+    adminUserId: session.adminUserId,
+    studentId: session.studentId,
+    currentEventsBlobUrl: session.eventsBlobUrl,
+    finalEventsBlobUrl: opts?.finalEventsBlobUrl,
+    extraSegments: opts?.extraSegments,
+  });
+  if (!assembledEvents.ok) {
+    return { ok: false, error: assembledEvents.error };
   }
-  for (const extra of opts?.extraSegments ?? []) {
-    if (!segmentByUrl.has(extra.blobUrl)) {
-      segmentByUrl.set(extra.blobUrl, extra);
-    }
-  }
-  const segments = [...segmentByUrl.values()];
-
-  console.log(
-    `[fzb] fzb=${whiteboardSessionId} action=assemble batches=${batchCount} segments=${segments.length}${assembled ? "" : " board=off"}`
-  );
-
-  const candidateScores: Array<{ url: string; score: number }> = [];
-  const assembledScore = assembled?.log.events.length ?? 0;
-  if (assembled) {
-    if (assembledScore > 0) {
-      candidateScores.push({ url: "__assembled__", score: assembledScore });
-    }
-    if (session.eventsBlobUrl) {
-      const existingScore = await countEventsInBlobUrl(session.eventsBlobUrl);
-      candidateScores.push({ url: session.eventsBlobUrl, score: existingScore });
-    }
-    if (opts?.finalEventsBlobUrl) {
-      const clientScore = await countEventsInBlobUrl(opts.finalEventsBlobUrl);
-      candidateScores.push({ url: opts.finalEventsBlobUrl, score: clientScore });
-    }
-  }
-
-  let finalEventsBlobUrl = session.eventsBlobUrl;
-  const best = candidateScores.reduce(
-    (acc, cur) => (cur.score > acc.score ? cur : acc),
-    { url: session.eventsBlobUrl, score: 0 }
-  );
-
-  if (assembled && best.url === "__assembled__" && assembledScore > 0) {
-    try {
-      const eventsBody = JSON.stringify(assembled.log);
-      const assembledPath = `whiteboard-sessions/${session.adminUserId}/${session.studentId}/${Date.now()}-events.json`;
-      const putResult = isBlobHarnessActive()
-        ? await harnessServerPut(
-            assembledPath,
-            eventsBody,
-            { contentType: "application/json", addRandomSuffix: true },
-            harnessRequestOrigin()
-          )
-        : await put(assembledPath, eventsBody, {
-          access: "private",
-          contentType: "application/json",
-          addRandomSuffix: true,
-        });
-      finalEventsBlobUrl = putResult.url;
-    } catch (err) {
-      console.error(
-        `[fzb] fzb=${whiteboardSessionId} action=assemble_blob_put_failed`,
-        err
-      );
-      return {
-        ok: false,
-        error: "Could not upload final whiteboard events. Please try again.",
-      };
-    }
-  } else if (best.url !== "__assembled__" && best.score > 0) {
-    finalEventsBlobUrl = best.url;
-  }
+  const { batchCount, segments } = assembledEvents;
+  const finalEventsBlobUrl = assembledEvents.eventsBlobUrl;
 
   if (!finalEventsBlobUrl || !/^https?:\/\//i.test(finalEventsBlobUrl)) {
     return {

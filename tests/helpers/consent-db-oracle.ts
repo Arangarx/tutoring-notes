@@ -19,7 +19,8 @@
 import { PrismaClient } from "@prisma/client";
 import { expect } from "@playwright/test";
 
-async function withPrisma<T>(fn: (prisma: PrismaClient) => Promise<T>): Promise<T> {
+/** One short-lived Prisma client per call: a test oracle never shares a connection with the code under test. */
+export async function withPrisma<T>(fn: (prisma: PrismaClient) => Promise<T>): Promise<T> {
   const prisma = new PrismaClient();
   try {
     return await fn(prisma);

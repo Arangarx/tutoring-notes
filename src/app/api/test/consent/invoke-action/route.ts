@@ -6,6 +6,7 @@ import {
   enqueueChunkTranscriptionAction,
   finalizeWhiteboardSessionFromBackend,
   generateNotesFromWhiteboardSessionAction,
+  issueJoinToken,
   registerWhiteboardSessionAudioSegmentAction,
   startWhiteboardSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
@@ -78,6 +79,8 @@ export async function POST(req: NextRequest) {
     }
     case "endStaleWhiteboardSession":
       return NextResponse.json({ result: await endStaleWhiteboardSession(sessionId) });
+    case "issueJoinToken":
+      return NextResponse.json({ result: await issueJoinToken(sessionId) });
     case "kick":
       return NextResponse.json({ result: await kickSessionChunksAction(sessionId) });
     case "generateNotes":
