@@ -34,6 +34,16 @@ import {
   waitUntilParked,
 } from "../helpers/consent-harness";
 import { seedStartFixture, type StartFixture } from "../helpers/consent-start-fixture";
+import {
+  expectReads,
+  openFamilyContext,
+  readReplay,
+  replayPagePath,
+  seedReplay,
+  SHAPE_ACCESS,
+  type Principal,
+  type ReplayFixture,
+} from "../helpers/consent-replay-fixture";
 import type { SessionCapabilities } from "../../src/lib/recording/session-capabilities";
 import {
   countBackendsWaitingOnLock,
@@ -1653,71 +1663,385 @@ test.describe("consent 6b: Start and refreeze (B5)", {
 test.describe("consent 6g: Replay per principal (B7, D4)", {
   tag: [TAG.WB_CONSENT, TAG.WB_ASSETS, TAG.WB_PRESENCE],
 }, () => {
-  // Oracle: oracle: HTTP status of each replay URL plus DOM of the replay card ("audio scrubber only" for audio-only, board+audio for full, none link for none).
-  test.fixme(
-    "RP1: replay: {shape} is available to {principal}",
-    async () => {
-      // pending: wave that owns RP1
+  /** The "View whiteboard" chips on a note card (`ParentShareNoteCard`). */
+  const REPLAY_LINK = "[data-testid='share-wb-replay-links'] a";
+  /** The inline audio players on a note card. */
+  const CARD_AUDIO = "[data-testid='share-page-audio'] audio";
+  const SHAPES = ["full", "audio_only", "board_only", "none"] as const;
+  const PRINCIPALS = ["share", "learner"] as const;
+  const PRINCIPAL_LABEL = { share: "share link", learner: "learner" } as const;
+  const NOT_SAVED_LINE = "The board was not saved because whiteboard recording was off.";
+
+  /** Every list that renders note cards, with the principal that reads it (parent notes and share are one family). */
+  function listSurfaces(f: ReplayFixture): Array<{ name: string; principal: Principal; path: string }> {
+    return [
+      { name: "parent notes", principal: "share", path: `/account/children/${f.learnerProfileId}/notes` },
+      { name: "share page", principal: "share", path: `/s/${f.shareToken}` },
+      { name: "share all", principal: "share", path: `/s/${f.shareToken}/all` },
+      { name: "learner home", principal: "learner", path: "/join" },
+    ];
+  }
+
+  /** What a list shows for the fixture's note: replay chips and inline audio players. Waits for the card. */
+  async function readCard(context: BrowserContext, path: string, noteId: string) {
+    const page = await context.newPage();
+    try {
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      await expect(page.locator(`article[data-note-id='${noteId}']`)).toBeVisible({ timeout: 45_000 });
+      const card = page.locator(`article[data-note-id='${noteId}']`);
+      return {
+        links: await card.locator(REPLAY_LINK).count(),
+        audio: await card.locator(CARD_AUDIO).count(),
+        notesHeading: await card.getByText("Topics covered").count(),
+      };
+    } finally {
+      await page.close();
     }
-  );
+  }
+
+  /** The replay page as the family sees it: player mounted, "not saved" line iff no board, audio scrubber iff audio. */
+  async function expectReplayPageShape(
+    context: BrowserContext,
+    f: ReplayFixture,
+    principal: Principal,
+    access: { board: boolean; audio: boolean }
+  ) {
+    const page = await context.newPage();
+    try {
+      await page.goto(replayPagePath(f, principal), { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("wb-replay-in-frame")).toBeVisible({ timeout: 90_000 });
+      await expect(page.getByTestId("wb-board-not-saved")).toHaveCount(access.board ? 0 : 1);
+      if (!access.board) await expect(page.getByTestId("wb-board-not-saved")).toHaveText(NOT_SAVED_LINE);
+      await expect(page.getByTestId("wb-replay-audio")).toHaveCount(access.audio ? 1 : 0);
+    } finally {
+      await page.close();
+    }
+  }
+
+  /** Opens both family contexts, runs `check` for each principal, closes them. */
+  async function forEachPrincipal(
+    browser: Browser,
+    f: ReplayFixture,
+    check: (context: BrowserContext, principal: Principal) => Promise<void>
+  ) {
+    for (const principal of PRINCIPALS) {
+      const context = await openFamilyContext(browser, f, principal);
+      try {
+        await check(context, principal);
+      } finally {
+        await context.close();
+      }
+    }
+  }
+
+  // Oracle: HTTP status of each replay URL plus DOM of the replay card ("audio scrubber only" for audio-only, board+audio for full, none link for none).
+  // One test per shape, each covering both principals; the table SHAPE_ACCESS is hand-written from the plan, not read from the code.
+  for (const shape of SHAPES) {
+    test(
+      `RP1: replay: ${shape} is available to ${PRINCIPALS.map((p) => PRINCIPAL_LABEL[p]).join(" and ")}`,
+      async ({ browser }) => {
+        test.setTimeout(240_000);
+        const f = await seedReplay(browser, { shape });
+        try {
+          await forEachPrincipal(browser, f, async (context, principal) => {
+            const access = SHAPE_ACCESS[shape];
+            expectReads(await readReplay(context, f, principal), access, `${shape} / ${principal}`);
+            if (access.board || access.audio) await expectReplayPageShape(context, f, principal, access);
+          });
+        } finally {
+          await f.cleanup();
+        }
+      }
+    );
+  }
+
   // Oracle: compare the set of asset URLs reachable by token vs. by family.
-  test.fixme(
+  test(
     "RP2: replay: share link shows exactly what the family sees, nothing more",
-    async () => {
-      // pending: wave that owns RP2
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      for (const shape of SHAPES) {
+        const f = await seedReplay(browser, { shape });
+        try {
+          const reads = {} as Record<Principal, Awaited<ReturnType<typeof readReplay>>>;
+          await forEachPrincipal(browser, f, async (context, principal) => {
+            reads[principal] = await readReplay(context, f, principal);
+          });
+          // Same reachable set, and that set is the shape's: the token reaches nothing the learner cannot.
+          expect(reads.share, `${shape}: share link vs learner`).toEqual(reads.learner);
+          expectReads(reads.share, SHAPE_ACCESS[shape], `${shape}: share link`);
+        } finally {
+          await f.cleanup();
+        }
+      }
     }
   );
+
   // Oracle: record with whiteboard on, End, then flip the live record off; replay still 200 (the frozen snapshot decides). Red today.
-  test.fixme(
+  test(
     "RP3: replay after consent revoked post-End: a recorded board is still replayable",
-    async () => {
-      // pending: wave that owns RP3
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      // The board was recorded (snapshot whiteboard on). The family later turned the board off and restricted it.
+      const f = await seedReplay(browser, { shape: "full", liveRecord: { whiteboard: false }, restrictWhiteboard: true });
+      try {
+        await forEachPrincipal(browser, f, async (context, principal) => {
+          expectReads(await readReplay(context, f, principal), SHAPE_ACCESS.full, `revoked / ${principal}`);
+          await expectReplayPageShape(context, f, principal, SHAPE_ACCESS.full);
+        });
+        for (const surface of listSurfaces(f)) {
+          const context = await openFamilyContext(browser, f, surface.principal);
+          try {
+            const card = await readCard(context, surface.path, f.noteId!);
+            expect(card.links, `${surface.name}: View whiteboard chip`).toBe(1);
+            expect(card.audio, `${surface.name}: inline audio`).toBe(1);
+          } finally {
+            await context.close();
+          }
+        }
+      } finally {
+        await f.cleanup();
+      }
     }
   );
+
   // Oracle: the converse.
-  test.fixme(
+  test(
     "RP4: replay after consent granted post-End: an unrecorded board stays unavailable",
-    async () => {
-      // pending: wave that owns RP4
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      // The board was NOT recorded (snapshot whiteboard off). The family later turned the board on.
+      const f = await seedReplay(browser, { shape: "audio_only", liveRecord: { whiteboard: true } });
+      try {
+        await forEachPrincipal(browser, f, async (context, principal) => {
+          expectReads(await readReplay(context, f, principal), SHAPE_ACCESS.audio_only, `granted / ${principal}`);
+          await expectReplayPageShape(context, f, principal, SHAPE_ACCESS.audio_only);
+        });
+      } finally {
+        await f.cleanup();
+      }
     }
   );
+
   // Oracle: table-driven across the loaders, learner/share/parent pages, the audio proxy, and the share proxy (HTTP/DOM per site; oracle is the brief's table, not 'replay-access.ts').
-  test.fixme(
+  test(
     "RP5: all seven replay sites give the same answer for the same session",
-    async () => {
-      // pending: wave that owns RP5
+    async ({ browser }) => {
+      test.setTimeout(420_000);
+      for (const shape of SHAPES) {
+        const access = SHAPE_ACCESS[shape];
+        const f = await seedReplay(browser, { shape });
+        try {
+          // Sites 1-4: the four lists (parent notes, share page, share all, learner home) show a chip and the inline
+          // audio exactly when the table says so.
+          for (const surface of listSurfaces(f)) {
+            const context = await openFamilyContext(browser, f, surface.principal);
+            try {
+              const card = await readCard(context, surface.path, f.noteId!);
+              expect(card.links, `${shape} / ${surface.name}: chip`).toBe(access.board || access.audio ? 1 : 0);
+              expect(card.audio, `${shape} / ${surface.name}: inline audio`).toBe(access.audio ? 1 : 0);
+            } finally {
+              await context.close();
+            }
+          }
+          // Sites 5-7: the replay pages, the board/audio routes and the audio proxy, for both principals.
+          await forEachPrincipal(browser, f, async (context, principal) => {
+            expectReads(await readReplay(context, f, principal), access, `${shape} / ${principal}`);
+          });
+        } finally {
+          await f.cleanup();
+        }
+      }
     }
   );
-  test.fixme(
+
+  // Characterization (green before and after): a session with no snapshot keeps today's replay, open when the
+  // learner's live record allows the board or when there is no record at all. The email-only arm is covered by
+  // parent-child-notes-whiteboard-replay.spec.ts.
+  test(
     "RP6: legacy session without a snapshot keeps today's replay behavior",
-    async () => {
-      // pending: wave that owns RP6
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      for (const liveRecord of [{ whiteboard: true }, null]) {
+        const f = await seedReplay(browser, { snapshot: false, liveRecord });
+        try {
+          await forEachPrincipal(browser, f, async (context, principal) => {
+            expectReads(
+              await readReplay(context, f, principal),
+              SHAPE_ACCESS.full,
+              `legacy, record ${liveRecord ? "allows board" : "absent"} / ${principal}`
+            );
+          });
+          for (const surface of listSurfaces(f)) {
+            const context = await openFamilyContext(browser, f, surface.principal);
+            try {
+              const card = await readCard(context, surface.path, f.noteId!);
+              expect(card.links, `legacy ${surface.name}: chip`).toBe(1);
+            } finally {
+              await context.close();
+            }
+          }
+        } finally {
+          await f.cleanup();
+        }
+      }
     }
   );
-  test.fixme(
+
+  // Oracle: the legacy board still follows the live record (C6 lock): board denied, audio still open (legacy audio is open).
+  test(
+    "RP6b: legacy session whose live record has whiteboard off: board hidden, audio still replayable",
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const f = await seedReplay(browser, { snapshot: false, liveRecord: { whiteboard: false } });
+      try {
+        await forEachPrincipal(browser, f, async (context, principal) => {
+          expectReads(await readReplay(context, f, principal), SHAPE_ACCESS.audio_only, `legacy, board off / ${principal}`);
+        });
+      } finally {
+        await f.cleanup();
+      }
+    }
+  );
+
+  /** Opens the tutor review screen and taps "Share session" (notes off). Returns once the save is confirmed. */
+  async function tutorSharesSession(page: Page, f: ReplayFixture) {
+    await page.goto(`/admin/students/${f.studentId}/whiteboard/${f.sessionId}/workspace`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({ timeout: 60_000 });
+    const share = page.getByTestId("wb-share-session");
+    await expect(share).toBeVisible({ timeout: 30_000 });
+    await expect(share).toHaveText("Share session");
+    await share.click();
+    await expect(page.getByTestId("wb-save-note-confirmation")).toBeVisible({ timeout: 30_000 });
+  }
+
+  const readSavedNote = (sessionId: string) =>
+    withPrisma(async (p) => {
+      const session = await p.whiteboardSession.findUniqueOrThrow({ where: { id: sessionId }, select: { noteId: true } });
+      if (!session.noteId) return null;
+      return p.sessionNote.findUniqueOrThrow({
+        where: { id: session.noteId },
+        select: { id: true, status: true, aiGenerated: true, aiPromptVersion: true },
+      });
+    });
+
+  test(
     "RP7: notes off: the review screen's \"Share session\" save releases the replay to the family",
-    async () => {
-      // pending: wave that owns RP7
+    async ({ page, browser }) => {
+      test.setTimeout(300_000);
+      const f = await seedReplay(browser, { shape: "full", notesOff: true, noNote: true });
+      try {
+        await tutorSharesSession(page, f);
+        const saved = await readSavedNote(f.sessionId);
+        expect(saved?.status).toBe("READY");
+
+        await forEachPrincipal(browser, f, async (context, principal) => {
+          expectReads(await readReplay(context, f, principal), SHAPE_ACCESS.full, `after Share session / ${principal}`);
+        });
+        const parent = await openFamilyContext(browser, f, "share");
+        try {
+          const card = await readCard(parent, `/account/children/${f.learnerProfileId}/notes`, saved!.id);
+          expect(card.links, "parent notes: View whiteboard chip").toBe(1);
+        } finally {
+          await parent.close();
+        }
+      } finally {
+        await f.cleanup();
+      }
     }
   );
-  test.fixme(
+
+  test(
     "RP8: notes off: before \"Share session\" the family sees no replay",
-    async () => {
-      // pending: wave that owns RP8
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const f = await seedReplay(browser, { shape: "full", notesOff: true, noNote: true });
+      try {
+        await forEachPrincipal(browser, f, async (context, principal) => {
+          expectReads(await readReplay(context, f, principal), SHAPE_ACCESS.none, `before Share session / ${principal}`);
+        });
+        const parent = await openFamilyContext(browser, f, "share");
+        try {
+          const page = await parent.newPage();
+          await page.goto(`/account/children/${f.learnerProfileId}/notes`, { waitUntil: "domcontentloaded" });
+          await expect(page.locator(REPLAY_LINK)).toHaveCount(0);
+          await expect(page.locator(`a[href*='${f.sessionId}']`)).toHaveCount(0);
+        } finally {
+          await parent.close();
+        }
+      } finally {
+        await f.cleanup();
+      }
     }
   );
-  // Oracle: DB oracle: 'aiGenerated = false' and 'aiPromptVersion = null' after a share-only save (today 'notes-actions.ts' 331–332 and 355–356 write 'true' and 'REDUCE_PROMPT_VERSION' unconditionally); control arm: a save from a ge …
-  test.fixme(
+
+  // Oracle: DB oracle: 'aiGenerated = false' and 'aiPromptVersion = null' after a share-only save (today 'notes-actions.ts' 331–332 and 355–356 write 'true' and 'REDUCE_PROMPT_VERSION' unconditionally); control arm: a save from a generated draft keeps true plus the version.
+  test(
     "RP9: notes off: a \"Share session\" save does not claim an AI wrote it",
-    async () => {
-      // pending: wave that owns RP9
+    async ({ page, browser, request }) => {
+      test.setTimeout(300_000);
+      const shareOnly = await seedReplay(browser, { shape: "full", notesOff: true, noNote: true });
+      const generated = await seedReplay(browser, { shape: "full", noteStatus: "DRAFT", generatedTutorNote: true });
+      try {
+        await tutorSharesSession(page, shareOnly);
+        expect(await readSavedNote(shareOnly.sessionId)).toMatchObject({
+          status: "READY",
+          aiGenerated: false,
+          aiPromptVersion: null,
+        });
+
+        // Control arm: a save that carries a generated draft still records the provenance (so the DB oracle can go red).
+        const res = await invokeConsentAction(request, "saveSessionNotes", generated.sessionId, {
+          topics: "edited",
+          assessment: "",
+          nextSteps: "",
+          links: "",
+        });
+        expect(res.status(), await res.text()).toBe(200);
+        const saved = await readSavedNote(generated.sessionId);
+        expect(saved).toMatchObject({ status: "READY", aiGenerated: true });
+        expect(saved?.aiPromptVersion, "the prompt version of the generated draft").toBeTruthy();
+      } finally {
+        await shareOnly.cleanup();
+        await generated.cleanup();
+      }
     }
   );
-  // Oracle: family DOM on the parent and share surfaces: replay card present, no empty notes block. How the family surface renders an all-blank READY note today is **UNVERIFIED**; this test settles it and the fix follows what it fin …
-  test.fixme(
+
+  // Oracle: family DOM on the parent and share surfaces: replay card present, no empty notes block. How the family surface renders an all-blank READY note today is **UNVERIFIED**; this test settles it and the fix follows what it finds.
+  test(
     "RP10: notes off: a shared session with blank notes shows the replay and no empty notes block",
-    async () => {
-      // pending: wave that owns RP10
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const blank = await seedReplay(browser, {
+        shape: "full",
+        notesOff: true,
+        note: { topics: "", homework: "", assessment: "", nextSteps: "" },
+      });
+      const written = await seedReplay(browser, { shape: "full" });
+      try {
+        const parent = await openFamilyContext(browser, blank, "share");
+        try {
+          for (const path of [`/account/children/${blank.learnerProfileId}/notes`, `/s/${blank.shareToken}`]) {
+            const card = await readCard(parent, path, blank.noteId!);
+            expect(card.links, `${path}: replay chip`).toBe(1);
+            expect(card.notesHeading, `${path}: empty "Topics covered" block`).toBe(0);
+          }
+        } finally {
+          await parent.close();
+        }
+        // Control: a note with text keeps its notes block on the same surface.
+        const control = await openFamilyContext(browser, written, "share");
+        try {
+          const card = await readCard(control, `/s/${written.shareToken}`, written.noteId!);
+          expect(card.notesHeading, "a written note shows its notes block").toBeGreaterThan(0);
+        } finally {
+          await control.close();
+        }
+      } finally {
+        await blank.cleanup();
+        await written.cleanup();
+      }
     }
   );
 });

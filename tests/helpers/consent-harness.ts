@@ -248,6 +248,7 @@ export type ConsentInvokeAction =
   | "triggerNotes"
   | "regenerateNotes"
   | "loadReviewPayload"
+  | "saveSessionNotes"
   | "runBoardPurge"
   | "setOrganizationStatus"
   | "removeOrgMember";

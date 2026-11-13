@@ -209,6 +209,9 @@ async function seedParentNotesReplay(opts: {
   withShareToken: boolean;
   withLiveSession: boolean;
   allowWhiteboardRecording: boolean | null;
+  /** Audio recording frozen on the snapshot (default on). Off in person leaves no audio to replay. */
+  snapshotAudio?: boolean;
+  sessionMode?: "LIVE" | "IN_PERSON";
   restrictWhiteboardRecording?: boolean;
   recordAllowWhiteboard?: boolean | null;
   isSelfLearner?: boolean;
@@ -266,6 +269,7 @@ async function seedParentNotesReplay(opts: {
         eventsBlobUrl: "https://pw.local/placeholder-whiteboard-events.json",
         endedAt: new Date("2026-10-01T18:00:00.000Z"),
         durationSeconds: 60,
+        sessionMode: opts.sessionMode ?? "LIVE",
       },
       select: { id: true },
     });
@@ -289,7 +293,7 @@ async function seedParentNotesReplay(opts: {
         data: {
           whiteboardSessionId: ended.id,
           allowLiveSession: true,
-          allowAudioRecording: true,
+          allowAudioRecording: opts.snapshotAudio ?? true,
           allowWhiteboardRecording: opts.allowWhiteboardRecording,
           allowNoteSending: true,
         },
@@ -567,14 +571,17 @@ test.describe(
       await expect(page.locator("a[href*='/s//']")).toHaveCount(0);
     });
 
-    test("whiteboard recording denied for the learner hides View whiteboard", async ({
+    test("a session recorded with neither whiteboard nor audio has no View whiteboard link", async ({
       page,
     }) => {
       test.setTimeout(60_000);
+      // In person with audio off and whiteboard off: nothing was recorded, so there is no replay to link.
       const fixture = await seedParentNotesReplay({
         withShareToken: true,
         withLiveSession: false,
         allowWhiteboardRecording: false,
+        snapshotAudio: false,
+        sessionMode: "IN_PERSON",
       });
 
       await page.goto(`/account/children/${fixture.learnerProfileId}/notes`);
@@ -585,7 +592,9 @@ test.describe(
       await expect(page.locator("a[href*='/s//']")).toHaveCount(0);
     });
 
-    test("a whiteboard restriction hides View whiteboard even when the record and snapshot allow it", async ({
+    // C6 (Q8, forward-only): after End the frozen snapshot decides. A restriction or a later consent record never
+    // hides a replay that was recorded, and never reveals one that was not (RP3/RP4 in consent-entry.spec.ts).
+    test("a whiteboard restriction added after End does not hide a replay the snapshot recorded", async ({
       page,
     }) => {
       test.setTimeout(60_000);
@@ -599,12 +608,15 @@ test.describe(
 
       await page.goto(`/account/children/${fixture.learnerProfileId}/notes`);
       await expect(page.getByText(fixture.topics)).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByRole("link", { name: /watch the whiteboard recording/i })).toHaveCount(
-        0
+      await expect(
+        page.getByRole("link", { name: /watch the whiteboard recording/i })
+      ).toHaveAttribute(
+        "href",
+        `/s/${fixture.shareToken}/whiteboard/${fixture.endedSessionId}`
       );
     });
 
-    test("the latest consent record hides View whiteboard when the snapshot still allows it", async ({
+    test("a later consent record that turns the board off does not hide a recorded board", async ({
       page,
     }) => {
       test.setTimeout(60_000);
@@ -617,12 +629,15 @@ test.describe(
 
       await page.goto(`/account/children/${fixture.learnerProfileId}/notes`);
       await expect(page.getByText(fixture.topics)).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByRole("link", { name: /watch the whiteboard recording/i })).toHaveCount(
-        0
+      await expect(
+        page.getByRole("link", { name: /watch the whiteboard recording/i })
+      ).toHaveAttribute(
+        "href",
+        `/s/${fixture.shareToken}/whiteboard/${fixture.endedSessionId}`
       );
     });
 
-    test("the latest consent record hides View whiteboard when the session has no snapshot", async ({
+    test("a legacy session (no snapshot) whose live record turned the board off still lists its audio replay", async ({
       page,
     }) => {
       test.setTimeout(60_000);
@@ -635,12 +650,13 @@ test.describe(
 
       await page.goto(`/account/children/${fixture.learnerProfileId}/notes`);
       await expect(page.getByText(fixture.topics)).toBeVisible({ timeout: 20_000 });
+      // Legacy audio is open (the board follows the live record: RP6b reads the board routes), so the replay is listed.
       await expect(page.getByRole("link", { name: /watch the whiteboard recording/i })).toHaveCount(
-        0
+        1
       );
     });
 
-    test("org-owned and tutor-owned rows are read from the student owner, latest version", async ({
+    test("the frozen snapshot decides for tutor-owned and org-owned rows alike, whatever the owners' latest records say", async ({
       page,
     }) => {
       test.setTimeout(60_000);
@@ -650,6 +666,8 @@ test.describe(
       await expect(page.getByText(fixture.tutorTopics)).toBeVisible({ timeout: 20_000 });
       await expect(page.getByText(fixture.orgTopics)).toBeVisible();
 
+      // Both sessions froze whiteboard on. The org's latest record (version 2) is off and the tutor's is on, and
+      // neither moves a recorded replay. (Legacy owner resolution is the jest `resolveReplayAccess` suite.)
       const tutorCard = page.locator("article", { hasText: fixture.tutorTopics });
       const orgCard = page.locator("article", { hasText: fixture.orgTopics });
       await expect(
@@ -660,25 +678,30 @@ test.describe(
       );
       await expect(
         orgCard.getByRole("link", { name: /watch the whiteboard recording/i })
-      ).toHaveCount(0);
-      await expect(page.locator(`a[href*='${fixture.orgSessionId}']`)).toHaveCount(0);
+      ).toHaveAttribute(
+        "href",
+        `/s/${fixture.orgToken}/whiteboard/${fixture.orgSessionId}`
+      );
     });
 
-    test("a self-learner who turned whiteboard recording off has no View whiteboard link", async ({
+    test("a self-learner's later consent change does not move a recorded replay, and a legacy record still opens one", async ({
       page,
     }) => {
       test.setTimeout(90_000);
-      const denied = await seedParentNotesReplay({
+      const recorded = await seedParentNotesReplay({
         withShareToken: true,
         withLiveSession: false,
         allowWhiteboardRecording: true,
         recordAllowWhiteboard: false,
         isSelfLearner: true,
       });
-      await page.goto(`/account/children/${denied.learnerProfileId}/notes`);
-      await expect(page.getByText(denied.topics)).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByRole("link", { name: /watch the whiteboard recording/i })).toHaveCount(
-        0
+      await page.goto(`/account/children/${recorded.learnerProfileId}/notes`);
+      await expect(page.getByText(recorded.topics)).toBeVisible({ timeout: 20_000 });
+      await expect(
+        page.getByRole("link", { name: /watch the whiteboard recording/i })
+      ).toHaveAttribute(
+        "href",
+        `/s/${recorded.shareToken}/whiteboard/${recorded.endedSessionId}`
       );
 
       const allowed = await seedParentNotesReplay({

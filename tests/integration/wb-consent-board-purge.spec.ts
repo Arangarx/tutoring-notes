@@ -168,10 +168,36 @@ test.describe("consent 6e: Whiteboard", {
     }
   );
   // Oracle: DOM
-  test.fixme(
+  // The review hero shows the explicit "not saved" line where the board thumbnail would be; whiteboard on shows no such line.
+  test(
     "W6: whiteboard off: tutor review shows the \"board was not saved\" state",
-    async () => {
-      // pending: wave that owns W6
+    async ({ page, request }) => {
+      test.setTimeout(180_000);
+      const off = await seedBoardSession(request, false);
+      const on = await seedBoardSession(request, true);
+      try {
+        for (const b of [off, on]) {
+          const keys = await seedBoard(request, b);
+          const end = await endWithBoard(request, b, keys);
+          expect(end.status(), await end.text()).toBe(200);
+        }
+
+        const hero = (b: BoardFixture) => `/admin/students/${b.studentId}/whiteboard/${b.whiteboardSessionId}/workspace`;
+        await page.goto(hero(off), { waitUntil: "domcontentloaded" });
+        await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({ timeout: 60_000 });
+        const notice = page.getByTestId("wb-review-board-thumbnail-wrap").getByTestId("wb-board-not-saved");
+        await expect(notice).toBeVisible({ timeout: 30_000 });
+        await expect(notice).toHaveText("The board was not saved because whiteboard recording was off.");
+
+        // Positive control: the same screen for whiteboard on shows no such line.
+        await page.goto(hero(on), { waitUntil: "domcontentloaded" });
+        await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({ timeout: 60_000 });
+        await expect(page.getByTestId("wb-review-board-thumbnail-loading")).toHaveCount(0, { timeout: 30_000 });
+        await expect(page.getByTestId("wb-board-not-saved")).toHaveCount(0);
+      } finally {
+        await off.cleanup();
+        await on.cleanup();
+      }
     }
   );
   // Oracle: Late POST refused ('acceptOrgForcedEndUpload' sets no 'eventsBlobUrl'); a blob a stale client uploaded under the session prefix is gone after the sweep; no URL is recorded anywhere (R2)
@@ -1186,10 +1212,47 @@ test.describe("consent 6e: Whiteboard", {
     }
   );
   // Oracle: C6. 'tutor-asset' calls 'resolveReplayAccess' and returns 404 when 'board' is false, while the asset is still in the harness store (before any purge pass). Positive control: whiteboard-on returns the asset. The events, s …
-  test.fixme(
+  test(
     "W27b: whiteboard off, after End and before any purge pass: tutor-asset returns 404 for an asset that still exists",
-    async () => {
-      // pending: wave that owns W27b
+    async ({ request }) => {
+      const off = await seedBoardSession(request, false);
+      const on = await seedBoardSession(request, true);
+      try {
+        const assetUrl = (b: BoardFixture, keys: { image: string }) =>
+          `/api/whiteboard/${b.whiteboardSessionId}/tutor-asset?u=${encodeURIComponent(harnessUrl(keys.image))}`;
+        const offKeys = await seedBoard(request, off);
+        const onKeys = await seedBoard(request, on);
+
+        // A LIVE session is unchanged: the tutor still reads its own board's asset while it is being drawn.
+        const live = await request.get(assetUrl(off, offKeys));
+        expect(live.status(), "live session, whiteboard off").toBe(200);
+        expect(await live.text()).toBe("pw-board-image-png");
+
+        for (const [b, keys] of [
+          [off, offKeys],
+          [on, onKeys],
+        ] as const) {
+          await blockAfterPurge(request, b.whiteboardSessionId);
+          const end = await endWithBoard(request, b, keys);
+          expect(end.status(), await end.text()).toBe(200);
+        }
+        expect((await readPurgeRow(off.whiteboardSessionId)).boardPurgeFirstPassAt).toBeNull();
+        // The asset is still in storage: the 404 is the decision, not missing data.
+        expect(await keysUnder(request, off.sessionPrefix)).toContain(offKeys.image);
+
+        const denied = await request.get(assetUrl(off, offKeys));
+        expect(denied.status(), "ended session, whiteboard off").toBe(404);
+        expect(await denied.text()).not.toBe("pw-board-image-png");
+
+        // Positive control: whiteboard on still serves it after End.
+        const allowed = await request.get(assetUrl(on, onKeys));
+        expect(allowed.status(), "ended session, whiteboard on").toBe(200);
+        expect(await allowed.text()).toBe("pw-board-image-png");
+      } finally {
+        await resetSeams(request);
+        await off.cleanup();
+        await on.cleanup();
+      }
     }
   );
 });
