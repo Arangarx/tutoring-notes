@@ -40,6 +40,15 @@ jest.mock("@/components/ThemeProvider", () => ({
   }),
 }));
 
+// These tests exercise how the page lays out replay links. WHAT may be replayed is the one decision function,
+// covered by `share/replay-access.test.ts` and the consent Playwright specs; here every ended session replays fully.
+jest.mock("@/lib/share/replay-access", () => ({
+  ...jest.requireActual("@/lib/share/replay-access"),
+  resolveReplayAccess: jest.fn(async (ids: readonly string[]) => {
+    return new Map(ids.map((id) => [id, { audio: true, board: true, reason: "snapshot" as const }]));
+  }),
+}));
+
 jest.mock("@/lib/db", () => ({
   db: {
     shareLink: { findUnique: (...a: unknown[]) => mockFindUnique(...a) },

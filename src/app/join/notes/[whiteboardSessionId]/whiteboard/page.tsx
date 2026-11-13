@@ -67,6 +67,7 @@ export default async function LearnerWhiteboardReplayPage({
       concatDurationSeconds={access.session.concatDurationSeconds}
       audioRecordings={access.session.audioRecordings}
       audience="learner"
+      replay={access.replay}
     />
   );
 }

@@ -33,7 +33,8 @@ export async function GET(
     shareToken,
     shareToken
       ? `/api/whiteboard/${sessionId}/public-concat-audio?token=${shareToken}`
-      : `/api/whiteboard/${sessionId}/public-concat-audio`
+      : `/api/whiteboard/${sessionId}/public-concat-audio`,
+    "audio"
   );
   if (!access.ok) return access.response;
 

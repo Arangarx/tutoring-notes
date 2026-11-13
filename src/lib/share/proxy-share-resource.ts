@@ -14,6 +14,11 @@ import {
   resolveLearnerWhiteboardReplay,
 } from "@/lib/share/learner-replay-access";
 import { parentShareReplayNoteIsHidden } from "@/lib/share/parent-share-replay-access";
+import {
+  replayResourceIsDenied,
+  resolveReplayAccess,
+  type ReplayResource,
+} from "@/lib/share/replay-access";
 import { getLearnerSessionFromHeaders } from "@/lib/server-session";
 
 export type ShareProxyAccess =
@@ -64,6 +69,20 @@ export function learnerReplayNoSessionResponse(args: {
 }
 
 /**
+ * The one replay decision applied to a share-token request. A 404 response when the session has ended and the
+ * frozen snapshot (or, for a legacy session, the live record) does not allow this resource; null otherwise.
+ */
+export async function replayResourceDeniedResponse(
+  whiteboardSessionId: string,
+  resource: ReplayResource,
+  principal: "share" | "learner"
+): Promise<Response | null> {
+  const access = (await resolveReplayAccess([whiteboardSessionId], { principal })).get(whiteboardSessionId);
+  if (!replayResourceIsDenied(access, resource)) return null;
+  return NextResponse.json({ error: "Not found." }, { status: 404 });
+}
+
+/**
  * Share-token access, or a signed-in learner who may view this ended replay.
  * A share token whose ended session is linked to a DRAFT (or missing) note
  * is a 404. No token and no learner session stays a 401. A learner who does
@@ -74,7 +93,8 @@ export async function assertWhiteboardReplayRequestAccess(
   req: Request,
   whiteboardSessionId: string,
   shareToken: string | null,
-  apiPath: string
+  apiPath: string,
+  resource: ReplayResource
 ): Promise<ShareProxyAccess> {
   if (shareToken) {
     const access = await assertShareProxyAccess(req, shareToken, apiPath);
@@ -91,6 +111,8 @@ export async function assertWhiteboardReplayRequestAccess(
         response: NextResponse.json({ error: "Not found." }, { status: 404 }),
       };
     }
+    const denied = await replayResourceDeniedResponse(whiteboardSessionId, resource, "share");
+    if (denied) return { ok: false, response: denied };
     return access;
   }
 
@@ -107,6 +129,14 @@ export async function assertWhiteboardReplayRequestAccess(
     whiteboardSessionId
   );
   if (!access.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Not found." }, { status: 404 }),
+    };
+  }
+
+  // The learner check already ran the one replay decision; apply the half this request asks for.
+  if (!access.replay[resource]) {
     return {
       ok: false,
       response: NextResponse.json({ error: "Not found." }, { status: 404 }),

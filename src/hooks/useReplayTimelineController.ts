@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { maxEventTimestampMs, deriveReplayPageListFromLog, findActiveReplayPageIdAt } from "@/lib/whiteboard/event-log";
+import { createEmptyEventLog, maxEventTimestampMs, deriveReplayPageListFromLog, findActiveReplayPageIdAt } from "@/lib/whiteboard/event-log";
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import { globalMsToSegmentLocal, buildEffectiveReplayTimeline } from "@/lib/whiteboard/replay-audio-timeline";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
@@ -260,10 +260,18 @@ export function useReplayTimelineController(
     setPaintReady(false);
     isAtEndRef.current = false;
     globalSegmentOffsetMsRef.current = 0;
+    // No event log to fetch: the board was not saved (consent), so the replay is the audio over an empty board.
+    if (eventsBlobUrl === null) {
+      setLoadState({ kind: "ready", log: createEmptyEventLog() });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const eventsUrl = eventsBlobUrl;
     (async () => {
       try {
-        const res = await fetch(eventsBlobUrl, {
-          credentials: credentialsForReplayFetch(eventsBlobUrl),
+        const res = await fetch(eventsUrl, {
+          credentials: credentialsForReplayFetch(eventsUrl),
         });
         if (!res.ok) {
           const friendly = await readReplayJsonError(res);

@@ -4,9 +4,7 @@ import type { ParentShareNoteModel } from "@/components/notes/ParentShareNoteCar
 import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
 import {
   REPLAY_VISIBLE_NOTE_STATUS,
-  loadParentVisibleWhiteboardReplayIds,
-  loadWhiteboardReplayIdsByNoteIds,
-  mergeWhiteboardStubsForShareCard,
+  applyReplayAccessToNotes,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 
 export type LearnerHomeNoteCard = {
@@ -56,39 +54,33 @@ export async function loadLearnerHomeNotes(learnerProfileId: string): Promise<{
     },
   });
 
-  const noteIds = notes.map((note) => note.id);
-  const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(noteIds);
-  const replayIdsByNote = await loadParentVisibleWhiteboardReplayIds({
-    noteIds,
-    learnerProfileId,
-    students,
-  });
+  const replayByNote = await applyReplayAccessToNotes(notes);
 
   return {
     tutorCount: students.length,
-    notes: notes.map((note) => ({
-      id: note.id,
-      dateLabel: formatDateOnlyDisplay(note.date),
-      token: shareTokenByStudentId.get(note.student.id) ?? "",
-      replaySessionIds: replayIdsByNote.get(note.id) ?? [],
-      note: {
+    notes: notes.map((note) => {
+      const replay = replayByNote.get(note.id);
+      return {
         id: note.id,
-        date: note.date,
-        startTime: note.startTime,
-        endTime: note.endTime,
-        template: note.template,
-        topics: note.topics,
-        homework: note.homework,
-        assessment: note.assessment,
-        nextSteps: note.nextSteps,
-        linksJson: note.linksJson,
-        shareRecordingInEmail: note.shareRecordingInEmail,
-        recordings: note.recordings,
-        whiteboardSessions: mergeWhiteboardStubsForShareCard(
-          note,
-          whiteboardIdsByNote.get(note.id)
-        ),
-      },
-    })),
+        dateLabel: formatDateOnlyDisplay(note.date),
+        token: shareTokenByStudentId.get(note.student.id) ?? "",
+        replaySessionIds: replay?.replaySessionIds ?? [],
+        note: {
+          id: note.id,
+          date: note.date,
+          startTime: note.startTime,
+          endTime: note.endTime,
+          template: note.template,
+          topics: note.topics,
+          homework: note.homework,
+          assessment: note.assessment,
+          nextSteps: note.nextSteps,
+          linksJson: note.linksJson,
+          shareRecordingInEmail: note.shareRecordingInEmail,
+          recordings: replay?.recordings ?? [],
+          whiteboardSessions: replay?.whiteboardSessions ?? [],
+        },
+      };
+    }),
   };
 }

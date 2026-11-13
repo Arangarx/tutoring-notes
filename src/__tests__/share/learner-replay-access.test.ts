@@ -4,9 +4,11 @@
  * Learner replay access and the parent visible-replay rule.
  *
  * Oracle is the row the caller can see: note status, who owns the student,
- * whether the session ended, the frozen whiteboard consent snapshot, and
- * Student.erasedAt. A DRAFT note is the auto-created nsi row and is not a
- * replay, on either path.
+ * whether the session ended, the frozen consent snapshot (what was recorded:
+ * whiteboard on/off, audio on/off, online or in person), and Student.erasedAt.
+ * A DRAFT note is the auto-created nsi row and is not a replay, on either path.
+ * The replay decision itself is `resolveReplayAccess`; the snapshot wins over
+ * the live consent record after End (Q8).
  */
 
 import { db } from "@/lib/db";
@@ -14,7 +16,7 @@ import {
   resolveLearnerWhiteboardReplay,
   sanitizeReplayLogId,
 } from "@/lib/share/learner-replay-access";
-import { loadParentVisibleWhiteboardReplayIds } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
+import { applyReplayAccessToNotes } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 import { uniq } from "../helpers/unique-test-token";
 
 afterAll(async () => {
@@ -26,6 +28,11 @@ async function seedReplay(opts: {
   ended?: boolean;
   /** When set, freeze this whiteboard-recording value on the session snapshot. */
   snapshotWhiteboard?: boolean;
+  /** Audio recording on the snapshot (default on). Off in person leaves no audio to replay. */
+  snapshotAudio?: boolean;
+  sessionMode?: "LIVE" | "IN_PERSON";
+  /** The live consent record's whiteboard switch (default on). */
+  liveWhiteboard?: boolean;
   erased?: boolean;
 }) {
   const tutor = await db.adminUser.create({
@@ -63,7 +70,7 @@ async function seedReplay(opts: {
       version: 1,
       allowLiveSession: true,
       allowAudioRecording: true,
-      allowWhiteboardRecording: true,
+      allowWhiteboardRecording: opts.liveWhiteboard ?? true,
       allowNoteSending: true,
       setByAccountHolderId: account.id,
       captureMethod: "electronic",
@@ -88,6 +95,7 @@ async function seedReplay(opts: {
       noteId: note.id,
       endedAt: opts.ended === false ? null : new Date("2026-06-01T01:00:00Z"),
       eventsBlobUrl: "https://example.invalid/replay-events.json",
+      sessionMode: opts.sessionMode ?? "LIVE",
     },
   });
   if (opts.snapshotWhiteboard !== undefined) {
@@ -95,7 +103,7 @@ async function seedReplay(opts: {
       data: {
         whiteboardSessionId: session.id,
         allowLiveSession: true,
-        allowAudioRecording: true,
+        allowAudioRecording: opts.snapshotAudio ?? true,
         allowWhiteboardRecording: opts.snapshotWhiteboard,
         allowNoteSending: true,
       },
@@ -110,16 +118,6 @@ async function seedReplay(opts: {
   };
 }
 
-function studentsOf(row: { studentId: string; tutorId: string }) {
-  return [
-    {
-      id: row.studentId,
-      adminUserId: row.tutorId,
-      organizationId: null,
-    },
-  ];
-}
-
 describe("resolveLearnerWhiteboardReplay", () => {
   it("allows the owning learner on an ended non-draft session", async () => {
     const row = await seedReplay({});
@@ -132,6 +130,8 @@ describe("resolveLearnerWhiteboardReplay", () => {
     if (access.ok) {
       expect(access.studentId).toBe(row.studentId);
       expect(access.session.id).toBe(row.sessionId);
+      // No snapshot (legacy) and a live record that allows the board: both halves open.
+      expect(access.replay).toEqual({ audio: true, board: true });
     }
     expect(spy).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -180,13 +180,51 @@ describe("resolveLearnerWhiteboardReplay", () => {
     expect(access).toEqual({ ok: false, reason: "not_visible" });
   });
 
-  it("denies when the consent snapshot froze whiteboard recording off", async () => {
+  it("opens audio only when the snapshot froze whiteboard recording off online", async () => {
     const row = await seedReplay({ snapshotWhiteboard: false });
     const access = await resolveLearnerWhiteboardReplay(
       row.learnerProfileId,
       row.sessionId
     );
+    expect(access.ok).toBe(true);
+    if (access.ok) expect(access.replay).toEqual({ audio: true, board: false });
+  });
+
+  it("opens the board only when the snapshot froze audio off in person", async () => {
+    const row = await seedReplay({
+      snapshotWhiteboard: true,
+      snapshotAudio: false,
+      sessionMode: "IN_PERSON",
+    });
+    const access = await resolveLearnerWhiteboardReplay(
+      row.learnerProfileId,
+      row.sessionId
+    );
+    expect(access.ok).toBe(true);
+    if (access.ok) expect(access.replay).toEqual({ audio: false, board: true });
+  });
+
+  it("denies when the snapshot froze both halves off", async () => {
+    const row = await seedReplay({
+      snapshotWhiteboard: false,
+      snapshotAudio: false,
+      sessionMode: "IN_PERSON",
+    });
+    const access = await resolveLearnerWhiteboardReplay(
+      row.learnerProfileId,
+      row.sessionId
+    );
     expect(access).toEqual({ ok: false, reason: "not_visible" });
+  });
+
+  it("ignores a live record that turned the board off after End (the snapshot decides)", async () => {
+    const row = await seedReplay({ snapshotWhiteboard: true, liveWhiteboard: false });
+    const access = await resolveLearnerWhiteboardReplay(
+      row.learnerProfileId,
+      row.sessionId
+    );
+    expect(access.ok).toBe(true);
+    if (access.ok) expect(access.replay.board).toBe(true);
   });
 
   it("denies an erased student", async () => {
@@ -199,23 +237,58 @@ describe("resolveLearnerWhiteboardReplay", () => {
   });
 });
 
-describe("loadParentVisibleWhiteboardReplayIds", () => {
-  it("omits a DRAFT note and returns an ended READY note", async () => {
-    const draft = await seedReplay({ noteStatus: "DRAFT" });
-    const ready = await seedReplay({ noteStatus: "READY" });
+/** A note as the list pages pass it to `applyReplayAccessToNotes` (the relation payload is empty: ids come from the FK query). */
+const cardNote = (noteId: string) => ({ id: noteId, whiteboardSessions: [], recordings: [] });
 
-    const hidden = await loadParentVisibleWhiteboardReplayIds({
-      noteIds: [draft.noteId],
-      learnerProfileId: draft.learnerProfileId,
-      students: studentsOf(draft),
-    });
-    expect(hidden.get(draft.noteId) ?? []).not.toContain(draft.sessionId);
+describe("applyReplayAccessToNotes", () => {
+  it("lists an ended session whose snapshot allows the board", async () => {
+    const ready = await seedReplay({ noteStatus: "READY", snapshotWhiteboard: true });
+    const shown = await applyReplayAccessToNotes([cardNote(ready.noteId)]);
+    expect(shown.get(ready.noteId)?.replaySessionIds).toEqual([ready.sessionId]);
+  });
 
-    const shown = await loadParentVisibleWhiteboardReplayIds({
-      noteIds: [ready.noteId],
-      learnerProfileId: ready.learnerProfileId,
-      students: studentsOf(ready),
+  it("lists nothing for a session the snapshot allows neither half of", async () => {
+    const none = await seedReplay({
+      snapshotWhiteboard: false,
+      snapshotAudio: false,
+      sessionMode: "IN_PERSON",
     });
-    expect(shown.get(ready.noteId)).toEqual([ready.sessionId]);
+    const shown = await applyReplayAccessToNotes([cardNote(none.noteId)]);
+    expect(shown.get(none.noteId)?.replaySessionIds).toEqual([]);
+  });
+
+  it("keeps a session with only audio, and drops the recording of a session with no audio", async () => {
+    const audioOnly = await seedReplay({ snapshotWhiteboard: false });
+    const boardOnly = await seedReplay({
+      snapshotWhiteboard: true,
+      snapshotAudio: false,
+      sessionMode: "IN_PERSON",
+    });
+    const recordingFor = (whiteboardSessionId: string) => ({ id: `rec-${whiteboardSessionId}`, whiteboardSessionId });
+    const emailOnly = { id: "rec-email-only", whiteboardSessionId: null };
+    const result = await applyReplayAccessToNotes([
+      { id: audioOnly.noteId, whiteboardSessions: [], recordings: [recordingFor(audioOnly.sessionId)] },
+      { id: boardOnly.noteId, whiteboardSessions: [], recordings: [recordingFor(boardOnly.sessionId), emailOnly] },
+    ]);
+    expect(result.get(audioOnly.noteId)?.replaySessionIds).toEqual([audioOnly.sessionId]);
+    expect(result.get(audioOnly.noteId)?.recordings.map((r) => r.id)).toEqual([`rec-${audioOnly.sessionId}`]);
+    expect(result.get(boardOnly.noteId)?.replaySessionIds).toEqual([boardOnly.sessionId]);
+    // The no-audio session's recording is dropped; the email-only recording (no session) stays.
+    expect(result.get(boardOnly.noteId)?.recordings.map((r) => r.id)).toEqual(["rec-email-only"]);
+  });
+
+  it("is not moved by a live record that changed after End (Q8)", async () => {
+    const revoked = await seedReplay({ snapshotWhiteboard: true, liveWhiteboard: false });
+    const shown = await applyReplayAccessToNotes([cardNote(revoked.noteId)]);
+    expect(shown.get(revoked.noteId)?.replaySessionIds).toEqual([revoked.sessionId]);
+  });
+
+  it("follows the live record for a legacy session with no snapshot", async () => {
+    const denied = await seedReplay({ liveWhiteboard: false });
+    const allowed = await seedReplay({ liveWhiteboard: true });
+    const result = await applyReplayAccessToNotes([cardNote(denied.noteId), cardNote(allowed.noteId)]);
+    // Legacy audio is open, so the denied-board session is still listed (as an audio replay).
+    expect(result.get(allowed.noteId)?.replaySessionIds).toEqual([allowed.sessionId]);
+    expect(result.get(denied.noteId)?.replaySessionIds).toEqual([denied.sessionId]);
   });
 });

@@ -11,6 +11,7 @@ import { parentShareAudioNoteIsHidden } from "@/lib/share/parent-share-replay-ac
 import {
   assertShareProxyAccess,
   learnerReplayNoSessionResponse,
+  replayResourceDeniedResponse,
   streamShareBlobWithRange,
 } from "@/lib/share/proxy-share-resource";
 
@@ -117,6 +118,15 @@ export async function GET(
     return shareAudioNotFound();
   }
 
+  // Replay audio follows the one replay decision. Email-only audio (no session on the recording or its
+  // note) has no session to key by and keeps the note-status rule above.
+  const replaySessionId =
+    recording.whiteboardSessionId ?? recording.note?.whiteboardSessions[0]?.id ?? null;
+  if (replaySessionId) {
+    const denied = await replayResourceDeniedResponse(replaySessionId, "audio", "share");
+    if (denied) return denied;
+  }
+
   return streamRecording(req, recordingId, recording, "share-audio-proxy");
 }
 
@@ -194,7 +204,7 @@ async function serveLearnerWhiteboardRecording(
     learner.learnerProfileId,
     recording.whiteboardSessionId
   );
-  if (!access.ok) {
+  if (!access.ok || !access.replay.audio) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
   if (access.studentId !== recording.studentId) {

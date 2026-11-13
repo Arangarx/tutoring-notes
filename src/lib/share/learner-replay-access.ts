@@ -1,13 +1,14 @@
 import { db, withDbRetry } from "@/lib/db";
 import { isStudentContentAccessSuspended } from "@/lib/erasure/active-erasure-scope";
-import { loadParentVisibleWhiteboardReplayIds } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
+import { isReplayVisibleNoteStatus } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
+import { replayAccessAny, resolveReplayAccess } from "@/lib/share/replay-access";
 
 /**
  * Ended, note-linked whiteboard replay a signed-in learner may open.
  *
- * Ownership is the session student's learner profile. Visibility reuses
- * {@link loadParentVisibleWhiteboardReplayIds} (ended, non-DRAFT note, and
- * the same consent rules as the parent share card) so the learner sees
+ * Ownership is the session student's learner profile. A non-DRAFT note is
+ * required. What may be replayed is {@link resolveReplayAccess} (the frozen
+ * snapshot), the same decision the parent share card uses, so the learner sees
  * exactly those replays. An erased student is not visible. A missing share
  * link is irrelevant — this path is authorized by the learner session, not
  * a token.
@@ -48,6 +49,7 @@ const replaySessionSelect = {
   durationSeconds: true,
   concatBlobUrl: true,
   concatDurationSeconds: true,
+  note: { select: { status: true } },
   student: {
     select: {
       name: true,
@@ -88,6 +90,8 @@ export type LearnerReplayAccess =
       studentId: string;
       studentName: string;
       session: LearnerReplaySession;
+      /** Which halves of the replay the one replay decision allows. At least one is true. */
+      replay: { audio: boolean; board: boolean };
     }
   | { ok: false; reason: "missing" | "not_owner" | "not_visible" };
 
@@ -118,19 +122,14 @@ export async function resolveLearnerWhiteboardReplay(
     return deny(learnerProfileId, whiteboardSessionId, "not_visible");
   }
 
-  const visible = await loadParentVisibleWhiteboardReplayIds({
-    noteIds: [session.noteId],
-    learnerProfileId,
-    students: [
-      {
-        id: session.studentId,
-        adminUserId: session.student.adminUserId,
-        organizationId: session.student.organizationId,
-      },
-    ],
-  });
-  const ids = visible.get(session.noteId) ?? [];
-  if (!ids.includes(session.id)) {
+  // A DRAFT note is the auto-created nsi row, not a replay.
+  if (!isReplayVisibleNoteStatus(session.note?.status)) {
+    return deny(learnerProfileId, whiteboardSessionId, "not_visible");
+  }
+
+  // What may be replayed (audio, board) is the one replay decision. Either half opens the replay.
+  const replay = (await resolveReplayAccess([session.id], { principal: "learner" })).get(session.id);
+  if (!replay || !replayAccessAny(replay)) {
     return deny(learnerProfileId, whiteboardSessionId, "not_visible");
   }
 
@@ -143,5 +142,6 @@ export async function resolveLearnerWhiteboardReplay(
     studentId: session.studentId,
     studentName: session.student.name,
     session,
+    replay: { audio: replay.audio, board: replay.board },
   };
 }

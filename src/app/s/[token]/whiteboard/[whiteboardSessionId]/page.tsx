@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import { WhiteboardReplayPageShell } from "@/components/whiteboard/replay/WhiteboardReplayPageShell";
 import { parentShareReplayNoteIsHidden } from "@/lib/share/parent-share-replay-access";
+import { replayAccessAny, resolveReplayAccess } from "@/lib/share/replay-access";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { formatBilledDurationLabel } from "@/lib/billing/display";
@@ -149,6 +150,15 @@ export default async function ShareWhiteboardPage({
     notFound();
   }
 
+  // What may be replayed comes from the frozen snapshot (plan § 2.9). Either half opens the page.
+  const replay = (await resolveReplayAccess([whiteboardSessionId], { principal: "share" })).get(
+    whiteboardSessionId
+  );
+  if (!replay || !replayAccessAny(replay)) {
+    console.log(`[wbShareReplay.page] wbsid=${whiteboardSessionId} replay not allowed — 404 on share`);
+    notFound();
+  }
+
   const studentName = link.student.name;
   const sessionLabel = `Whiteboard with ${studentName} — ${formatDate(session.startedAt)}`;
   const billedLabel = formatBilledDurationLabel({
@@ -187,6 +197,7 @@ export default async function ShareWhiteboardPage({
       audioRecordings={session.audioRecordings}
       audience="share"
       shareToken={token}
+      replay={{ audio: replay.audio, board: replay.board }}
     />
   );
 }

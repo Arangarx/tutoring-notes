@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ShareWhiteboardReplayPlayer } from "@/app/s/[token]/whiteboard/[whiteboardSessionId]/ShareWhiteboardReplayPlayer";
+import { ReplayBoardNotSavedNotice } from "@/components/whiteboard/replay/ReplayBoardNotSavedNotice";
 import {
   buildReplayAudioPayload,
   replayProxyUrl,
@@ -23,6 +24,8 @@ export type WhiteboardReplayPageShellProps = {
   /** Share appends the token. Learner uses the learner session on the same proxies. */
   audience: Extract<ReplayProxyAudience, "share" | "learner">;
   shareToken?: string;
+  /** Which halves of the replay the one replay decision allows (`resolveReplayAccess`). */
+  replay: { audio: boolean; board: boolean };
 };
 
 /**
@@ -31,17 +34,20 @@ export type WhiteboardReplayPageShellProps = {
  * builds the event and audio URLs) are the only differences.
  */
 export function WhiteboardReplayPageShell(props: WhiteboardReplayPageShellProps) {
-  const eventsApiUrl = replayProxyUrl({
-    resource: "events",
-    whiteboardSessionId: props.whiteboardSessionId,
-    audience: props.audience,
-    shareToken: props.shareToken,
-  });
+  // A half the replay decision denies is never requested: the proxy would 404 it.
+  const eventsApiUrl = props.replay.board
+    ? replayProxyUrl({
+        resource: "events",
+        whiteboardSessionId: props.whiteboardSessionId,
+        audience: props.audience,
+        shareToken: props.shareToken,
+      })
+    : null;
   const replayAudio = buildReplayAudioPayload({
     whiteboardSessionId: props.whiteboardSessionId,
-    concatBlobUrl: props.concatBlobUrl,
-    concatDurationSeconds: props.concatDurationSeconds,
-    audioRecordings: props.audioRecordings,
+    concatBlobUrl: props.replay.audio ? props.concatBlobUrl : null,
+    concatDurationSeconds: props.replay.audio ? props.concatDurationSeconds : null,
+    audioRecordings: props.replay.audio ? props.audioRecordings : [],
     audience: props.audience,
     shareToken: props.shareToken,
   });
@@ -63,6 +69,7 @@ export function WhiteboardReplayPageShell(props: WhiteboardReplayPageShellProps)
         </div>
       </header>
       <div className="wb-share-replay-page__player">
+        {props.replay.board ? null : <ReplayBoardNotSavedNotice />}
         <ShareWhiteboardReplayPlayer
           eventsBlobUrl={eventsApiUrl}
           audioSegments={replayAudio.audioSegments}

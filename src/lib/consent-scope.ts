@@ -563,12 +563,57 @@ export async function resolveFrozenSessionCapabilities(
     : await withDbRetry(() => readSession(db as unknown as ConsentReadClient), {
         label: "resolveFrozenSessionCapabilities.session",
       });
+  return frozenCapabilitiesFromRow(row);
+}
+
+/** The one projection of a session row's frozen snapshot: null when the row or its snapshot is absent. */
+function frozenCapabilitiesFromRow(
+  row: {
+    sessionMode: string;
+    notesForbidden: boolean;
+    consentSnapshot: ConsentToggleCeiling | null;
+  } | null
+): SessionCapabilities | null {
   if (!row?.consentSnapshot) return null;
   return capabilitiesFromConsentToggles(
     row.consentSnapshot,
     row.sessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE",
     row.notesForbidden
   );
+}
+
+/**
+ * {@link resolveFrozenSessionCapabilities} for many sessions in ONE read. The replay-access function is its
+ * reader (`replay-access.ts`, plan § 2.9): replay after End follows the frozen snapshot only.
+ *
+ * One entry per session that exists: its frozen capabilities (using the session's stored `sessionMode`, so an
+ * in-person session has `replay.audio` false), or `null` when it has no snapshot. A session that does not exist
+ * has NO entry, which is how the caller tells a missing session from a legacy one. Never reads the live record.
+ */
+export async function resolveFrozenSessionCapabilitiesBatch(
+  whiteboardSessionIds: readonly string[],
+  client?: ConsentReadClient
+): Promise<Map<string, SessionCapabilities | null>> {
+  const result = new Map<string, SessionCapabilities | null>();
+  const ids = [...new Set(whiteboardSessionIds)];
+  if (ids.length === 0) return result;
+  const readSessions = (c: ConsentReadClient) =>
+    c.whiteboardSession.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        sessionMode: true,
+        notesForbidden: true,
+        consentSnapshot: { select: CONSENT_TOGGLES_SELECT },
+      },
+    });
+  const rows = client
+    ? await readSessions(client)
+    : await withDbRetry(() => readSessions(db as unknown as ConsentReadClient), {
+        label: "resolveFrozenSessionCapabilitiesBatch.sessions",
+      });
+  for (const row of rows) result.set(row.id, frozenCapabilitiesFromRow(row));
+  return result;
 }
 
 /**

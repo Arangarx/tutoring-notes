@@ -5,7 +5,8 @@ import type { ReplayAudioSegment } from "@/lib/whiteboard/replay-helpers";
 import "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/whiteboard-chrome.css";
 
 export type ShareWhiteboardReplayPlayerProps = {
-  eventsBlobUrl: string;
+  /** `null` when the board was not saved. */
+  eventsBlobUrl: string | null;
   audioSegments?: readonly ReplayAudioSegment[] | null;
   canonicalAudioBlobUrl?: string | null;
   canonicalAudioMimeType?: string | null;

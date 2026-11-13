@@ -13,7 +13,8 @@ import { buildReplayReadOnlyChromeSlots } from "@/components/whiteboard/replay/R
 import { ReplayTimelineScrubber } from "@/components/whiteboard/replay/ReplayTimelineScrubber";
 
 export type WhiteboardReplayInFrameProps = {
-  eventsBlobUrl: string;
+  /** `null` when the board was not saved: no log is fetched and the replay is the audio over an empty board. */
+  eventsBlobUrl: string | null;
   audioSegments?: readonly ReplayAudioSegment[] | null;
   audioBlobUrl?: string | null;
   audioMimeType?: string | null;

@@ -3,6 +3,7 @@ import { isBlobHarnessActive } from "@/lib/blob-harness";
 import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { env } from "@/lib/env";
+import { replayResourceIsDenied, resolveReplayAccess } from "@/lib/share/replay-access";
 import {
   isWbAssetUrlInSessionScope,
   parseWbAssetUrlFromSearchParams,
@@ -40,6 +41,13 @@ export async function GET(
       whiteboardSessionId: session.id,
     })
   ) {
+    return new NextResponse("Not found.", { status: 404 });
+  }
+
+  // After End the frozen snapshot decides whether a board exists to read. Whiteboard off: 404 even while the asset
+  // blob is still in storage (before any purge pass). A live session is unchanged.
+  const replay = (await resolveReplayAccess([session.id], { principal: "tutor" })).get(session.id);
+  if (replayResourceIsDenied(replay, "board")) {
     return new NextResponse("Not found.", { status: 404 });
   }
 

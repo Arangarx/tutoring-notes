@@ -135,7 +135,8 @@ export type ReplayLoadState =
   | { kind: "error"; message: string };
 
 export type ReplayTimelineControllerInput = {
-  eventsBlobUrl: string;
+  /** The event log URL. `null` when the board was not saved: nothing is fetched and the log is empty. */
+  eventsBlobUrl: string | null;
   audioSegments?: readonly ReplayAudioSegment[] | null;
   audioBlobUrl?: string | null;
   audioMimeType?: string | null;

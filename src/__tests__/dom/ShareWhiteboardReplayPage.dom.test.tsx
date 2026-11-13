@@ -31,6 +31,15 @@ jest.mock("@/components/whiteboard/replay/WhiteboardReplayInFrame", () => ({
   WhiteboardReplayInFrame: () => <div data-testid="mock-wb-replay-in-frame" />,
 }));
 
+// This test is about page copy. WHAT may be replayed is the one decision function, covered by
+// `share/replay-access.test.ts` and the consent Playwright specs; here the session replays fully.
+jest.mock("@/lib/share/replay-access", () => ({
+  ...jest.requireActual("@/lib/share/replay-access"),
+  resolveReplayAccess: jest.fn(async (ids: readonly string[]) => {
+    return new Map(ids.map((id) => [id, { audio: true, board: true, reason: "snapshot" as const }]));
+  }),
+}));
+
 jest.mock("@/lib/db", () => ({
   db: {
     shareLink: {

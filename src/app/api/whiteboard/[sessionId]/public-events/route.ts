@@ -40,7 +40,8 @@ export async function GET(
     shareToken,
     shareToken
       ? `/api/whiteboard/${sessionId}/public-events?token=${shareToken}`
-      : `/api/whiteboard/${sessionId}/public-events`
+      : `/api/whiteboard/${sessionId}/public-events`,
+    "board"
   );
   if (!access.ok) return access.response;
 

@@ -11,8 +11,7 @@ import {
 } from "@/components/share/SharePageHelpers";
 import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
 import {
-  loadWhiteboardReplayIdsByNoteIds,
-  mergeWhiteboardStubsForShareCard,
+  applyReplayAccessToNotes,
   REPLAY_VISIBLE_NOTE_STATUS,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
@@ -57,9 +56,8 @@ export default async function SharePage({
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: parentShareNoteInclude,
   });
-  const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(
-    notes.map((n) => n.id)
-  );
+  // Replay links and inline audio come from the one replay decision (plan § 2.9).
+  const replayByNote = await applyReplayAccessToNotes(notes);
   const totalNotes = notes.length;
 
   // Which notes has this visitor already seen?
@@ -133,11 +131,8 @@ export default async function SharePage({
           nextSteps: note.nextSteps,
           linksJson: note.linksJson,
           shareRecordingInEmail: note.shareRecordingInEmail,
-          recordings: note.recordings,
-          whiteboardSessions: mergeWhiteboardStubsForShareCard(
-            note,
-            whiteboardIdsByNote.get(note.id)
-          ),
+          recordings: replayByNote.get(note.id)?.recordings ?? [],
+          whiteboardSessions: replayByNote.get(note.id)?.whiteboardSessions ?? [],
         }}
         isNew={isNew}
       />

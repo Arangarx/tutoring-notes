@@ -65,19 +65,12 @@ const CONSENT_READ_ALLOWLIST = new Set([
   "app/account/children/[id]/consent/page.tsx",
 ]);
 
-/**
- * Named C6 exception, NOT an allowlist entry: the replay loader still ANDs the live record with the snapshot
- * until C6 deletes those reads (§ 2.1, § 6i wave split). C6 removes this constant and the guard then fails on
- * any remaining read.
- */
-const NAMED_C6_EXCEPTION = new Set(["lib/share/loadWhiteboardReplayIdsForNotes.ts"]);
-
 describe("consent guards (§ 6i)", () => {
   it("C1: consent single resolver: no product file outside the allowlist calls consentRecord.find*/count/aggregate", () => {
     const offenders: string[] = [];
     for (const file of listProductFiles(SRC_ROOT)) {
       const name = rel(file);
-      if (CONSENT_READ_ALLOWLIST.has(name) || NAMED_C6_EXCEPTION.has(name)) continue;
+      if (CONSENT_READ_ALLOWLIST.has(name)) continue;
       const text = fs.readFileSync(file, "utf8");
       const hits = text.match(DIRECT_CONSENT_RECORD_READ);
       if (hits) offenders.push(`${name}: ${hits.join(", ")}`);
@@ -250,7 +243,86 @@ describe("consent guards (§ 6i)", () => {
       expect(ENDED_AT_WRITE.test("db.impersonationLog.update({ where: { id }, data: { endedAt: new Date() } })")).toBe(false);
     });
   });
-  it.todo("C6: replay single decision function: no replay decision site reads consent or snapshot columns outside replay-access.ts");
+  describe("C6: replay single decision function (§ 2.9, § 6i)", () => {
+    /** Every site that decides what of an ended session may be replayed. Each routes through the one function. */
+    const REPLAY_DECISION_SITES = [
+      "lib/share/replay-access.ts",
+      "lib/share/loadWhiteboardReplayIdsForNotes.ts",
+      "lib/share/learner-replay-access.ts",
+      "lib/share/proxy-share-resource.ts",
+      "lib/learner-home-notes.ts",
+      "app/api/audio/[recordingId]/route.ts",
+      "app/api/whiteboard/[sessionId]/public-events/route.ts",
+      "app/api/whiteboard/[sessionId]/public-snapshot/route.ts",
+      "app/api/whiteboard/[sessionId]/public-concat-audio/route.ts",
+      "app/api/whiteboard/[sessionId]/tutor-asset/route.ts",
+      "app/s/[token]/whiteboard/[whiteboardSessionId]/page.tsx",
+      "app/join/notes/[whiteboardSessionId]/whiteboard/page.tsx",
+      "app/s/[token]/page.tsx",
+      "app/s/[token]/all/page.tsx",
+    ];
+    const REPLAY_MODULE = "lib/share/replay-access.ts";
+
+    /** The four consent switch columns and the frozen snapshot / restriction tables. Named once, here, as the spec. */
+    const CONSENT_COLUMNS =
+      /\b(allowLiveSession|allowAudioRecording|allowWhiteboardRecording|allowNoteSending)\b|\bsessionConsentSnapshot\b|\bconsentRestriction\b/;
+    /** A live consent read: the resolvers that read the family's current record. */
+    const LIVE_RESOLVER = /\b(resolveEffectiveConsentForStudent|readLatestConsentPerOwner|resolveSessionCapabilities)\s*\(/;
+    /** What a site calls to get the decision. Every decision site calls one of these. */
+    const DECISION_ENTRY =
+      /\b(resolveReplayAccess|applyReplayAccessToNotes|resolveLearnerWhiteboardReplay|assertWhiteboardReplayRequestAccess|replayResourceDeniedResponse)\b/;
+
+    function replayCodeOnly(file: string): string {
+      return fs
+        .readFileSync(path.join(SRC_ROOT, file), "utf8")
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*(\/\/|\/\*|\*)/.test(line))
+        .map((line) => line.replace(/\s\/\/.*$/, ""))
+        .join("\n");
+    }
+
+    it("no replay decision site reads a consent switch column, the snapshot table or the restriction table", () => {
+      const offenders = REPLAY_DECISION_SITES.filter((file) => CONSENT_COLUMNS.test(replayCodeOnly(file)));
+      expect(offenders).toEqual([]);
+    });
+
+    it("only replay-access.ts calls a live consent resolver, and only for a session with no snapshot (the legacy function)", () => {
+      const outside = REPLAY_DECISION_SITES.filter(
+        (file) => file !== REPLAY_MODULE && LIVE_RESOLVER.test(replayCodeOnly(file))
+      );
+      expect(outside).toEqual([]);
+
+      // Inside the module the live read lives in exactly one function, the legacy (no snapshot) board read. Cutting
+      // that function out must leave no live resolver call behind.
+      const code = replayCodeOnly(REPLAY_MODULE);
+      const start = code.indexOf("async function legacyBoardAllowed");
+      expect(start).toBeGreaterThan(-1);
+      const end = code.indexOf("\n}\n", start);
+      expect(end).toBeGreaterThan(start);
+      const withoutLegacy = code.slice(0, start) + code.slice(end + 3);
+      expect(LIVE_RESOLVER.test(withoutLegacy)).toBe(false);
+    });
+
+    it("every replay decision site gets its answer from the one function", () => {
+      const missing = REPLAY_DECISION_SITES.filter(
+        (file) => file !== REPLAY_MODULE && !DECISION_ENTRY.test(replayCodeOnly(file))
+      );
+      expect(missing).toEqual([]);
+    });
+
+    it("the guard itself: catches a column, the snapshot and restriction tables and a live resolver call; ignores an import and prose", () => {
+      for (const code of [
+        "where: { allowWhiteboardRecording: true }",
+        "db.sessionConsentSnapshot.findUnique({})",
+        "await db.consentRestriction.findUnique({})",
+      ]) {
+        expect(CONSENT_COLUMNS.test(code)).toBe(true);
+      }
+      expect(LIVE_RESOLVER.test("await resolveEffectiveConsentForStudent(id, s)")).toBe(true);
+      expect(LIVE_RESOLVER.test("import { resolveEffectiveConsentForStudent } from 'x'")).toBe(false);
+      expect(CONSENT_COLUMNS.test("// whiteboard consent switch")).toBe(false);
+    });
+  });
   it.todo("C7: consent copy covers every switch effect (§ 2.8)");
   describe("C2a lane identity (§ 2.3): parseLane / isLearnerLane", () => {
     // The wire formats are persisted in SessionRecording / TranscriptChunk rows and outbox rows, so they are pinned

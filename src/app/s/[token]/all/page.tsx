@@ -15,8 +15,7 @@ import {
   parentShareWhiteboardSessionsArgs,
 } from "@/lib/share/parentShareNotePayload";
 import {
-  loadWhiteboardReplayIdsByNoteIds,
-  mergeWhiteboardStubsForShareCard,
+  applyReplayAccessToNotes,
   REPLAY_VISIBLE_NOTE_STATUS,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 import { Button } from "@/components/ui/button";
@@ -95,9 +94,8 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
     }),
   ]);
 
-  const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(
-    notes.map((n) => n.id)
-  );
+  // Replay links and inline audio come from the one replay decision (plan § 2.9).
+  const replayByNote = await applyReplayAccessToNotes(notes);
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
@@ -215,11 +213,8 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
                 nextSteps: n.nextSteps,
                 linksJson: n.linksJson,
                 shareRecordingInEmail: n.shareRecordingInEmail,
-                recordings: n.recordings,
-                whiteboardSessions: mergeWhiteboardStubsForShareCard(
-                  n,
-                  whiteboardIdsByNote.get(n.id)
-                ),
+                recordings: replayByNote.get(n.id)?.recordings ?? [],
+                whiteboardSessions: replayByNote.get(n.id)?.whiteboardSessions ?? [],
               }}
               isNew={false}
             />
