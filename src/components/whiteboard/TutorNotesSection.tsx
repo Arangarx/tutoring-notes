@@ -56,6 +56,9 @@ type StructuredFields = {
 
 export type StructuredNoteFields = StructuredFields;
 
+/** What "Share session" saves: no notes text. The save releases the replay; it writes no AI provenance. */
+const EMPTY_NOTE_FIELDS: StructuredFields = { topics: "", assessment: "", nextSteps: "", links: "" };
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -326,18 +329,15 @@ export default function TutorNotesSection({
     }
   }, [whiteboardSessionId]);
 
-  const handleSave = useCallback(async () => {
-    if (noteFieldsAreEmpty(fields)) {
-      setSaveError("Add at least one note field before saving.");
-      return;
-    }
+  // The one save routine. "Save to notes" saves the edited fields; "Share session" (notes off) saves none.
+  const saveNoteFields = useCallback(async (toSave: StructuredFields) => {
     setSaving(true);
     setSaveError(null);
     setSavedInShell(false);
     try {
       const result = await saveSessionNotesAction(
         whiteboardSessionId,
-        fields
+        toSave
       );
       if (!result.ok) {
         setSaveError(result.error ?? "Could not save the note. Please try again.");
@@ -356,7 +356,20 @@ export default function TutorNotesSection({
     } finally {
       setSaving(false);
     }
-  }, [whiteboardSessionId, fields, onSaved, router, studentId]);
+  }, [whiteboardSessionId, onSaved, router, studentId]);
+
+  const handleSave = useCallback(async () => {
+    if (noteFieldsAreEmpty(fields)) {
+      setSaveError("Add at least one note field before saving.");
+      return;
+    }
+    await saveNoteFields(fields);
+  }, [fields, saveNoteFields]);
+
+  const handleShareSession = useCallback(
+    () => saveNoteFields(EMPTY_NOTE_FIELDS),
+    [saveNoteFields]
+  );
 
   const handleDelete = useCallback(() => {
     setShowDeleteConfirm(false);
@@ -381,8 +394,9 @@ export default function TutorNotesSection({
   // Render states
   // -------------------------------------------------------------------------
 
-  // No note yet + no audio: don't show the notes section at all
-  if (isNotStarted && !hasAudio) {
+  // No note yet + no audio: don't show the notes section at all. Notes off still shows it: that is where
+  // "Share session" lives, and a session with no audio can still have a board to share.
+  if (isNotStarted && !hasAudio && !isSkipped) {
     return null;
   }
 
@@ -539,45 +553,10 @@ export default function TutorNotesSection({
           )}
 
           {/* Save error — finished, failed, or timed out */}
-          {saveError && canSaveManualNote && (
-            <div
-              role="alert"
-              style={{
-                background: "var(--error-soft)",
-                border: "1px solid var(--error-border)",
-                borderRadius: 6,
-                padding: "8px 10px",
-                fontSize: 13,
-                color: "var(--sign-out)",
-                marginTop: 8,
-              }}
-            >
-              {saveError}
-            </div>
-          )}
+          {saveError && canSaveManualNote && <SaveErrorAlert message={saveError} />}
 
           {/* Saved confirmation — finished, failed, or timed out */}
-          {savedInShell && canSaveManualNote && (
-            <div
-              role="status"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                background: "var(--success-soft, var(--info-soft))",
-                border: "1px solid var(--success-border, var(--info-border))",
-                borderRadius: 6,
-                padding: "6px 12px",
-                fontSize: 13,
-                fontWeight: 500,
-                marginTop: 8,
-                color: "var(--success-text, var(--text))",
-              }}
-              data-testid="wb-save-note-confirmation"
-            >
-              ✓ Saved — visible to parent
-            </div>
-          )}
+          {savedInShell && canSaveManualNote && <SavedConfirmation />}
 
           {(canSaveManualNote || showFinishReview) && (
             <div
@@ -674,10 +653,26 @@ export default function TutorNotesSection({
         </div>
       )}
 
-      {/* Skipped: notes are off for this session. One line, terminal (the poll never restarts). */}
+      {/* Skipped: notes are off for this session. One line, terminal (the poll never restarts). The review still
+          ends with a save: "Share session" releases the replay to the family with no notes text (Q1). */}
       {isSkipped && (
-        <div className="muted" style={{ fontSize: 13 }} data-testid="tutor-notes-skipped">
-          {NOTES_SKIPPED_COPY}
+        <div style={{ display: "grid", gap: 10 }}>
+          <div className="muted" style={{ fontSize: 13 }} data-testid="tutor-notes-skipped">
+            {NOTES_SKIPPED_COPY}
+          </div>
+          {saveError ? <SaveErrorAlert message={saveError} /> : null}
+          {savedInShell ? <SavedConfirmation /> : null}
+          <div>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={handleShareSession}
+              disabled={saving || deleting}
+              data-testid="wb-share-session"
+            >
+              {saving ? "Sharing…" : "Share session"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -726,7 +721,7 @@ export default function TutorNotesSection({
       )}
 
       {/* No audio recorded at all */}
-      {isNotStarted && !hasAudio && (
+      {isNotStarted && !hasAudio && !isSkipped && (
         <div className="muted" style={{ fontSize: 13 }}>
           No audio was recorded for this session. Notes are generated from the
           session recording.
@@ -745,6 +740,53 @@ export default function TutorNotesSection({
           </Link>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Save feedback — shared by "Save to notes" and "Share session"
+// ---------------------------------------------------------------------------
+
+function SaveErrorAlert({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      style={{
+        background: "var(--error-soft)",
+        border: "1px solid var(--error-border)",
+        borderRadius: 6,
+        padding: "8px 10px",
+        fontSize: 13,
+        color: "var(--sign-out)",
+        marginTop: 8,
+      }}
+    >
+      {message}
+    </div>
+  );
+}
+
+function SavedConfirmation() {
+  return (
+    <div
+      role="status"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        background: "var(--success-soft, var(--info-soft))",
+        border: "1px solid var(--success-border, var(--info-border))",
+        borderRadius: 6,
+        padding: "6px 12px",
+        fontSize: 13,
+        fontWeight: 500,
+        marginTop: 8,
+        color: "var(--success-text, var(--text))",
+      }}
+      data-testid="wb-save-note-confirmation"
+    >
+      ✓ Saved — visible to parent
     </div>
   );
 }

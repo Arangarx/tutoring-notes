@@ -64,6 +64,7 @@ const basePayload = {
   billedEndLocal: null as string | null,
   hasAudio: true,
   eventCount: 5,
+  boardSaved: true,
   eventsProxyUrl: "/api/whiteboard/wbs-1/events",
   snapshotProxyUrl: null,
   audioSegments: [

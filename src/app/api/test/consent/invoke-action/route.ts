@@ -14,6 +14,7 @@ import {
   kickSessionChunksAction,
   loadSessionReviewPayload,
   regenerateNotesAction,
+  saveSessionNotesAction,
   triggerNotesGenerationAction,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { removeOrgMember, setOrganizationStatus, type OrgLiveSessionEndChoice } from "@/lib/org-scope";
@@ -91,6 +92,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ result: await regenerateNotesAction(sessionId) });
     case "loadReviewPayload":
       return NextResponse.json({ result: await loadSessionReviewPayload(sessionId) });
+    case "saveSessionNotes":
+      return NextResponse.json({
+        result: await saveSessionNotesAction(sessionId, args as Parameters<typeof saveSessionNotesAction>[1]),
+      });
     case "runBoardPurge":
       return NextResponse.json({ result: await runBoardPurge(sessionId) });
     case "setOrganizationStatus": {

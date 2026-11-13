@@ -86,6 +86,7 @@ describe("WS-U-COPY 1.4 — SessionReviewMode error branch", () => {
       durationSeconds: 1800,
       hasAudio: false,
       eventCount: 0,
+      boardSaved: true,
       eventsProxyUrl: "/api/whiteboard/wbs-err/events",
       snapshotProxyUrl: null,
       audioSegments: [],

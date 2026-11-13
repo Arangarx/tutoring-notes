@@ -165,6 +165,7 @@ jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
       durationSeconds: 3600,
       hasAudio: false,
       eventCount: 0,
+      boardSaved: true,
       audioSegments: [],
       eventsProxyUrl: "/api/whiteboard/ws-shell-1/events",
       snapshotProxyUrl: null,

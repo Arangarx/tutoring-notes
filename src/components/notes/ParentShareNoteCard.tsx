@@ -79,6 +79,11 @@ export function ParentShareNoteCard(props: {
 }) {
   const { token, dateLabel, note, isNew } = props;
   const links = safeJsonArray(note.linksJson);
+  // A saved note with every section blank (a "Share session" save, notes off) renders no empty notes block: the
+  // family sees the date and the replay, not a column of dashes.
+  const hasNoteText =
+    links.length > 0 ||
+    [note.topics, note.homework, note.assessment, note.nextSteps].some((text) => text.trim().length > 0);
 
   const linkedWhiteboardIds = orderedUnique([
     ...note.whiteboardSessions.map((w) => w.id),
@@ -129,36 +134,38 @@ export function ParentShareNoteCard(props: {
         <div className="mb-2 text-xs text-muted-foreground">{note.template}</div>
       ) : null}
 
-      <div>
-        <NoteSection title="Topics covered">{note.topics || "—"}</NoteSection>
-        <NoteSection title="Homework">{note.homework || "—"}</NoteSection>
-        {note.assessment ? (
-          <NoteSection title="Assessment">{note.assessment}</NoteSection>
-        ) : null}
-        <NoteSection title="Next steps">{note.nextSteps || "—"}</NoteSection>
+      {hasNoteText ? (
+        <div data-testid="share-note-body">
+          <NoteSection title="Topics covered">{note.topics || "—"}</NoteSection>
+          <NoteSection title="Homework">{note.homework || "—"}</NoteSection>
+          {note.assessment ? (
+            <NoteSection title="Assessment">{note.assessment}</NoteSection>
+          ) : null}
+          <NoteSection title="Next steps">{note.nextSteps || "—"}</NoteSection>
 
-        {links.length > 0 && (
-          <section className="mb-2.5">
-            <h3 className="mb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-              Links
-            </h3>
-            <ul className="m-0 list-disc pl-[18px] text-sm">
-              {links.map((u) => (
-                <li key={u}>
-                  <a
-                    href={u}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-foreground underline-offset-2 hover:underline"
-                  >
-                    {u}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
+          {links.length > 0 && (
+            <section className="mb-2.5">
+              <h3 className="mb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                Links
+              </h3>
+              <ul className="m-0 list-disc pl-[18px] text-sm">
+                {links.map((u) => (
+                  <li key={u}>
+                    <a
+                      href={u}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-foreground underline-offset-2 hover:underline"
+                    >
+                      {u}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+      ) : null}
 
       {hasActions ? (
         <div className="mt-3.5 flex flex-col gap-3 border-t border-border/60 pt-3">

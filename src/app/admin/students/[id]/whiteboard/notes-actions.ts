@@ -43,6 +43,7 @@ import type { TutorNote } from "@prisma/client";
 import { TRANSCRIBE_SWEEP_MAX_ATTEMPTS } from "@/lib/recording/transcribe-sweep-config";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
+import { replayResourceIsDenied, resolveReplayAccess } from "@/lib/share/replay-access";
 
 // ---------------------------------------------------------------------------
 // (a) End-session sweep — kick non-done chunks for this session
@@ -309,6 +310,16 @@ export type SaveSessionNoteResult =
   | { ok: true; noteId: string }
   | { ok: false; error: string };
 
+/** True when the session has a TutorNote draft an AI wrote (done or partial, with content). */
+async function sessionHasGeneratedTutorNote(whiteboardSessionId: string): Promise<boolean> {
+  const note = await getTutorNoteBySessionId(whiteboardSessionId);
+  return (
+    note != null &&
+    (note.status === "done" || note.status === "partial") &&
+    (note.content ?? "").trim().length > 0
+  );
+}
+
 /**
  * Create or update the live SessionNote for a whiteboard session.
  *
@@ -342,6 +353,13 @@ export async function saveSessionNotesAction(
         )
       : "[]";
 
+    // AI provenance only when this save carries a generated draft, read from the session's own TutorNote row, never
+    // from the client. A share-only save (notes off, nothing generated) must not claim an AI wrote the note (SF7).
+    const generated = await sessionHasGeneratedTutorNote(whiteboardSessionId);
+    const provenance = generated
+      ? { aiGenerated: true, aiPromptVersion: REDUCE_PROMPT_VERSION }
+      : { aiGenerated: false, aiPromptVersion: null };
+
     let noteId: string;
 
     const existingNoteId = await withDbRetry(
@@ -365,8 +383,7 @@ export async function saveSessionNotesAction(
               nextSteps: fields.nextSteps,
               linksJson,
               status: "READY",
-              aiGenerated: true,
-              aiPromptVersion: REDUCE_PROMPT_VERSION,
+              ...provenance,
             },
           }),
         { label: "saveDraftSessionNote.update" }
@@ -389,8 +406,7 @@ export async function saveSessionNotesAction(
               nextSteps: fields.nextSteps,
               linksJson,
               status: "READY",
-              aiGenerated: true,
-              aiPromptVersion: REDUCE_PROMPT_VERSION,
+              ...provenance,
             },
             select: { id: true },
           }),
@@ -553,6 +569,11 @@ export type SessionReviewPayload = {
   hasAudio: boolean;
   /** Whiteboard event count from events.json (NOTE-1 replay gate). */
   eventCount: number;
+  /**
+   * False when this session's board was not saved because whiteboard recording was off (the frozen capability,
+   * never the stroke count). The review then shows the "board was not saved" state instead of a board preview.
+   */
+  boardSaved: boolean;
   eventsProxyUrl: string;
   snapshotProxyUrl: string | null;
   audioSegments: Array<{
@@ -620,8 +641,9 @@ export async function loadSessionReviewPayload(
     throw new Error(`Session ${whiteboardSessionId} not found`);
   }
 
-  const [initialNote, transcriptChunks] = await Promise.all([
+  const [initialNote, replayAccess, transcriptChunks] = await Promise.all([
     readTutorNoteStatus(whiteboardSessionId),
+    resolveReplayAccess([whiteboardSessionId], { principal: "tutor" }),
     db.transcriptChunk.findMany({
       where: { sessionId: whiteboardSessionId, transcript: { not: "" } },
       orderBy: { recordingTimeOffsetMs: "asc" },
@@ -668,6 +690,7 @@ export async function loadSessionReviewPayload(
     billedEndLocal: detail.billedEndLocal,
     hasAudio: replayAudio.hasAudio,
     eventCount,
+    boardSaved: !replayResourceIsDenied(replayAccess.get(whiteboardSessionId), "board"),
     eventsProxyUrl: `/api/whiteboard/${whiteboardSessionId}/events`,
     snapshotProxyUrl: detail.snapshotBlobUrl
       ? `/api/whiteboard/${whiteboardSessionId}/snapshot`

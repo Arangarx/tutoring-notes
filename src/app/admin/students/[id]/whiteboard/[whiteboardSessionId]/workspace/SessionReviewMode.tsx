@@ -21,6 +21,7 @@ import TutorNotesSection, {
 } from "@/components/whiteboard/TutorNotesSection";
 import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
 import { ReviewBoardThumbnail } from "./ReviewBoardThumbnail";
+import { ReplayBoardNotSavedNotice } from "@/components/whiteboard/replay/ReplayBoardNotSavedNotice";
 import { ReviewConfirmSlot } from "./ReviewConfirmSlot";
 import { ReviewWbTopBar } from "./ReviewWbTopBar";
 import type { ReviewSurfaceState } from "./review-surface-state";
@@ -268,10 +269,14 @@ export function SessionReviewMode({
                 data-testid="wb-review-board-thumbnail-wrap"
               >
                 {payload ? (
-                  <ReviewBoardThumbnail
-                    eventsProxyUrl={payload.eventsProxyUrl}
-                    whiteboardSessionId={whiteboardSessionId}
-                  />
+                  payload.boardSaved ? (
+                    <ReviewBoardThumbnail
+                      eventsProxyUrl={payload.eventsProxyUrl}
+                      whiteboardSessionId={whiteboardSessionId}
+                    />
+                  ) : (
+                    <ReplayBoardNotSavedNotice />
+                  )
                 ) : (
                   <div
                     data-testid="wb-review-board-thumbnail-loading"
