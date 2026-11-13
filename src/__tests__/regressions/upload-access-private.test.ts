@@ -63,15 +63,12 @@ const PATHS_BY_NAME: Record<string, string[]> = {
   "lib/recording/upload.ts": ["lib", "recording", "upload.ts"],
   // Whiteboard client-direct upload helpers (events, snapshot, assets).
   "lib/whiteboard/upload.ts": ["lib", "whiteboard", "upload.ts"],
-  // Whiteboard server actions — `createWhiteboardSession` seeds the
-  // empty events.json via put().
-  "app/admin/students/[id]/whiteboard/actions.ts": [
-    "app",
-    "admin",
-    "students",
-    "[id]",
+  // Final events.json assembly (tutor End, and the stale-session reaper) — the server-side put() that used to live
+  // in the whiteboard server actions file. Moved to a lib module so the cron-driven reaper can share it.
+  "lib/whiteboard/assemble-session-events.ts": [
+    "lib",
     "whiteboard",
-    "actions.ts",
+    "assemble-session-events.ts",
   ],
   // Whiteboard partial-checkpoint upload route — server-side put().
   "app/api/whiteboard/[sessionId]/checkpoint/route.ts": [

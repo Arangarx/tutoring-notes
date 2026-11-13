@@ -153,7 +153,7 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   `board_purge_after_failed err=<message>` (the post-response `after()` purge threw or could not be scheduled; the sweep retries), `board_purge_sweep_error err=<message>`,
   `[slc] cron=session-cleanup action=auth_rejected`,
   `board_purge_stuck ageMin=<n>`, `would_reap|reaped phase=<pending|active> idleSince=<iso>`,
-  `reaper_skip reason=already_ended|not_idle|appointment_delay`, `reaper_off`, `reaper_mode_invalid raw=<value>`,
+  `reaper_skip reason=already_ended|not_idle|appointment_delay`, `reaper_off`, `reaper_mode_invalid raw=<value>`, `reaper_error|reaper_after_error|reaper_assemble_failed err=<message>`, `reaper_events_url_kept reason=row_changed`,
   and `[slc] cron=session-cleanup job=<reaper|purge> action=job_error err=<message>`),
   `cns` (consent decisions — one prefix for every consent-resolution log line; always `wbsid=<id>` when a session
   exists: `action=capabilities_resolved audio=<mode> wb=<persist> notes=<draft> online=<bool|n/a> mic=<yes|defer|no> source=snapshot|live|legacy_unclaimed|fail_closed`,

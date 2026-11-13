@@ -180,7 +180,76 @@ describe("consent guards (§ 6i)", () => {
       expect(offenders).toEqual([]);
     });
   });
-  it.todo("C4c: reaper is the fifth caller (G7): one shared stampStaleWhiteboardSessionEnd; no other file writes a stale/forced endedAt or calls stampBoardPurgeIntent/freezeConsentSnapshotTx outside the helper and the two End paths");
+  describe("C4c: the reaper is the fifth caller of the shared stale-end helper (G7, § 6i)", () => {
+    const STAMP_HELPER = "lib/whiteboard/stale-session-stamp.ts";
+    /** The tutor End path: the one other place that ends a session in a transaction. */
+    const END_PATH = "app/admin/students/[id]/whiteboard/actions.ts";
+    /** Test-only seeding routes; gated by `isPlaywrightTestEnvEnabled`, never a product End. */
+    const TEST_ROUTE_PREFIX = "app/api/test/";
+
+    /** Product files (tests and test routes excluded) whose code matches `pattern`. */
+    function filesMatching(pattern: RegExp, opts?: { includeTestRoutes?: boolean }): string[] {
+      return listProductFiles(SRC_ROOT)
+        .map(rel)
+        .filter((name) => opts?.includeTestRoutes || !name.startsWith(TEST_ROUTE_PREFIX))
+        .filter((name) => pattern.test(codeOnlyForGuard(fs.readFileSync(path.join(SRC_ROOT, name), "utf8"))))
+        .sort();
+    }
+
+    /** Drops comment-only lines and trailing `// ...` so prose that names a call is not a hit. */
+    function codeOnlyForGuard(text: string): string {
+      return text
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*(\/\/|\/\*|\*)/.test(line))
+        .map((line) => line.replace(/\s\/\/.*$/, ""))
+        .join("\n");
+    }
+
+    /** A CALL (not the definition) of `name`. */
+    const callOf = (name: string) => new RegExp(`(?<!function\\s)(?<![.\\w])${name}\\s*\\(`);
+    /** A write of `endedAt` into a WhiteboardSession row, by update, updateMany or upsert. */
+    const ENDED_AT_WRITE = /whiteboardSession\s*\.\s*(?:update|updateMany|upsert)\s*\(\s*\{[\s\S]{0,400}?data\s*:\s*\{[\s\S]{0,300}?\bendedAt\s*:/;
+
+    it("stampBoardPurgeIntent and freezeConsentSnapshotAtEndTx are called only by the stale-end helper and the tutor End path", () => {
+      expect(filesMatching(callOf("stampBoardPurgeIntent"))).toEqual([END_PATH, STAMP_HELPER].sort());
+      expect(filesMatching(callOf("freezeConsentSnapshotAtEndTx"))).toEqual([END_PATH, STAMP_HELPER].sort());
+    });
+
+    it("no product file other than the stale-end helper and the tutor End path writes a WhiteboardSession endedAt", () => {
+      expect(filesMatching(ENDED_AT_WRITE)).toEqual([END_PATH, STAMP_HELPER].sort());
+    });
+
+    it("stampStaleWhiteboardSessionEnd has exactly five callers: the forced-end paths and the reaper", () => {
+      expect(filesMatching(callOf("stampStaleWhiteboardSessionEnd"))).toEqual(
+        [END_PATH, "lib/org-scope.ts", "lib/org-force-end-touch.ts", "lib/whiteboard/stale-session-reaper.ts"].sort()
+      );
+    });
+
+    it("the reaper ends a session only through the helper, passing the last-activity instant as endedAt and intent source reaper", () => {
+      const reaper = codeOnlyForGuard(
+        fs.readFileSync(path.join(SRC_ROOT, "lib/whiteboard/stale-session-reaper.ts"), "utf8")
+      );
+      expect(reaper).toMatch(
+        /stampStaleWhiteboardSessionEnd\(\s*tx\s*,\s*id\s*,\s*locked\.lastActivityAt\s*,\s*false\s*,\s*"reaper"\s*\)/
+      );
+      // It never writes the end, the intent or the freeze itself, and never back-dates the server-time stamps.
+      expect(reaper).not.toMatch(ENDED_AT_WRITE);
+      expect(reaper).not.toMatch(callOf("stampBoardPurgeIntent"));
+      expect(reaper).not.toMatch(callOf("freezeConsentSnapshotAtEndTx"));
+      expect(reaper).not.toMatch(/\b(?:frozenAt|revokedAt)\b/);
+    });
+
+    it("the guard itself: matches a call, a write and an import-free definition correctly", () => {
+      expect(callOf("stampBoardPurgeIntent").test("await stampBoardPurgeIntent(tx, id, {})")).toBe(true);
+      expect(callOf("stampBoardPurgeIntent").test("export async function stampBoardPurgeIntent(tx) {")).toBe(false);
+      expect(callOf("stampBoardPurgeIntent").test("x.stampBoardPurgeIntent(tx)")).toBe(false);
+      expect(
+        ENDED_AT_WRITE.test("await tx.whiteboardSession.updateMany({\n  where: { id },\n  data: { endedAt: now },\n});")
+      ).toBe(true);
+      expect(ENDED_AT_WRITE.test("db.whiteboardSession.findUnique({ where: { id }, select: { endedAt: true } })")).toBe(false);
+      expect(ENDED_AT_WRITE.test("db.impersonationLog.update({ where: { id }, data: { endedAt: new Date() } })")).toBe(false);
+    });
+  });
   it.todo("C6: replay single decision function: no replay decision site reads consent or snapshot columns outside replay-access.ts");
   it.todo("C7: consent copy covers every switch effect (§ 2.8)");
   describe("C2a lane identity (§ 2.3): parseLane / isLearnerLane", () => {
