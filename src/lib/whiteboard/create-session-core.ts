@@ -36,17 +36,13 @@ import {
 import { deleteBlob } from "@/lib/blob";
 import { db, withDbRetry } from "@/lib/db";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
-import {
-  assertConsentRecordExists,
-  createSessionConsentSnapshot,
-  ConsentError,
-} from "@/lib/consent-scope";
+import { createSessionConsentSnapshot } from "@/lib/consent-scope";
 import {
   ErasureAccessSuspendedError,
   isWhiteboardSessionBlockedByErasure,
 } from "@/lib/erasure/active-erasure-scope";
-import type { EntryRefusal } from "@/lib/scheduling/session-entry";
-import { consentRecordRefusalReason } from "@/lib/scheduling/session-entry-loader";
+import { isMissingRecordReason, type EntryRefusal } from "@/lib/scheduling/session-entry";
+import { loadSessionEntryState } from "@/lib/scheduling/session-entry-loader";
 import { logProductEvent } from "@/lib/observability/product-events";
 import { mintServerLiveKey } from "@/lib/whiteboard/live-key";
 
@@ -164,25 +160,22 @@ export async function createWhiteboardSessionCore({
     { label: "createWhiteboardSession.studentForConsent" }
   );
   const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
+  // The student row was proven owned by the caller; a missing row is an unexpected failure (thrown).
+  if (!studentForConsent) throw new Error("Student not found.");
 
-  try {
-    await assertConsentRecordExists(learnerProfileId, adminUserId, {
-      studentId,
-    });
-  } catch (err) {
-    if (err instanceof ConsentError && err.permission === "consentRecord") {
-      console.warn(
-        `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: no_consent_record${schedSuffix}`
-      );
-    }
-    // The refusal is RETURNED, with the reason for this learner (self / parent / unclaimed),
-    // so the tutor reads the same line the control shows. Anything else is unexpected: rethrow.
-    const reason = await consentRecordRefusalReason(
-      err,
-      studentForConsent ? { studentId, adminUserId, student: studentForConsent } : null
+  // The one entry rule (D3), called in place. Creating a room needs the room to be enterable at
+  // all, so the weaker mode (`inPerson`) decides: no usable consent record (unclaimed learner,
+  // self-learner or parent-held with no record) refuses here, before the Blob write, with the
+  // per-learner reason RETURNED as data so the tutor reads the same line the control shows.
+  // Online-off does not refuse a create (in person stays open). Erasure was refused above, and org
+  // admission throws from `recheckOrgAdmission` below, so those reasons are not handled here.
+  const entry = await loadSessionEntryState({ studentId, adminUserId, student: studentForConsent });
+  const decision = entry.inPerson;
+  if (!decision.allowed && isMissingRecordReason(decision.reason)) {
+    console.warn(
+      `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: ${decision.reason}${schedSuffix}`
     );
-    if (!reason) throw err;
-    return { ok: false, reason };
+    return { ok: false, reason: decision.reason };
   }
 
   await recheckOrgAdmission(studentId, adminUserId);

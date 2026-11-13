@@ -360,8 +360,11 @@ type Props = {
    * Default: no snapshot (legacy, no audio). Replaced by Start's refrozen capabilities once Start answers.
    */
   initialConsentInput?: SessionConsentInput;
-  /** Effective allowLiveSession from the session consent snapshot. Null shows Online. */
-  allowLiveSession?: boolean | null;
+  /**
+   * Tutor waiting room: why an ONLINE session cannot start while in person still can (the entry rule's online
+   * decision, from the LIVE record while PENDING). Hides Online, shows the reason, Start reads "Start in person".
+   */
+  onlineBlockedReason?: EntryBlockReason | null;
   /** Tutor waiting room: why neither mode can start (no consent record, unclaimed). Disables Start and shows the reason. */
   startBlockedReason?: EntryBlockReason | null;
   /**
@@ -537,7 +540,7 @@ export function WhiteboardWorkspaceClient({
   learnerSessionCapabilities = null,
   activatedAt: _activatedAt,
   initialConsentInput = NO_SNAPSHOT_CONSENT_INPUT,
-  allowLiveSession = null,
+  onlineBlockedReason = null,
   startBlockedReason = null,
   studentLearnerProfileId = null,
   identityKey,
@@ -1622,8 +1625,12 @@ export function WhiteboardWorkspaceClient({
   // Initialized from the prop (DB value at SSR time); tutor can toggle
   // before clicking Start. Persisted to DB at activation time.
   const [sessionMode, setSessionMode] = useState<WtrSessionMode>(
-    initialSessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE"
+    initialSessionMode === "IN_PERSON" || onlineBlockedReason ? "IN_PERSON" : "LIVE"
   );
+  // The mode the overlay shows and Start sends. When online cannot start, in person is the only offered mode, so
+  // it is what is pressed: derived here (a render-time fact), never flipped by an effect, and never counted as a
+  // choice (`modeChosen` stays false until the tutor toggles; pressing Start is what sends the mode).
+  const overlaySessionMode: WtrSessionMode = onlineBlockedReason ? "IN_PERSON" : sessionMode;
 
   // Consent wave C3b (§ 4.1): the waiting room's mode is UNKNOWN until the tutor picks one (the overlay's default
   // highlight is not a choice). Once Start answers, its refrozen capabilities are adopted and nothing derived from
@@ -7864,19 +7871,19 @@ export function WhiteboardWorkspaceClient({
     {!phaseActive && (
       <WaitingRoomOverlay
         role={role}
-        sessionMode={sessionMode}
+        sessionMode={overlaySessionMode}
         studentConnected={overlayStudentConnected}
         tutorName={tutorName}
         studentLabel={studentName || "your student"}
         canStart={overlayCanStart}
         isStarting={isStarting}
         startError={sessionStartError}
-        onStart={() => void activateSessionLive(sessionMode)}
+        onStart={() => void activateSessionLive(overlaySessionMode)}
         onSessionModeChange={(m) => {
           setSessionMode(m);
           setModeChosen(true);
         }}
-        allowLiveSession={allowLiveSession}
+        onlineBlockedReason={role === "tutor" ? onlineBlockedReason : null}
         startBlockedMessage={
           role === "tutor" && startBlockedReason
             ? entryRefusalMessage(startBlockedReason, studentName)

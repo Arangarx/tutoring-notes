@@ -1359,6 +1359,9 @@ export async function seedSelfLearnerWbSession(opts?: {
       create: { whiteboardSessionId, learnerProfileId },
       update: { leftAt: null },
     });
+    // `/join` runs the one entry rule for every principal, a self-learner included, so the learner needs the
+    // privacy record a real self-learner has (all switches on) or the page refuses them (consent wave C5).
+    await seedHarnessConsentForJoin(prisma, { learnerProfileId, adminUserId, whiteboardSessionId });
   } finally {
     await prisma.$disconnect();
   }

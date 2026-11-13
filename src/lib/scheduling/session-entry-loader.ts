@@ -1,8 +1,8 @@
 /**
  * Loads the inputs for `sessionEntryState` and builds the state, batched.
  * Also the one place that turns a refused decision into the error the schedule
- * bridge throws, and that names the reason behind a missing-record refusal (Start
- * and create RETURN that reason as data; see `EntryRefusal` in `session-entry.ts`).
+ * bridge throws. (Start, create and the join-token mint RETURN the reason as data
+ * instead; see `EntryRefusal` in `session-entry.ts`.)
  *
  * SERVER-ONLY. The pure rule, copy table and types are in `session-entry.ts`
  * (client-safe); this file reads the database.
@@ -18,12 +18,9 @@ import {
 } from "@/lib/erasure/active-erasure-scope";
 import { orgInstructorAdmitted } from "@/lib/org-scope";
 import {
-  decisionReason,
   entryBlockCopy,
-  isMissingRecordReason,
   sessionEntryState,
   type EntryBlockReason,
-  type MissingRecordReason,
   type SessionEntryInputs,
   type SessionEntryMode,
   type SessionEntryState,
@@ -155,36 +152,6 @@ export function entryRefusalError(reason: EntryBlockReason, learnerName: string)
     default:
       return new Error(entryBlockCopy(reason, "tutor", learnerName));
   }
-}
-
-/**
- * `assertConsentRecordExists` throws one generic `ConsentError` for every missing-record
- * case. Where a tutor reads the refusal (Start, create), this names the per-learner reason
- * (unclaimed / self / parent) so the action can RETURN it as `{ ok: false, reason }`.
- *
- * Decides nothing: the caller has already refused, and this never turns a refusal into a
- * pass. It returns null when `err` is anything else, there is no source row, or the entry
- * state cannot be loaded or does not name a missing-record reason; the caller then rethrows
- * the original error (an unexpected failure, not an expected refusal).
- */
-export async function consentRecordRefusalReason(
-  err: unknown,
-  source: SessionEntrySource | null
-): Promise<MissingRecordReason | null> {
-  if (!(err instanceof ConsentError) || err.permission !== "consentRecord" || !source) return null;
-  try {
-    const state = await loadSessionEntryState(source);
-    // The missing-record reasons block both modes, so either decision names the reason.
-    const reason = decisionReason(state.inPerson);
-    if (reason && isMissingRecordReason(reason)) return reason;
-  } catch (loadErr) {
-    console.warn(
-      `[slc] studentId=${source.studentId} action=consent_reason_lookup_failed ${
-        loadErr instanceof Error ? loadErr.message : String(loadErr)
-      }`
-    );
-  }
-  return null;
 }
 
 /** Throws `entryRefusalError` when `state` does not allow `mode`. */

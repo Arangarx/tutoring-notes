@@ -333,6 +333,13 @@ describe("consent guards (§ 6i)", () => {
       "assertEffectiveConsent",
       "resolveRecordedConsent",
       "audio-capture-policy",
+      // C5: the ONE entry rule (`sessionEntryState`) replaced the second existence check, the unreferenced
+      // live-record denial table and its assert, and the loader's reason-recovery helper.
+      "assertConsentRecordExists",
+      "assertConsentFromLiveRecord",
+      "LIVE_RECORD_DENIAL_COPY",
+      "CONSENT_RECORD_REQUIRED_MESSAGE",
+      "consentRecordRefusalReason",
     ];
     const self = path.resolve(__filename);
     const offenders: string[] = [];

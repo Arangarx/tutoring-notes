@@ -1,7 +1,10 @@
 /**
  * @jest-environment node
  *
- * CC-1 — assertConsentRecordExists unit/integration tests (T9, record-exists gate).
+ * CC-1 — the record-exists gate, now answered by the ONE entry rule (`sessionEntryState`) over the loader's
+ * inputs (consent wave C5 deleted the second, separate existence check). Same cases, same
+ * oracles (spec: no record means no entry; a record's audio switch does not matter; an organization-owned
+ * learner is read from the organization's row), asserted through `loadSessionEntryState`.
  */
 
 jest.mock("next/navigation", () => ({
@@ -11,14 +14,15 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
+import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { assertConsentRecordExists, ConsentError } from "@/lib/consent-scope";
+import { decisionReason } from "@/lib/scheduling/session-entry";
+import { loadSessionEntryState } from "@/lib/scheduling/session-entry-loader";
 import { uniq } from "../helpers/unique-test-token";
-
 
 async function createTutor() {
   return db.adminUser.create({
-    data: { email: `${uniq("tutor")}@example.com`, role: "TUTOR" },
+    data: { email: `${uniq("tutor")}@example.com`, role: "TUTOR", approvalStatus: "APPROVED" },
   });
 }
 
@@ -48,7 +52,8 @@ async function createLearnerProfile(
 async function createConsentRecord(
   learnerProfileId: string,
   adminUserId: string,
-  version: number
+  version: number,
+  overrides: { allowAudioRecording?: boolean } = {}
 ) {
   const ah = await db.learnerProfile.findUniqueOrThrow({
     where: { id: learnerProfileId },
@@ -60,7 +65,7 @@ async function createConsentRecord(
       adminUserId,
       version,
       allowLiveSession: true,
-      allowAudioRecording: true,
+      allowAudioRecording: overrides.allowAudioRecording ?? true,
       allowWhiteboardRecording: true,
       allowNoteSending: true,
       setByAccountHolderId: ah.accountHolderId,
@@ -69,90 +74,80 @@ async function createConsentRecord(
   });
 }
 
+/** The entry state for a tutor-owned student row with this learner (an unclaimed student has no learnerProfileId). */
+function privateEntry(tutorId: string, learnerProfileId: string | null, isSelfLearner = false) {
+  return loadSessionEntryState({
+    studentId: randomUUID(),
+    adminUserId: tutorId,
+    student: {
+      adminUserId: tutorId,
+      organizationId: null,
+      learnerProfileId,
+      learnerProfile: learnerProfileId ? { isSelfLearner } : null,
+    },
+  });
+}
+
 afterAll(async () => {
   await db.$disconnect();
 });
 
-describe("assertConsentRecordExists", () => {
-  it("unclaimed (learnerProfileId null) → throws ConsentError", async () => {
+describe("record-exists gate through the entry rule", () => {
+  it("unclaimed (learnerProfileId null): refused in both modes as unclaimed", async () => {
     const tutor = await createTutor();
-    await expect(
-      assertConsentRecordExists(null, tutor.id)
-    ).rejects.toThrow(ConsentError);
-    await expect(assertConsentRecordExists(null, tutor.id)).rejects.toMatchObject({
-      permission: "consentRecord",
-    });
+    const state = await privateEntry(tutor.id, null);
+    expect(decisionReason(state.online)).toBe("unclaimed");
+    expect(decisionReason(state.inPerson)).toBe("unclaimed");
   });
 
-  it("claimed + no ConsentRecord → throws ConsentError", async () => {
+  it("claimed + no ConsentRecord: refused in both modes (parent has not finished preferences)", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder();
     const profile = await createLearnerProfile(ah.id);
 
-    await expect(
-      assertConsentRecordExists(profile.id, tutor.id)
-    ).rejects.toThrow(ConsentError);
+    const state = await privateEntry(tutor.id, profile.id);
+    expect(decisionReason(state.online)).toBe("consent_missing_parent");
+    expect(decisionReason(state.inPerson)).toBe("consent_missing_parent");
   });
 
-  it("claimed + ConsentRecord exists → passes", async () => {
+  it("claimed + ConsentRecord exists: both modes allowed", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder();
     const profile = await createLearnerProfile(ah.id);
     await createConsentRecord(profile.id, tutor.id, 1);
 
-    await expect(
-      assertConsentRecordExists(profile.id, tutor.id)
-    ).resolves.toBeUndefined();
+    const state = await privateEntry(tutor.id, profile.id);
+    expect(state.online).toEqual({ allowed: true });
+    expect(state.inPerson).toEqual({ allowed: true });
   });
 
-  it("self-learner + no ConsentRecord → throws the consent-required error", async () => {
+  it("self-learner + no ConsentRecord: refused in both modes with the self-learner reason", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder({ isSelfLearner: true });
     const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
 
-    await expect(assertConsentRecordExists(profile.id, tutor.id)).rejects.toThrow(
-      "Parent privacy preferences must be set before starting a session."
-    );
-    await expect(assertConsentRecordExists(profile.id, tutor.id)).rejects.toMatchObject({
-      permission: "consentRecord",
-    });
+    const state = await privateEntry(tutor.id, profile.id, true);
+    expect(decisionReason(state.online)).toBe("consent_missing_self");
+    expect(decisionReason(state.inPerson)).toBe("consent_missing_self");
   });
 
-  it("self-learner with a record, even when audio is off, passes existence", async () => {
+  it("self-learner with a record, even when audio is off, is allowed (only the online switch decides entry)", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder({ isSelfLearner: true });
     const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
-    const ahId = ah.id;
-    await db.consentRecord.create({
-      data: {
-        learnerProfileId: profile.id,
-        adminUserId: tutor.id,
-        version: 1,
-        allowLiveSession: true,
-        allowAudioRecording: false,
-        allowWhiteboardRecording: true,
-        allowNoteSending: true,
-        setByAccountHolderId: ahId,
-        captureMethod: "electronic",
-      },
-    });
-    const log = jest.spyOn(console, "log").mockImplementation(() => {});
-    try {
-      await expect(assertConsentRecordExists(profile.id, tutor.id)).resolves.toBeUndefined();
-      const lines = log.mock.calls.map((call) => call.map(String).join(" "));
-      expect(lines.some((line) => line.includes("result=self_learner"))).toBe(false);
-      expect(lines.some((line) => line.includes("result=granted"))).toBe(true);
-    } finally {
-      log.mockRestore();
-    }
+    await createConsentRecord(profile.id, tutor.id, 1, { allowAudioRecording: false });
+
+    const state = await privateEntry(tutor.id, profile.id, true);
+    expect(state.online).toEqual({ allowed: true });
+    expect(state.inPerson).toEqual({ allowed: true });
   });
 
-  it("org-owned self-learner is read from the organization consent row", async () => {
+  it("org-owned self-learner is read from the organization's consent row", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder({ isSelfLearner: true });
     const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
     const org = await db.organization.create({
-      data: { name: uniq("org-exists"), createdByOperatorId: tutor.id },
+      data: { name: uniq("org-exists"), createdByOperatorId: tutor.id, status: "active" },
     });
     const student = await db.student.create({
       data: {
@@ -177,8 +172,22 @@ describe("assertConsentRecordExists", () => {
       },
     });
 
-    await expect(
-      assertConsentRecordExists(profile.id, tutor.id, { studentId: student.id })
-    ).resolves.toBeUndefined();
+    // The record is the organization's (adminUserId null), not the tutor's: reading it proves the owner comes
+    // from the Student row. Admission is not what this asserts, so the instructor is admitted.
+    await db.organizationMember.create({
+      data: { organizationId: org.id, adminUserId: tutor.id, roles: ["instructor"] },
+    });
+    const state = await loadSessionEntryState({
+      studentId: student.id,
+      adminUserId: tutor.id,
+      student: {
+        adminUserId: null,
+        organizationId: org.id,
+        learnerProfileId: profile.id,
+        learnerProfile: { isSelfLearner: true },
+      },
+    });
+    expect(state.online).toEqual({ allowed: true });
+    expect(state.inPerson).toEqual({ allowed: true });
   });
 });

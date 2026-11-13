@@ -18,7 +18,7 @@
  * Run (after un-fixme): npx playwright test tests/integration/wb-consent-matrix.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { test, expect, type APIRequestContext, type BrowserContext } from "@playwright/test";
+import { devices, test, expect, webkit, type APIRequestContext, type BrowserContext } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import {
@@ -34,6 +34,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   drawTestStrokeOnRole,
+  loginLearnerInContext,
   openTutorAndStudent,
   seedWbLiveSyncSession,
   waitForSceneElementIdsContaining,
@@ -176,10 +177,39 @@ test.describe("consent 6a: Entry (online switch)", {
   tag: [TAG.WB_CONSENT, TAG.WB_PRESENCE],
 }, () => {
   // Oracle: Student on 'devices["iPhone 13"]'; redirect + copy text
-  test.fixme(
+  test(
     "E15: online off: a WebKit (iPhone 13) student at /join is refused with the one-line reason",
     async () => {
-      // pending: wave that owns E15
+      test.setTimeout(150_000);
+      // Online switch off in the family's live record; the room is PENDING. Spec-typed family copy (the plan's § 7b table).
+      const s = await seedConsentSession({ switches: { allowLiveSession: false }, phase: "PENDING" });
+      const webkitBrowser = await webkit.launch();
+      // Same context shape the harness uses for the iPhone student: the device profile, and no permission grants (WebKit
+      // rejects the project's microphone grant).
+      const context = await webkitBrowser.newContext({ ...devices["iPhone 13"], permissions: [] });
+      try {
+        await loginLearnerInContext(context, s.learnerHandle, s.learnerPin);
+        const page = await context.newPage();
+        await page.goto(`/join/${s.whiteboardSessionId}#k=AAAAAAAAAAAAAAAAAAAAAA`, { waitUntil: "domcontentloaded" });
+        const line = page.getByTestId("join-entry-blocked");
+        await expect(line).toBeVisible({ timeout: 60_000 });
+        await expect(line).toHaveText("Live sessions are off in privacy settings.");
+        await expect(line).toHaveAttribute("data-entry-reason", "live_off");
+        await expect(page).toHaveURL(new RegExp(`/join/${s.whiteboardSessionId}`));
+        // No room, no A/V: the board never mounts, and no getUserMedia could have been asked for.
+        await expect(page.getByTestId("student-whiteboard-canvas-mount")).toHaveCount(0);
+        // The refusal is readable on the phone: inside the visible viewport, not clipped off-screen.
+        const box = await line.boundingBox();
+        const viewport = page.viewportSize();
+        expect(box, "refusal line has a box").not.toBeNull();
+        expect(viewport, "iPhone viewport").not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width + 1);
+      } finally {
+        await context.close();
+        await webkitBrowser.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Q9, B4 channel. Run for both client branches (SF-I): a join-token learner and a signed-in learner session, because each has its own 'JoinUnavailableReason' map ('WhiteboardWorkspaceClient.tsx' 1446–1454 and 1516–1521) an …

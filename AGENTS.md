@@ -159,7 +159,7 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   exists: `action=capabilities_resolved audio=<mode> wb=<persist> notes=<draft> online=<bool|n/a> mic=<yes|defer|no> source=snapshot|live|legacy_unclaimed|fail_closed`,
   `refrozen_at_start changed=<keys|none> created=<bool> before=<toggles|none> after=<toggles>`,
   `refreeze_skipped reason=already_active`, `frozen_at_end source=end|stale|reaper before=none after=<toggles>`,
-  `entry_denied surface=start|open_room|resume|join|schedule principal=<type> reason=<EntryBlockReason> mode=online|in_person`,
+  `entry_denied surface=start|open_room|resume|join|join_token|schedule principal=<type> reason=<EntryBlockReason> mode=online|in_person`,
   `learner_lane_refused surface=segment|end|chunk|queue|kick|sweep|generate streamId=<id>`, `lane_mismatch stored=<id> input=<id>` (worker: the stored lane wins),
   `replay_access audio=<bool> board=<bool> source=snapshot|legacy principal=<type>`),
   `txc` (transcription — `[txc] wbsid=<id> action=refused reason=audio_off|notes_off|notes_forbidden surface=chunk|queue|kick|sweep|generate streamId=<id>`; worker no-ops write `[txc] wbsid=<id> action=worker_skip reason=already_done|already_refused|already_transcribing|lane_unknown`; sweep auth

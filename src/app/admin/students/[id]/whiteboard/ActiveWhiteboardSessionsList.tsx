@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition, useState } from "react";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
+import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
 import { Button } from "@/components/ui/button";
+import { tutorControlState, type SessionEntryState } from "@/lib/scheduling/session-entry";
 import { finalizeWhiteboardSessionWithOutbox } from "@/lib/recording/finalize-whiteboard-session-client";
 import { deleteWhiteboardSessionAndDataAction } from "./notes-actions";
 export type ActiveWbListItem = {
   id: string;
   startedAt: Date;
+  /** Only a PENDING row shows the entry line under Resume. Omitted = no line. */
+  sessionPhase?: string;
 };
 
 /**
@@ -22,19 +26,46 @@ export type ActiveWbListItem = {
 export function ResumeWhiteboardSessionLink({
   studentId,
   sessionId,
+  entry,
+  learnerName = "",
 }: {
   studentId: string;
   sessionId: string;
+  /**
+   * The one entry rule's answer, passed only for a PENDING session (an ACTIVE one is past Start). Resume stays a
+   * link either way: the waiting room it opens is where Start is disabled or offers "Start in person". The line
+   * under the link is the SAME one Start shows (`SessionEntryBlocked`), so both controls give one answer.
+   */
+  entry?: SessionEntryState;
+  learnerName?: string;
 }) {
+  const control = entry ? tutorControlState(entry) : null;
+  const reason = control?.disabledReason ?? control?.onlineOnlyReason ?? null;
+  const reasonId = `resume-whiteboard-session-reason-${sessionId}`;
   return (
-    <Button asChild variant="accent" className="min-h-11 whitespace-nowrap">
-      <Link
-        href={`/admin/students/${studentId}/whiteboard/${sessionId}/workspace`}
-        data-testid="roster-resume-session"
-      >
-        Resume
-      </Link>
-    </Button>
+    <div className="flex flex-col">
+      <Button asChild variant="accent" className="min-h-11 whitespace-nowrap">
+        <Link
+          href={`/admin/students/${studentId}/whiteboard/${sessionId}/workspace`}
+          data-testid="roster-resume-session"
+          aria-describedby={reason ? reasonId : undefined}
+        >
+          Resume
+        </Link>
+      </Button>
+      {reason ? (
+        <SessionEntryBlocked
+          size="line"
+          id={reasonId}
+          reason={reason}
+          audience="tutor"
+          learnerName={learnerName}
+          inPersonStillOpen={control?.disabledReason == null}
+          className="mt-2"
+          data-testid="resume-whiteboard-session-reason"
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -42,9 +73,14 @@ export function ActiveWhiteboardSessionsList({
   studentId,
   sessions,
   variant = "card",
+  entry,
+  learnerName = "",
 }: {
   studentId: string;
   sessions: readonly ActiveWbListItem[];
+  /** The one entry rule's answer for this student and tutor; shown under Resume for PENDING rows. */
+  entry?: SessionEntryState;
+  learnerName?: string;
   /** `bare` omits the heading when a parent disclosure already titles the section. */
   variant?: "card" | "bare";
 }) {
@@ -64,7 +100,13 @@ export function ActiveWhiteboardSessionsList({
       </p>
       <ul className="m-0 list-none divide-y divide-border p-0">
         {sessions.map((s) => (
-          <RosterRow key={s.id} studentId={studentId} session={s} />
+          <RosterRow
+            key={s.id}
+            studentId={studentId}
+            session={s}
+            entry={s.sessionPhase === "PENDING" ? entry : undefined}
+            learnerName={learnerName}
+          />
         ))}
       </ul>
     </div>
@@ -74,9 +116,13 @@ export function ActiveWhiteboardSessionsList({
 function RosterRow({
   studentId,
   session,
+  entry,
+  learnerName,
 }: {
   studentId: string;
   session: ActiveWbListItem;
+  entry?: SessionEntryState;
+  learnerName: string;
 }) {
   const router = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -127,7 +173,12 @@ function RosterRow({
 
       <div className="flex shrink-0 flex-col gap-2 sm:items-end">
         <div className="flex flex-wrap items-center gap-2">
-          <ResumeWhiteboardSessionLink studentId={studentId} sessionId={session.id} />
+          <ResumeWhiteboardSessionLink
+            studentId={studentId}
+            sessionId={session.id}
+            entry={entry}
+            learnerName={learnerName}
+          />
 
           {/* End and review — WS-C server finalize, then straight to review overlay */}
           <Button

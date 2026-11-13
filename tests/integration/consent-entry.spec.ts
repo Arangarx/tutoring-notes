@@ -8,7 +8,8 @@
  * Run (after un-fixme): npx playwright test tests/integration/consent-entry.spec.ts --project=wb-regression --workers=1 --retries=0
  */
 
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import { TEST_ADMIN } from "../visual/helpers";
@@ -40,13 +41,25 @@ import {
   readConsentSnapshots,
   saveFamilyConsentVersion,
 } from "../helpers/consent-db-oracle";
-import { openTutorAndStudent, seedWbPendingLiveSyncSession, waitForWbE2eBridge } from "./whiteboard-live-sync.helpers";
+import {
+  loginAccountHolderInContext,
+  loginLearnerInContext,
+  openTutorAndStudent,
+  seedParentJoinPendingSession,
+  seedSelfLearnerWbSession,
+  seedWbPendingLiveSyncSession,
+  waitForWbE2eBridge,
+} from "./whiteboard-live-sync.helpers";
+import { TEST_PARENT } from "./identity/identity.helpers";
+import { seedBridgeScheduledSession, seedOnlineOffAppointment } from "./wb-org-qol-bridge.helpers";
 import { blobIntegrationEnabled } from "../helpers/blob-gate";
 import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
 import {
+  audioRequests,
   chooseMode,
   endFromWorkspace,
   laneCreateLines,
+  openTutorRoom,
   seedConsentSession,
   setFamilySwitches,
   startFromWaitingRoom,
@@ -110,107 +123,722 @@ async function openWorkspaceWaitingRoom(page: Page, f: StartFixture): Promise<vo
   await waitForWbE2eBridge(page, "tutor");
 }
 // ---------------------------------------------------------------------------
+// Entry helpers (consent wave C5): the learner and parent sides of `/join`, and the shared copy literals.
+// ---------------------------------------------------------------------------
+
+/** Spec-typed copy (the plan's § 7b table, written by hand here, never read from the code under test). */
+const FAMILY_LIVE_OFF = "Live sessions are off in privacy settings.";
+const tutorLiveOff = (learnerName: string) => `Live sessions are off in ${learnerName}'s privacy settings.`;
+const IN_PERSON_STILL_OPEN = "You can still open the room in person.";
+const familyMissingParent = (learnerName: string) => `Finish privacy preferences for ${learnerName} to join.`;
+
+const TUTOR_STATE = "tests/integration/.auth/tutor.json";
+/** A well-formed 128-bit key: `/join` needs `#k=` to mount the board, and no tutor is in the room to supply one. */
+const JOIN_KEY_FRAGMENT = "#k=AAAAAAAAAAAAAAAAAAAAAA";
+const joinPath = (sessionId: string) => `/join/${sessionId}${JOIN_KEY_FRAGMENT}`;
+
+async function studentNameOf(studentId: string): Promise<string> {
+  return withPrisma(
+    async (p) => (await p.student.findUniqueOrThrow({ where: { id: studentId }, select: { name: true } })).name
+  );
+}
+
+type LearnerLogin = { handle: string; pin: string };
+
+const shortStamp = () => `${Date.now().toString(36).slice(-4)}${Math.random().toString(36).slice(2, 6)}`;
+
+/**
+ * Gives an isolated fixture's learner a PIN login and makes it a participant of `sessionIds` (rows written straight to
+ * Postgres, never through the code under test). Deleting the profile removes the credential with it.
+ */
+async function giveLearnerLogin(learnerProfileId: string, sessionIds: string[]): Promise<LearnerLogin> {
+  const pin = "482916";
+  const stamp = shortStamp();
+  return withPrisma(async (p) => {
+    const profile = await p.learnerProfile.findUniqueOrThrow({
+      where: { id: learnerProfileId },
+      select: { accountHolderId: true, accountHolder: { select: { familyId: true } } },
+    });
+    const familyId = profile.accountHolder.familyId ?? `entfam${stamp}`;
+    if (!profile.accountHolder.familyId) {
+      await p.accountHolder.update({ where: { id: profile.accountHolderId }, data: { familyId } });
+    }
+    await p.learnerProfile.update({ where: { id: learnerProfileId }, data: { accessMode: "child_pin_required" } });
+    const username = `e${stamp}`;
+    await p.learnerCredential.create({
+      data: {
+        learnerProfileId,
+        accountHolderId: profile.accountHolderId,
+        username,
+        secretHash: await bcrypt.hash(pin, 10),
+      },
+    });
+    for (const whiteboardSessionId of sessionIds) {
+      await p.sessionParticipant.create({ data: { whiteboardSessionId, learnerProfileId } });
+    }
+    return { handle: `${username}@${familyId}`, pin };
+  });
+}
+
+type JoinVisit = { context: BrowserContext; page: Page };
+
+/** A fresh signed-in context (nothing shared with the tutor) that navigates straight to `path`. */
+async function visitAs(
+  browser: Browser,
+  signIn: (context: BrowserContext) => Promise<void>,
+  path: string
+): Promise<JoinVisit> {
+  const context = await browser.newContext();
+  await signIn(context);
+  const page = await context.newPage();
+  await page.goto(path, { waitUntil: "domcontentloaded" });
+  return { context, page };
+}
+
+const asLearner = (login: LearnerLogin) => (context: BrowserContext) =>
+  loginLearnerInContext(context, login.handle, login.pin);
+const asAccountHolder = (email: string, password: string) => (context: BrowserContext) =>
+  loginAccountHolderInContext(context, email, password);
+
+/** `/join` refused: the one-line reason (copy and code), still on the join URL, and the board never mounts. */
+async function expectJoinRefused(page: Page, sessionId: string, reason: string, text: string): Promise<void> {
+  const line = page.getByTestId("join-entry-blocked");
+  await expect(line).toBeVisible({ timeout: 60_000 });
+  await expect(line).toHaveText(text);
+  await expect(line).toHaveAttribute("data-entry-reason", reason);
+  await expect(page).toHaveURL(new RegExp(`/join/${sessionId}`));
+  await expect(page.getByTestId("student-whiteboard-canvas-mount")).toHaveCount(0);
+}
+
+/** `/join` admitted: the learner's board mounts and no refusal line is on the page. */
+async function expectJoinAdmitted(page: Page): Promise<void> {
+  await expect(page.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId("join-entry-blocked")).toHaveCount(0);
+}
+
+/** The real `issueJoinToken` action as the signed-in tutor: `{ ok: true }` or `{ ok: false, reason }`. */
+async function issueTokenVia(
+  request: APIRequestContext,
+  sessionId: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const res = await invokeConsentAction(request, "issueJoinToken", sessionId);
+  expect(res.status(), await res.text()).toBe(200);
+  return ((await res.json()) as { result: { ok: boolean; reason?: string } }).result;
+}
+
+/**
+ * One learner who studies with a private tutor AND in an organization, with a separate privacy record per owner and one
+ * PENDING session each (E10, E11). Everything is written straight to Postgres.
+ */
+async function seedTwoOwnerLearner(opts: { orgAllowsLive: boolean; privateAllowsLive: boolean }) {
+  const stamp = shortStamp();
+  const placeholder = "https://pw.local/placeholder-whiteboard-events.json";
+  const ids = await withPrisma(async (p) => {
+    const holder = await p.accountHolder.create({
+      data: { email: `pw-two-owner-${stamp}@test.local`, emailVerifiedAt: new Date("2026-01-01") },
+      select: { id: true },
+    });
+    const profile = await p.learnerProfile.create({
+      data: { accountHolderId: holder.id, displayName: `Two Owners ${stamp}` },
+      select: { id: true },
+    });
+    const tutor = await p.adminUser.create({
+      data: {
+        email: `pw-two-owner-tutor-${stamp}@test.local`,
+        role: "TUTOR",
+        approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
+      },
+      select: { id: true },
+    });
+    const instructor = await p.adminUser.create({
+      data: {
+        email: `pw-two-owner-instructor-${stamp}@test.local`,
+        role: "TUTOR",
+        approvalStatus: "APPROVED",
+        emailVerifiedAt: new Date("2026-01-01"),
+      },
+      select: { id: true },
+    });
+    const org = await p.organization.create({
+      data: {
+        name: `PW Two Owner ${stamp}`,
+        status: "active",
+        timezone: "America/Denver",
+        createdByOperatorId: "org-operator@example.com",
+        members: { create: [{ adminUserId: instructor.id, roles: ["instructor"] }] },
+      },
+      select: { id: true },
+    });
+    const privateStudent = await p.student.create({
+      data: { name: `Private ${stamp}`, adminUserId: tutor.id, learnerProfileId: profile.id },
+      select: { id: true },
+    });
+    const orgStudent = await p.student.create({
+      data: { name: `OrgLearner ${stamp}`, adminUserId: null, organizationId: org.id, learnerProfileId: profile.id },
+      select: { id: true },
+    });
+    const allOn = { allowAudioRecording: true, allowWhiteboardRecording: true, allowNoteSending: true };
+    await p.consentRecord.create({
+      data: {
+        learnerProfileId: profile.id,
+        adminUserId: tutor.id,
+        version: 1,
+        allowLiveSession: opts.privateAllowsLive,
+        ...allOn,
+        setByAccountHolderId: holder.id,
+        captureMethod: "electronic",
+      },
+    });
+    await p.consentRecord.create({
+      data: {
+        learnerProfileId: profile.id,
+        adminUserId: null,
+        organizationId: org.id,
+        version: 1,
+        allowLiveSession: opts.orgAllowsLive,
+        ...allOn,
+        setByAccountHolderId: holder.id,
+        captureMethod: "electronic",
+      },
+    });
+    const sessionFor = (adminUserId: string, studentId: string) =>
+      p.whiteboardSession.create({
+        data: {
+          adminUserId,
+          studentId,
+          consentAcknowledged: true,
+          eventsBlobUrl: placeholder,
+          sessionPhase: "PENDING",
+          sessionMode: "LIVE",
+        },
+        select: { id: true },
+      });
+    const privateSession = await sessionFor(tutor.id, privateStudent.id);
+    const orgSession = await sessionFor(instructor.id, orgStudent.id);
+    return {
+      holderId: holder.id,
+      profileId: profile.id,
+      adminIds: [tutor.id, instructor.id],
+      organizationId: org.id,
+      studentIds: [privateStudent.id, orgStudent.id],
+      privateSessionId: privateSession.id,
+      orgSessionId: orgSession.id,
+    };
+  });
+  const login = await giveLearnerLogin(ids.profileId, [ids.privateSessionId, ids.orgSessionId]);
+  return {
+    ...ids,
+    login,
+    cleanup: () =>
+      withPrisma(async (p) => {
+        const sessionIds = [ids.privateSessionId, ids.orgSessionId];
+        await p.productEvent.deleteMany({ where: { whiteboardSessionId: { in: sessionIds } } });
+        await p.sessionParticipant.deleteMany({ where: { whiteboardSessionId: { in: sessionIds } } });
+        await p.whiteboardSession.deleteMany({ where: { id: { in: sessionIds } } });
+        await p.consentRecord.deleteMany({ where: { learnerProfileId: ids.profileId } });
+        await p.student.deleteMany({ where: { id: { in: ids.studentIds } } });
+        await p.learnerProfile.deleteMany({ where: { id: ids.profileId } });
+        await p.accountHolder.deleteMany({ where: { id: ids.holderId } });
+        await p.organization.deleteMany({ where: { id: ids.organizationId } });
+        await p.adminUser.deleteMany({ where: { id: { in: ids.adminIds } } });
+      }),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 6a. Entry (online switch)
 // ---------------------------------------------------------------------------
 test.describe("consent 6a: Entry (online switch)", {
   tag: [TAG.WB_CONSENT, TAG.WB_PRESENCE],
 }, () => {
   // Oracle: Server response; session 'sessionMode' row
-  test.fixme(
+  test(
     "E1: online off: tutor Start Online is refused and Start in person works",
-    async () => {
-      // pending: wave that owns E1
+    async ({ request }) => {
+      test.setTimeout(150_000);
+      // Both session shapes the product has: one created with a snapshot, and a legacy one with none.
+      for (const snapshot of [false, true]) {
+        const f = await seedStartFixture({ record: { allowLiveSession: false }, snapshot });
+        const id = f.whiteboardSessionId;
+        try {
+          expect(await startVia(request, id, "LIVE"), "explicit Online").toEqual({ ok: false, reason: "live_off" });
+          // The stored mode is Online, so Start with no mode argument is also an Online Start.
+          expect(await startVia(request, id), "the session's own Online mode").toEqual({ ok: false, reason: "live_off" });
+          const refused = await sessionRow(id);
+          expect(refused.sessionPhase).toBe("PENDING");
+          expect(refused.activatedAt).toBeNull();
+
+          const started = await startVia(request, id, "IN_PERSON");
+          expect(started.ok).toBe(true);
+          if (started.ok) expect(started.sessionMode).toBe("IN_PERSON");
+          const after = await withPrisma((p) =>
+            p.whiteboardSession.findUniqueOrThrow({ where: { id }, select: { sessionPhase: true, sessionMode: true } })
+          );
+          expect(after).toEqual({ sessionPhase: "ACTIVE", sessionMode: "IN_PERSON" });
+        } finally {
+          await f.cleanup();
+        }
+      }
     }
   );
   // Oracle: DOM: in-person button visible, online absent; no mode auto-flip event
-  test.fixme(
+  // Real-browser oracle for "nothing chooses the mode for the tutor": while the room is only open, the session mode the
+  // chrome acts on stays UNKNOWN (it is set only by a choice), and pressing Start is what commits "in person". The old
+  // overlay effect committed the mode on mount, before any press.
+  test(
     "E2: online off: Open room works and offers only in person",
-    async () => {
-      // pending: wave that owns E2
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const s = await seedConsentSession({ switches: { allowLiveSession: false }, phase: "PENDING" });
+      const name = await studentNameOf(s.studentId);
+      const room = await openTutorRoom(browser, s, { spy: "passthrough" });
+      try {
+        const page = room.page;
+        const overlay = page.getByTestId("wb-waiting-overlay");
+        await expect(overlay).toBeVisible();
+        // Only in person is offered, and it is the pressed mode.
+        await expect(page.getByTestId("wb-session-mode-live")).toHaveCount(0);
+        await expect(page.getByTestId("wb-session-mode-in-person")).toHaveAttribute("aria-pressed", "true");
+        await expect(overlay).toHaveAttribute("data-session-mode", "IN_PERSON");
+        await expect(page.getByTestId("wb-waiting-online-blocked")).toHaveText(
+          `${tutorLiveOff(name)} ${IN_PERSON_STILL_OPEN}`
+        );
+        await expect(page.getByTestId("wb-start-session")).toHaveText("Start in person");
+
+        // Nobody has chosen anything yet: the session mode the chrome acts on is still unset (UNKNOWN), not committed.
+        await page.waitForTimeout(4_000);
+        const chrome = page.getByTestId("mynk-wb-chrome");
+        await expect(chrome).toHaveAttribute("data-session-mode", "UNKNOWN");
+        // Pressing Start is the choice: the session starts in person.
+        await startFromWaitingRoom(page);
+        await expect(chrome).toHaveAttribute("data-session-mode", "IN_PERSON");
+        const row = await withPrisma((p) =>
+          p.whiteboardSession.findUniqueOrThrow({
+            where: { id: s.whiteboardSessionId },
+            select: { sessionPhase: true, sessionMode: true },
+          })
+        );
+        expect(row).toEqual({ sessionPhase: "ACTIVE", sessionMode: "IN_PERSON" });
+        // Control: the spy works, and audio (on) is requested once the mode is chosen.
+        await expect.poll(() => audioRequests(page), { timeout: 20_000 }).toBeGreaterThan(0);
+      } finally {
+        await room.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Same reason line text
-  test.fixme(
+  test(
     "E3: online off: resume of an open session gives the same answer as Start",
-    async () => {
-      // pending: wave that owns E3
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const off = await seedStartFixture({ record: { allowLiveSession: false }, snapshot: true });
+      const on = await seedStartFixture({ record: {}, snapshot: true });
+      const context = await browser.newContext({ storageState: TUTOR_STATE });
+      try {
+        const page = await context.newPage();
+        const name = await studentNameOf(off.studentId);
+
+        // The student page's Resume link carries the same sentence the waiting room shows beside Start.
+        await page.goto(`/admin/students/${off.studentId}`, { waitUntil: "domcontentloaded" });
+        const resumeLine = page.getByTestId("resume-whiteboard-session-reason").first();
+        await expect(resumeLine).toBeVisible({ timeout: 30_000 });
+        const resumeText = (await resumeLine.innerText()).trim();
+        expect(resumeText).toBe(`${tutorLiveOff(name)} ${IN_PERSON_STILL_OPEN}`);
+
+        // Resume is not blocked (in person is open): it opens the room.
+        const resume = page.getByTestId("roster-resume-session").first();
+        await expect(resume).toBeVisible();
+        await resume.click();
+        await page.waitForURL(new RegExp(`/whiteboard/${off.whiteboardSessionId}/workspace`), { timeout: 60_000 });
+        await expect(page.getByTestId("wb-waiting-overlay")).toBeVisible({ timeout: 90_000 });
+        await expect(page.getByTestId("wb-waiting-online-blocked")).toHaveText(resumeText);
+
+        // Control: online allowed shows no line under Resume.
+        await page.goto(`/admin/students/${on.studentId}`, { waitUntil: "domcontentloaded" });
+        await expect(page.getByTestId("roster-resume-session").first()).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId("resume-whiteboard-session-reason")).toHaveCount(0);
+      } finally {
+        await context.close();
+        await off.cleanup();
+        await on.cleanup();
+      }
     }
   );
   // Oracle: Redirect + 'ENTRY_BLOCK_COPY' text
-  test.fixme(
+  test(
     "E4: online off: child cannot join, sees a one-line reason",
-    async () => {
-      // pending: wave that owns E4
+    async ({ browser }) => {
+      test.setTimeout(150_000);
+      const s = await seedConsentSession({ switches: { allowLiveSession: false }, phase: "PENDING" });
+      const visit = await visitAs(
+        browser,
+        asLearner({ handle: s.learnerHandle, pin: s.learnerPin }),
+        joinPath(s.whiteboardSessionId)
+      );
+      try {
+        await expectJoinRefused(visit.page, s.whiteboardSessionId, "live_off", FAMILY_LIVE_OFF);
+      } finally {
+        await visit.context.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: Same
-  test.fixme(
+  test(
     "E5: online off: parent joining as child cannot join",
-    async () => {
-      // pending: wave that owns E5
+    async ({ browser }) => {
+      test.setTimeout(150_000);
+      const s = await seedParentJoinPendingSession();
+      // The family turns online off after the room exists: a new live record version.
+      await saveFamilyConsentVersion(s.learnerProfileId, s.adminUserId, { allowLiveSession: false });
+      const visit = await visitAs(browser, asAccountHolder(s.ahEmail, s.ahPassword), joinPath(s.whiteboardSessionId));
+      try {
+        await expectJoinRefused(visit.page, s.whiteboardSessionId, "live_off", FAMILY_LIVE_OFF);
+      } finally {
+        await visit.context.close();
+        await dropFamilyConsentVersionsAbove(s.learnerProfileId, s.adminUserId, 1);
+      }
     }
   );
   // Oracle: Same; red today
-  test.fixme(
+  test(
     "E6: online off: self-learner cannot join (the /join gap)",
-    async () => {
-      // pending: wave that owns E6
+    async ({ browser }) => {
+      test.setTimeout(150_000);
+      const s = await seedSelfLearnerWbSession({ sessionPhase: "PENDING" });
+      await saveFamilyConsentVersion(s.learnerProfileId, s.adminUserId, { allowLiveSession: false });
+      const visit = await visitAs(browser, asAccountHolder(s.ahEmail, s.ahPassword), joinPath(s.whiteboardSessionId));
+      try {
+        await expectJoinRefused(visit.page, s.whiteboardSessionId, "live_off", FAMILY_LIVE_OFF);
+      } finally {
+        await visit.context.close();
+        await dropFamilyConsentVersionsAbove(s.learnerProfileId, s.adminUserId, 1);
+      }
     }
   );
   // Oracle: Lands on the blocked page, not a room
-  test.fixme(
+  test(
     "E7: online off: old /w/<joinToken> link cannot join",
-    async () => {
-      // pending: wave that owns E7
+    async ({ browser }) => {
+      test.setTimeout(150_000);
+      const s = await seedConsentSession({ switches: { allowLiveSession: false }, phase: "PENDING" });
+      const visit = await visitAs(
+        browser,
+        asLearner({ handle: s.learnerHandle, pin: s.learnerPin }),
+        `/w/${s.joinToken}${JOIN_KEY_FRAGMENT}`
+      );
+      try {
+        // The legacy link hands over to /join, which is where the one rule runs.
+        await visit.page.waitForURL(new RegExp(`/join/${s.whiteboardSessionId}`), { timeout: 60_000 });
+        await expectJoinRefused(visit.page, s.whiteboardSessionId, "live_off", FAMILY_LIVE_OFF);
+      } finally {
+        await visit.context.close();
+        await s.cleanup();
+      }
     }
   );
   // Oracle: DOM
-  test.fixme(
+  test(
     "E8: online off: schedule Join button is disabled with a reason for every principal",
-    async () => {
-      // pending: wave that owns E8
+    async ({ browser }) => {
+      test.setTimeout(300_000);
+      // Parent and tutor: the shared online-off appointment (the child's record has live off, in person still allowed).
+      const { fx, sched } = await seedOnlineOffAppointment();
+      const parent = await visitAs(browser, asAccountHolder(TEST_PARENT.email, TEST_PARENT.password), "/account/dashboard");
+      const tutorContext = await browser.newContext({ storageState: TUTOR_STATE });
+      // Child: the shared harness learner with its own appointment.
+      const child = await seedConsentSession({ switches: { allowLiveSession: false }, phase: "PENDING" });
+      const childAppointment = await seedBridgeScheduledSession({
+        adminUserId: child.adminUserId,
+        studentId: child.studentId,
+        learnerProfileId: child.learnerProfileId,
+        accountHolderId: (
+          await withPrisma((p) =>
+            p.learnerProfile.findUniqueOrThrow({
+              where: { id: child.learnerProfileId },
+              select: { accountHolderId: true },
+            })
+          )
+        ).accountHolderId,
+        startsInMs: 5 * 60_000,
+      });
+      const childVisit = await visitAs(browser, asLearner({ handle: child.learnerHandle, pin: child.learnerPin }), "/join");
+      try {
+        const parentJoin = parent.page.getByTestId(`join-scheduled-session-${sched.scheduledSessionId}`);
+        await expect(parentJoin).toBeVisible({ timeout: 30_000 });
+        await expect(parentJoin).toBeDisabled();
+        await expect(parent.page.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`)).toHaveText(FAMILY_LIVE_OFF);
+
+        const childJoin = childVisit.page.getByTestId(`join-scheduled-session-${childAppointment.scheduledSessionId}`);
+        await expect(childJoin).toBeVisible({ timeout: 30_000 });
+        await expect(childJoin).toBeDisabled();
+        await expect(
+          childVisit.page.getByTestId(`join-scheduled-reason-${childAppointment.scheduledSessionId}`)
+        ).toHaveText(FAMILY_LIVE_OFF);
+
+        // The tutor's control is Open room: online-off does not close it (in person), and the reason sits under it.
+        const tutorPage = await tutorContext.newPage();
+        await tutorPage.goto(`/admin/students/${fx.studentId}`, { waitUntil: "domcontentloaded" });
+        const open = tutorPage.getByTestId(`open-scheduled-room-${sched.scheduledSessionId}`).first();
+        await expect(open).toBeVisible({ timeout: 30_000 });
+        await expect(open).toBeEnabled();
+        await expect(tutorPage.getByTestId(`open-scheduled-room-reason-${sched.scheduledSessionId}`)).toContainText(
+          IN_PERSON_STILL_OPEN
+        );
+      } finally {
+        await parent.context.close();
+        await tutorContext.close();
+        await childVisit.context.close();
+        await withPrisma((p) =>
+          p.scheduledSession.deleteMany({
+            where: { id: { in: [sched.scheduledSessionId, childAppointment.scheduledSessionId] } },
+          })
+        );
+        await child.cleanup();
+      }
     }
   );
   // Oracle: Positive control
-  test.fixme(
+  test(
     "E9: online on: all of the above succeed",
-    async () => {
-      // pending: wave that owns E9
+    async ({ browser, request }) => {
+      test.setTimeout(300_000);
+      const f = await seedStartFixture({ record: {}, snapshot: true });
+      const id = f.whiteboardSessionId;
+      const login = await giveLearnerLogin(f.learnerProfileId, [id]);
+      const tutorContext = await browser.newContext({ storageState: TUTOR_STATE });
+      let visit: JoinVisit | null = null;
+      try {
+        // The tutor's waiting room offers both modes, with the ordinary Start label and no reason line.
+        const tutorPage = await tutorContext.newPage();
+        await openWorkspaceWaitingRoom(tutorPage, f);
+        await expect(tutorPage.getByTestId("wb-session-mode-live")).toBeVisible();
+        await expect(tutorPage.getByTestId("wb-session-mode-in-person")).toBeVisible();
+        await expect(tutorPage.getByTestId("wb-waiting-online-blocked")).toHaveCount(0);
+        await expect(tutorPage.getByTestId("wb-start-session")).toHaveText("Start session");
+
+        // The child joins; the tutor mints a join token; the tutor starts Online.
+        visit = await visitAs(browser, asLearner(login), joinPath(id));
+        await expectJoinAdmitted(visit.page);
+        expect((await issueTokenVia(request, id)).ok).toBe(true);
+        const started = await startVia(request, id, "LIVE");
+        expect(started.ok).toBe(true);
+        if (started.ok) expect(started.sessionMode).toBe("LIVE");
+      } finally {
+        await visit?.context.close();
+        await tutorContext.close();
+        await f.cleanup();
+      }
     }
   );
   // Oracle: Two sessions, one learner profile
-  test.fixme(
+  test(
     "E10: org consent off, private consent on: org session blocked, private session allowed, same learner",
-    async () => {
-      // pending: wave that owns E10
+    { tag: [TAG.ORG] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const x = await seedTwoOwnerLearner({ orgAllowsLive: false, privateAllowsLive: true });
+      const context = await browser.newContext();
+      try {
+        await asLearner(x.login)(context);
+        const orgPage = await context.newPage();
+        await orgPage.goto(joinPath(x.orgSessionId), { waitUntil: "domcontentloaded" });
+        await expectJoinRefused(orgPage, x.orgSessionId, "live_off", FAMILY_LIVE_OFF);
+        const privatePage = await context.newPage();
+        await privatePage.goto(joinPath(x.privateSessionId), { waitUntil: "domcontentloaded" });
+        await expectJoinAdmitted(privatePage);
+      } finally {
+        await context.close();
+        await x.cleanup();
+      }
     }
   );
   // Oracle: Same
-  test.fixme(
+  test(
     "E11: org consent on, private consent off: private session blocked, org session allowed",
-    async () => {
-      // pending: wave that owns E11
+    { tag: [TAG.ORG] },
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const x = await seedTwoOwnerLearner({ orgAllowsLive: true, privateAllowsLive: false });
+      const context = await browser.newContext();
+      try {
+        await asLearner(x.login)(context);
+        const privatePage = await context.newPage();
+        await privatePage.goto(joinPath(x.privateSessionId), { waitUntil: "domcontentloaded" });
+        await expectJoinRefused(privatePage, x.privateSessionId, "live_off", FAMILY_LIVE_OFF);
+        const orgPage = await context.newPage();
+        await orgPage.goto(joinPath(x.orgSessionId), { waitUntil: "domcontentloaded" });
+        await expectJoinAdmitted(orgPage);
+      } finally {
+        await context.close();
+        await x.cleanup();
+      }
     }
   );
   // Oracle: Live read while PENDING; '[cns]' log
-  test.fixme(
+  test(
     "E12: parent turns online on after the room was opened: child can join without a new session",
-    async () => {
-      // pending: wave that owns E12
+    async ({ browser, request }) => {
+      test.setTimeout(240_000);
+      const f = await seedStartFixture({ record: { allowLiveSession: false }, snapshot: true });
+      const id = f.whiteboardSessionId;
+      const login = await giveLearnerLogin(f.learnerProfileId, [id]);
+      const visit = await visitAs(browser, asLearner(login), joinPath(id));
+      try {
+        await expectJoinRefused(visit.page, id, "live_off", FAMILY_LIVE_OFF);
+
+        // The parent turns online on: a new live record version. The room (and its create-time snapshot) is untouched.
+        await saveFamilyConsentVersion(f.learnerProfileId, f.adminUserId, { allowLiveSession: true });
+        // A reload (a goto to the same URL and hash would be a same-document navigation and never ask the server).
+        await visit.page.reload({ waitUntil: "domcontentloaded" });
+        await expectJoinAdmitted(visit.page);
+
+        // Same room: one session row for the student, still PENDING, and the tutor can now Start Online.
+        const sessions = await withPrisma((p) => p.whiteboardSession.count({ where: { studentId: f.studentId } }));
+        expect(sessions).toBe(1);
+        expect((await sessionRow(id)).sessionPhase).toBe("PENDING");
+        const started = await startVia(request, id, "LIVE");
+        expect(started.ok).toBe(true);
+      } finally {
+        await visit.context.close();
+        await f.cleanup();
+      }
     }
   );
   // Oracle: Same
-  test.fixme(
+  test(
     "E13: child turns online off after the room was opened: child is refused",
-    async () => {
-      // pending: wave that owns E13
+    async ({ browser }) => {
+      test.setTimeout(240_000);
+      const f = await seedStartFixture({ record: {}, snapshot: true });
+      const id = f.whiteboardSessionId;
+      const login = await giveLearnerLogin(f.learnerProfileId, [id]);
+      const visit = await visitAs(browser, asLearner(login), joinPath(id));
+      try {
+        await expectJoinAdmitted(visit.page);
+
+        // The child tightens their own privacy: a restriction row forbids live sessions. No new session, no Start.
+        await withPrisma((p) =>
+          p.consentRestriction.create({
+            data: { learnerProfileId: f.learnerProfileId, restrictLiveSession: true, childSetLiveSession: true },
+          })
+        );
+        await visit.page.reload({ waitUntil: "domcontentloaded" });
+        await expectJoinRefused(visit.page, id, "live_off", FAMILY_LIVE_OFF);
+        expect((await sessionRow(id)).sessionPhase).toBe("PENDING");
+      } finally {
+        await visit.context.close();
+        await f.cleanup();
+      }
     }
   );
   // Oracle: Accept/refuse of each site vs the brief's table typed into the spec
-  test.fixme(
+  // The brief's table, typed here (never read from the rule): what every caller must answer for each privacy fixture.
+  //   no record    : Online refused (no record), in person refused (no record)
+  //   live off     : Online refused (live off),  in person accepted
+  //   live on      : Online accepted,            in person accepted
+  // `/join` and `issueJoinToken` are always online entries (the session's mode does not change their answer); the schedule
+  // bridge is the tutor's Open room control, which opens the room for in person (its answer is the in-person column).
+  test(
     "E16: one rule, every caller: Start, bridge, /join and issueJoinToken give the same answer for every (toggle, mode) fixture",
-    async () => {
-      // pending: wave that owns E16
+    async ({ browser, request }) => {
+      test.setTimeout(900_000);
+      const accept = { ok: true } as const;
+      const refuse = (reason: string) => ({ ok: false, reason }) as const;
+      const fixtures = [
+        { name: "no record", record: null, snapshot: false, online: refuse("consent_missing_parent"), inPerson: refuse("consent_missing_parent") },
+        { name: "live off", record: { allowLiveSession: false }, snapshot: true, online: refuse("live_off"), inPerson: accept },
+        { name: "live on", record: {}, snapshot: true, online: accept, inPerson: accept },
+      ] as const;
+
+      for (const fixture of fixtures) {
+        // Start, once per mode, on a fresh session each (an accepted Start changes the session).
+        for (const mode of ["LIVE", "IN_PERSON"] as const) {
+          const f = await seedStartFixture({ record: fixture.record, snapshot: fixture.snapshot });
+          try {
+            const expected = mode === "LIVE" ? fixture.online : fixture.inPerson;
+            const result = await startVia(request, f.whiteboardSessionId, mode);
+            const label = `Start (${fixture.name}, ${mode})`;
+            if (expected.ok) expect(result.ok, label).toBe(true);
+            else expect(result, label).toEqual({ ok: false, reason: expected.reason });
+          } finally {
+            await f.cleanup();
+          }
+        }
+
+        // issueJoinToken, /join and the bridge on one PENDING session.
+        const f = await seedStartFixture({ record: fixture.record, snapshot: fixture.snapshot });
+        const id = f.whiteboardSessionId;
+        const login = await giveLearnerLogin(f.learnerProfileId, [id]);
+        const studentName = await studentNameOf(f.studentId);
+        const visit = await visitAs(browser, asLearner(login), joinPath(id));
+        try {
+          const token = await issueTokenVia(request, id);
+          const tokenLabel = `issueJoinToken (${fixture.name})`;
+          if (fixture.online.ok) expect(token.ok, tokenLabel).toBe(true);
+          else expect(token, tokenLabel).toEqual({ ok: false, reason: fixture.online.reason });
+
+          if (fixture.online.ok) {
+            await expectJoinAdmitted(visit.page);
+          } else {
+            const familyReason = fixture.online.reason;
+            const familyText = familyReason === "live_off" ? FAMILY_LIVE_OFF : familyMissingParent(studentName);
+            await expectJoinRefused(visit.page, id, familyReason, familyText);
+          }
+        } finally {
+          await visit.context.close();
+          await f.cleanup();
+        }
+
+        // The bridge: an appointment the tutor opens from the student page.
+        const b = await seedStartFixture({ record: fixture.record, snapshot: fixture.snapshot });
+        const appointment = await seedBridgeScheduledSession({
+          adminUserId: b.adminUserId,
+          studentId: b.studentId,
+          learnerProfileId: b.learnerProfileId,
+          accountHolderId: "unused",
+          startsInMs: 5 * 60_000,
+        });
+        // The appointment, not a pre-made room, is what the control opens.
+        await withPrisma(async (p) => {
+          await p.sessionConsentSnapshot.deleteMany({ where: { whiteboardSessionId: b.whiteboardSessionId } });
+          await p.whiteboardSession.deleteMany({ where: { id: b.whiteboardSessionId } });
+        });
+        const tutorContext = await browser.newContext({ storageState: TUTOR_STATE });
+        try {
+          const page = await tutorContext.newPage();
+          await page.goto(`/admin/students/${b.studentId}`, { waitUntil: "domcontentloaded" });
+          const open = page.getByTestId(`open-scheduled-room-${appointment.scheduledSessionId}`);
+          if (fixture.inPerson.ok) {
+            await expect(open.first(), `bridge control (${fixture.name})`).toBeVisible({ timeout: 30_000 });
+            await expect(open.first()).toBeEnabled();
+            await open.first().click();
+            await page.waitForURL(/\/whiteboard\/[^/]+\/workspace/, { timeout: 60_000 });
+          } else {
+            // Neither mode can be entered: the page shows the "Open room unavailable" callout in place of the control.
+            await expect(page.getByText("Open room unavailable"), `bridge callout (${fixture.name})`).toBeVisible({
+              timeout: 30_000,
+            });
+            await expect(page.getByText("privacy preferences are not complete").first()).toBeVisible();
+            await expect(open).toHaveCount(0);
+            const rooms = await withPrisma((p) => p.whiteboardSession.count({ where: { studentId: b.studentId } }));
+            expect(rooms, `no room is created for a refused bridge (${fixture.name})`).toBe(0);
+          }
+        } finally {
+          await tutorContext.close();
+          await withPrisma(async (p) => {
+            await p.scheduledSession.deleteMany({ where: { id: appointment.scheduledSessionId } });
+            const rooms = await p.whiteboardSession.findMany({ where: { studentId: b.studentId }, select: { id: true } });
+            const roomIds = rooms.map((r) => r.id);
+            await p.sessionConsentSnapshot.deleteMany({ where: { whiteboardSessionId: { in: roomIds } } });
+            await p.productEvent.deleteMany({ where: { whiteboardSessionId: { in: roomIds } } });
+            await p.whiteboardSession.deleteMany({ where: { id: { in: roomIds } } });
+          });
+          await b.cleanup();
+        }
+      }
     }
   );
   // Oracle: DOM on the scheduler card; the 'org-learner.ts' child-floor bug; red today, fixed in C1.
@@ -350,10 +978,42 @@ test.describe("consent 6a: Entry (online switch)", {
     }
   );
   // Oracle: Q9 (PENDING ANDREW, default applied). Online off; create an in-person-intended session; the learner opens '/join' and is refused with the one-line reason ('ENTRY_BLOCK_COPY.live_off'), no room, no A/V. Control: online on …
-  test.fixme(
+  test(
     "E18: online off: a learner device cannot join any session, including one the tutor runs in person",
-    async () => {
-      // pending: wave that owns E18
+    async ({ browser }) => {
+      test.setTimeout(400_000);
+      // Each shape on its own (the harness learner is shared, so one live record at a time).
+      for (const shape of [
+        { name: "in-person session, still PENDING", phase: "PENDING", mode: "IN_PERSON" },
+        { name: "in-person session the tutor already Started (ACTIVE)", phase: "ACTIVE", mode: "IN_PERSON" },
+      ] as const) {
+        const s = await seedConsentSession({ switches: { allowLiveSession: false }, phase: shape.phase, mode: shape.mode });
+        const visit = await visitAs(
+          browser,
+          asLearner({ handle: s.learnerHandle, pin: s.learnerPin }),
+          joinPath(s.whiteboardSessionId)
+        );
+        try {
+          await expectJoinRefused(visit.page, s.whiteboardSessionId, "live_off", FAMILY_LIVE_OFF);
+        } finally {
+          await visit.context.close();
+          await s.cleanup();
+        }
+      }
+
+      // Control: online on, the same learner joins the same shape.
+      const control = await seedConsentSession({ switches: {}, phase: "ACTIVE", mode: "IN_PERSON" });
+      const visit = await visitAs(
+        browser,
+        asLearner({ handle: control.learnerHandle, pin: control.learnerPin }),
+        joinPath(control.whiteboardSessionId)
+      );
+      try {
+        await expectJoinAdmitted(visit.page);
+      } finally {
+        await visit.context.close();
+        await control.cleanup();
+      }
     }
   );
   // Oracle: C7. Spec-typed literals: the § 7a consent-editor descriptions (parent, child, self) and the § 7b 'ENTRY_BLOCK_COPY.live_off' lines (tutor and family) plus the waiting-room reason. The in-session recording notice is V1 an …
@@ -608,7 +1268,7 @@ test.describe("consent 6b: Start and refreeze (B5)", {
       }
     );
   }
-  // Oracle: Re-premised by re-review 2 (R1). New code cannot create an unclaimed-learner session ('assertConsentRecordExists' refuses it), so the test seeds a legacy PENDING row directly through the DB oracle helper (a 'WhiteboardSe …
+  // Oracle: Re-premised by re-review 2 (R1). New code cannot create an unclaimed-learner session (the entry rule refuses it), so the test seeds a legacy PENDING row directly through the DB oracle helper (a 'WhiteboardSe …
   // The claimed learner and its whiteboard-off record are seeded directly with the legacy row (a pre-gate session the family
   // claimed later). The `[cns] refrozen_at_start created=true` line is not read here; the new snapshot row is the oracle.
   test(

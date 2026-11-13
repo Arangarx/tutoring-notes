@@ -5,7 +5,6 @@ import { notFound } from "next/navigation";
 
 import { sendClaimInviteEmail } from "@/lib/account-holder-email";
 import { mintStudentClaimInvite, reinviteTargetKind } from "@/lib/claim-invite-service";
-import { resolveEffectiveConsentForStudent } from "@/lib/consent-scope";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { STAFF_HOME_ROLES } from "@/lib/org-appointment-scope";
@@ -16,7 +15,8 @@ import {
   orgLog,
 } from "@/lib/org-scope";
 import { getPublicBaseUrl } from "@/lib/public-url";
-import { entryBlockCopy } from "@/lib/scheduling/session-entry";
+import { decisionReason, entryBlockCopy, sessionEntryState } from "@/lib/scheduling/session-entry";
+import { loadSessionEntryInputs } from "@/lib/scheduling/session-entry-loader";
 
 /** Implementation cap. Andrew did not choose this number. Tests import it from here. */
 export const ORG_LEARNER_BRIEF_MAX_CHARS = 500;
@@ -219,6 +219,8 @@ export async function loadSchedulerLearner(
     select: {
       id: true,
       name: true,
+      adminUserId: true,
+      organizationId: true,
       learnerProfileId: true,
       organizationLearner: {
         select: { givenName: true, familyName: true, brief: true },
@@ -232,23 +234,23 @@ export async function loadSchedulerLearner(
   });
   const side = student.organizationLearner;
   const fullName = orgLearnerFullName(side.givenName, side.familyName).studentName;
-  let blockedReason: string | null = null;
-  if (!student.learnerProfileId) {
-    blockedReason = SCHEDULER_WAITING_ON_FAMILY;
-  } else {
-    // Through the one resolver: the organization's latest record AND NOT the child's restriction (D5, E17).
-    // The owner comes from the Student row (organization-owned), never inferred here.
-    const consent = await resolveEffectiveConsentForStudent(
-      student.learnerProfileId,
-      { adminUserId: null, organizationId },
-      null,
-      undefined,
-      "loadSchedulerLearner.consent"
-    );
-    if (consent && consent.allowLiveSession === false) {
-      blockedReason = SCHEDULER_LIVE_SESSIONS_OFF;
-    }
-  }
+  // The one entry rule over the same loaded inputs (the resolver inside the loader owns the child's floor, D5/E17).
+  // A scheduler card is not an admission check: the acting scheduler is not the instructor and erasure is not a
+  // scheduling hint, so those inputs are neutral here. Only the two reasons with a scheduler short form show;
+  // a claimed learner with no record yet has no line (nothing the scheduler can act on).
+  const inputs = await loadSessionEntryInputs({
+    studentId: student.id,
+    adminUserId: actor.adminId,
+    student,
+  });
+  const online = sessionEntryState({ ...inputs, org: null, erasureSuspended: false }).online;
+  const reason = decisionReason(online);
+  const blockedReason =
+    reason === "unclaimed"
+      ? SCHEDULER_WAITING_ON_FAMILY
+      : reason === "live_off"
+        ? SCHEDULER_LIVE_SESSIONS_OFF
+        : null;
   return {
     studentId: student.id,
     fullName,

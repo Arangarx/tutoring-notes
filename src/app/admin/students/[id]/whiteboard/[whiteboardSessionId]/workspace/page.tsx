@@ -152,10 +152,11 @@ export default async function WhiteboardWorkspacePage({
       }
     : NO_SNAPSHOT_CONSENT_INPUT;
 
-  // Waiting room: when the one entry rule blocks BOTH modes (no consent record, unclaimed learner), the Start
-  // control is disabled with the reason, before any click (consent wave C3a, decision 6). Online-only blocks
-  // stay with `allowLiveSession` (the waiting room offers in person).
-  const startBlockedReason =
+  // Waiting room: the one entry rule over the LIVE record while PENDING (the frozen snapshot is not the
+  // authority until Start). When it blocks BOTH modes (no consent record, unclaimed learner), the Start control
+  // is disabled with the reason, before any click (consent wave C3a, decision 6). When it blocks only ONLINE,
+  // the waiting room hides Online, shows the reason and offers "Start in person" (C5, E2).
+  const pendingControl =
     detail.sessionPhase === "PENDING" && !detail.endedAt
       ? tutorControlState(
           await loadSessionEntryState({
@@ -163,8 +164,10 @@ export default async function WhiteboardWorkspacePage({
             adminUserId: session.adminUserId,
             student: detail.student,
           })
-        ).disabledReason
+        )
       : null;
+  const startBlockedReason = pendingControl?.disabledReason ?? null;
+  const onlineBlockedReason = pendingControl?.onlineOnlyReason ?? null;
 
   const initialPersistedState =
     detail.sessionPhase === "ACTIVE" && !detail.endedAt
@@ -208,7 +211,7 @@ export default async function WhiteboardWorkspacePage({
       syncEnabled={syncEnabled}
       initialMode={detail.endedAt ? "review" : "live"}
       initialConsentInput={initialConsentInput}
-      allowLiveSession={detail.consentSnapshot?.allowLiveSession ?? null}
+      onlineBlockedReason={onlineBlockedReason}
       startBlockedReason={startBlockedReason}
       studentLearnerProfileId={detail.student.learnerProfileId}
       initialIntent={initialIntent}

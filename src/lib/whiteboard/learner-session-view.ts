@@ -9,13 +9,22 @@
  *     No live-record read and no resolver query (M17); this runs every 3.5 s per connected learner.
  *   - Started without a snapshot (legacy): the resolver and the entry inputs, as while PENDING.
  *
+ * `onlineOff` (the eviction signal) only ever means "the family's switch is off". `onlineDecision` is the same entry
+ * rule's full online answer, built from the SAME inputs with no extra read: the `/join` page refuses on it, for every
+ * principal and every reason (C5). The poll evicts on `onlineOff` only.
+ *
  * SERVER-ONLY.
  */
 
 import { capabilitiesFromConsentToggles, resolveSessionCapabilities, type ConsentToggleCeiling } from "@/lib/consent-scope";
 import type { CapabilitySessionMode, SessionCapabilities } from "@/lib/recording/session-capabilities";
 import { loadSessionEntryInputs } from "@/lib/scheduling/session-entry-loader";
-import { decisionReason, sessionEntryState, type SessionEntryInputs } from "@/lib/scheduling/session-entry";
+import {
+  decisionReason,
+  sessionEntryState,
+  type EntryDecision,
+  type SessionEntryInputs,
+} from "@/lib/scheduling/session-entry";
 
 /** The frozen toggles, selected as a relation of the session row (`consentSnapshot`). */
 export const LEARNER_VIEW_SNAPSHOT_SELECT = {
@@ -45,11 +54,13 @@ export type LearnerViewSession = {
 export type LearnerSessionView = {
   /** The family's online switch is off: the learner device may not stay (Q9). */
   onlineOff: boolean;
+  /** The entry rule's full online answer (any reason). `/join` refuses on it; the poll does not read it. */
+  onlineDecision: EntryDecision;
   sessionMode: CapabilitySessionMode;
   sessionCapabilities: SessionCapabilities;
 };
 
-/** Only the online switch evicts here. Other entry reasons are C5's (the `/join` refusal), not a live-session eviction. */
+/** Only the online switch evicts here. Other entry reasons are `/join`'s refusal, not a live-session eviction. */
 function onlineSwitchOff(inputs: SessionEntryInputs): boolean {
   return decisionReason(sessionEntryState(inputs).online) === "live_off";
 }
@@ -61,15 +72,16 @@ export async function resolveLearnerSessionView(session: LearnerViewSession): Pr
 
   if (!pending && snapshot) {
     // Start already passed erasure and org admission for this session and froze the online switch.
-    const onlineOff = onlineSwitchOff({
+    const inputs: SessionEntryInputs = {
       erasureSuspended: false,
       org: null,
       claimed: session.student.learnerProfileId != null,
       isSelfLearner: session.student.learnerProfile?.isSelfLearner === true,
       consent: { allowLiveSession: snapshot.allowLiveSession },
-    });
+    };
     return {
-      onlineOff,
+      onlineOff: onlineSwitchOff(inputs),
+      onlineDecision: sessionEntryState(inputs).online,
       sessionMode: storedMode,
       sessionCapabilities: capabilitiesFromConsentToggles(snapshot, storedMode, session.notesForbidden),
     };
@@ -84,5 +96,10 @@ export async function resolveLearnerSessionView(session: LearnerViewSession): Pr
     }),
     resolveSessionCapabilities(session.id, undefined, { sessionMode }),
   ]);
-  return { onlineOff: onlineSwitchOff(inputs), sessionMode, sessionCapabilities };
+  return {
+    onlineOff: onlineSwitchOff(inputs),
+    onlineDecision: sessionEntryState(inputs).online,
+    sessionMode,
+    sessionCapabilities,
+  };
 }

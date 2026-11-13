@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { seedTestAdmin } from "../visual/helpers";
+import { seedParentAccountHolder, seedParentConsentFixture } from "./identity/identity.helpers";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
@@ -60,6 +62,43 @@ export async function seedBridgeScheduledSession(opts: {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+/**
+ * A personal-tutor appointment starting in 5 minutes for the shared test parent's child, whose privacy record has
+ * "Allow online sessions" OFF (Andrew 2026-10-29, Decision 5). In person stays allowed, so the only thing that can
+ * block is the online entry. The shared fixture seed used by the bridge specs and consent-entry E8.
+ */
+export async function seedOnlineOffAppointment() {
+  await seedParentAccountHolder();
+  const adminUserId = await seedTestAdmin();
+  const fx = await seedParentConsentFixture({ adminUserId });
+  const prisma = new PrismaClient();
+  try {
+    await prisma.consentRecord.create({
+      data: {
+        learnerProfileId: fx.learnerProfileId,
+        adminUserId: fx.adminUserId,
+        version: 1,
+        allowLiveSession: false,
+        allowAudioRecording: false,
+        allowWhiteboardRecording: false,
+        allowNoteSending: true,
+        setByAccountHolderId: fx.accountHolderId,
+        captureMethod: "electronic",
+      },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+  const sched = await seedBridgeScheduledSession({
+    adminUserId: fx.adminUserId,
+    studentId: fx.studentId,
+    learnerProfileId: fx.learnerProfileId,
+    accountHolderId: fx.accountHolderId,
+    startsInMs: 5 * 60_000,
+  });
+  return { fx, sched };
 }
 
 const ORG_FAMILY_SUBJECT = "Org family PW session";

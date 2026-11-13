@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import {
   seedBridgeScheduledSession,
+  seedOnlineOffAppointment,
   seedOrgBookedFamilyAppointment,
 } from "./wb-org-qol-bridge.helpers";
 import {
@@ -441,37 +442,6 @@ test.describe("org QoL schedule bridge", () => {
   // Online sessions off (Andrew 2026-10-29, Decision 5): the parent's "Allow online
   // sessions" switch governs ONLINE only. Two independent tests, one per audience, so
   // each half can be proven red on its own.
-  async function seedOnlineOffAppointment() {
-    await seedParentAccountHolder();
-    const adminUserId = await seedTestAdmin();
-    const fx = await seedParentConsentFixture({ adminUserId });
-    const prisma = new PrismaClient();
-    try {
-      await prisma.consentRecord.create({
-        data: {
-          learnerProfileId: fx.learnerProfileId,
-          adminUserId: fx.adminUserId,
-          version: 1,
-          allowLiveSession: false,
-          allowAudioRecording: false,
-          allowWhiteboardRecording: false,
-          allowNoteSending: true,
-          setByAccountHolderId: fx.accountHolderId,
-          captureMethod: "electronic",
-        },
-      });
-    } finally {
-      await prisma.$disconnect();
-    }
-    const sched = await seedBridgeScheduledSession({
-      adminUserId: fx.adminUserId,
-      studentId: fx.studentId,
-      learnerProfileId: fx.learnerProfileId,
-      accountHolderId: fx.accountHolderId,
-      startsInMs: 5 * 60_000,
-    });
-    return { fx, sched };
-  }
 
   test.describe("Online sessions off: the family's Join is refused", () => {
     test.use({ storageState: PARENT_STATE });

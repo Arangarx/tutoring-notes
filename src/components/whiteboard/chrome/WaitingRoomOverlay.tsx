@@ -20,7 +20,9 @@
  */
 
 import "./waiting-room-overlay.css";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
+import type { EntryBlockReason } from "@/lib/scheduling/session-entry";
 import { WbIconShare } from "./wb-icons";
 
 export type WtrSessionMode = "LIVE" | "IN_PERSON";
@@ -63,10 +65,12 @@ export type WaitingRoomOverlayProps = {
   /** Called when the tutor changes the LIVE ↔ IN_PERSON toggle. */
   onSessionModeChange: (mode: WtrSessionMode) => void;
   /**
-   * Effective consent for a live (online) session. False hides the online
-   * control. Null or omitted still shows it.
+   * Tutor-only: why an ONLINE session cannot be started (the entry rule's online decision while in person is
+   * still open). Hides the Online control, shows the reason beside Start, and the pressed mode is In person.
+   * Nothing flips the mode on the tutor's behalf: pressing Start ("Start in person") is the explicit choice.
+   * Null or omitted offers both modes.
    */
-  allowLiveSession?: boolean | null;
+  onlineBlockedReason?: EntryBlockReason | null;
   /**
    * Pre-built mic control node (both roles: WbTopBarMicControlLive with
    * cloned-stream inline meter). Already wired to liveAv in the workspace —
@@ -151,7 +155,7 @@ export function WaitingRoomOverlay({
   startBlockedMessage = null,
   onStart,
   onSessionModeChange,
-  allowLiveSession = null,
+  onlineBlockedReason = null,
   micControlNode,
   camControlNode,
   micPickerNode,
@@ -170,13 +174,9 @@ export function WaitingRoomOverlay({
   onShowCancelConfirmChange,
 }: WaitingRoomOverlayProps) {
   const isTutor = role === "tutor";
-  const liveAllowed = allowLiveSession !== false;
+  const liveAllowed = onlineBlockedReason == null;
   const inPerson = sessionMode === "IN_PERSON";
-  useEffect(() => {
-    if (isTutor && !liveAllowed && sessionMode === "LIVE") {
-      onSessionModeChange("IN_PERSON");
-    }
-  }, [isTutor, liveAllowed, sessionMode, onSessionModeChange]);
+  const startLabel = liveAllowed ? "Start session" : "Start in person";
   const [uncontrolledCancelConfirm, setUncontrolledCancelConfirm] = useState(false);
   const showCancelConfirm = showCancelConfirmProp ?? uncontrolledCancelConfirm;
   const setShowCancelConfirm = (show: boolean) => {
@@ -285,6 +285,16 @@ export function WaitingRoomOverlay({
                   In person
                 </button>
               </div>
+              {onlineBlockedReason ? (
+                <SessionEntryBlocked
+                  size="line"
+                  reason={onlineBlockedReason}
+                  audience="tutor"
+                  learnerName={studentLabel}
+                  inPersonStillOpen
+                  data-testid="wb-waiting-online-blocked"
+                />
+              ) : null}
               {inPerson && (
                 <p className="mynk-wtr-mode-note">
                   In person: the student is beside you. No remote connection is required.
@@ -342,9 +352,9 @@ export function WaitingRoomOverlay({
                 onClick={() => { void onStart(); }}
                 disabled={!canStart || isStarting || Boolean(startBlockedMessage)}
                 data-testid="wb-start-session"
-                aria-label={isStarting ? "Starting session…" : "Start session"}
+                aria-label={isStarting ? "Starting session…" : startLabel}
               >
-                {isStarting ? "Starting…" : "Start session"}
+                {isStarting ? "Starting…" : startLabel}
               </button>
             </div>
 

@@ -33,8 +33,6 @@ import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import {
-  assertConsentRecordExists,
-  ConsentError,
   freezeConsentSnapshotAtEndTx,
   resolveFrozenSessionCapabilities,
 } from "@/lib/consent-scope";
@@ -49,6 +47,7 @@ import {
 } from "@/lib/recording/consent-gates";
 import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
 import type { EntryRefusal } from "@/lib/scheduling/session-entry";
+import { loadSessionEntryState } from "@/lib/scheduling/session-entry-loader";
 import {
   startSessionTx,
   StartRefusedSignal,
@@ -441,14 +440,22 @@ function generateJoinToken(): string {
     .replace(/=+$/g, "");
 }
 
-export type IssueJoinTokenResult = {
-  /** Opaque token to embed in the student URL path. */
-  token: string;
-  /** Path the tutor's client should append `#k=<key>` to before sharing. */
-  joinPath: string;
-  /** ISO timestamp when this token stops working. */
-  expiresAt: string;
-};
+/**
+ * `{ ok: true, ... }` a token (new or reused). `{ ok: false, reason }` the entry rule refused an online
+ * entry (no consent record, online sessions off, ...): returned as data, not thrown, because Next redacts
+ * a thrown server-action error in a production build. Unexpected failures still throw.
+ */
+export type IssueJoinTokenResult =
+  | {
+      ok: true;
+      /** Opaque token to embed in the student URL path. */
+      token: string;
+      /** Path the tutor's client should append `#k=<key>` to before sharing. */
+      joinPath: string;
+      /** ISO timestamp when this token stops working. */
+      expiresAt: string;
+    }
+  | EntryRefusal;
 
 /**
  * Return a stable, reusable join token for the given whiteboard
@@ -508,27 +515,36 @@ export async function issueJoinToken(
     );
   }
 
-  const studentForConsent = await withDbRetry(
+  const studentForEntry = await withDbRetry(
     () =>
       db.student.findUnique({
         where: { id: session.studentId },
-        select: { learnerProfileId: true },
+        select: {
+          adminUserId: true,
+          organizationId: true,
+          learnerProfileId: true,
+          learnerProfile: { select: { isSelfLearner: true } },
+        },
       }),
-    { label: "issueJoinToken.studentForConsent" }
+    { label: "issueJoinToken.studentForEntry" }
   );
-  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
+  // The student row exists (the session was just proven owned); a missing row is an unexpected failure.
+  if (!studentForEntry) throw new Error("Student not found.");
 
-  try {
-    await assertConsentRecordExists(learnerProfileId, session.adminUserId, {
-      studentId: session.studentId,
-    });
-  } catch (err) {
-    if (err instanceof ConsentError && err.permission === "consentRecord") {
-      console.log(
-        `[wjg] wbsid=${whiteboardSessionId} action=join_token_blocked reason=no_consent_record`
-      );
-    }
-    throw err;
+  // The one entry rule (D3), called in place. A join link opens an ONLINE entry (the learner joins from their
+  // own device), so the mode is `online`: no consent record, or the family's online switch off, refuses here
+  // exactly as it does at `/join`. The refusal is RETURNED, never thrown (a thrown server-action error is
+  // redacted by Next in a production build, so the tutor could not read why).
+  const entry = await loadSessionEntryState({
+    studentId: session.studentId,
+    adminUserId: session.adminUserId,
+    student: studentForEntry,
+  });
+  if (!entry.online.allowed) {
+    console.warn(
+      `[cns] wbsid=${whiteboardSessionId} action=entry_denied surface=join_token principal=tutor reason=${entry.online.reason} mode=online`
+    );
+    return { ok: false, reason: entry.online.reason };
   }
 
   const now = new Date();
@@ -557,6 +573,7 @@ export async function issueJoinToken(
       `[issueJoinToken] rid=${rid} wbsid=${whiteboardSessionId} reused token=${existing.token.slice(0, 8)}... expiresAt=${existing.expiresAt.toISOString()}`
     );
     return {
+      ok: true,
       token: existing.token,
       joinPath: `/w/${existing.token}`,
       expiresAt: existing.expiresAt.toISOString(),
@@ -622,6 +639,7 @@ export async function issueJoinToken(
   );
 
   return {
+    ok: true,
     token,
     joinPath: `/w/${token}`,
     expiresAt: expiresAt.toISOString(),

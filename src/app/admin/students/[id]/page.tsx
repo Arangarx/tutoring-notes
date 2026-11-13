@@ -54,7 +54,7 @@ export default async function StudentDetailPage({
         where: { endedAt: null },
         orderBy: { startedAt: "desc" },
         take: 20,
-        select: { id: true, startedAt: true },
+        select: { id: true, startedAt: true, sessionPhase: true },
       },
       learnerProfile: {
         select: {
@@ -151,6 +151,8 @@ export default async function StudentDetailPage({
   const lastNote = student.notes[0];
   const openSessions = student.whiteboardSessions.length;
   const resumeSessionId = student.whiteboardSessions[0]?.id ?? null;
+  const resumePending =
+    scopedAdminUserId !== null && student.whiteboardSessions[0]?.sessionPhase === "PENDING";
   const nextAppointment = upcomingScheduledSessions[0] ?? null;
   const openRoomControl =
     view.mainButton === "open_room" && nextAppointment ? nextAppointment : null;
@@ -159,10 +161,12 @@ export default async function StudentDetailPage({
     ? tutorControlState(openRoomControl.entry).disabledReason
     : null;
 
-  // Start session (no appointment): the same entry rule the appointment rows use.
-  let startEntry: SessionEntryState = ENTRY_UNAVAILABLE;
-  if (view.mainButton === "start_session" && scopedAdminUserId) {
-    startEntry = await loadSessionEntryState({
+  // Start session (no appointment) and Resume of a PENDING room: the same entry rule the appointment rows
+  // use, loaded once. A started (ACTIVE) room is past Start, so only a PENDING one shows the line.
+  const hasPendingOpenSession = student.whiteboardSessions.some((s) => s.sessionPhase === "PENDING");
+  let studentEntry: SessionEntryState = ENTRY_UNAVAILABLE;
+  if ((view.mainButton === "start_session" || hasPendingOpenSession) && scopedAdminUserId) {
+    studentEntry = await loadSessionEntryState({
       studentId: id,
       adminUserId: scopedAdminUserId,
       student: {
@@ -207,7 +211,12 @@ export default async function StudentDetailPage({
       <SectionCard realm="admin" title="Session" data-testid="student-session-card">
         {view.mainButton === "resume" && resumeSessionId ? (
           <div data-testid="student-main-control">
-            <ResumeWhiteboardSessionLink studentId={student.id} sessionId={resumeSessionId} />
+            <ResumeWhiteboardSessionLink
+              studentId={student.id}
+              sessionId={resumeSessionId}
+              entry={resumePending ? studentEntry : undefined}
+              learnerName={student.name}
+            />
           </div>
         ) : null}
         {openRoomControl ? (
@@ -235,7 +244,7 @@ export default async function StudentDetailPage({
           <div data-testid="student-main-control">
             <StartWhiteboardSession
               studentId={student.id}
-              entry={startEntry}
+              entry={studentEntry}
               learnerName={student.name}
               label="Start session"
             />
@@ -255,6 +264,8 @@ export default async function StudentDetailPage({
                     <ActiveWhiteboardSessionsList
                       studentId={student.id}
                       sessions={student.whiteboardSessions}
+                      entry={scopedAdminUserId !== null ? studentEntry : undefined}
+                      learnerName={student.name}
                       variant="bare"
                     />
                   ),

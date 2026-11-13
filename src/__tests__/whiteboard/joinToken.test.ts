@@ -40,6 +40,13 @@ jest.mock("@vercel/blob", () => ({
   put: jest.fn(),
 }));
 
+// The entry rule reads the erasure gate first; no erasure here (its other inputs come from the db mocks below).
+jest.mock("@/lib/erasure/active-erasure-scope", () => ({
+  __esModule: true,
+  ErasureAccessSuspendedError: class ErasureAccessSuspendedError extends Error {},
+  isWhiteboardSessionBlockedByErasure: jest.fn().mockResolvedValue({ blocked: false }),
+}));
+
 const tokenCountMock = jest.fn();
 const tokenCreateMock = jest.fn();
 const tokenFindFirstMock = jest.fn();
@@ -79,14 +86,30 @@ import {
   issueJoinToken,
   revokeJoinTokensForSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
-import { ConsentError } from "@/lib/consent-scope";
 
-function mockConsentRecordExists() {
-  dbStudentFindUniqueMock.mockResolvedValue({ learnerProfileId: "lp-1" });
-  dbConsentRecordFindFirstMock.mockResolvedValue({
-    id: "cr-1",
+/** A claimed minor with a live record (the toggles are the spec's inputs; `allowLiveSession` is the one that decides). */
+function mockConsentRecordExists(overrides: { allowLiveSession?: boolean } = {}) {
+  dbStudentFindUniqueMock.mockResolvedValue({
+    adminUserId: "admin-1",
+    organizationId: null,
+    learnerProfileId: "lp-1",
     learnerProfile: { isSelfLearner: false },
   });
+  dbConsentRecordFindFirstMock.mockResolvedValue({
+    id: "cr-1",
+    version: 1,
+    allowLiveSession: overrides.allowLiveSession ?? true,
+    allowAudioRecording: true,
+    allowWhiteboardRecording: true,
+    allowNoteSending: true,
+    learnerProfile: { isSelfLearner: false },
+  });
+}
+
+/** Narrows the `{ ok: true, ... }` arm; a refusal here is a test failure with its reason. */
+function minted<T extends { ok: boolean }>(result: T): Extract<T, { ok: true }> {
+  if (!result.ok) throw new Error(`expected a minted token, got a refusal: ${JSON.stringify(result)}`);
+  return result as Extract<T, { ok: true }>;
 }
 
 beforeEach(() => {
@@ -119,7 +142,7 @@ describe("issueJoinToken", () => {
     tokenCountMock.mockResolvedValue(2);
     tokenCreateMock.mockResolvedValue({});
 
-    const result = await issueJoinToken("wb-session-1");
+    const result = minted(await issueJoinToken("wb-session-1"));
 
     expect(assertOwnsWhiteboardSessionMock).toHaveBeenCalledWith("wb-session-1");
     expect(tokenCreateMock).toHaveBeenCalledTimes(1);
@@ -153,7 +176,7 @@ describe("issueJoinToken", () => {
       expiresAt: futureExpiry,
     });
 
-    const result = await issueJoinToken("wb-session-1");
+    const result = minted(await issueJoinToken("wb-session-1"));
 
     expect(result.token).toBe(
       "existing-token-abcdefghij_already_minted_earlier"
@@ -182,7 +205,7 @@ describe("issueJoinToken", () => {
     tokenCountMock.mockResolvedValue(0);
     tokenCreateMock.mockResolvedValue({});
 
-    const result = await issueJoinToken("wb-session-1");
+    const result = minted(await issueJoinToken("wb-session-1"));
 
     // findFirst was called WITH the safety filter.
     const findFirstArgs = tokenFindFirstMock.mock.calls[0]?.[0] as {
@@ -235,7 +258,7 @@ describe("issueJoinToken", () => {
       .mockRejectedValueOnce(collision)
       .mockResolvedValueOnce({});
 
-    const result = await issueJoinToken("wb-session-1");
+    const result = minted(await issueJoinToken("wb-session-1"));
 
     expect(tokenCreateMock).toHaveBeenCalledTimes(2);
     // The two attempts MUST have used different tokens — the retry
@@ -271,14 +294,54 @@ describe("issueJoinToken", () => {
     expect(tokenCountMock).not.toHaveBeenCalled();
   });
 
-  test("M-2: claimed minor with no ConsentRecord → ConsentError, no token minted", async () => {
+  // C5: a refusal is RETURNED as data (production redacts a thrown server-action error, so the tutor could not
+  // read a thrown one). The reasons are the spec's: the entry rule's names, per learner situation.
+  test("M-2: claimed minor with no ConsentRecord → { ok: false, reason } returned (not thrown), no token minted", async () => {
     assertOwnsWhiteboardSessionMock.mockResolvedValue(liveSession);
     dbConsentRecordFindFirstMock.mockResolvedValue(null);
-    dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: false });
 
-    await expect(issueJoinToken("wb-session-1")).rejects.toThrow(ConsentError);
+    await expect(issueJoinToken("wb-session-1")).resolves.toEqual({
+      ok: false,
+      reason: "consent_missing_parent",
+    });
     expect(tokenCreateMock).not.toHaveBeenCalled();
     expect(tokenCountMock).not.toHaveBeenCalled();
+    expect(tokenFindFirstMock).not.toHaveBeenCalled();
+  });
+
+  test("unclaimed student → { ok: false, reason: 'unclaimed' }, no token minted", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(liveSession);
+    dbStudentFindUniqueMock.mockResolvedValue({
+      adminUserId: "admin-1",
+      organizationId: null,
+      learnerProfileId: null,
+      learnerProfile: null,
+    });
+
+    await expect(issueJoinToken("wb-session-1")).resolves.toEqual({ ok: false, reason: "unclaimed" });
+    expect(tokenCreateMock).not.toHaveBeenCalled();
+  });
+
+  test("online switch off → { ok: false, reason: 'live_off' }: a join link is an online entry, no token minted or reused", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(liveSession);
+    mockConsentRecordExists({ allowLiveSession: false });
+    // Even an already-minted live token must not be handed back while online is off.
+    tokenFindFirstMock.mockResolvedValue({
+      token: "existing-token-abcdefghij_already_minted_earlier",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await expect(issueJoinToken("wb-session-1")).resolves.toEqual({ ok: false, reason: "live_off" });
+    expect(tokenCreateMock).not.toHaveBeenCalled();
+    expect(tokenFindFirstMock).not.toHaveBeenCalled();
+  });
+
+  test("a missing student row is an unexpected failure (thrown), not a refusal", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(liveSession);
+    dbStudentFindUniqueMock.mockResolvedValue(null);
+
+    await expect(issueJoinToken("wb-session-1")).rejects.toThrow(/student not found/i);
+    expect(tokenCreateMock).not.toHaveBeenCalled();
   });
 });
 

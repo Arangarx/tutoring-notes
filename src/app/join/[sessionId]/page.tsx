@@ -22,7 +22,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createHash } from "crypto";
-import { db, withDbRetry } from "@/lib/db";
+import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import {
   getLearnerSessionFromHeaders,
@@ -45,6 +45,7 @@ import {
   LEARNER_VIEW_SNAPSHOT_SELECT,
   resolveLearnerSessionView,
 } from "@/lib/whiteboard/learner-session-view";
+import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
 import { WhiteboardSessionShell } from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell";
 import { JoinAuthGate } from "./JoinAuthGate";
 import { JoinHashRestorer } from "./JoinHashRestorer";
@@ -120,6 +121,8 @@ export default async function JoinSessionPage({
   // AUTH: resolve effective learnerProfileId from either valid principal.
   // -------------------------------------------------------------------------
   let effectiveLearnerProfileId: string | null = null;
+  // Which principal got in (for the refusal log only).
+  let effectiveViaAccountHolder = false;
 
   // Path A: standard learner session (mynk_learner_session).
   // Accepts child_pin_required AND account_holder_session learners.
@@ -167,6 +170,7 @@ export default async function JoinSessionPage({
       // assertIsSessionParticipant calls notFound() when no active participant row.
       await assertIsSessionParticipant(decision.learnerProfileId, sessionId);
       effectiveLearnerProfileId = decision.learnerProfileId;
+      effectiveViaAccountHolder = true;
     }
   }
 
@@ -206,52 +210,44 @@ export default async function JoinSessionPage({
   }
 
   // -------------------------------------------------------------------------
-  // B2: allowLiveSession consent check — deny entry if the snapshot says false.
-  //
-  // Applies to child learners only (self-learners auto-pass). Unclaimed
-  // sessions (no learnerProfileId) keep existing behavior — no snapshot
-  // denial. Claimed minors without a snapshot (grandfathered pre-CC-1) are
-  // denied fail-closed (H-5).
+  // The one entry rule (D3), called in place for EVERY principal. /join is always
+  // an online entry: the learner joins from their own device, so the mode is
+  // `online`. Child, parent-as-child and self-learner all get the same answer;
+  // the copy is the family column of ENTRY_BLOCK_COPY. Internal reasons (org
+  // state, erasure, unclaimed) collapse to the generic family line.
   // -------------------------------------------------------------------------
-  if (!isSelfLearner) {
-    const consentSnap = await withDbRetry(
-      () =>
-        db.sessionConsentSnapshot.findUnique({
-          where: { whiteboardSessionId: sessionId },
-          select: { allowLiveSession: true },
-        }),
-      { label: "joinSessionPage.consentSnapshot" }
+  const learnerView = await resolveLearnerSessionView(session);
+  if (!learnerView.onlineDecision.allowed) {
+    const reason = learnerView.onlineDecision.reason;
+    const principal = effectiveViaAccountHolder
+      ? isSelfLearner
+        ? "self_learner"
+        : "parent_as_child"
+      : "learner";
+    console.info(
+      `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
+        ` action=join_denied reason=${reason}` +
+        ` lpr=${effectiveLearnerProfileId}`
     );
-    const noSnapshotForClaimedMinor = lpId !== null && consentSnap === null;
-    const liveSessionDenied =
-      consentSnap !== null && consentSnap.allowLiveSession === false;
-    if (noSnapshotForClaimedMinor || liveSessionDenied) {
-      if (noSnapshotForClaimedMinor) {
-        console.info(
-          `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
-            ` action=join_denied reason=no_consent_snapshot` +
-            ` lpr=${effectiveLearnerProfileId}`
-        );
-      } else {
-        console.info(
-          `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
-            ` action=join_denied_consent_live_session` +
-            ` lpr=${effectiveLearnerProfileId}`
-        );
-      }
-      return (
-        <main className="container" style={{ maxWidth: 720, padding: "2rem" }}>
-          <div className="card">
-            <h1 style={{ marginTop: 0 }}>Session not available</h1>
-            <p>
-              Your account does not have permission to join live whiteboard
-              sessions. Please ask your parent or guardian to update your
-              session preferences, then have your tutor start a new session.
-            </p>
-          </div>
-        </main>
-      );
-    }
+    console.info(
+      `[cns] wbsid=${sessionId} action=entry_denied surface=join principal=${principal}` +
+        ` reason=${reason} mode=online`
+    );
+    return (
+      <main className="container" style={{ maxWidth: 720, padding: "2rem" }}>
+        <div className="card">
+          <h1 style={{ marginTop: 0 }}>Session not available</h1>
+          <SessionEntryBlocked
+            size="line"
+            reason={reason}
+            audience="family"
+            learnerName={session.student?.name ?? ""}
+            className="text-sm"
+            data-testid="join-entry-blocked"
+          />
+        </div>
+      </main>
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -305,10 +301,7 @@ export default async function JoinSessionPage({
   // into #k= during first client render, so no join link is needed. Legacy
   // sessions return null and keep the link-fragment path.
   const liveKey = readServerLiveKey(session.id, session.liveKeyEnc);
-  const [turnIceServers, learnerView] = await Promise.all([
-    getTurnIceServers(`wbsid=${session.id} role=student`),
-    resolveLearnerSessionView(session),
-  ]);
+  const turnIceServers = await getTurnIceServers(`wbsid=${session.id} role=student`);
 
   // JoinHashRestorer runs before the student shell so the #k= fragment is
   // in place when the shell's key-read effect fires.

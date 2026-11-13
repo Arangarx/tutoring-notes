@@ -46,7 +46,8 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   activatedAt?: string | null;
   /** Page-load consent behind the capabilities (no snapshot = legacy no-audio input). */
   initialConsentInput?: SessionConsentInput;
-  allowLiveSession?: boolean | null;
+  /** Why only ONLINE cannot start (in person still can). Null/omitted = both modes offered. */
+  onlineBlockedReason?: EntryBlockReason | null;
   /** Why neither mode can start (no consent record, unclaimed, ...). Null/omitted = Start is not blocked by the entry rule. */
   startBlockedReason?: EntryBlockReason | null;
   /** Claimed student's LearnerProfile id — per-speaker lane attribution. */
@@ -144,7 +145,7 @@ function TutorWhiteboardSessionShell({
   sessionMode,
   activatedAt,
   initialConsentInput,
-  allowLiveSession = null,
+  onlineBlockedReason = null,
   startBlockedReason = null,
   studentLearnerProfileId,
   initialIntent,
@@ -194,7 +195,7 @@ function TutorWhiteboardSessionShell({
         sessionMode={sessionMode}
         activatedAt={activatedAt}
         initialConsentInput={initialConsentInput}
-        allowLiveSession={allowLiveSession}
+        onlineBlockedReason={onlineBlockedReason}
         startBlockedReason={startBlockedReason}
         studentLearnerProfileId={studentLearnerProfileId}
         initialIntent={initialIntent}

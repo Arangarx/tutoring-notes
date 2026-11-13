@@ -6,7 +6,6 @@
  * Coverage:
  *   - ConsentRecord create + MAX-version retrieval
  *   - createSessionConsentSnapshot (claimed+consented, claimed+no-record, unclaimed)
- *   - assertConsentFromLiveRecord (flag OFF, granted, denied, unclaimed, self-learner, no-record)
  *   - Snapshot is skipped when no record; unclaimed always skipped
  *   - Self-learner uses the same effective toggles as everyone else
  *   - Cross-owner guard: parent B cannot write consent for parent A's learner
@@ -25,11 +24,9 @@ jest.mock("next/navigation", () => ({
 import { db } from "@/lib/db";
 import { uniq } from "../helpers/unique-test-token";
 import {
-  assertConsentFromLiveRecord,
   createSessionConsentSnapshot,
   effectiveConsentToggles,
   freezeConsentSnapshotTx,
-  ConsentError,
 } from "@/lib/consent-scope";
 
 // ---------------------------------------------------------------------------
@@ -585,107 +582,6 @@ describe("createSessionConsentSnapshot", () => {
     expect(snapshot).not.toBeNull();
     expect(snapshot!.consentRecordId).toBe(record.id);
     expect(snapshot!.allowAudioRecording).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// assertConsentFromLiveRecord (unconditional — CONSENT_ENFORCEMENT flag removed)
-// ---------------------------------------------------------------------------
-
-describe("assertConsentFromLiveRecord", () => {
-  it("unclaimed student → void", async () => {
-    const tutor = await createTutor();
-    const student = await createStudent(tutor.id, undefined);
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).resolves.toBeUndefined();
-  });
-
-  it("self-learner with no ConsentRecord is denied notes", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder({ isSelfLearner: true });
-    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
-    const student = await createStudent(tutor.id, profile.id);
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).rejects.toMatchObject({
-      name: "ConsentError",
-      permission: "allowNoteSending",
-    });
-  });
-
-  it("self-learner with allowAudioRecording false and notes off is denied notes", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder({ isSelfLearner: true });
-    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
-    const student = await createStudent(tutor.id, profile.id);
-    await createConsentRecord(profile.id, tutor.id, 1, {
-      allowAudioRecording: false,
-      allowNoteSending: false,
-      allowLiveSession: true,
-    });
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).rejects.toThrow("Parental consent for notes updates has not been granted.");
-  });
-
-  it("self-learner with notes on is still allowed", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder({ isSelfLearner: true });
-    const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
-    const student = await createStudent(tutor.id, profile.id);
-    await createConsentRecord(profile.id, tutor.id, 1, {
-      allowAudioRecording: true,
-      allowNoteSending: true,
-    });
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).resolves.toBeUndefined();
-  });
-
-  it("claimed + no ConsentRecord → throws ConsentError", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).rejects.toThrow(ConsentError);
-  });
-
-  it("record with allowNoteSending=true → void (granted)", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    await createConsentRecord(profile.id, tutor.id, 1, { allowNoteSending: true });
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).resolves.toBeUndefined();
-  });
-
-  it("record with allowNoteSending=false → throws ConsentError", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    await createConsentRecord(profile.id, tutor.id, 1, { allowNoteSending: false });
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).rejects.toThrow(ConsentError);
-  });
-
-  it("uses latest version when multiple records exist", async () => {
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    await createConsentRecord(profile.id, tutor.id, 1, { allowNoteSending: false });
-    await createConsentRecord(profile.id, tutor.id, 2, { allowNoteSending: true });
-    // Latest (v2) says true → void
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).resolves.toBeUndefined();
   });
 });
 
