@@ -62,4 +62,16 @@ describe("playwright harness server gate", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(String(fetchImpl.mock.calls[0][0])).toContain(":3100/");
   });
+
+  it("checks the configured dev ports", async () => {
+    const fetchImpl = jest.fn(async () => jsonResponse(200, { playwrightTest: true }));
+    await assertPlaywrightDevServers({
+      fetchImpl,
+      env: { PW_PORT: "3200", PW_RELAY_PORT: "3012" },
+    });
+    expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual([
+      "http://localhost:3200/api/test/playwright-harness",
+      "http://localhost:3201/api/test/playwright-harness",
+    ]);
+  });
 });

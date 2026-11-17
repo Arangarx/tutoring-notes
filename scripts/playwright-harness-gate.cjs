@@ -7,6 +7,8 @@
  * The bearer secret matches the webServer command in playwright.config.ts.
  */
 
+const { resolvePwStack } = require("./pw-stack.cjs");
+
 const HARNESS_SECRET = "playwright-test-secret";
 
 async function assertPlaywrightTestServer(origin, options = {}) {
@@ -44,9 +46,10 @@ async function assertPlaywrightTestServer(origin, options = {}) {
 
 async function assertPlaywrightDevServers(options = {}) {
   const env = options.env || process.env;
-  await assertPlaywrightTestServer("http://localhost:3100", options);
+  const stack = resolvePwStack(env);
+  await assertPlaywrightTestServer(stack.origin, options);
   if (!env.WB_SKIP_3101_WEBSERVER) {
-    await assertPlaywrightTestServer("http://localhost:3101", options);
+    await assertPlaywrightTestServer(stack.altOrigin, options);
   }
 }
 
