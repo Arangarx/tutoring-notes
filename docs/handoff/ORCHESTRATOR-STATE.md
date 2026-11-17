@@ -44,7 +44,7 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 
 Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
 
-**Machine-load cap (Andrew 2026-11-17 16:35):** at most TWO Playwright stacks at once, even after pw-parallel lands (he plays games on this machine). Prefer one when the time difference is small.
+**Machine-load cap (Andrew 2026-11-17 16:36):** applies ONLY while Andrew is playing WoW. Before starting a Playwright stack, check `Get-Process | Where-Object { $_.ProcessName -match '^Wow' }`. If WoW is running: at most TWO stacks at once (one when the time difference is small). If not: up to three.
 
 ### Uncommitted / unmerged
 
