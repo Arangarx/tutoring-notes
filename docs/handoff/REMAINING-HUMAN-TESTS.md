@@ -1,10 +1,10 @@
 # Remaining human tests
 
-Date: 2026-11-11. Branch: `feat/org-qol` @ [`7741b792`](https://github.com/Arangarx/tutoring-notes/commit/7741b792).
+Date: 2026-11-11. Branch: `feat/org-qol` @ [`c15a1f38`](https://github.com/Arangarx/tutoring-notes/commit/c15a1f3819f06e32995f7d3d7f82fbd900c75375).
 
 Andrew's rule (2026-11-11): Tyson verifies mechanical hardware and human-feel only. Everything else needs a full automated test. He does not re-run a behavior a Playwright or jest test already covers.
 
-Counts: **human-only 3**, **automated 4**, **gaps 6**, **closed 67**.
+Counts: **human-only 3**, **automated 7**, **gaps 3**, **closed 67**. G2, G3, and G5 moved to automated on 2026-11-11. G3 still has open nits (erasure shell, other instructors' sessions on the detail page, dead-end rename/notes/account links). Those are not a reason to send item 52 back to Tyson.
 
 ## Sources
 
@@ -98,8 +98,8 @@ The 2026-10-29 Discord relay, after he ran the retest list: most retests are fix
 - **Last result:** PARTIAL in the Drive doc. The wide-desktop "missing button" part was then closed as design. The menu bug is still open.
 - **His note (doc):** "I didn’t find a more session options button on device A (my computer) only on device B (my phone)." Update: "Still not on device A."
 - **His note (Discord, under item 48):** he ran full screen at 3840×2160 and did not narrow the window. The Google Doc he used has no "narrow the window" step (`docs/handoff/ORG-QOL-TYSON-TEST-PACKET.md` item 48 does). After he narrowed, the button appeared and opened. New bug, same item: "if i have the menu open and expand the window so the button goes away, the menu stays pulled up and won't go away until I shrink it and click the button again."
-- **Classification:** GAP. The hidden-on-wide button is already asserted by `tests/integration/wb-org-qol-surface.spec.ts` › `session menu and drawing menu use different icons and a more-below cue` (hidden at 1280px, visible at 1000px). That test never opens the menu at 1000px and resizes to 1280px.
-- **Next action:** in that same spec, next to that test: open the session menu at 1000px, resize to 1280px, assert the menu is closed. Tyson does not re-check the wide-desktop button.
+- **Classification:** AUTOMATED. `99b39500`. `tests/integration/wb-org-qol-surface.spec.ts` › `session menu closes when the window widens enough to hide More`. The hidden-on-wide button stays covered by `session menu and drawing menu use different icons and a more-below cue`. Review of the menu change found it additive only.
+- **Next action:** none for Tyson. He does not re-check the wide-desktop button.
 
 ### G3. Item 52 — Organization learner missing from the tutor's student list
 
@@ -107,8 +107,8 @@ The 2026-10-29 Discord relay, after he ran the retest list: most retests are fix
 - **Last result:** Drive checkbox PASS. Relayed result PARTIAL.
 - **His note (doc, under item 52):** "When an instructor with students already assigned joins an organization, should their current students be automatically added as learners to that organization too?"
 - **Relayed under item 52:** "Org scheduler schedules a brand-new student (not in the tutor's list) → the student does not appear in the tutor's student list." Andrew: if it is the same learner the tutor already has, show that learner once, with the appointment flagged as from the organization. Display-only merge; records stay separate. Private students are not auto-added to the org.
-- **Classification:** GAP. `tests/integration/wb-org-booking.spec.ts` › `the personal booking picker never lists an org learner` asserts the schedule picker stays free of org-only learners. No test asserts the tutor Students list shows that org learner once, with an organization badge.
-- **Next action:** add that Students-list case to `tests/integration/wb-org-booking.spec.ts`, beside `a scheduler-booked appointment appears on the instructor's Schedule with the organization badge`. Tyson does not re-run item 52 to discover this.
+- **Classification:** AUTOMATED, with nits. `b27cf785` puts the booked org learner on the Students list once, with `OrgBadge`. `c15a1f38` lets an admitted instructor open `/admin/students/<id>`. `ef0d586f` shows that instructor the existing deletion screen when the learner's access is suspended, and refuses Cancel and delete before any rows are removed. An instructor outside the organization still gets "Not found". `canAccessStudentRow` was not widened. Review of the shell is MERGE-OK-WITH-NITS. Open nits, not a reason to re-ask Tyson: the page still lists another instructor's sessions (opening one is Not found); Notes, Account & sharing, rename, delete, and share on the normal page are still dead ends; the admission check is written in both the page and the layout.
+- **Next action:** none for Tyson. He does not re-run item 52. The open nits stay with the orchestrator.
 
 ### G4. Graph expression delete controls work for the student and not the tutor
 
@@ -123,8 +123,8 @@ The 2026-10-29 Discord relay, after he ran the retest list: most retests are fix
 - **Source:** `docs/handoff/tyson-feedback-2026-10-28.md`, section "Organization UI", same note as A4. Andrew's decision 6: remember the last org per account; a single-org user never sees switcher chrome.
 - **Last result:** note on 2026-10-28. No Drive checkbox.
 - **His note:** first login lands on the specific org page; after clicking away, Organization lands on the organizations list and the name must be clicked to get back in. He asked which org a multi-org person lands on, and said that coming back should still be that org.
-- **Classification:** GAP. `tests/integration/wb-org-link-row.spec.ts` › `org list rows are full-width click targets` opens the index on purpose. Nothing asserts that leaving `/admin/organization/<id>` for Students and opening Organization again returns to that id.
-- **Next action:** add that return-to-last-org test to `tests/integration/wb-org-link-row.spec.ts`. Tyson does not walk the tab again as the first check.
+- **Classification:** AUTOMATED. The product already did this on a real sidebar click. `47140530` locks it in `tests/integration/wb-org-link-row.spec.ts` › `Organization tab returns to the org you were in`: clear the cookie, click the org, click sidebar Students, the Organization link already points at that id. Review `820d239e` is MERGE-OK-WITH-NITS. `org list rows are full-width click targets` still opens the index on purpose.
+- **Next action:** none for Tyson. He does not walk the tab again as the first check.
 
 ### G6. Transcript silence hotfix
 

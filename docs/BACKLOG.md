@@ -2,11 +2,38 @@
 
 Living document for open work, pilot feedback, reliability gaps, and deferred product decisions.
 
+## Launch buckets (Andrew 2026-11-17)
+
+This section is the sequencing source for the launch. It supersedes the older Release priorities list (Andrew 2026-07-30, option B) below. That older list stays in the file as the record of the 2026-07-30 order. The approved plan is [docs/handoff/LAUNCH-PLAN.md](handoff/LAUNCH-PLAN.md). The current picture is [docs/handoff/LAUNCH-STATE.md](handoff/LAUNCH-STATE.md).
+
+Assigning each of the 78 MUST rows to a bucket waits on the freshness pass (plan item A4). Until that pass lands, do not treat a July MUST row as launch-blocking on its old label alone.
+
+**Bucket A — must ship before people use it.** One release of `feat/org-qol` with both hotfixes folded in. Finish the consent wave (Andrew approves one copy document, then C8 privacy and terms honesty, then C7-min UI copy). Fix confirmed core-session bugs from the freshness pass. First-impression blockers: a public limits page, a clear Start-blocked reason, signup email to Andrew, and email 2FA only when mail can send. Org functionality a school needs in the first sessions: timezone on create, W7 polish, the failing in-person Open room test, and an operator setup runbook. Static security checks ported and high or critical findings fixed. Full master gate. One accurate human smoke book.
+
+**Bucket B — during the pilot.** Stripe and a pricing page. The AI pen test if the one-day quarantine spike does not land before launch. Medium security findings. C7-rest (deduplicating forked consent copy), W26, and the remaining consent jest todos. Org follow-ups: instructor Account and sharing unless the A6 triage pulls it into Bucket A, the W5 merged roster row, W6 last org stored per account, learner and claim caps, W9 replay-missing reason, and org oversight of notes if schools ask. Turn the reaper to enforce after Andrew reads the `would_reap` logs. SMS after the A2P campaign is approved. Observability (error tracking and an operator funnel). Remaining MUST rows the freshness pass marks open but not first-session. Spanish transcription when the first Spanish tutor or family appears. Calculus graphs are conditional: they move to Bucket A if a college organization that needs calculus is in the pipeline. A sizing pass is in progress.
+
+**Bucket B — C6 verification nits (2026-11-12, MERGE-OK-WITH-NITS).** These are not launch blockers. They stay here until a later pass picks them up.
+
+- RP6 comment.
+- Legacy "board not saved" copy may be untrue for pre-C6 sessions.
+- No unrelated-family arm in the RP table.
+- Dropped loader DRAFT test.
+- Static 14-site guard.
+- "No whiteboard activity" text beside the not-saved notice (C7).
+- Org `notesForbidden` share error unverified.
+- A recording with no session id can render inline.
+
+**Bucket C — after the site is live.** A human pen test once there is income. Self-serve org signup, org billing and departments, two-way calendar sync, and Apple CalDAV. Wyzant and UVU export. A brand pass. Dedupe waves C and D. The rest of the MAYBE and 1.x rows.
+
+### Testing scope waiver (Andrew 2026-11-17)
+
+Andrew waived exhaustive coverage outside the core flow. The core flow keeps full red-before / green-after Playwright. Core flow means whiteboard, live A/V, session entry and consent, recording, End, notes, and replay. Every other surface needs one happy-path test and one failure-path test, with red-before and green-after shown, plus a quick independent review. Extra coverage on those other surfaces moves to Bucket B. The same rule is in [`.cursor/rules/exhaustive-testing-mandate.mdc`](../.cursor/rules/exhaustive-testing-mandate.mdc) under Scope waiver. Agents may not widen this waiver.
+
 **Andrew decision (2026-10-21): replay audio follows the consent snapshot at recording time.** If audio consent was off, the child is not recorded, so there is nothing to hide. Do not add a second gate on the child's current audio toggle.
 
 ## Go over soon (Andrew 2026-09-28)
 
-**Keep at the top (Andrew 2026-10-05).** This whole section stays here until Andrew explicitly clears an item. Reviewing or refining does not mean deleting the raw notes or the open items under them, and it does not mean moving them down the backlog.
+**Keep at the top (Andrew 2026-10-05).** This whole section stays here until Andrew explicitly clears an item. Launch buckets (2026-11-17) sit above it and own sequencing. Reviewing or refining does not mean deleting the raw notes or the open items under them, and it does not mean moving them down the backlog.
 
 **Raw — Sarah meeting notes (Andrew 2026-09-28). Review and refine later. Not decisions.** Captured in Andrew’s wording. Do not treat any line as a locked requirement until he clarifies.
 
@@ -80,7 +107,9 @@ Related: `ADMIN-STUDENT-DETAIL-MOBILE-DISCOVER` / `MOBILE-ICONS` (merged, verify
 
 **Status:** `OPEN` — go over soon.
 
-## 🎯 Release priorities (Andrew 2026-07-30, option B) — do these first, in order
+## 🎯 Release priorities (Andrew 2026-07-30, option B) — superseded for sequencing
+
+**Superseded for sequencing on 2026-11-17.** [Launch buckets](#launch-buckets-andrew-2026-11-17) at the top of this file set the order of work. This list stays below as the older record. Do not start from it when choosing the next launch task.
 
 We are on the **release track**: expand beyond Sarah to unsupervised new pilots. **Re-ranked after Sarah 2026-07-29 meeting** (Andrew chose **B**: Google external before student-detail UX). Ordered priorities:
 

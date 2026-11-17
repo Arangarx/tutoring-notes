@@ -7,6 +7,10 @@ alwaysApply: true
 
 **Ratified Andrew 2026-07-10.** From this point forward: **nothing is done if it does not have comprehensive tests.** If we touch a surface, it gets **exhaustive red-before / green-after testing.** There are no exceptions to quality or testing without Andrew's **explicit, documented waiver.**
 
+## Scope waiver (Andrew 2026-11-17)
+
+Andrew waived exhaustive coverage outside the core flow. Recorded in [`docs/BACKLOG.md`](../../docs/BACKLOG.md) under Launch buckets, heading "Testing scope waiver (Andrew 2026-11-17)". The core flow still requires full red-before / green-after Playwright. Core flow means whiteboard, live A/V, session entry and consent, recording, End, notes, and replay. Every other surface needs one happy-path test and one failure-path test, with red-before and green-after shown. Extra coverage on those other surfaces moves to Bucket B. This waiver does not relax tests-to-spec, the independent oracle, the core-flow bar, or the rule that agents may not widen a waiver.
+
 ## The bar
 
 1. **Touched surface = exhaustively tested.** Any code you write or change ships with tests that comprehensively cover the behavior — happy paths, edge cases, failure modes, and the specific bug/behavior being fixed.
