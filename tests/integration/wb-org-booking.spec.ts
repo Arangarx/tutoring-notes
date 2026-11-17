@@ -187,6 +187,31 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
     await prisma.$disconnect();
   });
 
+  test("the booking dialog has no default instructor and explains the disabled Save", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const { org, owner } = await seedOrg();
+    const scheduler = await seedMember(org.id, "Sam Scheduler", ["scheduler"]);
+    await seedMember(org.id, "Ida Instructor", ["instructor"]);
+    await seedLearner(org.id, owner.id);
+    const { context, page } = await signIn(browser, scheduler);
+    try {
+      await page.goto(`/admin/organization/${org.id}`);
+      await page.getByTestId("schedule-new-session").click();
+      await expect(page.getByTestId("schedule-instructor")).toContainText("Choose an instructor");
+      await expect(page.getByTestId("schedule-instructor-required")).toHaveText("Choose an instructor.");
+      await expect(page.getByTestId("schedule-save-session")).toBeDisabled();
+      await expect(page.getByTestId("schedule-timezone-note")).toHaveText("Times are in America/Denver.");
+      await page.getByTestId("schedule-instructor").click();
+      await page.getByRole("option", { name: "Ida Instructor" }).click();
+      await expect(page.getByTestId("schedule-instructor-required")).toHaveCount(0);
+      await expect(page.getByTestId("schedule-save-session")).toBeEnabled();
+    } finally {
+      await context.close();
+    }
+  });
+
   test("a scheduler books, changes, and cancels an org appointment without a parent email", async ({
     browser,
   }) => {
@@ -214,9 +239,10 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
         where: { studentId: student.id, subject: "Algebra" },
       });
       const row = page.getByTestId(`org-appointment-${created.id}`);
-      await expect(row).toContainText("Ida Instructor");
-      await expect(row).toContainText("Mary Ann Lee");
+      await expect(row).toContainText("Instructor: Ida Instructor");
+      await expect(row).toContainText("Learner: Mary Ann Lee");
       await expect(row).toContainText(/\d:\d{2}/);
+      await expect(row).not.toContainText(/\d{4}-\d{2}-\d{2}/);
       expect(created.adminUserId).toBe(instructor.id);
 
       await page.getByTestId(`org-appointment-edit-${created.id}`).click();
