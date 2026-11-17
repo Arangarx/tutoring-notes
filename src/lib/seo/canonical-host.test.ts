@@ -42,6 +42,7 @@ describe("canonical URL builder", () => {
     expect(PUBLIC_SITEMAP_PATHS).toContain("/privacy");
     expect(PUBLIC_SITEMAP_PATHS).toContain("/terms");
     expect(PUBLIC_SITEMAP_PATHS).toContain("/features");
+    expect(PUBLIC_SITEMAP_PATHS).toContain("/limits");
     for (const path of PUBLIC_SITEMAP_PATHS) {
       expect(path).not.toMatch(/^\/(admin|s|account|w|join|api)\b/);
     }

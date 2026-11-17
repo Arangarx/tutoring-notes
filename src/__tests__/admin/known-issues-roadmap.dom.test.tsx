@@ -16,7 +16,9 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
     render(<KnownIssuesRoadmapView />);
   });
 
-  it("renders the three section headings", () => {
+  it("renders the limits and the three later section headings", () => {
+    expect(screen.getByText("What Mynk does today")).toBeInTheDocument();
+    expect(screen.getByTestId("product-today-list")).toHaveTextContent(/English only/i);
     expect(screen.getByText("Recently improved")).toBeInTheDocument();
     expect(screen.getByText("Known issues we're still working on")).toBeInTheDocument();
     expect(screen.getByText("Roadmap / coming soon")).toBeInTheDocument();
@@ -49,7 +51,8 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
       within(list).getByText(/A child does not need their own login for a parent to join/)
     ).toBeInTheDocument();
     expect(within(list).getByText(/Empty review screen/)).toBeInTheDocument();
-    expect(within(list).getByText(/Student microphone boost — final check/)).toBeInTheDocument();
+    expect(within(list).getByText(/Student microphone volume/)).toBeInTheDocument();
+    expect(within(list).getByText(/have not finished checking/)).toBeInTheDocument();
   });
 
   it("does not list known issues that shipped in the durability wave", () => {

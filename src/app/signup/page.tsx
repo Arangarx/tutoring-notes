@@ -3,6 +3,10 @@ import Link from "next/link";
 
 import { AuthShell } from "@/components/auth/AuthShell";
 import { env } from "@/lib/env";
+import {
+  PRODUCT_TODAY_LINK_LABEL,
+  PRODUCT_TODAY_PATH,
+} from "@/lib/known-issues-roadmap-content";
 import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 
 import { safeRelativeReturnPath } from "@/lib/safe-return-path";
@@ -30,9 +34,17 @@ export default async function SignupPage({
       title="Create your account"
       description="Sign up with email and password or Google. Each account is separate — your students and notes stay in your workspace. During the pilot, new teaching accounts are approved by Mynk."
       footer={
-        <Link href="/" className="text-brand underline-offset-2 hover:underline">
-          ← Home
-        </Link>
+        <span className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+          <Link href="/" className="text-brand underline-offset-2 hover:underline">
+            ← Home
+          </Link>
+          <Link
+            href={PRODUCT_TODAY_PATH}
+            className="text-brand underline-offset-2 hover:underline"
+          >
+            {PRODUCT_TODAY_LINK_LABEL}
+          </Link>
+        </span>
       }
     >
       <SignupForm

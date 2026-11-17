@@ -1,6 +1,47 @@
-/** Sarah-facing copy for Settings → Known issues & roadmap (draft @ 6815c4f). */
+/**
+ * One source for "what Mynk does today" and Settings → Known issues & roadmap.
+ * The public /limits page and the signed-in settings page both render this module.
+ */
 
 export const KNOWN_ISSUES_ROADMAP_PAGE_TITLE = "Known issues & roadmap";
+
+/** Public route. Signed-out tutors read the same sentences as the settings page. */
+export const PRODUCT_TODAY_PATH = "/limits";
+
+export const PRODUCT_TODAY_PAGE_TITLE = "What Mynk does today";
+
+export const PRODUCT_TODAY_LINK_LABEL = "What Mynk does today";
+
+export const productTodayIntro =
+  "Limits of the pilot, in plain language. The same list is on this page for anyone and under Settings after you sign in.";
+
+export type KnownIssueItem = {
+  title: string;
+  body: string;
+};
+
+export const productTodayItems: readonly KnownIssueItem[] = [
+  {
+    title: "Notes and transcription",
+    body: "Session notes and transcription are English only. Spanish is next, then more languages.",
+  },
+  {
+    title: "New teaching accounts",
+    body: "New teaching accounts are approved by Mynk. The pilot is free, and Mynk does not take a cut of what you charge.",
+  },
+  {
+    title: "Before the first session",
+    body: "A family must accept the invite and save privacy settings before the first session can start, online or in person.",
+  },
+  {
+    title: "Live video",
+    body: "Live video works best on a current version of Chrome, Edge, or Safari. A student on a phone is supported.",
+  },
+  {
+    title: "Two-factor sign-in",
+    body: "A teaching account requires two-factor sign-in before you can use the product.",
+  },
+];
 
 export const recentlyImprovedIntro =
   "What you'll notice in the app after this update wave.";
@@ -75,11 +116,6 @@ export const recentlyImprovedSections: readonly RecentlyImprovedSection[] = [
 export const knownIssuesIntro =
   "Honest, low-alarm notes on things that may still come up. We're on it.";
 
-export type KnownIssueItem = {
-  title: string;
-  body: string;
-};
-
 export const knownIssuesItems: readonly KnownIssueItem[] = [
   {
     title: "PDF boards — occasional stray mark",
@@ -90,8 +126,8 @@ export const knownIssuesItems: readonly KnownIssueItem[] = [
     body: "A parent signed in on the family account can open that child's live session from Upcoming sessions when the appointment window is open. They do not need the child's username or PIN. Set up the child's login under Manage only if the child will sign in on their own device.",
   },
   {
-    title: "Student microphone boost — final check",
-    body: "Students can adjust their own mic volume in the app; we're doing one more round of real two-device testing to make sure tutors consistently hear the boost before we call this fully done.",
+    title: "Student microphone volume",
+    body: "Students can turn their own microphone up during a live session. We have not finished checking that the tutor hears that boost on a second device.",
   },
   {
     title: "Empty review screen",
