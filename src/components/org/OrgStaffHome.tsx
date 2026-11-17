@@ -19,10 +19,12 @@ export function OrgStaffHome({
   data,
   canActivate,
   error,
+  timeZone,
 }: {
   data: OrgStaffHomeData;
   canActivate: boolean;
   error: string | null;
+  timeZone: string;
 }) {
   const canManage = data.actor.roles.includes("owner") || data.actor.roles.includes("admin");
   const waitlisted = data.members
@@ -43,6 +45,7 @@ export function OrgStaffHome({
           status={data.org.status}
           dailyInviteCap={data.org.dailyInviteCap}
           maxMembers={data.org.maxMembers}
+          timezone={timeZone}
           waitlisted={waitlisted}
           returnTo={`/admin/organization/${data.org.id}`}
         />

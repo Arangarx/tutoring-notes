@@ -2,6 +2,7 @@ import { createOrganizationByOwnerEmailAction } from "@/app/admin/orgs/actions";
 import { LinkRow, LinkRowList } from "@/components/LinkRow";
 import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
+import { OrgTimeZoneSelect } from "@/components/org/OrgTimeZoneSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +45,7 @@ export default async function OperatorOrganizationsPage({
               <Label htmlFor="org-name">Organization name</Label>
               <Input id="org-name" name="name" type="text" required />
             </div>
+            <OrgTimeZoneSelect id="org-timezone" />
             <div className="space-y-2">
               <Label htmlFor="org-owner-email">Owner email</Label>
               <Input
