@@ -22,10 +22,26 @@ test.describe("Public limits — what Mynk does today", () => {
     await expect(page).not.toHaveURL(/\/login/);
 
     const list = page.getByTestId("product-today-list");
+    const roadmap = page.getByTestId("known-issues-roadmap-section");
+    const pageCopy = page.getByTestId("known-issues-roadmap");
     await expect(list).toContainText(
-      "Session notes and transcription support English only for now."
+      "Session notes and transcription support English only."
     );
-    await expect(list).not.toContainText("Spanish is next");
+    await expect(list).not.toContainText("Spanish");
+    await expect(roadmap).toContainText(
+      "Spanish support for automatic notes is next, then more languages."
+    );
+    await expect(roadmap).not.toContainText(/Spanish is available/i);
+    await expect(pageCopy).not.toContainText("tutor settings");
+    await expect(pageCopy).not.toContainText("Smoother automatic updates");
+    await expect(pageCopy).not.toContainText("Richer billing");
+    await expect(pageCopy).not.toContainText("Continued polish");
+    await expect(pageCopy).not.toContainText("PDF boards — occasional stray mark");
+    await expect(pageCopy).not.toContainText("Empty review screen");
+    await expect(pageCopy).not.toContainText("working on a fix");
+    await expect(pageCopy).not.toContainText("We're on it");
+    await expect(pageCopy).not.toContainText("Replays start from the beginning");
+    await expect(pageCopy).not.toContainText(/calculus/i);
     await expect(list).toContainText(/approved by Mynk/i);
     await expect(list).toContainText(/accept the invite/i);
     await expect(list).toContainText(/privacy settings/i);

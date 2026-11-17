@@ -61,7 +61,7 @@ export function KnownIssuesRoadmapView() {
       </SectionCard>
 
       <SectionCard realm="admin"
-        title="Known issues we're still working on"
+        title="Known issues"
         description={knownIssuesIntro}
         data-testid="known-issues-open"
       >
