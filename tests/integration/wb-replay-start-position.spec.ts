@@ -27,6 +27,7 @@ import {
 } from "../helpers/blob-gate";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { recordEndEnterReplay } from "./wb-replay-record.helpers";
+import { uploadReplayEvents } from "./wb-replay-harness.helpers";
 import { TAG } from "../test-tags";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
@@ -186,18 +187,7 @@ async function openReplayAndAssertStartsAtZero(
   await page.getByTestId("wb-review-enter-replay").click();
   await expect(page.getByTestId("wb-replay-in-frame")).toBeVisible({ timeout: 30_000 });
 
-  // A real `playing` event after the click (playback actually began).
-  let playingRow: TraceRow | undefined;
-  await expect
-    .poll(
-      async () => {
-        const rows = await readTrace(page);
-        playingRow = rows.find((r) => r.ev === "playing" && r.t >= tClick);
-        return playingRow !== undefined;
-      },
-      { timeout: 60_000, intervals: [100, 250, 500] }
-    )
-    .toBe(true);
+  const playingRow = await waitForPlayingEvent(page, tClick);
 
   await page.waitForTimeout(ADVANCE_WAIT_MS);
   await attachTrace(page, testInfo, label);
@@ -243,6 +233,41 @@ async function openReplayAndAssertStartsAtZero(
     lastCt,
     `${label}: currentTime jumped ahead of real time (began ${first}, now ${lastCt})`
   ).toBeLessThan(first + ADVANCE_WAIT_MS / 1000 + 3);
+}
+
+/** A real `playing` event on the audio element after `sinceT` (playback actually began). */
+async function waitForPlayingEvent(page: Page, sinceT: number): Promise<TraceRow> {
+  let playingRow: TraceRow | undefined;
+  await expect
+    .poll(
+      async () => {
+        const rows = await readTrace(page);
+        playingRow = rows.find((r) => r.ev === "playing" && r.t >= sinceT);
+        return playingRow !== undefined;
+      },
+      {
+        message: "audio never began playing after replay was opened",
+        timeout: 60_000,
+        intervals: [100, 250, 500],
+      }
+    )
+    .toBe(true);
+  return playingRow!;
+}
+
+/** Playback begins at the start of a (very short) clip. */
+async function expectPlaybackBegins(
+  page: Page,
+  testInfo: TestInfo,
+  label: string,
+  sinceT: number
+) {
+  const row = await waitForPlayingEvent(page, sinceT);
+  await attachTrace(page, testInfo, label);
+  expect(
+    typeof row.ct === "number" ? row.ct : NaN,
+    `${label}: playback began at currentTime=${row.ct}`
+  ).toBeLessThan(0.3);
 }
 
 async function hideReplay(page: Page) {
@@ -364,5 +389,101 @@ test.describe(
       await hideReplay(page);
       await openReplayAndAssertStartsAtZero(page, testInfo, "concat re-open");
     });
+
+    // Seeded finite-duration PCM clips: no WebM duration scan, no mic needed, so these run
+    // on every engine (Chromium here; WebKit via the same spec file).
+    // 0.3 s is the sub-0.5 s clip (start and "near the end" are the same place).
+    // 8 s is a long clip whose start is clearly distinct from its end.
+    for (const clipSec of [0.3, 8]) {
+      test(`seeded ${clipSec}s finite-duration clip: first open and re-open start playing at ~0`, async ({
+        page,
+      }, testInfo) => {
+        test.setTimeout(180_000);
+        assertLocalDatabaseUrlForHarness();
+
+        const session = await seedWbLiveSyncSession();
+        const recordingId = await withPrisma(async (p) => {
+          await p.whiteboardSession.update({
+            where: { id: session.whiteboardSessionId },
+            data: {
+              endedAt: new Date("2026-10-11T18:30:00.000Z"),
+              concatBlobUrl: null,
+              concatDurationSeconds: null,
+              durationSeconds: 8,
+            },
+          });
+          const row = await p.sessionRecording.create({
+            data: {
+              adminUserId: session.adminUserId,
+              studentId: session.studentId,
+              whiteboardSessionId: session.whiteboardSessionId,
+              blobUrl: `https://pw.local/${session.whiteboardSessionId}/clip.wav`,
+              mimeType: "audio/wav",
+              sizeBytes: 128,
+              durationSeconds: clipSec,
+              orderIndex: 0,
+              streamId: "tutor:mic",
+            },
+            select: { id: true },
+          });
+          return row.id;
+        });
+        await uploadReplayEvents({
+          request: page.request,
+          adminUserId: session.adminUserId,
+          studentId: session.studentId,
+          whiteboardSessionId: session.whiteboardSessionId,
+        });
+
+        const wav = buildSineWav(clipSec);
+        await page.route(`**/api/audio/admin/${recordingId}`, (route) =>
+          route.fulfill({ status: 200, body: wav, contentType: "audio/wav" })
+        );
+
+        await installReplayAudioTrace(page);
+        await page.goto(
+          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(page.getByTestId("wb-review-enter-replay")).toBeVisible({ timeout: 60_000 });
+
+        if (clipSec < 0.5) {
+          const t1 = await traceNow(page);
+          await page.getByTestId("wb-review-enter-replay").click();
+          await expectPlaybackBegins(page, testInfo, `${clipSec}s first open`, t1);
+          await hideReplay(page);
+          const t2 = await traceNow(page);
+          await page.getByTestId("wb-review-enter-replay").click();
+          await expectPlaybackBegins(page, testInfo, `${clipSec}s re-open`, t2);
+        } else {
+          await openReplayAndAssertStartsAtZero(page, testInfo, `${clipSec}s first open`);
+          await hideReplay(page);
+          await openReplayAndAssertStartsAtZero(page, testInfo, `${clipSec}s re-open`);
+        }
+      });
+    }
   }
 );
+
+/** A mono 8 kHz 16-bit PCM WAV of a quiet sine, `sec` seconds long. */
+function buildSineWav(sec: number): Buffer {
+  const rate = 8000;
+  const n = Math.round(rate * sec);
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write("RIFF", 0);
+  buf.writeUInt32LE(36 + n * 2, 4);
+  buf.write("WAVEfmt ", 8);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24);
+  buf.writeUInt32LE(rate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write("data", 36);
+  buf.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) {
+    buf.writeInt16LE(Math.round(3000 * Math.sin((2 * Math.PI * 440 * i) / rate)), 44 + i * 2);
+  }
+  return buf;
+}
