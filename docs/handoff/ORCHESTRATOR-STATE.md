@@ -10,15 +10,18 @@
 
 ### Last action
 
-Launch plan approved and day-1 lanes dispatched on 2026-11-17.
+2026-11-17 13:40. Merged so far into `feat/org-qol`: launch docs (ec04ccf5), decisions + freshness (cde8296d), test type fixes (a55fca4f). Every other lane has code pushed but is blocked on Playwright: the single shared lock `$env:TEMP\tn-pw.lock` serialised all lanes, and most 4h waits expired. Andrew approved the consent copy (item 36 → "Mynk recommends keeping this on for the best experience."), and the Strix pen test using the existing local `OPENAI_API_KEY` (never printed).
 
 ### Next actions
 
-Review each lane's report. Run a separate verification for each lane: Sonnet when the lane touches core flow or a fragile surface, Grok otherwise. Merge each accepted lane with `merge --no-ff` into `feat/org-qol`. Andrew approves `CONSENT-COPY-FOR-APPROVAL.md`. Then C8 and C7-min. Then A8, the full master gate. Then A9, the book `docs/handoff/PILOT-RELEASE-SMOKE.md`. Then A10, cutover, only after Andrew's go.
+1. pw-parallel verify + 3-stack proof. If MERGE-OK, merge it FIRST, then give later lanes their own stack (PW_* env vars) instead of the shared lock.
+2. As each lane reports MERGE-READY with green gates, run a separate verification (Sonnet on core/fragile, Grok otherwise), then `merge --no-ff` into `feat/org-qol` and push. static-checks merges LAST, then `npm ci` in main.
+3. After apply-race merges: live-A/V Sonnet lane (G1, SMOKE-BLOCK-1, BUG-8, AV-CAM-BUTTON-ACQUIRING, B11, AV-REFRESH-LOSS, phone WebKit A/V), WS-B, WS-N5 (recording-durability agent, WhiteboardWorkspaceClient `wbCaptureActive` wiring), then Gate A5 sync matrix.
+4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
+5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then Strix on the integrated tip. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 
 ### Open Andrew-confirms
 
-- Consent copy approval (`CONSENT-COPY-FOR-APPROVAL.md`, not written yet).
 - What to do with stale worktrees `../tn-org` and `../tn-qol-hydrate`. Both have uncommitted edits and were not removed.
 - Repoint of preview.usemynk.com at `feat/org-qol`. That is a Vercel write and waits for an explicit go.
 - Go to apply the seven production migrations.
@@ -27,17 +30,19 @@ Review each lane's report. Run a separate verification for each lane: Sonnet whe
 
 Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [LAUNCH-STATE.md](LAUNCH-STATE.md).
 
-| Lane | Tier | Agent |
+| Lane | State | Agent now |
 |---|---|---|
-| pw-parallel | Grok | 1242c63a |
-| fold-transcript | Grok | 28cb0681 |
-| fold-apply-race | Sonnet | 355a519c |
-| consent-copy | Grok | 506b73f2 |
-| static-checks | Grok | 500b16c6 |
-| org-finish | Grok | e77120ee |
-| first-impression | Grok | cb9d36d8 |
+| pw-parallel | built d0647098; Sonnet verify + 3-stack proof | cd5d283b |
+| fold-transcript | built (to 699a7c2d); Sonnet verify + classify 7 reds | ba62c33b |
+| fold-apply-race | ported (tip 3ac128f6, red-before 7/10); Sonnet running green gates | 355a519c |
+| consent-copy (C8 privacy/terms) | Grok building/testing | cf19800a |
+| static-checks | built da90ccb2; Sonnet verify finished tests, report pending | bb66f960 |
+| org-finish | Grok committing + gates | e77120ee |
+| first-impression | rework (drop "Spanish is next"; test 2FA guards) | 0184c9f8 |
+| recording-durability | items 1+2 pushed (4efa5d2c, b9568ad3); Sonnet running gates; item 3 WS-N5 deferred | 4b3b91a3 |
+| replay-start | Sonnet; local commits 91f574fa, d05d719b not pushed; short-clip fix staged in %TEMP% | e47069eb |
 
-Read-only freshness checks of the 78 MUST rows (six Grok explorers) and a calculus sizing are running. The shared machine lock for Playwright, the database, and the dev server is `$env:TEMP\tn-pw.lock`.
+Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
 
 ### Uncommitted / unmerged
 
