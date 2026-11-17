@@ -38,13 +38,12 @@ import {
 
 } from "../helpers/blob-gate";
 
+import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
+
 import {
-
-  seedWbLiveSyncSession,
-
-  waitForWbE2eBridge,
-
-} from "./whiteboard-live-sync.helpers";
+  muteReplayAudioWhenPresent,
+  recordEndEnterReplay,
+} from "./wb-replay-record.helpers";
 
 import { TAG } from "../test-tags";
 
@@ -56,93 +55,11 @@ const TEST_SECRET =
 
 
 
-const VAD_METER_HIGH = 0.5;
-
-const VAD_METER_LOW = 0;
-
-
-
 /** WS-L / WS-W regression sentinel — scrub must NOT park at t≈0. */
 
 const NEAR_ZERO_AUDIO_SEC = 0.25;
 
 const NEAR_ZERO_GLOBAL_MS = 500;
-
-
-
-async function injectVadOverrides(page: import("@playwright/test").Page) {
-
-  await page.addInitScript(() => {
-
-    const w = window as unknown as {
-
-      __VAD_MAX_SEGMENT_SECONDS_OVERRIDE?: number;
-
-      __VAD_MIN_SEGMENT_SECONDS_OVERRIDE?: number;
-
-      __VAD_SILENCE_HOLD_MS_OVERRIDE?: number;
-
-      __VAD_SILENCE_RMS_THRESHOLD_OVERRIDE?: number;
-
-      __VAD_TEST_METER_LEVEL__?: number;
-
-    };
-
-    w.__VAD_MIN_SEGMENT_SECONDS_OVERRIDE = 1;
-
-    w.__VAD_SILENCE_HOLD_MS_OVERRIDE = 800;
-
-    w.__VAD_SILENCE_RMS_THRESHOLD_OVERRIDE = 0.15;
-
-    w.__VAD_MAX_SEGMENT_SECONDS_OVERRIDE = 120;
-
-    w.__VAD_TEST_METER_LEVEL__ = 0.5;
-
-  });
-
-}
-
-
-
-async function setVadTestMeterLevel(
-
-  page: import("@playwright/test").Page,
-
-  level: number
-
-) {
-
-  await page.evaluate((lvl) => {
-
-    (window as unknown as { __VAD_TEST_METER_LEVEL__?: number }).__VAD_TEST_METER_LEVEL__ =
-
-      lvl;
-
-  }, level);
-
-}
-
-
-
-async function driveTwoVadSilenceCuts(page: import("@playwright/test").Page) {
-
-  await setVadTestMeterLevel(page, VAD_METER_HIGH);
-
-  await page.waitForTimeout(1_200);
-
-  await setVadTestMeterLevel(page, VAD_METER_LOW);
-
-  await page.waitForTimeout(1_000);
-
-  await setVadTestMeterLevel(page, VAD_METER_HIGH);
-
-  await page.waitForTimeout(1_200);
-
-  await setVadTestMeterLevel(page, VAD_METER_LOW);
-
-  await page.waitForTimeout(1_000);
-
-}
 
 
 
@@ -165,40 +82,6 @@ async function fetchRecordingCount(
   expect(res.ok(), await res.text()).toBeTruthy();
 
   return (await res.json()) as { count: number; byStream: Record<string, number> };
-
-}
-
-
-
-async function muteReplayAudioWhenPresent(page: import("@playwright/test").Page) {
-
-  await page.evaluate(() => {
-
-    const muteIfPresent = () => {
-
-      const el = document.querySelector(
-
-        '[data-testid="wb-replay-audio"]'
-
-      ) as HTMLAudioElement | null;
-
-      if (el && !el.dataset.mutedByTest) {
-
-        el.muted = true;
-
-        el.dataset.mutedByTest = "1";
-
-      }
-
-    };
-
-    const obs = new MutationObserver(muteIfPresent);
-
-    obs.observe(document.body, { childList: true, subtree: true });
-
-    muteIfPresent();
-
-  });
 
 }
 
@@ -447,82 +330,6 @@ function assertNotNearZeroAudio(
     `${context}: audio currentTime must NOT be t≈0 after scrub (WS-L/WS-W regression)`
 
   ).toBeGreaterThan(NEAR_ZERO_AUDIO_SEC);
-
-}
-
-
-
-async function recordEndEnterReplay(
-
-  page: import("@playwright/test").Page,
-
-  studentId: string,
-
-  whiteboardSessionId: string,
-
-  opts?: { multiSegment?: boolean }
-
-) {
-
-  if (opts?.multiSegment) {
-
-    await injectVadOverrides(page);
-
-  }
-
-  await page.goto(
-
-    `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
-
-    { waitUntil: "domcontentloaded" }
-
-  );
-
-  await expect(page.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
-
-    timeout: 90_000,
-
-  });
-
-  await waitForWbE2eBridge(page, "tutor");
-
-
-
-  if (opts?.multiSegment) {
-
-    await driveTwoVadSilenceCuts(page);
-
-  } else {
-
-    await page.waitForTimeout(5_000);
-
-  }
-
-
-
-  await page.getByTestId("wb-end-session").click();
-
-  const confirmBtn = page.getByTestId("wb-end-session-confirm-yes");
-
-  if (await confirmBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-
-    await confirmBtn.click();
-
-  }
-
-
-
-  await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
-
-    timeout: 120_000,
-
-  });
-
-  await expect(page.getByTestId("wb-review-enter-replay")).toBeVisible({
-
-    timeout: 60_000,
-
-  });
 
 }
 
