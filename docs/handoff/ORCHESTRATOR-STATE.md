@@ -44,6 +44,8 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 
 Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
 
+**Machine-load cap (Andrew 2026-11-17 16:35):** at most TWO Playwright stacks at once, even after pw-parallel lands (he plays games on this machine). Prefer one when the time difference is small.
+
 ### Uncommitted / unmerged
 
 The `launch/*` branches are unmerged. `docs/handoff/tyson-retest-2026-10-28.md` stays untracked on purpose.
