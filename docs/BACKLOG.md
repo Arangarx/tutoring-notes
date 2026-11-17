@@ -6,11 +6,28 @@ Living document for open work, pilot feedback, reliability gaps, and deferred pr
 
 This section is the sequencing source for the launch. It supersedes the older Release priorities list (Andrew 2026-07-30, option B) below. That older list stays in the file as the record of the 2026-07-30 order. The approved plan is [docs/handoff/LAUNCH-PLAN.md](handoff/LAUNCH-PLAN.md). The current picture is [docs/handoff/LAUNCH-STATE.md](handoff/LAUNCH-STATE.md).
 
-Assigning each of the 78 MUST rows to a bucket waits on the freshness pass (plan item A4). Until that pass lands, do not treat a July MUST row as launch-blocking on its old label alone.
+The freshness pass (plan item A4) is in progress. Andrew's 2026-11-17 decisions below refine buckets; the MUST table marks rows the pass confirmed fixed or superseded. Do not treat a July MUST row as launch-blocking on its old label alone without checking those markers and the buckets.
 
-**Bucket A — must ship before people use it.** One release of `feat/org-qol` with both hotfixes folded in. Finish the consent wave (Andrew approves one copy document, then C8 privacy and terms honesty, then C7-min UI copy). Fix confirmed core-session bugs from the freshness pass. First-impression blockers: a public limits page, a clear Start-blocked reason, signup email to Andrew, and email 2FA only when mail can send. Org functionality a school needs in the first sessions: timezone on create, W7 polish, the failing in-person Open room test, and an operator setup runbook. Static security checks ported and high or critical findings fixed. Full master gate. One accurate human smoke book.
+**Bucket A — must ship before people use it.** One release of `feat/org-qol` with both hotfixes folded in. Finish the consent wave (Andrew approves one copy document, then C8 privacy and terms honesty — including parent deletion-by-email process and timeframe — then C7-min UI copy). Fix confirmed core-session bugs from the freshness pass (see **Freshness pass — Bucket A** below). First-impression blockers: a public limits page, a clear Start-blocked reason, signup email to Andrew, and email 2FA only when mail can send. Org functionality a school needs in the first sessions: timezone on create, W7 polish, the failing in-person Open room test, and an operator setup runbook. Static security checks ported and high or critical findings fixed (Semgrep, gitleaks, npm audit high/critical including `next` and `next-auth`, security jest suite). Full master gate. One accurate human smoke book.
 
-**Bucket B — during the pilot.** Stripe and a pricing page. The AI pen test if the one-day quarantine spike does not land before launch. Medium security findings. C7-rest (deduplicating forked consent copy), W26, and the remaining consent jest todos. Org follow-ups: instructor Account and sharing unless the A6 triage pulls it into Bucket A, the W5 merged roster row, W6 last org stored per account, learner and claim caps, W9 replay-missing reason, and org oversight of notes if schools ask. Turn the reaper to enforce after Andrew reads the `would_reap` logs. SMS after the A2P campaign is approved. Observability (error tracking and an operator funnel). Remaining MUST rows the freshness pass marks open but not first-session. Spanish transcription when the first Spanish tutor or family appears. Calculus graphs are conditional: they move to Bucket A if a college organization that needs calculus is in the pipeline. A sizing pass is in progress.
+**Bucket B — during the pilot.** Stripe and a pricing page. The AI pen test if the one-day quarantine spike does not land before launch (otherwise AI pen test during the pilot). Medium security findings. C7-rest (deduplicating forked consent copy), W26, and the remaining consent jest todos. Org follow-ups: instructor Account and sharing unless the A6 triage pulls it into Bucket A, the W5 merged roster row, W6 last org stored per account, learner and claim caps, W9 replay-missing reason, and org oversight of notes if schools ask. Turn the reaper to enforce after Andrew reads the `would_reap` logs. SMS after the A2P campaign is approved. Observability (error tracking and an operator funnel). Remaining MUST rows the freshness pass marks open but not first-session (see **Freshness pass — Bucket B**). Parent self-serve erasure UI with email confirmation. Lawyer consult items: audio recording of minors per jurisdiction, `CONSENT-LEGAL-CONSULT`, deletion scope not reaching backups / calendar / mail / logs / OpenAI — once the site pays for itself. Spanish transcription when the first Spanish tutor or family appears. Calculus graphs are conditional: they move to Bucket A if a college organization that needs calculus is in the pipeline. A sizing pass is in progress.
+
+### Andrew product and policy decisions (2026-11-17)
+
+- **Parent data deletion:** parents request deletion by email; Mynk performs it with the existing admin erasure tool; C8 must document how to ask and the timeframe. Parent self-serve deletion screen with email confirmation → Bucket B.
+- **Consent popup:** not needed. Parent saved privacy settings frozen at session Start are the consent. Closes MUST **Consent modal removal**.
+- **Consent switch tiers:** `CONSENT_SWITCHES` critical / recommended / standard ratified as-is. Closes MUST **Essentials-vs-optional tier ratification**.
+- **OpenAI:** Andrew confirms in the OpenAI dashboard that API data is not used for training and applies for zero data retention; launch does not wait for ZDR approval. **Andrew action item.**
+- **Lawyer questions** (Bucket B once the site pays for itself): audio recording of minors per jurisdiction; `CONSENT-LEGAL-CONSULT`; deletion not reaching backups / calendar / mail / logs / OpenAI. Until then privacy/terms state only what the app actually does.
+- **Security launch bar:** Semgrep + gitleaks + npm audit high/critical cleared (including `next` and `next-auth`) + security jest suite; AI pen test during the pilot if setup takes more than one day; human pen test → Bucket C.
+
+### Freshness pass — bucket assignments (2026-11-17)
+
+**Bucket A (launch-blocking or in flight):** B11 student cam/mic not released on ended screen; WS-N-PAGEHIDE + WS-B audio loss on tab kill/refresh; WS-N5 strokes not captured right after reopen; W1-SHIP-B-FINALIZE End deletes failed uploads; SMOKE-UX-1 replay starts at end; AV-REFRESH-LOSS replug camera/mic after refresh; Gate A5 bidirectional sync action test matrix; learner login `access_mode_mismatch` handle leak (`src/app/api/auth/learner/login/route.ts:168`); npm audit criticals remaining after launch-bar pass.
+
+**Bucket B (pilot):** password-changed notification email; in-memory login/API rate limits reset on cold start (`src/lib/rate-limit.ts`); WB-SESSION-MAX-DURATION end clock before start wraps to next day; WB-ADULT-JOIN B4 parent/self-learner toggle; hot-swap mic `track.onended`; in-progress segment loss on hard crash; W1-SHIP-B-STUCK retry UI; SMOKE-BLOCK-5 solo LIVE armed capture; Sarah test-student purge.
+
+**Bucket C (after income):** WS-T-9 empty outbox IDB self-heal.
 
 **Bucket B — C6 verification nits (2026-11-12, MERGE-OK-WITH-NITS).** These are not launch blockers. They stay here until a later pass picks them up.
 
@@ -23,7 +40,7 @@ Assigning each of the 78 MUST rows to a bucket waits on the freshness pass (plan
 - Org `notesForbidden` share error unverified.
 - A recording with no session id can render inline.
 
-**Bucket C — after the site is live.** A human pen test once there is income. Self-serve org signup, org billing and departments, two-way calendar sync, and Apple CalDAV. Wyzant and UVU export. A brand pass. Dedupe waves C and D. The rest of the MAYBE and 1.x rows.
+**Bucket C — after the site is live.** A human pen test once there is income (Andrew 2026-11-17). Self-serve org signup, org billing and departments, two-way calendar sync, and Apple CalDAV. Wyzant and UVU export. A brand pass. Dedupe waves C and D. WS-T-9 empty outbox IDB self-heal. The rest of the MAYBE and 1.x rows.
 
 ### Testing scope waiver (Andrew 2026-11-17)
 
@@ -209,19 +226,19 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 #### Recording & session lifecycle
 
 - **B11** — release camera/mic tracks on session end (§3)
-- **beforeunload guard mid-recording (reliability #9)** —  (§3)
+- **beforeunload guard mid-recording (reliability #9)** —  (§3) **DONE (verified 2026-11-17).**
 - **Hot-swap mic / track.onended (reliability #7)** —  (§3)
 - **In-progress segment IDB on crash (reliability #1)** —  (§3)
-- **PRESARAH-1** — always-on recording; remove recording-intent toggles (§1)
-- **recording-end-to-end** — review auto-start from 0 (§1)
-- **recording-resilience** — SessionRecording rows after reopen (§1)
-- **SMOKE-AUDIO-1** — first-acquire mic silent until switch-and-back (§1)
-- **SMOKE-END-WINDDOWN** — disarm board + immediate student wind-down on End (§1)
-- **Upload-failure blob persistence (reliability #2)** —  (§3)
+- **PRESARAH-1** — always-on recording; remove recording-intent toggles (§1) **DONE (verified 2026-11-17).**
+- **recording-end-to-end** — review auto-start from 0 (§1) **DONE (verified 2026-11-17).** Related **SMOKE-UX-1** stays open (Bucket A).
+- **recording-resilience** — SessionRecording rows after reopen (§1) **DONE (verified 2026-11-17).**
+- **SMOKE-AUDIO-1** — first-acquire mic silent until switch-and-back (§1) **DONE (verified 2026-11-17).**
+- **SMOKE-END-WINDDOWN** — disarm board + immediate student wind-down on End (§1) **DONE (verified 2026-11-17).**
+- **Upload-failure blob persistence (reliability #2)** —  (§3) **DONE (verified 2026-11-17).**
 - **W1-SHIP-B-FINALIZE** — `finalizeOutboxAfterEnd` drops all IDB rows (§3)
 - **W1-SHIP-B-STUCK** — `stuck` semantics + UX vs `permanent-fail@50` (§3)
 - **WS-B** — tab-kill resume loses pre-kill audio in replay/notes (§1)
-- **WS-G** — server-side tutor:mic concat replay master (§3)
+- **WS-G** — server-side tutor:mic concat replay master (§3) **DONE (verified 2026-11-17).**
 - **WS-N-PAGEHIDE** — in-progress segment flush at tab-kill (§3)
 - **WS-N5** — resume FSM `armed` window drops stroke capture after reopen (§1)
 
@@ -235,24 +252,24 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 #### Whiteboard, sync & replay
 
 - **AV-REFRESH-LOSS** — student hard-refresh loses A/V (§4)
-- **Gate A2** — waiting room (§4)
+- **Gate A2** — waiting room (§4) **DONE (verified 2026-11-17).**
 - **Gate A5** — live bidirectional sync completeness audit (§1)
 - **Gate A6** — replay fidelity + AV/timer sync comprehensive pass (§1)
-- **Hide replay must pause audio** —  (§4)
-- **In-person waiting-room consent projection (Plan #2)** —  (§4)
-- **PDF cross-page stroke bleed / WB-STROKE-BLEED (verify/watch)** —  (§4)
-- **Replay scrub drag** — 429s + frozen scene (§4)
+- **Hide replay must pause audio** —  (§4) **DONE (verified 2026-11-17).**
+- **In-person waiting-room consent projection (Plan #2)** —  (§4) **DONE (verified 2026-11-17).**
+- **PDF cross-page stroke bleed / WB-STROKE-BLEED (verify/watch)** —  (§4) **DONE (verified 2026-11-17).**
+- **Replay scrub drag** — 429s + frozen scene (§4) **DONE (verified 2026-11-17).**
 - **SMOKE-BLOCK-5** — solo/in-person stroke capture in armed window (§4)
 - **SMOKE-UX-1** — replay auto-play jumps to scrubber end (§1)
-- **SSG-3 / A6-1** — multi-segment replay scrubber + proportional seek (§1)
-- **Student canvas file sync (images/PDF)** —  (§4)
-- **Student canvas stuck on "Loading scene…"** —  (§4)
-- **Student Exit → rejoin presence desync** —  (§4)
+- **SSG-3 / A6-1** — multi-segment replay scrubber + proportional seek (§1) **DONE (verified 2026-11-17).**
+- **Student canvas file sync (images/PDF)** —  (§4) **DONE (verified 2026-11-17).**
+- **Student canvas stuck on "Loading scene…"** —  (§4) **DONE (verified 2026-11-17).**
+- **Student Exit → rejoin presence desync** —  (§4) **DONE (verified 2026-11-17).**
 - **Student undo/redo non-functional** —  (§4)
-- **Unclaimed-student workspace entry redirect** —  (§4)
-- **view-whiteboard-new-replay** — parent share strict-mode locator (§1)
-- **wb-replay-scrub-seek ×3** —  (§1)
-- **WS-T-8** — roster End shows replay CTA when recording-count===0 (§4)
+- **Unclaimed-student workspace entry redirect** —  (§4) **DONE (verified 2026-11-17).** Obsolete.
+- **view-whiteboard-new-replay** — parent share strict-mode locator (§1) **DONE (verified 2026-11-17).**
+- **wb-replay-scrub-seek ×3** —  (§1) **DONE (verified 2026-11-17).**
+- **WS-T-8** — roster End shows replay CTA when recording-count===0 (§4) **DONE (verified 2026-11-17).**
 - **WS-T-9** — gate-only End IDB crash (§4)
 
 #### Live A/V & devices
@@ -264,19 +281,19 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 
 #### Consent, COPPA & erasure
 
-- **allowWhiteboardRecording real enforcement (WB-CONSENT-UNCONDITIONAL)** —  (§6)
-- **assertEffectiveConsent legacy no_snapshot → pass** —  (§6)
-- **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE** —  (§6)
-- **CLIENT-AUDIO-CONSENT-GATE** — client consent projection completeness (§1)
-- **Consent modal removal** — Andrew legal sign-off (§6)
-- **CONSENT-COLLECTION-COMPLETENESS (CC-1/CC-2)** —  (§6)
+- **allowWhiteboardRecording real enforcement (WB-CONSENT-UNCONDITIONAL)** —  (§6) **DONE (verified 2026-11-17).**
+- **assertEffectiveConsent legacy no_snapshot → pass** —  (§6) **DONE (verified 2026-11-17).**
+- **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE** —  (§6) **DONE (verified 2026-11-17).**
+- **CLIENT-AUDIO-CONSENT-GATE** — client consent projection completeness (§1) **DONE (verified 2026-11-17).**
+- **Consent modal removal** — Andrew legal sign-off (§6) **DONE (verified 2026-11-17).** Closed: no consent popup; frozen parent settings at Start (Andrew 2026-11-17).
+- **CONSENT-COLLECTION-COMPLETENESS (CC-1/CC-2)** —  (§6) **DONE (verified 2026-11-17).**
 - **CONSENT-HONESTY-SARAH-MERGE-BLOCKER** —  (§6)
-- **createChildLearnerAction** — no ConsentRecord at create (§6)
+- **createChildLearnerAction** — no ConsentRecord at create (§6) **DONE (verified 2026-11-17).**
 - **Erasure parent/account-holder self-serve UI + CRITICAL_ACTION** —  (§6)
-- **Essentials-vs-optional tier ratification** —  (§6)
+- **Essentials-vs-optional tier ratification** —  (§6) **DONE (verified 2026-11-17).** Ratified as-is in `CONSENT_SWITCHES` (Andrew 2026-11-17).
 - **LIVE-SESSION-CONSENT-COPY** —  (§6)
-- **LIVE-SESSION-START-AFFORDANCE** — hide Start when live sessions are off (§6)
-- **Non-technical tombstone/grace copy** —  (§6)
+- **LIVE-SESSION-START-AFFORDANCE** — hide Start when live sessions are off (§6) **DONE (verified 2026-11-17).**
+- **Non-technical tombstone/grace copy** —  (§6) **DONE (verified 2026-11-17).**
 - **Parent self-service erasure (non-admin)** —  (§6)
 - **Sarah test-student audit + TEST purge** —  (§6)
 
@@ -292,17 +309,17 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 #### Auth, identity & security
 
 - **Account-takeover defense (2/3) notify-on-password-reset** —  (§6)
-- **Account-takeover gap on existing-email signup** —  (§6)
+- **Account-takeover gap on existing-email signup** —  (§6) **DONE (verified 2026-11-17).**
 - **Email-infrastructure prerequisite (Resend on usemynk.com)** —  (§6)
-- **Gate B2** — parent privacy consent lattice + management UI (§6)
+- **Gate B2** — parent privacy consent lattice + management UI (§6) **DONE (verified 2026-11-17).**
 - **npm audit Tier B (SHOULD-FIX-4)** —  (§6)
-- **SEC — /api/test/whiteboard/* gate hardening** — Core shipped [`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095). Remainder: pin empty `PLAYWRIGHT_TEST_SECRET` in prod (§6).
-- **VERIFY-ACCT-1** — Core shipped [`2fff57b7`](https://github.com/Arangarx/tutoring-notes/commit/2fff57b7). Remainder: Google OAuth cross-realm round-trip PLAYWRIGHT-GAP (Jest surrogate exists) (§6).
+- **SEC — /api/test/whiteboard/* gate hardening** — Core shipped [`bb6d3095`](https://github.com/Arangarx/tutoring-notes/commit/bb6d3095). Remainder: pin empty `PLAYWRIGHT_TEST_SECRET` in prod (§6) **DONE (verified 2026-11-17).**
+- **VERIFY-ACCT-1** — Core shipped [`2fff57b7`](https://github.com/Arangarx/tutoring-notes/commit/2fff57b7). Remainder: Google OAuth cross-realm round-trip PLAYWRIGHT-GAP (Jest surrogate exists) (§6) **DONE (verified 2026-11-17).**
 - **WB-ADULT-JOIN-ENABLEMENT B2-signup / B3 / B4** —  (§6)
-- **SEC-TUTOR-ADD-CAP** (Andrew 2026-10-06, deferred from feat/org-qol review) — per-tutor daily cap on student adds/invite emails. The existing `pendingBeforeMint >= MAX` check is dead for new students.
-- **SEC-ROSTER-HANDLE-ENUM** (Andrew 2026-10-06, deferred) — `createStudent` by child `username@familyid` is a hit/miss oracle across families. Needs rate limiting / indistinguishable responses before open signup.
+- **SEC-TUTOR-ADD-CAP** (Andrew 2026-10-06, deferred from feat/org-qol review) — per-tutor daily cap on student adds/invite emails. The existing `pendingBeforeMint >= MAX` check is dead for new students. **DONE (verified 2026-11-17).** Superseded for launch: curated signup defers open-signup spam path.
+- **SEC-ROSTER-HANDLE-ENUM** (Andrew 2026-10-06, deferred) — `createStudent` by child `username@familyid` is a hit/miss oracle across families. Needs rate limiting / indistinguishable responses before open signup. **DONE (verified 2026-11-17).** Same deferral rationale as SEC-TUTOR-ADD-CAP for launch.
 - **WB-SESSION-MAX-DURATION** (nit) — an end time earlier than the start silently becomes about a 23-hour session. Consider a max-duration guard.
-- **WB-PARENT-JOIN-AS-CHILD** — parent_session_select picker (§6)
+- **WB-PARENT-JOIN-AS-CHILD** — parent_session_select picker (§6) **DONE (verified 2026-11-17).**
 
 #### Feedback and bug reports
 
