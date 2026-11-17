@@ -21,6 +21,7 @@ export function TwoFactorMethodChooserCards({
   onChooseTotp,
   onChooseSms,
   smsEnrollmentAvailable,
+  emailEnrollmentAvailable = true,
   loading,
   loadingMethod,
   emailLabel = "Set up with email",
@@ -31,38 +32,63 @@ export function TwoFactorMethodChooserCards({
   onChooseTotp: () => void;
   onChooseSms: () => void;
   smsEnrollmentAvailable: boolean;
+  /** False when platform mail cannot send (`isEmailConfigured()`). */
+  emailEnrollmentAvailable?: boolean;
   loading: boolean;
   loadingMethod?: "email" | "totp" | "sms" | null;
   emailLabel?: string;
   totpLabel?: string;
   emailCardHighlighted?: boolean;
 }) {
+  const emailSuggested = emailEnrollmentAvailable && emailCardHighlighted;
+  const authenticatorSuggested = !emailEnrollmentAvailable;
   return (
     <div className="grid gap-3 sm:grid-cols-1">
       <Card
-        className={emailCardHighlighted ? "border-primary ring-1 ring-primary/30" : undefined}
+        className={
+          emailSuggested
+            ? "border-primary ring-1 ring-primary/30"
+            : emailEnrollmentAvailable
+              ? undefined
+              : "opacity-80"
+        }
         data-testid="tfa-choose-email"
       >
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Email code</CardTitle>
           <CardDescription>
-            {emailCardHighlighted
-              ? "Default — we send a 6-digit code to your account email at sign-in."
-              : "We send a 6-digit code to your account email at sign-in."}
+            {!emailEnrollmentAvailable
+              ? "Not available yet — email delivery is not configured."
+              : emailSuggested
+                ? "Default — we send a 6-digit code to your account email at sign-in."
+                : "We send a 6-digit code to your account email at sign-in."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={onChooseEmail} disabled={loading} className="w-full sm:w-auto">
-            {loading && loadingMethod === "email" ? "Sending code…" : emailLabel}
+          <Button
+            onClick={onChooseEmail}
+            disabled={loading || !emailEnrollmentAvailable}
+            className="w-full sm:w-auto"
+          >
+            {!emailEnrollmentAvailable
+              ? "Email not available"
+              : loading && loadingMethod === "email"
+                ? "Sending code…"
+                : emailLabel}
           </Button>
         </CardContent>
       </Card>
 
-      <Card data-testid="tfa-choose-totp">
+      <Card
+        data-testid="tfa-choose-totp"
+        className={authenticatorSuggested ? "border-primary ring-1 ring-primary/30" : undefined}
+      >
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Authenticator app</CardTitle>
           <CardDescription>
-            Use Google Authenticator, 1Password, or another TOTP app.
+            {authenticatorSuggested
+              ? "Suggested — use Google Authenticator, 1Password, or another TOTP app."
+              : "Use Google Authenticator, 1Password, or another TOTP app."}
           </CardDescription>
         </CardHeader>
         <CardContent>

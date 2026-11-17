@@ -57,6 +57,7 @@ interface Props {
   isAdmin: boolean;
   userId: string;
   smsEnrollmentAvailable?: boolean;
+  emailEnrollmentAvailable?: boolean;
   /** Pre-masked phone (e.g. "+1•••••1234") when method is SMS_OTP. */
   maskedPhone?: string;
 }
@@ -89,6 +90,7 @@ export function TwoFactorManageView({
   isAdmin,
   userId,
   smsEnrollmentAvailable = false,
+  emailEnrollmentAvailable = true,
   maskedPhone: initialMaskedPhone,
 }: Props) {
   const isEmailOtp = method === "EMAIL_OTP";
@@ -832,9 +834,10 @@ export function TwoFactorManageView({
           onChooseTotp={handleChangeChooseTotp}
           onChooseSms={handleChangeChooseSms}
           smsEnrollmentAvailable={smsEnrollmentAvailable}
+          emailEnrollmentAvailable={emailEnrollmentAvailable}
           loading={isPending}
           loadingMethod={changeMethod}
-          emailCardHighlighted={isEmailOtp}
+          emailCardHighlighted={emailEnrollmentAvailable && isEmailOtp}
         />
         <button
           type="button"
