@@ -16,7 +16,10 @@ describe("product today limits", () => {
   it("states the pilot limits in one content source", () => {
     const text = limitsText();
     expect(PRODUCT_TODAY_PAGE_TITLE).toBe("What Mynk does today");
-    expect(text).toMatch(/English only/i);
+    expect(text).toContain(
+      "Session notes and transcription support English only for now."
+    );
+    expect(text).not.toMatch(/Spanish is next/i);
     expect(text).toMatch(/notes/i);
     expect(text).toMatch(/transcription/i);
     expect(text).toMatch(/approved by Mynk/i);
@@ -37,6 +40,9 @@ describe("product today limits", () => {
     expect(text).not.toMatch(/notes support Spanish/i);
     expect(text).not.toMatch(/approved instantly/i);
     expect(text).not.toMatch(/no approval/i);
-    expect(text).toMatch(/Spanish is next/i);
+    expect(text).not.toMatch(/Spanish is next/i);
+    expect(text).toContain(
+      "Session notes and transcription support English only for now."
+    );
   });
 });

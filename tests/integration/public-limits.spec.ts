@@ -22,7 +22,10 @@ test.describe("Public limits — what Mynk does today", () => {
     await expect(page).not.toHaveURL(/\/login/);
 
     const list = page.getByTestId("product-today-list");
-    await expect(list).toContainText(/English only/i);
+    await expect(list).toContainText(
+      "Session notes and transcription support English only for now."
+    );
+    await expect(list).not.toContainText("Spanish is next");
     await expect(list).toContainText(/approved by Mynk/i);
     await expect(list).toContainText(/accept the invite/i);
     await expect(list).toContainText(/privacy settings/i);

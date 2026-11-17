@@ -23,7 +23,7 @@ export type KnownIssueItem = {
 export const productTodayItems: readonly KnownIssueItem[] = [
   {
     title: "Notes and transcription",
-    body: "Session notes and transcription are English only. Spanish is next, then more languages.",
+    body: "Session notes and transcription support English only for now.",
   },
   {
     title: "New teaching accounts",

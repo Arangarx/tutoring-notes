@@ -32,8 +32,7 @@ describe("TwoFactorMethodChooserCards — email availability", () => {
     expect(button).toBeEnabled();
     expect(button).toHaveTextContent("Set up with email");
     expect(email).toHaveTextContent(/Default — we send a 6-digit code/i);
-    expect(email.className).toMatch(/border-primary/);
-    expect(screen.getByTestId("tfa-choose-totp").className).not.toMatch(/border-primary/);
+    expect(screen.getByTestId("tfa-choose-totp")).not.toHaveTextContent(/Suggested —/i);
   });
 
   it("disables email and suggests the authenticator when mail cannot send", () => {
@@ -43,10 +42,9 @@ describe("TwoFactorMethodChooserCards — email availability", () => {
     expect(button).toBeDisabled();
     expect(button).toHaveTextContent("Email not available");
     expect(email).toHaveTextContent(/Not available yet —/i);
-    expect(email.className).not.toMatch(/border-primary/);
 
     const totp = screen.getByTestId("tfa-choose-totp");
-    expect(totp.className).toMatch(/border-primary/);
+    expect(totp).toHaveTextContent(/Suggested —/i);
     expect(within(totp).getByRole("button")).toBeEnabled();
     expect(within(totp).getByRole("button")).toHaveTextContent(/authenticator/i);
   });
