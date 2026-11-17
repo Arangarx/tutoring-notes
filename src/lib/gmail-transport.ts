@@ -1,11 +1,12 @@
 import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 import { OAuth2Client } from "google-auth-library";
 import { env } from "./env";
 
 export async function createGmailTransport(
   refreshToken: string,
   userEmail: string
-): Promise<nodemailer.Transporter | null> {
+): Promise<Transporter | null> {
   const clientId = env.GOOGLE_CLIENT_ID;
   const clientSecret = env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
