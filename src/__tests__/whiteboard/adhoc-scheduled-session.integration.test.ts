@@ -29,7 +29,7 @@ jest.mock("@vercel/blob", () => ({
 }));
 
 const requireStudentScopeMock = jest.fn();
-const assertOwnsStudentMock = jest.fn(async () => undefined);
+const assertOwnsStudentMock = jest.fn(async (_id: string) => undefined);
 
 jest.mock("@/lib/student-scope", () => ({
   __esModule: true,

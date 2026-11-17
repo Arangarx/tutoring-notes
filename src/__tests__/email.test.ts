@@ -20,5 +20,5 @@ test("sendPlatformMail when SMTP not configured fails closed with an explicit er
     text: "Body",
   });
   expect(result.sent).toBe(false);
-  expect(result.error).toMatch(/SMTP/i);
+  if (!result.sent) expect(result.error).toMatch(/SMTP/i);
 });

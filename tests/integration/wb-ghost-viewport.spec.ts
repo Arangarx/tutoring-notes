@@ -137,7 +137,7 @@ test.describe("ghost viewport after a board switch", {
             __TN_WB_E2E__?: Record<string, { getAppState: () => { zoom?: { value?: number } } }>;
           }
         ).__TN_WB_E2E__?.[r];
-        const z = bridge?.getAppState()?.zoom?.value;
+        const z = (bridge?.getAppState()?.zoom as { value?: number } | undefined)?.value;
         return typeof z === "number" && z > 0 ? z : 1;
       }, role);
     const camerasMatch = async () => {
@@ -552,7 +552,7 @@ test.describe("ghost viewport freezes on the viewer's screen during a pan", {
         }, { timeout: 4_000 })
         .toBe(true);
       expect(distinctive).not.toBeNull();
-      const frozenAt = distinctive as ScreenBox;
+      const frozenAt = distinctive as unknown as ScreenBox;
 
       const tutorCam = await readViewportSnapshot(peers.tutorPage, "tutor");
       const tutorZoom = tutorCam.zoom > 0 ? tutorCam.zoom : 1;

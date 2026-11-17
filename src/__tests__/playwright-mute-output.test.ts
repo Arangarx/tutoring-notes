@@ -30,11 +30,11 @@ function muteHelperPids() {
   );
   return out
     .split(/\s+/)
-    .map((part) => Number(part))
-    .filter((pid) => Number.isInteger(pid) && pid > 0);
+    .map((part: string) => Number(part))
+    .filter((pid: number) => Number.isInteger(pid) && pid > 0);
 }
 
-function pidAlive(pid) {
+function pidAlive(pid: number) {
   try {
     process.kill(pid, 0);
     return true;
@@ -111,14 +111,14 @@ describe("playwright runner pid resolution", () => {
   });
 
   it("returns this process when it is already the cli runner", () => {
-    const runner = resolvePlaywrightRunnerPid(43821, (pid) =>
+    const runner = resolvePlaywrightRunnerPid(43821, (pid: number) =>
       pid === 43821 ? { ppid: 100, commandLine: cli } : null,
     );
     expect(runner).toBe(43821);
   });
 
   it("walks from a short-lived child up to the cli.js runner", () => {
-    const lookup = (pid) => {
+    const lookup = (pid: number) => {
       if (pid === 50) return { ppid: 40, commandLine: "node global-setup-worker.js" };
       if (pid === 40) return { ppid: 10, commandLine: cli };
       if (pid === 10) return { ppid: 1, commandLine: "C:\\Windows\\System32\\cmd.exe" };
@@ -128,7 +128,7 @@ describe("playwright runner pid resolution", () => {
   });
 
   it("keeps the start pid when no ancestor is the runner", () => {
-    const lookup = (pid) => {
+    const lookup = (pid: number) => {
       if (pid === 7) return { ppid: 6, commandLine: "node jest.js" };
       if (pid === 6) return { ppid: 1, commandLine: "C:\\Windows\\explorer.exe" };
       return null;
@@ -137,7 +137,7 @@ describe("playwright runner pid resolution", () => {
   });
 
   it("stops on a parent cycle and returns the start pid", () => {
-    const lookup = (pid) => {
+    const lookup = (pid: number) => {
       if (pid === 3) return { ppid: 4, commandLine: "node a.js" };
       if (pid === 4) return { ppid: 3, commandLine: "node b.js" };
       return null;
@@ -154,9 +154,12 @@ describe("playwright runner pid resolution", () => {
 });
 
 describe("playwright output mute lifetime", () => {
-  const stoppers = [];
+  const stoppers: Array<() => void> = [];
   afterEach(() => {
-    while (stoppers.length) stoppers.pop()();
+    while (stoppers.length) {
+      const stop = stoppers.pop();
+      if (stop) stop();
+    }
   });
 
   it("does not return until the first sweep is ready, then stays up", async () => {
@@ -180,7 +183,7 @@ describe("playwright output mute lifetime", () => {
     expect(text.indexOf(`watching pid=${process.pid}`)).toBeLessThan(
       text.indexOf("[playwright-mute] ready"),
     );
-    const started = muteHelperPids().filter((pid) => !before.has(pid));
+    const started = muteHelperPids().filter((pid: number) => !before.has(pid));
     expect(started.length).toBeGreaterThan(0);
     for (const pid of started) expect(pidAlive(pid)).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -192,7 +195,7 @@ describe("playwright output mute lifetime", () => {
   }, 120000);
 });
 
-function csharpStatic(ps1, signature) {
+function csharpStatic(ps1: string, signature: string) {
   const start = ps1.indexOf(signature);
   if (start < 0) throw new Error(`missing ${signature}`);
   const next = ps1.indexOf("\n  static ", start + signature.length);

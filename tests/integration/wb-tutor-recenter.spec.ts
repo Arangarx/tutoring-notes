@@ -86,7 +86,7 @@ async function readTutorCamera(page: Page): Promise<{
         >;
       }
     ).__TN_WB_E2E__?.tutor?.getAppState();
-    const zoom = st?.zoom?.value;
+    const zoom = (st?.zoom as { value?: number } | undefined)?.value;
     return {
       scrollX: Number(st?.scrollX) || 0,
       scrollY: Number(st?.scrollY) || 0,
@@ -124,7 +124,7 @@ test.describe("tutor recenter view", { tag: [TAG.WB_CHROME, TAG.WB_VIEWPORT] }, 
             __TN_WB_E2E__?: Record<string, { getAppState: () => { zoom?: { value?: number } } }>;
           }
         ).__TN_WB_E2E__?.tutor?.getAppState();
-        return st?.zoom?.value ?? 0;
+        return (st?.zoom as { value?: number } | undefined)?.value ?? 0;
       });
       expect(Math.abs(zoom - 1.4)).toBeLessThanOrEqual(0.05);
       await expect(peers.studentPage.getByRole("button", { name: "Recenter view" })).toHaveCount(0);
@@ -154,7 +154,7 @@ test.describe("tutor recenter view", { tag: [TAG.WB_CHROME, TAG.WB_VIEWPORT] }, 
             __TN_WB_E2E__?: Record<string, { getAppState: () => { zoom?: { value?: number } } }>;
           }
         ).__TN_WB_E2E__?.tutor?.getAppState();
-        return st?.zoom?.value ?? 0;
+        return (st?.zoom as { value?: number } | undefined)?.value ?? 0;
       });
       expect(Math.abs(zoom - 1.85)).toBeLessThanOrEqual(0.05);
     } finally {

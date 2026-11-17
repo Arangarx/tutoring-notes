@@ -221,8 +221,9 @@ describe("enqueueChunkTranscribe", () => {
 // used unchanged (fail-open).
 
 function restoreEnv(name: "CRON_SECRET" | "PLAYWRIGHT_TEST" | "NODE_ENV", value: string | undefined) {
-  if (value === undefined) delete process.env[name];
-  else process.env[name] = value;
+  const env = process.env as Record<string, string | undefined>;
+  if (value === undefined) delete env[name];
+  else env[name] = value;
 }
 
 describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)", () => {
@@ -290,7 +291,7 @@ describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)"
   });
 
   test("a leaked PLAYWRIGHT_TEST in production still uses the bearer fetch", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
     process.env.CRON_SECRET = MOCK_SECRET;
     process.env.PLAYWRIGHT_TEST = "1";
     await enqueueChunkTranscribe(JOB);
@@ -300,7 +301,7 @@ describe("enqueueChunkTranscribe — CRON_SECRET bearer (SHOULD-FIX-2 Option A)"
   });
 
   test("PLAYWRIGHT_TEST outside production still bearer-fetches the queue route", async () => {
-    process.env.NODE_ENV = "test";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "test";
     process.env.PLAYWRIGHT_TEST = "1";
     process.env.CRON_SECRET = MOCK_SECRET;
 

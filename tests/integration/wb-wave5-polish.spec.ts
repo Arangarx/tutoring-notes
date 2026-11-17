@@ -920,7 +920,20 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         for (let i = 0; i < fitted.rects.length; i++) {
           for (let j = i + 1; j < fitted.rects.length; j++) {
             expect(
-              overlaps(fitted.rects[i], fitted.rects[j]),
+              overlaps(
+                {
+                  x: fitted.rects[i].left,
+                  y: fitted.rects[i].top,
+                  width: fitted.rects[i].width,
+                  height: fitted.rects[i].height,
+                },
+                {
+                  x: fitted.rects[j].left,
+                  y: fitted.rects[j].top,
+                  width: fitted.rects[j].width,
+                  height: fitted.rects[j].height,
+                }
+              ),
               `${fitted.rects[i].id} overlaps ${fitted.rects[j].id} at ${width}px with longest copy`
             ).toBe(false);
           }
