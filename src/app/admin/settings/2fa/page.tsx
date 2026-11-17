@@ -31,7 +31,11 @@ import { db } from "@/lib/db";
 import { PageShell } from "@/components/PageShell";
 import { SectionCard } from "@/components/SectionCard";
 import { SubNav } from "@/components/SubNav";
-import { isTwoFactorEnrollmentConfirmed, isSms2faEnrollmentAvailable } from "@/lib/two-factor-enrollment";
+import {
+  isEmail2faEnrollmentAvailable,
+  isSms2faEnrollmentAvailable,
+  isTwoFactorEnrollmentConfirmed,
+} from "@/lib/two-factor-enrollment";
 import { maskE164 } from "@/lib/sms";
 import { TwoFactorSetupForm } from "./setup/TwoFactorSetupForm";
 import { TwoFactorManageView } from "./TwoFactorManageView";
@@ -97,7 +101,11 @@ export default async function TwoFactorManagePage() {
     return (
       <PageShell realm="admin"
         title="Set up Two-Factor Authentication"
-        description="Protect your account with a one-time code — emailed by default, or use an authenticator app."
+        description={
+          isEmail2faEnrollmentAvailable()
+            ? "Protect your account with a one-time code — emailed by default, or use an authenticator app."
+            : "Protect your account with an authenticator app. Email codes are not available yet."
+        }
         eyebrow={
           <Link
             href="/admin/settings"
@@ -110,7 +118,10 @@ export default async function TwoFactorManagePage() {
         sidebarWidth="narrow"
       >
           <SectionCard realm="admin" title="Choose your verification method">
-            <TwoFactorSetupForm smsEnrollmentAvailable={isSms2faEnrollmentAvailable()} />
+            <TwoFactorSetupForm
+              smsEnrollmentAvailable={isSms2faEnrollmentAvailable()}
+              emailEnrollmentAvailable={isEmail2faEnrollmentAvailable()}
+            />
           </SectionCard>
       </PageShell>
     );
@@ -141,6 +152,7 @@ export default async function TwoFactorManagePage() {
             isAdmin={isAdmin}
             userId={session.user.id ?? ""}
             smsEnrollmentAvailable={isSms2faEnrollmentAvailable()}
+            emailEnrollmentAvailable={isEmail2faEnrollmentAvailable()}
             maskedPhone={twoFaRow.phoneE164 ? maskE164(twoFaRow.phoneE164) : undefined}
           />
         </SectionCard>

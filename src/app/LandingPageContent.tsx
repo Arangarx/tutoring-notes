@@ -6,6 +6,10 @@ import { signOut, useSession } from "next-auth/react";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  PRODUCT_TODAY_LINK_LABEL,
+  PRODUCT_TODAY_PATH,
+} from "@/lib/known-issues-roadmap-content";
 import { SITE_ROLE_SELF_LEARNER_PARENT } from "@/lib/site-role-labels";
 
 function ValuePropCard({
@@ -195,7 +199,14 @@ export function LandingPageContent() {
               Mynk is free during the pilot. No credit card. Mynk doesn&apos;t take
               a cut of what you charge. Your teaching account requires two-factor
               sign-in. Parents and students sign in to their own accounts. During
-              the pilot, new teaching accounts are approved by Mynk.
+              the pilot, new teaching accounts are approved by Mynk.{" "}
+              <Link
+                href={PRODUCT_TODAY_PATH}
+                className="font-medium text-foreground underline underline-offset-[3px]"
+              >
+                {PRODUCT_TODAY_LINK_LABEL}
+              </Link>
+              .
             </p>
 
             <div className="mx-auto mb-8 max-w-md rounded-2xl bg-brand px-6 py-5 text-left">

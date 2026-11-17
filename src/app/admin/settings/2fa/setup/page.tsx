@@ -5,7 +5,11 @@ import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { TwoFactorSetupForm } from "./TwoFactorSetupForm";
 import { ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
-import { isTwoFactorEnrollmentConfirmed, isSms2faEnrollmentAvailable } from "@/lib/two-factor-enrollment";
+import {
+  isEmail2faEnrollmentAvailable,
+  isSms2faEnrollmentAvailable,
+  isTwoFactorEnrollmentConfirmed,
+} from "@/lib/two-factor-enrollment";
 import { maskE164 } from "@/lib/sms";
 
 export const dynamic = "force-dynamic";
@@ -88,7 +92,9 @@ export default async function TwoFactorSetupPage() {
     <div className="card" style={{ maxWidth: 540 }}>
       <h1 style={{ marginTop: 0 }}>Set up Two-Factor Authentication</h1>
       <p className="muted" style={{ marginBottom: 20 }}>
-        Protect your account with a one-time code — emailed by default, or use an authenticator app.
+        {isEmail2faEnrollmentAvailable()
+          ? "Protect your account with a one-time code — emailed by default, or use an authenticator app."
+          : "Protect your account with an authenticator app. Email codes are not available yet."}
       </p>
       <TwoFactorSetupForm
         pendingEmailEnrollment={pendingEmailEnrollment}
@@ -96,6 +102,7 @@ export default async function TwoFactorSetupPage() {
         pendingSmsEnrollment={pendingSmsEnrollment}
         pendingMaskedPhone={pendingMaskedPhone}
         smsEnrollmentAvailable={isSms2faEnrollmentAvailable()}
+        emailEnrollmentAvailable={isEmail2faEnrollmentAvailable()}
       />
     </div>
   );

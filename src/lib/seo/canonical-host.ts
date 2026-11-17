@@ -24,6 +24,7 @@ export const PUBLIC_SITEMAP_PATHS = [
   "/login",
   "/signup",
   "/feedback",
+  "/limits",
 ] as const;
 
 export type CanonicalRedirectInput = {

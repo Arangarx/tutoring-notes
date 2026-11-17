@@ -257,6 +257,7 @@ export default defineConfig({
         "**/integration/note-form-hydration.spec.ts",
         "**/integration/note-outbox-share.spec.ts",
         "**/integration/ux-sarah-wave1-bundle.spec.ts",
+        "**/integration/public-limits.spec.ts",
         "**/integration/calendar-sync-badge.spec.ts",
         "**/integration/calendar-oauth-connect.spec.ts",
         "**/integration/recording-resilience.spec.ts",
