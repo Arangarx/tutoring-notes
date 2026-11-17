@@ -1,5 +1,9 @@
 # Consent copy for approval
 
+**Part 1 approved by Andrew on 2026-11-17** ("as long as it is fair and accurate").
+
+One change: item 36's "Most families keep this on" becomes "Mynk recommends keeping this on for the best experience."
+
 **Fact-checked 2026-11-17.**
 
 This is the consent wording for the release. You are approving sentences, not code.
@@ -429,10 +433,10 @@ These can ship during the pilot. They are not required to make the legal pages h
 **Where:** `RECOMMENDED_CONSENT_NOTE`, under a recommended switch (audio).
 **Who sees it:** Parent, and the child page when a parent has turned that switch back on uses a different line ("Your parent turned this back on.").
 **Current:** "You can turn this off, but most families keep it on so sessions are useful after class ends."
-**Proposed:** Keep it.
-**Why:** It does not describe a behavior. It is still fair.
+**Proposed:** "You can turn this off, but Mynk recommends keeping this on for the best experience."
+**Why:** Andrew, 2026-11-17, replaced "most families keep it on so sessions are useful after class ends." The new sentence does not describe a behavior.
 
-**Your change:**
+**Your change:** Approved 2026-11-17. "Most families keep this on" becomes "Mynk recommends keeping this on for the best experience."
 
 ### 37. One description per switch
 

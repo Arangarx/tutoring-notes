@@ -18,6 +18,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Live session server-held encryption key (product-specific) 2026-10-06.
  * Mynk SMS 2FA opt-in / no marketing share (product-specific) 2026-09-21.
  * Org honesty copy (product-specific; umbrella SYNCED FROM unchanged) 2026-10-12.
+ * Consent-switch honesty (product-specific; umbrella SYNCED FROM unchanged) 2026-11-17.
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -47,7 +48,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="October 12, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="November 17, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Mynk</strong>, also titled Tutoring Notes, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -66,9 +67,7 @@ export default function PrivacyPage() {
             <h2 className="heading m-0 text-lg font-normal">What Mynk is</h2>
             <p style={{ margin: "8px 0 0" }}>
               Mynk is the web application these pages describe. It is also titled Tutoring Notes.
-              It helps private tutors run a shared whiteboard session, record it, and draft the
-              notes. When a note is finalized, the parent and student can see the notes and the
-              lesson replay in their account.
+              It helps private tutors run a shared whiteboard session, record what the privacy settings allow, and draft notes when notes are on. When the tutor saves, the parent and student can see what was recorded. That save can be notes and a replay, or a replay with no notes.
             </p>
           </div>
 
@@ -78,8 +77,8 @@ export default function PrivacyPage() {
               <li><strong>Account information:</strong> email address, hashed password, and optional display name when you create a tutor account.</li>
               <li><strong>Optional phone number</strong> (tutor/admin accounts only, collected only if you enable two-factor authentication via text message — never required).</li>
               <li><strong>Session notes:</strong> student names, session dates, topics, homework, assessment, plan, and links you enter.</li>
-              <li><strong>Session audio recordings</strong> from a whiteboard session (stored in Vercel Blob — see below).</li>
-              <li><strong>Whiteboard session data:</strong> timestamped stroke logs, optional PDF / image inserts, and a session snapshot used for the parent replay surface.</li>
+              <li><strong>Session audio recordings</strong>, when any of that audio is saved (stored in Vercel Blob — see below). Online, if audio recording is off, the tutor&apos;s voice can still be saved. In person, audio recording off saves no audio.</li>
+              <li><strong>Whiteboard session data</strong>, when whiteboard recording is on: timestamped stroke logs, optional PDF or image inserts, and a session snapshot for replay. When whiteboard recording is off, the board is deleted from our servers after the session ends.</li>
               <li><strong>Parent or guardian email addresses</strong> you enter for that student, including for an invite or an optional reminder.</li>
               <li><strong>Outbound email logs</strong> (subject, recipient, body text, share link) retained for delivery troubleshooting.</li>
               <li><strong>Feedback submissions</strong> (message, optional contact email, and submitter IP address retained for abuse prevention on the public form).</li>
@@ -89,7 +88,7 @@ export default function PrivacyPage() {
               <li><strong>Calendar subscription feed token</strong> — an opaque secret URL we generate if you use the ICS/webcal subscription feed (see Calendar subscription feed below).</li>
               <li><strong>Standard technical logs</strong> (IP address, user agent, timestamps) collected by our hosting provider for security and reliability.</li>
               <li><strong>LearnerProfile information:</strong> a student&rsquo;s name entered when creating a student profile. For students under 13, this is personal information subject to COPPA protections.</li>
-              <li><strong>Session transcripts</strong> automatically generated from session audio by the OpenAI transcription service (see below). Transcripts are derived from and linked to the session audio recording.</li>
+              <li><strong>Session transcripts</strong>, only when session notes are on, made from the saved audio by OpenAI (see below). If notes are off, there is no transcript, even if audio was saved.</li>
               <li><strong>Parent or guardian contact information</strong> collected during the account-claim and consent flow for students, including for verifiable parental consent purposes for students under 13.</li>
             </ul>
           </div>
@@ -129,7 +128,7 @@ export default function PrivacyPage() {
                 <ul style={{ margin: "4px 0 0", paddingLeft: 20, lineHeight: 1.6 }}>
                   <li><strong>Vercel</strong> — application hosting + serverless functions (US region).</li>
                   <li><strong>Neon</strong> — PostgreSQL database (US region).</li>
-                  <li><strong>Vercel Blob</strong> — object storage for session audio and whiteboard snapshots (US region).</li>
+                  <li><strong>Vercel Blob</strong> — object storage for session audio and for whiteboard snapshots, when those are saved (US region).</li>
                   <li><strong>OpenAI</strong> — AI note generation and audio transcription. See AI note generation section below.</li>
                 </ul>
               </li>
@@ -161,8 +160,7 @@ export default function PrivacyPage() {
               (<code>gmail.send</code> scope) and to read your email address{" "}
               (<code>userinfo.email</code> scope).               These permissions are used exclusively
               to send an optional reminder from your Gmail account when you click
-              Email a reminder in the app. The parent or student already sees the notes
-              and the lesson replay in their account when you finalize a note. We do <strong>not</strong> read, search,
+              Email a reminder in the app. The parent or student already sees what was recorded, when you save. We do <strong>not</strong> read, search,
               index, modify, or delete any of your existing emails. Google user data we
               receive through Gmail APIs is used only to provide the user-facing email-
               sending feature you asked for, consistent with Google&apos;s applicable API
@@ -245,8 +243,7 @@ export default function PrivacyPage() {
           <div>
             <h2 className="heading m-0 text-lg font-normal">AI note generation (OpenAI)</h2>
             <p style={{ margin: "8px 0 0" }}>
-              When a session is recorded, the audio is transcribed by OpenAI and the notes
-              are drafted automatically. That is part of the session.
+              When session notes are on, the saved audio is transcribed by OpenAI and the notes are drafted from it. Transcription is for English speech. If notes are off, the audio is not transcribed and no notes are drafted, even if audio was saved.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               OpenAI&apos;s API data usage policy states that data submitted through the
@@ -268,9 +265,8 @@ export default function PrivacyPage() {
               URLs served through our application, not direct public blob links.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              Recordings are sent to <strong>OpenAI</strong> via the{" "}
-              <code>/v1/audio/transcriptions</code> endpoint for
-              transcription as part of the note generation flow. OpenAI acts as a{" "}
+              When session notes are on, those recordings are sent to <strong>OpenAI</strong> via the{" "}
+              <code>/v1/audio/transcriptions</code> endpoint so the notes can be drafted. The student&apos;s voice is included only if audio recording saved it. If notes are off, the recording is not sent for transcription. OpenAI acts as a{" "}
               <strong>subprocessor</strong> processing audio on our instructions under a
               data processing agreement; audio data is <strong>not used to train</strong>{" "}
               OpenAI&rsquo;s models. Audio is not shared with any other third party.
@@ -278,21 +274,36 @@ export default function PrivacyPage() {
             <p style={{ margin: "8px 0 0" }}>
               Audio recordings of tutoring sessions may contain the voices of students,
               including students under 13. Audio of students under 13 is collected only with
-              verifiable parental consent. Online, if audio recording is off, the child&rsquo;s
-              voice is left out of the saved recording. The tutor&rsquo;s microphone can still
-              be saved and transcribed. In person, audio recording off saves nothing, because
-              one microphone would catch everyone in the room. See the{" "}
+              verifiable parental consent. Online, if audio recording is off, the child&apos;s voice is left out of the saved recording. The tutor&apos;s microphone can still be saved. It is transcribed only when session notes are on. In person, audio recording off saves no audio, because one microphone would catch everyone. The whiteboard follows its own setting. See the{" "}
               <strong>Children&rsquo;s data and parental rights (COPPA)</strong> section
               below for how long we keep that information and how to exercise your rights.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               A self-learner agrees to session recording when they set up their account, and
-              can turn live sessions, audio recording, whiteboard recording, or notes off later
+              can turn online sessions, audio recording, whiteboard recording, or notes off later
               in their settings. Audio recording off works the same way as for a child.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              If a whiteboard session was recorded, the signed-in parent or student can play
-              that audio with the notes. There is no separate switch for including the audio.
+              The signed-in parent or student can play back what was recorded: the audio, the board, or both. Replay does not need notes to be on. There is no separate switch that adds the audio back. If the board was not saved, replay says so.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="heading m-0 text-lg font-normal">What each switch does</h2>
+            <p style={{ margin: "8px 0 0" }}>
+              Online sessions. On, the student can join an online session with video and audio. Off, an online session cannot be started or joined. In person is not controlled by this switch.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              Audio. On, session audio is saved. Off, online, the student&apos;s voice is left out and the tutor&apos;s microphone can still be saved. Off, in person, no audio is saved, because one microphone would catch everyone. The whiteboard follows its own setting. Saved audio is transcribed only when notes are on.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              Whiteboard. On, the board is saved and can be replayed. Off, the board still works during the session. After the session ends, the saved board is deleted from our servers, as described under Data retention and deletion.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              Notes. On, notes are drafted from the saved audio. Transcription is for English speech. Off, nothing is transcribed and no notes are drafted, even if audio was saved.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              During the session, the tutor and the student can both see which of these are off.
             </p>
           </div>
 
@@ -325,8 +336,16 @@ export default function PrivacyPage() {
               <strong>We do not retain children&rsquo;s personal information
               indefinitely.</strong> Verified deletion requests from a parent or legal
               guardian (see Children&rsquo;s data and parental rights below) are honored
-              promptly. Automated retention schedules may be introduced in the future;
-              this policy will be updated when they take effect.
+              promptly. We do delete one kind of data on its own: when whiteboard recording is off, the board from that session is deleted from our servers after the session ends. A later pass removes anything still uploading, and a failed pass is tried again. That is not a general retention schedule for audio, transcripts, or notes. Those stay until the tutor deletes that session, or you ask Mynk to delete them. Turning whiteboard recording off does not delete a board already saved from an earlier session.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              While a session runs, the tutor&apos;s browser keeps a recovery copy of the board on that device so a dropped connection does not lose the drawing. That copy is removed when the session ends on that device. If the session ended somewhere else, it is removed the next time the tutor opens that student&apos;s workspace on that device.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              Our database keeps backup history for a limited period. A file removed from storage can remain recoverable for a limited period. This policy does not state a number of days for either.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              To ask Mynk to delete a recording or other personal information, email <a href="mailto:arangarx+tutoringnotes@gmail.com">arangarx+tutoringnotes@gmail.com</a>. Mynk completes that request within 30 days.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               After an account is deleted, we keep a record of the consent choices that were
@@ -364,10 +383,7 @@ export default function PrivacyPage() {
               their account. Minors do not have tutor accounts.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              When a parent or a self-learner has finished account setup, consent is recorded
-              in that Mynk account before a live session. A parent records it for a child. A
-              self-learner records it for themselves. A student who has not finished setup
-              does not have that record yet.
+              When a parent or a self-learner has finished account setup, consent is recorded in that Mynk account before a session can start. That is true online and in person. A parent records it for a child. A self-learner records it for themselves. Without that record, a session cannot start. The online-sessions switch controls online sessions only. In person, the recording switches decide what is saved.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               Parent or student share links are tokenized and revocable. Opening one requires
@@ -397,8 +413,8 @@ export default function PrivacyPage() {
                 includes the child&rsquo;s voice. Online, if audio recording is off, the
                 child&rsquo;s voice is left out and the tutor&rsquo;s microphone can still be
                 saved. In person, audio recording off saves nothing.</li>
-              <li><strong>Session transcripts</strong> automatically derived from audio
-                via OpenAI (subprocessor) for note generation and session history.</li>
+              <li><strong>Session transcripts</strong>, only when session notes are on, made from the saved audio via OpenAI (subprocessor) for note generation. If notes are off, there is no transcript.</li>
+              <li><strong>Whiteboard drawings</strong>, when whiteboard recording is on. When it is off, the board is deleted from our servers after the session ends.</li>
               <li><strong>Session notes</strong> created by or for the tutor summarizing
                 session content, topics, and progress related to the student.</li>
               <li><strong>LearnerProfile information</strong> — the student&rsquo;s name
@@ -409,9 +425,8 @@ export default function PrivacyPage() {
             </ul>
 
             <p style={{ margin: "8px 0 0" }}>
-              <strong>Subprocessors handling children&rsquo;s data.</strong> Session audio
-              is transmitted to <strong>OpenAI</strong> via the{" "}
-              <code>/v1/audio/transcriptions</code> endpoint for transcription only.
+              <strong>Subprocessors handling children&rsquo;s data.</strong> When session notes are on, session audio is transmitted to <strong>OpenAI</strong> via the{" "}
+              <code>/v1/audio/transcriptions</code> endpoint for transcription only. It is not sent for transcription when notes are off.
               OpenAI acts as a subprocessor operating under a data processing agreement
               on our instructions; child audio is <strong>not used to train</strong>{" "}
               OpenAI&rsquo;s models. Session data is stored in{" "}
@@ -423,14 +438,7 @@ export default function PrivacyPage() {
             </p>
 
             <p style={{ margin: "8px 0 0" }}>
-              <strong>How we use children&rsquo;s personal information.</strong> Children&rsquo;s
-              personal information is used exclusively to: deliver the tutoring session
-              recording, transcription, and note-generation service; enable the tutor to
-              review session history and track the student&rsquo;s progress; and, when a note
-              is finalized, let the parent or student see the notes and the lesson replay in
-              their signed-in account. We do not use children&rsquo;s
-              personal information for advertising, profiling, or any purpose unrelated
-              to the child&rsquo;s tutoring sessions.
+              <strong>How we use children&apos;s personal information.</strong> Children&apos;s personal information is used to run the tutoring session and, when the matching switch is on, to save that part of it, transcribe it, and draft notes. Online, if audio recording is off, the child&apos;s voice is left out. When the tutor saves, the parent or student can see what was recorded — notes, a replay, or both — in their signed-in account. We do not use children&apos;s personal information for advertising, profiling, or any purpose unrelated to the child&apos;s tutoring sessions.
             </p>
 
             <p style={{ margin: "8px 0 0" }}>
@@ -442,9 +450,7 @@ export default function PrivacyPage() {
               parents can review progress.{" "}
               <strong>We do not retain children&rsquo;s personal information
               indefinitely.</strong> Verified deletion requests from a parent or legal
-              guardian are honored promptly (see Parental rights below). Automated
-              retention schedules may be introduced in the future; this policy will be
-              updated when they take effect.
+              guardian are honored promptly (see Parental rights below). We do delete one kind of data on its own: when whiteboard recording is off, the board from that session is deleted from our servers after the session ends. A later pass removes anything still uploading, and a failed pass is tried again. That is not a general retention schedule for audio, transcripts, or notes. Those stay until the tutor deletes that session, or you ask Mynk to delete them. Turning whiteboard recording off does not delete a board already saved from an earlier session.
             </p>
 
             <p style={{ margin: "8px 0 0" }}>
@@ -455,9 +461,7 @@ export default function PrivacyPage() {
               <li>Review the personal information we have collected from your child.</li>
               <li>Direct us to delete your child&rsquo;s personal information.</li>
               <li>Revoke consent and refuse to permit further collection or use of your
-                child&rsquo;s personal information. Turning a consent off stops that new
-                collection. Online, if audio recording is off, the tutor&rsquo;s microphone
-                can still be saved.</li>
+                child&rsquo;s personal information. Turning a consent off stops that new collection. A change applies to a session that has not started. A session that has started keeps what it started with. Online, if audio recording is off, the tutor&apos;s microphone can still be saved. It is transcribed only when notes are on. In person, audio recording off saves no audio. When whiteboard recording is off, the board from that session is deleted from our servers after the session ends. A board saved from an earlier session is not deleted by turning the switch off.</li>
             </ul>
             <p style={{ margin: "8px 0 0" }}>
               To exercise any of these rights, contact us at{" "}
@@ -469,10 +473,7 @@ export default function PrivacyPage() {
             <p style={{ margin: "8px 0 0" }}>
               <strong>Consent revocation and data already collected (two tracks).</strong>{" "}
               Session audio recordings, transcripts, and notes are created only with a
-              parent or guardian&rsquo;s consent. Turning a consent off stops that new
-              collection. Online, if audio recording is off, the tutor&rsquo;s microphone can
-              still be saved. It does not automatically delete content already created under
-              your prior consent. As a parent or legal guardian, you may request to
+              parent or guardian&rsquo;s consent. Turning a consent off stops that new collection. A change applies to a session that has not started. A session that has started keeps what it started with. Online, if audio recording is off, the tutor&apos;s microphone can still be saved. It is transcribed only when notes are on. In person, audio recording off saves no audio. When whiteboard recording is off, the board from that session is deleted from our servers after the session ends. A board saved from an earlier session is not deleted by turning the switch off. It does not automatically delete content already created under your prior consent. As a parent or legal guardian, you may request to
               review or delete your child&rsquo;s personal information at any time by
               contacting us at{" "}
               <a href="mailto:arangarx+tutoringnotes@gmail.com">arangarx+tutoringnotes@gmail.com</a>.
@@ -482,7 +483,7 @@ export default function PrivacyPage() {
 
             <p style={{ margin: "8px 0 0" }}>
               <strong>Educational use by the tutor.</strong> With parental consent, a
-              child&rsquo;s session recordings, transcripts, and notes may be used by
+              child&apos;s session recordings, transcripts, notes, and whiteboard drawings, when they were saved, may be used by
               the tutor for that child&rsquo;s instruction — for example, reviewing past
               sessions to plan future lessons. This consent is part of account setup.
               Turning a consent off stops that new collection. It does not remove content
