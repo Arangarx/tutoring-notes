@@ -135,7 +135,7 @@ describe("email OTP challenge DB behaviour", () => {
 
   it("send rate limit blocks after 3 sends / 15 min", async () => {
     jest.mock("@/lib/email", () => ({
-      sendPlatformMail: jest.fn().mockResolvedValue({ sent: true }),
+      sendPlatformMail: jest.fn(async () => ({ sent: true as const })),
     }));
 
     const { sendEmailOtpChallenge, EMAIL_OTP_SEND_MAX } = await import(
@@ -167,7 +167,7 @@ describe("email OTP challenge DB behaviour", () => {
 
   it("new send invalidates prior unused challenges", async () => {
     jest.mock("@/lib/email", () => ({
-      sendPlatformMail: jest.fn().mockResolvedValue({ sent: true }),
+      sendPlatformMail: jest.fn(async () => ({ sent: true as const })),
     }));
 
     const { sendEmailOtpChallenge, verifyEmailOtpChallenge } = await import(
@@ -204,7 +204,10 @@ describe("email OTP challenge DB behaviour", () => {
   it("sendEmailOtpChallenge returns honest error when sendPlatformMail fails", async () => {
     jest.resetModules();
     jest.mock("@/lib/email", () => ({
-      sendPlatformMail: jest.fn().mockResolvedValue({ sent: false, error: "SMTP unavailable" }),
+      sendPlatformMail: jest.fn(async () => ({
+        sent: false as const,
+        error: "SMTP unavailable",
+      })),
     }));
 
     await ensureTestAdmin();
@@ -233,7 +236,7 @@ describe("email OTP logging hygiene", () => {
     };
 
     jest.mock("@/lib/email", () => ({
-      sendPlatformMail: jest.fn().mockImplementation(async (opts: { text?: string }) => {
+      sendPlatformMail: jest.fn(async (opts: { text?: string }) => {
         const match = opts.text?.match(/\n(\d{6})\n/);
         return { sent: true, _capturedCode: match?.[1] };
       }),

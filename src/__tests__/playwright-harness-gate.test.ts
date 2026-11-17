@@ -60,6 +60,8 @@ describe("playwright harness server gate", () => {
       env: { WB_SKIP_3101_WEBSERVER: "1" },
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(String(fetchImpl.mock.calls[0][0])).toContain(":3100/");
+    expect(
+      String((fetchImpl.mock.calls[0] as unknown as [string, ...unknown[]] | undefined)?.[0])
+    ).toContain(":3100/");
   });
 });

@@ -83,6 +83,7 @@ function mockWorkspaceAudio(
     swapMicDevice: jest.fn(() => Promise.resolve()),
     swapMicDeviceBySlot: jest.fn(() => Promise.resolve()),
     setTutorRecordingMute: jest.fn(),
+    micAcquireSettled: true,
     ...overrides,
   };
 }

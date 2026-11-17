@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  */
-import ical from "node-ical";
+import ical, { type VEvent } from "node-ical";
 
 import { buildIcsCalendarBody } from "@/lib/calendar/ics-feed";
 
@@ -14,7 +14,7 @@ function collectUidsAndDtstamps(icsBody: string): {
   const dtstamps: string[] = [];
   for (const entry of Object.values(parsed)) {
     if (entry && typeof entry === "object" && "type" in entry && entry.type === "VEVENT") {
-      const ev = entry as ical.VEvent;
+      const ev = entry as VEvent;
       if (ev.uid) uids.push(String(ev.uid));
       if (ev.stamp) {
         dtstamps.push(new Date(ev.stamp as Date).toISOString());

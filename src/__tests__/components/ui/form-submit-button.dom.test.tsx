@@ -29,7 +29,12 @@ describe("FormSubmitButton", () => {
   });
 
   it("swaps label, disables, and sets aria-busy when pending", () => {
-    mockUseFormStatus.mockReturnValue({ pending: true, data: null, method: null, action: null });
+    mockUseFormStatus.mockReturnValue({
+      pending: true,
+      data: new FormData(),
+      method: "post",
+      action: "",
+    });
     render(<FormSubmitButton label="Save" pendingLabel="Saving…" />);
     const button = screen.getByRole("button", { name: "Saving…" });
     expect(button).toHaveTextContent("Saving…");
@@ -38,7 +43,12 @@ describe("FormSubmitButton", () => {
   });
 
   it("defaults pending label to label with ellipsis", () => {
-    mockUseFormStatus.mockReturnValue({ pending: true, data: null, method: null, action: null });
+    mockUseFormStatus.mockReturnValue({
+      pending: true,
+      data: new FormData(),
+      method: "post",
+      action: "",
+    });
     render(<FormSubmitButton label="Send" />);
     expect(screen.getByRole("button", { name: "Send…" })).toHaveTextContent("Send…");
   });

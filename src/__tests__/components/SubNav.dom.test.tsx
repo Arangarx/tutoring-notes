@@ -20,9 +20,11 @@ describe("SubNav", () => {
 
   test("legacy SettingsSubNav and AccountChildNav modules are removed (single SubNav canonical)", async () => {
     await expect(
+      // @ts-expect-error removed module — existence check is runtime-only
       import("@/components/admin/SettingsSubNav")
     ).rejects.toThrow();
     await expect(
+      // @ts-expect-error removed module — existence check is runtime-only
       import("@/app/account/children/[id]/AccountChildNav")
     ).rejects.toThrow();
 
