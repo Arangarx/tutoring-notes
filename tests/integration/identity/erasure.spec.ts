@@ -8,9 +8,10 @@ import {
   seedErasureFamilyFixture,
   seedShareErasureFixture,
 } from "./erasure.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const ERASURE_ADMIN_STATE = "tests/integration/.auth/erasure-admin.json";
-const TUTOR_STATE = "tests/integration/.auth/tutor.json";
+const ERASURE_ADMIN_STATE = authStatePath("erasure-admin.json");
+const TUTOR_STATE = authStatePath("tutor.json");
 
 const GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 

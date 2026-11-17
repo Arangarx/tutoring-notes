@@ -126,11 +126,13 @@ function relayHttpUrl(env = process.env) {
 
 function relayDockerArgs(env = process.env) {
   const stack = resolvePwStack(env);
+  // Default stack: no --name, exactly today's docker run (Docker auto-names it).
+  // Only a non-default relay port gets a fixed name so stacks stay distinguishable.
+  const name = stack.relayPort === 3002 ? [] : ["--name", stack.relayContainerName];
   return [
     "run",
     "--rm",
-    "--name",
-    stack.relayContainerName,
+    ...name,
     "-p",
     `${stack.relayPort}:3002`,
     "-e",
@@ -163,8 +165,13 @@ function buildWbDevServerCommand(options) {
   const stack = resolvePwStack(env);
   const databaseUrl = playwrightDatabaseUrl(env);
   const port = options.port;
-  const solo = options.soloUntilStudent
-    ? "set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& "
+  // The primary dev server (PW_PORT) carries three extras the alternate
+  // server (PW_ALT_PORT) never had. Keep that split so the default run is unchanged.
+  const solo = options.primary ? "set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& " : "";
+  const claimInvites = options.primary ? "&& set NEXT_PUBLIC_CLAIM_INVITES_ENABLED=true" : "";
+  const googleOauth = options.primary
+    ? "&& set GOOGLE_CLIENT_ID=playwright-harness-google-client-id" +
+      "&& set GOOGLE_CLIENT_SECRET=playwright-harness-google-client-secret"
     : "";
   return (
     `cmd /c "set DATABASE_URL=${databaseUrl}&& set DIRECT_URL=${databaseUrl}` +
@@ -183,10 +190,9 @@ function buildWbDevServerCommand(options) {
     `&& set CRON_SECRET=${options.cronSecret}` +
     `&& set NEXT_PUBLIC_PLAYWRIGHT_TEST=1` +
     `&& set NEXT_PUBLIC_BLOB_HARNESS_LOCAL=1` +
-    `&& set NEXT_PUBLIC_CLAIM_INVITES_ENABLED=true` +
+    claimInvites +
     `&& set NEXTAUTH_URL=http://localhost:${port}` +
-    `&& set GOOGLE_CLIENT_ID=playwright-harness-google-client-id` +
-    `&& set GOOGLE_CLIENT_SECRET=playwright-harness-google-client-secret` +
+    googleOauth +
     `&& set LEARNER_SESSION_HMAC_SECRET=pw-wb-test-hmac-secret-regression-2026` +
     `&& set AH_SESSION_HMAC_SECRET=pw-wb-test-ah-hmac-secret-regression-2026` +
     `&& node scripts/wb-regression-assert-local-db.cjs` +

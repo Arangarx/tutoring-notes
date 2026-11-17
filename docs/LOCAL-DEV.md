@@ -113,7 +113,7 @@ One default stack at a time. Whoever runs it (Playwright, DB-backed Jest, `next 
 | Env | Unset means |
 |---|---|
 | `PW_PORT` | `3100`. The second dev port is `PW_ALT_PORT`, or `3101` when `PW_PORT` is 3100, otherwise `PW_PORT + 1`. |
-| `PW_RELAY_PORT` | `3002`. `WHITEBOARD_SYNC_URL` follows it. Container name is `wb-relay-local` on 3002 and `wb-relay-local-<port>` otherwise. |
+| `PW_RELAY_PORT` | `3002`. `WHITEBOARD_SYNC_URL` follows it. The image is `wb-relay-local`. On 3002 the container is unnamed (Docker auto-names it, as before). Any other port runs as container `wb-relay-local-<port>`. |
 | `PW_DB_NAME` | Playwright stays on `tutoring_notes` and Jest stays on `tutoring_notes_test`. When set, both use that database name on `127.0.0.1` unless `TEST_DATABASE_URL` is already set (Jest keeps the explicit URL). The host guard still refuses any non-local host. |
 | `PW_OUTPUT_DIR` | `test-results` |
 | `PW_REPORT_DIR` | Playwright's default reporter. Set this so two runs do not share `playwright-report`. |

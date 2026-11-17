@@ -107,7 +107,7 @@ export default defineConfig({
     {
       command: buildWbDevServerCommand({
         port: stack.port,
-        soloUntilStudent: true,
+        primary: true,
         totpKey: WB_REGRESSION_TOTP_ENCRYPTION_KEY,
         twilioSid: PW_TWILIO_ACCOUNT_SID,
         twilioToken: PW_TWILIO_AUTH_TOKEN,
@@ -134,7 +134,7 @@ export default defineConfig({
           {
             command: buildWbDevServerCommand({
               port: stack.altPort,
-              soloUntilStudent: false,
+              primary: false,
               totpKey: WB_REGRESSION_TOTP_ENCRYPTION_KEY,
               twilioSid: PW_TWILIO_ACCOUNT_SID,
               twilioToken: PW_TWILIO_AUTH_TOKEN,

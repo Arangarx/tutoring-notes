@@ -12,6 +12,7 @@ import {
   clickBoardPageTab,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 async function loadTutorBoard(page: Page, session: Awaited<ReturnType<typeof seedWbLiveSyncSession>>) {
   await page.goto(
@@ -66,7 +67,7 @@ test.describe("WS-O board tab overflow", { tag: [TAG.WB_CHROME] }, () => {
 
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 520, height: 900 },
     });
     const page = await context.newPage();
@@ -130,7 +131,7 @@ test.describe("WS-O board tab overflow", { tag: [TAG.WB_CHROME] }, () => {
   test("no scroll controls when only one board fits", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();

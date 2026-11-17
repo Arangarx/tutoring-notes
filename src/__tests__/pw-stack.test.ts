@@ -6,6 +6,8 @@
  * every shared resource (dev port, relay, database, output dir) together.
  */
 
+export {};
+
 const {
   assertAllowedPort,
   allowedDevPorts,
@@ -54,8 +56,6 @@ describe("playwright stack endpoints", () => {
     expect(args).toEqual([
       "run",
       "--rm",
-      "--name",
-      "wb-relay-local",
       "-p",
       "3002:3002",
       "-e",
@@ -68,13 +68,13 @@ describe("playwright stack endpoints", () => {
     const primary = buildWbDevServerCommand({
       env: {},
       port: stack.port,
-      soloUntilStudent: true,
+      primary: true,
       ...FIXTURE_SECRETS,
     });
     const secondary = buildWbDevServerCommand({
       env: {},
       port: stack.altPort,
-      soloUntilStudent: false,
+      primary: false,
       ...FIXTURE_SECRETS,
     });
     expect(primary).toContain("WHITEBOARD_SYNC_URL=ws://localhost:3002");
@@ -86,6 +86,12 @@ describe("playwright stack endpoints", () => {
     expect(secondary).toContain("NEXTAUTH_URL=http://localhost:3101");
     expect(secondary).toContain("--port 3101");
     expect(secondary).not.toContain("NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT");
+    // Today the alternate (:3101) server never set these; only :3100 does.
+    expect(primary).toContain("NEXT_PUBLIC_CLAIM_INVITES_ENABLED=true");
+    expect(primary).toContain("GOOGLE_CLIENT_ID=");
+    expect(secondary).not.toContain("NEXT_PUBLIC_CLAIM_INVITES_ENABLED");
+    expect(secondary).not.toContain("GOOGLE_CLIENT_ID");
+    expect(secondary).not.toContain("GOOGLE_CLIENT_SECRET");
 
     const prod = buildProdShapeServerCommand({
       env: {},
@@ -127,7 +133,7 @@ describe("playwright stack endpoints", () => {
     const primary = buildWbDevServerCommand({
       env,
       port: stack.port,
-      soloUntilStudent: true,
+      primary: true,
       ...FIXTURE_SECRETS,
     });
     expect(primary).toContain("WHITEBOARD_SYNC_URL=ws://localhost:3012");

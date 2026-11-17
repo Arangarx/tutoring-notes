@@ -11,6 +11,7 @@ import { TAG } from "../test-tags";
 import { seedTestAdmin } from "../visual/helpers";
 import { seedParentAccountHolder } from "./identity/identity.helpers";
 import { loginLearnerInContext } from "./whiteboard-live-sync.helpers";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 test.describe("ad-hoc session on family lists", { tag: [TAG.WB_PRESENCE] }, () => {
   test("tutor Start shows the same upcoming row on the parent dashboard and the child join list", async ({
@@ -86,11 +87,11 @@ test.describe("ad-hoc session on family lists", { tag: [TAG.WB_PRESENCE] }, () =
     }
 
     const tutorContext = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const parentContext = await browser.newContext({
-      storageState: "tests/integration/.auth/parent.json",
+      storageState: authStatePath("parent.json"),
       viewport: { width: 1280, height: 900 },
     });
     const childContext = await browser.newContext({

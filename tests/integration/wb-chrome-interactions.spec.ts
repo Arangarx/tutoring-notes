@@ -10,6 +10,7 @@ import {
   assertControlFullyInViewport,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /**
  * Chrome interactivity gate — each control must be clickable and return
@@ -40,7 +41,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Share dropdown opens on click and is visible", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -65,7 +66,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Mic dropdown opens on click", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });
@@ -85,7 +86,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Theme toggle opens menu and selecting an option applies data-theme", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -110,7 +111,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Shapes flyout opens on click and selects a shape tool", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -135,7 +136,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Left-rail more (3-dot) menu opens on click", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -154,7 +155,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Props compact panel (PP-06) opens on click and stays open when cursor moves onto it", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -184,7 +185,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("elementFromPoint at Share caret returns the button itself", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -235,7 +236,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("P0: undo does NOT bleed Board-1 strokes onto Board-2 (cross-board history isolation)", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -320,7 +321,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Share dropdown renders ABOVE the waiting banner (z-index gate)", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -368,7 +369,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Active tool button retains --active class on hover", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -411,7 +412,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Dark-mode initial stroke: ink swatch is present and active when dark theme is applied", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -465,7 +466,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Single-open: opening More popover closes Shapes flyout", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -497,7 +498,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Inactive tool button shows hover state on mouseover", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -529,7 +530,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Selected chip keeps --active style on hover", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -594,7 +595,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Dark-mode ink swatch DRAW path: clicking Ink swatch sets strokeColor to white (#ffffff)", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -672,7 +673,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Opacity slider thumb is flush at 0% and 100%", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -722,7 +723,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Board delete affordance: add board, delete board 2, board 1 intact", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -792,7 +793,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("PP-06 props flyout is visually unclipped — elementFromPoint hit + viewport bounds (regression gate)", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
@@ -882,7 +883,7 @@ test.describe("wb chrome — interactive controls", () => {
   test("Left rail collapse button is reachable at short viewport height (constraint B)", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 500 },
     });
     const page = await context.newPage();
@@ -1219,7 +1220,7 @@ test.describe("wb touch chrome fixes @wb-chrome", () => {
   }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 390, height: 844 },
       hasTouch: true,
       isMobile: true,
@@ -1244,7 +1245,7 @@ test.describe("wb touch chrome fixes @wb-chrome", () => {
   }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 844, height: 390 },
       hasTouch: true,
       isMobile: true,
@@ -1332,7 +1333,7 @@ test.describe("wb touch chrome fixes @wb-chrome", () => {
     test.setTimeout(240_000);
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 390, height: 844 },
       hasTouch: true,
       isMobile: true,

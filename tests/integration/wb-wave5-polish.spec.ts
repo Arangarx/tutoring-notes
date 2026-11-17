@@ -31,6 +31,7 @@ import {
   type WbViewportSize,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 async function loadTutorBoard(
   page: Page,
@@ -197,7 +198,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     const session = await seedWbLiveSyncSession();
     // Use pre-created learner storage state (avoids rate-limiting /api/auth/learner/login
     // when many tests run sequentially; falls back to a fresh login if file is absent).
-    const learnerAuthFile = path.join(process.cwd(), "tests", "integration", ".auth", "learner.json");
+    const learnerAuthFile = path.join(process.cwd(), authStatePath("learner.json"));
     const learnerOpts = fs.existsSync(learnerAuthFile) ? { storageState: learnerAuthFile } : {};
     const studentContext = await browser.newContext({
       viewport: { width: 390, height: 844 },
@@ -207,7 +208,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
       await loginLearnerInContext(studentContext, session.learnerHandle, session.learnerPin);
     }
     const tutorContext = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     try {
@@ -254,7 +255,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     // overflow — so this test must emulate a real touch device. `hasTouch`
     // alone yields pointer:coarse in Chromium → phone-landscape layout.
     const tutorContext = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 844, height: 390 },
       hasTouch: true,
     });
@@ -455,7 +456,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     const session = await seedWbLiveSyncSession();
 
     // Resolve learner storage state once (avoids per-test rate-limiting).
-    const _learnerAuthFile10 = path.join(process.cwd(), "tests", "integration", ".auth", "learner.json");
+    const _learnerAuthFile10 = path.join(process.cwd(), authStatePath("learner.json"));
     const _learnerOpts10 = fs.existsSync(_learnerAuthFile10) ? { storageState: _learnerAuthFile10 } : {};
 
     for (const role of ["tutor", "student"] as const) {
@@ -463,7 +464,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
       const context =
         role === "tutor"
           ? await browser.newContext({
-              storageState: "tests/integration/.auth/tutor.json",
+              storageState: authStatePath("tutor.json"),
               viewport,
             })
           : await browser.newContext({ viewport, ..._learnerOpts10 });
@@ -472,7 +473,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         await loadTutorBoard(page, session);
       } else {
         const tutorContext = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
         });
         const tutorPage = await tutorContext.newPage();
@@ -516,7 +517,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     // close. `hasTouch` keeps pointer:coarse across the resize so the only thing
     // that changes is the width-driven layout mode.
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 850, height: 900 },
       hasTouch: true,
     });
@@ -545,7 +546,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     test.setTimeout(120_000);
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone", "camera"],
       colorScheme: "dark",
@@ -630,7 +631,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     // a monitor flipped to mobile chrome). detectLayoutMode keeps "desktop" for
     // mouse/fine-pointer down to the 400px emergency floor.
     const desktopCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     try {
@@ -653,7 +654,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     // 700px (< 768) that is "narrow". This is the contrast that proves the fix
     // keys off input capability, not viewport width alone.
     const touchCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 700, height: 900 },
       hasTouch: true,
       isMobile: true,
@@ -698,7 +699,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     // 0.25s; measuring before the transition settles reads the closed (off-
     // screen) position — hence the explicit settle below.
     const ctx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 844, height: 390 },
       hasTouch: true,
     });
@@ -945,7 +946,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     const session = await seedWbLiveSyncSession();
 
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });
@@ -1030,7 +1031,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     const widths = [1280, 900, 640, 460] as const;
 
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });

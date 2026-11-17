@@ -37,11 +37,9 @@ import { TAG } from "../test-tags";
 import { clearStudentStartBlockers } from "../helpers/clear-student-start-blockers";
 import path from "node:path";
 import fs from "node:fs";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
-const LEARNER_AUTH_FILE = path.join(
-  process.cwd(),
-  "tests/integration/.auth/learner.json"
-);
+const LEARNER_AUTH_FILE = path.join(process.cwd(), authStatePath("learner.json"));
 
 /** Roster URL after cancel — not the workspace path under the same student. */
 function studentRosterUrl(studentId: string) {
@@ -134,7 +132,7 @@ test.describe(
         const session = await seedParentJoinPendingSession();
 
         const tutorContext = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 800 },
         });
         // Parent / account-holder only. No learner.json cookie.
@@ -209,7 +207,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorContext = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 800 },
         });
 
@@ -266,7 +264,7 @@ test.describe(
         const { studentId, adminUserId, whiteboardSessionId: sessionAId } = session;
 
         const tutorContext = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 800 },
         });
 

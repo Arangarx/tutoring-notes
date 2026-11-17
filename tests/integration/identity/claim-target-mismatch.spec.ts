@@ -3,8 +3,9 @@ import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 
 import { seedUnclaimedClaimInvite } from "./claim-wizard.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
+const PARENT_STATE = authStatePath("parent.json");
 
 test.describe("child invite rejected when the adult claims it for themselves", () => {
   test.use({ storageState: PARENT_STATE });

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /**
  * P1-WB-9 — admin cost dashboard auth boundary (`integration` project).
@@ -10,8 +11,8 @@ import { expect, test } from "@playwright/test";
  * Auth seam: Playwright storageState from `auth.setup.ts` — tutor.json (TUTOR)
  * and erasure-admin.json (ADMIN via seedTestAdminWithRole).
  */
-const TUTOR_STATE = "tests/integration/.auth/tutor.json";
-const ADMIN_STATE = "tests/integration/.auth/erasure-admin.json";
+const TUTOR_STATE = authStatePath("tutor.json");
+const ADMIN_STATE = authStatePath("erasure-admin.json");
 
 const COST_DASHBOARD_PATH = "/admin/cost";
 

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
 import { seedWbLiveSyncSession, waitForWbE2eBridge } from "./whiteboard-live-sync.helpers";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /**
  * Captures a full-page PNG of the tutor live-board chrome for visual gate
@@ -12,7 +13,7 @@ test.describe("wb chrome rendered screenshot", () => {
   test("capture tutor workspace live board", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
