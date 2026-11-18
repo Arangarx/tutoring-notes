@@ -589,6 +589,8 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
     expect(banner).toHaveTextContent(
       "The board is not being saved. It still works during this session. After the session ends, we delete the saved board from our servers."
     );
-    expect(banner).toHaveTextContent("Notes are off for this session. Nothing is transcribed.");
+    expect(banner).toHaveTextContent(
+      "Notes are off for this session. Nothing is transcribed and no notes are drafted."
+    );
   });
 });

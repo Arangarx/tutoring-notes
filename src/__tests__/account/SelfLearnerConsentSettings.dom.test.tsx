@@ -52,6 +52,16 @@ describe("SelfLearnerConsentSettings", () => {
 
     expect(screen.getByText("Ms. Smith")).toBeInTheDocument();
     expect(screen.getByLabelText(/allow online sessions/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "These switches control what is saved. The video and audio call is separate."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The video and audio call still works when online sessions are on. The whiteboard follows its own setting."
+      )
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("self-learner-agreement")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/without live sessions, mynk is effectively just a scheduling calendar/i)
@@ -176,7 +186,7 @@ describe("SelfLearnerConsentSettings", () => {
 
     expect(
       screen.getByText(
-        "With online sessions off, online sessions cannot be started or joined. In person is not affected."
+        "Online sessions cannot be started or joined. In person is not affected."
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/your child/i)).not.toBeInTheDocument();

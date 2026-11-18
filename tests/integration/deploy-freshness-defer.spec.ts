@@ -58,7 +58,7 @@ test.describe("deploy freshness capture defer", () => {
     expect(reloadRequested).toBe(false);
 
     await expect(
-      page.getByText("A new version is ready — it'll apply automatically when your session ends."),
+      page.getByText("A new version is ready. It will apply when you are not recording."),
     ).toBeVisible({ timeout: 5_000 });
 
     await page.evaluate(() => {

@@ -14,12 +14,12 @@ export const LIVE_SESSION_CONSENT_COPY = {
 export const AUDIO_RECORDING_CONSENT_COPY = {
   label: "Allow session audio recording",
   description:
-    "Session audio is recorded. If this is off, online sessions save the tutor's voice only, and in person sessions save no audio. The live call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting.",
+    "Session audio is recorded. If this is off, online sessions leave your child's voice out, and the tutor's microphone can still be saved. In person, no audio is saved. The video and audio call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting.",
 } as const;
 
 /** Accepted self-learner audio help. Andrew 2026-11-17 (consent copy item 34). */
 export const SELF_LEARNER_AUDIO_HELP =
-  "Off means your voice is left out of the saved recording. Online, your tutor's microphone can still be saved. In person, no audio is saved. The whiteboard follows its own setting. Nothing is transcribed if notes are off.";
+  "These switches control what is saved. The video and audio call is separate.";
 
 /** Accepted self-learner agreement. Andrew 2026-11-17 (item 35). */
 export const SELF_LEARNER_AGREEMENT =
@@ -38,7 +38,7 @@ export const AUDIENCE_SWITCH_DESCRIPTION = {
   allowLiveSession:
     "You can join online sessions with video and audio. In person is not affected by this switch.",
   allowAudioRecording:
-    "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The whiteboard follows its own setting.",
+    "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The video and audio call still works when online sessions are on. The whiteboard follows its own setting.",
 } as const;
 
 export const WHITEBOARD_RECORDING_CONSENT_COPY = {
@@ -53,7 +53,7 @@ export const SESSION_NOTES_CONSENT_COPY = {
 
 /** Shown when online sessions are off. Same sentence for parent, child, and self-learner (item 30). */
 export const LIVE_SESSION_SCHEDULING_NOTE =
-  "With online sessions off, online sessions cannot be started or joined. In person is not affected.";
+  "Online sessions cannot be started or joined. In person is not affected.";
 
 /** Restored parent-editor copy. Shown under a recommended switch. Andrew 2026-11-17 (item 36). */
 export const RECOMMENDED_CONSENT_NOTE =
@@ -80,7 +80,7 @@ export const RECORDING_OFF_AUDIO_ONLINE_STUDENT =
 export const RECORDING_OFF_AUDIO_NONE = "Session audio is not being saved.";
 export const RECORDING_OFF_WHITEBOARD =
   "The board is not being saved. It still works during this session. After the session ends, we delete the saved board from our servers.";
-export const RECORDING_OFF_NOTES = "Notes are off for this session. Nothing is transcribed.";
+export const RECORDING_OFF_NOTES = "Notes are off for this session. Nothing is transcribed and no notes are drafted.";
 
 /**
  * Self-learner switch lines (approved items 29–33). The parent page keeps its own descriptions.
@@ -198,11 +198,11 @@ export const CONSENT_SWITCHES = [
 
 /** Confirming the decline button saves every switch off (item 28). */
 const DECLINE_PARENT =
-  "If you continue, every switch is saved off. Online sessions cannot start. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account.";
+  "If you continue, every switch is saved off. Online sessions cannot be started or joined. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account.";
 const DECLINE_PARENT_INVITED =
   "Your child has already been invited. They cannot join an online session until online sessions are on.";
 const DECLINE_SELF =
-  "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. In person can still happen. Open Manage, then Privacy.";
+  "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. You can still meet in person. Open Manage, then Privacy.";
 const DECLINE_SELF_INVITED =
   "You have already been invited. You cannot join that online session until online sessions are on.";
 

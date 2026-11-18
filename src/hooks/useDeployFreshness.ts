@@ -11,7 +11,7 @@ import {
 } from "@/lib/deploy/capture-defer-registry";
 
 const VERSION_TOAST =
-  "A new version is ready — it'll apply automatically when your session ends.";
+  "A new version is ready. It will apply when you are not recording.";
 
 function getClientBuildSha(): string | null {
   if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_PLAYWRIGHT_TEST === "1") {

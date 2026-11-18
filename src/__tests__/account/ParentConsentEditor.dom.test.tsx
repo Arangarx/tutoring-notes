@@ -82,7 +82,7 @@ describe("ParentConsentEditor — consent switches", () => {
     expect(screen.queryByText(/everything drawn/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Session audio is recorded. If this is off, online sessions save the tutor's voice only, and in person sessions save no audio. The live call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting."
+        "Session audio is recorded. If this is off, online sessions leave your child's voice out, and the tutor's microphone can still be saved. In person, no audio is saved. The video and audio call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting."
       )
     ).toBeInTheDocument();
   });
@@ -228,7 +228,7 @@ describe("ParentConsentEditor — organization rows", () => {
     render(<ParentConsentEditor {...defaultProps} />);
     expect(
       screen.queryByText(
-        "With online sessions off, online sessions cannot be started or joined. In person is not affected."
+        "Online sessions cannot be started or joined. In person is not affected."
       )
     ).not.toBeInTheDocument();
     expect(
@@ -245,7 +245,7 @@ describe("ParentConsentEditor — organization rows", () => {
     );
     expect(
       screen.getByText(
-        "With online sessions off, online sessions cannot be started or joined. In person is not affected."
+        "Online sessions cannot be started or joined. In person is not affected."
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/limited to scheduling/i)).not.toBeInTheDocument();

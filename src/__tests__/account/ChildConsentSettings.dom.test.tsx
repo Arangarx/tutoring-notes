@@ -42,7 +42,7 @@ describe("ChildConsentSettings", () => {
     expect(screen.queryByText(/everything drawn/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The whiteboard follows its own setting."
+        "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The video and audio call still works when online sessions are on. The whiteboard follows its own setting."
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/saved for notes and review/i)).not.toBeInTheDocument();

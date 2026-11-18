@@ -58,7 +58,7 @@ describe("ConsentSetupForm — consent switches", () => {
     expect(screen.queryByText(/everything drawn/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Session audio is recorded. If this is off, online sessions save the tutor's voice only, and in person sessions save no audio. The live call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting."
+        "Session audio is recorded. If this is off, online sessions leave your child's voice out, and the tutor's microphone can still be saved. In person, no audio is saved. The video and audio call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting."
       )
     ).toBeInTheDocument();
   });
@@ -126,7 +126,7 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "If you continue, every switch is saved off. Online sessions cannot start. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account."
+        "If you continue, every switch is saved off. Online sessions cannot be started or joined. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account."
       )
     ).toBeInTheDocument();
     expect(
@@ -167,7 +167,7 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
 
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(
-      "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. In person can still happen. Open Manage, then Privacy."
+      "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. You can still meet in person. Open Manage, then Privacy."
     );
     expect(dialog.textContent ?? "").not.toMatch(/record/i);
     expect(dialog).not.toHaveTextContent(/your child/i);
@@ -190,7 +190,7 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
 
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(
-      "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. In person can still happen. Open Manage, then Privacy. You have already been invited. You cannot join that online session until online sessions are on."
+      "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. You can still meet in person. Open Manage, then Privacy. You have already been invited. You cannot join that online session until online sessions are on."
     );
     expect(dialog.textContent ?? "").not.toMatch(/record/i);
     expect(dialog).not.toHaveTextContent(/your child/i);
@@ -209,7 +209,7 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
 
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(
-      "If you continue, every switch is saved off. Online sessions cannot start. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account. Your child has already been invited. They cannot join an online session until online sessions are on."
+      "If you continue, every switch is saved off. Online sessions cannot be started or joined. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account. Your child has already been invited. They cannot join an online session until online sessions are on."
     );
     expect(dialog).not.toHaveTextContent(/cannot participate in live tutoring sessions/i);
   });

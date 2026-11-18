@@ -2128,7 +2128,7 @@ test.describe("consent 6h: Visibility (both sides see what is off)", {
   const STUDENT_AUDIO = "Your voice is not being saved. Your tutor's microphone can still be saved.";
   const BOARD_OFF =
     "The board is not being saved. It still works during this session. After the session ends, we delete the saved board from our servers.";
-  const NOTES_OFF = "Notes are off for this session. Nothing is transcribed.";
+  const NOTES_OFF = "Notes are off for this session. Nothing is transcribed and no notes are drafted.";
 
   // Oracle: DOM text from literals in the spec (not the copy module)
   test("V1: tutor sees which recordings are off before Start and during the session", async ({ browser }) => {

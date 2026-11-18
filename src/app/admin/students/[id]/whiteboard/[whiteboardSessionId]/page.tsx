@@ -271,7 +271,7 @@ export default async function WhiteboardReviewPage({
               href={`/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`}
               className="btn primary"
             >
-              Return to live session
+              Return to this session
             </Link>
           )}
         </div>

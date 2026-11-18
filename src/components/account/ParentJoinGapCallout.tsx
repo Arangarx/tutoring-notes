@@ -20,7 +20,7 @@ export function ParentJoinGapCallout({
       className="border-border border-l-[3px] border-l-accent bg-accent-soft/40"
     >
       <AlertTitle className="text-foreground">
-        You can join online sessions for your child
+        Your child does not need their own login for you to join
       </AlertTitle>
       <AlertDescription className="text-muted-foreground">
         <p>
