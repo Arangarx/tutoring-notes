@@ -70,6 +70,12 @@ export type WbE2eSceneBridge = {
     whiteboardSessionId: string,
     studentId: string
   ) => Promise<string>;
+  /**
+   * Excalidraw's OWN image tool / paste shape: binary in `BinaryFiles`, an
+   * image element with a `fileId` and no `customData.assetUrl`, and no upload.
+   * Peers cannot hydrate it until the app back-fills the asset URL.
+   */
+  insertNativeImageFixture: (base64: string, mimeType: "image/png") => string;
   /** JSXGraph embeddable insert (Playwright inv 12). */
   insertGraphFixture: (
     whiteboardSessionId: string,
@@ -474,6 +480,32 @@ export function registerWbE2eSceneBridge(
       }
       invokeSceneMutationHook(role);
       return result.elementId;
+    },
+    insertNativeImageFixture(base64, mimeType) {
+      const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      const fileId = `e2e-native-file-${suffix}`;
+      const elementId = `e2e-native-image-${suffix}`;
+      api.addFiles([
+        {
+          id: fileId,
+          mimeType,
+          dataURL: `data:${mimeType};base64,${base64}`,
+          created: Date.now(),
+        },
+      ]);
+      const el = {
+        ...makeRectangle(elementId, 200, 200, 80, 80),
+        type: "image",
+        fileId,
+        status: "saved",
+        scale: [1, 1],
+        crop: null,
+        strokeColor: "transparent",
+      } as unknown as ExcalidrawLikeElement;
+      const existing = readLiveSceneIncludingDeleted(api);
+      api.updateScene({ elements: [...existing, el], captureUpdate: "IMMEDIATELY" });
+      invokeSceneMutationHook(role);
+      return elementId;
     },
     insertGraphFixture(whiteboardSessionId, studentId, initialExpressions) {
       const result = insertGraphOnCanvas({

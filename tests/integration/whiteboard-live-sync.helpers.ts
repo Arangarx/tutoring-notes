@@ -929,6 +929,35 @@ export async function insertPngFixtureOnRole(
   );
 }
 
+/**
+ * Insert a PNG the way Excalidraw's own image tool / paste does: binary in
+ * `BinaryFiles`, image element with no `customData.assetUrl` (E2E bridge).
+ */
+export async function insertNativeImageOnRole(
+  page: Page,
+  role: "tutor" | "student",
+  fixturePath: string
+): Promise<string> {
+  const base64 = fs.readFileSync(fixturePath).toString("base64");
+  return page.evaluate(
+    ({ r, b64 }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            { insertNativeImageFixture: (base64: string, mime: "image/png") => string }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.insertNativeImageFixture) {
+        throw new Error(`E2E bridge missing insertNativeImageFixture for ${r}`);
+      }
+      return bridge.insertNativeImageFixture(b64, "image/png");
+    },
+    { r: role, b64: base64 }
+  );
+}
+
 export async function readImageElementState(
   page: Page,
   role: "tutor" | "student",
