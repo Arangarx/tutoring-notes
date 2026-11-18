@@ -20,8 +20,7 @@
 4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
 5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 6. **Strix pen test + any further OpenAI evals: deferred to 2026-11-18 (Andrew).** The local `.env` has NO `OPENAI_API_KEY`; the only key on the machine is production (`.env.production.local`). Ask Andrew which key before running. Andrew said the notes-abstain eval's few cents on the production key were fine (no rotation).
-7. 21:30 status. recording-durability MERGED 84cb0eed (Sonnet re-verify 347f9767 MERGE-OK). BACKLOG entry moved under Launch buckets → Bucket B (W1-SHIP-B-FINALIZE). Bucket A now lists WS-B recovered draft enqueue (still queued behind apply-race). Unfixed nit: the hard-kill sample at 19.5s leaves 0.5s margin, so a 10s mutation could pass by luck; 19.0s would be safer. notes-abstain: Sonnet 7ba1e0a1 gave MERGE-OK @ 769c3d9f; Grok 8286d3c3 is now doing the follow-ups: key fallback, narrow `hadSpeech` query, dead page branch, live-reduce jest red/green, mixed fixture. Then a narrow recheck and merge.
-8. notes-abstain: before merge, `scripts/eval-notes-abstain.mjs` must read only the lane's own `.env` / `process.env`. Remove the `.env.production.local` and `../tutoring-notes/*` fallbacks (lines ~56-59).
+7. 21:30 status. recording-durability MERGED 84cb0eed (Sonnet re-verify 347f9767 MERGE-OK). BACKLOG entry moved under Launch buckets → Bucket B (W1-SHIP-B-FINALIZE). Bucket A now lists WS-B recovered draft enqueue (still queued behind apply-race). Unfixed nit: the hard-kill sample at 19.5s leaves 0.5s margin, so a 10s mutation could pass by luck; 19.0s would be safer. notes-abstain MERGED fdf2c23b (Sonnet 7ba1e0a1 MERGE-OK; follow-ups 931d3e5b rechecked by conductor: eval reads only local `.env`, `hadSpeech` single `findFirst`, live-reduce cases red on base). Pending tomorrow with the key decision: first real run of the `mixed-homework-and-scheduling` fixture (`npm run eval:notes-abstain`). Nit: the poll's `transcript: { not: "" }` treats whitespace-only as speech; `transcriptsHadSpeech` may not.
 
 ### Open Andrew-confirms
 
@@ -39,7 +38,7 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | first-impression | MERGED acd0cc00 | — |
 | consent-copy (C8 privacy/terms) | MERGED 96978496 | — |
 | fold-transcript | MERGED 10f8f1ff (worktree removed; tsc 0 on merged tip) | — |
-| notes-abstain (SMOKE-NOTES-3) | NEW lane from 0c83fdc4. Grok: plan, then prompt abstain + real-API eval (fixtures, 3x each) + honest copy ("No lesson content was found…" vs "No speech…") + jest + Playwright. STOPs if a schema change is needed. Then a Sonnet verify (notes = core flow) | 8286d3c3-98d5-4c8e-b500-7fa1f29b14f7 |
+| notes-abstain (SMOKE-NOTES-3) | MERGED fdf2c23b (tip 931d3e5b). Worktree removed | — |
 | fold-apply-race | 708307bc: Sonnet verify 59208d8a MERGE-OK. Before merge (Sonnet author): extract one shared core for e2e-student-apply-hold.ts + test-seams.ts (else STOP → Andrew waiver), add student-undo H1 variant. Queued after merge (Sonnet, own lane with Playwright repro): overlapping apply windows (`releaseApplyingRemote` clears `applyingRemoteRef` mid-hydrate of next apply; guard ~:1103 should check `v3ApplyInFlightRef`); WB-STUDENT-FLUSH-IMAGE-ASSETURL | 355a519c |
 | static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
 | org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
