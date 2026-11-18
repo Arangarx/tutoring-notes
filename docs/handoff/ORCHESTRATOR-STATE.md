@@ -35,7 +35,8 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | pw-parallel | MERGED f85468c8 | — |
 | first-impression | MERGED acd0cc00 | — |
 | consent-copy (C8 privacy/terms) | MERGED 96978496 | — |
-| fold-transcript | MERGED 10f8f1ff (worktree removed; tsc 0 on merged tip). SMOKE-NOTES-3 (notes abstain on non-teaching talk, Grok) now unblocked | — |
+| fold-transcript | MERGED 10f8f1ff (worktree removed; tsc 0 on merged tip) | — |
+| notes-abstain (SMOKE-NOTES-3) | NEW lane from 0c83fdc4. Grok: plan, then prompt abstain + real-API eval (fixtures, 3x each) + honest copy ("No lesson content was found…" vs "No speech…") + jest + Playwright. STOPs if a schema change is needed. Then a Sonnet verify (notes = core flow) | 8286d3c3-98d5-4c8e-b500-7fa1f29b14f7 |
 | fold-apply-race | 708307bc: Sonnet verify 59208d8a MERGE-OK. Before merge (Sonnet author): extract one shared core for e2e-student-apply-hold.ts + test-seams.ts (else STOP → Andrew waiver), add student-undo H1 variant. Queued after merge (Sonnet, own lane with Playwright repro): overlapping apply windows (`releaseApplyingRemote` clears `applyingRemoteRef` mid-hydrate of next apply; guard ~:1103 should check `v3ApplyInFlightRef`); WB-STUDENT-FLUSH-IMAGE-ASSETURL | 355a519c |
 | static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
 | org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
