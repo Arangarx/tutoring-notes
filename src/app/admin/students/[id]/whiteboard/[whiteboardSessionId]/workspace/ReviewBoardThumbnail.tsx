@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { NOTHING_DRAWN_COPY } from "@/components/whiteboard/replay/ReplayBoardNotSavedNotice";
 import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import {
@@ -449,7 +450,7 @@ export function ReviewBoardThumbnail({
         data-testid="wb-review-board-thumbnail-empty"
       >
         <span className="muted" style={{ fontSize: 13 }}>
-          No board strokes recorded
+          {NOTHING_DRAWN_COPY}
         </span>
       </div>
     );

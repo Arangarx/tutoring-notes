@@ -4,7 +4,13 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/SectionCard";
-import { CONSENT_SWITCHES, SELF_LEARNER_AUDIO_HELP } from "@/lib/consent-toggle-copy";
+import {
+  CONSENT_SWITCHES,
+  NEXT_SESSION_APPLIES_COPY,
+  SELF_LEARNER_AUDIO_HELP,
+  SELF_LIVE_OFF_NOTE,
+  SELF_SWITCH_DESCRIPTION,
+} from "@/lib/consent-toggle-copy";
 import { saveSelfLearnerConsentAction } from "@/app/account/children/[id]/consent/actions";
 
 import { ConsentSwitches, type ConsentSwitchKey } from "./ConsentSwitches";
@@ -107,6 +113,15 @@ export function SelfLearnerConsentSettings({
     onSaved?.();
   }
 
+  const selfSwitches = CONSENT_SWITCHES.map((item) => ({
+    key: item.key,
+    label: item.label,
+    description: SELF_SWITCH_DESCRIPTION[item.key],
+    emphasis: item.emphasis,
+    banner: item.key === "allowLiveSession" ? SELF_LIVE_OFF_NOTE : undefined,
+    notice: "notice" in item ? item.notice : undefined,
+  }));
+
   return (
     <SectionCard realm="account" title="Session recording" className="rounded-[10px]">
       <div className="space-y-4">
@@ -119,7 +134,7 @@ export function SelfLearnerConsentSettings({
             <p className="text-sm font-medium text-foreground">{tutor.name}</p>
             <ConsentSwitches
               idPrefix={tutor.id}
-              switches={CONSENT_SWITCHES}
+              switches={selfSwitches}
               values={tutor}
               onToggle={(key, checked) => setFlag("tutor", tutor.id, key, checked)}
             />
@@ -130,7 +145,7 @@ export function SelfLearnerConsentSettings({
             <p className="text-sm font-medium text-foreground">{org.name}</p>
             <ConsentSwitches
               idPrefix={org.id}
-              switches={CONSENT_SWITCHES}
+              switches={selfSwitches}
               values={org}
               onToggle={(key, checked) => setFlag("org", org.id, key, checked)}
             />
@@ -145,6 +160,9 @@ export function SelfLearnerConsentSettings({
             Something went wrong saving your preferences. Please try again.
           </p>
         ) : null}
+        <p className="text-sm text-muted-foreground" data-testid="consent-next-session">
+          {NEXT_SESSION_APPLIES_COPY}
+        </p>
         <Button type="button" onClick={() => void save()} disabled={busy}>
           {busy ? "Saving…" : "Save preferences"}
         </Button>

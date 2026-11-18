@@ -74,6 +74,7 @@ export default async function JoinPage() {
                     ceiling={consent.ceiling}
                     effective={consent.effective}
                     restoredByParent={consent.restoredByParent}
+                    owners={consent.owners}
                   />
                 </CardContent>
               </Card>

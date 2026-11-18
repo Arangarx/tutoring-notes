@@ -168,7 +168,16 @@ export type OrgBoard = BoardFixture & { organizationId: string; ownerAdminUserId
  */
 export async function seedOrgBoardSession(
   request: APIRequestContext,
-  opts: { whiteboard: boolean; teacherId?: string; orgStatusChangedAt?: Date; orgStatus?: "active" | "suspended" }
+  opts: {
+    whiteboard: boolean;
+    /** Defaults on, so existing callers keep a full recording. */
+    audio?: boolean;
+    /** Defaults unset, so existing callers keep the row's own mode. */
+    mode?: "LIVE" | "IN_PERSON";
+    teacherId?: string;
+    orgStatusChangedAt?: Date;
+    orgStatus?: "active" | "suspended";
+  }
 ): Promise<OrgBoard> {
   return withPrisma(async (prisma) => {
     const harnessTutor = await seedTestAdmin();
@@ -219,7 +228,7 @@ export async function seedOrgBoardSession(
     });
     const switches = {
       allowLiveSession: true,
-      allowAudioRecording: true,
+      allowAudioRecording: opts.audio ?? true,
       allowWhiteboardRecording: opts.whiteboard,
       allowNoteSending: true,
     };
@@ -245,6 +254,7 @@ export async function seedOrgBoardSession(
         consentAcknowledged: true,
         eventsBlobUrl: harnessUrl(placeholderKey),
         sessionPhase: "ACTIVE",
+        ...(opts.mode ? { sessionMode: opts.mode } : {}),
         startedAt: new Date(now - 10 * 60_000),
         activatedAt: new Date(now - 10 * 60_000),
         lastActiveAt: new Date(now),

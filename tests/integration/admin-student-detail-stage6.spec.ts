@@ -330,7 +330,7 @@ test.describe("Admin student detail — stage 6", () => {
       await expectReasonUnderControl(
         button,
         page.getByTestId(`open-scheduled-room-reason-${appointmentId}`),
-        "Live sessions are off in Online Off Student's privacy settings. You can still open the room in person."
+        "Online sessions are off in Online Off Student's privacy settings. You can still meet in person."
       );
     }
   );
@@ -407,7 +407,7 @@ test.describe("Admin student detail — stage 6", () => {
       await expectReasonUnderControl(
         start,
         page.getByTestId("start-whiteboard-session-reason"),
-        "Live sessions are off in Start Online Off's privacy settings. You can still open the room in person."
+        "Online sessions are off in Start Online Off's privacy settings. You can still meet in person."
       );
     }
   );

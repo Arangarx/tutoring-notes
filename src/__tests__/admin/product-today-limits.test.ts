@@ -78,6 +78,8 @@ describe("product today limits", () => {
     expect(roadmap).not.toMatch(/richer billing/i);
     expect(roadmap).not.toMatch(/continued polish/i);
     expect(publicCopy).not.toMatch(/calculus/i);
+    expect(improved).toContain("A new version applies while you are recording. It does not wait until the session ends.");
+    expect(improved).not.toContain("A new version waits until the session ends");
     expect(known).not.toMatch(/PDF boards/i);
     expect(known).not.toMatch(/Empty review screen/i);
     expect(known).not.toMatch(/working on a fix/i);

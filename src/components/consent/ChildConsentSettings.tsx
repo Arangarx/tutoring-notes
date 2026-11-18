@@ -4,7 +4,8 @@ import { useState } from "react";
 
 import { ConsentSwitches, type ConsentSwitchKey } from "@/components/consent/ConsentSwitches";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CONSENT_SWITCHES } from "@/lib/consent-toggle-copy";
+import { CONSENT_SWITCHES, NEXT_SESSION_APPLIES_COPY } from "@/lib/consent-toggle-copy";
+import type { ChildConsentOwner } from "@/lib/child-consent";
 import type { ConsentToggleCeiling } from "@/lib/consent-scope";
 import { saveChildConsentAction } from "@/app/join/child-home-actions";
 
@@ -19,10 +20,12 @@ export function ChildConsentSettings({
   ceiling,
   effective,
   restoredByParent,
+  owners = [],
 }: {
   ceiling: ConsentToggleCeiling;
   effective: ConsentToggleCeiling;
   restoredByParent: ConsentToggleCeiling;
+  owners?: readonly ChildConsentOwner[];
 }) {
   const [values, setValues] = useState(effective);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +72,15 @@ export function ChildConsentSettings({
       <p className="text-sm text-muted-foreground">
         You can turn any of these off. A parent can turn one back on.
       </p>
+      {owners.length > 0 ? (
+        <ul className="space-y-2">
+          {owners.map((owner) => (
+            <li key={owner.key} data-testid="child-consent-owner" className="text-sm">
+              <p className="font-medium text-foreground">{owner.label}</p>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <ConsentSwitches
         idPrefix="child"
         testIdPrefix="child-consent"
@@ -78,6 +90,9 @@ export function ChildConsentSettings({
           if (!busy) void onToggle(key, checked);
         }}
       />
+      <p className="text-sm text-muted-foreground" data-testid="consent-next-session">
+        {NEXT_SESSION_APPLIES_COPY}
+      </p>
       {error ? (
         <Alert className="rounded-[10px] border-destructive/30" role="alert">
           <AlertTitle>Could not update</AlertTitle>

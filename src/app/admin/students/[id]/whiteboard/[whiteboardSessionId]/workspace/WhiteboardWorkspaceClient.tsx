@@ -85,6 +85,10 @@ import {
 } from "@/lib/recording/session-capabilities";
 import { micRequestBlockedReason } from "@/lib/recording/mic-acquire-gate";
 import {
+  RECORDING_OFF_AUDIO_NONE,
+  recordingOffBannerLines,
+} from "@/lib/consent-toggle-copy";
+import {
   createSessionMsClock,
   type SessionMsClock,
 } from "@/lib/recording/session-clock";
@@ -1654,7 +1658,6 @@ export function WhiteboardWorkspaceClient({
   const audioCapturePolicy = sessionCapabilities.audio.mode;
   const sessionCapabilitiesRef = useRef(sessionCapabilities);
   sessionCapabilitiesRef.current = sessionCapabilities;
-  const initialHasConsentSnapshot = initialConsentInput.hasConsentSnapshot;
   // A learner page without server capabilities (token-only DOM harness) keeps the pre-consent mic.
   const micAcquireForRole: MicAcquire =
     role === "tutor" ? tutorMicAcquire : (learnerView.sessionCapabilities?.mic.acquire ?? "yes");
@@ -1662,41 +1665,49 @@ export function WhiteboardWorkspaceClient({
   const tutorMicLocked = role === "tutor" && micLocked;
   const studentMicLocked = role === "student" && micLocked;
 
-  const audioConsentBannerMessage = useMemo(() => {
-    if (role !== "tutor") return null;
-    if (audioCapturePolicy === "full") return null;
-    if (audioCapturePolicy === "none") {
-      if (!initialHasConsentSnapshot) {
-        return (
-          <>
-            <strong>Recording &amp; notes off</strong> — no audio consent on
-            file for this student. Whiteboard and live conversation continue.
-            Parent setup may be required before audio can be saved.
-          </>
-        );
-      }
-      return (
-        <>
-          <strong>Audio not recorded</strong> — this student&apos;s parent has
-          not allowed session audio. Whiteboard and live conversation continue.
-        </>
-      );
+  const recordingOffLines = useMemo(() => {
+    if (role === "student") {
+      const caps = learnerView.sessionCapabilities;
+      if (!caps) return [];
+      return recordingOffBannerLines({
+        audience: "student",
+        audioMode: caps.audio.mode,
+        whiteboardOff: caps.off.includes("whiteboard"),
+        notesOff: caps.off.includes("notes"),
+      });
     }
-    if (audioCapturePolicy === "tutor_only" && phaseActive) {
-      return (
-        <>
-          <strong>Student audio not recorded</strong> — only your microphone is
-          included in the recording and notes.
-        </>
-      );
-    }
-    return null;
+    // Before a type is chosen, nothing is saved yet: the highlighted mode is not a choice.
+    const caps =
+      adoptedCapabilities ??
+      deriveSessionCapabilities({
+        ...initialConsentInput,
+        sessionMode: phaseActive || modeChosen ? sessionMode : "UNKNOWN",
+      });
+    return recordingOffBannerLines({
+      audience: "tutor",
+      audioMode: caps.audio.mode,
+      whiteboardOff: caps.off.includes("whiteboard"),
+      notesOff: caps.off.includes("notes"),
+    });
   }, [
     role,
-    audioCapturePolicy,
-    initialHasConsentSnapshot,
+    learnerView.sessionCapabilities,
+    adoptedCapabilities,
+    initialConsentInput,
     phaseActive,
+    modeChosen,
+    sessionMode,
   ]);
+  const recordingOffBanner =
+    recordingOffLines.length > 0 ? (
+      <Banner tone="warning" testId="wb-audio-consent-banner">
+        {recordingOffLines.map((line) => (
+          <p key={line} style={{ margin: 0 }}>
+            {line}
+          </p>
+        ))}
+      </Banner>
+    ) : null;
 
   const [audioConsentDraftCleared, setAudioConsentDraftCleared] =
     useState(false);
@@ -6767,6 +6778,9 @@ export function WhiteboardWorkspaceClient({
         !clientMounted ||
         (role === "student" ? studentAvPickerDisabled || studentMicLocked : endingBusy || tutorMicLocked)
       }
+      disabledReason={
+        (role === "student" ? studentMicLocked : tutorMicLocked) ? RECORDING_OFF_AUDIO_NONE : undefined
+      }
     />
   );
 
@@ -6999,6 +7013,7 @@ export function WhiteboardWorkspaceClient({
             }
             onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
             disabled={studentAvPickerDisabled || studentMicLocked}
+            disabledReason={studentMicLocked ? RECORDING_OFF_AUDIO_NONE : undefined}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}
@@ -7167,6 +7182,7 @@ export function WhiteboardWorkspaceClient({
               void liveAv.setMicDeviceBySlot(slot, { force: true })
             }
             disabled={!clientMounted || endingBusy || tutorMicLocked}
+            disabledReason={tutorMicLocked ? RECORDING_OFF_AUDIO_NONE : undefined}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}
@@ -7455,11 +7471,7 @@ export function WhiteboardWorkspaceClient({
                   </button>
                 </div>
               )}
-            {audioConsentBannerMessage && (
-              <Banner tone="warning" testId="wb-audio-consent-banner">
-                {audioConsentBannerMessage}
-              </Banner>
-            )}
+            {phaseActive ? recordingOffBanner : null}
             {audioDraftRecovery && (
               <Banner tone="warning" testId="wb-audio-draft-recovery-banner">
                 <span>
@@ -7890,6 +7902,7 @@ export function WhiteboardWorkspaceClient({
           setModeChosen(true);
         }}
         onlineBlockedReason={role === "tutor" ? onlineBlockedReason : null}
+        recordingOffNotice={phaseActive ? null : recordingOffBanner}
         startBlockedMessage={
           role === "tutor" && startBlockedReason
             ? entryRefusalMessage(startBlockedReason, studentName)
@@ -7936,6 +7949,7 @@ function Banner({
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
+      id={testId}
       data-testid={testId}
       className="card"
       style={{

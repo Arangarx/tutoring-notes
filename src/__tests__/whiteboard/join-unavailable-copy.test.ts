@@ -29,10 +29,10 @@ describe("joinUnavailableReasonFromServer", () => {
 });
 
 describe("joinUnavailableCopy — online_off", () => {
-  test("says the learner was disconnected because live sessions are off", () => {
+  test("says the learner was disconnected because online sessions are off", () => {
     expect(joinUnavailableCopy("online_off", "Ms. Tutor")).toEqual({
       title: "You were disconnected",
-      body: "Live sessions are off in privacy settings.",
+      body: "Online sessions are off in privacy settings, so this device has been disconnected.",
     });
   });
 

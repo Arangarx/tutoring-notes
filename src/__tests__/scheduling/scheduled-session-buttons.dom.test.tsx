@@ -152,7 +152,7 @@ describe("scheduled session buttons", () => {
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("type", "button");
     const reason = screen.getByTestId("join-scheduled-reason-sched-blocked");
-    expect(reason).toHaveTextContent("Live sessions are off in privacy settings.");
+    expect(reason).toHaveTextContent("Online sessions are off in privacy settings.");
     expect(button.getAttribute("aria-describedby")).toBe(reason.id);
   });
 
@@ -188,8 +188,8 @@ describe("scheduled session buttons", () => {
     expect(button).toBeEnabled();
     expect(button).toHaveAttribute("type", "submit");
     const reason = screen.getByTestId("open-scheduled-room-reason-sched-4");
-    expect(reason).toHaveTextContent("Live sessions are off in Maya's privacy settings.");
-    expect(reason).toHaveTextContent("You can still open the room in person.");
+    expect(reason).toHaveTextContent("Online sessions are off in Maya's privacy settings.");
+    expect(reason).toHaveTextContent("You can still meet in person.");
     expect(button.getAttribute("aria-describedby")).toBe(reason.id);
   });
 

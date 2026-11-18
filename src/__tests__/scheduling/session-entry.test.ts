@@ -252,9 +252,9 @@ describe("entry copy (every reason, every audience, never blank)", () => {
 
   it("hand-written lines the spec names", () => {
     expect(entryBlockCopy("live_off", "tutor", "Maya")).toBe(
-      "Live sessions are off in Maya's privacy settings."
+      "Online sessions are off in Maya's privacy settings."
     );
-    expect(entryBlockCopy("live_off", "scheduler", "Maya")).toBe("Live sessions are off");
+    expect(entryBlockCopy("live_off", "scheduler", "Maya")).toBe("Online sessions are off");
     expect(entryBlockCopy("unclaimed", "scheduler", "Maya")).toBe("Waiting on the family");
     expect(entryBlockCopy("consent_missing_parent", "family", "Maya")).toBe(
       "Finish privacy preferences for Maya to join."
@@ -262,7 +262,7 @@ describe("entry copy (every reason, every audience, never blank)", () => {
     expect(entryBlockCopy("not_yet", "family", "Maya")).toBe(
       "Join opens 15 minutes before the start."
     );
-    expect(ENTRY_IN_PERSON_STILL_OPEN).toBe("You can still open the room in person.");
+    expect(ENTRY_IN_PERSON_STILL_OPEN).toBe("You can still meet in person.");
   });
 
   it("an unrecognised reason (stale client) falls back to the generic line, never blank", () => {
@@ -272,7 +272,7 @@ describe("entry copy (every reason, every audience, never blank)", () => {
 
   it("an empty learner name reads 'The learner', not a hole", () => {
     expect(entryBlockCopy("live_off", "tutor", "   ")).toBe(
-      "Live sessions are off in The learner's privacy settings."
+      "Online sessions are off in The learner's privacy settings."
     );
   });
 });
@@ -333,7 +333,7 @@ describe("one copy table: the tutor callout text lives in ENTRY_BLOCK_COPY", () 
 
   it("a reason without callout text shows its one tutor line, with the name filled in", () => {
     expect(entryCardParagraphs("live_off", "Maya")).toEqual([
-      "Live sessions are off in Maya's privacy settings.",
+      "Online sessions are off in Maya's privacy settings.",
     ]);
   });
 
@@ -370,7 +370,7 @@ describe("entryRefusalMessage: what a tutor reads after a refused Start (hand-wr
 
   it("online off: the live-sessions line, no hint", () => {
     expect(entryRefusalMessage("live_off", "Maya")).toBe(
-      "Live sessions are off in Maya's privacy settings."
+      "Online sessions are off in Maya's privacy settings."
     );
   });
 

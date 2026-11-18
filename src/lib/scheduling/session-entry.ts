@@ -193,9 +193,9 @@ export const ENTRY_BLOCK_COPY: Record<
     ],
   },
   live_off: {
-    tutor: "Live sessions are off in {name}'s privacy settings.",
-    family: "Live sessions are off in privacy settings.",
-    scheduler: "Live sessions are off",
+    tutor: "Online sessions are off in {name}'s privacy settings.",
+    family: "Online sessions are off in privacy settings.",
+    scheduler: "Online sessions are off",
   },
   not_yet: {
     tutor: TUTOR_UNKNOWN,
@@ -221,7 +221,7 @@ export const ENTRY_BLOCK_COPY: Record<
 };
 
 /** Appended to the online-off line when the room can still be opened in person. */
-export const ENTRY_IN_PERSON_STILL_OPEN = "You can still open the room in person.";
+export const ENTRY_IN_PERSON_STILL_OPEN = "You can still meet in person.";
 
 /** The visible name of a control a blocked card stands in for. One title per control. */
 export type EntryControl = "start" | "openRoom";

@@ -11,6 +11,7 @@ import { WbRoleProvider } from "@/components/whiteboard/chrome/wb-role";
 import { ReplayCanvasSurface } from "@/components/whiteboard/replay/ReplayCanvasSurface";
 import { buildReplayReadOnlyChromeSlots } from "@/components/whiteboard/replay/ReplayReadOnlyChromeSlots";
 import { ReplayTimelineScrubber } from "@/components/whiteboard/replay/ReplayTimelineScrubber";
+import { NOTHING_DRAWN_COPY } from "@/components/whiteboard/replay/ReplayBoardNotSavedNotice";
 
 export type WhiteboardReplayInFrameProps = {
   /** `null` when the board was not saved: no log is fetched and the replay is the audio over an empty board. */
@@ -209,10 +210,12 @@ export function WhiteboardReplayInFrame({
   if (!log) return null;
 
   if (log.events.length === 0 && !hasAudio) {
+    // The page already says the board was not saved. Do not stack a second empty-board sentence on it.
+    if (eventsBlobUrl === null) return null;
     return (
       <div className="card" style={{ padding: 16 }} data-testid="wb-replay-empty">
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-          No whiteboard activity was recorded for this session.
+          {NOTHING_DRAWN_COPY}
         </p>
       </div>
     );

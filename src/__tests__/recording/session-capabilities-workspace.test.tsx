@@ -7,6 +7,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import {
   NO_SNAPSHOT_CONSENT_INPUT,
   TUTOR_MIC_STREAM_ID,
+  deriveSessionCapabilities,
   resolveRemoteRecordingGainLinear,
   shouldAttachRemoteStreamToRecordingMixdown,
   type SessionConsentInput,
@@ -476,7 +477,7 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
     mockDraftFindInProgress.mockResolvedValue(null);
   });
 
-  test("policy=none + no snapshot shows recording-off copy", () => {
+  test("no snapshot says session audio is not being saved", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -486,32 +487,27 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
     );
 
     const banner = screen.getByTestId("wb-audio-consent-banner");
-    expect(banner).toHaveTextContent("Recording & notes off");
-    expect(banner).toHaveTextContent(
-      "no audio consent on file for this student"
-    );
-    expect(banner).toHaveTextContent("Parent setup may be required");
+    expect(banner).toHaveTextContent("Session audio is not being saved.");
+    expect(banner).not.toHaveTextContent("no audio consent on file");
+    expect(banner).not.toHaveTextContent("Parent setup");
   });
 
-  test("policy=none + denied consent shows in-person denied copy", () => {
+  test("in person audio off says session audio is not being saved", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
-        initialSessionPhase="PENDING"
+        initialSessionPhase="ACTIVE"
         initialConsentInput={snapshotConsent({ audio: false })}
         sessionMode="IN_PERSON"
       />
     );
 
     const banner = screen.getByTestId("wb-audio-consent-banner");
-    expect(banner).toHaveTextContent("Audio not recorded");
-    expect(banner).toHaveTextContent(
-      "parent has not allowed session audio"
-    );
-    expect(banner).not.toHaveTextContent("Recording & notes off");
+    expect(banner).toHaveTextContent("Session audio is not being saved.");
+    expect(banner).not.toHaveTextContent("Your microphone can still be saved");
   });
 
-  test("policy=tutor_only + active session shows student-audio-off copy", () => {
+  test("online audio off tells the tutor their microphone can still be saved", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -522,13 +518,13 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
     );
 
     const banner = screen.getByTestId("wb-audio-consent-banner");
-    expect(banner).toHaveTextContent("Student audio not recorded");
     expect(banner).toHaveTextContent(
-      "only your microphone is included in the recording and notes"
+      "This student's voice is not being saved. Your microphone can still be saved."
     );
+    expect(banner).not.toHaveTextContent("notes");
   });
 
-  test("policy=tutor_only + waiting room hides banner", () => {
+  test("waiting room before a type is chosen does not say the tutor microphone can still be saved", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -538,9 +534,9 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
       />
     );
 
-    expect(
-      screen.queryByTestId("wb-audio-consent-banner")
-    ).not.toBeInTheDocument();
+    const banner = screen.getByTestId("wb-audio-consent-banner");
+    expect(banner).toHaveTextContent("Session audio is not being saved.");
+    expect(banner).not.toHaveTextContent("Your microphone can still be saved");
   });
 
   test("policy=full does not render consent banner", () => {
@@ -556,7 +552,7 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("student role never sees consent banner", () => {
+  test("student role without server capabilities does not invent a banner", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -568,5 +564,31 @@ describe("WhiteboardWorkspaceClient audio-consent banner", () => {
     expect(
       screen.queryByTestId("wb-audio-consent-banner")
     ).not.toBeInTheDocument();
+  });
+
+  test("student sees the online audio-off line and the shared whiteboard and notes lines", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        role="student"
+        initialSessionPhase="ACTIVE"
+        learnerSessionMode="LIVE"
+        learnerSessionCapabilities={deriveSessionCapabilities({
+          hasConsentSnapshot: true,
+          toggles: { audio: false, whiteboard: false, notes: false },
+          sessionMode: "LIVE",
+          notesForbidden: false,
+        })}
+      />
+    );
+
+    const banner = screen.getByTestId("wb-audio-consent-banner");
+    expect(banner).toHaveTextContent(
+      "Your voice is not being saved. Your tutor's microphone can still be saved."
+    );
+    expect(banner).toHaveTextContent(
+      "The board is not being saved. It still works during this session. After the session ends, we delete the saved board from our servers."
+    );
+    expect(banner).toHaveTextContent("Notes are off for this session. Nothing is transcribed.");
   });
 });

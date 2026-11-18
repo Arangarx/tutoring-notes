@@ -57,8 +57,12 @@ describe("SelfLearnerConsentSettings", () => {
       screen.queryByText(/without live sessions, mynk is effectively just a scheduling calendar/i)
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/you can turn this off, but most families keep it on/i)
+      screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
+    expect(screen.getByTestId("consent-next-session")).toHaveTextContent(
+      "A change applies to a session that has not started, including one whose room is already open."
+    );
+    expect(document.body.textContent ?? "").not.toMatch(/your child/i);
 
     await user.click(screen.getByRole("button", { name: /save preferences/i }));
     await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
@@ -171,10 +175,13 @@ describe("SelfLearnerConsentSettings", () => {
     );
 
     expect(
-      screen.getByText(/without live sessions, mynk is effectively just a scheduling calendar/i)
+      screen.getByText(
+        "With online sessions off, online sessions cannot be started or joined. In person is not affected."
+      )
     ).toBeInTheDocument();
+    expect(screen.queryByText(/your child/i)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/you can turn this off, but most families keep it on/i)
+      screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
   });
 });

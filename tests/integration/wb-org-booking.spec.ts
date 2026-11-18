@@ -721,7 +721,7 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
     });
     const appointment = await seedHourAheadAppointment(instructor.id, student.id);
     const expected =
-      "Live sessions are off in Mary Ann Lee's privacy settings. You can still open the room in person.";
+      "Online sessions are off in Mary Ann Lee's privacy settings. You can still meet in person.";
 
     const { context, page } = await signIn(browser, instructor, LOCAL_TZ);
     try {

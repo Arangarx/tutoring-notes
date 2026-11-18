@@ -16,6 +16,8 @@ type Props = {
   /** Slot-aware mic pick — preferred when wired to `useLiveAV.setMicDeviceBySlot`. */
   onPickMicSlot?: (slotIndex: number) => void | Promise<void>;
   disabled?: boolean;
+  /** The recording-off line, named as the reason on the disabled mic controls. */
+  disabledReason?: string;
 };
 
 /**
@@ -30,6 +32,7 @@ export function WbTopBarMicControl({
   onMicDeviceChange,
   onPickMicSlot,
   disabled,
+  disabledReason,
 }: Props) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [meterLevel, setMeterLevel] = useState(0);
@@ -109,6 +112,7 @@ export function WbTopBarMicControl({
         title={isMicMuted ? "Unmute microphone" : "Microphone — click to mute"}
         onClick={(e) => afterToggleRefreshHover(e.currentTarget, handleMainClick)}
         disabled={disabled}
+        aria-describedby={disabledReason ? "wb-audio-consent-banner" : undefined}
         data-testid="wb-topbar-mic-toggle"
       >
         <WbIconMic />
@@ -122,6 +126,7 @@ export function WbTopBarMicControl({
           aria-label="Microphone settings"
           aria-expanded={popoverOpen}
           disabled={disabled}
+          aria-describedby={disabledReason ? "wb-audio-consent-banner" : undefined}
           onClick={(e) => {
             e.stopPropagation();
             setPopoverOpen((p) => !p);

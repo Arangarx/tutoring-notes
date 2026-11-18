@@ -223,7 +223,7 @@ describe("ParentConsentEditor — organization rows", () => {
       )
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/you can turn this off, but most families keep it on/i)
+      screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
   });
 
@@ -240,7 +240,7 @@ describe("ParentConsentEditor — organization rows", () => {
       )
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/you can turn this off, but most families keep it on/i)
+      screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
   });
 });
