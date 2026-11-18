@@ -3,8 +3,6 @@
  *
  * Visible in the waiting room, under the mic/camera controls, before
  * Start. Not shown on the live session bar. Students never see it.
- *
- * Not run in this change — the orchestrator runs red/green later.
  */
 
 import { test, expect, type Locator, type Page } from "@playwright/test";

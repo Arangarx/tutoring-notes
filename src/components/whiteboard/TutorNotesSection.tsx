@@ -94,6 +94,14 @@ type Props = {
 /** Polling interval in ms while notes are pending/generating. */
 const POLL_INTERVAL_MS = 3_000;
 
+/**
+ * A finished note whose stored content is the canonical empty structured note.
+ * That is what the worker writes when every chunk was silence. A blank
+ * in-progress form is pending or generating, so it does not match.
+ */
+const NO_SPEECH_NOTE_COPY =
+  "No speech was detected in this recording, so no notes were drafted. You can write notes yourself.";
+
 /** Client-side skeleton timeout in ms — matches ratified Q5 (5 min). */
 const SKELETON_TIMEOUT_MS = 5 * 60 * 1_000;
 
@@ -134,6 +142,18 @@ export function parseNoteContent(content: string | null): StructuredFields {
     // Legacy markdown content — surface in topics for manual review
     return { ...EMPTY_STRUCTURED_NOTE, topics: content };
   }
+}
+
+/** Stored TutorNote.content is the worker's empty structured note, not a blank draft. */
+function isCanonicalEmptyStructuredNote(content: string | null): boolean {
+  if (!content) return false;
+  const fields = parseNoteContent(content);
+  return (
+    fields.topics === EMPTY_STRUCTURED_NOTE.topics &&
+    fields.assessment === EMPTY_STRUCTURED_NOTE.assessment &&
+    fields.nextSteps === EMPTY_STRUCTURED_NOTE.nextSteps &&
+    fields.links === EMPTY_STRUCTURED_NOTE.links
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +227,10 @@ export default function TutorNotesSection({
     ? "Writing notes…"
     : "Preparing your notes...";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
+  const silentEmptyDone =
+    note.found &&
+    note.status === "done" &&
+    isCanonicalEmptyStructuredNote(note.content);
   const isFailed = note.found && note.status === "failed";
   // A finished, failed, or timed-out note can be saved by hand. Session
   // deletion stays on a finished note: it removes the session, not the draft.
@@ -223,7 +247,7 @@ export default function TutorNotesSection({
   // stops that replacement so the tutor can type into the empty fields.
   const visibleFields: StructuredFields =
     isGeneratingPhase && formInFlight
-      ? { topics: "", assessment: "", nextSteps: "", links: "" }
+      ? { ...EMPTY_STRUCTURED_NOTE }
       : fields;
   const showInBoxSkeleton =
     formInFlight &&
@@ -478,6 +502,16 @@ export default function TutorNotesSection({
               : undefined
           }
         >
+          {silentEmptyDone ? (
+            <div
+              className="muted"
+              style={{ fontSize: 13 }}
+              data-testid="tutor-notes-no-speech"
+            >
+              {NO_SPEECH_NOTE_COPY}
+            </div>
+          ) : null}
+
           {/* Partial transcript badge — done only */}
           {isDone && note.isPartial && (
             <div
