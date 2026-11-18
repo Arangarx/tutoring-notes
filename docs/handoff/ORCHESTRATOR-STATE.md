@@ -44,6 +44,16 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 
 Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
 
+**Parallel Playwright stacks (merged f85468c8, 2026-11-17).** Each stack has its own lock. A lane worktree must contain f85468c8 (conductor merges `origin/feat/org-qol` into the lane first). One worktree per stack; leave `PW_DIST_DIR` unset.
+
+| Stack | Lock | Env |
+|---|---|---|
+| default | `$env:TEMP\tn-pw.lock` | none (3100/3101, relay 3002, DB `tutoring_notes`) |
+| 2 | `$env:TEMP\tn-pw-2.lock` | `PW_PORT=3200 PW_RELAY_PORT=3012 PW_DB_NAME=tutoring_notes_pw2 PW_OUTPUT_DIR=test-results-pw2 PW_REPORT_DIR=playwright-report-pw2 PW_AUTH_DIR=tests/integration/.auth-pw2` |
+| 3 | `$env:TEMP\tn-pw-3.lock` | same with 3300 / 3022 / `tutoring_notes_pw3` / `-pw3` |
+
+DBs `tutoring_notes_pw2` and `tutoring_notes_pw3` already exist locally. After a stack-2/3 run: `docker rm -f wb-relay-local-3012` (or `-3022`). Never run jest with `PW_DB_NAME` set while that stack's Playwright runs (jest force-resets that DB). The harness mail dir is shared across stacks: never run `wb-child-home`, `org-staff-invite`, or tutor-verify specs on two stacks at once. Never commit `tsconfig.json` / `next-env.d.ts` from a lane.
+
 **Machine-load cap (Andrew 2026-11-17 16:36):** applies ONLY while Andrew is playing WoW. Before starting a Playwright stack, check `Get-Process | Where-Object { $_.ProcessName -match '^Wow(Classic|T|B)?$' }` (the game itself, not WowCompanion or WowVoiceProxy). If WoW is running: at most TWO stacks at once (one when the time difference is small). If not: up to three.
 
 ### Uncommitted / unmerged
