@@ -494,16 +494,19 @@ describe("BUG-FIX 2026-06-01: rotate and regen backup-code display requires expl
     expect(section).not.toContain("router.replace");
   });
 
-  it("handleRegenStart does not navigate — sets view to regen-done only", () => {
-    const handleRegenIdx = content.indexOf("function handleRegenStart");
-    // Find the next function after handleRegenStart.
-    const nextFnIdx = content.indexOf("\n  const handleCopyRegenCodes", handleRegenIdx + 1);
-    expect(handleRegenIdx).toBeGreaterThan(-1);
-    expect(nextFnIdx).toBeGreaterThan(handleRegenIdx);
-    const section = content.slice(handleRegenIdx, nextFnIdx);
-    // Sets view to regen-done on success.
+  it("regen sets regen-done in handleRegenWithCode and neither regen handler navigates", () => {
+    const startIdx = content.indexOf("function handleRegenStart");
+    const withCodeIdx = content.indexOf("function handleRegenWithCode");
+    const nextFnIdx = content.indexOf("\n  function handleResetSelf", withCodeIdx + 1);
+    expect(startIdx).toBeGreaterThan(-1);
+    expect(withCodeIdx).toBeGreaterThan(startIdx);
+    expect(nextFnIdx).toBeGreaterThan(withCodeIdx);
+    const startSection = content.slice(startIdx, withCodeIdx);
+    const section = content.slice(withCodeIdx, nextFnIdx);
+    expect(startSection).not.toContain("router.push");
+    expect(startSection).not.toContain("router.refresh");
+    expect(startSection).not.toContain("router.replace");
     expect(section).toContain('"regen-done"');
-    // Must NOT auto-navigate.
     expect(section).not.toContain("router.push");
     expect(section).not.toContain("router.refresh");
     expect(section).not.toContain("router.replace");

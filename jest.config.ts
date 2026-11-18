@@ -22,6 +22,16 @@ import nextJest from "next/jest.js";
 
 const createJestConfig = nextJest({ dir: "./" });
 
+// These two refuse tutoring_notes_test. Default `npx jest` skips them.
+// `npm run test:org-db` sets JEST_ORG_DB=1 and points at tutoring_notes_org_test.
+const orgDbOnlySuites =
+  process.env.JEST_ORG_DB === "1"
+    ? []
+    : [
+        "<rootDir>/src/__tests__/org/org-slice1.integration.test.ts",
+        "<rootDir>/src/__tests__/org/org-learner.integration.test.ts",
+      ];
+
 const customJestConfig = {
   testEnvironment: "node",
   setupFiles: ["<rootDir>/jest.setup-env.ts"],
@@ -32,6 +42,7 @@ const customJestConfig = {
     "<rootDir>/tests/",
     "<rootDir>/test-results/",
     "<rootDir>/src/__tests__/helpers/",
+    ...orgDbOnlySuites,
   ],
   globalSetup: "<rootDir>/jest.global-setup.ts",
   moduleNameMapper: {

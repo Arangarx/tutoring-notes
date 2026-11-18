@@ -34,6 +34,10 @@ beforeEach(() => {
   jest.resetModules();
   process.env.NEXTAUTH_SECRET = "test-nextauth-secret-must-be-at-least-32-chars-long";
   process.env.TOTP_ENCRYPTION_KEY = Buffer.alloc(32, 0xaa).toString("base64url");
+  process.env.SMTP_HOST = "smtp.test.local";
+  process.env.SMTP_USER = "otp-test";
+  process.env.SMTP_PASS = "otp-test-pass";
+  process.env.SMTP_FROM = "noreply@test.local";
 });
 
 afterEach(() => {
