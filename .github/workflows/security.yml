@@ -1,0 +1,74 @@
+# Standing security checks: static analysis, dependency audit, secret scan,
+# and the existing Jest security tests. Nothing here calls a deployed site.
+# Each job calls scripts/security-check.mjs. Rulesets, the gitleaks version,
+# and the unreachable Jest database URL live in that script only.
+# Node 20 matches docs/PLATFORM-ASSUMPTIONS.md §7.1 (production is Node 20+).
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feat/org-qol
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Install Semgrep
+        run: pip install semgrep
+      - name: Scan
+        run: node scripts/security-check.mjs --only semgrep
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+      - name: Detect secrets
+        run: node scripts/security-check.mjs --only gitleaks
+
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Audit production dependencies
+        run: node scripts/security-check.mjs --only audit
+
+  jest-security:
+    name: Jest security tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run security tests
+        run: node scripts/security-check.mjs --only jest

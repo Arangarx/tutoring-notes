@@ -1,4 +1,5 @@
 import { FlatCompat } from "@eslint/eslintrc";
+import security from "eslint-plugin-security";
 
 const compat = new FlatCompat({
   baseDirectory: import.meta.dirname,
@@ -9,6 +10,10 @@ const designTokenMessage =
 
 export default [
   ...compat.extends("next/core-web-vitals"),
+  // Recommended rules from eslint-plugin-security. They ship as warnings so
+  // `next lint` and `next build` stay green on existing code. Promote them
+  // to errors once this baseline is triaged.
+  security.configs.recommended,
   {
     files: ["src/**/*.{ts,tsx,js,jsx}"],
     ignores: [

@@ -1,10 +1,11 @@
 import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 import { db } from "@/lib/db";
 import { env, isEmailConfigured } from "./env";
 import { createGmailTransport } from "./gmail-transport";
 import { asciiEmailDisplayName, sendViaGmailApi } from "./gmail-api-send";
 
-let _transport: nodemailer.Transporter | null = null;
+let _transport: Transporter | null = null;
 
 function buildTransportFromConfig(config: {
   host: string;
@@ -51,7 +52,7 @@ export async function getGmailConnectionForTutor(adminUserId: string | null): Pr
   }
 }
 
-async function getTransportAndFrom(adminUserId?: string | null): Promise<{ transport: nodemailer.Transporter; fromEmail: string } | null> {
+async function getTransportAndFrom(adminUserId?: string | null): Promise<{ transport: Transporter; fromEmail: string } | null> {
   const gmail = adminUserId !== undefined
     ? await getGmailConnectionForTutor(adminUserId)
     : await getGmailConnection();
@@ -149,7 +150,7 @@ function platformSmtpMissingError(): string {
 }
 
 function buildPlatformSmtpTransport(): {
-  transport: nodemailer.Transporter;
+  transport: Transporter;
   fromEmail: string;
 } {
   const port = env.SMTP_PORT ? parseInt(env.SMTP_PORT, 10) : 587;
