@@ -12,6 +12,19 @@ export function audioRecoveryBannerHeadline(durationSec: number): string {
   )} of audio.`;
 }
 
+/** Shown once the recovered audio is in the upload queue (not yet necessarily uploaded). */
+export const AUDIO_RECOVERY_QUEUED_COPY = "It is uploading to this session.";
+
+/**
+ * Shown when the recovered audio could NOT be handed to the upload queue. Honest about where the
+ * audio is (still on this device) and what happens next (retry on reopen) — nothing more.
+ */
+export function audioRecoveryFailedMessage(durationSec: number): string {
+  return `Audio recording was interrupted. We found ${formatDuration(
+    Math.max(0, Math.floor(durationSec))
+  )} of audio but could not start uploading it. It is still saved on this device, and we will try again the next time you open this session.`;
+}
+
 export function estimatedDurationSecFromDraft(row: DraftSegmentRow): number {
   return Math.max(0, Math.floor(row.estimatedDurationSec));
 }

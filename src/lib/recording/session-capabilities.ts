@@ -164,17 +164,18 @@ export function deriveSessionCapabilities(input: SessionCapabilityInput): Sessio
  * Rules:
  *  - `audioMode === "none"` (IN_PERSON / audio denied): follow `wbEventsActive`
  *    (CF-2 / CF-2.1 — stroke logs persist even with no audio).
- *  - audio modes: capture while the FSM is `recording` OR `paused`. `armed`
- *    / `idle` / `stopping` still gate capture OFF, preserving the CF-2.1
- *    armed-gate contract (armed is NOT paused) — with ONE exception, WS-N5:
- *  - audio modes, REOPENED already-started session: capture also while the
- *    FSM is `armed`. A page reload resets the host's `everHadParticipants`
- *    latch, so a started session is `armed` ("waiting for the first
- *    participant") until a student reconnects. That wait is the same
- *    situation as the disconnect pause above (the session is live, the
+ *  - audio modes: capture while the FSM is `recording` OR `paused`. Every
+ *    other state stays OFF, including `armed` (CF-2.1: armed is not paused),
+ *    `idle`, and `failed`.
+ *  - ONE exception, WS-N5: a REOPENED already-started session also captures
+ *    while the FSM is `armed` and only then. A page reload resets the host's
+ *    `everHadParticipants` latch, so a started session sits `armed` ("waiting
+ *    for the first participant") until a student reconnects. That wait is the
+ *    same situation as the disconnect pause above (the session is live, the
  *    tutor is teaching), so its strokes are captured and stamped at the
- *    frozen session clock instead of being silently dropped. Stopping is
- *    still honoured: `wbEventsActive` goes false on End.
+ *    frozen session clock. `idle` and `failed` are not that wait — `wbEventsActive`
+ *    can still be true in those states — so they stay off. End is still
+ *    honoured: `wbEventsActive` goes false.
  */
 export function deriveWbCaptureActive(input: {
   /** `audio.mode` of the session capabilities. */
@@ -186,6 +187,11 @@ export function deriveWbCaptureActive(input: {
   /** Tutor session-active gate (role/phase/userWantsRecording). */
   wbEventsActive: boolean;
   /**
+   * FSM `state === "armed"`. The WS-N5 reopen exception captures only in this
+   * state. Absent is not armed, so a reopen does not capture.
+   */
+  isArmed?: boolean;
+  /**
    * The workspace was opened on a session that was ALREADY started (phase ACTIVE at mount),
    * i.e. the tutor reopened it. Absent/false for a session first started in this page.
    */
@@ -193,7 +199,11 @@ export function deriveWbCaptureActive(input: {
 }): boolean {
   if (input.audioMode === "none") return input.wbEventsActive;
   if (input.recordingActive || input.isPaused) return true;
-  return input.reopenedStartedSession === true && input.wbEventsActive;
+  return (
+    input.reopenedStartedSession === true &&
+    input.wbEventsActive &&
+    input.isArmed === true
+  );
 }
 
 /** Gate E: remote streams enter the recording mixdown only when the audio mode is full. */

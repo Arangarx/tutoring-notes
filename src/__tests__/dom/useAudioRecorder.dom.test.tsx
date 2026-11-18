@@ -86,7 +86,9 @@ jest.mock("@/lib/action-correlation", () => ({
 }));
 
 // A4 WS-N-PAGEHIDE: spy on IDB draft checkpoints (only exercised by the `recordingDraft` describe at the bottom).
-const mockDraftCheckpoint = jest.fn(async (_row: { chunkCount: number; sessionId: string }) => {});
+const mockDraftCheckpoint = jest.fn(
+  async (_row: { chunkCount: number; sessionId: string; segmentId?: string; recordingTimeOffsetMs?: number }) => {}
+);
 jest.mock("@/lib/recording/recording-draft-store", () => {
   const actual = jest.requireActual("@/lib/recording/recording-draft-store");
   return {
@@ -1007,6 +1009,52 @@ describe("useAudioRecorder — recordingDraft cadence (A4 WS-N-PAGEHIDE)", () =>
       delete (document as unknown as { visibilityState?: string }).visibilityState;
       if (orig) Object.defineProperty(Document.prototype, "visibilityState", orig);
     }
+  });
+
+  test("stop enqueues under the draft segment id, so a kill between enqueue and clear dedupes", async () => {
+    mockUploadOk("https://blob.example/draft-stop");
+    const onRecorded = jest.fn();
+    const view = renderHook(() =>
+      useAudioRecorder({
+        studentId: "stu-1",
+        onRecorded,
+        recordingDraft: { sessionId: "wbsid-draft", streamId: "tutor:mic" },
+      })
+    );
+    await flushAsync();
+    await act(async () => {
+      await view.result.current.handleStartRecording();
+    });
+    const recorder = FakeMediaRecorder.lastInstance();
+    recorder.feedData();
+    const draftedSegmentId = mockDraftCheckpoint.mock.calls.at(-1)?.[0]?.segmentId;
+    expect(draftedSegmentId).toEqual(expect.any(String));
+
+    await act(async () => {
+      view.result.current.stopAndUpload("final");
+      await flushAsync();
+    });
+
+    expect(onRecorded).toHaveBeenCalledTimes(1);
+    expect(onRecorded.mock.calls[0][1]).toEqual({ segmentId: draftedSegmentId });
+  });
+
+  test("checkpoint stores the segment start offset so recovery does not land at 0", async () => {
+    const onRecorded = jest.fn();
+    const view = renderHook(() =>
+      useAudioRecorder({
+        studentId: "stu-1",
+        onRecorded,
+        getAudioMs: () => 42_000,
+        recordingDraft: { sessionId: "wbsid-draft", streamId: "tutor:mic" },
+      })
+    );
+    await flushAsync();
+    await act(async () => {
+      await view.result.current.handleStartRecording();
+    });
+    FakeMediaRecorder.lastInstance().feedData();
+    expect(mockDraftCheckpoint.mock.calls.at(-1)?.[0]?.recordingTimeOffsetMs).toBe(42_000);
   });
 
   test("tab hidden does NOT call requestData before timeslice delivery was ever observed (iOS MP4 fragment guard)", async () => {

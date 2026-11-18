@@ -166,10 +166,16 @@ import {
   type DraftSegmentRow,
 } from "@/lib/recording/recording-draft-store";
 import {
+  AUDIO_RECOVERY_QUEUED_COPY,
   audioRecoveryBannerHeadline,
+  audioRecoveryFailedMessage,
   draftHasRecoverableAudio,
   estimatedDurationSecFromDraft,
 } from "@/lib/recording/recording-draft-recovery";
+import {
+  draftRescanDelayMs,
+  recoverDraftIfNotLive,
+} from "@/lib/recording/recording-draft-lock";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
 import { type PageStripRow } from "@/components/whiteboard/PageStrip";
@@ -2031,7 +2037,13 @@ export function WhiteboardWorkspaceClient({
    */
   const [audioDraftRecovery, setAudioDraftRecovery] =
     useState<DraftSegmentRow | null>(null);
-  /** Recovery scan runs once per mount: a later re-run would find the LIVE segment's draft. */
+  /** Set when the recovered audio could not be handed to the upload queue. The draft stays in IDB. */
+  const [audioDraftRecoveryFailed, setAudioDraftRecoveryFailed] =
+    useState<DraftSegmentRow | null>(null);
+  /**
+   * Recovery scan runs once per mount (plus one deferred re-scan when Web Locks are unavailable
+   * and the draft still looks fresh). A later re-run would find the LIVE segment's draft.
+   */
   const audioDraftScanDoneRef = useRef(false);
 
   /**
@@ -2079,12 +2091,16 @@ export function WhiteboardWorkspaceClient({
         blob?: Blob;
         durationSeconds?: number;
       },
-      _meta?: { autoRollover?: boolean }
+      meta?: { autoRollover?: boolean; segmentId?: string }
     ) => {
+      // Use the draft's own segment id when the recorder passes it: a draft recovered after a kill
+      // between this enqueue and the draft clear below then dedupes onto THIS row (outbox key is
+      // session/stream/segmentId) instead of uploading the same audio twice.
       const segmentId =
-        typeof globalThis.crypto?.randomUUID === "function"
+        meta?.segmentId ??
+        (typeof globalThis.crypto?.randomUUID === "function"
           ? globalThis.crypto.randomUUID()
-          : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+          : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
 
       // p3-clock: capture THIS segment's start offset and advance the
       // carried-forward anchor SYNCHRONOUSLY at callback entry — before any
@@ -2131,7 +2147,8 @@ export function WhiteboardWorkspaceClient({
         });
         try {
           const draftStore = getOrCreateRecordingDraftStore();
-          await draftStore.clear(whiteboardSessionId, TUTOR_MIC_STREAM_ID);
+          // Only this segment's draft: after a rollover the row may already be the NEW segment's.
+          await draftStore.clearIfSegment(whiteboardSessionId, TUTOR_MIC_STREAM_ID, segmentId);
         } catch (clearErr) {
           console.warn(
             `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} draft clear after enqueue failed`,
@@ -2200,56 +2217,107 @@ export function WhiteboardWorkspaceClient({
     if (audioCapturePolicy === "none") return;
     if (audioDraftScanDoneRef.current) return;
     let cancelled = false;
-    void (async () => {
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scan = async (isRetry: boolean) => {
       const dft = Math.random().toString(36).slice(2, 7);
+      let row: DraftSegmentRow | null = null;
       try {
         const draftStore = getOrCreateRecordingDraftStore();
-        const row = await draftStore.findInProgress(
+        row = await draftStore.findInProgress(
           whiteboardSessionId,
           TUTOR_MIC_STREAM_ID
         );
         if (cancelled) return;
-        audioDraftScanDoneRef.current = true;
-        if (!draftHasRecoverableAudio(row) || row === null) return;
+        if (!draftHasRecoverableAudio(row) || row === null) {
+          audioDraftScanDoneRef.current = true;
+          return;
+        }
 
         // WS-B: enqueue the interrupted segment into the outbox NOW, with no tutor click. The
         // recovery used to wait behind a Keep/Discard banner; a tutor who ignored it, or who
         // reloaded again, lost the audio (the next segment's first checkpoint overwrites the
         // single draft row for this stream). The outbox dedupes on (session, stream, segmentId),
         // so a repeat enqueue of the same draft is harmless.
-        const blob = draftStore.assemble(row);
-        await getOrCreateUploadOutbox().enqueue({
-          sessionId: whiteboardSessionId,
-          streamId: TUTOR_MIC_STREAM_ID,
-          segmentId: row.segmentId,
-          blobLocalRef: blob,
-          blobRemoteUrl: null,
-          mimeType: row.mimeType,
-          sizeBytes: blob.size,
-          audioStartedAtMs: row.firstChunkMs,
+        //
+        // The row may belong to a LIVE recorder (another tab, or this tab's new segment if the
+        // scan lands after its first checkpoint). Recover only when we can take that segment's
+        // Web Lock. Without locks, a checkpoint newer than ~3 timeslices is left alone and
+        // scanned once more after that window.
+        const found = row;
+        const outcome = await recoverDraftIfNotLive(found, async () => {
+          const blob = draftStore.assemble(found);
+          const recordingTimeOffsetMs =
+            typeof found.recordingTimeOffsetMs === "number" ? found.recordingTimeOffsetMs : 0;
+          await getOrCreateUploadOutbox().enqueue({
+            sessionId: whiteboardSessionId,
+            streamId: TUTOR_MIC_STREAM_ID,
+            segmentId: found.segmentId,
+            blobLocalRef: blob,
+            blobRemoteUrl: null,
+            mimeType: found.mimeType,
+            sizeBytes: blob.size,
+            audioStartedAtMs: found.firstChunkMs,
+            recordingTimeOffsetMs,
+          });
+          console.log(
+            `[WhiteboardWorkspaceClient] dft=${dft} recover-and-enqueue wbsid=${whiteboardSessionId} streamId=${TUTOR_MIC_STREAM_ID} segmentId=${found.segmentId} sizeBytes=${blob.size} offsetMs=${recordingTimeOffsetMs}`
+          );
+          // Only this segment's draft: a newer segment may already own the shared row.
+          try {
+            await draftStore.clearIfSegment(
+              whiteboardSessionId,
+              TUTOR_MIC_STREAM_ID,
+              found.segmentId
+            );
+          } catch (clearErr) {
+            console.warn(
+              `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} draft clear after recovery failed`,
+              clearErr
+            );
+          }
+          return found;
         });
-        console.log(
-          `[WhiteboardWorkspaceClient] dft=${dft} recover-and-enqueue wbsid=${whiteboardSessionId} streamId=${TUTOR_MIC_STREAM_ID} segmentId=${row.segmentId} sizeBytes=${blob.size}`
-        );
-        // Drop the draft only if it is still the one we enqueued (never wipe a newer segment's).
-        const current = await draftStore.findInProgress(
-          whiteboardSessionId,
-          TUTOR_MIC_STREAM_ID
-        );
-        if (current === null || current.segmentId === row.segmentId) {
-          await draftStore.clear(whiteboardSessionId, TUTOR_MIC_STREAM_ID);
+        if (cancelled) return;
+        if (outcome.status === "recovered") {
+          audioDraftScanDoneRef.current = true;
+          setAudioDraftRecoveryFailed(null);
+          setAudioDraftRecovery(outcome.value);
+          return;
         }
-        setAudioDraftRecovery(row);
+        if (!isRetry) {
+          const delay = draftRescanDelayMs(found.checkpointedAt);
+          if (delay !== null) {
+            // A little past the window, so the re-read is not still "fresh" by a timer tick.
+            // A live recorder rewrites the row every timeslice, so this slack cannot age a
+            // live checkpoint out of the window.
+            retryTimer = setTimeout(() => {
+              if (!cancelled) void scan(true);
+            }, delay + 250);
+            return;
+          }
+        }
+        // A live recorder owns this draft (lock held, or still fresh after the one re-scan).
+        audioDraftScanDoneRef.current = true;
       } catch (err) {
-        // Enqueue failed: the draft stays in IndexedDB, so the next load retries.
+        if (cancelled) return;
+        // Enqueue failed: the draft stays in IndexedDB, so the next open retries.
+        audioDraftScanDoneRef.current = true;
         console.warn(
           `[WhiteboardWorkspaceClient] dft=${dft} wbsid=${whiteboardSessionId} audio draft recovery failed`,
           err
         );
+        if (row && draftHasRecoverableAudio(row)) {
+          setAudioDraftRecovery(null);
+          setAudioDraftRecoveryFailed(row);
+        }
       }
-    })();
+    };
+
+    void scan(false);
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [whiteboardSessionId, audioCapturePolicy]);
 
@@ -2694,13 +2762,15 @@ export function WhiteboardWorkspaceClient({
   // keeps drawing; those strokes stay captured and stamp at the FROZEN clock
   // (getAudioMs is driven by wbSignal, which is false while paused), so they
   // collapse to the pause instant on replay (ratified 2026-07-02). Armed /
-  // idle still gate WB capture OFF (CF-2.1 armed-gate preserved). Audio
-  // recording itself is unaffected — the AudioBridge keys off FSM
+  // idle still gate WB capture OFF (CF-2.1 armed-gate preserved), including
+  // on a reopen — the WS-N5 exception is `armed` only, not idle or failed.
+  // Audio recording itself is unaffected — the AudioBridge keys off FSM
   // recordingActive, not this.
   const wbCaptureActive = deriveWbCaptureActive({
     audioMode: audioCapturePolicy,
     recordingActive,
     isPaused: lifecycle.state === "paused",
+    isArmed: lifecycle.state === "armed",
     wbEventsActive,
     // WS-N5: mounted on an already-started session (a reopen) — `everBothPresentRef`
     // was reset by the reload, so the FSM sits `armed` until a student reconnects;
@@ -7454,7 +7524,18 @@ export function WhiteboardWorkspaceClient({
                 {audioRecoveryBannerHeadline(
                   estimatedDurationSecFromDraft(audioDraftRecovery)
                 )}{" "}
-                It was saved to this session.
+                {AUDIO_RECOVERY_QUEUED_COPY}
+              </Banner>
+            )}
+            {audioDraftRecoveryFailed && (
+              <Banner
+                tone="warning"
+                testId="wb-audio-draft-recovery-failed-banner"
+                onDismiss={() => setAudioDraftRecoveryFailed(null)}
+              >
+                {audioRecoveryFailedMessage(
+                  estimatedDurationSecFromDraft(audioDraftRecoveryFailed)
+                )}
               </Banner>
             )}
             {presence.bannerMessage && (

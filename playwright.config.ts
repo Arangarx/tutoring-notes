@@ -254,6 +254,8 @@ export default defineConfig({
         "**/integration/wb-tab-kill-audio-durability.spec.ts",
         "**/integration/wb-recording-draft-durability.spec.ts",
         "**/integration/wb-recording-draft-recovery.spec.ts",
+        "**/integration/wb-recording-draft-live-owner.spec.ts",
+        "**/integration/wb-recording-draft-recovery-guards.spec.ts",
         "**/integration/wb-reopen-stroke-capture.spec.ts",
         "**/integration/wb-tutor-recording-mute.spec.ts",
         "**/integration/wb-transcription-language-notice.spec.ts",

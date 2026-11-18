@@ -15,6 +15,28 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
+const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
+
+export type RecordingCount = { count: number; byStream: Record<string, number>; blobUrls: string[] };
+
+/** Server-side SessionRecording rows. Independent of the draft store and the outbox. */
+export async function fetchRecordingCount(page: Page, sessionId: string): Promise<RecordingCount> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await page.request.get(`/api/test/whiteboard/${sessionId}/recording-count`, {
+        headers: { Authorization: `Bearer ${TEST_SECRET}` },
+      });
+      expect(res.ok(), await res.text()).toBeTruthy();
+      return (await res.json()) as RecordingCount;
+    } catch (err) {
+      lastErr = err;
+      await page.waitForTimeout(750);
+    }
+  }
+  throw lastErr;
+}
+
 export const TUTOR_MIC = "tutor:mic";
 
 export type StartRecord = { at: number; audio: boolean; timeslice: number | null };

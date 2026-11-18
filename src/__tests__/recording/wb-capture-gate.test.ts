@@ -47,12 +47,16 @@ describe("deriveWbCaptureActive", () => {
       ).toBe(true);
     });
 
+    // Armed-gate oracle: wbEventsActive is TRUE, so this fails if capture simply
+    // follows wbEventsActive. A PENDING workspace render cannot show this — phase
+    // is not active, so wbEventsActive is already false there.
     test("does NOT capture while armed (armed is not paused — CF-2.1 gate preserved)", () => {
       expect(
         deriveWbCaptureActive({
           audioMode: "tutor_only",
           recordingActive: false,
           isPaused: false,
+          isArmed: true,
           wbEventsActive: true,
         })
       ).toBe(false);
@@ -60,6 +64,7 @@ describe("deriveWbCaptureActive", () => {
 
     // WS-N5: a tutor who REOPENS a session that was already started sits in `armed`
     // until a student reconnects; strokes drawn meanwhile must still be recorded.
+    // `isArmed` is required: wbEventsActive alone is also true in idle/failed.
     test("CAPTURES while armed in a reopened, already-started session (WS-N5)", () => {
       for (const audioMode of ["full", "tutor_only"] as const) {
         expect(
@@ -67,10 +72,26 @@ describe("deriveWbCaptureActive", () => {
             audioMode,
             recordingActive: false,
             isPaused: false,
+            isArmed: true,
             wbEventsActive: true,
             reopenedStartedSession: true,
           })
         ).toBe(true);
+      }
+    });
+
+    test("a reopened session does NOT capture in idle or failed (WS-N5 is armed only)", () => {
+      for (const isArmed of [false, undefined]) {
+        expect(
+          deriveWbCaptureActive({
+            audioMode: "full",
+            recordingActive: false,
+            isPaused: false,
+            isArmed,
+            wbEventsActive: true,
+            reopenedStartedSession: true,
+          })
+        ).toBe(false);
       }
     });
 

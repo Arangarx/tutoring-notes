@@ -16,6 +16,7 @@ import userEvent from "@testing-library/user-event";
 import { SessionReviewMode } from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/SessionReviewMode";
 import TutorNotesSection from "@/components/whiteboard/TutorNotesSection";
 import type { DraftSegmentRow } from "@/lib/recording/recording-draft-store";
+import { draftLockName, DRAFT_FRESH_WINDOW_MS } from "@/lib/recording/recording-draft-lock";
 
 // ---------------------------------------------------------------------------
 // SessionReviewMode (1.4)
@@ -152,20 +153,28 @@ describe("WS-U-COPY 2.11 — TutorNotesSection failed copy", () => {
 const mockDraftClear = jest.fn((_sessionId: string, _streamId: string) =>
   Promise.resolve()
 );
+const mockDraftClearIfSegment = jest.fn(
+  (_sessionId: string, _streamId: string, _segmentId: string) => Promise.resolve(true)
+);
 const mockDraftFindInProgress = jest.fn<
   Promise<DraftSegmentRow | null>,
   [string, string]
 >(() => Promise.resolve(null));
 const mockOutboxEnqueue = jest.fn((_args: unknown) => Promise.resolve());
 
-jest.mock("@/lib/recording/recording-draft-store", () => ({
-  getOrCreateRecordingDraftStore: () => ({
-    clear: mockDraftClear,
-    findInProgress: mockDraftFindInProgress,
-    assemble: jest.fn(() => new Blob(["audio"], { type: "audio/webm" })),
-    checkpoint: jest.fn(),
-  }),
-}));
+jest.mock("@/lib/recording/recording-draft-store", () => {
+  const actual = jest.requireActual("@/lib/recording/recording-draft-store");
+  return {
+    ...actual,
+    getOrCreateRecordingDraftStore: () => ({
+      clear: mockDraftClear,
+      clearIfSegment: mockDraftClearIfSegment,
+      findInProgress: mockDraftFindInProgress,
+      assemble: jest.fn(() => new Blob(["audio"], { type: "audio/webm" })),
+      checkpoint: jest.fn(),
+    }),
+  };
+});
 
 const syncCtl = {
   peerCountListeners: new Set<(n: number) => void>(),
@@ -488,6 +497,7 @@ describe("WS-U-COPY workspace client", () => {
   beforeEach(() => {
     window.scrollTo = jest.fn();
     mockDraftClear.mockClear();
+    mockDraftClearIfSegment.mockClear();
     mockDraftFindInProgress.mockReset();
     mockDraftFindInProgress.mockResolvedValue(null);
     liveAvCtl.setReachable = null;
@@ -509,8 +519,8 @@ describe("WS-U-COPY workspace client", () => {
     ) as jest.Mock;
   });
 
-  it("1.5 — WS-B: a recovered draft is enqueued with no click; the banner only informs", async () => {
-    const draft = {
+  function recoverableDraft(overrides: Partial<DraftSegmentRow> = {}): DraftSegmentRow {
+    return {
       key: "ws-copy:tutor:mic",
       segmentId: "seg-1",
       mimeType: "audio/webm",
@@ -522,15 +532,21 @@ describe("WS-U-COPY workspace client", () => {
       sessionId: "ws-copy",
       streamId: "tutor:mic",
       checkpointedAt: 1234,
-    } satisfies DraftSegmentRow;
-    mockDraftFindInProgress.mockResolvedValue(draft);
+      ...overrides,
+    };
+  }
+
+  it("1.5 — WS-B: a recovered draft is enqueued with no click; the banner says it is uploading", async () => {
+    mockDraftFindInProgress.mockResolvedValue(recoverableDraft());
     mockOutboxEnqueue.mockClear();
     mockDraftClear.mockClear();
+    mockDraftClearIfSegment.mockClear();
 
     render(<WhiteboardWorkspaceClient {...tutorProps} initialUserWantsRecording />);
     await screen.findByTestId("wb-mock-excalidraw-canvas");
 
     // Enqueued and the draft dropped, without anyone clicking anything.
+    // No offset on the row: the transcript anchor falls back to 0, it is not omitted.
     await waitFor(() => {
       expect(mockOutboxEnqueue).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -539,36 +555,50 @@ describe("WS-U-COPY workspace client", () => {
           segmentId: "seg-1",
           audioStartedAtMs: 1234,
           blobRemoteUrl: null,
+          recordingTimeOffsetMs: 0,
         })
       );
     });
     await waitFor(() => {
-      expect(mockDraftClear).toHaveBeenCalledWith("ws-copy", "tutor:mic");
+      expect(mockDraftClearIfSegment).toHaveBeenCalledWith("ws-copy", "tutor:mic", "seg-1");
     });
+    expect(mockDraftClear).not.toHaveBeenCalled();
 
     const banner = await screen.findByTestId("wb-audio-draft-recovery-banner");
     expect(banner).toHaveTextContent(/recovered 00:05 of audio/i);
+    expect(banner).toHaveTextContent("It is uploading to this session.");
+    expect(banner).not.toHaveTextContent("It was saved to this session.");
     expect(screen.queryByTestId("wb-audio-draft-keep")).toBeNull();
     expect(screen.queryByTestId("wb-audio-draft-discard")).toBeNull();
   });
 
-  it("1.5b — WS-B: if the outbox refuses the draft it stays in IndexedDB for the next load", async () => {
-    mockDraftFindInProgress.mockResolvedValue({
-      key: "ws-copy:tutor:mic",
-      segmentId: "seg-fail",
-      mimeType: "audio/webm",
-      chunkCount: 1,
-      chunks: [new Blob(["x"], { type: "audio/webm" })],
-      firstChunkMs: 1,
-      lastChunkMs: 1,
-      estimatedDurationSec: 5,
-      sessionId: "ws-copy",
-      streamId: "tutor:mic",
-      checkpointedAt: 1,
-    } satisfies DraftSegmentRow);
+  it("1.5c — a recovered draft keeps the segment start offset for the notes timeline", async () => {
+    mockDraftFindInProgress.mockResolvedValue(
+      recoverableDraft({ segmentId: "seg-offset", recordingTimeOffsetMs: 84_000 })
+    );
+    mockOutboxEnqueue.mockClear();
+
+    render(<WhiteboardWorkspaceClient {...tutorProps} initialUserWantsRecording />);
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+
+    await waitFor(() => {
+      expect(mockOutboxEnqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          segmentId: "seg-offset",
+          recordingTimeOffsetMs: 84_000,
+        })
+      );
+    });
+  });
+
+  it("1.5b — WS-B: if the outbox refuses the draft it stays on this device and the banner says so", async () => {
+    mockDraftFindInProgress.mockResolvedValue(
+      recoverableDraft({ segmentId: "seg-fail", checkpointedAt: 1 })
+    );
     mockOutboxEnqueue.mockClear();
     mockOutboxEnqueue.mockRejectedValueOnce(new Error("quota"));
     mockDraftClear.mockClear();
+    mockDraftClearIfSegment.mockClear();
     const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
 
     render(<WhiteboardWorkspaceClient {...tutorProps} initialUserWantsRecording />);
@@ -576,8 +606,80 @@ describe("WS-U-COPY workspace client", () => {
     await waitFor(() => expect(mockOutboxEnqueue).toHaveBeenCalledTimes(1));
 
     expect(mockDraftClear).not.toHaveBeenCalled();
+    expect(mockDraftClearIfSegment).not.toHaveBeenCalled();
     expect(screen.queryByTestId("wb-audio-draft-recovery-banner")).toBeNull();
+    const failed = await screen.findByTestId("wb-audio-draft-recovery-failed-banner");
+    expect(failed).toHaveTextContent(/still saved on this device/i);
+    expect(failed).toHaveTextContent(/next time you open this session/i);
+    expect(failed).not.toHaveTextContent(/saved to this session/i);
     warn.mockRestore();
+  });
+
+  it("a live recorder's lock keeps the mount scan from enqueueing or clearing the draft", async () => {
+    const draft = recoverableDraft({ segmentId: "seg-live", checkpointedAt: 1 });
+    const held = new Set<string>([
+      draftLockName(draft.sessionId, draft.streamId, draft.segmentId),
+    ]);
+    const original = Object.getOwnPropertyDescriptor(navigator, "locks");
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: {
+        request: async (
+          name: string,
+          optionsOrCb: { ifAvailable?: boolean } | ((lock: unknown) => unknown),
+          maybeCb?: (lock: unknown) => unknown
+        ) => {
+          const options = typeof optionsOrCb === "function" ? {} : optionsOrCb;
+          const cb = (typeof optionsOrCb === "function" ? optionsOrCb : maybeCb) as (
+            lock: unknown
+          ) => unknown;
+          if (options.ifAvailable && held.has(name)) return cb(null);
+          held.add(name);
+          try {
+            return await cb({ name, mode: "exclusive" });
+          } finally {
+            held.delete(name);
+          }
+        },
+      },
+    });
+    mockDraftFindInProgress.mockResolvedValue(draft);
+    mockOutboxEnqueue.mockClear();
+    mockDraftClearIfSegment.mockClear();
+    try {
+      render(<WhiteboardWorkspaceClient {...tutorProps} initialUserWantsRecording />);
+      await screen.findByTestId("wb-mock-excalidraw-canvas");
+      await waitFor(() => expect(mockDraftFindInProgress).toHaveBeenCalled());
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(mockOutboxEnqueue).not.toHaveBeenCalled();
+      expect(mockDraftClearIfSegment).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("wb-audio-draft-recovery-banner")).toBeNull();
+    } finally {
+      if (original) Object.defineProperty(navigator, "locks", original);
+      else Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+    }
+  });
+
+  it("without Web Locks a just-checkpointed draft is skipped, then recovered once the freshness window passes", async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "locks");
+    Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+    const checkpointedAt = Date.now() - (DRAFT_FRESH_WINDOW_MS - 250);
+    mockDraftFindInProgress.mockResolvedValue(recoverableDraft({ checkpointedAt }));
+    mockOutboxEnqueue.mockClear();
+    mockDraftClearIfSegment.mockClear();
+    try {
+      render(<WhiteboardWorkspaceClient {...tutorProps} initialUserWantsRecording />);
+      await screen.findByTestId("wb-mock-excalidraw-canvas");
+      await waitFor(() => expect(mockDraftFindInProgress).toHaveBeenCalled());
+      expect(mockOutboxEnqueue).not.toHaveBeenCalled();
+      await waitFor(() => expect(mockOutboxEnqueue).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+      expect(mockDraftClearIfSegment).toHaveBeenCalledTimes(1);
+    } finally {
+      if (original) Object.defineProperty(navigator, "locks", original);
+      else Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+    }
   });
 
   it("1.6 — beforeunload warns when recording is active", async () => {

@@ -87,9 +87,11 @@ import {
   type UploadMode,
 } from "@/lib/recording/recording-state";
 import {
+  DRAFT_TIMESLICE_MS,
   draftRowKey,
   getOrCreateRecordingDraftStore,
 } from "@/lib/recording/recording-draft-store";
+import { holdDraftLock } from "@/lib/recording/recording-draft-lock";
 import {
   disposeStreamTracks,
   fingerprintMediaTrackSettings,
@@ -110,13 +112,6 @@ import {
  * (see `noteDraftChunkReceived`), so a crash loses at most ~one timeslice.
  */
 const DRAFT_CHECKPOINT_INTERVAL_MS = 30_000;
-/**
- * MediaRecorder timeslice when draft durability is enabled (iOS may not fire — see PLATFORM-ASSUMPTIONS §8.1).
- * 5s (A4 launch plan WS-N-PAGEHIDE): a tab kill / crash cannot run pagehide code, so the
- * worst-case audio loss is one timeslice. Was 30s.
- */
-const DRAFT_TIMESLICE_MS = 5_000;
-
 export type RecordedAudio = {
   /**
    * Remote Vercel Blob URL after inline upload (final/tail segment).
@@ -158,7 +153,15 @@ export type UseAudioRecorderOptions = {
    */
   onRecorded: (
     audio: RecordedAudio,
-    meta?: { autoRollover?: boolean }
+    meta?: {
+      autoRollover?: boolean;
+      /**
+       * Draft-mode only: the id the in-progress draft for THIS segment carries. Enqueue with it so
+       * a recovery of the same draft collapses onto this row (outbox dedupe on
+       * session/stream/segmentId) instead of duplicating the audio.
+       */
+      segmentId?: string;
+    }
   ) => void | Promise<void>;
   /** Called whenever the recording active state changes (acquiring/ready/recording/paused/uploading = true). */
   onRecordingActive?: (active: boolean) => void;
@@ -383,6 +386,22 @@ async function attemptRelaxedMicAcquire(
   return null;
 }
 
+/**
+ * Meta for `onRecorded`. The draft segment id is included only when this stop owns a draft, so a
+ * kill between enqueue and draft-clear recovers onto the same outbox row. Non-draft stops keep the
+ * previous shape (`undefined`, or `{ autoRollover: true }` with no segment id).
+ */
+function draftRecordedMeta(
+  segmentId: string | undefined,
+  autoRollover: boolean
+): { autoRollover?: boolean; segmentId?: string } | undefined {
+  if (!autoRollover && !segmentId) return undefined;
+  return {
+    ...(autoRollover ? { autoRollover: true as const } : {}),
+    ...(segmentId ? { segmentId } : {}),
+  };
+}
+
 export function useAudioRecorder({
   studentId,
   onRecorded,
@@ -476,6 +495,8 @@ export function useAudioRecorder({
   const pendingUploadsRef = useRef<Set<Promise<void>>>(new Set());
   /** Stable segment id for the current MediaRecorder segment (draft + outbox dedupe on recovery). */
   const segmentIdForDraftRef = useRef<string | null>(null);
+  /** Releases the Web Lock that marks the open segment's draft as owned by this live recorder. */
+  const draftLockReleaseRef = useRef<(() => void) | null>(null);
   const draftCheckpointIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null
   );
@@ -656,6 +677,9 @@ export function useAudioRecorder({
     return () => {
       stopTimer();
       teardownMicStream();
+      // Unmounted: nothing is writing the draft any more, so it is recoverable.
+      draftLockReleaseRef.current?.();
+      draftLockReleaseRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -665,6 +689,33 @@ export function useAudioRecorder({
       return globalThis.crypto.randomUUID();
     }
     return `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  /**
+   * Start a new draft segment: mint its id and mark the draft as owned by this live recorder (Web
+   * Lock) so a recovery scan in any tab leaves it alone. A lock left over from a segment nobody
+   * handed over is released first (never leak ownership of a dead segment).
+   */
+  function beginDraftSegment() {
+    if (!recordingDraft) return;
+    draftLockReleaseRef.current?.();
+    const segmentId = mintDraftSegmentId();
+    segmentIdForDraftRef.current = segmentId;
+    draftLockReleaseRef.current = holdDraftLock(
+      recordingDraft.sessionId,
+      recordingDraft.streamId,
+      segmentId
+    );
+  }
+
+  /** Hand the open segment's identity + lock to the stop path (which releases it when done). */
+  function takeDraftSegmentOwnership(): {
+    segmentId: string | undefined;
+    release: () => void;
+  } {
+    const release = draftLockReleaseRef.current ?? (() => {});
+    draftLockReleaseRef.current = null;
+    return { segmentId: segmentIdForDraftRef.current ?? undefined, release };
   }
 
   function clearDraftCheckpointScheduling() {
@@ -709,6 +760,7 @@ export function useAudioRecorder({
         lastChunkMs: Date.now(),
         checkpointedAt: Date.now(),
         estimatedDurationSec: elapsedRef.current,
+        recordingTimeOffsetMs: segmentStartOffsetMsRef.current,
       });
     } catch (err) {
       console.warn("[useAudioRecorder] recording draft checkpoint failed:", err);
@@ -948,8 +1000,12 @@ export function useAudioRecorder({
         noteDraftChunkReceived(newRecorder);
       }
     };
+    // The OLD segment keeps its identity + draft lock until its enqueue lands (released in the
+    // rollover tracking `finally` below); the NEW segment gets its own.
+    const { segmentId: oldDraftSegmentId, release: releaseOldDraftLock } =
+      takeDraftSegmentOwnership();
     if (recordingDraft) {
-      segmentIdForDraftRef.current = mintDraftSegmentId();
+      beginDraftSegment();
       firstChunkMsRef.current = null;
       timesliceDataReceivedRef.current = false;
       try {
@@ -1001,7 +1057,7 @@ export function useAudioRecorder({
                 blob,
                 durationSeconds: segmentDurationSeconds,
               },
-              { autoRollover: true }
+              draftRecordedMeta(oldDraftSegmentId, true)
             );
             rolloverInProgressRef.current = false;
           } catch (err) {
@@ -1013,6 +1069,7 @@ export function useAudioRecorder({
           // segmentDurationSeconds captured for parity with legacy telemetry.
           void segmentDurationSeconds;
         } finally {
+          releaseOldDraftLock();
           rolloverTracking.settle();
         }
       })();
@@ -1026,6 +1083,7 @@ export function useAudioRecorder({
       // won't fire, so settle the pre-registered tracking Promise
       // ourselves — otherwise flushPendingUploads() would hang on
       // it forever.
+      releaseOldDraftLock();
       rolloverTracking.settle();
     }
   }
@@ -1670,7 +1728,7 @@ export function useAudioRecorder({
       resetVadState("open");
     }
     if (recordingDraft) {
-      segmentIdForDraftRef.current = mintDraftSegmentId();
+      beginDraftSegment();
       firstChunkMsRef.current = null;
       timesliceDataReceivedRef.current = false;
       startDraftCheckpointScheduling();
@@ -1832,6 +1890,11 @@ export function useAudioRecorder({
     // bug the Phase 1b smoke test hit on master.
     const stopTracking = registerPendingStop();
 
+    // This stop owns the open segment's identity and draft lock until its enqueue + draft clear
+    // finish (released in the `finally` below), so no recovery scan can mistake it for an orphan.
+    const { segmentId: stoppingDraftSegmentId, release: releaseStoppingDraftLock } =
+      takeDraftSegmentOwnership();
+
     void checkpointDraftToStore();
 
     recorder.onstop = () => {
@@ -1883,7 +1946,7 @@ export function useAudioRecorder({
                   blob,
                   durationSeconds: segmentDurationSeconds,
                 },
-                { autoRollover: true }
+                draftRecordedMeta(stoppingDraftSegmentId, true)
               );
               setUploadMode(null);
               mediaRecorderRef.current = null;
@@ -1914,15 +1977,18 @@ export function useAudioRecorder({
             setDoneSegmentSeconds(segmentDurationSeconds);
             setUploadMode(null);
             setRecordState("done");
-            await onRecorded({
-              blobUrl: result.blobUrl,
-              mimeType,
-              sizeBytes: blob.size,
-              filename,
-              previewUrl,
-              blob,
-              durationSeconds: segmentDurationSeconds,
-            });
+            await onRecorded(
+              {
+                blobUrl: result.blobUrl,
+                mimeType,
+                sizeBytes: blob.size,
+                filename,
+                previewUrl,
+                blob,
+                durationSeconds: segmentDurationSeconds,
+              },
+              draftRecordedMeta(stoppingDraftSegmentId, false)
+            );
             rolloverInProgressRef.current = false;
           } catch (err) {
             const msg = err instanceof Error ? err.message : "Upload failed";
@@ -1933,6 +1999,7 @@ export function useAudioRecorder({
             rolloverInProgressRef.current = false;
           }
         } finally {
+          releaseStoppingDraftLock();
           stopTracking.settle();
         }
       })();
@@ -1944,6 +2011,7 @@ export function useAudioRecorder({
       // Recorder already inactive — onstop won't fire. Settle the
       // tracking Promise ourselves so flushPendingUploads() doesn't
       // wait forever on a callback that will never arrive.
+      releaseStoppingDraftLock();
       stopTracking.settle();
     }
   }
@@ -1951,6 +2019,8 @@ export function useAudioRecorder({
   function handleReset() {
     stopTimer();
     clearDraftCheckpointScheduling();
+    draftLockReleaseRef.current?.();
+    draftLockReleaseRef.current = null;
     teardownMicStream();
     mediaRecorderRef.current = null;
     chunksRef.current = [];
