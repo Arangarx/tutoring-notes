@@ -239,7 +239,7 @@ test.describe("consent 6a: Entry (online switch)", {
         await startFromWaitingRoom(pair.tutorPage);
 
         await expect(learner.getByRole("heading", { name: "You were disconnected" })).toBeVisible({ timeout: 10_000 });
-        await expect(learner.getByText("Online sessions are off in privacy settings.")).toBeVisible();
+        await expect(learner.getByText("Online sessions are off in privacy settings, so this device has been disconnected.")).toBeVisible();
         await expect(learner.getByText("This link isn't usable anymore")).toHaveCount(0);
         await expect
           .poll(() => lines.some((l) => /\[wjg\].*action=sync_disconnect/.test(l)), { timeout: 10_000 })

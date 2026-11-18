@@ -93,7 +93,7 @@ test.describe(
           `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
           { waitUntil: "domcontentloaded" }
         );
-        await expect(page.getByTestId("wb-audio-consent-banner")).toContainText("Audio not recorded", {
+        await expect(page.getByTestId("wb-audio-consent-banner")).toContainText("Session audio is not being saved.", {
           timeout: 90_000,
         });
 
