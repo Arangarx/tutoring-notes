@@ -55,11 +55,10 @@ function gte(version: string, floor: string): boolean {
   return true;
 }
 
-function versionsOf(name: string, omitDev = false): string[] {
+function npmLsStdout(args: string): string {
   let stdout = "";
-  const omit = omitDev ? " --omit=dev" : "";
   try {
-    stdout = execSync(`npm ls ${name} --all --json${omit}`, {
+    stdout = execSync(`npm ls ${args}`, {
       encoding: "utf8",
       // shell is a string so this matches ExecSyncOptions on @types/node 24.
       shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh",
@@ -69,9 +68,23 @@ function versionsOf(name: string, omitDev = false): string[] {
     const thrown = err as { stdout?: string | Buffer };
     stdout = thrown.stdout ? String(thrown.stdout) : "";
   }
+  return stdout;
+}
+
+/** Throws when npm ls did not print a JSON object. An empty string is a failure, not an empty tree. */
+function parseNpmTree(stdout: string): NpmNode {
   const start = stdout.indexOf("{");
-  if (start < 0) return [];
+  if (start < 0) {
+    throw new Error("npm ls produced no JSON");
+  }
   const tree = JSON.parse(stdout.slice(start)) as NpmNode;
+  if (!tree || typeof tree !== "object") {
+    throw new Error("npm ls JSON is not an object");
+  }
+  return tree;
+}
+
+function versionsIn(tree: NpmNode, name: string): string[] {
   const found: string[] = [];
   const walk = (node: NpmNode | undefined, nodeName: string | undefined) => {
     if (!node || typeof node !== "object") return;
@@ -82,6 +95,16 @@ function versionsOf(name: string, omitDev = false): string[] {
   };
   walk(tree, tree.name);
   return found;
+}
+
+function versionsOf(name: string, omitDev = false): string[] {
+  const omit = omitDev ? " --omit=dev" : "";
+  return versionsIn(parseNpmTree(npmLsStdout(`${name} --all --json${omit}`)), name);
+}
+
+/** Full production tree, not `npm ls picomatch` (that omits next and sass when picomatch is absent). */
+function productionTree(): NpmNode {
+  return parseNpmTree(npmLsStdout("--all --json --omit=dev"));
 }
 
 /**
@@ -126,7 +149,12 @@ describe("production dependency floors", () => {
   it("production tree contains no picomatch while GHSA-fc5q-39xc-vjpf is unpatched", () => {
     // Latest published picomatch is 4.0.7, and the advisory range is <=4.0.7.
     // A version floor cannot clear it. The production tree must not install it.
-    expect(versionsOf("picomatch", true)).toEqual([]);
+    // next and sass must be in the same parsed tree: an empty npm ls used to
+    // look like "no picomatch" and pass.
+    const tree = productionTree();
+    expect(versionsIn(tree, "next").length).toBeGreaterThan(0);
+    expect(versionsIn(tree, "sass").length).toBeGreaterThan(0);
+    expect(versionsIn(tree, "picomatch")).toEqual([]);
   });
 
   it("every brace-expansion copy is outside the high advisory", () => {
