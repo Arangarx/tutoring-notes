@@ -448,7 +448,7 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     expect(lastWbOpts?.recordingActive).toBe(true);
   });
 
-  test("CF-2.1: wbCaptureActive selects FSM recordingActive when policy≠none, not paused (armed gate)", () => {
+  test("WS-N5: wbCaptureActive stays ON while armed in a REOPENED (ACTIVE at mount) session", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -460,10 +460,26 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     );
 
     const lastWbOpts = capturedWhiteboardRecorderOptions.at(-1);
-    // policy=tutor_only: FSM is armed (no student yet) → recordingActive false;
-    // wbEventsActive is true but wbCaptureActive must track the audio FSM here,
-    // not wbEventsActive. Armed is NOT paused, so the p3-clock `|| isPaused`
-    // branch does not fire — the CF-2.1 armed gate is preserved.
+    // policy=tutor_only: FSM is armed (no student yet after the reload) → FSM
+    // recordingActive false, but the session was already started, so the tutor's
+    // strokes must still be recorded (they used to be dropped until a student
+    // reconnected).
+    expect(lastWbOpts?.recordingActive).toBe(true);
+  });
+
+  test("CF-2.1: wbCaptureActive keeps the armed gate for a session that has not started (PENDING)", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        syncUrl="wss://wb.example.com"
+        initialSessionPhase="PENDING"
+        initialConsentInput={snapshotConsent({ audio: false })}
+        sessionMode="LIVE"
+      />
+    );
+
+    const lastWbOpts = capturedWhiteboardRecorderOptions.at(-1);
+    // Waiting room: nothing is recorded before Start.
     expect(lastWbOpts?.recordingActive).toBe(false);
   });
 });

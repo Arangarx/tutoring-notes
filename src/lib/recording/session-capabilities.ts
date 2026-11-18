@@ -166,7 +166,15 @@ export function deriveSessionCapabilities(input: SessionCapabilityInput): Sessio
  *    (CF-2 / CF-2.1 — stroke logs persist even with no audio).
  *  - audio modes: capture while the FSM is `recording` OR `paused`. `armed`
  *    / `idle` / `stopping` still gate capture OFF, preserving the CF-2.1
- *    armed-gate contract (armed is NOT paused).
+ *    armed-gate contract (armed is NOT paused) — with ONE exception, WS-N5:
+ *  - audio modes, REOPENED already-started session: capture also while the
+ *    FSM is `armed`. A page reload resets the host's `everHadParticipants`
+ *    latch, so a started session is `armed` ("waiting for the first
+ *    participant") until a student reconnects. That wait is the same
+ *    situation as the disconnect pause above (the session is live, the
+ *    tutor is teaching), so its strokes are captured and stamped at the
+ *    frozen session clock instead of being silently dropped. Stopping is
+ *    still honoured: `wbEventsActive` goes false on End.
  */
 export function deriveWbCaptureActive(input: {
   /** `audio.mode` of the session capabilities. */
@@ -177,9 +185,15 @@ export function deriveWbCaptureActive(input: {
   isPaused: boolean;
   /** Tutor session-active gate (role/phase/userWantsRecording). */
   wbEventsActive: boolean;
+  /**
+   * The workspace was opened on a session that was ALREADY started (phase ACTIVE at mount),
+   * i.e. the tutor reopened it. Absent/false for a session first started in this page.
+   */
+  reopenedStartedSession?: boolean;
 }): boolean {
   if (input.audioMode === "none") return input.wbEventsActive;
-  return input.recordingActive || input.isPaused;
+  if (input.recordingActive || input.isPaused) return true;
+  return input.reopenedStartedSession === true && input.wbEventsActive;
 }
 
 /** Gate E: remote streams enter the recording mixdown only when the audio mode is full. */

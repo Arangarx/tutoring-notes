@@ -663,6 +663,7 @@ REOPEN on hardware; green Jest did not catch. Independent oracle: scrubber posit
 
 **[P0][REC] WS-B — tab-kill resume loses pre-kill audio in replay/notes**  
 Master-cut #11: post-resume segment only in transcribed notes. WS-N landed partial durability; full pre-kill segment assembly still open.
+**Fixed on `launch/rec-draft` (2026-11-18, pending merge):** the recovered IDB draft is auto-enqueued into the upload outbox on the next workspace load (no Keep/Discard click; the banner is info-only). Test: `tests/integration/wb-recording-draft-recovery.spec.ts` — "hard kill mid-recording, reopen with no clicks: the pre-kill audio is attached to the session" + "two unattended hard kills in a row: both pre-kill segments reach the server". Remaining: Bucket B `W1-SHIP-B-FINALIZE` (keeping un-uploaded outbox rows at End) is unchanged.
 
 **[P1][REC] SMOKE-END-WINDDOWN — disarm board + immediate student wind-down on End**  
 Remainder: hardware VERIFY; PERF-1 snapshot de-await. Merges [`e58e0826`](https://github.com/Arangarx/tutoring-notes/commit/e58e0826) / [`69eacbf6`](https://github.com/Arangarx/tutoring-notes/commit/69eacbf6) shipped.
@@ -686,6 +687,7 @@ Remainder: shallow client gates on upload/IDB/transcription and per-speaker **p3
 
 **[P1][REC] WS-N5 — resume FSM `armed` window drops stroke capture after reopen**  
 On reopen FSM re-enters `armed` → `wbCaptureActive` false. Related to solo/in-person stroke gap; distinct from audio-only fix.
+**Fixed on `launch/rec-draft` (2026-11-18, pending merge):** `deriveWbCaptureActive` takes `reopenedStartedSession` (phase ACTIVE at mount) so strokes are captured while `armed`. A not-yet-started (PENDING) session keeps the CF-2.1 armed gate. Test: `tests/integration/wb-reopen-stroke-capture.spec.ts` — "reopen an ACTIVE session with no student present, draw at once, End: the stroke is in the replay event log" (runs on the alt server, which has the production solo-off default).
 
 **[P1][NOTES] SMOKE-NOTES-3 — notes fabricate on non-teaching talk**  
 Map/reduce accuracy + abstain path. Prompt @ `cefc5cd` PASS for teaching; refinement flagged. Cross-ref **MAP-ACC** (#1 post-master).

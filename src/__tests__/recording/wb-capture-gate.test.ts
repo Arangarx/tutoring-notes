@@ -58,6 +58,46 @@ describe("deriveWbCaptureActive", () => {
       ).toBe(false);
     });
 
+    // WS-N5: a tutor who REOPENS a session that was already started sits in `armed`
+    // until a student reconnects; strokes drawn meanwhile must still be recorded.
+    test("CAPTURES while armed in a reopened, already-started session (WS-N5)", () => {
+      for (const audioMode of ["full", "tutor_only"] as const) {
+        expect(
+          deriveWbCaptureActive({
+            audioMode,
+            recordingActive: false,
+            isPaused: false,
+            wbEventsActive: true,
+            reopenedStartedSession: true,
+          })
+        ).toBe(true);
+      }
+    });
+
+    test("reopened session still stops capturing once the tutor is no longer active (End / not wanting recording)", () => {
+      expect(
+        deriveWbCaptureActive({
+          audioMode: "full",
+          recordingActive: false,
+          isPaused: false,
+          wbEventsActive: false,
+          reopenedStartedSession: true,
+        })
+      ).toBe(false);
+    });
+
+    test("a session first started in this page (not reopened) keeps the armed gate", () => {
+      expect(
+        deriveWbCaptureActive({
+          audioMode: "full",
+          recordingActive: false,
+          isPaused: false,
+          wbEventsActive: true,
+          reopenedStartedSession: false,
+        })
+      ).toBe(false);
+    });
+
     test("does NOT capture while idle/stopping (neither recording nor paused)", () => {
       expect(
         deriveWbCaptureActive({

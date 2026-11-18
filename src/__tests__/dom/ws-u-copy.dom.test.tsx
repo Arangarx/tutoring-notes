@@ -156,6 +156,7 @@ const mockDraftFindInProgress = jest.fn<
   Promise<DraftSegmentRow | null>,
   [string, string]
 >(() => Promise.resolve(null));
+const mockOutboxEnqueue = jest.fn((_args: unknown) => Promise.resolve());
 
 jest.mock("@/lib/recording/recording-draft-store", () => ({
   getOrCreateRecordingDraftStore: () => ({
@@ -324,7 +325,7 @@ jest.mock("@/lib/recording/upload-outbox-instance", () => ({
       }),
       subscribe: () => () => undefined,
     }),
-    enqueue: jest.fn(),
+    enqueue: (args: unknown) => mockOutboxEnqueue(args),
   }),
 }));
 jest.mock(
@@ -508,33 +509,75 @@ describe("WS-U-COPY workspace client", () => {
     ) as jest.Mock;
   });
 
-  it("1.5 — discard confirm gates draftStore.clear", async () => {
-    mockDraftFindInProgress.mockResolvedValue({
+  it("1.5 — WS-B: a recovered draft is enqueued with no click; the banner only informs", async () => {
+    const draft = {
       key: "ws-copy:tutor:mic",
       segmentId: "seg-1",
       mimeType: "audio/webm",
       chunkCount: 1,
       chunks: [new Blob(["x"], { type: "audio/webm" })],
-      firstChunkMs: Date.now(),
-      lastChunkMs: Date.now(),
+      firstChunkMs: 1234,
+      lastChunkMs: 1234,
       estimatedDurationSec: 5,
       sessionId: "ws-copy",
       streamId: "tutor:mic",
-      checkpointedAt: Date.now(),
-    } satisfies DraftSegmentRow);
+      checkpointedAt: 1234,
+    } satisfies DraftSegmentRow;
+    mockDraftFindInProgress.mockResolvedValue(draft);
+    mockOutboxEnqueue.mockClear();
+    mockDraftClear.mockClear();
 
     render(<WhiteboardWorkspaceClient {...tutorProps} initialUserWantsRecording />);
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    expect(await screen.findByTestId("wb-audio-draft-recovery-banner")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByTestId("wb-audio-draft-discard"));
-    expect(mockDraftClear).not.toHaveBeenCalled();
-    expect(screen.getByTestId("wb-audio-draft-discard-confirm")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByTestId("wb-audio-draft-discard-confirm-yes"));
+    // Enqueued and the draft dropped, without anyone clicking anything.
+    await waitFor(() => {
+      expect(mockOutboxEnqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: "ws-copy",
+          streamId: "tutor:mic",
+          segmentId: "seg-1",
+          audioStartedAtMs: 1234,
+          blobRemoteUrl: null,
+        })
+      );
+    });
     await waitFor(() => {
       expect(mockDraftClear).toHaveBeenCalledWith("ws-copy", "tutor:mic");
     });
+
+    const banner = await screen.findByTestId("wb-audio-draft-recovery-banner");
+    expect(banner).toHaveTextContent(/recovered 00:05 of audio/i);
+    expect(screen.queryByTestId("wb-audio-draft-keep")).toBeNull();
+    expect(screen.queryByTestId("wb-audio-draft-discard")).toBeNull();
+  });
+
+  it("1.5b — WS-B: if the outbox refuses the draft it stays in IndexedDB for the next load", async () => {
+    mockDraftFindInProgress.mockResolvedValue({
+      key: "ws-copy:tutor:mic",
+      segmentId: "seg-fail",
+      mimeType: "audio/webm",
+      chunkCount: 1,
+      chunks: [new Blob(["x"], { type: "audio/webm" })],
+      firstChunkMs: 1,
+      lastChunkMs: 1,
+      estimatedDurationSec: 5,
+      sessionId: "ws-copy",
+      streamId: "tutor:mic",
+      checkpointedAt: 1,
+    } satisfies DraftSegmentRow);
+    mockOutboxEnqueue.mockClear();
+    mockOutboxEnqueue.mockRejectedValueOnce(new Error("quota"));
+    mockDraftClear.mockClear();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    render(<WhiteboardWorkspaceClient {...tutorProps} initialUserWantsRecording />);
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await waitFor(() => expect(mockOutboxEnqueue).toHaveBeenCalledTimes(1));
+
+    expect(mockDraftClear).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("wb-audio-draft-recovery-banner")).toBeNull();
+    warn.mockRestore();
   });
 
   it("1.6 — beforeunload warns when recording is active", async () => {
