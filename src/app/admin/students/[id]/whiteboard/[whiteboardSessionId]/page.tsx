@@ -11,6 +11,8 @@ import TutorNotesSection from "@/components/whiteboard/TutorNotesSection";
 import { SessionCostPanel } from "@/components/admin/SessionCostPanel";
 import { getSessionCostBreakdown } from "@/lib/observability/cost-queries";
 import { loadTutorNoteForReview } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { transcriptsHadSpeech } from "@/lib/note-content";
+import { getTranscriptChunksBySessionId } from "@/lib/recording/transcript-store";
 import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
 import { formatClockDuration } from "@/lib/time/format-duration-ms";
 
@@ -162,6 +164,9 @@ export default async function WhiteboardReviewPage({
   const tutorNote = !isLive
     ? await loadTutorNoteForReview(whiteboardSessionId)
     : null;
+  const transcriptChunks = !isLive
+    ? await getTranscriptChunksBySessionId(whiteboardSessionId)
+    : [];
 
   const initialNote = tutorNote
     ? {
@@ -171,6 +176,9 @@ export default async function WhiteboardReviewPage({
         isPartial: tutorNote.isPartial,
         error: tutorNote.error ?? null,
         generatedAt: tutorNote.generatedAt?.toISOString() ?? null,
+        hadSpeech: transcriptsHadSpeech(
+          transcriptChunks.map((chunk) => chunk.transcript)
+        ),
       }
     : { found: false as const };
 

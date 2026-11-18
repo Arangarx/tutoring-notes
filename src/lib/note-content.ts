@@ -21,3 +21,10 @@ export const EMPTY_STRUCTURED_NOTE: StructuredNoteFields = Object.freeze({
   nextSteps: "",
   links: "",
 });
+
+/** True when any stored transcript chunk contains speech (not silence drops). */
+export function transcriptsHadSpeech(
+  transcripts: readonly (string | null | undefined)[]
+): boolean {
+  return transcripts.some((text) => (text ?? "").trim().length > 0);
+}

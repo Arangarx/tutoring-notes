@@ -25,33 +25,10 @@ import { estimateCostUsd, logCostEvent } from "@/lib/observability/cost-events";
 import type { ChunkExtractionPayload } from "@/lib/recording/transcript-types";
 import { MAP_MODEL } from "@/lib/ai-models";
 import { enqueueLiveReduce } from "@/lib/recording/notes-enqueue";
-
-const EXTRACT_SYSTEM_PROMPT = `You extract structured information from tutoring session audio transcripts.
-
-Given a transcript segment, identify:
-- topics: subject topics introduced or discussed (math, science, etc.)
-- studentQuestions: questions the student asked (verbatim or tight paraphrase)
-- corrections: errors or misconceptions the tutor corrected, including those signaled by in-session reactions ("almost!" / "not quite" / "try again" imply wrestling; "yes!" / "got it" / "perfect" imply mastery on that point)
-- followUps: homework, practice problems, or next-session items mentioned
-
-STRICT RULES:
-(1) Only include information supported by the transcript — explicit statements or clear in-session reactions. Do not invent or fabricate content.
-(2) Be terse — short phrases, not full sentences.
-(3) Use empty arrays when nothing was found for a field.
-
-Respond in JSON only — no markdown fences, no commentary:
-{"topics":[],"studentQuestions":[],"corrections":[],"followUps":[]}`;
-
-function buildExtractPrompt(transcript: string): string {
-  return `Extract structured information from this tutoring session transcript segment.
-
-Rules: include only what the transcript supports; map tutor reactions to corrections when they signal misunderstanding or mastery; use terse phrases.
-
-Transcript:
-${transcript}
-
-Respond with JSON only.`;
-}
+import {
+  EXTRACT_SYSTEM_PROMPT,
+  buildExtractPrompt,
+} from "@/lib/recording/notes-prompts";
 
 /**
  * Parse the model response, tolerating minor formatting issues.

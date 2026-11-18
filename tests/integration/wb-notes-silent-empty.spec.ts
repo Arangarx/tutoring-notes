@@ -18,6 +18,8 @@ applyWbRegressionLocalDatabaseEnv();
 
 const NO_SPEECH =
   "No speech was detected in this recording, so no notes were drafted. You can write notes yourself.";
+const NO_LESSON =
+  "No lesson content was found in this recording, so no notes were drafted. You can write notes yourself.";
 
 const SPOKEN_TOPICS = "Quadratics and factoring";
 
@@ -72,6 +74,7 @@ test.describe("silent empty session notes", { tag: [TAG.WB_RECORDING] }, () => {
     });
     await openReview(page, silent.studentId, silent.whiteboardSessionId);
     await expect(page.getByText(NO_SPEECH)).toBeVisible();
+    await expect(page.getByText(NO_LESSON)).toHaveCount(0);
     await expect(page.getByTestId("wb-save-note")).toBeDisabled();
 
     const spoken = await seedEndedNote({
@@ -85,6 +88,38 @@ test.describe("silent empty session notes", { tag: [TAG.WB_RECORDING] }, () => {
     });
     await openReview(page, spoken.studentId, spoken.whiteboardSessionId);
     await expect(page.getByText(NO_SPEECH)).toHaveCount(0);
+    await expect(page.getByText(NO_LESSON)).toHaveCount(0);
     await expect(page.locator("#wb-note-topics")).toHaveValue(SPOKEN_TOPICS);
+  });
+
+  test("an abstained note (speech existed) shows the no-lesson copy, not the no-speech copy", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+
+    const session = await seedEndedNote({
+      status: "done",
+      content: JSON.stringify(EMPTY_STRUCTURED_NOTE),
+    });
+    const prisma = new PrismaClient();
+    try {
+      await prisma.transcriptChunk.create({
+        data: {
+          sessionId: session.whiteboardSessionId,
+          chunkBlobUrl: `https://example.invalid/abstain-${session.whiteboardSessionId}.webm`,
+          recordingTimeOffsetMs: 0,
+          transcript:
+            "Can we move Thursday from 3 to 4:30? I'll send your mom the calendar invite.",
+          status: "done",
+        },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    await openReview(page, session.studentId, session.whiteboardSessionId);
+    await expect(page.getByTestId("tutor-notes-no-lesson")).toHaveText(NO_LESSON);
+    await expect(page.getByText(NO_SPEECH)).toHaveCount(0);
+    await expect(page.getByTestId("wb-save-note")).toBeDisabled();
   });
 });

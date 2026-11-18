@@ -41,6 +41,7 @@ import { gateNotesDraft, gateTranscription } from "@/lib/recording/consent-gates
 import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
 import type { TutorNote } from "@prisma/client";
 import { TRANSCRIBE_SWEEP_MAX_ATTEMPTS } from "@/lib/recording/transcribe-sweep-config";
+import { transcriptsHadSpeech } from "@/lib/note-content";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { replayResourceIsDenied, resolveReplayAccess } from "@/lib/share/replay-access";
@@ -186,11 +187,17 @@ export type TutorNoteStatusResult =
       isPartial: boolean;
       error: string | null;
       generatedAt: string | null;
+      /** A stored transcript chunk has non-empty speech. Empty note + this is abstain, not silence. */
+      hadSpeech?: boolean;
     };
 
 /** The one TutorNote → status mapping. Caller has asserted ownership. Never creates a row. */
 async function readTutorNoteStatus(whiteboardSessionId: string): Promise<TutorNoteStatusResult> {
-  const note = await getTutorNoteBySessionId(whiteboardSessionId);
+  const [note, chunks] = await Promise.all([
+    getTutorNoteBySessionId(whiteboardSessionId),
+    getTranscriptChunksBySessionId(whiteboardSessionId),
+  ]);
+  const hadSpeech = transcriptsHadSpeech(chunks.map((chunk) => chunk.transcript));
   if (!note) {
     const draft = await gateNotesDraft(whiteboardSessionId, "status");
     return draft.allow ? { found: false } : { found: false, notesOff: true };
@@ -202,6 +209,7 @@ async function readTutorNoteStatus(whiteboardSessionId: string): Promise<TutorNo
     isPartial: note.isPartial,
     error: note.error ?? null,
     generatedAt: note.generatedAt?.toISOString() ?? null,
+    hadSpeech,
   };
 }
 

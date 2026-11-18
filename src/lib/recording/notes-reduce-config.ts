@@ -10,4 +10,4 @@
  */
 
 /** Prompt version for auto-generated structured notes. Increment when the reduce prompt changes. */
-export const REDUCE_PROMPT_VERSION = "2026-07-09-v3-dedup-assessment";
+export const REDUCE_PROMPT_VERSION = "2026-11-17-v4-abstain";
