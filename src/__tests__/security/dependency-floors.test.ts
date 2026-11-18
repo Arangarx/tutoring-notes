@@ -26,6 +26,10 @@ const FLOORS: Record<string, string> = {
   "source-map-js": "1.2.2",
   undici: "6.29.1",
   ws: "8.21.0",
+  // sass 1.32.9–1.78.0 pulls chokidar 3, which pulls picomatch. Every
+  // published picomatch through 4.0.7 is GHSA-fc5q-39xc-vjpf. 1.79.0 is the
+  // first sass that depends on chokidar 4 (no picomatch).
+  sass: "1.79.0",
 };
 
 type NpmNode = {
@@ -51,10 +55,11 @@ function gte(version: string, floor: string): boolean {
   return true;
 }
 
-function versionsOf(name: string): string[] {
+function versionsOf(name: string, omitDev = false): string[] {
   let stdout = "";
+  const omit = omitDev ? " --omit=dev" : "";
   try {
-    stdout = execSync(`npm ls ${name} --all --json`, {
+    stdout = execSync(`npm ls ${name} --all --json${omit}`, {
       encoding: "utf8",
       // shell is a string so this matches ExecSyncOptions on @types/node 24.
       shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh",
@@ -90,17 +95,6 @@ function nanoidOk(version: string): boolean {
   return gte(version, "5.1.16");
 }
 
-/**
- * picomatch <=2.3.1 and 4.0.0–4.0.3 are high. 2.3.2+ and 4.0.4+ are outside
- * those ranges. A single >=2.3.2 check would accept a vulnerable 4.0.3.
- */
-function picomatchOk(version: string): boolean {
-  const parsed = parseVersion(version);
-  if (!parsed) return false;
-  if (parsed[0] === 4) return gte(version, "4.0.4");
-  return gte(version, "2.3.2");
-}
-
 /** brace-expansion highs: <=1.1.20, 2.0.0–2.1.6, and 3.0.0–5.0.11. */
 function braceOk(version: string): boolean {
   const parsed = parseVersion(version);
@@ -129,11 +123,10 @@ describe("production dependency floors", () => {
     expect(tooOld).toEqual([]);
   });
 
-  it("every picomatch copy is outside the high advisory", () => {
-    const versions = versionsOf("picomatch");
-    expect(versions.length).toBeGreaterThan(0);
-    const tooOld = versions.filter((version) => !picomatchOk(version));
-    expect(tooOld).toEqual([]);
+  it("production tree contains no picomatch while GHSA-fc5q-39xc-vjpf is unpatched", () => {
+    // Latest published picomatch is 4.0.7, and the advisory range is <=4.0.7.
+    // A version floor cannot clear it. The production tree must not install it.
+    expect(versionsOf("picomatch", true)).toEqual([]);
   });
 
   it("every brace-expansion copy is outside the high advisory", () => {

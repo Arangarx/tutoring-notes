@@ -6,14 +6,18 @@ Security checks for Mynk live here.
 
 [`.github/workflows/security.yml`](../../.github/workflows/security.yml) runs on pull requests and on pushes to `feat/org-qol` and `master`. It is static analysis, dependency audit, secret scanning, and the Jest security tests. It does not call any deployed site.
 
-`npm run security:check` runs the same four checks locally. It is part of the master gate ([`.cursor/rules/test-selection.mdc`](../../.cursor/rules/test-selection.mdc)). The Jest step uses an unreachable database URL so it cannot reset the shared test database.
+`npm run security:check` runs the same four checks locally. It is part of the master gate ([`.cursor/rules/test-selection.mdc`](../../.cursor/rules/test-selection.mdc)). CI jobs call the same script with `--only semgrep`, `--only gitleaks`, `--only audit`, or `--only jest`. The Semgrep rulesets, the gitleaks version and checksums, and the unreachable Jest database URL live in [`scripts/security-check.mjs`](../../scripts/security-check.mjs) only.
+
+Local Semgrep is a prerequisite: `pip install semgrep`, and `semgrep` must be on `PATH`. gitleaks is not a prerequisite. When it is not on `PATH`, the script downloads gitleaks 8.30.1, checks the pinned SHA-256, and extracts it into `node_modules/.cache/gitleaks-8.30.1`. That download needs network access to GitHub.
 
 | Job | What it runs | Result |
 | --- | --- | --- |
-| Semgrep | OSS CLI with `p/owasp-top-ten`, `p/typescript`, `p/react`, `p/nextjs`, and `--error` | Fails the job on a finding. Action SHAs in this workflow are pinned. |
-| gitleaks | `gitleaks detect` on the repository (8.30.1) | Fails if a secret is found. [`.gitleaks.toml`](../../.gitleaks.toml) allowlists test fixtures the `generic-api-key` rule mislabels, with the reason in that file. |
-| npm audit | `node scripts/check-npm-audit.mjs` (runs `npm audit --audit-level=high --omit=dev`) | Fails when a high or critical production advisory is not listed in [`scripts/audit-allow.json`](../../scripts/audit-allow.json). Also fails when a listed package is no longer high or critical. |
-| Jest security | `npx jest src/__tests__/security` only | Fails if those tests fail. The tests mock the database and do not need a live database. This job does not run the full Jest suite or Playwright. |
+| Semgrep | `node scripts/security-check.mjs --only semgrep` (OSS CLI, `p/owasp-top-ten`, `p/typescript`, `p/react`, `p/nextjs`, `--error`) | Fails the job on a finding. Action SHAs in this workflow are pinned. |
+| gitleaks | `node scripts/security-check.mjs --only gitleaks` | Fails if a secret is found. [`.gitleaks.toml`](../../.gitleaks.toml) allowlists test fixtures the `generic-api-key` rule mislabels, with the reason in that file. |
+| npm audit | `node scripts/security-check.mjs --only audit` (`npm audit --audit-level=high --omit=dev`) | Fails when a high or critical production advisory is not listed in [`scripts/audit-allow.json`](../../scripts/audit-allow.json). Also fails when a listed package is no longer high or critical. |
+| Jest security | `node scripts/security-check.mjs --only jest` | Fails if those tests fail. The script points Jest at an unreachable database URL so global setup cannot reset the shared test database. This job does not run the full Jest suite or Playwright. |
+
+CI uses Node 20, the same floor as [docs/PLATFORM-ASSUMPTIONS.md](../PLATFORM-ASSUMPTIONS.md) §7.1. There is no `engines` pin and no `.nvmrc`. `@cortex-js/compute-engine` (via `mathlive`) declares `node >= 21.7.3`. Nothing under `src/` imports it. CI stays on 20 so it matches the documented production runtime.
 
 Local lint loads `eslint-plugin-security`'s recommended rules as warnings so existing code does not fail `next lint` or `next build`. A promotion to errors is a separate triage because the existing warning count would fail next lint.
 
@@ -29,7 +33,8 @@ High and critical production advisories on this branch were cleared without down
 - **pdfjs-dist** is `^6.5.438`. The advisory range was `>=5.6.83 <6.2.108`. `PDFDocumentProxy.destroy` is gone. The PDF path still calls `doc.cleanup()`, then `loadingTask.destroy()`.
 - **deepmerge-ts** is overridden to 8.0.2, outside the `<8.0.0` advisory. **effect** is overridden to 3.21.0, outside `<3.20.0`. `prisma` and `@prisma/client` stay on `^6.16.1` (the lock may resolve a later 6.x). They were reported only through those dependencies.
 - **nanoid** 3.x copies are overridden to 3.3.20. The 4.0.2 copy under `@excalidraw/mermaid-to-excalidraw` is overridden to 5.1.16 for that package only. `@excalidraw/excalidraw` stays on `^0.18.1`.
-- Same-major overrides clear **lodash-es** 4.18.1, **@xmldom/xmldom** 0.9.12, **postcss** 8.5.33, **defu** 6.1.7, **dompurify** 3.4.18, **immutable** 4.3.9, **sharp** 0.35.5, **socket.io-parser** 4.2.7, **source-map-js** 1.2.2, **undici** 6.29.1, **ws** 8.23.0, **picomatch** 2.3.1 → 2.3.2 (4.x copies resolve to 4.0.7, outside 4.0.0–4.0.3), and **brace-expansion** 1.x → 1.1.22.
+- Same-major overrides clear **lodash-es** 4.18.1, **@xmldom/xmldom** 0.9.12, **postcss** 8.5.33, **defu** 6.1.7, **dompurify** 3.4.18, **immutable** 4.3.9, **sharp** 0.35.5, **socket.io-parser** 4.2.7, **source-map-js** 1.2.2, **undici** 6.29.1, **ws** 8.23.0, and **brace-expansion** 1.x → 1.1.22.
+- **picomatch** GHSA-fc5q-39xc-vjpf covers every published release (`<=4.0.7`). `npm view picomatch version` is 4.0.7, so no picomatch override can leave the range. The production copies were picomatch 2.3.2 under `sass@1.51.0` → `chokidar@3` → `anymatch` / `readdirp`, which also flagged `sass`, `chokidar`, `anymatch`, `readdirp`, and `@excalidraw/excalidraw`. **sass** is overridden to 1.79.0, the last release that depends on chokidar 4 and immutable 4 and does not depend on `@parcel/watcher`. chokidar 4 depends only on `readdirp` (no picomatch). sass 1.80.0 adds `@parcel/watcher`, which depends on picomatch 4.0.7, so that pin does not clear the advisory. The app has no `.scss` files. `@excalidraw/excalidraw` lists `sass` but does not import it, and Next treats `sass` as an optional peer for stylesheet compilation. `chokidar` here is the compiler's file watcher, not a request path. The production tree must contain no `picomatch` (`dependency-floors` asserts that). The `picomatch@2.3.1` → 2.3.2 override stays for any leftover dev copy of the older advisory. Remove the sass pin when a picomatch release newer than 4.0.7 exists, or when Excalidraw and Next no longer install sass.
 
 `src/__tests__/security/dependency-floors.test.ts` asserts every installed copy is at or above those advisory floors.
 

@@ -230,9 +230,11 @@ function runAudit() {
   if (result.status !== 0) fail("npm audit gate failed.");
 }
 
-function runJest() {
+function runJest(maxWorkers) {
   console.log("jest: src/__tests__/security");
-  const result = run("npx", ["jest", "src/__tests__/security", "--watchAll=false"], {
+  const jestArgs = ["jest", "src/__tests__/security", "--watchAll=false"];
+  if (maxWorkers) jestArgs.push("--maxWorkers", maxWorkers);
+  const result = run("npx", jestArgs, {
     stdio: "inherit",
     env: {
       ...process.env,
@@ -244,9 +246,41 @@ function runJest() {
   if (result.status !== 0) fail("security jest failed.");
 }
 
-const gitleaksBinary = await ensureGitleaks();
-runSemgrep();
-runGitleaks(gitleaksBinary);
-runAudit();
-runJest();
+const CHECKS = ["semgrep", "gitleaks", "audit", "jest"];
+
+function parseArgs() {
+  const selected = [];
+  let jestMaxWorkers = "";
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === "--jest-max-workers") {
+      jestMaxWorkers = args[i + 1] || "";
+      if (!/^[1-9]\d*$/.test(jestMaxWorkers)) {
+        fail("--jest-max-workers needs a positive integer.");
+      }
+      i += 1;
+      continue;
+    }
+    if (args[i] !== "--only") fail(`Unknown argument: ${args[i]}`);
+    const name = args[i + 1];
+    if (!CHECKS.includes(name)) {
+      fail(`Unknown check "${name || ""}". Expected one of: ${CHECKS.join(", ")}.`);
+    }
+    selected.push(name);
+    i += 1;
+  }
+  return {
+    selected: selected.length > 0 ? selected : CHECKS,
+    jestMaxWorkers,
+  };
+}
+
+const { selected, jestMaxWorkers } = parseArgs();
+if (selected.includes("semgrep")) runSemgrep();
+if (selected.includes("gitleaks")) {
+  const gitleaksBinary = await ensureGitleaks();
+  runGitleaks(gitleaksBinary);
+}
+if (selected.includes("audit")) runAudit();
+if (selected.includes("jest")) runJest(jestMaxWorkers);
 console.log("security:check passed");
