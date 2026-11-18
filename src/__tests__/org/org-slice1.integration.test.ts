@@ -171,10 +171,11 @@ describe("org slice 1", () => {
     const { organizationId } = await createOrganizationAction({
       name,
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     const org = await db.organization.findUnique({ where: { id: organizationId } });
     expect(org?.status).toBe("pending");
+    expect(org?.timezone).toBe("America/Denver");
     expect(org?.createdByOperatorId).toBe(operator.id);
     expect(org?.maxMembers).toBeNull();
     // Stage 2: an omitted staff-invite cap stores the starting limit, 25.
@@ -187,6 +188,20 @@ describe("org slice 1", () => {
     expect(member?.approvedViaOrg).toBe(false);
     const ownerRow = await db.adminUser.findUnique({ where: { id: owner.id } });
     expect(ownerRow?.role).toBe("TUTOR");
+  });
+
+  it("refuses a time zone outside the United States list", async () => {
+    const owner = await seedUser();
+    await asOperator();
+    const name = uniq("utc-zone");
+    await expect(
+      createOrganizationAction({
+        name,
+        ownerAdminUserId: owner.id,
+        timezone: "UTC",
+      })
+    ).rejects.toMatchObject({ code: "invalid_timezone" });
+    expect(await db.organization.count({ where: { name } })).toBe(0);
   });
 
   it("stores the operator email when that email has no admin row", async () => {
@@ -217,7 +232,7 @@ describe("org slice 1", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("explicit-unlimited"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
       dailyInviteCap: null,
     });
     const created = await db.organization.findUnique({ where: { id: organizationId } });
@@ -226,7 +241,7 @@ describe("org slice 1", () => {
     const legacy = await db.organization.create({
       data: {
         name: uniq("legacy-unlimited"),
-        timezone: "UTC",
+        timezone: "America/Denver",
         dailyInviteCap: null,
         createdByOperatorId: "legacy-operator",
         members: { create: { adminUserId: owner.id, roles: ["owner"], approvedViaOrg: false } },
@@ -360,7 +375,7 @@ describe("org invite accept", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("inv"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
       maxMembers: null,
       dailyInviteCap: null,
     });
@@ -776,7 +791,7 @@ describe("org invite accept", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("sole-owner-invite"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     await setOrganizationStatusAction(organizationId, "active");
     const invite = await insertDirectInvite({
@@ -810,7 +825,7 @@ describe("org invite accept", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("last-owner-reactivate"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     await setOrganizationStatusAction(organizationId, "active");
     mockSession({ email: owner.email, id: owner.id });
@@ -849,7 +864,7 @@ describe("org invite accept", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("stale-inviter"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     await setOrganizationStatusAction(organizationId, "active");
     mockSession({ email: owner.email, id: owner.id });
@@ -884,7 +899,7 @@ describe("org role matrix and caps", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("roles"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     mockSession({ email: owner.email, id: owner.id });
     const adminInvite = await createOrgInvite(organizationId, admin.email, ["admin"]);
@@ -962,7 +977,7 @@ describe("org role matrix and caps", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("caps"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
       maxMembers: 1,
       dailyInviteCap: null,
     });
@@ -980,7 +995,8 @@ describe("org role matrix and caps", () => {
     await expect(
       createOrgInvite(organizationId, `${uniq("day2")}@example.com`, ["instructor"], day)
     ).rejects.toMatchObject({ code: "daily_invite_cap" });
-    const nextDay = new Date("2026-06-16T01:00:00.000Z");
+    // 01:00Z is still the previous evening in Denver. 07:00Z is the next Denver morning.
+    const nextDay = new Date("2026-06-16T07:00:00.000Z");
     const later = await createOrgInvite(
       organizationId,
       `${uniq("nextday")}@example.com`,
@@ -993,7 +1009,7 @@ describe("org role matrix and caps", () => {
     const { organizationId: raceOrg } = await createOrganizationAction({
       name: uniq("race-cap"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
       dailyInviteCap: 1,
     });
     mockSession({ email: owner.email, id: owner.id });
@@ -1050,7 +1066,7 @@ describe("stage 2 staff invite rules", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("staff-gate"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     mockSession({ email: owner.email, id: owner.id });
     const schedulerInvite = await createOrgInvite(organizationId, scheduler.email, ["scheduler"]);
@@ -1089,7 +1105,7 @@ describe("stage 2 staff invite rules", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("removed-inviter"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     await setOrganizationStatusAction(organizationId, "active");
     mockSession({ email: owner.email, id: owner.id });
@@ -1116,7 +1132,7 @@ describe("stage 2 staff invite rules", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("already-approved"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     await setOrganizationStatusAction(organizationId, "active");
     mockSession({ email: owner.email, id: owner.id });
@@ -1141,7 +1157,7 @@ describe("stage 2 staff invite rules", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("oracle"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     mockSession({ email: owner.email, id: owner.id });
     const hit = await createOrgInvite(organizationId, existing.email, ["instructor"]);
@@ -1178,7 +1194,7 @@ describe("stage 2 staff invite rules", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("activate-waitlist"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     mockSession({ email: owner.email, id: owner.id });
     const invite = await createOrgInvite(organizationId, invitee.email, ["scheduler"]);
@@ -1255,7 +1271,7 @@ describe("stage 2 staff invite rules", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("mail-fail-org"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     mockSession({ email: owner.email, id: owner.id });
     setPlatformMailSenderForTests(async () => ({ sent: false, error: "smtp-host-down" }));
@@ -1284,7 +1300,7 @@ describe("jwt refresh after org approval", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("jwt"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     await setOrganizationStatusAction(organizationId, "active");
     mockSession({ email: owner.email, id: owner.id });
@@ -1349,7 +1365,7 @@ describe("saveOrganizationCapsAction", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("cap-form"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     const back = `/admin/orgs/${organizationId}`;
     const fields = {
@@ -1406,7 +1422,7 @@ describe("sign-in landing", () => {
     const { organizationId } = await createOrganizationAction({
       name: uniq("landing"),
       ownerAdminUserId: owner.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
 
     expect(await staffHomeLandingPath(owner.id)).toBe(
@@ -1451,7 +1467,7 @@ describe("sign-in landing", () => {
     const second = await createOrganizationAction({
       name: uniq("landing-two"),
       ownerAdminUserId: scheduler.id,
-      timezone: "UTC",
+      timezone: "America/Denver",
     });
     expect(await staffHomeLandingPath(scheduler.id)).toBe("/admin/organization");
 

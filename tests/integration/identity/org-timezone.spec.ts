@@ -8,7 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { TAG } from "../../test-tags";
 import { TEST_ADMIN } from "../../visual/helpers";
 
-const OPERATOR_STATE = "tests/integration/.auth/tutor.json";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 const { assertLocalDatabaseUrlForHarness } = require("../../../scripts/wb-regression-local-db.cjs");
 
 const EASTERN = "America/New_York";
@@ -81,7 +81,7 @@ async function withPrisma<T>(run: (prisma: PrismaClient) => Promise<T>): Promise
 }
 
 test.describe("organization time zone", { tag: [TAG.ORG, TAG.WB_CHROME] }, () => {
-  test.use({ storageState: OPERATOR_STATE });
+  test.use({ storageState: authStatePath("tutor.json") });
 
   test("an org created in Eastern shows that zone on the schedule", async ({ page }) => {
     test.setTimeout(120_000);
