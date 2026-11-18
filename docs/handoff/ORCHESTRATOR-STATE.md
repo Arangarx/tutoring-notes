@@ -20,7 +20,8 @@
 4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
 5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 6. **Strix pen test + any further OpenAI evals: deferred to 2026-11-18 (Andrew).** The local `.env` has NO `OPENAI_API_KEY`; the only key on the machine is production (`.env.production.local`). Ask Andrew which key before running. Andrew said the notes-abstain eval's few cents on the production key were fine (no rotation).
-7. notes-abstain: before merge, `scripts/eval-notes-abstain.mjs` must read only the lane's own `.env` / `process.env`. Remove the `.env.production.local` and `../tutoring-notes/*` fallbacks (lines ~56-59).
+7. 21:25 status. recording-durability: B1/B2 fixed at `32b45dc1` (author 4b3b91a3); narrow Sonnet re-verify 347f9767 running, then merge. Its BACKLOG entry sits in a temporary "Bucket B (pilot) — recording durability" section; move it under Launch buckets → Bucket B when merging. notes-abstain: Sonnet 7ba1e0a1 gave MERGE-OK @ 769c3d9f; Grok 8286d3c3 is now doing the follow-ups: key fallback, narrow `hadSpeech` query, dead page branch, live-reduce jest red/green, mixed fixture. Then a narrow recheck and merge.
+8. notes-abstain: before merge, `scripts/eval-notes-abstain.mjs` must read only the lane's own `.env` / `process.env`. Remove the `.env.production.local` and `../tutoring-notes/*` fallbacks (lines ~56-59).
 
 ### Open Andrew-confirms
 
