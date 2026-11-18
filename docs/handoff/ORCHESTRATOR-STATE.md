@@ -32,14 +32,16 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 
 | Lane | State | Agent now |
 |---|---|---|
-| pw-parallel | built d0647098; Sonnet verify + 3-stack proof | cd5d283b |
-| fold-transcript | built (to 699a7c2d); Sonnet verify + classify 7 reds | ba62c33b |
-| fold-apply-race | ported (tip 3ac128f6, red-before 7/10); Sonnet running green gates | 355a519c |
-| consent-copy (C8 privacy/terms) | Grok building/testing | cf19800a |
-| static-checks | built da90ccb2; Sonnet verify finished tests, report pending | bb66f960 |
-| org-finish | Grok committing + gates | e77120ee |
-| first-impression | rework (drop "Spanish is next"; test 2FA guards) | 0184c9f8 |
-| recording-durability | items 1+2 pushed (4efa5d2c, b9568ad3); Sonnet running gates; item 3 WS-N5 deferred | 4b3b91a3 |
+| pw-parallel | MERGED f85468c8 | — |
+| first-impression | MERGED acd0cc00 | — |
+| consent-copy (C8 privacy/terms) | MERGED 96978496 | — |
+| fold-transcript | built (to 699a7c2d); Sonnet verify ba62c33b DIED on Cursor "unpaid invoice" — re-dispatch Sonnet verify once Andrew pays | — |
+| fold-apply-race | feat/org-qol merged in (708307bc); Sonnet gates on stack 2 | 355a519c |
+| static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
+| org-finish | MERGE-READY at 0849bc8e (org-db 62, timezone spec, wb-org-booking :270 :652 now green, tsc 0, build 0). Grok verifier running (Sonnet blocked by invoice; add Sonnet auth-boundary pass when billing returns) | 259b6a86 |
+| recording-durability | tip 7cb9af32, NOT ready: pagehide flush never lands, Page.crash harness hangs. Decision (conductor): keep 5s slice; test hidden-then-kill, freeze-then-close crash surrogate, graceful bound ≤1 slice. Sonnet reworking tests | 4b3b91a3 |
+| jest-mocks | MERGED f0e97d94 (9 stale-mock reds fixed). Worktree removed. NOTE: removing it before its node_modules junction deleted main `node_modules\.bin`; repaired with `npm rebuild --ignore-scripts` (npm ls clean). Always `cmd /c rmdir <wt>\node_modules` FIRST | — |
+| jest-triage | NEW: 13 failing jest suites on feat/org-qol (env / drift / real bug). Grok classifying, fixing drift, reporting real bugs | f2bc9df0 |
 | replay-start | Sonnet; local commits 91f574fa, d05d719b not pushed; short-clip fix staged in %TEMP% | e47069eb |
 
 Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
