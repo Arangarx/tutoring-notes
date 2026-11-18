@@ -98,7 +98,7 @@ export const recentlyImprovedSections: readonly RecentlyImprovedSection[] = [
     title: "Reliability & clearer messaging",
     items: [
       "Friendlier messages throughout — clearer saving status, reconnection text, error screens with a way forward, and plain-language notes when something is still preparing.",
-      "A new version applies while you are recording. It does not wait until the session ends.",
+      "A new version waits while you are recording, so it does not interrupt a recording.",
       "If the app hits a loading glitch after an update, it tries to recover on its own instead of leaving you stuck.",
     ],
   },
