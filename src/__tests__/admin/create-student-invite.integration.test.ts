@@ -162,7 +162,7 @@ describe("createStudent — invite on add", () => {
       form({
         learnerKind: "child_learner",
         inviteEmail: `${uniq("missparent")}@example.com`,
-        childIdentifier: `nobody@${uniq("nofam").replace(/[^a-z0-9]/gi, "").slice(0, 16)}`,
+        childIdentifier: `nobody@${uniq("nofam").replace(/[^a-z0-9]/gi, "").slice(-16)}`,
       })
     );
 

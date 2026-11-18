@@ -475,7 +475,7 @@ describe("createStudent burst limit", () => {
       await db.student.count({ where: { adminUserId: tutor.id, organizationId: null } })
     ).toBe(10);
 
-    const freshHandle = `${uniq("newkid")}@${uniq("nofam").replace(/[^a-z0-9]/gi, "").slice(0, 16)}`;
+    const freshHandle = `${uniq("newkid")}@${uniq("nofam").replace(/[^a-z0-9]/gi, "").slice(-16)}`;
     const fresh = await createStudent(
       null,
       form({

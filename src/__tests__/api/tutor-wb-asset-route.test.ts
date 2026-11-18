@@ -18,13 +18,9 @@ jest.mock("@/lib/whiteboard-scope", () => ({
     assertOwnsWhiteboardSessionMock(...args),
 }));
 
-jest.mock("@/lib/env", () => {
-  const actual = jest.requireActual<typeof import("@/lib/env")>("@/lib/env");
-  return {
-    ...actual,
-    env: { ...actual.env, BLOB_READ_WRITE_TOKEN: "test_blob_rw_token" },
-  };
-});
+jest.mock("@/lib/env", () =>
+  require("@/__tests__/helpers/mock-env-with-blob-token").envModuleWithBlobToken()
+);
 
 const assertStudentNotErasedApiMock = jest.fn();
 jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
@@ -34,6 +30,7 @@ jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
 }));
 
 import { GET } from "@/app/api/whiteboard/[sessionId]/tutor-asset/route";
+import { TEST_BLOB_RW_TOKEN } from "../helpers/mock-env-with-blob-token";
 
 const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
@@ -43,7 +40,7 @@ function inScopeAssetUrl(studentId: string, sessionId: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  process.env.BLOB_READ_WRITE_TOKEN = "test_blob_rw_token";
+  process.env.BLOB_READ_WRITE_TOKEN = TEST_BLOB_RW_TOKEN;
   assertOwnsWhiteboardSessionMock.mockResolvedValue({
     id: "wb_sess",
     studentId: "stu_a",

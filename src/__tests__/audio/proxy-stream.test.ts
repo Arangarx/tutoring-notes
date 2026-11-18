@@ -21,6 +21,7 @@
  */
 
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
+import { TEST_BLOB_RW_TOKEN } from "../helpers/mock-env-with-blob-token";
 
 function makeReq(headers: Record<string, string> = {}): Request {
   return new Request("https://example.test/api/audio/admin/aud_1", {
@@ -37,13 +38,11 @@ function makeUpstream(
   return new Response(body, { status, headers });
 }
 
-const BLOB_TOKEN = "test_blob_rw_token";
-
 describe("streamBlobWithRangeSupport", () => {
   const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
   beforeEach(() => {
-    process.env.BLOB_READ_WRITE_TOKEN = BLOB_TOKEN;
+    process.env.BLOB_READ_WRITE_TOKEN = TEST_BLOB_RW_TOKEN;
   });
 
   afterAll(() => {
@@ -81,7 +80,7 @@ describe("streamBlobWithRangeSupport", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0].url).toBe("https://blob.test/abc");
     expect(seen[0].headers.get("range")).toBeNull();
-    expect(seen[0].headers.get("authorization")).toBe(`Bearer ${BLOB_TOKEN}`);
+    expect(seen[0].headers.get("authorization")).toBe(`Bearer ${TEST_BLOB_RW_TOKEN}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("audio/webm;codecs=opus");
     expect(res.headers.get("Accept-Ranges")).toBe("bytes");
