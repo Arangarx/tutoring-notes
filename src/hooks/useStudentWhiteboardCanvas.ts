@@ -368,7 +368,13 @@ export function useStudentWhiteboardCanvas(
         }
       }
       const releaseApplyingRemote = () => {
-        applyingRemoteRef.current = false;
+        // The viewport window can outlive its own apply and end while the NEXT
+        // v3 apply is mid-hydrate. That apply owns `applyingRemoteRef` and
+        // clears it in its own `finally`; clearing it here would reopen the
+        // edit path (and the apply's own scene write) while it is in flight.
+        if (!v3ApplyInFlightRef.current) {
+          applyingRemoteRef.current = false;
+        }
         tutorViewportApplyRef.current = false;
         flushDirtyAfterApplyRef.current();
       };

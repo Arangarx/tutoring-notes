@@ -5217,7 +5217,6 @@ export function WhiteboardWorkspaceClient({
         studentOnCanvasChange(elements, _appState, files);
         if (studentApplyingRemoteRef.current) return;
         markLoadingCleared("remote_scene");
-        if (!pathJoinToken) return;
         const api = excalidrawAPIRef.current;
         if (api) {
           const onChangePageId = studentActivePageIdRef.current;

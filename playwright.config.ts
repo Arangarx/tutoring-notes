@@ -261,6 +261,7 @@ export default defineConfig({
         "**/integration/wb-e4-pdf-board-stroke-leak.spec.ts",
         "**/integration/wb-e5-pdf-board-stroke-bleed-initial-board.spec.ts",
         "**/integration/wb-student-apply-race.spec.ts",
+        "**/integration/wb-student-apply-overlap.spec.ts",
         "**/integration/wb-notes-shimmer.spec.ts",
         "**/integration/wb-notes-silent-empty.spec.ts",
         "**/integration/wb-chunk-transcribe-queue.spec.ts",
