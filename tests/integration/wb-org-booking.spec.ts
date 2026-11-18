@@ -36,9 +36,13 @@ function nextAuthSecret(): string {
   return secret;
 }
 
+/** Node and the pinned browser share this zone so Schedule "today" matches the tutor zone. */
+const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 async function signIn(
   browser: Browser,
-  admin: { id: string; email: string; displayName: string | null }
+  admin: { id: string; email: string; displayName: string | null },
+  timezoneId?: string
 ): Promise<{ context: BrowserContext; page: import("@playwright/test").Page }> {
   const token = await encode({
     token: {
@@ -56,6 +60,7 @@ async function signIn(
     maxAge: 60 * 60,
   });
   const context = await browser.newContext({
+    ...(timezoneId ? { timezoneId } : {}),
     storageState: {
       cookies: [
         {
@@ -263,7 +268,7 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
   });
 
   test("a removed, unapproved, or non-instructor choice leaves no appointment", async ({ browser }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     const { org, owner } = await seedOrg();
     const scheduler = await seedMember(org.id, "Sam Scheduler", ["scheduler"]);
     const removed = await seedMember(org.id, "Remy Instructor", ["instructor"]);
@@ -275,40 +280,81 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
       await page.goto(`/admin/organization/${org.id}`);
       await expect(page.getByTestId("schedule-new-session")).toBeVisible();
 
-      await prisma.organizationMember.update({
-        where: { organizationId_adminUserId: { organizationId: org.id, adminUserId: removed.id } },
-        data: { removedAt: new Date() },
-      });
-      await prisma.adminUser.update({
-        where: { id: unapproved.id },
-        data: { approvalStatus: "WAITLISTED" },
-      });
-      await prisma.organizationMember.update({
-        where: { organizationId_adminUserId: { organizationId: org.id, adminUserId: dropped.id } },
-        data: { roles: ["scheduler"] },
-      });
+      const cases: Array<[string, string, () => Promise<void>]> = [
+        [
+          "Remy Instructor",
+          "Removed slot",
+          () =>
+            prisma.organizationMember.update({
+              where: {
+                organizationId_adminUserId: { organizationId: org.id, adminUserId: removed.id },
+              },
+              data: { removedAt: new Date() },
+            }).then(() => undefined),
+        ],
+        [
+          "Una Instructor",
+          "Unapproved slot",
+          () =>
+            prisma.adminUser.update({
+              where: { id: unapproved.id },
+              data: { approvalStatus: "WAITLISTED" },
+            }).then(() => undefined),
+        ],
+        [
+          "Ned Instructor",
+          "Role slot",
+          () =>
+            prisma.organizationMember.update({
+              where: {
+                organizationId_adminUserId: { organizationId: org.id, adminUserId: dropped.id },
+              },
+              data: { roles: ["scheduler"] },
+            }).then(() => undefined),
+        ],
+      ];
 
-      for (const [name, subject] of [
-        ["Remy Instructor", "Removed slot"],
-        ["Una Instructor", "Unapproved slot"],
-        ["Ned Instructor", "Role slot"],
-      ] as const) {
-        await page.getByTestId("schedule-new-session").click();
+      for (const [name, subject, revoke] of cases) {
+        // The device-timezone save refreshes this page and can close the dialog.
+        // Reopen until the choice is on screen. Revoke only once Save is in flight,
+        // so the server — not a stale empty list — is what refuses the appointment.
+        await expect(async () => {
+          if (!(await page.getByTestId("schedule-create-form").isVisible())) {
+            await page.getByTestId("schedule-new-session").click();
+          }
+          await expect(page.getByTestId("schedule-instructor")).toBeVisible({ timeout: 5_000 });
+        }).toPass({ timeout: 30_000 });
         await page.getByTestId("schedule-instructor").click();
         await page.getByRole("option", { name }).click();
         await page.locator("#schedule-subject").fill(subject);
         await page.locator("#schedule-start").fill("16:00");
-        await page.getByTestId("schedule-save-session").click();
-        await expect(page.getByTestId("schedule-save-error")).toContainText(
-          "That instructor cannot take this appointment.",
-          { timeout: 30_000 }
-        );
+
+        let revoked = false;
+        const onSave = async (route: import("@playwright/test").Route) => {
+          const request = route.request();
+          if (!revoked && request.method() === "POST" && request.headers()["next-action"]) {
+            revoked = true;
+            await revoke();
+          }
+          await route.continue();
+        };
+        await page.route("**/admin/organization/**", onSave);
+        try {
+          await page.getByTestId("schedule-save-session").click();
+          await expect(page.getByTestId("schedule-save-error")).toContainText(
+            "That instructor cannot take this appointment.",
+            { timeout: 30_000 }
+          );
+        } finally {
+          await page.unroute("**/admin/organization/**", onSave);
+        }
         expect(
           await prisma.scheduledSession.count({ where: { studentId: student.id, subject } })
         ).toBe(0);
         const close = page.getByTestId("schedule-create-form").getByRole("button", { name: "Close" });
         await expect(close).toBeEnabled();
         await close.click();
+        await expect(page.getByTestId("schedule-create-form")).toBeHidden();
       }
     } finally {
       await context.close();
@@ -594,16 +640,30 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
   // --- Org UX W4: the reason is on screen wherever the control is ---------------------
 
   async function seedHourAheadAppointment(adminUserId: string, studentId: string) {
-    const startAt = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    // Wall-clock day and clock match LOCAL_TZ. A later timezone seed rewrites
+    // startAt from date + HH:MM; a UTC instant in the DATE column was landing
+    // on the next calendar day, so Schedule's today panel had no Open room.
+    const now = new Date();
+    const ahead = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+    const sameDay =
+      ahead.getFullYear() === now.getFullYear() &&
+      ahead.getMonth() === now.getMonth() &&
+      ahead.getDate() === now.getDate();
+    const startAt = sameDay
+      ? ahead
+      : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 0, 0);
+    const endAt = new Date(startAt.getTime() + 60 * 60 * 1000);
+    const hhmm = (value: Date) =>
+      `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
     return prisma.scheduledSession.create({
       data: {
         adminUserId,
         studentId,
-        date: startAt,
-        startTime: "16:00",
-        endTime: "17:00",
+        date: new Date(Date.UTC(startAt.getFullYear(), startAt.getMonth(), startAt.getDate())),
+        startTime: hhmm(startAt),
+        endTime: hhmm(endAt),
         startAt,
-        endAt: new Date(startAt.getTime() + 60 * 60 * 1000),
+        endAt,
         plannedDurationMinutes: 60,
         subject: "Algebra",
       },
@@ -617,11 +677,15 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
     const { org, owner } = await seedOrg();
     const instructor = await seedMember(org.id, "Ida Instructor", ["instructor"]);
     const { student } = await seedLearner(org.id, owner.id, false);
+    await prisma.adminUser.update({
+      where: { id: instructor.id },
+      data: { tutorTimezone: LOCAL_TZ },
+    });
     const appointment = await seedHourAheadAppointment(instructor.id, student.id);
     const expected =
       "Live sessions are off in Mary Ann Lee's privacy settings. You can still open the room in person.";
 
-    const { context, page } = await signIn(browser, instructor);
+    const { context, page } = await signIn(browser, instructor, LOCAL_TZ);
     try {
       for (const route of [`/admin/organization/${org.id}`, "/admin/schedule"]) {
         await page.goto(route);
@@ -907,8 +971,6 @@ test.describe("instructor scoping on the org page", { tag: [TAG.ORG, TAG.WB_PRES
  * browser's own zone, so the Month day detail and the Agenda both list them.
  */
 test.describe("org appointments on the instructor Schedule", { tag: [TAG.ORG, TAG.WB_PRESENCE] }, () => {
-  const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
   /** An instructor whose Schedule is displayed in this machine's zone. */
   async function seedInstructor(
     organizationId: string,
