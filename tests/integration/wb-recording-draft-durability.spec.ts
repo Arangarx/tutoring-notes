@@ -157,13 +157,18 @@ test.describe(
       const page = await openWorkspaceAndStartRecording(context, studentId, whiteboardSessionId);
       // Hard kill at segment start + 16s: no pagehide, no JS. Only what is already in IDB survives.
       const segmentStart = await waitForOpenSegmentAge(page, 16_000);
+      // Open the reader tab BEFORE the crash: asking a context for a new page after its
+      // only page has crashed hangs (attempt 1 of this spec timed out on newPage()).
+      // The reader never mounts the workspace, so it cannot write a new draft.
+      const reader = await context.newPage();
+      await reader.goto("/login", { waitUntil: "domcontentloaded" });
+      // Keep the workspace tab foreground so no visibilitychange flush masks the hard kill.
+      await page.bringToFront();
+      const crashed = page.waitForEvent("crash", { timeout: 30_000 });
       const cdp = await context.newCDPSession(page);
       const killedAt = Date.now();
       await cdp.send("Page.crash").catch(() => undefined);
-      await page.close({ runBeforeUnload: false }).catch(() => undefined);
-
-      const reader = await context.newPage();
-      await reader.goto("/login", { waitUntil: "domcontentloaded" });
+      await crashed;
       const draft = await decodeDraftSeconds(reader, whiteboardSessionId);
 
       const elapsedSec = (killedAt - segmentStart) / 1000;
