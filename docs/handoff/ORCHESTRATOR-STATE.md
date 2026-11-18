@@ -10,7 +10,7 @@
 
 ### Last action
 
-**2026-11-18 12:24: learner-login MERGED `df798123` (lane `ce1b86f0`; Sonnet [login confirm](d4d73b93-40aa-40eb-93e1-096056cdc35d) MERGE-OK). A8 started: `npm run test:wb-sync` on this tip, one stack only because WoW is running. `test:prod-shape` and `next build` wait until that finishes. No `next dev` is up. Still open outside this gate: SMOKE-UX-1 hardware end-jump, AV-REFRESH-LOSS, Gate A5 audit.**
+**2026-11-18 15:10: A8 `test:wb-sync` exit 1 (~2.8h). Jest 1215/1215. Playwright 14 REAL-FAIL + 1 ENV-FLAKE (M11). Known harness, not this tip: RP1–RP3, RP5–RP7 and W27 (events/snapshot 500), V4 child-consent owner label, WS-N5 (blob reset ECONNREFUSED on :3101), AI panel x2 (no OPENAI_API_KEY, so the textarea stays hidden). [copy asserts](a844fc08-fc96-494c-89d6-74d4c229a6bd) is updating the two stale sentences (draft banner, E19 disconnect body). `test:regression` and `test:prod-shape` have not started.**
 
 **2026-11-18 09:15: conductor swap (Opus → fresh Grok chat) to cut spend. Andrew: "today try really hard to keep the spending burn down."**
 
@@ -40,7 +40,7 @@
 2. As each lane reports MERGE-READY with green gates, run a separate verification (Sonnet on core/fragile, Grok otherwise), then `merge --no-ff` into `feat/org-qol` and push. static-checks merges LAST, then `npm ci` in main.
 3. apply-race MERGED 014ae4cb. apply-overlap MERGED 93d496b0. Gate A5 sync matrix waits until rec-draft and live-av stop editing the workspace client. It is an audit, not the next merge.
 4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
-5. static-checks MERGED and `npm ci` done. B11 camera-switch MERGED `13aa5d41`. learner-login MERGED `df798123`. Next: A8 full gate on this tip (`test:wb-sync` + `test:regression` + `test:prod-shape` + `next build`; prod-shape must not run beside `next dev`). Then A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
+5. A8 `test:wb-sync` finished red (see Last action). Stale copy asserts are in flight. Then `test:regression`, `test:prod-shape`, and `next build` (prod-shape must not run beside `next dev`). Then A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 6. **Strix pen test + any further OpenAI evals: deferred to 2026-11-18 (Andrew).** The local `.env` has NO `OPENAI_API_KEY`; the only key on the machine is production (`.env.production.local`). Ask Andrew which key before running. Andrew said the notes-abstain eval's few cents on the production key were fine (no rotation).
 7. 21:30 status. recording-durability MERGED 84cb0eed (Sonnet re-verify 347f9767 MERGE-OK). BACKLOG entry moved under Launch buckets → Bucket B (W1-SHIP-B-FINALIZE). Bucket A now lists WS-B recovered draft enqueue (still queued behind apply-race). Unfixed nit: the hard-kill sample at 19.5s leaves 0.5s margin, so a 10s mutation could pass by luck; 19.0s would be safer. notes-abstain MERGED fdf2c23b (Sonnet 7ba1e0a1 MERGE-OK; follow-ups 931d3e5b rechecked by conductor: eval reads only local `.env`, `hadSpeech` single `findFirst`, live-reduce cases red on base). Pending tomorrow with the key decision: first real run of the `mixed-homework-and-scheduling` fixture (`npm run eval:notes-abstain`). Nit: the poll's `transcript: { not: "" }` treats whitespace-only as speech; `transcriptsHadSpeech` may not.
 
