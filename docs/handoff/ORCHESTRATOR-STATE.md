@@ -20,7 +20,7 @@
 4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
 5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 6. **Strix pen test + any further OpenAI evals: deferred to 2026-11-18 (Andrew).** The local `.env` has NO `OPENAI_API_KEY`; the only key on the machine is production (`.env.production.local`). Ask Andrew which key before running. Andrew said the notes-abstain eval's few cents on the production key were fine (no rotation).
-7. 21:25 status. recording-durability: B1/B2 fixed at `32b45dc1` (author 4b3b91a3); narrow Sonnet re-verify 347f9767 running, then merge. Its BACKLOG entry sits in a temporary "Bucket B (pilot) — recording durability" section; move it under Launch buckets → Bucket B when merging. notes-abstain: Sonnet 7ba1e0a1 gave MERGE-OK @ 769c3d9f; Grok 8286d3c3 is now doing the follow-ups: key fallback, narrow `hadSpeech` query, dead page branch, live-reduce jest red/green, mixed fixture. Then a narrow recheck and merge.
+7. 21:30 status. recording-durability MERGED 84cb0eed (Sonnet re-verify 347f9767 MERGE-OK). BACKLOG entry moved under Launch buckets → Bucket B (W1-SHIP-B-FINALIZE). Bucket A now lists WS-B recovered draft enqueue (still queued behind apply-race). Unfixed nit: the hard-kill sample at 19.5s leaves 0.5s margin, so a 10s mutation could pass by luck; 19.0s would be safer. notes-abstain: Sonnet 7ba1e0a1 gave MERGE-OK @ 769c3d9f; Grok 8286d3c3 is now doing the follow-ups: key fallback, narrow `hadSpeech` query, dead page branch, live-reduce jest red/green, mixed fixture. Then a narrow recheck and merge.
 8. notes-abstain: before merge, `scripts/eval-notes-abstain.mjs` must read only the lane's own `.env` / `process.env`. Remove the `.env.production.local` and `../tutoring-notes/*` fallbacks (lines ~56-59).
 
 ### Open Andrew-confirms
@@ -44,7 +44,7 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
 | org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
 | jest-triage | MERGED 2035b5b4 (worktree removed). Remaining full-jest red: upload-outbox "different streams upload in parallel" (on base too → A8). Author had deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | — |
-| recording-durability | 55bfc51b: Sonnet verify 95c46f72 REJECT. B1 oracle samples after a slice boundary (10-15s slices would pass) → sample just before. B2 outbox finalize keeping rows (b9568ad3) has no consumer, orphan blobs, minor-audio retention → conductor decision: REVERT b9568ad3, backlog late-register/recovery UI. Sonnet author fixing | 4b3b91a3 |
+| recording-durability | MERGED 84cb0eed (tip 32b45dc1; B1 oracle red on 10s/30s, b9568ad3 reverted). Worktree removed | — |
 | jest-mocks | MERGED f0e97d94 (9 stale-mock reds fixed). Worktree removed. NOTE: removing it before its node_modules junction deleted main `node_modules\.bin`; repaired with `npm rebuild --ignore-scripts` (npm ls clean). Always `cmd /c rmdir <wt>\node_modules` FIRST | — |
 | replay-start | feat/org-qol merged in (ac0f9cf5, pushed). Sonnet resumed: apply short-clip fix from %TEMP%, red/green, gates | e47069eb-4f31-4f63-b672-2489506d9f28 |
 
