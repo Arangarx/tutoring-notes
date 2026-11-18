@@ -252,6 +252,7 @@ export default defineConfig({
         "**/integration/wb-review-overlay-3paths.spec.ts",
         "**/integration/wb-vad-per-speaker-durability.spec.ts",
         "**/integration/wb-tab-kill-audio-durability.spec.ts",
+        "**/integration/wb-recording-draft-durability.spec.ts",
         "**/integration/wb-tutor-recording-mute.spec.ts",
         "**/integration/wb-transcription-language-notice.spec.ts",
         "**/integration/wb-e2-pdf-stroke-leak.spec.ts",

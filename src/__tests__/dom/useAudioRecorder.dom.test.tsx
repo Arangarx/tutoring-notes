@@ -85,6 +85,17 @@ jest.mock("@/lib/action-correlation", () => ({
     debugId ? `${msg} [debug=${debugId}]` : msg,
 }));
 
+// A4 WS-N-PAGEHIDE: spy on IDB draft checkpoints (only exercised by the `recordingDraft` describe at the bottom).
+const mockDraftCheckpoint = jest.fn(async (_row: { chunkCount: number; sessionId: string }) => {});
+jest.mock("@/lib/recording/recording-draft-store", () => {
+  const actual = jest.requireActual("@/lib/recording/recording-draft-store");
+  return {
+    __esModule: true,
+    ...actual,
+    getOrCreateRecordingDraftStore: () => ({ checkpoint: mockDraftCheckpoint }),
+  };
+});
+
 import { uploadAudioDirect } from "@/lib/recording/upload";
 import { createMicAudioGraph } from "@/lib/mic-recorder-audio";
 import {
@@ -144,6 +155,10 @@ class FakeMediaRecorder {
     this.startCalls.push(args);
     this.state = "recording";
     recorderEventLog.push({ kind: "start", instance: this.instanceIndex });
+  }
+  requestDataCalls = 0;
+  requestData() {
+    this.requestDataCalls += 1;
   }
   pause() {
     this.pauseCalls += 1;
@@ -920,5 +935,92 @@ describe("useAudioRecorder — mic persistence (WS-H)", () => {
     );
     expect(localStorage.getItem(STORAGE_DEVICE_KEY)).toBe("default-mic-id");
     expect(localStorage.getItem(STORAGE_MIC_GROUP_KEY)).toBe("grp-default");
+  });
+});
+
+// A4 / WS-N-PAGEHIDE — draft durability cadence. Real timing/crash behavior is proven in Playwright
+// (tests/integration/wb-recording-draft-durability.spec.ts); these pin the hook wiring in jsdom.
+describe("useAudioRecorder — recordingDraft cadence (A4 WS-N-PAGEHIDE)", () => {
+  function renderDraftRecorder() {
+    return renderHook(() =>
+      useAudioRecorder({
+        studentId: "stu-1",
+        onRecorded: jest.fn(),
+        recordingDraft: { sessionId: "wbsid-draft", streamId: "tutor:mic" },
+      })
+    );
+  }
+
+  async function startDraftRecording() {
+    mockDraftCheckpoint.mockClear();
+    const view = renderDraftRecorder();
+    await flushAsync();
+    await act(async () => {
+      await view.result.current.handleStartRecording();
+    });
+    expect(view.result.current.state).toBe("recording");
+    return { view, recorder: FakeMediaRecorder.lastInstance() };
+  }
+
+  test("starts MediaRecorder with a short timeslice so a hard kill loses little", async () => {
+    const { recorder } = await startDraftRecording();
+    const timeslice = recorder.startCalls[0][0];
+    expect(typeof timeslice).toBe("number");
+    expect(timeslice as number).toBeGreaterThan(0);
+    // Spec: a tab kill may lose at most one slice; the old 30s cadence lost up to 30s of audio.
+    expect(timeslice as number).toBeLessThanOrEqual(10_000);
+  });
+
+  test("checkpoints the open segment to the draft store on every timeslice chunk", async () => {
+    const { recorder } = await startDraftRecording();
+    expect(mockDraftCheckpoint).not.toHaveBeenCalled();
+    recorder.feedData();
+    expect(mockDraftCheckpoint).toHaveBeenCalledTimes(1);
+    expect(mockDraftCheckpoint.mock.calls[0][0].chunkCount).toBe(1);
+    recorder.feedData();
+    expect(mockDraftCheckpoint).toHaveBeenCalledTimes(2);
+    expect(mockDraftCheckpoint.mock.calls[1][0].chunkCount).toBe(2);
+  });
+
+  test("pagehide persists held chunks but does NOT requestData (the partial slice can never land after teardown)", async () => {
+    const { recorder } = await startDraftRecording();
+    recorder.feedData();
+    mockDraftCheckpoint.mockClear();
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(mockDraftCheckpoint).toHaveBeenCalled();
+    expect(recorder.requestDataCalls).toBe(0);
+  });
+
+  test("tab hidden also requests the partial slice", async () => {
+    const { recorder } = await startDraftRecording();
+    recorder.feedData();
+    const orig = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(recorder.requestDataCalls).toBe(1);
+    } finally {
+      delete (document as unknown as { visibilityState?: string }).visibilityState;
+      if (orig) Object.defineProperty(Document.prototype, "visibilityState", orig);
+    }
+  });
+
+  test("tab hidden does NOT call requestData before timeslice delivery was ever observed (iOS MP4 fragment guard)", async () => {
+    const { recorder } = await startDraftRecording();
+    const orig = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(recorder.requestDataCalls).toBe(0);
+    } finally {
+      delete (document as unknown as { visibilityState?: string }).visibilityState;
+      if (orig) Object.defineProperty(Document.prototype, "visibilityState", orig);
+    }
   });
 });

@@ -104,10 +104,18 @@ import {
   sharedDeviceAcquireMutex,
 } from "@/lib/av/device-acquire-mutex";
 
-/** Draft checkpoint interval (W1 Surface 1) — matches design cadence. */
+/**
+ * Fallback draft checkpoint interval (W1 Surface 1). The primary cadence is
+ * event-driven: every timeslice chunk checkpoints the open segment to IDB
+ * (see `noteDraftChunkReceived`), so a crash loses at most ~one timeslice.
+ */
 const DRAFT_CHECKPOINT_INTERVAL_MS = 30_000;
-/** MediaRecorder timeslice when draft durability is enabled (iOS may not fire — see PLATFORM-ASSUMPTIONS §8.1). */
-const DRAFT_TIMESLICE_MS = 30_000;
+/**
+ * MediaRecorder timeslice when draft durability is enabled (iOS may not fire — see PLATFORM-ASSUMPTIONS §8.1).
+ * 5s (A4 launch plan WS-N-PAGEHIDE): a tab kill / crash cannot run pagehide code, so the
+ * worst-case audio loss is one timeslice. Was 30s.
+ */
+const DRAFT_TIMESLICE_MS = 5_000;
 
 export type RecordedAudio = {
   /**
@@ -172,8 +180,8 @@ export type UseAudioRecorderOptions = {
   avLogSessionId?: string;
   /**
    * When set (whiteboard workspace), checkpoint in-progress chunks to the
-   * separate recording-draft IndexedDB store every 30s, on stop, and on
-   * page hide. Recorder-tab consumers omit this.
+   * separate recording-draft IndexedDB store on every 5s timeslice chunk, on
+   * stop, and on page hide. Recorder-tab consumers omit this.
    */
   recordingDraft?: {
     sessionId: string;
@@ -707,6 +715,52 @@ export function useAudioRecorder({
     }
   }
 
+  /**
+   * A timeslice chunk arrived for the OPEN segment (draft mode only): bookkeeping
+   * plus an immediate IDB checkpoint, so the draft always trails the live audio by
+   * at most one timeslice (a tab kill / crash cannot run any code). The final
+   * `ondataavailable` fired by `stop()` has `state === "inactive"` and is skipped:
+   * the stop path owns that segment (enqueue → draft clear).
+   */
+  function noteDraftChunkReceived(recorder: MediaRecorder) {
+    if (!recordingDraft) return;
+    if (firstChunkMsRef.current === null) {
+      firstChunkMsRef.current = Date.now();
+    }
+    if (recorder.state === "recording") {
+      timesliceDataReceivedRef.current = true;
+    }
+    if (recorder.state !== "inactive") {
+      void checkpointDraftToStore();
+    }
+  }
+
+  /**
+   * Best-effort flush when the tab goes hidden (app switch / lock screen — the tab
+   * usually stays alive briefly before the OS kills it; pagehide only checkpoints): persist the
+   * chunks we already hold and ask the encoder for the partial open slice — its
+   * `dataavailable` runs `noteDraftChunkReceived`, which checkpoints it. Not
+   * guaranteed to finish before teardown; the 5s timeslice is the guarantee.
+   * `requestData()` is only used once this browser has proven timeslice delivery
+   * (iOS Safari may not, and manual slicing there yields non-concatenable MP4
+   * fragments — PLATFORM-ASSUMPTIONS §8.1).
+   */
+  function flushDraftNow(reason: "hidden") {
+    if (!recordingDraft) return;
+    const rec = mediaRecorderRef.current;
+    console.info(
+      `[useAudioRecorder] dft flush reason=${reason} wbsid=${recordingDraft.sessionId} chunks=${chunksRef.current.length} recorderState=${rec?.state ?? "none"}`
+    );
+    void checkpointDraftToStore();
+    if (rec && rec.state !== "inactive" && timesliceDataReceivedRef.current) {
+      try {
+        rec.requestData();
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+
   function startDraftCheckpointScheduling() {
     if (!recordingDraft || typeof window === "undefined") return;
     clearDraftCheckpointScheduling();
@@ -714,11 +768,15 @@ export function useAudioRecorder({
       void checkpointDraftToStore();
     }, DRAFT_CHECKPOINT_INTERVAL_MS);
     const onPageHide = () => {
+      // checkpoint only — NO requestData(): the partial slice's dataavailable fires
+      // after the document is torn down, so it never lands (Playwright navigate-away
+      // probe, A4 2026-11-17: loss was the same with and without it). The hidden flush
+      // above is the case that works (the page stays alive briefly after going hidden).
       void checkpointDraftToStore();
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        void checkpointDraftToStore();
+        flushDraftNow("hidden");
       }
     };
     draftPagehideHandlerRef.current = onPageHide;
@@ -887,14 +945,7 @@ export function useAudioRecorder({
     newRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) {
         chunksRef.current.push(e.data);
-        if (recordingDraft) {
-          if (firstChunkMsRef.current === null) {
-            firstChunkMsRef.current = Date.now();
-          }
-          if (newRecorder.state === "recording") {
-            timesliceDataReceivedRef.current = true;
-          }
-        }
+        noteDraftChunkReceived(newRecorder);
       }
     };
     if (recordingDraft) {
@@ -1643,18 +1694,11 @@ export function useAudioRecorder({
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) {
         chunksRef.current.push(e.data);
-        if (recordingDraft) {
-          if (firstChunkMsRef.current === null) {
-            firstChunkMsRef.current = Date.now();
-          }
-          if (recorder.state === "recording") {
-            timesliceDataReceivedRef.current = true;
-          }
-        }
+        noteDraftChunkReceived(recorder);
       }
     };
 
-    // Workspace draft durability: optional 30s timeslice so chunks exist
+    // Workspace draft durability: optional 5s timeslice so chunks exist
     // between stop() events (see PLATFORM-ASSUMPTIONS §8.1). Recorder-tab
     // path keeps start() without timeslice (iOS MP4 fragmentation guard).
     if (recordingDraft) {
