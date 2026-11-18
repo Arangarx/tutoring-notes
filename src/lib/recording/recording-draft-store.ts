@@ -19,6 +19,14 @@ export const DRAFT_STORE_NAME = "drafts";
 
 const DB_VERSION = 1;
 
+/**
+ * MediaRecorder timeslice when draft durability is enabled (iOS may not fire — see
+ * PLATFORM-ASSUMPTIONS §8.1). 5s (A4 launch plan WS-N-PAGEHIDE): a tab kill / crash cannot run
+ * pagehide code, so the worst-case audio loss is one timeslice. Also the cadence the live-owner
+ * freshness fallback in `recording-draft-lock.ts` is derived from.
+ */
+export const DRAFT_TIMESLICE_MS = 5_000;
+
 export type DraftSegmentRow = {
   /** `${sessionId}:${streamId}` — one draft per stream per session. */
   key: string;
@@ -37,6 +45,13 @@ export type DraftSegmentRow = {
   checkpointedAt: number;
   /** Display duration for recovery banner `[N:NN]` (whole seconds). */
   estimatedDurationSec: number;
+  /**
+   * Session-clock offset (ms) at the START of this segment — the same value the live stop path
+   * stamps as `recordingTimeOffsetMs`, so a recovered segment lands at its real place in the
+   * notes timeline instead of at 0. Optional and additive: drafts written before this field
+   * existed simply lack it (no IDB version bump; old rows stay readable).
+   */
+  recordingTimeOffsetMs?: number;
 };
 
 export function draftRowKey(sessionId: string, streamId: string): string {
@@ -56,6 +71,16 @@ export type RecordingDraftStore = {
     streamId: string
   ) => Promise<DraftSegmentRow | null>;
   clear: (sessionId: string, streamId: string) => Promise<void>;
+  /**
+   * Delete the stream's draft ONLY if it still belongs to `segmentId` (one atomic transaction).
+   * The row is shared per stream, so an unconditional `clear` after finishing segment A would
+   * also wipe segment B's live draft. Resolves true when a row was deleted.
+   */
+  clearIfSegment: (
+    sessionId: string,
+    streamId: string,
+    segmentId: string
+  ) => Promise<boolean>;
   assemble: (row: DraftSegmentRow) => Blob;
   close: () => Promise<void>;
 };
@@ -191,6 +216,35 @@ export function createRecordingDraftStore(
       logger.log?.(
         `[recording-draft] dft=${dft} cleared sessionId=${sessionId} streamId=${streamId}`
       );
+    },
+
+    async clearIfSegment(
+      sessionId: string,
+      streamId: string,
+      segmentId: string
+    ): Promise<boolean> {
+      const key = draftRowKey(sessionId, streamId);
+      const dft = newDftShortId();
+      const deleted = await withStore("readwrite", (store) => {
+        return new Promise<boolean>((resolve, reject) => {
+          const getReq = store.get(key);
+          getReq.onsuccess = () => {
+            const row = getReq.result as DraftSegmentRow | undefined;
+            if (!row || row.segmentId !== segmentId) {
+              resolve(false);
+              return;
+            }
+            const delReq = store.delete(key);
+            delReq.onsuccess = () => resolve(true);
+            delReq.onerror = () => reject(delReq.error ?? new Error("IDB delete failed"));
+          };
+          getReq.onerror = () => reject(getReq.error ?? new Error("IDB get failed"));
+        });
+      });
+      logger.log?.(
+        `[recording-draft] dft=${dft} ${deleted ? "cleared" : "clear-skipped-other-segment"} sessionId=${sessionId} streamId=${streamId} segmentId=${segmentId}`
+      );
+      return deleted;
     },
 
     assemble: assembleDraftChunks,

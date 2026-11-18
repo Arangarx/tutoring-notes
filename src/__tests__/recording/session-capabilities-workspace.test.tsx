@@ -57,16 +57,21 @@ jest.mock("@/lib/recording/upload-outbox-instance", () => ({
   }),
 }));
 
-jest.mock("@/lib/recording/recording-draft-store", () => ({
-  getOrCreateRecordingDraftStore: () => ({
-    clear: (sessionId: string, streamId: string) =>
-      mockDraftClear(sessionId, streamId),
-    findInProgress: (sessionId: string, streamId: string) =>
-      mockDraftFindInProgress(sessionId, streamId),
-    assemble: jest.fn(),
-    checkpoint: jest.fn(),
-  }),
-}));
+jest.mock("@/lib/recording/recording-draft-store", () => {
+  const actual = jest.requireActual("@/lib/recording/recording-draft-store");
+  return {
+    ...actual,
+    getOrCreateRecordingDraftStore: () => ({
+      clear: (sessionId: string, streamId: string) =>
+        mockDraftClear(sessionId, streamId),
+      clearIfSegment: jest.fn(async () => true),
+      findInProgress: (sessionId: string, streamId: string) =>
+        mockDraftFindInProgress(sessionId, streamId),
+      assemble: jest.fn(),
+      checkpoint: jest.fn(),
+    }),
+  };
+});
 
 jest.mock("@/components/ThemeProvider", () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -449,7 +454,7 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     expect(lastWbOpts?.recordingActive).toBe(true);
   });
 
-  test("CF-2.1: wbCaptureActive selects FSM recordingActive when policy≠none, not paused (armed gate)", () => {
+  test("WS-N5: wbCaptureActive stays ON while armed in a REOPENED (ACTIVE at mount) session", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -461,11 +466,11 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     );
 
     const lastWbOpts = capturedWhiteboardRecorderOptions.at(-1);
-    // policy=tutor_only: FSM is armed (no student yet) → recordingActive false;
-    // wbEventsActive is true but wbCaptureActive must track the audio FSM here,
-    // not wbEventsActive. Armed is NOT paused, so the p3-clock `|| isPaused`
-    // branch does not fire — the CF-2.1 armed gate is preserved.
-    expect(lastWbOpts?.recordingActive).toBe(false);
+    // policy=tutor_only: FSM is armed (no student yet after the reload) → FSM
+    // recordingActive false, but the session was already started, so the tutor's
+    // strokes must still be recorded (they used to be dropped until a student
+    // reconnected).
+    expect(lastWbOpts?.recordingActive).toBe(true);
   });
 });
 

@@ -12,7 +12,9 @@ import {
   type DraftSegmentRow,
 } from "@/lib/recording/recording-draft-store";
 import {
+  AUDIO_RECOVERY_QUEUED_COPY,
   audioRecoveryBannerHeadline,
+  audioRecoveryFailedMessage,
   draftHasRecoverableAudio,
   estimatedDurationSecFromDraft,
 } from "@/lib/recording/recording-draft-recovery";
@@ -95,6 +97,30 @@ describe("recording-draft-store", () => {
     await store.close();
   });
 
+  test("checkpoint round-trips recordingTimeOffsetMs and still reads a row written without it", async () => {
+    const store = createRecordingDraftStore({ dbName: uniqueDbName() });
+    await store.checkpoint(makeRow({ recordingTimeOffsetMs: 84_000 }));
+    expect((await store.findInProgress(SESSION, STREAM))?.recordingTimeOffsetMs).toBe(84_000);
+
+    const legacy = makeRow({ segmentId: "seg-old" });
+    delete legacy.recordingTimeOffsetMs;
+    await store.checkpoint(legacy);
+    const found = await store.findInProgress(SESSION, STREAM);
+    expect(found?.segmentId).toBe("seg-old");
+    expect(found?.recordingTimeOffsetMs).toBeUndefined();
+    await store.close();
+  });
+
+  test("clearIfSegment deletes only the named segment", async () => {
+    const store = createRecordingDraftStore({ dbName: uniqueDbName() });
+    await store.checkpoint(makeRow({ segmentId: "seg-live" }));
+    expect(await store.clearIfSegment(SESSION, STREAM, "seg-other")).toBe(false);
+    expect((await store.findInProgress(SESSION, STREAM))?.segmentId).toBe("seg-live");
+    expect(await store.clearIfSegment(SESSION, STREAM, "seg-live")).toBe(true);
+    expect(await store.findInProgress(SESSION, STREAM)).toBeNull();
+    await store.close();
+  });
+
   test("clear removes row so findInProgress is null", async () => {
     const store = createRecordingDraftStore({ dbName: uniqueDbName() });
     await store.checkpoint(makeRow());
@@ -162,6 +188,19 @@ describe("recording-draft-recovery", () => {
     expect(audioRecoveryBannerHeadline(125)).toBe(
       "Audio recording was interrupted. We recovered 02:05 of audio."
     );
+  });
+
+  test("queued copy describes an upload, not a finished save", () => {
+    expect(AUDIO_RECOVERY_QUEUED_COPY).toBe("It is uploading to this session.");
+    expect(AUDIO_RECOVERY_QUEUED_COPY).not.toMatch(/saved to this session/i);
+  });
+
+  test("failed enqueue copy says the audio is still on this device and will be tried next open", () => {
+    const message = audioRecoveryFailedMessage(5);
+    expect(message).toMatch(/still saved on this device/i);
+    expect(message).toMatch(/next time you open this session/i);
+    expect(message).not.toMatch(/saved to this session/i);
+    expect(message).toMatch(/00:05/);
   });
 
   test("draftHasRecoverableAudio requires chunks", () => {

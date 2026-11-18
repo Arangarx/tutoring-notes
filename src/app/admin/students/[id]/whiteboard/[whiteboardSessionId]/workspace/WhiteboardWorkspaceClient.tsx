@@ -167,10 +167,16 @@ import {
   type DraftSegmentRow,
 } from "@/lib/recording/recording-draft-store";
 import {
+  AUDIO_RECOVERY_QUEUED_COPY,
   audioRecoveryBannerHeadline,
+  audioRecoveryFailedMessage,
   draftHasRecoverableAudio,
   estimatedDurationSecFromDraft,
 } from "@/lib/recording/recording-draft-recovery";
+import {
+  draftRescanDelayMs,
+  recoverDraftIfNotLive,
+} from "@/lib/recording/recording-draft-lock";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
 import { type PageStripRow } from "@/components/whiteboard/PageStrip";
@@ -2032,11 +2038,21 @@ export function WhiteboardWorkspaceClient({
   // lives below the `const liveAv = useLiveAV(...)` declaration because
   // it reads liveAv.reachableParticipants in its dependency array.
 
+  /**
+   * WS-B: the interrupted-recording draft found on mount. It is ENQUEUED into the upload
+   * outbox automatically (no tutor click); this state only drives the informational
+   * "we recovered N:NN of audio" banner.
+   */
   const [audioDraftRecovery, setAudioDraftRecovery] =
     useState<DraftSegmentRow | null>(null);
-  const [audioDraftRecoveryBusy, setAudioDraftRecoveryBusy] = useState(false);
-  const [audioDraftDiscardConfirmOpen, setAudioDraftDiscardConfirmOpen] =
-    useState(false);
+  /** Set when the recovered audio could not be handed to the upload queue. The draft stays in IDB. */
+  const [audioDraftRecoveryFailed, setAudioDraftRecoveryFailed] =
+    useState<DraftSegmentRow | null>(null);
+  /**
+   * Recovery scan runs once per mount (plus one deferred re-scan when Web Locks are unavailable
+   * and the draft still looks fresh). A later re-run would find the LIVE segment's draft.
+   */
+  const audioDraftScanDoneRef = useRef(false);
 
   /**
    * p3-clock: monotonic-clock accessor, read by callbacks that are defined
@@ -2083,12 +2099,16 @@ export function WhiteboardWorkspaceClient({
         blob?: Blob;
         durationSeconds?: number;
       },
-      _meta?: { autoRollover?: boolean }
+      meta?: { autoRollover?: boolean; segmentId?: string }
     ) => {
+      // Use the draft's own segment id when the recorder passes it: a draft recovered after a kill
+      // between this enqueue and the draft clear below then dedupes onto THIS row (outbox key is
+      // session/stream/segmentId) instead of uploading the same audio twice.
       const segmentId =
-        typeof globalThis.crypto?.randomUUID === "function"
+        meta?.segmentId ??
+        (typeof globalThis.crypto?.randomUUID === "function"
           ? globalThis.crypto.randomUUID()
-          : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+          : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
 
       // p3-clock: capture THIS segment's start offset and advance the
       // carried-forward anchor SYNCHRONOUSLY at callback entry — before any
@@ -2135,7 +2155,8 @@ export function WhiteboardWorkspaceClient({
         });
         try {
           const draftStore = getOrCreateRecordingDraftStore();
-          await draftStore.clear(whiteboardSessionId, TUTOR_MIC_STREAM_ID);
+          // Only this segment's draft: after a rollover the row may already be the NEW segment's.
+          await draftStore.clearIfSegment(whiteboardSessionId, TUTOR_MIC_STREAM_ID, segmentId);
         } catch (clearErr) {
           console.warn(
             `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} draft clear after enqueue failed`,
@@ -2202,83 +2223,111 @@ export function WhiteboardWorkspaceClient({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (audioCapturePolicy === "none") return;
+    if (audioDraftScanDoneRef.current) return;
     let cancelled = false;
-    void (async () => {
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scan = async (isRetry: boolean) => {
+      const dft = Math.random().toString(36).slice(2, 7);
+      let row: DraftSegmentRow | null = null;
       try {
         const draftStore = getOrCreateRecordingDraftStore();
-        const row = await draftStore.findInProgress(
+        row = await draftStore.findInProgress(
           whiteboardSessionId,
           TUTOR_MIC_STREAM_ID
         );
-        if (!cancelled && draftHasRecoverableAudio(row)) {
-          setAudioDraftRecovery(row);
+        if (cancelled) return;
+        if (!draftHasRecoverableAudio(row) || row === null) {
+          audioDraftScanDoneRef.current = true;
+          return;
         }
+
+        // WS-B: enqueue the interrupted segment into the outbox NOW, with no tutor click. The
+        // recovery used to wait behind a Keep/Discard banner; a tutor who ignored it, or who
+        // reloaded again, lost the audio (the next segment's first checkpoint overwrites the
+        // single draft row for this stream). The outbox dedupes on (session, stream, segmentId),
+        // so a repeat enqueue of the same draft is harmless.
+        //
+        // The row may belong to a LIVE recorder (another tab, or this tab's new segment if the
+        // scan lands after its first checkpoint). Recover only when we can take that segment's
+        // Web Lock. Without locks, a checkpoint newer than ~3 timeslices is left alone and
+        // scanned once more after that window.
+        const found = row;
+        const outcome = await recoverDraftIfNotLive(found, async () => {
+          const blob = draftStore.assemble(found);
+          const recordingTimeOffsetMs =
+            typeof found.recordingTimeOffsetMs === "number" ? found.recordingTimeOffsetMs : 0;
+          await getOrCreateUploadOutbox().enqueue({
+            sessionId: whiteboardSessionId,
+            streamId: TUTOR_MIC_STREAM_ID,
+            segmentId: found.segmentId,
+            blobLocalRef: blob,
+            blobRemoteUrl: null,
+            mimeType: found.mimeType,
+            sizeBytes: blob.size,
+            audioStartedAtMs: found.firstChunkMs,
+            recordingTimeOffsetMs,
+          });
+          console.log(
+            `[WhiteboardWorkspaceClient] dft=${dft} recover-and-enqueue wbsid=${whiteboardSessionId} streamId=${TUTOR_MIC_STREAM_ID} segmentId=${found.segmentId} sizeBytes=${blob.size} offsetMs=${recordingTimeOffsetMs}`
+          );
+          // Only this segment's draft: a newer segment may already own the shared row.
+          try {
+            await draftStore.clearIfSegment(
+              whiteboardSessionId,
+              TUTOR_MIC_STREAM_ID,
+              found.segmentId
+            );
+          } catch (clearErr) {
+            console.warn(
+              `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} draft clear after recovery failed`,
+              clearErr
+            );
+          }
+          return found;
+        });
+        if (cancelled) return;
+        if (outcome.status === "recovered") {
+          audioDraftScanDoneRef.current = true;
+          setAudioDraftRecoveryFailed(null);
+          setAudioDraftRecovery(outcome.value);
+          return;
+        }
+        if (!isRetry) {
+          const delay = draftRescanDelayMs(found.checkpointedAt);
+          if (delay !== null) {
+            // A little past the window, so the re-read is not still "fresh" by a timer tick.
+            // A live recorder rewrites the row every timeslice, so this slack cannot age a
+            // live checkpoint out of the window.
+            retryTimer = setTimeout(() => {
+              if (!cancelled) void scan(true);
+            }, delay + 250);
+            return;
+          }
+        }
+        // A live recorder owns this draft (lock held, or still fresh after the one re-scan).
+        audioDraftScanDoneRef.current = true;
       } catch (err) {
+        if (cancelled) return;
+        // Enqueue failed: the draft stays in IndexedDB, so the next open retries.
+        audioDraftScanDoneRef.current = true;
         console.warn(
-          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} audio draft recovery scan failed`,
+          `[WhiteboardWorkspaceClient] dft=${dft} wbsid=${whiteboardSessionId} audio draft recovery failed`,
           err
         );
+        if (row && draftHasRecoverableAudio(row)) {
+          setAudioDraftRecovery(null);
+          setAudioDraftRecoveryFailed(row);
+        }
       }
-    })();
+    };
+
+    void scan(false);
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [whiteboardSessionId, audioCapturePolicy]);
-
-  const handleAudioDraftKeep = useCallback(async () => {
-    if (!audioDraftRecovery) return;
-    setAudioDraftRecoveryBusy(true);
-    const dft = Math.random().toString(36).slice(2, 7);
-    try {
-      const draftStore = getOrCreateRecordingDraftStore();
-      const blob = draftStore.assemble(audioDraftRecovery);
-      const outbox = getOrCreateUploadOutbox();
-      await outbox.enqueue({
-        sessionId: whiteboardSessionId,
-        streamId: TUTOR_MIC_STREAM_ID,
-        segmentId: audioDraftRecovery.segmentId,
-        blobLocalRef: blob,
-        blobRemoteUrl: null,
-        mimeType: audioDraftRecovery.mimeType,
-        sizeBytes: blob.size,
-        audioStartedAtMs: audioDraftRecovery.firstChunkMs,
-      });
-      await draftStore.clear(whiteboardSessionId, TUTOR_MIC_STREAM_ID);
-      console.log(
-        `[WhiteboardWorkspaceClient] dft=${dft} keep-and-enqueue wbsid=${whiteboardSessionId} streamId=${TUTOR_MIC_STREAM_ID} segmentId=${audioDraftRecovery.segmentId} sizeBytes=${blob.size}`
-      );
-      setAudioDraftRecovery(null);
-    } catch (err) {
-      console.error(
-        `[WhiteboardWorkspaceClient] dft=${dft} keep-and-enqueue failed wbsid=${whiteboardSessionId}`,
-        err
-      );
-    } finally {
-      setAudioDraftRecoveryBusy(false);
-    }
-  }, [audioDraftRecovery, whiteboardSessionId]);
-
-  const handleAudioDraftDiscard = useCallback(async () => {
-    if (!audioDraftRecovery) return;
-    setAudioDraftRecoveryBusy(true);
-    const dft = Math.random().toString(36).slice(2, 7);
-    try {
-      const draftStore = getOrCreateRecordingDraftStore();
-      await draftStore.clear(whiteboardSessionId, TUTOR_MIC_STREAM_ID);
-      console.log(
-        `[WhiteboardWorkspaceClient] dft=${dft} discard wbsid=${whiteboardSessionId} streamId=${TUTOR_MIC_STREAM_ID}`
-      );
-      setAudioDraftRecovery(null);
-      setAudioDraftDiscardConfirmOpen(false);
-    } catch (err) {
-      console.error(
-        `[WhiteboardWorkspaceClient] dft=${dft} discard failed wbsid=${whiteboardSessionId}`,
-        err
-      );
-    } finally {
-      setAudioDraftRecoveryBusy(false);
-    }
-  }, [audioDraftRecovery, whiteboardSessionId]);
 
   // ---------------------------------------------------------------
   // Live-A/V hook (Phase 4c)
@@ -2721,14 +2770,20 @@ export function WhiteboardWorkspaceClient({
   // keeps drawing; those strokes stay captured and stamp at the FROZEN clock
   // (getAudioMs is driven by wbSignal, which is false while paused), so they
   // collapse to the pause instant on replay (ratified 2026-07-02). Armed /
-  // idle still gate WB capture OFF (CF-2.1 armed-gate preserved). Audio
-  // recording itself is unaffected — the AudioBridge keys off FSM
+  // idle still gate WB capture OFF (CF-2.1 armed-gate preserved), including
+  // on a reopen — the WS-N5 exception is `armed` only, not idle or failed.
+  // Audio recording itself is unaffected — the AudioBridge keys off FSM
   // recordingActive, not this.
   const wbCaptureActive = deriveWbCaptureActive({
     audioMode: audioCapturePolicy,
     recordingActive,
     isPaused: lifecycle.state === "paused",
+    isArmed: lifecycle.state === "armed",
     wbEventsActive,
+    // WS-N5: mounted on an already-started session (a reopen) — `everBothPresentRef`
+    // was reset by the reload, so the FSM sits `armed` until a student reconnects;
+    // strokes drawn meanwhile must still be recorded.
+    reopenedStartedSession: initialSessionPhase === "ACTIVE",
   });
 
   // Split-brain detection: sync says the student is present (peerCount ≥ 1)
@@ -6871,7 +6926,7 @@ export function WhiteboardWorkspaceClient({
         userWantsRecording={userWantsRecording}
         recordingActive={recordingActive}
         audioCapturePolicy={audioCapturePolicy}
-        panelDisabled={endingBusy || !userWantsRecording || audioDraftRecovery !== null}
+        panelDisabled={endingBusy || !userWantsRecording}
         onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
         showPanel={false}
       />
@@ -7467,70 +7522,25 @@ export function WhiteboardWorkspaceClient({
               )}
             {phaseActive ? recordingOffBanner : null}
             {audioDraftRecovery && (
-              <Banner tone="warning" testId="wb-audio-draft-recovery-banner">
-                <span>
-                  {audioRecoveryBannerHeadline(
-                    estimatedDurationSecFromDraft(audioDraftRecovery)
-                  )}
-                </span>
-                <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={audioDraftRecoveryBusy}
-                    data-testid="wb-audio-draft-keep"
-                    onClick={() => void handleAudioDraftKeep()}
-                  >
-                    Keep
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={audioDraftRecoveryBusy}
-                    data-testid="wb-audio-draft-discard"
-                    onClick={() => setAudioDraftDiscardConfirmOpen(true)}
-                  >
-                    Discard
-                  </button>
-                </span>
-                {audioDraftDiscardConfirmOpen && (
-                  <div
-                    role="alertdialog"
-                    aria-label="Confirm discard recovered audio"
-                    data-testid="wb-audio-draft-discard-confirm"
-                    style={{
-                      marginTop: 8,
-                      padding: "8px 10px",
-                      borderRadius: 6,
-                      border: "1px solid var(--error-border)",
-                      background: "var(--error-soft)",
-                      fontSize: 13,
-                    }}
-                  >
-                    <p style={{ margin: "0 0 8px" }}>
-                      Discard this recovered recording? This cannot be undone.
-                    </p>
-                    <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={audioDraftRecoveryBusy}
-                        data-testid="wb-audio-draft-discard-confirm-yes"
-                        onClick={() => void handleAudioDraftDiscard()}
-                      >
-                        Yes, discard
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={audioDraftRecoveryBusy}
-                        data-testid="wb-audio-draft-discard-confirm-cancel"
-                        onClick={() => setAudioDraftDiscardConfirmOpen(false)}
-                      >
-                        Cancel
-                      </button>
-                    </span>
-                  </div>
+              <Banner
+                tone="info"
+                testId="wb-audio-draft-recovery-banner"
+                onDismiss={() => setAudioDraftRecovery(null)}
+              >
+                {audioRecoveryBannerHeadline(
+                  estimatedDurationSecFromDraft(audioDraftRecovery)
+                )}{" "}
+                {AUDIO_RECOVERY_QUEUED_COPY}
+              </Banner>
+            )}
+            {audioDraftRecoveryFailed && (
+              <Banner
+                tone="warning"
+                testId="wb-audio-draft-recovery-failed-banner"
+                onDismiss={() => setAudioDraftRecoveryFailed(null)}
+              >
+                {audioRecoveryFailedMessage(
+                  estimatedDurationSecFromDraft(audioDraftRecoveryFailed)
                 )}
               </Banner>
             )}

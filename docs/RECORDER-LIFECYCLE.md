@@ -607,7 +607,7 @@ students apply tutor patches only.
 | Tutor reports "lost a session" | `WhiteboardWorkspaceClient.handleEndSession` step ordering, `drainOutboxOrTimeout` timeout, atomic-action server logs grepped by `wbsid=` |
 | "Recording pill says off but I'm recording" | FSM inputs at the top of `WhiteboardWorkspaceClient` — usually `everHadParticipants` not latched, or `inputStreams` missing |
 | "End button is grey forever" | `inFlightStreamCount` from the outbox observer; check `obx=` lines for permanent failure |
-| "Tab died mid-recording — audio gone" | `dft=` lines + `tutoring-notes-recording-draft` IDB; workspace recovery banner (`wb-audio-draft-recovery-banner`) should offer Keep → outbox enqueue |
+| "Tab died mid-recording — audio gone" | `dft=` lines + `tutoring-notes-recording-draft` IDB; on the next workspace load the draft is enqueued into the outbox automatically (WS-B, no Keep/Discard click; `dft=… recover-and-enqueue` log line) and the info banner `wb-audio-draft-recovery-banner` says so. If the enqueue failed the draft stays in IDB and the next load retries |
 | "Replay/preview shows blank canvas" | `parseEventLogBySchema` rejected the log (schema version), or `restoreElements` failed; check the replay/`pvw=` console lines |
 | "Snapshot link is missing on the share page" | Best-effort by design. Grep `snp=` lines in the workspace console for the skip reason; null means End succeeded without a snapshot |
 | "Group session paused even though one student is still here" | FSM input `participants` — make sure the sync layer is putting peer ids in, and `participants.size >= 1` for non-paused state |
