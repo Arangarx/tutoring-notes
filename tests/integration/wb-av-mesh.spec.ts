@@ -16,6 +16,7 @@ import {
   type WbLiveSyncSession,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+const { resolvePwStack } = require("../../scripts/pw-stack.cjs");
 
 /**
  * Live A/V mesh + layout↔A/V firewall surrogates (hermetic local relay, fake
@@ -317,7 +318,7 @@ async function prepareCamerasAndCapture(context: BrowserContext): Promise<void> 
   // and has no fake mic. Chromium still needs the grant so the camera auto-enables.
   if (context.browser()?.browserType().name() !== "webkit") {
     await context.grantPermissions(["microphone", "camera"], {
-      origin: "http://localhost:3100",
+      origin: resolvePwStack().origin,
     });
   }
   await installPeerConnectionCapture(context);
@@ -686,7 +687,7 @@ test.describe("live A/V over a TURN relay", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] 
   }, testInfo) => {
     test.setTimeout(180_000);
     const session = await seedWbPendingLiveSyncSession();
-    const baseURL = testInfo.project.use.baseURL ?? "http://localhost:3100";
+    const baseURL = testInfo.project.use.baseURL ?? resolvePwStack().origin;
     const turnCookie = {
       name: "pw_turn_ice_servers",
       value: encodeURIComponent(JSON.stringify(TURN_ICE)),

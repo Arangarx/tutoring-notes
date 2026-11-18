@@ -5,10 +5,11 @@ import { generateRawToken, hashToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/s
 import { TAG } from "../../test-tags";
 import { ensureParentForClaimWizard } from "./claim-wizard.helpers";
 import { TEST_PARENT } from "./identity.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
 const { assertLocalDatabaseUrlForHarness } = require("../../../scripts/wb-regression-local-db.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
+const PARENT_STATE = authStatePath("parent.json");
 
 test.describe("org learner claim", () => {
   test.use({ storageState: PARENT_STATE });

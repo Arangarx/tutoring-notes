@@ -75,6 +75,7 @@ import {
   setFamilySwitches,
   startFromWaitingRoom,
 } from "../helpers/consent-tutor-room";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
@@ -143,7 +144,7 @@ const tutorLiveOff = (learnerName: string) => `Live sessions are off in ${learne
 const IN_PERSON_STILL_OPEN = "You can still open the room in person.";
 const familyMissingParent = (learnerName: string) => `Finish privacy preferences for ${learnerName} to join.`;
 
-const TUTOR_STATE = "tests/integration/.auth/tutor.json";
+const TUTOR_STATE = authStatePath("tutor.json");
 /** A well-formed 128-bit key: `/join` needs `#k=` to mount the board, and no tutor is in the room to supply one. */
 const JOIN_KEY_FRAGMENT = "#k=AAAAAAAAAAAAAAAAAAAAAA";
 const joinPath = (sessionId: string) => `/join/${sessionId}${JOIN_KEY_FRAGMENT}`;

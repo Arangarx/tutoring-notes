@@ -22,6 +22,7 @@ import {
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
@@ -51,7 +52,7 @@ test.describe(
       const session = await seedWbPendingLiveSyncSession({ sessionMode: "IN_PERSON" });
 
       const tutorCtx = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 900 },
         permissions: ["microphone"],
       });

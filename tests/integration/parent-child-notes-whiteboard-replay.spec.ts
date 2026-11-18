@@ -19,11 +19,12 @@ import {
   uploadHarnessBlob,
   uploadReplayEvents,
 } from "./wb-replay-harness.helpers";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
-const TUTOR_STATE = "tests/integration/.auth/tutor.json";
+const PARENT_STATE = authStatePath("parent.json");
+const TUTOR_STATE = authStatePath("tutor.json");
 /** Bytes stored in the harness. A served concat or recording must equal this. */
 const SHARE_REPLAY_AUDIO_MARKER = "parent-share-replay-audio-oracle-v1";
 /** Bytes stored as the final-snapshot PNG. A served snapshot must equal this. */

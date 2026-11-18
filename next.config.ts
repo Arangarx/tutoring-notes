@@ -80,6 +80,11 @@ const CONTENT_SECURITY_POLICY = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // A second stack in the same worktree sets PW_DIST_DIR so two `next dev`
+  // processes do not share `.next`. Unset keeps the default `.next`.
+  ...(process.env.PW_DIST_DIR?.trim()
+    ? { distDir: process.env.PW_DIST_DIR.trim() }
+    : {}),
   // Read once, when this process starts. `devIndicators: false` drops the
   // Next.js Dev Tools logo. Next 15.5 still shows "Open issues overlay"
   // while the dev error count is above zero, so click targets at the

@@ -3,8 +3,9 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 import { loginTutorWithPassword } from "./tutor-2fa-login.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const OPERATOR_STATE = "tests/integration/.auth/tutor.json";
+const OPERATOR_STATE = authStatePath("tutor.json");
 
 const { assertLocalDatabaseUrlForHarness } = require("../../../scripts/wb-regression-local-db.cjs");
 

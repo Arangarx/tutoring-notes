@@ -6,23 +6,28 @@
  * SAFETY-CRITICAL — WB PLAYWRIGHT DEV-SERVER PORT CLEANUP (ALLOWLIST ONLY)
  * ============================================================================
  *
- * This helper kills listeners on EXACTLY ports 3100 and 3101 — the Next.js
- * dev servers spawned by Playwright's wb-regression webServer entries.
+ * This helper kills listeners on the stack's two Next.js dev ports only
+ * (PW_PORT and PW_ALT_PORT; defaults 3100 and 3101).
  *
- * NEVER add port 3002 to the allowlist. :3002 is the persistent Docker relay
- * (wb-relay-local) / Postgres pipe endpoint managed by
- * scripts/playwright-relay-or-stub.cjs. Killing :3002 wedges Docker + the
- * local Postgres relay and breaks every subsequent wb-regression run.
+ * NEVER target the relay port. Default :3002 is the Docker relay
+ * (wb-relay-local) managed by scripts/playwright-relay-or-stub.cjs.
+ * A custom PW_RELAY_PORT is the same kind of port. Killing it wedges
+ * Docker and breaks every subsequent wb-regression run.
  *
- * NEVER kill Docker PIDs or processes not bound to 3100/3101.
+ * NEVER kill Docker PIDs or processes not bound to this stack's dev ports.
  * ============================================================================
  */
 
 const { execSync, spawnSync } = require("node:child_process");
 const net = require("node:net");
+const { allowedDevPorts, assertAllowedPort } = require("./pw-stack.cjs");
 
-/** Hard-coded allowlist — do NOT extend without orchestrator review. */
-const ALLOWED_PORTS = Object.freeze([3100, 3101]);
+/** Dev ports for this process's stack. Never includes the relay port. */
+function currentAllowedPorts() {
+  return Object.freeze(allowedDevPorts());
+}
+
+const ALLOWED_PORTS = currentAllowedPorts();
 
 function portIsFree(port) {
   return new Promise((resolve) => {
@@ -35,17 +40,12 @@ function portIsFree(port) {
   });
 }
 
-function assertAllowedPort(port) {
-  if (!ALLOWED_PORTS.includes(port)) {
-    throw new Error(
-      `[free-wb-dev-server-ports] REFUSED port ${port} — allowlist is [${ALLOWED_PORTS.join(", ")}] only. ` +
-        "Port 3002 (Docker relay) must NEVER be targeted.",
-    );
-  }
+function assertThisStackPort(port) {
+  assertAllowedPort(port);
 }
 
 function getListenerPidsWindows(port) {
-  assertAllowedPort(port);
+  assertThisStackPort(port);
   const ps = spawnSync(
     "powershell",
     [
@@ -67,7 +67,7 @@ function getListenerPidsWindows(port) {
 }
 
 function getListenerPidsUnix(port) {
-  assertAllowedPort(port);
+  assertThisStackPort(port);
   try {
     const out = execSync(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t 2>/dev/null || true`, {
       encoding: "utf8",
@@ -108,7 +108,7 @@ function killPid(pid, port) {
 }
 
 async function freePort(port) {
-  assertAllowedPort(port);
+  assertThisStackPort(port);
   if (await portIsFree(port)) {
     console.log(`[free-wb-dev-server-ports] :${port} already free`);
     return;
@@ -128,15 +128,19 @@ async function freePort(port) {
  * (e.g. `npm run dev -- --port 3100`). Catches orphans that no longer hold LISTEN.
  */
 function getOrphanedWbDevServerPids() {
+  const ports = currentAllowedPorts();
   const pids = new Set();
   if (process.platform === "win32") {
+    const match = ports
+      .map((port) => `$_.CommandLine -match '--port\\s+${port}\\b'`)
+      .join(" -or ");
     const ps = spawnSync(
       "powershell",
       [
         "-NoProfile",
         "-Command",
         "Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" -ErrorAction SilentlyContinue | " +
-          "Where-Object { $_.CommandLine -match '--port\\s+3100\\b' -or $_.CommandLine -match '--port\\s+3101\\b' } | " +
+          `Where-Object { ${match} } | ` +
           "Select-Object -ExpandProperty ProcessId -Unique",
       ],
       { encoding: "utf8" },
@@ -150,8 +154,9 @@ function getOrphanedWbDevServerPids() {
     return [...pids];
   }
   try {
+    const alternation = currentAllowedPorts().join("|");
     const out = execSync(
-      "ps -ax -o pid=,command= 2>/dev/null | grep -E 'node.*--port[[:space:]]+(3100|3101)\\b' || true",
+      `ps -ax -o pid=,command= 2>/dev/null | grep -E 'node.*--port[[:space:]]+(${alternation})\\b' || true`,
       { encoding: "utf8" },
     );
     for (const line of out.split(/\r?\n/)) {
@@ -172,14 +177,14 @@ async function cleanupWbDevServerPorts() {
   for (const pid of orphanPids) {
     killPid(pid, "orphan");
   }
-  for (const port of ALLOWED_PORTS) {
+  for (const port of currentAllowedPorts()) {
     await freePort(port);
   }
 }
 
 async function main() {
   const cliPorts = process.argv.slice(2).map((arg) => Number(arg));
-  const ports = cliPorts.length > 0 ? cliPorts : [...ALLOWED_PORTS];
+  const ports = cliPorts.length > 0 ? cliPorts : [...currentAllowedPorts()];
   for (const port of ports) {
     await freePort(port);
   }

@@ -18,11 +18,15 @@ import { replayEventsFixture } from "../integration/wb-replay-harness.helpers";
 export const CLEANUP = "/api/cron/session-cleanup" as const;
 /** Far past any pass-2 delay the plan allows (the platform's default upload token lives one hour). */
 export const PAST_PASS_2_DELAY_MS = 2 * 60 * 60_000;
-/** Same origin the server builds harness URLs from (`NEXTAUTH_URL` on the wb-regression webServer). */
-export const HARNESS_ORIGIN = "http://localhost:3100";
+const { harnessOrigin } = require("../../scripts/pw-stack.cjs");
+
+/** Same origin the server builds harness URLs from (`NEXTAUTH_URL`, else PW_PORT). */
+export function currentHarnessOrigin(): string {
+  return harnessOrigin();
+}
 
 export function harnessUrl(key: string): string {
-  return `${HARNESS_ORIGIN}/api/test/blob/object/${key.split("/").map(encodeURIComponent).join("/")}`;
+  return `${currentHarnessOrigin()}/api/test/blob/object/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 /** The shape `create-session-core.ts` writes at create (`emptyEventsJson`). */

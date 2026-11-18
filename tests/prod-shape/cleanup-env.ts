@@ -17,6 +17,7 @@ import { parse as parseEnvFile } from "dotenv";
 import { PROD_SHAPE_NEXTAUTH_SECRET } from "../helpers/prod-shape-secret";
 
 const { applyWbRegressionLocalDatabaseEnv, assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
+const { resolvePwStack } = require("../../scripts/pw-stack.cjs");
 
 applyWbRegressionLocalDatabaseEnv();
 assertLocalDatabaseUrlForHarness();
@@ -25,7 +26,7 @@ if (!process.env.NEXTAUTH_SECRET) {
   process.env.NEXTAUTH_SECRET = PROD_SHAPE_NEXTAUTH_SECRET;
 }
 if (!process.env.NEXTAUTH_URL) {
-  process.env.NEXTAUTH_URL = "http://localhost:3102";
+  process.env.NEXTAUTH_URL = resolvePwStack().prodShapeOrigin;
 }
 
 if (!process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
