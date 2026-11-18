@@ -982,7 +982,7 @@ describe("useAudioRecorder — recordingDraft cadence (A4 WS-N-PAGEHIDE)", () => {
     expect(mockDraftCheckpoint.mock.calls[1][0].chunkCount).toBe(2);
   });
 
-  test("pagehide persists held chunks and requests the partial slice once timeslice delivery is proven", async () => {
+  test("pagehide persists held chunks but does NOT requestData (the partial slice can never land after teardown)", async () => {
     const { recorder } = await startDraftRecording();
     recorder.feedData();
     mockDraftCheckpoint.mockClear();
@@ -990,7 +990,7 @@ describe("useAudioRecorder — recordingDraft cadence (A4 WS-N-PAGEHIDE)", () => {
       window.dispatchEvent(new Event("pagehide"));
     });
     expect(mockDraftCheckpoint).toHaveBeenCalled();
-    expect(recorder.requestDataCalls).toBe(1);
+    expect(recorder.requestDataCalls).toBe(0);
   });
 
   test("tab hidden also requests the partial slice", async () => {
@@ -1009,11 +1009,18 @@ describe("useAudioRecorder — recordingDraft cadence (A4 WS-N-PAGEHIDE)", () => {
     }
   });
 
-  test("pagehide does NOT call requestData before timeslice delivery was ever observed (iOS MP4 fragment guard)", async () => {
+  test("tab hidden does NOT call requestData before timeslice delivery was ever observed (iOS MP4 fragment guard)", async () => {
     const { recorder } = await startDraftRecording();
-    act(() => {
-      window.dispatchEvent(new Event("pagehide"));
-    });
-    expect(recorder.requestDataCalls).toBe(0);
+    const orig = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(recorder.requestDataCalls).toBe(0);
+    } finally {
+      delete (document as unknown as { visibilityState?: string }).visibilityState;
+      if (orig) Object.defineProperty(Document.prototype, "visibilityState", orig);
+    }
   });
 });

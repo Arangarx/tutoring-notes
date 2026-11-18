@@ -736,7 +736,8 @@ export function useAudioRecorder({
   }
 
   /**
-   * Best-effort flush when the tab is going away (pagehide / hidden): persist the
+   * Best-effort flush when the tab goes hidden (app switch / lock screen — the tab
+   * usually stays alive briefly before the OS kills it; pagehide only checkpoints): persist the
    * chunks we already hold and ask the encoder for the partial open slice — its
    * `dataavailable` runs `noteDraftChunkReceived`, which checkpoints it. Not
    * guaranteed to finish before teardown; the 5s timeslice is the guarantee.
@@ -744,7 +745,7 @@ export function useAudioRecorder({
    * (iOS Safari may not, and manual slicing there yields non-concatenable MP4
    * fragments — PLATFORM-ASSUMPTIONS §8.1).
    */
-  function flushDraftNow(reason: "pagehide" | "hidden") {
+  function flushDraftNow(reason: "hidden") {
     if (!recordingDraft) return;
     const rec = mediaRecorderRef.current;
     console.info(
@@ -767,7 +768,11 @@ export function useAudioRecorder({
       void checkpointDraftToStore();
     }, DRAFT_CHECKPOINT_INTERVAL_MS);
     const onPageHide = () => {
-      flushDraftNow("pagehide");
+      // checkpoint only — NO requestData(): the partial slice's dataavailable fires
+      // after the document is torn down, so it never lands (Playwright navigate-away
+      // probe, A4 2026-11-17: loss was the same with and without it). The hidden flush
+      // above is the case that works (the page stays alive briefly after going hidden).
+      void checkpointDraftToStore();
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
