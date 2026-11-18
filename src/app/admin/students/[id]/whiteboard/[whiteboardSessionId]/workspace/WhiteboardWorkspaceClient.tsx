@@ -290,7 +290,10 @@ import {
   registerWbE2eSceneBridge,
   registerWbE2eSceneMutationHook,
 } from "@/lib/whiteboard/wb-e2e-scene-bridge";
-import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
+import {
+  mergeScenesReconciled,
+  readLiveSceneIncludingDeleted,
+} from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import { followWireFromTutorAppState } from "@/lib/whiteboard/viewport-align";
 import {
   createWbFollowDebugTelemetry,
@@ -1160,7 +1163,7 @@ export function WhiteboardWorkspaceClient({
         !pageForeignGuardRef.current.has(targetId);
       const localForMerge: ReadonlyArray<ExcalidrawLikeElement> =
         onTargetReadTime
-          ? (((api.getSceneElementsIncludingDeleted?.() ?? api.getSceneElements()) as ReadonlyArray<ExcalidrawLikeElement>))
+          ? readLiveSceneIncludingDeleted(api)
           : ((pageDataRef.current[targetId] as
               | ReadonlyArray<ExcalidrawLikeElement>
               | undefined) ?? []);
@@ -5209,8 +5212,10 @@ export function WhiteboardWorkspaceClient({
       }
       // ---- Student path (role="student"): student canvas sync ----
       if (role === "student") {
-        if (studentApplyingRemoteRef.current) return;
+        // While an apply is in flight the hook marks the change and commits
+        // it after the apply.
         studentOnCanvasChange(elements, _appState, files);
+        if (studentApplyingRemoteRef.current) return;
         markLoadingCleared("remote_scene");
         if (!pathJoinToken) return;
         const api = excalidrawAPIRef.current;

@@ -39,6 +39,7 @@
  */
 
 import { isPlaywrightTestEnvEnabled } from "@/lib/playwright-test-route";
+import { createParkingLot, type ParkingLot } from "@/lib/seam-parking-lot";
 
 /** A hold parked inside a DB transaction auto-releases this fast (SF-B). */
 export const IN_TX_HOLD_CAP_MS = 3_000;
@@ -93,14 +94,12 @@ export class SeamFaultError extends Error {
   }
 }
 
-type Parked = { release: () => void; timer: ReturnType<typeof setTimeout> };
-
 type HoldArm = {
   name: HoldPointName;
   sessionId: string;
   parkFirstN: number;
-  parkedTotal: number;
-  parked: Parked[];
+  /** Park / release / count mechanics, shared with the browser seam. */
+  lot: ParkingLot;
   releasedByTest: number;
   autoReleased: number;
   passedThrough: number;
@@ -153,12 +152,7 @@ function faultKey(name: string, sessionId?: string): string {
 }
 
 function releaseAll(arm: HoldArm, byTest: boolean): number {
-  const n = arm.parked.length;
-  for (const p of arm.parked) {
-    clearTimeout(p.timer);
-    p.release();
-  }
-  arm.parked = [];
+  const n = arm.lot.releaseAll();
   if (byTest) arm.releasedByTest += n;
   return n;
 }
@@ -177,24 +171,20 @@ export async function holdPoint(name: HoldPointName, sessionId: string): Promise
   if (!isTestSeamActive()) return;
   const arm = state().holds.get(holdKey(name, sessionId));
   if (!arm) return;
-  if (arm.parkedTotal >= arm.parkFirstN) {
+  if (arm.lot.parkedTotal() >= arm.parkFirstN) {
     arm.passedThrough += 1;
     return;
   }
-  arm.parkedTotal += 1;
 
   const cap = HOLD_POINTS[name].inTx ? IN_TX_HOLD_CAP_MS : OUT_OF_TX_HOLD_CAP_MS;
   await new Promise<void>((resolve) => {
-    const parked: Parked = {
-      release: resolve,
-      timer: setTimeout(() => {
-        arm.parked = arm.parked.filter((p) => p !== parked);
+    arm.lot.park(resolve, {
+      capMs: cap,
+      onCap: () => {
         arm.autoReleased += 1;
         console.warn(`[seam] hold auto_released name=${name} sessionId=${sessionId} capMs=${cap}`);
-        resolve();
-      }, cap),
-    };
-    arm.parked.push(parked);
+      },
+    });
   });
 }
 
@@ -214,8 +204,7 @@ export function armHold(opts: {
     name: opts.name,
     sessionId: opts.sessionId,
     parkFirstN: Math.max(1, Math.floor(opts.parkFirstN ?? 1)),
-    parkedTotal: 0,
-    parked: [],
+    lot: createParkingLot(),
     releasedByTest: 0,
     autoReleased: 0,
     passedThrough: 0,
@@ -263,8 +252,8 @@ export function holdPointState(name: HoldPointName, sessionId: string): HoldPoin
   return {
     armed: true,
     parkFirstN: arm.parkFirstN,
-    parked: arm.parked.length,
-    parkedTotal: arm.parkedTotal,
+    parked: arm.lot.parkedNow(),
+    parkedTotal: arm.lot.parkedTotal(),
     releasedByTest: arm.releasedByTest,
     autoReleased: arm.autoReleased,
     passedThrough: arm.passedThrough,
