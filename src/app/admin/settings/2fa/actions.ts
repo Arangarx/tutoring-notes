@@ -47,6 +47,7 @@ import {
 import { sendSmsOtpChallenge, verifyOtpChallenge } from "@/lib/otp-challenge";
 import { normalizeUsPhoneToE164, maskE164 } from "@/lib/sms";
 import {
+  isEmail2faEnrollmentAvailable,
   isSms2faEnrollmentAvailable,
   isTwoFactorEnrollmentConfirmed,
 } from "@/lib/two-factor-enrollment";
@@ -499,6 +500,10 @@ export type StartEmailOtpEnrollmentResult =
  * and sends the first 6-digit code. No silent enroll on send failure.
  */
 export async function startEmailOtpEnrollment(): Promise<StartEmailOtpEnrollmentResult> {
+  if (!isEmail2faEnrollmentAvailable()) {
+    return { ok: false, error: "Email codes are not available right now." };
+  }
+
   let adminId: string;
   let email: string;
   try {
@@ -1333,6 +1338,10 @@ export type StartEmailOtpMethodChangeResult =
   | { ok: false; error: string };
 
 export async function startEmailOtpMethodChange(): Promise<StartEmailOtpMethodChangeResult> {
+  if (!isEmail2faEnrollmentAvailable()) {
+    return { ok: false, error: "Email codes are not available right now." };
+  }
+
   let adminId: string;
   let email: string;
   try {

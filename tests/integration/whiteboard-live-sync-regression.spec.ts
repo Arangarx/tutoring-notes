@@ -49,6 +49,7 @@ import {
   WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /**
  * Real-browser whiteboard live-sync regression net (hermetic local relay).
@@ -71,18 +72,12 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
     // Mynk chrome (44px topbar + board tabs + banners) consumes flex height;
     // 1200px → enough Excalidraw canvas vs student viewport (~458px).
     const tutorContext = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 1200 },
     });
     // Load pre-created learner storage state to avoid hitting the 30 req/min API
     // rate limit when many tests run sequentially from the same IP.
-    const learnerAuthFile = path.join(
-      process.cwd(),
-      "tests",
-      "integration",
-      ".auth",
-      "learner.json"
-    );
+    const learnerAuthFile = path.join(process.cwd(), authStatePath("learner.json"));
     const learnerStorageState = fs.existsSync(learnerAuthFile)
       ? learnerAuthFile
       : undefined;
@@ -682,7 +677,7 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
 
     // --- Step 1: open tutor only, draw a stroke ---
     const tutorContext = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const tutorPage = await tutorContext.newPage();
@@ -703,13 +698,7 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
 
     // --- Step 2: student joins AFTER stroke is on board ---
     const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
-    const learnerAuthFile11 = path.join(
-      process.cwd(),
-      "tests",
-      "integration",
-      ".auth",
-      "learner.json"
-    );
+    const learnerAuthFile11 = path.join(process.cwd(), authStatePath("learner.json"));
     const studentContext = await browser.newContext({
       viewport: { width: 1280, height: 640 },
       ...(fs.existsSync(learnerAuthFile11) ? { storageState: learnerAuthFile11 } : {}),

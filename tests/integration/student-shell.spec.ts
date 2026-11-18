@@ -21,11 +21,9 @@ import { test, expect } from "@playwright/test";
 import { TEST_LEARNER } from "../visual/helpers";
 import { loginLearnerInContext } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
-const LEARNER_AUTH_FILE = path.join(
-  process.cwd(),
-  "tests/integration/.auth/learner.json"
-);
+const LEARNER_AUTH_FILE = path.join(process.cwd(), authStatePath("learner.json"));
 
 test.describe(
   "StudentPageShell",

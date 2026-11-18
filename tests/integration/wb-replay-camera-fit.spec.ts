@@ -16,7 +16,8 @@
  *   npx playwright test tests/integration/wb-replay-camera-fit.spec.ts --project=wb-regression --workers=1
  */
 
-import { expect, test, type Page } from "./fixtures";
+import { expect, test } from "./fixtures";
+import { type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { TAG } from "../test-tags";
 import { viewportCoordsToSceneCoords } from "@/lib/whiteboard/excalidraw-viewport-coords";
@@ -144,7 +145,7 @@ async function readRectangleInk(
   page: Page,
   rootTestId: string
 ): Promise<InkBox | null> {
-  return page.evaluate((rootId) => {
+  return page.evaluate((rootId: string) => {
     const frame = document.querySelector(`[data-testid="${rootId}"]`);
     const host = frame?.querySelector(
       "[data-replay-viewport-metrics]"
@@ -316,9 +317,10 @@ async function expectReplayCameraFit(page: Page, rootTestId: string, camera: See
     .toBeGreaterThan(30);
 
   if (!ink) throw new Error("rectangle ink was not measured");
-  const defaultZoom = ink.screenWidth / camera.sceneWidth;
+  const inkBox: InkBox = ink;
+  const defaultZoom = inkBox.screenWidth / camera.sceneWidth;
   expectZoomClose(defaultZoom, camera.zoom, "default zoom");
-  expectCenterHeld(ink, camera);
+  expectCenterHeld(inkBox, camera);
 
   const fitButton = page.getByTestId("wb-replay-camera-fit");
   await expect(fitButton).toBeVisible();
@@ -342,16 +344,17 @@ async function expectReplayCameraFit(page: Page, rootTestId: string, camera: See
     .not.toBeCloseTo(camera.zoom, 1);
 
   if (!fitInk) throw new Error("fit-view ink was not measured");
-  const observedFit = fitInk.screenWidth / camera.sceneWidth;
+  const fitInkBox: InkBox = fitInk;
+  const observedFit = fitInkBox.screenWidth / camera.sceneWidth;
   const expectedFit =
     camera.zoom *
     Math.min(
-      fitInk.hostW / camera.viewportWidth,
-      fitInk.hostH / camera.viewportHeight
+      fitInkBox.hostW / camera.viewportWidth,
+      fitInkBox.hostH / camera.viewportHeight
     );
   expectZoomClose(observedFit, expectedFit, "fit zoom");
-  expectCenterHeld(fitInk, camera);
-  expectSlackSideShowsMoreBoard(fitInk, camera, observedFit);
+  expectCenterHeld(fitInkBox, camera);
+  expectSlackSideShowsMoreBoard(fitInkBox, camera, observedFit);
 
   await fitButton.click();
   await expect(fitButton).toHaveAttribute("aria-pressed", "false");
@@ -366,8 +369,9 @@ async function expectReplayCameraFit(page: Page, rootTestId: string, camera: See
     .toBeLessThan(0.08);
 
   if (!restored) throw new Error("restored tutor-zoom ink was not measured");
-  expectZoomClose(restored.screenWidth / camera.sceneWidth, camera.zoom, "restored tutor zoom");
-  expectCenterHeld(restored, camera);
+  const restoredBox: InkBox = restored;
+  expectZoomClose(restoredBox.screenWidth / camera.sceneWidth, camera.zoom, "restored tutor zoom");
+  expectCenterHeld(restoredBox, camera);
 }
 
 test.describe("replay camera fit view", { tag: [TAG.WB_VIEWPORT] }, () => {

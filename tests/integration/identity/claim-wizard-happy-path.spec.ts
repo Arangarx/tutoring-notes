@@ -7,8 +7,9 @@ import {
   readLearnerCredentialOracle,
   seedUnclaimedClaimInvite,
 } from "./claim-wizard.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
+const PARENT_STATE = authStatePath("parent.json");
 
 /** Valid 6-digit PIN — not in weak-pattern blocklist. */
 const CHILD_PIN = "847291";

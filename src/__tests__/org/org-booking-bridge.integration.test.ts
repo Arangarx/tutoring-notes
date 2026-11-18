@@ -209,7 +209,7 @@ describe("org schedule bridge", () => {
   it.each([
     ["pending org", "pending" as const, null, "APPROVED" as const, ["instructor"] as const],
     ["suspended org", "suspended" as const, null, "APPROVED" as const, ["instructor"] as const],
-  ])("no whiteboard row when the org is %s", async (_label, status) => {
+  ])("no whiteboard row when the org is %s", async (_label, status, ..._rest) => {
     const { org, owner } = await seedOrg(status);
     const instructor = await seedMember(org.id, ["instructor"]);
     const { student } = await seedOrgLearner(org.id, owner.id);

@@ -288,7 +288,7 @@ describe("useViewportWireBroadcast", () => {
       ms?: number
     ) => {
       const id = origSetInterval(fn, ms as number);
-      intervalIds.push(id);
+      intervalIds.push(id as unknown as ReturnType<typeof setInterval>);
       return id;
     }) as typeof setInterval);
     function Host() {

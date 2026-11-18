@@ -57,7 +57,6 @@ test.describe("P1-ID-2 — tutor 2FA login→land + QR local-gen", () => {
     page,
   }) => {
     await seedUnenrolled2faTutor();
-    const pageOrigin = "http://localhost:3100";
     const capture = attachNetworkCapture(page);
     capture.start();
 
@@ -83,6 +82,7 @@ test.describe("P1-ID-2 — tutor 2FA login→land + QR local-gen", () => {
     const secret = (await secretEl.textContent())?.trim() ?? "";
     expect(secret.length).toBeGreaterThanOrEqual(16);
 
+    const pageOrigin = new URL(page.url()).origin;
     capture.assertNoSecretEgress(secret, pageOrigin);
 
     for (const req of capture.requests) {

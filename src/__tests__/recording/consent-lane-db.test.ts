@@ -49,7 +49,7 @@ type SessionOpts = {
   notes?: boolean;
   mode?: "LIVE" | "IN_PERSON";
   notesForbidden?: boolean;
-  ended?: boolean;
+  ended?: boolean | "recent";
 };
 
 async function seedSession(o: SessionOpts) {

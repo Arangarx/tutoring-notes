@@ -38,6 +38,8 @@ Canonical registry: [`tests/test-tags.ts`](../../tests/test-tags.ts).
 | `npm run test:wb-sync` | **Full** wb jest + full wb-regression Playwright (~40 min) |
 | `npm run test:prod-shape` | Production build (`next build && next start` on :3102). Proves the server-action shape `next dev` hides. Writes `.next` — do not run beside `next dev` or any other Playwright webServer. |
 
+Parallel stacks: set `PW_PORT`, `PW_RELAY_PORT`, `PW_DB_NAME`, and `PW_OUTPUT_DIR` (see [`docs/LOCAL-DEV.md`](../../docs/LOCAL-DEV.md)). The default stack is the one that holds `$env:TEMP\tn-pw.lock`.
+
 Path → tag mapping lives in [`scripts/wb-test-select.cjs`](../../scripts/wb-test-select.cjs).
 
 ## Merge tiers (orchestrator enforces)

@@ -14,6 +14,7 @@ import { uploadHarnessBlob, uploadReplayEvents } from "./wb-replay-harness.helpe
 import { readHarnessMailUrl } from "@/lib/playwright-harness-mail";
 import { seedTestAdmin } from "../visual/helpers";
 import { BOARD_NOT_SAVED_LINE } from "../helpers/consent-replay-fixture";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 const CURRENT_PIN = "482916";
 const NEXT_PIN = "159357";
@@ -704,7 +705,7 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
     }
 
     const parentContext = await browser.newContext({
-      storageState: "tests/integration/.auth/parent.json",
+      storageState: authStatePath("parent.json"),
       viewport: { width: 1280, height: 900 },
     });
     try {
@@ -768,7 +769,7 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
     }
 
     const parentContext = await browser.newContext({
-      storageState: "tests/integration/.auth/parent.json",
+      storageState: authStatePath("parent.json"),
       viewport: { width: 1280, height: 900 },
     });
     try {
@@ -817,7 +818,7 @@ test.describe("child home on /join", { tag: [TAG.WB_PRESENCE] }, () => {
     }
 
     const limitContext = await browser.newContext({
-      storageState: "tests/integration/.auth/parent.json",
+      storageState: authStatePath("parent.json"),
       viewport: { width: 1280, height: 900 },
     });
     try {

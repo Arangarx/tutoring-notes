@@ -44,6 +44,7 @@ import {
 } from "../visual/helpers";
 import { mintServerLiveKey, readServerLiveKey } from "@/lib/whiteboard/live-key";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /** Signed-out /join renders JoinAuthGate. Child sessions offer both sign-in paths. */
 async function expectJoinAuthGate(
@@ -244,7 +245,7 @@ test.describe("Auth BLOCKERs — /join/ participant gate", { tag: [TAG.WB_PRESEN
     // Tutor NextAuth is not a join principal (learner or owning account holder).
     // The signed-out gate is the design: both child and parent sign-in, no board.
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
     });
     try {
       const page = await tutorCtx.newPage();
@@ -374,7 +375,7 @@ test.describe("Fragment preservation — #k= survives stale-session /join/ hit",
 
     // Open tutor workspace to obtain the real E2E encryption key from the URL hash.
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     let encryptionKey: string;
@@ -472,7 +473,7 @@ test.describe("Phase-gated capture + timer", { tag: [TAG.WB_SYNC] }, () => {
     const session = await seedWbPendingLiveSyncSession();
 
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });
@@ -523,7 +524,7 @@ test.describe("Phase-gated capture + timer", { tag: [TAG.WB_SYNC] }, () => {
     const session = await seedWbPendingLiveSyncSession();
 
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });
@@ -595,7 +596,7 @@ test.describe("Waiting-room overlay + Start gating", { tag: [TAG.WB_CHROME, TAG.
     const session = await seedWbPendingLiveSyncSession();
 
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });
@@ -639,7 +640,7 @@ test.describe("Waiting-room overlay + Start gating", { tag: [TAG.WB_CHROME, TAG.
     const session = await seedWbPendingLiveSyncSession();
 
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });
@@ -705,7 +706,7 @@ test.describe("Waiting-room overlay + Start gating", { tag: [TAG.WB_CHROME, TAG.
       const session = await seedWbPendingLiveSyncSession();
 
       const tutorCtx = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 900 },
         permissions: ["microphone", "clipboard-read", "clipboard-write"],
       });
@@ -773,7 +774,7 @@ test.describe("Waiting-room overlay + Start gating", { tag: [TAG.WB_CHROME, TAG.
     const session = await seedWbPendingLiveSyncSession({ sessionMode: "IN_PERSON" });
 
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });
@@ -832,7 +833,7 @@ test.describe(
       const session = await seedWbPendingLiveSyncSession({ sessionMode: "IN_PERSON" });
 
       const tutorCtx = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 900 },
         permissions: ["microphone"],
       });
@@ -886,7 +887,7 @@ test.describe(
       const session = await seedWbPendingLiveSyncSession();
 
       const tutorCtx = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 900 },
         permissions: ["microphone"],
       });
@@ -948,7 +949,7 @@ test.describe("Dual-device takeover", { tag: [TAG.WB_PRESENCE] }, () => {
     const session = await seedWbLiveSyncSession();
 
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone"],
     });
@@ -1038,7 +1039,7 @@ test.describe("Dual-device takeover", { tag: [TAG.WB_PRESENCE] }, () => {
       const session = await seedWbLiveSyncSession();
 
       const tutorCtx = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 900 },
         permissions: ["microphone"],
       });
@@ -1181,7 +1182,7 @@ test.describe("/w/ retirement — redirect bridge", { tag: [TAG.WB_PRESENCE] }, 
 
     // Authenticate the learner FIRST, then navigate to /w/ — should auto-join board.
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
     });
     const studentCtx = await browser.newContext({
@@ -1274,7 +1275,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone"],
         });
@@ -1347,7 +1348,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone"],
         });
@@ -1421,7 +1422,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone"],
         });
@@ -1528,7 +1529,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -1629,7 +1630,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -1726,7 +1727,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -1800,7 +1801,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -1862,7 +1863,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -1923,7 +1924,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -2024,7 +2025,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -2107,7 +2108,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -2183,7 +2184,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -2283,7 +2284,7 @@ test.describe(
           );
 
           const tutorCtx = await browser.newContext({
-            storageState: "tests/integration/.auth/tutor.json",
+            storageState: authStatePath("tutor.json"),
             viewport: { width: 1280, height: 900 },
             permissions: ["microphone", "camera"],
           });
@@ -2379,7 +2380,7 @@ test.describe(
         const session = await seedWbLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 844, height: 390 },
           hasTouch: true,
           permissions: ["microphone", "camera"],
@@ -2422,7 +2423,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -2487,7 +2488,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -2573,7 +2574,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -3215,7 +3216,7 @@ test.describe(
         const session2 = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });
@@ -3330,7 +3331,7 @@ test.describe(
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
-          storageState: "tests/integration/.auth/tutor.json",
+          storageState: authStatePath("tutor.json"),
           viewport: { width: 1280, height: 900 },
           permissions: ["microphone", "camera"],
         });

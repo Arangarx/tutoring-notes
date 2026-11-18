@@ -10,8 +10,9 @@ import {
   submitTotpOnVerifyPage,
   waitFor2faVerifyChallenge,
 } from "./tutor-2fa-login.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const OPERATOR_STATE = "tests/integration/.auth/tutor.json";
+const OPERATOR_STATE = authStatePath("tutor.json");
 const LEARNER_CAP_SENTENCE = "This organization has reached its learner limit for today.";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../../scripts/wb-regression-local-db.cjs");

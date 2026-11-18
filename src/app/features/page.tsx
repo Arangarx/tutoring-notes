@@ -5,6 +5,10 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  PRODUCT_TODAY_LINK_LABEL,
+  PRODUCT_TODAY_PATH,
+} from "@/lib/known-issues-roadmap-content";
 import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
 
 export const metadata: Metadata = {
@@ -167,6 +171,13 @@ export default function FeaturesPage() {
                 className="text-primary underline underline-offset-[3px]"
               >
                 Send feedback
+              </Link>
+              {" · "}
+              <Link
+                href={PRODUCT_TODAY_PATH}
+                className="text-primary underline underline-offset-[3px]"
+              >
+                {PRODUCT_TODAY_LINK_LABEL}
               </Link>
               {" · "}
               <Link href="/privacy" className="underline underline-offset-[3px]">

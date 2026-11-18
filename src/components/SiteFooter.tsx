@@ -1,5 +1,10 @@
 import Link from "next/link";
 
+import {
+  PRODUCT_TODAY_LINK_LABEL,
+  PRODUCT_TODAY_PATH,
+} from "@/lib/known-issues-roadmap-content";
+
 type SiteFooterProps = {
   buildShortSha?: string;
 };
@@ -10,6 +15,13 @@ export function SiteFooter({ buildShortSha }: SiteFooterProps) {
       <div className="mx-auto flex max-w-[980px] flex-wrap items-center justify-center gap-x-5 gap-y-2">
         <Link href="/features" className="underline underline-offset-2 hover:text-foreground">
           Features
+        </Link>
+        <span aria-hidden>·</span>
+        <Link
+          href={PRODUCT_TODAY_PATH}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          {PRODUCT_TODAY_LINK_LABEL}
         </Link>
         <span aria-hidden>·</span>
         <Link href="/feedback" className="underline underline-offset-2 hover:text-foreground">

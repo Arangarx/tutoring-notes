@@ -18,6 +18,7 @@ import {
   seedWbPendingLiveSyncSession,
   waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 const HYDRATION_PATTERN = /hydrat|did not match|didn't match/i;
 
@@ -42,7 +43,7 @@ test.describe("waiting-room peer id hydration", { tag: [TAG.WB_CHROME, TAG.WB_AV
     const session = await seedWbPendingLiveSyncSession();
 
     const tutorCtx = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone", "camera"],
     });

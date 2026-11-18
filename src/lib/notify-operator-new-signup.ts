@@ -17,7 +17,12 @@ export async function notifyOperatorsOfNewSignup(opts: {
   method: NewSignupMethod;
 }): Promise<void> {
   const recipients = Array.from(getOperatorEmailSet());
-  if (recipients.length === 0) return;
+  if (recipients.length === 0) {
+    console.warn(
+      "[signup] action=operator_notify_skipped reason=no_operator_or_admin_email"
+    );
+    return;
+  }
 
   const base = getPublicBaseUrl();
   const methodLabel =

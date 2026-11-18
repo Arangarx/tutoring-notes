@@ -10,9 +10,10 @@ import {
   seedPinLockoutLearner,
   WRONG_PIN,
 } from "./learner-pin-lockout.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
 const EMPTY_STATE = { cookies: [] as [], origins: [] as [] };
-const PARENT_STATE = "tests/integration/.auth/parent.json";
+const PARENT_STATE = authStatePath("parent.json");
 
 test.describe("P1-ID-1 — learner PIN hard lockout (API contract)", () => {
   test.use({ storageState: EMPTY_STATE });

@@ -161,8 +161,9 @@ first, then re-submit. The consent screen will continue to display
 | Live whiteboard session encryption key | **Product** — server-held key for sessions created after this release, encrypted at rest, disclosed only to signed-in tutor and authorized learner/parent for that session. Terms has no section for this key. |
 | AI note generation (OpenAI) | Product |
 | Session audio recordings (Vercel Blob) | Product |
+| What each switch does | **Product** — online sessions, audio, whiteboard, and notes (2026-11-17). The sentence that both people can see which are off ships with the item 5 banner in C7, not on this page yet. |
 | Where data is stored | Product |
-| Data retention and deletion | **Hybrid** — umbrella framing, product-specific delete-from-app instruction. Product copy keeps session history for a reasonable period after tutoring ends and says automated retention schedules may be introduced later. |
+| Data retention and deletion | **Hybrid** — umbrella framing, product-specific delete-from-app instruction. Product copy keeps session history for a reasonable period after tutoring ends. It discloses that a board is deleted from our servers after the session when whiteboard recording is off, says that is not a general retention schedule, states no number of days for backups or leftover files, and says a deletion request emailed to arangarx+tutoringnotes@gmail.com is completed within 30 days (2026-11-17). |
 | Security | **Hybrid** — umbrella enumerated list (encryption in transit / hosting / authentication / secrets / Limited Use) + product-specific bcrypt password storage. Teaching accounts require two-factor sign-in. Email is the default. An authenticator app or a text message is a choice. SMS codes go through Twilio (2026-09-11). |
 | Children | **Hybrid** — umbrella's framing, plus product-specific consent, share-link sign-in, and COPPA disclosures. **Updated 2026-10-12:** the tutor-responsibility paragraph and the share-link-without-an-account paragraph are no longer the page text. COPPA disclosures stay in the adjacent `<div>` headed "Children's data and parental rights (COPPA)". Retention on the page is a reasonable period. |
 | Changes | **Umbrella** |
@@ -243,6 +244,8 @@ repo lands a verification-team-driven change before the deploy):
   changes.
 
 ## History
+
+- **2026-11-17** — Consent honesty (product facades only; umbrella SYNCED FROM date unchanged 2026-09-10). Privacy and terms no longer say every session records, transcribes, and drafts notes, or that a board is kept when whiteboard recording is off. Product copy states when audio, the board, transcripts, and notes are saved; that a missing consent record blocks start online and in person; that turning whiteboard recording off deletes that session's board from our servers after it ends and is not a general retention schedule; and that a deletion request to arangarx+tutoringnotes@gmail.com is completed within 30 days. In-UI Last updated: November 17, 2026. No umbrella-verbatim sentence was rewritten. The umbrella retention sentence about a defined deletion timeframe is not on these pages and was not added, because this policy does not state a number of days.
 
 - **2026-10-12** — Org honesty copy (product facades only; umbrella SYNCED FROM date unchanged 2026-09-10). Privacy and terms name Mynk, require teaching-account two-factor with email as the default, require sign-in for share links, and describe organization staff access. Consent rows stay after deletion without a name, email, or email fingerprint. Retention on the pages is a reasonable period. In-UI Last updated: October 12, 2026.
 
