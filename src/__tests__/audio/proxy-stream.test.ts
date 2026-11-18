@@ -37,7 +37,20 @@ function makeUpstream(
   return new Response(body, { status, headers });
 }
 
+const BLOB_TOKEN = "test_blob_rw_token";
+
 describe("streamBlobWithRangeSupport", () => {
+  const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
+
+  beforeEach(() => {
+    process.env.BLOB_READ_WRITE_TOKEN = BLOB_TOKEN;
+  });
+
+  afterAll(() => {
+    if (originalBlobToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+    else process.env.BLOB_READ_WRITE_TOKEN = originalBlobToken;
+  });
+
   it("forwards no Range header on initial requests and returns 200 + Accept-Ranges", async () => {
     const seen: Array<{ url: string; headers: Headers }> = [];
     const fetchImpl = jest.fn(
@@ -68,7 +81,7 @@ describe("streamBlobWithRangeSupport", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0].url).toBe("https://blob.test/abc");
     expect(seen[0].headers.get("range")).toBeNull();
-    expect(seen[0].headers.get("authorization")).toMatch(/^Bearer /);
+    expect(seen[0].headers.get("authorization")).toBe(`Bearer ${BLOB_TOKEN}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("audio/webm;codecs=opus");
     expect(res.headers.get("Accept-Ranges")).toBe("bytes");

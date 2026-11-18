@@ -157,6 +157,14 @@ describe("Admin home page routing", () => {
       AdminTestAccountsPanel: jest.fn(),
     }));
 
+    jest.doMock("@/lib/db", () => ({
+      db: {
+        organizationMember: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+      },
+    }));
+
     const page = await import("@/app/admin/page");
 
     await expect(page.default()).rejects.toMatchObject({ digest: "NEXT_REDIRECT" });

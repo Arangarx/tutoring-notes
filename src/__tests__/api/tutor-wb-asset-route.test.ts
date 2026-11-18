@@ -18,6 +18,14 @@ jest.mock("@/lib/whiteboard-scope", () => ({
     assertOwnsWhiteboardSessionMock(...args),
 }));
 
+jest.mock("@/lib/env", () => {
+  const actual = jest.requireActual<typeof import("@/lib/env")>("@/lib/env");
+  return {
+    ...actual,
+    env: { ...actual.env, BLOB_READ_WRITE_TOKEN: "test_blob_rw_token" },
+  };
+});
+
 const assertStudentNotErasedApiMock = jest.fn();
 jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
   __esModule: true,

@@ -12,6 +12,14 @@
  * DB: tutoring_notes_test via jest.global-setup.ts.
  */
 
+jest.mock("@/lib/env", () => {
+  const actual = jest.requireActual<typeof import("@/lib/env")>("@/lib/env");
+  return {
+    ...actual,
+    env: { ...actual.env, BLOB_READ_WRITE_TOKEN: "test_blob_rw_token" },
+  };
+});
+
 const mockBlobGet = jest.fn();
 
 jest.mock("@vercel/blob", () => ({

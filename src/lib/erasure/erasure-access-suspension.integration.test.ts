@@ -21,6 +21,14 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
+jest.mock("@/lib/env", () => {
+  const actual = jest.requireActual<typeof import("@/lib/env")>("@/lib/env");
+  return {
+    ...actual,
+    env: { ...actual.env, BLOB_READ_WRITE_TOKEN: "test_token" },
+  };
+});
+
 jest.mock("@vercel/blob", () => ({
   __esModule: true,
   put: jest.fn(),

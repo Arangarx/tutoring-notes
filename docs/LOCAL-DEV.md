@@ -144,7 +144,7 @@ npm run test:wb-playwright:tags -- @wb-chrome
 
 ## Organization Jest suites (`npm run test:org-db`)
 
-Runs the two org integration suites (`src/__tests__/org/org-slice1.integration.test.ts` and `org-learner.integration.test.ts`) in **one process** (`--runInBand`) against their own database, `tutoring_notes_org_test`, on the same local Docker Postgres. Both suites refuse to run on any other database (they check `current_database()`), so org rows never land in `tutoring_notes_test`. Run it after `npm run db:up`.
+Runs the two org integration suites (`src/__tests__/org/org-slice1.integration.test.ts` and `org-learner.integration.test.ts`) in **one process** (`--runInBand`) against their own database, `tutoring_notes_org_test`, on the same local Docker Postgres. Both suites refuse to run on any other database (they check `current_database()`), so org rows never land in `tutoring_notes_test`. Default `npx jest` ignores these two files. Run this command after `npm run db:up`.
 
 - **Hardcoded URL.** `scripts/test-org-db.mjs` uses `postgresql://postgres:postgres@127.0.0.1:5432/tutoring_notes_org_test` (the local Docker credentials from `.env.example`). It is not read from `.env`.
 - **It overrides your environment.** The script sets `TEST_DATABASE_URL`, `DATABASE_URL` and `DIRECT_URL` to that URL, and `ADMIN_EMAIL=org-operator@example.com` / `OPERATOR_EMAILS=env-operator@example.com`, for the child jest process only. Whatever is in `.env` or your shell for those variables is ignored for this run.

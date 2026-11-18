@@ -127,7 +127,7 @@ describe("createStudent — invite on add", () => {
     const tutor = await seedTutor();
     mockSessionAsTutor(tutor);
 
-    const familyId = uniq("fam").replace(/[^a-z0-9]/gi, "").slice(0, 16);
+    const familyId = uniq("fam").replace(/[^a-z0-9]/gi, "").slice(-16);
     const username = "kid";
     const familyEmail = `${uniq("family")}@example.com`;
     const holder = await db.accountHolder.create({
