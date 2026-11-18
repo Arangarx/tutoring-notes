@@ -8,11 +8,12 @@ import {
   seedParentAccountHolder,
   seedTestAdminWithRole,
 } from "./identity/identity.helpers";
+const { authStatePath, resolvePwStack } = require("../../scripts/pw-stack.cjs");
 
-const authFile = path.join(__dirname, ".auth", "tutor.json");
-const learnerAuthFile = path.join(__dirname, ".auth", "learner.json");
-const parentAuthFile = path.join(__dirname, ".auth", "parent.json");
-const erasureAdminAuthFile = path.join(__dirname, ".auth", "erasure-admin.json");
+const authFile = path.join(process.cwd(), authStatePath("tutor.json"));
+const learnerAuthFile = path.join(process.cwd(), authStatePath("learner.json"));
+const parentAuthFile = path.join(process.cwd(), authStatePath("parent.json"));
+const erasureAdminAuthFile = path.join(process.cwd(), authStatePath("erasure-admin.json"));
 
 setup("authenticate tutor storageState + seed learner credentials", async ({
   page,
@@ -58,7 +59,7 @@ setup("authenticate tutor storageState + seed learner credentials", async ({
   // The stored cookie is valid for 90 days (LearnerDeviceSession.expiresAt);
   // it is refreshed on every integration-setup run so it never expires during
   // a test run.
-  const apiCtx = await request.newContext({ baseURL: "http://localhost:3100" });
+  const apiCtx = await request.newContext({ baseURL: resolvePwStack().origin });
   try {
     const resp = await apiCtx.post("/api/auth/learner/login", {
       data: { username: TEST_LEARNER.handle, pin: TEST_LEARNER.pin },
@@ -76,7 +77,7 @@ setup("authenticate tutor storageState + seed learner credentials", async ({
   }
 
   // --- Parent: account-holder login → parent.json storage state ---
-  const parentCtx = await request.newContext({ baseURL: "http://localhost:3100" });
+  const parentCtx = await request.newContext({ baseURL: resolvePwStack().origin });
   try {
     const resp = await parentCtx.post("/api/auth/account-holder/login", {
       data: { email: TEST_PARENT.email, password: TEST_PARENT.password },
@@ -94,7 +95,7 @@ setup("authenticate tutor storageState + seed learner credentials", async ({
   }
 
   // --- Erasure ADMIN: API credentials login (no UI signout) → erasure-admin.json ---
-  const erasureCtx = await request.newContext({ baseURL: "http://localhost:3100" });
+  const erasureCtx = await request.newContext({ baseURL: resolvePwStack().origin });
   try {
     const csrfRes = await erasureCtx.get("/api/auth/csrf");
     if (!csrfRes.ok()) {

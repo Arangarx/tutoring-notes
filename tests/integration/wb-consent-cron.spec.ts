@@ -24,13 +24,12 @@ import {
   runReaperCron,
   seedHarnessBlobs,
 } from "../helpers/consent-harness";
-import { seedIdle } from "../helpers/consent-board-fixture";
+import { currentHarnessOrigin, seedIdle } from "../helpers/consent-board-fixture";
 import { HOUR_MS } from "../helpers/consent-db-oracle";
 import { SESSION_REAPER_TIME_BUDGET_MS } from "@/lib/session-cleanup-config";
 import { seedStartFixture } from "../helpers/consent-start-fixture";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 
-const HARNESS_ORIGIN = "http://localhost:3100";
 const prisma = new PrismaClient();
 test.afterAll(async () => {
   await prisma.$disconnect();
@@ -172,7 +171,7 @@ test.describe("consent 6l: Cron isolation (B1)", {
       const chunk = await prisma.transcriptChunk.create({
         data: {
           sessionId: s.whiteboardSessionId,
-          chunkBlobUrl: `${HARNESS_ORIGIN}/api/test/blob/object/consent-k4/${s.studentId}/${Date.now()}.webm`,
+          chunkBlobUrl: `${currentHarnessOrigin()}/api/test/blob/object/consent-k4/${s.studentId}/${Date.now()}.webm`,
           recordingTimeOffsetMs: 0,
           status: "pending",
           streamId: "tutor:mic",

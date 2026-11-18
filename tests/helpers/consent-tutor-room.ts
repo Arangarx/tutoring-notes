@@ -21,6 +21,7 @@ import {
   waitForWbE2eBridge,
   type WbLiveSyncSession,
 } from "../integration/whiteboard-live-sync.helpers";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 
@@ -87,7 +88,7 @@ export async function openTutorRoom(
   opts?: { spy?: GetUserMediaMode; permissions?: string[]; prepare?: (ctx: BrowserContext, page: Page) => Promise<void> }
 ): Promise<TutorRoom> {
   const context = await browser.newContext({
-    storageState: "tests/integration/.auth/tutor.json",
+    storageState: authStatePath("tutor.json"),
     viewport: { width: 1280, height: 1000 },
     permissions: opts?.permissions ?? ["microphone", "camera"],
   });

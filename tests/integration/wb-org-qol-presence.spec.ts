@@ -18,22 +18,17 @@ import {
   readVisibleScene,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 async function openTutorAndStudent(
   browser: Browser,
   session: Awaited<ReturnType<typeof seedWbLiveSyncSession>>
 ) {
   const tutorContext = await browser.newContext({
-    storageState: "tests/integration/.auth/tutor.json",
+    storageState: authStatePath("tutor.json"),
     viewport: { width: 1280, height: 1200 },
   });
-  const learnerAuthFile = path.join(
-    process.cwd(),
-    "tests",
-    "integration",
-    ".auth",
-    "learner.json"
-  );
+  const learnerAuthFile = path.join(process.cwd(), authStatePath("learner.json"));
   const learnerStorageState = fs.existsSync(learnerAuthFile)
     ? learnerAuthFile
     : undefined;

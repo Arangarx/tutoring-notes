@@ -1,18 +1,22 @@
 "use strict";
 
 /**
- * Playwright webServer helper for port 3002.
+ * Playwright webServer helper for the relay port (PW_RELAY_PORT, default 3002).
  * Uses the real wb-relay-local Docker image when present; otherwise a minimal
  * HTTP stub so identity/consent e2e can run without `npm run relay:build`.
  * WB regression still prefers the real image when available.
+ * The container name follows the host port so two relays can run at once.
+ * The image still listens on 3002 inside the container.
  */
 
 const http = require("node:http");
 const { spawn } = require("node:child_process");
 const { execSync } = require("node:child_process");
 const net = require("node:net");
+const { relayDockerArgs, resolvePwStack } = require("./pw-stack.cjs");
 
-const PORT = 3002;
+const stack = resolvePwStack();
+const PORT = stack.relayPort;
 
 function portInUse(port) {
   return new Promise((resolve) => {
@@ -52,28 +56,19 @@ async function main() {
       `[playwright-relay-or-stub] :${PORT} already in use — holding webServer slot (reuse relay)`
     );
     // Playwright webServer (CI reuseExistingServer=false) needs this process to
-    // stay alive while an existing relay/stub already owns :3002.
+    // stay alive while an existing relay/stub already owns this port.
     await new Promise(() => {});
     return;
   }
 
   if (dockerImageExists("wb-relay-local")) {
-    console.log("[playwright-relay-or-stub] starting wb-relay-local container");
-    const child = spawn(
-      "docker",
-      [
-        "run",
-        "--rm",
-        "-p",
-        `${PORT}:3002`,
-        "-e",
-        "PORT=3002",
-        "-e",
-        "CORS_ORIGIN=http://localhost:3100",
-        "wb-relay-local",
-      ],
-      { stdio: "inherit", shell: process.platform === "win32" }
+    console.log(
+      `[playwright-relay-or-stub] starting ${stack.relayContainerName} on :${PORT}`
     );
+    const child = spawn("docker", relayDockerArgs(), {
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    });
     child.on("exit", (code) => process.exit(code ?? 0));
     process.on("SIGTERM", () => child.kill("SIGTERM"));
     process.on("SIGINT", () => child.kill("SIGINT"));

@@ -18,6 +18,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { cleanupWbDevServerPorts } = require("./free-wb-dev-server-ports.cjs");
+const { resolvePwStack } = require("./pw-stack.cjs");
 
 const ROOT = path.resolve(__dirname, "..");
 const PROJECT = "wb-regression";
@@ -32,8 +33,13 @@ const DEFAULT_TARGET_SHARDS = 6;
  * from prior shards are deleted before merge. Also set PWTEST_BLOB_DO_NOT_REMOVE
  * on shard runs: BlobReporter removes PLAYWRIGHT_BLOB_OUTPUT_DIR by default.
  */
-const MERGE_BLOB_DIR = path.join(ROOT, "wb-shard-blobs");
-const MERGED_JSON_REPORT = path.join(ROOT, "test-results", "wb-shard-merged.json");
+const stack = resolvePwStack();
+const MERGE_BLOB_DIR = process.env.PW_BLOB_DIR
+  ? path.resolve(ROOT, process.env.PW_BLOB_DIR)
+  : process.env.PW_OUTPUT_DIR
+    ? path.resolve(ROOT, `${process.env.PW_OUTPUT_DIR}-blobs`)
+    : path.join(ROOT, "wb-shard-blobs");
+const MERGED_JSON_REPORT = path.join(ROOT, stack.outputDir, "wb-shard-merged.json");
 /** Pause between shards so prior dev-server memory/handles can be reclaimed. */
 const INTER_SHARD_COOLDOWN_MS = 8000;
 
@@ -391,7 +397,7 @@ async function runIntegrationSetup() {
 
 async function runShard(shard, index) {
   const shardLabel = shard.name || `shard-${index + 1}`;
-  const blobDir = path.join(ROOT, "test-results", `shard-${index + 1}`);
+  const blobDir = path.join(ROOT, stack.outputDir, `shard-${index + 1}`);
   fs.mkdirSync(blobDir, { recursive: true });
 
   console.log(`\n=== ${shardLabel} (${shard.files.length} files, ~${shard.testCount} tests) ===`);
@@ -452,7 +458,10 @@ function mergeBlobReports() {
       cwd: ROOT,
       encoding: "utf8",
       shell: process.platform === "win32",
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        ...(stack.reportDir ? { PLAYWRIGHT_HTML_REPORT: stack.reportDir } : {}),
+      },
     },
   );
   process.stdout.write(result.stdout || "");

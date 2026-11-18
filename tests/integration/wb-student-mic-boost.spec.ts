@@ -12,6 +12,7 @@ import {
   STORAGE_LEARNER_MIC_GAIN_KEY_PREFIX,
 } from "../../src/lib/recording/storage";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /**
  * WS-M — student self-boost on live-A/V publish path.
@@ -31,18 +32,12 @@ test.describe("student mic boost (WS-M)", { tag: [TAG.WB_AV] }, () => {
     const session = await seedWbLiveSyncSession();
 
     const tutorContext = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone", "camera"],
     });
 
-    const learnerAuthFile = path.join(
-      process.cwd(),
-      "tests",
-      "integration",
-      ".auth",
-      "learner.json"
-    );
+    const learnerAuthFile = path.join(process.cwd(), authStatePath("learner.json"));
     const learnerStorageState = fs.existsSync(learnerAuthFile)
       ? learnerAuthFile
       : undefined;

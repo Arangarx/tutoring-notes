@@ -8,8 +8,9 @@ import {
   seedOtherFamilyChildWithNote,
   seedParentChildWithNote,
 } from "./parent-dashboard-notes-scope.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
+const PARENT_STATE = authStatePath("parent.json");
 
 test.describe("P2-ID-2 — parent dashboard + child-notes scoping", () => {
   test.use({ storageState: PARENT_STATE });

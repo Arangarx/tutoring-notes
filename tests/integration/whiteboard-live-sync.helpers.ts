@@ -29,6 +29,7 @@ import {
   viewportSceneCenterFromScroll,
 } from "../../src/lib/whiteboard/viewport-align";
 import { MIN_KEY_LEN } from "../../src/lib/whiteboard/encryption-key";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /** Screen-pixel tolerance for viewport center / PDF fit (owner: 16px). */
 export const WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX = 16;
@@ -1490,7 +1491,7 @@ export async function openTutorAndStudent(
   };
 
   const tutorContext = await browser.newContext({
-    storageState: "tests/integration/.auth/tutor.json",
+    storageState: authStatePath("tutor.json"),
     viewport: { width: 1280, height: 1200 },
   });
   if (options?.prepareContext) await options.prepareContext(tutorContext);
@@ -1506,13 +1507,7 @@ export async function openTutorAndStudent(
   //
   // Playwright runs from the repo root (process.cwd() = workspace root), so the
   // path is stable regardless of which spec file calls this helper.
-  const learnerAuthFile = path.join(
-    process.cwd(),
-    "tests",
-    "integration",
-    ".auth",
-    "learner.json"
-  );
+  const learnerAuthFile = path.join(process.cwd(), authStatePath("learner.json"));
   const learnerStorageState = fs.existsSync(learnerAuthFile)
     ? learnerAuthFile
     : undefined;

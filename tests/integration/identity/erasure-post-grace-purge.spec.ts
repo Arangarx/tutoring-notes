@@ -11,8 +11,9 @@ import {
   seedPostGracePurgeFixture,
   type PostGracePurgeFixture,
 } from "./erasure.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const TUTOR_STATE = "tests/integration/.auth/tutor.json";
+const TUTOR_STATE = authStatePath("tutor.json");
 
 function oracleOpts(
   fixture: PostGracePurgeFixture,

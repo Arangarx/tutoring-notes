@@ -14,8 +14,9 @@ import {
   submitTotpOnVerifyPage,
   waitFor2faVerifyChallenge,
 } from "./tutor-2fa-login.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const OPERATOR_STATE = "tests/integration/.auth/tutor.json";
+const OPERATOR_STATE = authStatePath("tutor.json");
 const EMPTY_STATE = { cookies: [] as [], origins: [] as [] };
 
 const { assertLocalDatabaseUrlForHarness } = require("../../../scripts/wb-regression-local-db.cjs");

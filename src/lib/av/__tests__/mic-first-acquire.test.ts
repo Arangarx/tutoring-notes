@@ -590,8 +590,12 @@ describe("useAudioRecorder first-acquire (SMOKE-AUDIO-1)", () => {
 
     // swapLocalMicSource must have been called once, with the recovered stream.
     expect(mockSwapLocalMicSource).toHaveBeenCalledTimes(1);
-    expect(mockSwapLocalMicSource.mock.calls[0]?.[0]).toBe(recoveredStream);
-    expect(mockSwapLocalMicSource.mock.calls[0]?.[0]).not.toBe(silentStream);
+    expect(
+      (mockSwapLocalMicSource.mock.calls[0] as unknown as [MediaStream] | undefined)?.[0]
+    ).toBe(recoveredStream);
+    expect(
+      (mockSwapLocalMicSource.mock.calls[0] as unknown as [MediaStream] | undefined)?.[0]
+    ).not.toBe(silentStream);
   });
 
   // ── H: Attempt #4 — recovery uses swap-equivalent reopen ─────────────────

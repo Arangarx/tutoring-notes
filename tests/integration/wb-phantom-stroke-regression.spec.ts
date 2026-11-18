@@ -10,6 +10,7 @@ import {
   loginLearnerInContext,
   waitForElementOnPeer,
 } from "./whiteboard-live-sync.helpers";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /**
  * Phantom-stroke regression gate — wb-wave5-phantom-fix.
@@ -34,19 +35,13 @@ async function openTutorAndStudent(
   session: Awaited<ReturnType<typeof seedWbLiveSyncSession>>
 ) {
   const tutorContext = await browser.newContext({
-    storageState: "tests/integration/.auth/tutor.json",
+    storageState: authStatePath("tutor.json"),
     viewport: { width: 1280, height: 900 },
     permissions: ["microphone"],
   });
 
   // Use the shared learner auth state (same pattern as openTutorAndStudent in helpers).
-  const learnerAuthFile = path.join(
-    process.cwd(),
-    "tests",
-    "integration",
-    ".auth",
-    "learner.json"
-  );
+  const learnerAuthFile = path.join(process.cwd(), authStatePath("learner.json"));
   const learnerStorageState = fs.existsSync(learnerAuthFile)
     ? learnerAuthFile
     : undefined;

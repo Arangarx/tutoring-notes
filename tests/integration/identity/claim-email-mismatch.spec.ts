@@ -3,8 +3,9 @@ import { PrismaClient } from "@prisma/client";
 
 import { TEST_PARENT } from "./identity.helpers";
 import { seedUnclaimedClaimInvite } from "./claim-wizard.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
+const PARENT_STATE = authStatePath("parent.json");
 const INVITED = "invited.parent@example.com";
 
 test.describe("wrong-account claim hides the full email", () => {

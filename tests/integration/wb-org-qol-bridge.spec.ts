@@ -39,9 +39,10 @@ import {
   expectDisabledStartShowsLearnerLine,
   seedPendingWithoutConsent,
 } from "../helpers/refused-start";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
-const LEARNER_STATE = "tests/integration/.auth/learner.json";
+const PARENT_STATE = authStatePath("parent.json");
+const LEARNER_STATE = authStatePath("learner.json");
 
 /**
  * The only reason codes a family may be sent (org-ux-pass-plan § 3, W4 family audience).
@@ -224,7 +225,7 @@ test.describe("org QoL schedule bridge", () => {
       });
 
       const tutorContext = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 1200 },
         ...WB_LIVE_CONTEXT,
       });
@@ -302,7 +303,7 @@ test.describe("org QoL schedule bridge", () => {
       });
 
       const tutorContext = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 1200 },
         ...WB_LIVE_CONTEXT,
       });
@@ -385,7 +386,7 @@ test.describe("org QoL schedule bridge", () => {
         ...WB_LIVE_CONTEXT,
       });
       const tutorContext = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 1200 },
         ...WB_LIVE_CONTEXT,
       });
@@ -468,7 +469,7 @@ test.describe("org QoL schedule bridge", () => {
   });
 
   test.describe("Online sessions off: the tutor can still open the room in person", () => {
-    test.use({ storageState: "tests/integration/.auth/tutor.json" });
+    test.use({ storageState: authStatePath("tutor.json") });
     test(
       "online sessions off: the tutor's Open room stays available for in person, with the reason under it",
       { tag: [TAG.WB_CHROME] },
@@ -881,7 +882,7 @@ test.describe(
   "refused waiting-room Start names the learner's situation",
   { tag: [TAG.WB_PRESENCE, TAG.WB_CHROME] },
   () => {
-    test.use({ storageState: "tests/integration/.auth/tutor.json" });
+    test.use({ storageState: authStatePath("tutor.json") });
 
     for (const testCase of REFUSED_START_CASES) {
       test(`${testCase.situation}: the refusal reads the learner's own line`, async ({ page }) => {

@@ -1,13 +1,16 @@
 "use strict";
 
 const crypto = require("crypto");
+const { playwrightDatabaseUrl } = require("./pw-stack.cjs");
 
 /**
  * Local Postgres URL for the whiteboard regression net (docker-compose.yml).
  * Playwright webServer + globalSetup force this; host guard rejects anything else.
+ * Database name follows PW_DB_NAME (default tutoring_notes). Host stays local.
  */
-const WB_REGRESSION_LOCAL_DATABASE_URL =
-  "postgresql://postgres:postgres@127.0.0.1:5432/tutoring_notes";
+function currentLocalDatabaseUrl() {
+  return playwrightDatabaseUrl();
+}
 
 /** Fixed 32-byte root key for Playwright webServer only (live session keys + 2FA fixtures). */
 const WB_REGRESSION_TOTP_ENCRYPTION_KEY = crypto
@@ -53,12 +56,15 @@ function assertLocalDatabaseUrlForHarness(databaseUrl = process.env.DATABASE_URL
 }
 
 function applyWbRegressionLocalDatabaseEnv() {
-  process.env.DATABASE_URL = WB_REGRESSION_LOCAL_DATABASE_URL;
-  process.env.DIRECT_URL = WB_REGRESSION_LOCAL_DATABASE_URL;
+  const url = currentLocalDatabaseUrl();
+  process.env.DATABASE_URL = url;
+  process.env.DIRECT_URL = url;
 }
 
 module.exports = {
-  WB_REGRESSION_LOCAL_DATABASE_URL,
+  get WB_REGRESSION_LOCAL_DATABASE_URL() {
+    return currentLocalDatabaseUrl();
+  },
   WB_REGRESSION_TOTP_ENCRYPTION_KEY,
   ALLOWED_HOSTS,
   assertLocalDatabaseUrlForHarness,

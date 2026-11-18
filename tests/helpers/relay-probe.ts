@@ -25,8 +25,12 @@ export const RELAY_HANDSHAKE_EVENTS = [
   "new-user",
 ] as const;
 
-/** Local relay the wb-regression webServer points at (`WHITEBOARD_SYNC_URL=ws://localhost:3002`). */
-export const LOCAL_RELAY_URL = "http://localhost:3002";
+const { relayHttpUrl } = require("../../scripts/pw-stack.cjs");
+
+/** Local relay the wb-regression webServer points at (`WHITEBOARD_SYNC_URL`, default `ws://localhost:3002`). */
+export function localRelayUrl(): string {
+  return relayHttpUrl().replace(/\/$/, "");
+}
 
 function isSocketIdList(v: unknown): boolean {
   return Array.isArray(v) && v.length <= 8 && v.every((x) => typeof x === "string" && x.length <= 40);
@@ -67,7 +71,7 @@ export async function openRelayClient(opts?: {
   url?: string;
   timeoutMs?: number;
 }): Promise<RelayClient> {
-  const url = opts?.url ?? LOCAL_RELAY_URL;
+  const url = opts?.url ?? localRelayUrl();
   const timeoutMs = opts?.timeoutMs ?? 15_000;
   const events: RelayEvent[] = [];
   let lastAt = Date.now();

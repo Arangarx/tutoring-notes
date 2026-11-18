@@ -10,6 +10,7 @@ import {
 } from "./whiteboard-live-sync.helpers";
 import { STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX } from "../../src/lib/recording/storage";
 import { TAG } from "../test-tags";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /** Stable fake mic ids injected by {@link installDualMicHarness}. */
 export const E6_MIC_A = "e6-persist-mic-a";
@@ -165,18 +166,12 @@ test.describe("student mic persistence (BUG-7)", { tag: [TAG.WB_AV] }, () => {
     const session = await seedWbLiveSyncSession();
 
     const tutorContext = await browser.newContext({
-      storageState: "tests/integration/.auth/tutor.json",
+      storageState: authStatePath("tutor.json"),
       viewport: { width: 1280, height: 900 },
       permissions: ["microphone", "camera"],
     });
 
-    const learnerAuthFile = path.join(
-      process.cwd(),
-      "tests",
-      "integration",
-      ".auth",
-      "learner.json"
-    );
+    const learnerAuthFile = path.join(process.cwd(), authStatePath("learner.json"));
     const learnerStorageState = fs.existsSync(learnerAuthFile)
       ? learnerAuthFile
       : undefined;
