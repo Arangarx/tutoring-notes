@@ -161,7 +161,7 @@ first, then re-submit. The consent screen will continue to display
 | Live whiteboard session encryption key | **Product** — server-held key for sessions created after this release, encrypted at rest, disclosed only to signed-in tutor and authorized learner/parent for that session. Terms has no section for this key. |
 | AI note generation (OpenAI) | Product |
 | Session audio recordings (Vercel Blob) | Product |
-| What each switch does | **Product** — online sessions, audio, whiteboard, and notes, and that the tutor and the student can both see which are off during the session (2026-11-17). |
+| What each switch does | **Product** — online sessions, audio, whiteboard, and notes (2026-11-17). The sentence that both people can see which are off ships with the item 5 banner in C7, not on this page yet. |
 | Where data is stored | Product |
 | Data retention and deletion | **Hybrid** — umbrella framing, product-specific delete-from-app instruction. Product copy keeps session history for a reasonable period after tutoring ends. It discloses that a board is deleted from our servers after the session when whiteboard recording is off, says that is not a general retention schedule, states no number of days for backups or leftover files, and says a deletion request emailed to arangarx+tutoringnotes@gmail.com is completed within 30 days (2026-11-17). |
 | Security | **Hybrid** — umbrella enumerated list (encryption in transit / hosting / authentication / secrets / Limited Use) + product-specific bcrypt password storage. Teaching accounts require two-factor sign-in. Email is the default. An authenticator app or a text message is a choice. SMS codes go through Twilio (2026-09-11). |

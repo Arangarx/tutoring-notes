@@ -302,9 +302,6 @@ export default function PrivacyPage() {
             <p style={{ margin: "8px 0 0" }}>
               Notes. On, notes are drafted from the saved audio. Transcription is for English speech. Off, nothing is transcribed and no notes are drafted, even if audio was saved.
             </p>
-            <p style={{ margin: "8px 0 0" }}>
-              During the session, the tutor and the student can both see which of these are off.
-            </p>
           </div>
 
           <div>

@@ -278,6 +278,8 @@ Use the online sentence only when the student's voice is left out and the tutor'
 
 "During the session, the tutor and the student can both see which of these are off."
 
+The last sentence ships with item 5 in C7, not C8. C8 does not put it on the privacy page, because today only the tutor sees an audio banner.
+
 **Why:** The page has to say what the switches do, in the same words the product shows.
 
 **Your change:**

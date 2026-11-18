@@ -134,9 +134,7 @@ for (const path of ["/privacy", "/terms"] as const) {
       expect(text).toContain(
         "Notes. On, notes are drafted from the saved audio. Transcription is for English speech. Off, nothing is transcribed and no notes are drafted, even if audio was saved."
       );
-      expect(text).toContain(
-        "During the session, the tutor and the student can both see which of these are off."
-      );
+      // Item 22 last sentence is added with the item 5 banner (C7).
       expect(text).toContain(BOARD_DELETION);
       expect(text).toContain(
         "While a session runs, the tutor's browser keeps a recovery copy of the board on that device so a dropped connection does not lose the drawing. That copy is removed when the session ends on that device. If the session ended somewhere else, it is removed the next time the tutor opens that student's workspace on that device."
