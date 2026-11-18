@@ -60,6 +60,7 @@ import {
 } from "@/components/av/initials-from-label";
 import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
 import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
+import { hasPresentableVideoTrack } from "@/lib/av/video-track-presentable";
 
 /** Same on the server and the first client render. The real peer id is sessionStorage-backed and must not be in the hydrated HTML. */
 const PEER_ID_UNTIL_HYDRATED = "pending";
@@ -164,6 +165,11 @@ export function AVTile({
    * audio" interstitial.
    */
   const [audioBlocked, setAudioBlocked] = useState(false);
+  /**
+   * Stream+track identity whose `<video>` has reported `videoWidth > 0`.
+   * A mismatch (new stream or new track) means we have no frame evidence yet.
+   */
+  const [paintedVideoKey, setPaintedVideoKey] = useState("");
   const domPeerId = useHydratedDomPeerId(participant.peerId);
 
   useEffect(() => {
@@ -203,6 +209,69 @@ export function AVTile({
       if (innerRaf !== null) cancelAnimationFrame(innerRaf);
     };
   }, [participant.videoStream]);
+
+  // Frame evidence, not `track.muted`. A receiver track exists before any RTP,
+  // and after a reload `muted` can stay true while frames flow (G1). Keep the
+  // <video> mounted at display:block (Chrome wires the compositor only on a
+  // visible element) and cover it until videoWidth > 0. Do not time this off
+  // `muted` — that flag lies. A new stream or track id drops the evidence.
+  const videoFrameKey = (() => {
+    const stream = participant.videoStream;
+    if (!stream) return "";
+    const ids = stream
+      .getVideoTracks()
+      .map((t, i) => (t.id && t.id.length > 0 ? t.id : `idx${i}`));
+    return `${stream.id}|${ids.join(",")}`;
+  })();
+  const videoFrameKeyRef = useRef(videoFrameKey);
+  videoFrameKeyRef.current = videoFrameKey;
+  const hasFrameEvidence =
+    videoFrameKey !== "" && paintedVideoKey === videoFrameKey;
+
+  useEffect(() => {
+    const el = videoRef.current;
+    const key = videoFrameKey;
+    if (!el || !key) return;
+    const mark = () => {
+      if (videoFrameKeyRef.current !== key) return;
+      if (videoRef.current !== el) return;
+      if (el.videoWidth > 0) setPaintedVideoKey(key);
+    };
+    el.addEventListener("loadeddata", mark);
+    el.addEventListener("resize", mark);
+    const withRvfc = el as HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: () => void) => number;
+      cancelVideoFrameCallback?: (handle: number) => void;
+    };
+    let rvfcHandle: number | null = null;
+    const armRvfc = () => {
+      if (typeof withRvfc.requestVideoFrameCallback !== "function") return;
+      rvfcHandle = withRvfc.requestVideoFrameCallback(() => {
+        mark();
+        // A callback can land before the element has a non-zero width.
+        // Re-arm only while this stream still has no frame evidence.
+        if (
+          videoRef.current === el &&
+          videoFrameKeyRef.current === key &&
+          el.videoWidth <= 0
+        ) {
+          armRvfc();
+        }
+      });
+    };
+    armRvfc();
+    mark();
+    return () => {
+      el.removeEventListener("loadeddata", mark);
+      el.removeEventListener("resize", mark);
+      if (
+        rvfcHandle !== null &&
+        typeof withRvfc.cancelVideoFrameCallback === "function"
+      ) {
+        withRvfc.cancelVideoFrameCallback(rvfcHandle);
+      }
+    };
+  }, [videoFrameKey]);
 
   // Mechanism B (part 2): ResizeObserver-driven reflow + play().
   //
@@ -341,26 +410,31 @@ export function AVTile({
   // so initials render instead of a black <video> frame. When the peer
   // presence-signaled `camOn === false`, trust that over inbound track state
   // (remote track enabled/muted does not propagate reliably to receivers).
+  // When the stream IS presentable (including camOn===true while the receiver
+  // track is still muted), keep the video mounted but show "Waiting for
+  // video…" until a decoded frame arrives. `track.muted` is not that signal.
   const remoteParticipant = !isLocalTile ? (participant as AvParticipant) : null;
   const remoteReportsCamOff = remoteParticipant?.camOn === false;
   const hasActiveVideoTrack =
     !remoteReportsCamOff &&
-    !!participant.videoStream &&
-    participant.videoStream
-      .getVideoTracks()
-      .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
+    hasPresentableVideoTrack(participant.videoStream, remoteParticipant?.camOn);
+  const localCamHeldOff = isLocalTile && localCamMuted === true;
+  const awaitingFirstFrame =
+    hasActiveVideoTrack && !hasFrameEvidence && !localCamHeldOff;
   const showCamPlaceholder =
     remoteReportsCamOff ||
     !hasActiveVideoTrack ||
-    (isLocalTile && localCamMuted === true);
+    awaitingFirstFrame ||
+    localCamHeldOff;
 
   const remote = remoteParticipant;
   const remoteAwaitingVideo =
-    !!remote &&
-    !hasActiveVideoTrack &&
-    remote.camOn !== false &&
-    (remote.peerConnectionState === "connecting" ||
-      remote.peerConnectionState === "new");
+    awaitingFirstFrame ||
+    (!!remote &&
+      !hasActiveVideoTrack &&
+      remote.camOn !== false &&
+      (remote.peerConnectionState === "connecting" ||
+        remote.peerConnectionState === "new"));
 
   const palette: Record<
     ConnectionStateColor,
@@ -453,7 +527,12 @@ export function AVTile({
             height: "100%",
             objectFit: "cover",
             transform: isLocalTile ? "scaleX(-1)" : undefined,
-            display: showCamPlaceholder ? "none" : "block",
+            // display:none never wires Chrome's compositor (black until a
+            // later resize). While the first frame is still missing, stay
+            // display:block and opacity:0; the placeholder paints on top.
+            display:
+              showCamPlaceholder && !awaitingFirstFrame ? "none" : "block",
+            opacity: awaitingFirstFrame ? 0 : 1,
           }}
         />
         {showCamPlaceholder &&

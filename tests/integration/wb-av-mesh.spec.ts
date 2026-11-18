@@ -229,6 +229,8 @@ type PwCaptureWindow = Window & {
   __pwLivePcs?: () => RTCPeerConnection[];
   /** Every video track getUserMedia handed out. */
   __pwGumVideoTracks?: MediaStreamTrack[];
+  /** Every audio track getUserMedia handed out (B11: hardware release oracle). */
+  __pwGumAudioTracks?: MediaStreamTrack[];
 };
 
 /**
@@ -262,13 +264,16 @@ async function installPeerConnectionCapture(
     // Independent oracle for the single-acquisition invariant: every video
     // track getUserMedia hands out, whatever the app does with it afterwards.
     const gumTracks: MediaStreamTrack[] = [];
+    const gumAudioTracks: MediaStreamTrack[] = [];
     w.__pwGumVideoTracks = gumTracks;
+    w.__pwGumAudioTracks = gumAudioTracks;
     const md = navigator.mediaDevices;
     if (md && typeof md.getUserMedia === "function") {
       const nativeGum = md.getUserMedia.bind(md);
       md.getUserMedia = async (constraints?: MediaStreamConstraints) => {
         const stream = await nativeGum(constraints);
         for (const t of stream.getVideoTracks()) gumTracks.push(t);
+        for (const t of stream.getAudioTracks()) gumAudioTracks.push(t);
         return stream;
       };
     }
@@ -1029,15 +1034,9 @@ test.describe("live A/V reload recovers a peer whose PC has extra m-lines", {
 }, () => {
   // A reloaded page builds a brand-new RTCPeerConnection (new DTLS identity)
   // for the same stable peerId. The survivor's old PC must not be the one
-  // that answers it, whatever m-line count it grew to.
-  //
-  // FIXME(item 35 / C2): stays red until the fingerprint-based peer replacement
-  // (peer-mesh C2) ships. A stale student PC with a forced extra video m-line
-  // cannot answer the reloaded tutor's 2-m-line offer. Fix A (one camera track
-  // per device) removes the real-world cause, so this documents only the
-  // remaining class. Patch: docs/handoff/item35-c2-fingerprint-replace.patch.
-  // Tracked in docs/BACKLOG.md ("Live A/V reload: C2 fingerprint replacement").
-  test.fixme("tutor reload: student's PC with an extra video m-line still shows the student's camera on the tutor", async ({
+  // that answers it, whatever m-line count it grew to. Recovery is
+  // fingerprint replace in `src/lib/av/peer-mesh.ts` (`replaceReloadedPeerEntry`).
+  test("tutor reload: student's PC with an extra video m-line still shows the student's camera on the tutor", async ({
     browser,
   }) => {
     test.setTimeout(240_000);
@@ -1224,6 +1223,623 @@ test.describe("phone student acquires exactly one camera", { tag: [TAG.WB_AV] },
         stillSending,
         `camera is off in the UI but these captured video tracks still send: ${JSON.stringify(tracks)}`
       ).toEqual([]);
+    } finally {
+      await peers.close();
+    }
+  });
+});
+
+/**
+ * G1 (Tyson packet item 35, Discord 2026-10-29): "especially if either the
+ * tutor or student refresh their page while in the waiting room" — the other
+ * person's camera tile stays a colored placeholder. Spec: after EITHER person
+ * reloads in the waiting room (both cameras on), BOTH people's remote <video>
+ * tiles paint moving frames again within the 20s window used for the live
+ * reload tests (longer than the 5s presence prune + 6s eviction timer).
+ * Oracle = the on-screen remote <video> (videoWidth > 0, not paused,
+ * currentTime advancing), never the app's own muted/camOn gating.
+ */
+test.describe("G1 waiting-room reload keeps both camera tiles", {
+  tag: [TAG.WB_AV, TAG.WB_PRESENCE],
+}, () => {
+  const studentKinds: Array<{ label: string; device?: string }> = [
+    { label: "desktop student" },
+    { label: "Pixel 7 phone student", device: "Pixel 7" },
+  ];
+
+  async function openWaitingRoomBothCamerasOn(browser: Browser, device?: string) {
+    const session = await seedWbPendingLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+      prepareContext: prepareCamerasAndCapture,
+      ...(device ? { studentDevice: device } : {}),
+    });
+    const meshLogs = attachMeshLogs(peers.tutorPage, peers.studentPage);
+    await expect(peers.tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible();
+    await expect(peers.studentPage.getByTestId("wb-waiting-overlay")).toBeVisible();
+    await expectWaitingRoomMediaOn(peers.tutorPage);
+    await expectWaitingRoomMediaOn(peers.studentPage);
+    await expectBothCamerasPlaying(
+      peers.tutorPage,
+      peers.studentPage,
+      meshLogs,
+      "waiting-room-baseline",
+      90_000,
+      "waiting-room baseline: both camera tiles never painted before any reload"
+    );
+    return { peers, meshLogs };
+  }
+
+  for (const kind of studentKinds) {
+    test(`G1: ${kind.label}, tutor reloads in the waiting room — both camera tiles paint again`, async ({
+      browser,
+    }) => {
+      test.setTimeout(300_000);
+      const { peers, meshLogs } = await openWaitingRoomBothCamerasOn(browser, kind.device);
+      try {
+        await reloadTutor(peers.tutorPage);
+        await expect(peers.tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible();
+        await expectBothCamerasPlaying(
+          peers.tutorPage,
+          peers.studentPage,
+          meshLogs,
+          "waiting-room-tutor-reload",
+          8_000,
+          "camera tiles did not paint within 8s of a tutor reload in the waiting room"
+        );
+      } finally {
+        await peers.close();
+      }
+    });
+
+    test(`G1: ${kind.label}, student reloads in the waiting room — both camera tiles paint again`, async ({
+      browser,
+    }) => {
+      test.setTimeout(300_000);
+      const { peers, meshLogs } = await openWaitingRoomBothCamerasOn(browser, kind.device);
+      try {
+        await reloadStudent(peers.tutorPage, peers.studentPage);
+        await expect(peers.studentPage.getByTestId("wb-waiting-overlay")).toBeVisible();
+        await expectBothCamerasPlaying(
+          peers.tutorPage,
+          peers.studentPage,
+          meshLogs,
+          "waiting-room-student-reload",
+          8_000,
+          "camera tiles did not paint within 8s of a student reload in the waiting room"
+        );
+      } finally {
+        await peers.close();
+      }
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Launch lane `launch/live-av` — remaining A/V items. Each oracle is something
+// the browser reports (PC list, track readyState, getStats, the painted <video>),
+// never the app's own gating state.
+// ---------------------------------------------------------------------------
+
+/** Every audio track getUserMedia created on the page (init-script capture). */
+async function readGumAudioTracks(page: Page): Promise<GumVideoTrackState[]> {
+  return page.evaluate(() =>
+    ((window as PwCaptureWindow).__pwGumAudioTracks ?? []).map((t) => ({
+      readyState: t.readyState,
+      enabled: t.enabled,
+    }))
+  );
+}
+
+/** How many PCs the page ever created, and the creation index of each non-closed one. */
+async function readPcIdentity(page: Page): Promise<{ created: number; liveIdx: number[] }> {
+  return page.evaluate(() => {
+    const w = window as PwCaptureWindow;
+    const all = w.__pwPcs ?? [];
+    const live = w.__pwLivePcs?.() ?? [];
+    return { created: all.length, liveIdx: live.map((pc) => all.indexOf(pc)) };
+  });
+}
+
+/** What the browser says about each non-closed PC: ICE state, connectionState, inbound RTP. */
+async function readPcStates(page: Page): Promise<
+  Array<{ ice: string; conn: string; audioIn: number; videoIn: number }>
+> {
+  return page.evaluate(async () => {
+    const live = (window as PwCaptureWindow).__pwLivePcs?.() ?? [];
+    return Promise.all(
+      live.map(async (pc) => {
+        let audioIn = 0;
+        let videoIn = 0;
+        const stats = await pc.getStats();
+        stats.forEach((r) => {
+          if (r.type !== "inbound-rtp") return;
+          if (r.kind === "audio") audioIn += r.packetsReceived ?? 0;
+          if (r.kind === "video") videoIn += r.packetsReceived ?? 0;
+        });
+        return { ice: pc.iceConnectionState, conn: pc.connectionState, audioIn, videoIn };
+      })
+    );
+  });
+}
+
+/** Inbound audio packets are arriving on some live PC (independent of any tile/UI state). */
+async function pageReceivesAudioRtp(page: Page): Promise<boolean> {
+  return (await readPcStates(page)).some((s) => s.audioIn > 0);
+}
+
+/**
+ * Emulates the Safari/iOS quirk behind SMOKE-BLOCK-1: the browser's aggregate
+ * `connectionState` never leaves "connecting" although ICE is connected and
+ * media flows. Applied to the prototype so every PC the app builds inherits it.
+ */
+async function installConnectionStateStuckConnecting(context: BrowserContext): Promise<void> {
+  await context.addInitScript(() => {
+    // Find the prototype in the chain that owns the accessor (another init script
+    // may have wrapped RTCPeerConnection, so the accessor can sit further up).
+    let owner: object | null = RTCPeerConnection.prototype;
+    while (owner && !Object.getOwnPropertyDescriptor(owner, "connectionState")) {
+      owner = Object.getPrototypeOf(owner);
+    }
+    const desc = owner ? Object.getOwnPropertyDescriptor(owner, "connectionState") : undefined;
+    if (!owner || !desc?.get) return;
+    const realGet = desc.get;
+    Object.defineProperty(owner, "connectionState", {
+      configurable: true,
+      get(this: RTCPeerConnection) {
+        const real = realGet.call(this) as RTCPeerConnectionState;
+        return real === "connected" ? "connecting" : real;
+      },
+    });
+  });
+}
+test.describe("SMOKE-BLOCK-1 Start enables when ICE is up even if connectionState lags", {
+  tag: [TAG.WB_AV, TAG.WB_PRESENCE],
+}, () => {
+  test("SMOKE-BLOCK-1: connectionState stuck on connecting with ICE connected and media flowing — Start still enables", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const session = await seedWbPendingLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+      waitForConnected: false,
+      prepareContext: async (ctx) => {
+        await prepareCamerasAndCapture(ctx);
+        await installConnectionStateStuckConnecting(ctx);
+      },
+    });
+    try {
+      const { tutorPage, studentPage } = peers;
+      // Independent proof the link is really up (browser stats, not app state),
+      // and that the quirk is really in effect (so the test cannot pass vacuously).
+      await expect
+        .poll(
+          async () => {
+            const s = (await readPcStates(tutorPage))[0];
+            return s ? `${s.ice}/${s.conn}/audioIn>0=${s.audioIn > 0}` : "no-pc";
+          },
+          { timeout: 90_000, message: "tutor PC never reached ICE connected with inbound audio" }
+        )
+        .toMatch(/^(connected|completed)\/connecting\/audioIn>0=true$/);
+
+      await expect(tutorPage.getByTestId("wb-start-session")).toBeEnabled({ timeout: 30_000 });
+      await expect(
+        studentPage.getByTestId("wb-waiting-overlay").getByRole("heading", { level: 2 })
+      ).not.toHaveText(/connecting/i, { timeout: 30_000 });
+    } finally {
+      await peers.close();
+    }
+  });
+});
+
+test.describe("BUG-8 / AV-REFRESH-LOSS: media comes back after a peer leaves and returns", {
+  tag: [TAG.WB_AV, TAG.WB_PRESENCE],
+}, () => {
+  async function openLiveBothCamerasPlaying(browser: Browser) {
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+      prepareContext: prepareCamerasAndCapture,
+    });
+    const meshLogs = attachMeshLogs(peers.tutorPage, peers.studentPage);
+    await expectCamerasOn(peers.tutorPage, peers.studentPage);
+    await expectBothCamerasPlaying(
+      peers.tutorPage,
+      peers.studentPage,
+      meshLogs,
+      "live-baseline",
+      90_000,
+      "live baseline cameras never played"
+    );
+    await expect.poll(() => pageReceivesAudioRtp(peers.tutorPage), { timeout: 30_000 }).toBe(true);
+    await expect.poll(() => pageReceivesAudioRtp(peers.studentPage), { timeout: 30_000 }).toBe(true);
+    return { peers, meshLogs };
+  }
+
+  test("BUG-8: student Exit then Rejoin — tutor builds a new peer connection and both cameras and audio flow again", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const { peers, meshLogs } = await openLiveBothCamerasPlaying(browser);
+    try {
+      const { tutorPage, studentPage } = peers;
+      const before = await readPcIdentity(tutorPage);
+      expect(before.liveIdx.length, "tutor should hold exactly one live PC before the exit").toBe(1);
+
+      await studentPage.getByTestId("wb-student-exit").click();
+      await expect(studentPage.getByRole("status")).toHaveText(/you left the session/i, {
+        timeout: 15_000,
+      });
+      await studentPage.getByTestId("wb-student-rejoin").click();
+      await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+        timeout: 90_000,
+      });
+      await waitForTutorStudentConnected(tutorPage);
+
+      await expectBothCamerasPlaying(
+        tutorPage,
+        studentPage,
+        meshLogs,
+        "after-student-exit-rejoin",
+        30_000,
+        "cameras did not resume within 30s of the student's Exit then Rejoin"
+      );
+      await expect.poll(() => pageHasLiveRemoteAudio(tutorPage), { timeout: 15_000 }).toBe(true);
+      await expect.poll(() => pageHasLiveRemoteAudio(studentPage), { timeout: 15_000 }).toBe(true);
+
+      // The tutor must be talking over a NEW peer connection, not the pre-exit one.
+      const after = await readPcIdentity(tutorPage);
+      expect(after.liveIdx.length, `tutor live PCs after rejoin: ${JSON.stringify(after)}`).toBe(1);
+      expect(
+        after.liveIdx[0],
+        `tutor kept the pre-exit PC (created=${before.created}, live=${JSON.stringify(after.liveIdx)})`
+      ).toBeGreaterThanOrEqual(before.created);
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("AV-REFRESH-LOSS: student hard refresh in a live session — own camera and mic come back with no action and both sides see and hear each other", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const { peers, meshLogs } = await openLiveBothCamerasPlaying(browser);
+    try {
+      const { tutorPage, studentPage } = peers;
+      await reloadStudent(tutorPage, studentPage);
+      await expectBothCamerasPlaying(
+        tutorPage,
+        studentPage,
+        meshLogs,
+        "after-student-hard-refresh",
+        25_000,
+        "cameras did not resume within 25s of the student's hard refresh"
+      );
+      // The reloaded page holds its OWN live camera and mic again, unprompted.
+      await expect
+        .poll(
+          async () => ({
+            video: (await readGumVideoTracks(studentPage)).filter((t) => t.readyState === "live").length,
+            audio: (await readGumAudioTracks(studentPage)).filter((t) => t.readyState === "live").length,
+          }),
+          { timeout: 15_000 }
+        )
+        .toMatchObject({ video: 1, audio: expect.any(Number) });
+      expect((await readGumAudioTracks(studentPage)).filter((t) => t.readyState === "live").length).toBeGreaterThanOrEqual(1);
+      await expect.poll(() => pageReceivesAudioRtp(tutorPage), { timeout: 15_000 }).toBe(true);
+      await expect.poll(() => pageReceivesAudioRtp(studentPage), { timeout: 15_000 }).toBe(true);
+    } finally {
+      await peers.close();
+    }
+  });
+});
+
+test.describe("B11 student releases camera and mic on the ended screen", {
+  tag: [TAG.WB_AV, TAG.WB_PRESENCE],
+}, () => {
+  test("B11: tutor ends the session — the student's camera and mic hardware tracks are released", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const session = await seedWbPendingLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+      prepareContext: prepareCamerasAndCapture,
+    });
+    const meshLogs = attachMeshLogs(peers.tutorPage, peers.studentPage);
+    try {
+      const { tutorPage, studentPage } = peers;
+      await item35WaitingRoomThenStart({ ...peers, close: peers.close }, meshLogs);
+
+      // Non-vacuous precondition: the student really holds a live camera AND a live mic.
+      const liveBefore = {
+        video: (await readGumVideoTracks(studentPage)).filter((t) => t.readyState === "live").length,
+        audio: (await readGumAudioTracks(studentPage)).filter((t) => t.readyState === "live").length,
+      };
+      expect(liveBefore.video, "student never held a live camera track").toBeGreaterThanOrEqual(1);
+      expect(liveBefore.audio, "student never held a live mic track").toBeGreaterThanOrEqual(1);
+
+      await tutorPage.getByTestId("wb-end-session").click();
+      await expect(tutorPage.getByTestId("wb-end-session-confirm")).toBeVisible({ timeout: 10_000 });
+      await tutorPage.getByTestId("wb-end-session-confirm-yes").click();
+      await expect(studentPage.getByText("Session has ended")).toBeVisible({ timeout: 60_000 });
+
+      // The ended screen is up: the hardware (camera light, mic indicator) must be free.
+      await expect
+        .poll(
+          async () => {
+            const [video, audio] = await Promise.all([
+              readGumVideoTracks(studentPage),
+              readGumAudioTracks(studentPage),
+            ]);
+            return JSON.stringify({
+              liveVideo: video.filter((t) => t.readyState === "live").length,
+              liveAudio: audio.filter((t) => t.readyState === "live").length,
+            });
+          },
+          {
+            timeout: 10_000,
+            message: "student still holds a live camera/mic track on the 'Session has ended' screen",
+          }
+        )
+        .toBe(JSON.stringify({ liveVideo: 0, liveAudio: 0 }));
+    } finally {
+      await peers.close();
+    }
+  });
+});
+
+test.describe("AV-CAM-BUTTON-ACQUIRING camera button reflects a camera that is starting", {
+  tag: [TAG.WB_AV, TAG.WB_PRESENCE],
+}, () => {
+  test("AV-CAM-BUTTON-ACQUIRING: while the camera is still starting the button reads on, and one tap cancels it so the camera ends off", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const session = await seedWbPendingLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+      prepareContext: async (ctx) => {
+        await prepareCamerasAndCapture(ctx);
+        // Slow camera hardware (phone HAL): video getUserMedia resolves ~8s late.
+        await ctx.addInitScript(() => {
+          const md = navigator.mediaDevices;
+          const prior = md.getUserMedia.bind(md);
+          md.getUserMedia = async (c?: MediaStreamConstraints) => {
+            if (c && c.video) await new Promise((r) => setTimeout(r, 8_000));
+            return prior(c);
+          };
+        });
+      },
+    });
+    try {
+      const { studentPage } = peers;
+      const cam = studentPage.getByTestId("wb-waiting-overlay").getByTestId("wb-topbar-cam-toggle");
+      await expect(cam).toBeVisible({ timeout: 30_000 });
+      // The camera has not arrived yet (the slow getUserMedia is still pending)...
+      expect((await readGumVideoTracks(studentPage)).length).toBe(0);
+      // ...and the button must say the camera is coming ON (offering "turn off"),
+      // not claim it is off.
+      await expect(cam).toHaveAttribute("aria-label", "Turn camera off");
+
+      await cam.click(); // user cancels the starting camera
+      await expect(cam).toHaveAttribute("aria-label", "Turn camera on");
+
+      // Let the slow camera finally arrive.
+      await expect
+        .poll(async () => (await readGumVideoTracks(studentPage)).length, { timeout: 30_000 })
+        .toBeGreaterThanOrEqual(1);
+      await studentPage.waitForTimeout(1_500);
+
+      await expect(cam).toHaveAttribute("aria-label", "Turn camera on");
+      const tracks = await readGumVideoTracks(studentPage);
+      expect(
+        tracks.filter((t) => t.readyState === "live" && t.enabled),
+        `user cancelled the camera but a track still sends: ${JSON.stringify(tracks)}`
+      ).toEqual([]);
+    } finally {
+      await peers.close();
+    }
+  });
+});
+test.describe("phone student A/V is bidirectional", { tag: [TAG.WB_AV, TAG.WB_PRESENCE] }, () => {
+  // Real WebKit is not available here: Playwright's WebKit build on Windows has no
+  // RTCPeerConnection/MediaStream (probed 2026-11-17: all `undefined`), so an iPhone
+  // student cannot run a call in it. The closest surrogate is the iPhone 13 and Pixel 7
+  // device profiles (touch-primary narrow layout, mobile UA) on the Chromium engine,
+  // plus the existing WebKit join/consent specs for engine-specific layout.
+  // PLAYWRIGHT-GAP: real iOS Safari WebRTC (see docs/BACKLOG.md "Phone student A/V: real WebKit").
+  for (const device of ["Pixel 7", "iPhone 13"]) {
+    test(`phone student (${device} profile): after Start, tutor and student each see moving video and receive live audio RTP`, async ({
+      browser,
+    }) => {
+      test.setTimeout(300_000);
+      const session = await seedWbPendingLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        ensureFollow: false,
+        studentDevice: device,
+        prepareContext: prepareCamerasAndCapture,
+      });
+      const meshLogs = attachMeshLogs(peers.tutorPage, peers.studentPage);
+      try {
+        const { tutorPage, studentPage } = peers;
+        await expect(studentPage.locator(".mynk-wb-chrome")).toHaveAttribute("data-layout", "narrow");
+        await item35WaitingRoomThenStart({ ...peers, close: peers.close }, meshLogs);
+        await expectBothCamerasPlaying(
+          tutorPage,
+          studentPage,
+          meshLogs,
+          `phone-${device}-live`,
+          45_000,
+          `${device} student: both camera tiles never painted after Start`
+        );
+        await expect.poll(() => pageHasLiveRemoteAudio(tutorPage), { timeout: 30_000 }).toBe(true);
+        await expect.poll(() => pageHasLiveRemoteAudio(studentPage), { timeout: 30_000 }).toBe(true);
+        await expect.poll(() => pageReceivesAudioRtp(tutorPage), { timeout: 30_000 }).toBe(true);
+        await expect.poll(() => pageReceivesAudioRtp(studentPage), { timeout: 30_000 }).toBe(true);
+      } finally {
+        await peers.close();
+      }
+    });
+  }
+});
+
+/**
+ * The presence-trusted gate exposes a videoStream as soon as camOn is true,
+ * which is before any RTP. An undrawn canvas captureStream(0) is a sender
+ * track that never produces a frame. The tutor must see "Waiting for video…"
+ * on that tile (the <video> stays mounted) until the canvas is drawn.
+ */
+test.describe("receiver tile waits for a frame when camOn is true", {
+  tag: [TAG.WB_AV],
+}, () => {
+  type StallTile = {
+    camOn: string | null;
+    videoTracks: number;
+    videoWidth: number;
+    placeholder: string | null;
+    waitingText: string;
+    videoDisplay: string;
+    videoOpacity: string;
+  };
+
+  async function readRemoteStallTile(page: Page): Promise<StallTile | null> {
+    return page.evaluate(() => {
+      const tiles = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-is-local="false"]')
+      ).filter((tile) => {
+        const style = getComputedStyle(tile);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        const box = tile.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      });
+      const tile = tiles[0];
+      if (!tile) return null;
+      const video = tile.querySelector<HTMLVideoElement>("video");
+      const placeholder = tile.querySelector<HTMLElement>("[data-placeholder-kind]");
+      const stream = video?.srcObject;
+      const style = video ? getComputedStyle(video) : null;
+      return {
+        camOn: tile.getAttribute("data-cam-on"),
+        videoTracks: stream instanceof MediaStream ? stream.getVideoTracks().length : 0,
+        videoWidth: video?.videoWidth ?? 0,
+        placeholder: placeholder?.getAttribute("data-placeholder-kind") ?? null,
+        waitingText: placeholder?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        videoDisplay: style?.display ?? "",
+        videoOpacity: style?.opacity ?? "",
+      };
+    });
+  }
+
+  test("camOn with an undrawn canvas captureStream(0) shows Waiting for video, and a drawn frame reveals it", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbPendingLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+      prepareContext: async (ctx) => {
+        await prepareCamerasAndCapture(ctx);
+        await ctx.addInitScript(() => {
+          const w = window as Window & {
+            __pwStallCanvases?: HTMLCanvasElement[];
+            __pwStallTracks?: Array<MediaStreamTrack & { requestFrame?: () => void }>;
+          };
+          w.__pwStallCanvases = [];
+          w.__pwStallTracks = [];
+          const md = navigator.mediaDevices;
+          if (!md || typeof md.getUserMedia !== "function") return;
+          const wrapped = md.getUserMedia.bind(md);
+          md.getUserMedia = async (constraints?: MediaStreamConstraints) => {
+            if (!constraints?.video) return wrapped(constraints);
+            const canvas = document.createElement("canvas");
+            canvas.width = 64;
+            canvas.height = 48;
+            w.__pwStallCanvases!.push(canvas);
+            const videoOnly = canvas.captureStream(0);
+            for (const track of videoOnly.getVideoTracks()) {
+              w.__pwStallTracks!.push(track);
+            }
+            if (!constraints.audio) return videoOnly;
+            const audioOnly = await wrapped({ audio: constraints.audio, video: false });
+            return new MediaStream([
+              ...audioOnly.getAudioTracks(),
+              ...videoOnly.getVideoTracks(),
+            ]);
+          };
+        });
+      },
+    });
+    try {
+      await expect(peers.tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible();
+      await expect
+        .poll(async () => readRemoteStallTile(peers.tutorPage), {
+          timeout: 60_000,
+          message: "tutor remote tile never showed the waiting placeholder over a mounted no-frame video",
+        })
+        .toEqual(
+          expect.objectContaining({
+            camOn: "true",
+            videoTracks: 1,
+            videoWidth: 0,
+            placeholder: "awaiting-video",
+            videoDisplay: "block",
+            videoOpacity: "0",
+          })
+        );
+      const held = await readRemoteStallTile(peers.tutorPage);
+      expect(held?.waitingText).toContain("Waiting for video");
+      // An undrawn captureStream(0) must not flip to a bare video on its own.
+      await peers.tutorPage.waitForTimeout(1_500);
+      const still = await readRemoteStallTile(peers.tutorPage);
+      expect(still).toEqual(
+        expect.objectContaining({
+          camOn: "true",
+          videoTracks: 1,
+          videoWidth: 0,
+          placeholder: "awaiting-video",
+          videoOpacity: "0",
+        })
+      );
+
+      const drawn = await peers.studentPage.evaluate(() => {
+        const w = window as Window & {
+          __pwStallCanvases?: HTMLCanvasElement[];
+          __pwStallTracks?: Array<MediaStreamTrack & { requestFrame?: () => void }>;
+        };
+        const canvases = w.__pwStallCanvases ?? [];
+        for (const canvas of canvases) {
+          const ctx = canvas.getContext("2d");
+          if (!ctx) continue;
+          ctx.fillStyle = "#00aa00";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        for (const track of w.__pwStallTracks ?? []) {
+          if (track.readyState === "live" && typeof track.requestFrame === "function") {
+            track.requestFrame();
+          }
+        }
+        return canvases.length;
+      });
+      expect(drawn).toBeGreaterThan(0);
+
+      await expect
+        .poll(async () => readRemoteStallTile(peers.tutorPage), {
+          timeout: 20_000,
+          message: "drawing the sender canvas never revealed the tutor's remote video",
+        })
+        .toEqual(
+          expect.objectContaining({
+            camOn: "true",
+            placeholder: null,
+            videoDisplay: "block",
+            videoOpacity: "1",
+          })
+        );
+      const revealed = await readRemoteStallTile(peers.tutorPage);
+      expect(revealed?.videoWidth ?? 0).toBeGreaterThan(0);
+      expect(revealed?.waitingText ?? "").not.toContain("Waiting for video");
     } finally {
       await peers.close();
     }

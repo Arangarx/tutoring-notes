@@ -1776,6 +1776,42 @@ describe("useLiveAV — remote tracks + state", () => {
     unmount();
   });
 
+  test("SMOKE-BLOCK-1: Start gate stays empty on ICE checking, failed, and disconnected, and fills on ICE connected or completed while connectionState is still connecting", async () => {
+    const { result, unmount, meshHandles } = await withPeer();
+
+    // Presence alone is not a call. Start reads reachableParticipants.
+    expect(result.current.reachableParticipants).toEqual([]);
+
+    for (const ice of ["checking", "failed", "disconnected"] as const) {
+      act(() => {
+        meshHandles.emitPcState("student-B", "connected");
+        meshHandles.emitIceState("student-B", ice);
+      });
+      await waitFor(() => {
+        expect(result.current.participants[0]?.iceConnectionState).toBe(ice);
+      });
+      expect(result.current.reachableParticipants).toEqual([]);
+    }
+
+    for (const ice of ["connected", "completed"] as const) {
+      act(() => {
+        meshHandles.emitPcState("student-B", "connecting");
+        meshHandles.emitIceState("student-B", ice);
+      });
+      await waitFor(() => {
+        expect(result.current.reachableParticipants.map((p) => p.peerId)).toEqual([
+          "student-B",
+        ]);
+      });
+      expect(result.current.participants[0]?.peerConnectionState).toBe(
+        "connecting"
+      );
+      expect(result.current.participants[0]?.iceConnectionState).toBe(ice);
+    }
+
+    unmount();
+  });
+
   /**
    * TRACK-BEFORE-PRESENCE regression test (2026-06-16).
    *
@@ -2333,6 +2369,60 @@ describe("useLiveAV — teardown", () => {
 
     unmount();
     expect(videoTrack.stopped).toBe(true);
+  });
+
+  test("unmount stops the raw student mic track the same way releaseLocalMedia does", async () => {
+    mockPublishDispose.mockClear();
+    const { stream, audioTracks } = makeFakeStream(1);
+    const video = makeFakeStream(0, 1);
+    const rawMic = audioTracks[0]!;
+    const cam = video.videoTracks[0]!;
+    const props = makeBaseProps({
+      localPeerId: "student-S",
+      learnerProfileId: "lp-stop-all",
+      _getUserMedia: jest.fn(async (constraints: MediaStreamConstraints) => {
+        if (constraints.video) return video.stream as unknown as MediaStream;
+        return stream as unknown as MediaStream;
+      }),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+      await result.current.requestCam();
+    });
+    expect(rawMic.stopped).toBe(false);
+    expect(cam.stopped).toBe(false);
+    expect(result.current.localVideoStream).not.toBeNull();
+
+    unmount();
+
+    expect(mockPublishDispose).toHaveBeenCalled();
+    expect(rawMic.stopped).toBe(true);
+    expect(cam.stopped).toBe(true);
+  });
+});
+
+describe("useLiveAV — releaseLocalMedia blocks later acquire", () => {
+  test("requestMic and requestCam return without getUserMedia after the ended screen releases media", async () => {
+    const getUM = jest.fn(async () => makeFakeStream(1, 1).stream as unknown as MediaStream);
+    const props = makeBaseProps({
+      _getUserMedia: getUM as unknown as UseLiveAVOptions["_getUserMedia"],
+    });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    act(() => {
+      result.current.releaseLocalMedia();
+    });
+    await act(async () => {
+      await result.current.requestMic();
+      await result.current.requestCam();
+    });
+
+    expect(getUM).not.toHaveBeenCalled();
+    expect(result.current.localAudioStream).toBeNull();
+    expect(result.current.localVideoStream).toBeNull();
+    unmount();
   });
 });
 
