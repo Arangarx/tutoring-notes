@@ -147,6 +147,16 @@ We are on the **release track**: expand beyond Sarah to unsupervised new pilots.
 
 **Background (not blocking the ordered list):** Wave A/B + tokens are done; Wave C/D dedupe (fragile WB/A/V — Opus-grade) remains open; agenticPipeline Phase 2; NativeSelect; design-system gallery. New work still = zero new duplication ([`docs/DEDUPE-PLAN.md`](DEDUPE-PLAN.md)).
 
+### Near-term high priority — transcription languages (Andrew 2026-10-28)
+
+**Transcription language support (English + Spanish first).** Whisper is pinned to English (`TRANSCRIPTION_LANGUAGE` in `src/lib/transcribe-constants.ts`) because leaving language unset made silent audio hallucinate foreign text. Tutors see “Transcription currently supports English only.” in the waiting room, under the mic/camera controls, before Start. Students do not see it. It is not on the live session bar.
+
+Next: a per-learner, per-tutor, or per-session language setting. Spanish is the minimum for US operation; more languages later. Investigate safe auto-detection, but pair it with the silence guard — auto-detect on silent audio produced those foreign-text hallucinations. Remove the English-only notice once the setting is real.
+
+Digit-only transcript chunks (`42.`, `3.14`) are classified empty and dropped by whisper-guardrails (`classifySentence` ignores a sentence with no letters, so the chunk is empty) at any clip length. The old rule only dropped them on clips of 2 seconds or less. On a math app a lone numeric answer may be real speech — revisit with per-speaker VAD.
+
+**Release-priority placement is not settled** — confirm with Andrew where this sits in the ordered list above. **Status:** `OPEN` — near-term, high priority.
+
 ### QUEUED — `/admin/design-system` component gallery (Andrew 2026-07-27)
 
 **Why:** Andrew’s work days no longer have appetite for full-site manual reviews — hunting every card/subpage to eyeball dedupe/layout is too slow. Agents must give him a **findable, organized** eyeball surface instead of “go look around the app.”

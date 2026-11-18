@@ -651,4 +651,31 @@ describe("processChunkTranscribeJob", () => {
     expect(mockUpdateTranscriptChunkStatus).not.toHaveBeenCalled();
     expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
   });
+
+  test("silence-dropped chunk is done with an empty transcript and no error", async () => {
+    setupHappyPath();
+    mockTranscribeChunk.mockResolvedValue({
+      transcript: "",
+      durationMs: 8000,
+      modelUsed: "gpt-4o-mini-transcribe",
+    });
+
+    // No stored row and no lane is lane_unknown on this branch. Pass the tutor
+    // mic lane explicitly; do not revive the old tutor:mic default.
+    const outcome = await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      streamId: TUTOR_MIC_STREAM_ID,
+      recordingTimeOffsetMs: 0,
+    });
+
+    expect(outcome).toBe("done");
+    const finalCall = mockUpsertTranscriptChunk.mock.calls.at(-1)?.[0];
+    expect(finalCall).toMatchObject({
+      status: "done",
+      transcript: "",
+      durationMs: 8000,
+    });
+    expect(finalCall.error).toBeUndefined();
+  });
 });

@@ -32,6 +32,10 @@ import "server-only";
 
 import OpenAI from "openai";
 import { env } from "@/lib/env";
+import {
+  EMPTY_STRUCTURED_NOTE,
+  type StructuredNoteFields,
+} from "@/lib/note-content";
 import { db, withDbRetry } from "@/lib/db";
 import { isTutorApproved } from "@/lib/tutor-approval-scope";
 import {
@@ -112,21 +116,25 @@ export type LiveReduceResult =
   | { outcome: "skipped"; reason: string }
   | { outcome: "failed"; error: string };
 
-/**
- * Structured note fields matching SessionNote DB columns.
- * homework is intentionally omitted: it folds into nextSteps per REQ-S3-4.
- */
-export type StructuredNoteFields = {
-  topics: string;
-  assessment: string;
-  /** UI label "Plan". Includes follow-ups + homework per REQ-S3-4. */
-  nextSteps: string;
-  links: string;
-};
+export { EMPTY_STRUCTURED_NOTE, type StructuredNoteFields };
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/** Blank and whitespace-only chunks are silence drops — omit them from the join. */
+function spokenChunkText(transcript: string | null | undefined): string | null {
+  const text = (transcript ?? "").trim();
+  return text.length > 0 ? text : null;
+}
+
+/** True when the reduce has tutoring content. Silence must not call the model. */
+function hasReduceSource(
+  extractions: readonly unknown[],
+  rawTranscripts: readonly unknown[]
+): boolean {
+  return extractions.length > 0 || rawTranscripts.length > 0;
+}
 
 function buildReducePrompt(
   extractions: Array<ChunkExtractionPayload & { speakerLabel?: string | null }>,
@@ -285,16 +293,28 @@ export async function processLiveReduceJob(
     }));
 
   const rawTranscripts = doneChunks
-    .filter((c) => c.transcript)
+    .filter((c) => spokenChunkText(c.transcript))
     .sort((a, b) => a.recordingTimeOffsetMs - b.recordingTimeOffsetMs)
     .map((c) => ({
-      text: c.transcript as string,
+      text: spokenChunkText(c.transcript) as string,
       speakerLabel: speakerLabelForChunk(c.id),
     }));
 
   console.log(
     `[tnt] wbsid=${sessionId} action=live_reduce_inputs extractions=${orderedExtractions.length} rawTranscripts=${rawTranscripts.length} watermarkWas=${watermark} nowReducing=${doneCount}`
   );
+
+  if (!hasReduceSource(orderedExtractions, rawTranscripts)) {
+    await updateTutorNote(sessionId, {
+      content: JSON.stringify(EMPTY_STRUCTURED_NOTE),
+      lastReducedChunkCount: doneCount,
+      lastLiveReduceAt: new Date(),
+    });
+    console.log(
+      `[tnt] wbsid=${sessionId} action=live_reduce_empty_skip_llm chunks=${doneCount}`
+    );
+    return { outcome: "live_done" };
+  }
 
   // --- 4. OpenAI reduce call ------------------------------------------------
   if (!env.OPENAI_API_KEY) {
@@ -572,16 +592,32 @@ export async function processNotesReduceJob(
 
   // Fallback: use raw transcripts from done chunks ordered by recordingTimeOffsetMs
   const rawTranscripts = chunks
-    .filter((c) => c.status === "done" && c.transcript)
+    .filter((c) => c.status === "done" && spokenChunkText(c.transcript))
     .sort((a, b) => a.recordingTimeOffsetMs - b.recordingTimeOffsetMs)
     .map((c) => ({
-      text: c.transcript as string,
+      text: spokenChunkText(c.transcript) as string,
       speakerLabel: speakerLabelForChunk(c.id),
     }));
 
   console.log(
     `[tnt] wbsid=${sessionId} action=reduce_inputs extractions=${orderedExtractions.length} rawTranscripts=${rawTranscripts.length} isPartial=${isPartial}`
   );
+
+  if (!hasReduceSource(orderedExtractions, rawTranscripts)) {
+    const finalStatus = isPartial ? "partial" : "done";
+    await updateTutorNote(sessionId, {
+      status: finalStatus,
+      content: JSON.stringify(EMPTY_STRUCTURED_NOTE),
+      isPartial,
+      generatedAt: new Date(),
+    });
+    console.log(
+      `[tnt] wbsid=${sessionId} action=reduce_empty_skip_llm status=${finalStatus} chunks=${doneChunks}`
+    );
+    return isPartial
+      ? { outcome: "partial", isPartial: true }
+      : { outcome: "done", isPartial: false };
+  }
 
   // --- 6. Mark as generating ------------------------------------------------------
   await updateTutorNote(sessionId, { status: "generating" });

@@ -39,7 +39,7 @@ const EnvSchema = z.object({
   ),
   /** Primary transcription model (recording chunk pipeline). Default: gpt-4o-mini-transcribe. */
   OPENAI_TRANSCRIBE_PRIMARY_MODEL: z.string().optional(),
-  /** Fallback transcription model (silence-hallucination guard). Default: whisper-1. */
+  /** Fallback transcription model when the primary API call fails. Default: whisper-1. */
   OPENAI_TRANSCRIBE_FALLBACK_MODEL: z.string().optional(),
   /** Legacy single-shot transcribe model (src/lib/transcribe.ts). Default: whisper-1. */
   OPENAI_LEGACY_TRANSCRIBE_MODEL: z.string().optional(),

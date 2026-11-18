@@ -162,9 +162,9 @@ Dedupe Wave C/D + agenticPipeline Phase 2 = **background**. Everything else is r
   `entry_denied surface=start|open_room|resume|join|join_token|schedule principal=<type> reason=<EntryBlockReason> mode=online|in_person`,
   `learner_lane_refused surface=segment|end|chunk|queue|kick|sweep|generate streamId=<id>`, `lane_mismatch stored=<id> input=<id>` (worker: the stored lane wins),
   `replay_access audio=<bool> board=<bool> source=snapshot|legacy principal=<type>`),
-  `txc` (transcription — `[txc] wbsid=<id> action=refused reason=audio_off|notes_off|notes_forbidden surface=chunk|queue|kick|sweep|generate streamId=<id>`; worker no-ops write `[txc] wbsid=<id> action=worker_skip reason=already_done|already_refused|already_transcribing|lane_unknown`; sweep auth
+  `txc` (transcription — `[txc] wbsid=<id> action=refused reason=audio_off|notes_off|notes_forbidden surface=chunk|queue|kick|sweep|generate streamId=<id>`; worker no-ops write `[txc] wbsid=<id> action=worker_skip reason=already_done|already_refused|already_transcribing|lane_unknown`; a dropped silence hallucination writes `[txc] wbsid=<id> action=silence_dropped part=<n/n> reason=<phrase|empty|number_unit|repetition|non_latin|sound|filler>`; sweep auth
   rejections write `[txc] action=sweep_auth_rejected`),
-  `tnt` (tutor notes drafting — `[tnt] wbsid=<id> action=skip reason=notes_off|no_audio|notes_forbidden surface=status|enqueue|reduce|live_reduce|generate|trigger|regenerate`; a failed gate lookup at enqueue writes `[tnt] wbsid=<id> action=enqueue_gate_error err=<message>` and falls through to the pending upsert),
+  `tnt` (tutor notes drafting — `[tnt] wbsid=<id> action=skip reason=notes_off|no_audio|notes_forbidden surface=status|enqueue|reduce|live_reduce|generate|trigger|regenerate`; blank or whitespace-only transcripts skip the model with `[tnt] wbsid=<id> action=live_reduce_empty_skip_llm|reduce_empty_skip_llm`; a failed gate lookup at enqueue writes `[tnt] wbsid=<id> action=enqueue_gate_error err=<message>` and falls through to the pending upsert),
   `rol` (JWT role-refresh — auth-options jwt callback
   periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
   stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when

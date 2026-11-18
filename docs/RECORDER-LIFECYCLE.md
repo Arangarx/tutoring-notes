@@ -482,7 +482,7 @@ explicit precedence, add tests in
 `src/__tests__/recording/lifecycle-machine.test.ts`. Then thread the
 input from the host. Do NOT introduce side effects in the FSM.
 
-**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs / ers / sal prefixes
+**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs / ers / sal / txc prefixes
 documented?**
 A: AGENTS.md "Per-session ID logging is mandatory." section. The
 3-letter prefixes used in this stack are `wbsid` (whiteboard
@@ -565,7 +565,8 @@ key is `2fa-verify:<adminUserId>`; key lines:
 `[tfr] tfr=2fa-verify:<id> action=rate-limited count=<n> retryAfterSec=<s>`,
 `[tfr] tfr=2fa-verify:<id> action=approaching-limit count=<n>/20`),
 `org` (organization membership and visibility — every membership change, schedule-on-behalf, reassignment, and metadata view writes
-`[org] org=<organizationId> action=<action> actor=<adminUserId> ...`; the schedule-to-session bridge also logs the appointment id with `wbsid`), and
+`[org] org=<organizationId> action=<action> actor=<adminUserId> ...`; the schedule-to-session bridge also logs the appointment id with `wbsid`),
+`txc` (transcription chunk — `[txc] wbsid=<id> action=silence_dropped part=<n/n> reason=<code>` when a silence cliché is discarded instead of stored; consent refusals stay `action=refused`. Full action list is in AGENTS.md), and
 the component-specific ones in `useAudioRecorder` (`aud=`).
 
 ### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)

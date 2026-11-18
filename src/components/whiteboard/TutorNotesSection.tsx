@@ -30,6 +30,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -41,23 +42,22 @@ import {
   type TutorNoteStatusResult,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  EMPTY_STRUCTURED_NOTE,
+  type StructuredNoteFields,
+} from "@/lib/note-content";
 import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
+
+export type { StructuredNoteFields };
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type StructuredFields = {
-  topics: string;
-  assessment: string;
-  nextSteps: string;
-  links: string;
-};
-
-export type StructuredNoteFields = StructuredFields;
+type StructuredFields = StructuredNoteFields;
 
 /** What "Share session" saves: no notes text. The save releases the replay; it writes no AI provenance. */
-const EMPTY_NOTE_FIELDS: StructuredFields = { topics: "", assessment: "", nextSteps: "", links: "" };
+const EMPTY_NOTE_FIELDS: StructuredFields = { ...EMPTY_STRUCTURED_NOTE };
 
 // ---------------------------------------------------------------------------
 // Props
@@ -95,6 +95,14 @@ type Props = {
 /** Polling interval in ms while notes are pending/generating. */
 const POLL_INTERVAL_MS = 3_000;
 
+/**
+ * A finished note whose stored content is the canonical empty structured note.
+ * That is what the worker writes when every chunk was silence. A blank
+ * in-progress form is pending or generating, so it does not match.
+ */
+const NO_SPEECH_NOTE_COPY =
+  "No speech was detected in this recording, so no notes were drafted. You can write notes yourself.";
+
 /** Client-side skeleton timeout in ms — matches ratified Q5 (5 min). */
 const SKELETON_TIMEOUT_MS = 5 * 60 * 1_000;
 
@@ -116,7 +124,7 @@ export function noteFieldsAreEmpty(fields: StructuredFields): boolean {
 }
 
 export function parseNoteContent(content: string | null): StructuredFields {
-  if (!content) return { topics: "", assessment: "", nextSteps: "", links: "" };
+  if (!content) return { ...EMPTY_STRUCTURED_NOTE };
   try {
     const parsed = JSON.parse(content) as Record<string, unknown>;
     return {
@@ -133,8 +141,20 @@ export function parseNoteContent(content: string | null): StructuredFields {
     };
   } catch {
     // Legacy markdown content — surface in topics for manual review
-    return { topics: content, assessment: "", nextSteps: "", links: "" };
+    return { ...EMPTY_STRUCTURED_NOTE, topics: content };
   }
+}
+
+/** Stored TutorNote.content is the worker's empty structured note, not a blank draft. */
+function isCanonicalEmptyStructuredNote(content: string | null): boolean {
+  if (!content) return false;
+  const fields = parseNoteContent(content);
+  return (
+    fields.topics === EMPTY_STRUCTURED_NOTE.topics &&
+    fields.assessment === EMPTY_STRUCTURED_NOTE.assessment &&
+    fields.nextSteps === EMPTY_STRUCTURED_NOTE.nextSteps &&
+    fields.links === EMPTY_STRUCTURED_NOTE.links
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +185,7 @@ export default function TutorNotesSection({
   const [internalFields, setInternalFields] = useState<StructuredFields>(() =>
     initialNote.found && initialNote.content
       ? parseNoteContent(initialNote.content)
-      : { topics: "", assessment: "", nextSteps: "", links: "" }
+      : { ...EMPTY_STRUCTURED_NOTE }
   );
 
   const fields = isControlled ? controlledFields! : internalFields;
@@ -208,6 +228,10 @@ export default function TutorNotesSection({
     ? "Writing notes…"
     : "Preparing your notes...";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
+  const silentEmptyDone =
+    note.found &&
+    note.status === "done" &&
+    isCanonicalEmptyStructuredNote(note.content);
   const isFailed = note.found && note.status === "failed";
   // A finished, failed, or timed-out note can be saved by hand. Session
   // deletion stays on a finished note: it removes the session, not the draft.
@@ -224,7 +248,7 @@ export default function TutorNotesSection({
   // stops that replacement so the tutor can type into the empty fields.
   const visibleFields: StructuredFields =
     isGeneratingPhase && formInFlight
-      ? { topics: "", assessment: "", nextSteps: "", links: "" }
+      ? { ...EMPTY_STRUCTURED_NOTE }
       : fields;
   const showInBoxSkeleton =
     formInFlight &&
@@ -479,6 +503,12 @@ export default function TutorNotesSection({
               : undefined
           }
         >
+          {silentEmptyDone ? (
+            <NotesNotice testId="tutor-notes-no-speech">
+              {NO_SPEECH_NOTE_COPY}
+            </NotesNotice>
+          ) : null}
+
           {/* Partial transcript badge — done only */}
           {isDone && note.isPartial && (
             <div
@@ -657,9 +687,7 @@ export default function TutorNotesSection({
           ends with a save: "Share session" releases the replay to the family with no notes text (Q1). */}
       {isSkipped && (
         <div style={{ display: "grid", gap: 10 }}>
-          <div className="muted" style={{ fontSize: 13 }} data-testid="tutor-notes-skipped">
-            {NOTES_SKIPPED_COPY}
-          </div>
+          <NotesNotice testId="tutor-notes-skipped">{NOTES_SKIPPED_COPY}</NotesNotice>
           {saveError ? <SaveErrorAlert message={saveError} /> : null}
           {savedInShell ? <SavedConfirmation /> : null}
           <div>
@@ -678,9 +706,9 @@ export default function TutorNotesSection({
 
       {/* Done but no content (shouldn't happen but defensive) */}
       {isDone && note.found && !note.content && (
-        <div className="muted" style={{ fontSize: 13 }}>
+        <NotesNotice>
           Notes were generated but the content is empty. Click Regenerate to retry.
-        </div>
+        </NotesNotice>
       )}
 
       {/* Failed state */}
@@ -722,10 +750,10 @@ export default function TutorNotesSection({
 
       {/* No audio recorded at all */}
       {isNotStarted && !hasAudio && !isSkipped && (
-        <div className="muted" style={{ fontSize: 13 }}>
+        <NotesNotice>
           No audio was recorded for this session. Notes are generated from the
           session recording.
-        </div>
+        </NotesNotice>
       )}
 
       {/* A done note with no content still hides the form. Failed and timed-out notes keep it. */}
@@ -740,6 +768,15 @@ export default function TutorNotesSection({
           </Link>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Inline muted line used by the notes section. Same markup at every site. */
+function NotesNotice({ testId, children }: { testId?: string; children: ReactNode }) {
+  return (
+    <div className="muted" style={{ fontSize: 13 }} data-testid={testId}>
+      {children}
     </div>
   );
 }

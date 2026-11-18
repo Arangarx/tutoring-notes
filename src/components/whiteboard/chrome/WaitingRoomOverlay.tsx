@@ -21,6 +21,7 @@
 
 import "./waiting-room-overlay.css";
 import { useState, type ReactNode } from "react";
+import { TranscriptionLanguageNotice } from "@/components/recording/TranscriptionLanguageNotice";
 import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
 import type { EntryBlockReason } from "@/lib/scheduling/session-entry";
 import { WbIconShare } from "./wb-icons";
@@ -236,10 +237,16 @@ export function WaitingRoomOverlay({
           {avTilesNode}
         </div>
 
-        {/* ── A/V controls row (chip-toggles) ── */}
-        <div className="mynk-wtr-av-controls">
-          {micControlNode}
-          {camControlNode}
+        {/* ── A/V controls + tutor transcription notice (before Start / record) ── */}
+        <div
+          className="mynk-wtr-audio-cluster"
+          data-testid="wb-waiting-audio-controls"
+        >
+          <div className="mynk-wtr-av-controls">
+            {micControlNode}
+            {camControlNode}
+          </div>
+          {isTutor ? <TranscriptionLanguageNotice /> : null}
         </div>
 
         {/* ── Device pickers (mic + camera selects) ── */}
