@@ -16,7 +16,7 @@
 
 1. pw-parallel verify + 3-stack proof. If MERGE-OK, merge it FIRST, then give later lanes their own stack (PW_* env vars) instead of the shared lock.
 2. As each lane reports MERGE-READY with green gates, run a separate verification (Sonnet on core/fragile, Grok otherwise), then `merge --no-ff` into `feat/org-qol` and push. static-checks merges LAST, then `npm ci` in main.
-3. After apply-race merges: live-A/V Sonnet lane (G1, SMOKE-BLOCK-1, BUG-8, AV-CAM-BUTTON-ACQUIRING, B11, AV-REFRESH-LOSS, phone WebKit A/V), WS-B, WS-N5 (recording-durability agent, WhiteboardWorkspaceClient `wbCaptureActive` wiring), then Gate A5 sync matrix.
+3. apply-race MERGED 014ae4cb. Lanes live-av, rec-draft, apply-overlap, c7-copy started 21:55 (see In-flight). After apply-overlap merges: Gate A5 sync matrix (Grok).
 4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
 5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 6. **Strix pen test + any further OpenAI evals: deferred to 2026-11-18 (Andrew).** The local `.env` has NO `OPENAI_API_KEY`; the only key on the machine is production (`.env.production.local`). Ask Andrew which key before running. Andrew said the notes-abstain eval's few cents on the production key were fine (no rotation).
@@ -39,7 +39,13 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | consent-copy (C8 privacy/terms) | MERGED 96978496 | — |
 | fold-transcript | MERGED 10f8f1ff (worktree removed; tsc 0 on merged tip) | — |
 | notes-abstain (SMOKE-NOTES-3) | MERGED fdf2c23b (tip 931d3e5b). Worktree removed | — |
-| fold-apply-race | 84ebc1e3: author 355a519c done: `src/lib/seam-parking-lot.ts` single park/release core used by both seams + T5a-H1 undo test (red with fix commits reverted, green with fix); apply-race 17/17 on stack 2, next build 0, tsc 0. Sonnet re-verify 2091ab89 running, then merge. The author saw consent-entry.spec RP1/2/3/5/6/7 + W27 red (replay/snapshot fetch ECONNREFUSED/500), also red on pristine 708307bc. Triage these in A8 (possibly environmental). Queued after merge (Sonnet, own lane with Playwright repro): overlapping apply windows (`releaseApplyingRemote` clears `applyingRemoteRef` mid-hydrate of next apply; guard ~:1103 should check `v3ApplyInFlightRef`); WB-STUDENT-FLUSH-IMAGE-ASSETURL | 355a519c |
+| fold-apply-race | MERGED 014ae4cb (tip 84ebc1e3; Sonnet 2091ab89 MERGE-OK; merged tsc 0). Worktree removed. A8 TODO: consent-entry.spec RP1/2/3/5/6/7 + W27 red (replay/snapshot fetch ECONNREFUSED/500), red on pristine too; verifier reads it as environmental (blob/replay harness on parallel stacks) | — |
+| live-av (`tn-live-av`) | From 014ae4cb. Sonnet author: G1, SMOKE-BLOCK-1, BUG-8, B11, AV-REFRESH-LOSS, AV-CAM-BUTTON-ACQUIRING, phone WebKit A/V; plan first, red/green per item, `@wb-av`. Then a separate Sonnet verify | 7922b1b8-944c-43cc-9af0-e0d62ed95ad4 |
+| rec-draft (`tn-rec-draft`) | From 014ae4cb. Sonnet author: WS-B recovered draft enqueue + WS-N5 strokes after reopen (`wbCaptureActive`). `@wb-recording`. Then a separate Sonnet verify | ecca8b30-d57b-4d8d-bc0a-f865f8027ea1 |
+| apply-overlap (`tn-apply-overlap`) | From 014ae4cb. Sonnet author: overlapping apply windows (`releaseApplyingRemote` vs `v3ApplyInFlightRef` ~:1103) + WB-STUDENT-FLUSH-IMAGE-ASSETURL, reusing the hold seam. Then a separate Sonnet verify | 4251d9cb-6445-4867-8983-b4e21f103581 |
+| c7-copy (`tn-c7-copy`) | From 014ae4cb. Grok author: approved UI items 1-7, item 5 banner for tutor AND student, item 22 last sentence re-added with it, /limits 'while you are recording', org-session audio/wb restriction tests, V1-V4/E-copy/S2b/M16b. STOPs on unapproved strings. Then a Sonnet verify | dc0d749d-a81d-4f8c-a7a9-649fe6b5a05d |
+
+**Lock convention (from 21:55):** new lanes run Playwright on stack 2/3 ONLY. The default DB `tutoring_notes_test` is reserved for jest, and DB-backed jest holds `tn-pw.lock` while it runs (jest global setup resets that DB). The WoW cap counts all `tn-pw*.lock` files.
 | static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
 | org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
 | jest-triage | MERGED 2035b5b4 (worktree removed). Remaining full-jest red: upload-outbox "different streams upload in parallel" (on base too → A8). Author had deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | — |
