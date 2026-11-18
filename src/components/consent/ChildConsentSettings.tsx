@@ -13,11 +13,13 @@ import type { ChildConsentOwner } from "@/lib/child-consent";
 import type { ConsentToggleCeiling } from "@/lib/consent-scope";
 import { saveChildConsentAction } from "@/app/join/child-home-actions";
 
-const CHILD_DESCRIPTION: Partial<Record<ConsentSwitchKey, string>> = {
-  allowLiveSession: SELF_SWITCH_DESCRIPTION.allowLiveSession,
-  allowAudioRecording:
-    "Session audio can be saved for notes and review. Live conversation still works when live sessions are on.",
-};
+/** Child lines for the two switches whose parent text says "your child" (items 29 and 31). */
+function childSwitchDescription(key: ConsentSwitchKey): string | undefined {
+  if (key === "allowLiveSession" || key === "allowAudioRecording") {
+    return SELF_SWITCH_DESCRIPTION[key];
+  }
+  return undefined;
+}
 
 export function ChildConsentSettings({
   ceiling,
@@ -60,7 +62,7 @@ export function ChildConsentSettings({
   const switches = CONSENT_SWITCHES.map((item) => ({
     key: item.key,
     label: item.label,
-    description: CHILD_DESCRIPTION[item.key] ?? item.description,
+    description: childSwitchDescription(item.key) ?? item.description,
     emphasis: item.emphasis,
     banner: "banner" in item ? item.banner : undefined,
     notice: restoredByParent[item.key]

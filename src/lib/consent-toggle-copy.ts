@@ -14,7 +14,7 @@ export const LIVE_SESSION_CONSENT_COPY = {
 export const AUDIO_RECORDING_CONSENT_COPY = {
   label: "Allow session audio recording",
   description:
-    "Allows this tutor to record session audio for notes and review. For in-person sessions, one microphone captures everyone in the room. For online sessions, your child's voice is recorded separately from the tutor's. Live conversation is always available when live sessions are allowed — this toggle only controls what is saved.",
+    "Session audio is recorded. If this is off, online sessions save the tutor's voice only, and in person sessions save no audio. The live call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting.",
 } as const;
 
 /** Accepted self-learner audio help. Andrew 2026-11-17 (consent copy item 34). */
@@ -25,19 +25,35 @@ export const SELF_LEARNER_AUDIO_HELP =
 export const SELF_LEARNER_AGREEMENT =
   "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk may draft session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
 
+/** One board sentence for parent, child, and self-learner (item 32). */
+export const WHITEBOARD_SWITCH_DESCRIPTION =
+  "The board is saved and can be replayed. If this is off, the board still works during the session. After the session ends, the saved board is deleted from our servers.";
+
+/** One notes sentence for parent, child, and self-learner (item 33). */
+export const NOTES_SWITCH_DESCRIPTION =
+  "Session notes are drafted from the audio. Transcription is for English speech. If this is off, nothing is transcribed and no notes are drafted, even if audio was saved.";
+
+/** Child and self-learner online and audio lines (items 29 and 31). */
+export const AUDIENCE_SWITCH_DESCRIPTION = {
+  allowLiveSession:
+    "You can join online sessions with video and audio. In person is not affected by this switch.",
+  allowAudioRecording:
+    "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The whiteboard follows its own setting.",
+} as const;
+
 export const WHITEBOARD_RECORDING_CONSENT_COPY = {
   label: "Allow whiteboard recording",
-  description: "The shared whiteboard can be saved and replayed.",
+  description: WHITEBOARD_SWITCH_DESCRIPTION,
 } as const;
 
 export const SESSION_NOTES_CONSENT_COPY = {
   label: "Allow session notes",
-  description: "Mynk can draft session notes from the session.",
+  description: NOTES_SWITCH_DESCRIPTION,
 } as const;
 
-/** Restored parent-editor copy. Shown above the live-session switch. */
+/** Shown when online sessions are off. Same sentence for parent, child, and self-learner (item 30). */
 export const LIVE_SESSION_SCHEDULING_NOTE =
-  "Without live sessions, Mynk is effectively just a scheduling calendar — your child cannot join tutoring on the whiteboard. You can decline, but there is little reason to use the app if this stays off.";
+  "With online sessions off, online sessions cannot be started or joined. In person is not affected.";
 
 /** Restored parent-editor copy. Shown under a recommended switch. Andrew 2026-11-17 (item 36). */
 export const RECOMMENDED_CONSENT_NOTE =
@@ -71,19 +87,14 @@ export const RECORDING_OFF_NOTES = "Notes are off for this session. Nothing is t
  * The self page must not say "your child".
  */
 export const SELF_SWITCH_DESCRIPTION = {
-  allowLiveSession:
-    "You can join online sessions with video and audio. In person is not affected by this switch.",
-  allowAudioRecording:
-    "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The whiteboard follows its own setting.",
-  allowWhiteboardRecording:
-    "The board is saved and can be replayed. If this is off, the board still works during the session. After the session ends, the saved board is deleted from our servers.",
-  allowNoteSending:
-    "Session notes are drafted from the audio. Transcription is for English speech. If this is off, nothing is transcribed and no notes are drafted, even if audio was saved.",
+  allowLiveSession: AUDIENCE_SWITCH_DESCRIPTION.allowLiveSession,
+  allowAudioRecording: AUDIENCE_SWITCH_DESCRIPTION.allowAudioRecording,
+  allowWhiteboardRecording: WHITEBOARD_SWITCH_DESCRIPTION,
+  allowNoteSending: NOTES_SWITCH_DESCRIPTION,
 } as const;
 
-/** Shown on the self-learner page when online sessions are off (item 30). */
-export const SELF_LIVE_OFF_NOTE =
-  "With online sessions off, online sessions cannot be started or joined. In person is not affected.";
+/** Same sentence as `LIVE_SESSION_SCHEDULING_NOTE` (item 30). */
+export const SELF_LIVE_OFF_NOTE = LIVE_SESSION_SCHEDULING_NOTE;
 
 export function recordingOffBannerLines(input: {
   audience: "tutor" | "student";
@@ -185,16 +196,20 @@ export const CONSENT_SWITCHES = [
   },
 ] as const satisfies readonly ConsentSwitchEntry[];
 
+/** Confirming the decline button saves every switch off (item 28). */
+const DECLINE_PARENT =
+  "If you continue, every switch is saved off. Online sessions cannot start. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account.";
+const DECLINE_PARENT_INVITED =
+  "Your child has already been invited. They cannot join an online session until online sessions are on.";
+const DECLINE_SELF =
+  "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. In person can still happen. Open Manage, then Privacy.";
+const DECLINE_SELF_INVITED =
+  "You have already been invited. You cannot join that online session until online sessions are on.";
+
 export const CONSENT_DECLINE_WARNING = {
   title: "Are you sure?",
-  pendingInvite:
-    "If you continue without enabling any options, your child will not be able to join the live tutoring session they've already been invited to. You can change these preferences later from your account dashboard.",
-  plain:
-    "Until you set preferences, your child cannot participate in live tutoring sessions with this tutor. You can update preferences any time from your account dashboard.",
-  /** Pending-invite warning for the person whose own sessions these are. */
-  selfLearnerPending:
-    "Consent has not been given yet. You cannot join a session until you give consent, including the live tutoring session you have already been invited to. Open Manage, then Privacy.",
-  /** No consent yet. Does not address a parent. */
-  selfLearner:
-    "Consent has not been given yet. You cannot join a session until you give consent. Open Manage, then Privacy.",
+  plain: DECLINE_PARENT,
+  pendingInvite: `${DECLINE_PARENT} ${DECLINE_PARENT_INVITED}`,
+  selfLearner: DECLINE_SELF,
+  selfLearnerPending: `${DECLINE_SELF} ${DECLINE_SELF_INVITED}`,
 } as const;

@@ -27,9 +27,17 @@ describe("ConsentSetupForm — consent switches", () => {
     render(<ConsentSetupForm {...defaultProps} />);
 
     expect(screen.getByLabelText(/allow session notes/i)).toBeInTheDocument();
-    expect(screen.getByText(/mynk can draft session notes/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Session notes are drafted from the audio. Transcription is for English speech. If this is off, nothing is transcribed and no notes are drafted, even if audio was saved."
+      )
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/allow whiteboard recording/i)).toBeInTheDocument();
-    expect(screen.getByText(/shared whiteboard can be saved and replayed/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The board is saved and can be replayed. If this is off, the board still works during the session. After the session ends, the saved board is deleted from our servers."
+      )
+    ).toBeInTheDocument();
   });
 
   test("still renders active consent toggles", () => {
@@ -50,7 +58,7 @@ describe("ConsentSetupForm — consent switches", () => {
     expect(screen.queryByText(/everything drawn/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        /live conversation is always available when live sessions are allowed/i
+        "Session audio is recorded. If this is off, online sessions save the tutor's voice only, and in person sessions save no audio. The live call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting."
       )
     ).toBeInTheDocument();
   });
@@ -117,10 +125,12 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
 
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(
-      screen.getByText(/cannot participate in live tutoring sessions with this tutor/i)
+      screen.getByText(
+        "If you continue, every switch is saved off. Online sessions cannot start. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account."
+      )
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/session they've already been invited to/i)
+      screen.queryByText(/Your child has already been invited/i)
     ).not.toBeInTheDocument();
 
     await user.click(
@@ -157,7 +167,7 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
 
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(
-      "Consent has not been given yet. You cannot join a session until you give consent. Open Manage, then Privacy."
+      "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. In person can still happen. Open Manage, then Privacy."
     );
     expect(dialog.textContent ?? "").not.toMatch(/record/i);
     expect(dialog).not.toHaveTextContent(/your child/i);
@@ -180,7 +190,7 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
 
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(
-      "Consent has not been given yet. You cannot join a session until you give consent, including the live tutoring session you have already been invited to. Open Manage, then Privacy."
+      "If you continue, every switch is saved off. You cannot join an online session until you turn online sessions on. In person can still happen. Open Manage, then Privacy. You have already been invited. You cannot join that online session until online sessions are on."
     );
     expect(dialog.textContent ?? "").not.toMatch(/record/i);
     expect(dialog).not.toHaveTextContent(/your child/i);
@@ -197,12 +207,11 @@ describe("ConsentSetupForm — CC-2 mandatory consent choice (T8, decline dialog
       screen.getByRole("button", { name: /no consent now, i'll review later/i })
     );
 
-    expect(
-      screen.getByText(/session they've already been invited to/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/cannot participate in live tutoring sessions with this tutor/i)
-    ).not.toBeInTheDocument();
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent(
+      "If you continue, every switch is saved off. Online sessions cannot start. You can still meet in person. In person, no audio is saved, and the board is not kept after the session. You can change this later from your account. Your child has already been invited. They cannot join an online session until online sessions are on."
+    );
+    expect(dialog).not.toHaveTextContent(/cannot participate in live tutoring sessions/i);
   });
 
   test("409 consent_already_saved on decline is treated as saved", async () => {

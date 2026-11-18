@@ -40,6 +40,17 @@ describe("ChildConsentSettings", () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/everything drawn/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The whiteboard follows its own setting."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/saved for notes and review/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The board is saved and can be replayed. If this is off, the board still works during the session. After the session ends, the saved board is deleted from our servers."
+      )
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/allow online sessions/i)).toBeInTheDocument();
   });
 });

@@ -51,9 +51,17 @@ describe("ParentConsentEditor — consent switches", () => {
     render(<ParentConsentEditor {...defaultProps} />);
 
     expect(screen.getByLabelText(/allow session notes/i)).toBeInTheDocument();
-    expect(screen.getByText(/mynk can draft session notes/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Session notes are drafted from the audio. Transcription is for English speech. If this is off, nothing is transcribed and no notes are drafted, even if audio was saved."
+      )
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/allow whiteboard recording/i)).toBeInTheDocument();
-    expect(screen.getByText(/shared whiteboard can be saved and replayed/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The board is saved and can be replayed. If this is off, the board still works during the session. After the session ends, the saved board is deleted from our servers."
+      )
+    ).toBeInTheDocument();
   });
 
   test("still renders active consent toggles", () => {
@@ -74,7 +82,7 @@ describe("ParentConsentEditor — consent switches", () => {
     expect(screen.queryByText(/everything drawn/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        /live conversation is always available when live sessions are allowed/i
+        "Session audio is recorded. If this is off, online sessions save the tutor's voice only, and in person sessions save no audio. The live call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting."
       )
     ).toBeInTheDocument();
   });
@@ -220,7 +228,7 @@ describe("ParentConsentEditor — organization rows", () => {
     render(<ParentConsentEditor {...defaultProps} />);
     expect(
       screen.queryByText(
-        /without live sessions, mynk is effectively just a scheduling calendar/i
+        "With online sessions off, online sessions cannot be started or joined. In person is not affected."
       )
     ).not.toBeInTheDocument();
     expect(
@@ -237,12 +245,31 @@ describe("ParentConsentEditor — organization rows", () => {
     );
     expect(
       screen.getByText(
-        /without live sessions, mynk is effectively just a scheduling calendar/i
+        "With online sessions off, online sessions cannot be started or joined. In person is not affected."
       )
     ).toBeInTheDocument();
     expect(
       screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
+  });
+
+  test("a child-off online row is labeled Online sessions", () => {
+    render(
+      <ParentConsentEditor
+        {...defaultProps}
+        childSet={{
+          childSetLiveSession: true,
+          childSetAudioRecording: false,
+          childSetWhiteboardRecording: false,
+          childSetNoteSending: false,
+        }}
+      />
+    );
+    expect(screen.getByLabelText("Online sessions")).toBeInTheDocument();
+    expect(
+      screen.getByText("Your child turned this off. Turn it back on to allow it again.")
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Live tutoring sessions")).not.toBeInTheDocument();
   });
 });
 

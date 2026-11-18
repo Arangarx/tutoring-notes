@@ -405,7 +405,9 @@ describe("Claim setup page — M-1 pending session invite detection", () => {
     );
 
     expect(
-      await screen.findByText(/session they've already been invited to/i)
+      await screen.findByText(
+        /Your child has already been invited. They cannot join an online session/i
+      )
     ).toBeInTheDocument();
   });
 
@@ -425,7 +427,7 @@ describe("Claim setup page — M-1 pending session invite detection", () => {
 
     expect(
       await screen.findByText(
-        /cannot participate in live tutoring sessions with this tutor/i
+        /Online sessions cannot start. You can still meet in person/i
       )
     ).toBeInTheDocument();
     expect(

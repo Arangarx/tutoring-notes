@@ -91,7 +91,7 @@ const CHILD_OFF_SWITCHES = [
     restrict: "restrictLiveSession" as const,
     childSet: "childSetLiveSession" as const,
     key: "allowLiveSession" as const,
-    label: "Live tutoring sessions",
+    label: "Online sessions",
     description: "Your child turned this off. Turn it back on to allow it again.",
   },
   {
