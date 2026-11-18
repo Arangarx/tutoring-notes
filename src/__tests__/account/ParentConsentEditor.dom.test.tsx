@@ -248,6 +248,8 @@ describe("ParentConsentEditor — organization rows", () => {
         "With online sessions off, online sessions cannot be started or joined. In person is not affected."
       )
     ).toBeInTheDocument();
+    expect(screen.queryByText(/limited to scheduling/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/without live sessions/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();

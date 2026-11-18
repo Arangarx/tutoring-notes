@@ -11,7 +11,7 @@ describe("ParentJoinGapCallout", () => {
     render(<ParentJoinGapCallout />);
     expect(screen.getByTestId("parent-join-gap-callout")).toBeInTheDocument();
     expect(
-      screen.getByText(/You can join live sessions for your child/)
+      screen.getByText("You can join online sessions for your child")
     ).toBeInTheDocument();
     expect(
       screen.getByText(/You do not need their PIN/)

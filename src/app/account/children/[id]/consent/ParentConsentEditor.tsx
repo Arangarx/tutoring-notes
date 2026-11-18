@@ -295,13 +295,6 @@ export function ParentConsentEditor({
               </AccordionTrigger>
               <AccordionContent className="pb-4">
                 <div className="space-y-3">
-                  {!tutor.allowLiveSession ? (
-                    <div className="rounded-[8px] border border-warning/30 bg-warning/10 px-3 py-2">
-                      <p className="text-sm font-medium text-warning">
-                        Limited to scheduling without live sessions
-                      </p>
-                    </div>
-                  ) : null}
                   <ConsentSwitches
                     idPrefix={tutor.adminUserId}
                     testIdPrefix="parent-consent-toggle"
