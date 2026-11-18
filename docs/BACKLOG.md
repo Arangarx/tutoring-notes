@@ -668,12 +668,16 @@ Master-cut #11: post-resume segment only in transcribed notes. WS-N landed parti
 Remainder: hardware VERIFY; PERF-1 snapshot de-await. Merges [`e58e0826`](https://github.com/Arangarx/tutoring-notes/commit/e58e0826) / [`69eacbf6`](https://github.com/Arangarx/tutoring-notes/commit/69eacbf6) shipped.
 
 **[P1][AV] SMOKE-BLOCK-1 — reachability under-reports connected peer (Start dead)**  
-Still open on `master`. Start enables only when `reachableParticipants` is at least 1, and a peer counts only when both `peerConnectionState === "connected"` and ICE is `connected` or `completed`. Safari can leave the overall connection on `connecting` while ICE is already up, so the count stays 0 and Start stays disabled. The A/V-required gate is correct. The bug is a false zero. Cross-ref **BUG-8** on reconnect.
+**FIXED on `launch/live-av` (2026-11-18, pending merge + independent verification):** reachable = ICE `connected`/`completed` and aggregate state `connected` or `connecting` (`useLiveAV.rebuild()`). Guard: `wb-av-mesh.spec.ts` › "SMOKE-BLOCK-1: connectionState stuck on connecting with ICE connected and media flowing — Start still enables" (red on pre-fix: Start stays disabled). See `docs/LIVE-AV.md` invariant 18.
+
+Was open on `master`. Start enables only when `reachableParticipants` is at least 1, and a peer counts only when both `peerConnectionState === "connected"` and ICE is `connected` or `completed`. Safari can leave the overall connection on `connecting` while ICE is already up, so the count stays 0 and Start stays disabled. The A/V-required gate is correct. The bug is a false zero. Cross-ref **BUG-8** on reconnect.
 
 Andrew's July 3 Android smoke did not reproduce the dead Start button. Reconnect got worse: board and laser recovered, audio and video did not, and the timer stayed paused. Notes: [`presarah-batch-resmoke-smokebook-2026-07-03.md`](archive/handoff/presarah-batch-resmoke-smokebook-2026-07-03.md) item B1.
 
 **[P1][AV] BUG-8 — reconnect media transport not rebuilt after peer leave/rejoin**  
-FRAGILE — `peer-mesh.ts` / `useLiveAV.ts`. Pre-existing; surfaced 2026-07-03 re-smoke. Plan + hardware validation before merge.
+**FIXED on `launch/live-av` (2026-11-18, pending merge + independent verification) via C2 fingerprint replace** (`peer-mesh.ts`). Media already resumed in the harness; the real defect was the tutor keeping its old `RTCPeerConnection` across a student exit/rejoin. Guard: `wb-av-mesh.spec.ts` › "BUG-8: student Exit then Rejoin — tutor builds a new peer connection and both cameras and audio flow again" (red on pre-fix: tutor's live PC is still the original; oracle is PC identity from the browser's PC list plus painted video + audio RTP). Hardware validation still wanted (real Safari/Android).
+
+FRAGILE — `peer-mesh.ts` / `useLiveAV.ts`. Pre-existing; surfaced 2026-07-03 re-smoke.
 
 **[P1][AV] BUG-9 — camera hotswap mid-session does not recover cleanly**  
 Same fragile surface as BUG-8. Deferred pending plan.
@@ -736,7 +740,7 @@ Closed history: [`docs/SHIPPED.md`](SHIPPED.md).
 
 **[P2][AV] AVTile mount latch deferred (2026-10-07):** `useHydratedDomPeerId` in `src/components/av/AVTile.tsx` still has its own mount latch. Deferred because it touches live A/V.
 
-**[P1][WB] AV-CAM-BUTTON-ACQUIRING (2026-10-06):** the camera button reads Off while the student camera is still starting (`isCamMuted` starts true); clicking it then means turn on, and the in-flight acquire sets `isCamMuted(false)` regardless (`useLiveAV.ts` ~1378/~1505). Consider an explicit starting state on the button. The contract comment at `useLiveAV.ts` ~347–351 does not match :1378. Opus-owned.
+**[P1][WB] AV-CAM-BUTTON-ACQUIRING — FIXED on `launch/live-av` (2026-11-18, pending merge + verification):** `useLiveAV` exposes `isCamStarting` + a start intent; the button reads "on" while the camera starts and one tap cancels it (track lands disabled). Guard: `wb-av-mesh.spec.ts` › "AV-CAM-BUTTON-ACQUIRING: while the camera is still starting the button reads on, and one tap cancels it so the camera ends off" (red on pre-fix: label "Turn camera on" while starting). Original report (2026-10-06): the camera button reads Off while the student camera is still starting (`isCamMuted` starts true); clicking it then means turn on, and the in-flight acquire sets `isCamMuted(false)` regardless (`useLiveAV.ts` ~1378/~1505). Consider an explicit starting state on the button. The contract comment at `useLiveAV.ts` ~347–351 does not match :1378. Opus-owned.
 
 **[P2][AV] PLAYWRIGHT-GAP — phone student A/V on real WebKit (2026-11-17, launch/live-av):** Playwright's WebKit build on Windows has no `RTCPeerConnection` or `MediaStream` (probed 2026-11-17: every WebRTC global `undefined`), so a student on `devices["iPhone 13"]` cannot run a call in WebKit here. Surrogate that does run: `wb-av-mesh.spec.ts` › "phone student A/V is bidirectional" (Pixel 7 and iPhone 13 device profiles on the Chromium engine: narrow touch layout, mobile UA, both sides see moving video and receive audio RTP), plus the existing WebKit join/consent specs for engine-specific layout. Still hardware-only: real iOS Safari WebRTC (connectionState quirks, background suspension). Re-check when a Playwright release ships WebKit WebRTC on Windows, or run the WebKit project on macOS/Linux CI.
 
@@ -821,6 +825,8 @@ Spurious recovery banner; duplicate audio risk.
 Discord overlap; `ondevicechange` feasibility.
 
 **[P1][REC] B11 — release camera/mic tracks on session end**  
+**FIXED on `launch/live-av` (2026-11-18, pending merge + independent verification):** the student ended screen now calls `leaveAllPeers()` + `releaseLocalMedia()` and sets `micAcquireForRole` to `"no"` (the student's `useAudioRecorder` holds a second mic). Guard: `wb-av-mesh.spec.ts` › "B11: tutor ends the session — the student's camera and mic hardware tracks are released" (red on pre-fix: `liveVideo:1, liveAudio:2` on the ended screen; oracle = every getUserMedia track's `readyState`). Tutor-side end is unchanged (not covered by this item).
+
 Sarah blocked re-entering Discord. `RECORDER-LIFECYCLE` Surface 2.
 
 **[P2][REC] macOS ondevicechange debounce — unvalidated**  
@@ -928,7 +934,9 @@ Quality bar: a fold must not drop a fact that one full reduce of the same extrac
 `concatBlobUrl` / `buildReplayAudioPayload` partial; formal `tutor:mic:concat` replay master per plan not complete.
 
 **[P2][AV] Live A/V reload — C2: fingerprint-based peer replacement (deferred from item 35, 2026-10-22)**
-Fix A (one camera track per device) shipped alone for packet item 35. C2 was built and verified in jest but is NOT shipping.
+**SHIPPING on `launch/live-av` (2026-11-18, pending merge + independent verification):** C2 plus option (1) below (a presence-trusted tile gate: `src/lib/av/video-track-presentable.ts`) landed together; the gate is what keeps C2 from regressing the tile. **Product flag for Andrew:** the gate now trusts the sender's `camOn===true` over the receiver's `track.muted`; revert is one line. Guards: BUG-8 test (red without C2), G1 tests (red with C2 but without the gate in 3 of 4 runs), the extra-m-line tests (un-fixme'd). **G1 (waiting-room reload, Tyson item 35) honesty note:** the four `G1:` tests pass on pristine code at their 8s window (8/8 over `--repeat-each=2`), so the harness does NOT reproduce Tyson's report on pristine; they are guards (red only for C2-without-gate), not red-before proof of a G1 fix. The reported failure is likely hardware/timing-dependent (receiver `track.muted` stuck true after reload). Needs Andrew's hardware smoke on the waiting-room reload path. Historical notes below.
+
+Fix A (one camera track per device) shipped alone for packet item 35. C2 was built and verified in jest but was NOT shipping at the time.
 
 - What it does: `peer-mesh.ts` remembers each peer's DTLS fingerprint set from the applied remote description. An offer carrying a different set means the peer reloaded (new `RTCPeerConnection`, same stable `peerId`), so the mesh fires `leave` to subscribers, closes the stale PC and answers from a fresh one (`event=peer-instance-replaced reason=fingerprint-changed`). Fixes a stale PC with more m-lines than the reloaded peer's offer (`signal-apply-fail`).
 - Patch (peer-mesh.ts + peer-mesh.test.ts, applies with `git apply`): `docs/handoff/item35-c2-fingerprint-replace.patch`.
@@ -1071,7 +1079,7 @@ Student sees only Board 1 tab.
 Student view lock when synced.
 
 **[P2][WB] AV-REFRESH-LOSS — student hard-refresh loses A/V**  
-Not proven fixed post-wave5.
+**Already works on `launch/live-av` base (2026-11-18, evidence):** `wb-av-mesh.spec.ts` › "AV-REFRESH-LOSS: student hard refresh in a live session — own camera and mic come back with no action and both sides see and hear each other" is green on the pre-lane code and with the lane's changes (not red-before, so it is a regression guard, not a fix). Real-device replug (unplug/replug hardware) is not reproducible in Playwright; stays a hardware smoke item.
 
 **[P2][WB] Exit→rejoin A/V slow / ghost**  
 Unify smoke item 21.

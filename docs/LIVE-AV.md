@@ -369,11 +369,52 @@ fix for a real pilot-blocking bug.
     tests: "single acquisition under concurrent requestMicAndCam + requestCam") + `@wb-av`
     Playwright (Pixel 7 student: one live GUM video track, one video m-line,
     cam-off leaves no enabled video track, tutor reload keeps the student's
-    video). Remaining class (a PC that has *already* grown extra m-lines) is
-    deferred as C2 in [BACKLOG.md](BACKLOG.md) (patch in
-    `docs/handoff/item35-c2-fingerprint-replace.patch`); do not loosen the
-    muted-track tile gating (`hasActiveVideoTracks` requires `!track.muted`)
-    to paper over it.
+    video). The remaining class (a PC that has *already* grown extra m-lines,
+    or a stale PC that cannot answer a reloaded peer's fresh offer) is closed
+    by invariant 18 (C2).
+
+18. **Reload recovery is fingerprint-replace + presence-trusted tiles; a
+    mesh-reachable peer is ICE-connected** (launch/live-av lane, 2026-11-18).
+    - **C2 fingerprint replace** (`peer-mesh.ts`: `parseSdpFingerprints`,
+      `remoteFingerprints`, `replaceReloadedPeerEntry`): an inbound offer whose
+      `a=fingerprint` set differs from the entry's stored set is a *reloaded*
+      peer (same stable `peerId`, new DTLS identity). Subscribers hear `leave`
+      first, the old PC closes WITHOUT sending leave, then a fresh entry
+      answers the offer. Do not remove it: without it a stale PC answers a
+      fresh offer with `signal-apply-fail` (m-lines order mismatch) and
+      recovery waits on the 3s watchdog + wedge path (~15s in the harness;
+      Tyson item 35 / G1 waiting-room reload).
+    - **Presence-trusted tile gate** (`video-track-presentable.ts`
+      `hasPresentableVideoTrack(stream, senderReportsCamOn)`): a remote video
+      track counts as presentable when it is `enabled`, not `ended`, and either
+      the sender's presence says `camOn === true` OR the receiver track is not
+      `muted`. After a peer reload the receiver `track.muted` can stay stuck
+      `true` while RTP flows (`rxM` in the PC summary, `vIn>0`), so gating on
+      `!muted` alone painted the placeholder forever. This loosens the old
+      "require `!track.muted`" gate **only** when the sender affirmatively
+      reports `camOn===true` (presence only broadcasts `camOn` when a stream
+      exists). One-line revert in that file if product disagrees.
+    - **Reachability** (`useLiveAV.rebuild()`): a peer is `reachable` when its
+      ICE state is `connected`/`completed` and the aggregate PC state is
+      `connected` **or** `connecting`. Safari/iOS keep aggregate
+      `connectionState` on `connecting` while ICE is connected and media
+      flows; requiring exactly `connected` under-counted peers and left the
+      tutor's Start disabled (SMOKE-BLOCK-1).
+    - **Camera-start intent** (`useLiveAV`: `isCamStarting`,
+      `camStartIntentOn`): while `getUserMedia(video)` is in flight the button
+      reads "on"; one tap flips the intent, and the track lands disabled
+      (`isCamMuted` true) when the user cancelled. `requestMicAndCam` honors
+      the same intent (AV-CAM-BUTTON-ACQUIRING).
+    - **`releaseLocalMedia()`** stops and nulls every local track the hook
+      owns. The student workspace calls it (after `leaveAllPeers`) when the
+      join-unavailable / ended screen shows, and `micAcquireForRole` is `"no"`
+      for a student there so `useAudioRecorder` (which holds its OWN second
+      mic gUM on students) also releases (B11).
+    - Guards: `@wb-av` specs in `tests/integration/wb-av-mesh.spec.ts`
+      (`G1:`, `SMOKE-BLOCK-1:`, `BUG-8:`, `AV-REFRESH-LOSS:`, `B11:`,
+      `AV-CAM-BUTTON-ACQUIRING:`, phone-student surrogates) + jest
+      `video-track-presentable.test.ts` and the C2 cases in
+      `peer-mesh.test.ts`.
 
 
 ---

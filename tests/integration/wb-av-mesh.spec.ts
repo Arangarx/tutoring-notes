@@ -1572,17 +1572,6 @@ test.describe("B11 student releases camera and mic on the ended screen", {
       expect(liveBefore.video, "student never held a live camera track").toBeGreaterThanOrEqual(1);
       expect(liveBefore.audio, "student never held a live mic track").toBeGreaterThanOrEqual(1);
 
-      console.log(
-        "B11-diag student audio gUM:",
-        JSON.stringify(
-          await studentPage.evaluate(() =>
-            ((window as unknown as { __pwGumAudioStacks?: string[] }).__pwGumAudioStacks ?? []).map(
-              (s, i) => ({ i, stack: s.slice(0, 400) })
-            )
-          )
-        )
-      );
-
       await tutorPage.getByTestId("wb-end-session").click();
       await expect(tutorPage.getByTestId("wb-end-session-confirm")).toBeVisible({ timeout: 10_000 });
       await tutorPage.getByTestId("wb-end-session-confirm-yes").click();
