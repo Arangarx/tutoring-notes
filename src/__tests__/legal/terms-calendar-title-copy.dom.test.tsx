@@ -40,7 +40,12 @@ describe("terms calendar title honesty", () => {
     const body = bodyText();
     expect(body).not.toMatch(/opt in per student/i);
     expect(body).toMatch(/first name and last initial/i);
-    expect(screen.getByText(/Last updated: October 12, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last updated: November 17, 2026/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Last updated: October 12, 2026/i)).toBeNull();
+    const dated = bodyText();
+    expect(dated).toContain("Mynk completes that request within 30 days.");
+    expect(dated).not.toContain("before a live session");
+    expect(dated).not.toContain("when you finalize a note");
   });
 
   it("agrees with the privacy policy on calendar titles", () => {

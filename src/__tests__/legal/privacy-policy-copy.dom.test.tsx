@@ -32,16 +32,29 @@ describe("privacy policy copy (SEC-POLICY-TRUTH interim)", () => {
   it("shows updated date and truthful retention/audio wording", () => {
     render(<PrivacyPage />);
 
-    expect(screen.getByText(/Last updated: October 12, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last updated: November 17, 2026/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Last updated: October 12, 2026/i)).toBeNull();
     expect(screen.queryByText(/24 months after the account is closed/i)).toBeNull();
     expect(screen.queryByText(/grade level/i)).toBeNull();
     expect(
       screen.getByText(/authenticated, session-scoped URLs served through/i)
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/Automated retention schedules may be introduced in the future/i)
-        .length
-    ).toBeGreaterThanOrEqual(1);
+    const body = document.body.textContent ?? "";
+    expect(body).not.toMatch(/Automated retention schedules may be introduced in the future/i);
+    expect(body).not.toMatch(/transcribed by OpenAI and the notes are drafted automatically/);
+    expect(body).not.toMatch(
+      /timestamped stroke logs, optional PDF \/ image inserts, and a session snapshot used for the parent replay surface/
+    );
+    expect(body).toContain(
+      "That is not a general retention schedule for audio, transcripts, or notes."
+    );
+    expect(body).toContain(
+      "When session notes are on, the saved audio is transcribed by OpenAI and the notes are drafted from it."
+    );
+    expect(body).toContain(
+      "Whiteboard session data, when whiteboard recording is on:"
+    );
+    expect(body).toContain("Mynk completes that request within 30 days.");
     const tfaBullet = screen.getByText("Two-factor authentication.").closest("li");
     expect(tfaBullet).toHaveTextContent(/Teaching accounts require two-factor sign-in/);
     expect(tfaBullet).toHaveTextContent(/The code is emailed by default/);
