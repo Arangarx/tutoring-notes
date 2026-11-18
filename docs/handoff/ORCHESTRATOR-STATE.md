@@ -24,7 +24,8 @@
     - `055c818c-f6f1-430b-b9a5-9da3716b6d5f`: live-av round 2 (Grok). Covers: frame-evidence tile gate, `stopAllLocalMedia` dedupe, negative reachability jest, nits. Then a Grok verify, then a Sonnet confirm.
     - `81171a6d-16b0-40a7-9dea-0a9dcf0812cf`: apply-overlap verify (Grok; auth boundary + S3 flake).
     - `e7bf69c7-4106-4fc0-a47b-474fa0d167bc`: c7-copy verify (Grok, readonly; truth vs code + natural wording). MERGE-OK means merge.
-- **Open Andrew question (not yet asked):** rec-draft removed Keep/Discard, and recovered audio auto-uploads. A tutor can no longer discard a recovered clip; the only removal is deleting the whole session. Does he want a Discard back? Ask briefly; he is sick.
+- **DECIDED (Andrew 2026-11-18): no Discard.** Recovered audio auto-uploads; deleting the whole session is the only removal. Andrew sees no real use case for losing part of a session. Do not add per-clip delete.
+- **Replay-start ready:** nits done at `790d71a8` (82516388; tsc and eslint clean; 14 Playwright passed). The new conductor reads the `af9e17aa..790d71a8` diff, then merges (`--no-ff`, message file). On merge: add a PLAYWRIGHT-GAP BACKLOG entry for the end-jump, plus an A9 hardware item (trace `seeking`/`durationchange`/`seeked`/`play`).
 
 2026-11-17 13:40. Merged so far into `feat/org-qol`: launch docs (ec04ccf5), decisions + freshness (cde8296d), test type fixes (a55fca4f). Every other lane has code pushed but is blocked on Playwright: the single shared lock `$env:TEMP\tn-pw.lock` serialised all lanes, and most 4h waits expired. Andrew approved the consent copy (item 36 → "Mynk recommends keeping this on for the best experience."), and the Strix pen test using the existing local `OPENAI_API_KEY` (never printed).
 
