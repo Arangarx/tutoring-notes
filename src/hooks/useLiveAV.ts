@@ -87,6 +87,7 @@ import {
 } from "@/lib/av/signaling";
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
 import type { MicAcquire } from "@/lib/recording/session-capabilities";
+import { hasPresentableVideoTrack } from "@/lib/av/video-track-presentable";
 import { logMicRequestBlocked, micRequestBlockedReason } from "@/lib/recording/mic-acquire-gate";
 import {
   disposeStreamTracks as disposeAvStreamTracks,
@@ -355,6 +356,12 @@ export type UseLiveAVReturn = {
    * UI placeholders render correctly.
    */
   isCamMuted: boolean;
+  /**
+   * True while a camera acquisition is in flight and no stream exists yet.
+   * During this window `isCamMuted` reads false (the camera is coming on) until
+   * the user cancels the start with `toggleCam()`.
+   */
+  isCamStarting: boolean;
   /** Flip the mute state of every local audio track. */
   toggleMic: () => void;
   /**
@@ -436,6 +443,12 @@ export type UseLiveAVReturn = {
    * Used on student Exit before sync disconnect so the tutor drops stale PCs.
    */
   leaveAllPeers: () => void;
+  /**
+   * Stop every local camera/mic track and drop the streams (session over, e.g.
+   * the student's "Session has ended" screen). Acquisitions still in flight
+   * stop their tracks when they land. Terminal for this hook instance.
+   */
+  releaseLocalMedia: () => void;
   /**
    * Retry the failed `getUserMedia` calls. If `error` is set,
    * re-runs `requestMic()`. If `videoError` is set, re-runs
@@ -898,6 +911,30 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   isMicMutedRef.current = isMicMuted;
   const isCamMutedRef = useRef<boolean>(true);
   isCamMutedRef.current = isCamMuted;
+  // AV-CAM-BUTTON-ACQUIRING: while a camera acquisition is in flight (no stream
+  // yet) the button must read "on" (the camera is coming), and one tap means
+  // "cancel". `camStartIntentOn` is that pending intent; it only matters while
+  // `camStartingCount > 0`. A cancelled start still lands the stream (the
+  // single-acquisition invariant), but with tracks disabled and isCamMuted=true.
+  const [camStartingCount, setCamStartingCount] = useState(0);
+  const [camStartIntentOn, setCamStartIntentOn] = useState(true);
+  const camStartingCountRef = useRef(0);
+  const camStartIntentOnRef = useRef(true);
+  const beginCamStart = () => {
+    if (camStartingCountRef.current === 0) {
+      camStartIntentOnRef.current = true;
+      setCamStartIntentOn(true);
+    }
+    camStartingCountRef.current += 1;
+    setCamStartingCount(camStartingCountRef.current);
+  };
+  const endCamStart = () => {
+    camStartingCountRef.current = Math.max(0, camStartingCountRef.current - 1);
+    if (!unmountedRef.current) setCamStartingCount(camStartingCountRef.current);
+  };
+  // B11: set by `releaseLocalMedia` (session over). An acquisition that lands
+  // afterwards must stop its tracks instead of publishing them.
+  const mediaReleasedRef = useRef(false);
   const micInFlightRef = useRef<Promise<void> | null>(null);
   const camInFlightRef = useRef<Promise<void> | null>(null);
   const avBundleInFlightRef = useRef<Promise<void> | null>(null);
@@ -968,7 +1005,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         { sessionId: sid }
       );
 
-      if (unmountedRef.current) {
+      if (unmountedRef.current || mediaReleasedRef.current) {
         graph?.dispose();
         for (const t of rawStream.getTracks()) {
           try {
@@ -1235,7 +1272,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
               }
             }
           }
-          if (unmountedRef.current) {
+          if (unmountedRef.current || mediaReleasedRef.current) {
             for (const t of stream.getTracks()) {
               try {
                 t.stop();
@@ -1313,6 +1350,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       }
 
       startAcquiring();
+      beginCamStart();
       if (!unmountedRef.current) setVideoError(null);
       log.log(
         `requestCam start video=${
@@ -1405,7 +1443,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
               }
             }
           }
-          if (unmountedRef.current) {
+          if (unmountedRef.current || mediaReleasedRef.current) {
             for (const t of stream.getTracks()) {
               try {
                 t.stop();
@@ -1415,14 +1453,21 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
             }
             return;
           }
+          // The user cancelled this start while the camera was still coming up
+          // (AV-CAM-BUTTON-ACQUIRING): keep the single stream (invariant 17) but
+          // land it muted, exactly like a camera toggled off.
+          const startCancelled = !camStartIntentOnRef.current;
+          if (startCancelled) {
+            for (const t of stream.getVideoTracks()) t.enabled = false;
+          }
           localVideoStreamRef.current = stream;
           setLocalVideoStream(stream);
           setHasEverHadLocalMedia(true);
           setHasCamPermission("granted");
           // requestCam implies user intent "cam on" — unmute on
           // success regardless of the placeholder isCamMuted=true
-          // initial state. Tracks land enabled (the default).
-          setIsCamMuted(false);
+          // initial state, unless the user cancelled the start.
+          setIsCamMuted(startCancelled);
           log.log(
             `cam acquired tracks=${stream.getVideoTracks().length}`
           );
@@ -1455,6 +1500,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
         } finally {
           endAcquiring();
+          endCamStart();
           camInFlightRef.current = null;
         }
       });
@@ -1500,6 +1546,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
 
     startAcquiring();
+    const bundleStartsCam = !localVideoStreamRef.current;
+    if (bundleStartsCam) beginCamStart();
     if (!unmountedRef.current) {
       if (wantAudio) setError(null);
       setVideoError(null);
@@ -1553,7 +1601,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
             throw firstErr;
           }
         }
-        if (unmountedRef.current) {
+        if (unmountedRef.current || mediaReleasedRef.current) {
           for (const t of stream.getTracks()) {
             try {
               t.stop();
@@ -1569,9 +1617,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         const videoStream = needVideo
           ? new MediaStream(stream.getVideoTracks())
           : null;
+        // User cancelled the camera while it was starting (AV-CAM-BUTTON-ACQUIRING):
+        // land the single stream muted, like a camera toggled off.
+        const camStartCancelled = !camStartIntentOnRef.current;
         if (videoStream) {
           for (const t of videoStream.getVideoTracks()) {
-            t.enabled = true;
+            t.enabled = !camStartCancelled;
           }
           localVideoStreamRef.current = videoStream;
           setLocalVideoStream(videoStream);
@@ -1583,7 +1634,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         if (audioStream) setHasMicPermission("granted");
         if (videoStream) {
           setHasCamPermission("granted");
-          setIsCamMuted(false);
+          setIsCamMuted(camStartCancelled);
         }
         log.log(
           `requestMicAndCam acquired audio=${audioStream?.getAudioTracks().length ?? 0} video=${videoStream?.getVideoTracks().length ?? 0}`
@@ -1635,6 +1686,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }
       } finally {
         endAcquiring();
+        if (bundleStartsCam) endCamStart();
         avBundleInFlightRef.current = null;
       }
     });
@@ -1989,12 +2041,6 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       Array<MediaStreamTrack>
     >();
 
-    function hasActiveVideoTracks(stream: MediaStream): boolean {
-      return stream
-        .getVideoTracks()
-        .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
-    }
-
     function rebuild() {
       if (disposed) return;
       const out: AvParticipant[] = [];
@@ -2018,18 +2064,24 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           videoStream:
             entry.hasVideoTrack &&
             entry.camOn !== false &&
-            hasActiveVideoTracks(entry.videoStream)
+            hasPresentableVideoTrack(entry.videoStream, entry.camOn)
               ? entry.videoStream
               : null,
           peerConnectionState: entry.peerConnectionState,
           iceConnectionState: entry.iceConnectionState,
         };
         out.push(p);
-        // A peer is reachable when WebRTC is fully connected at both
-        // the PC layer and the ICE layer. Sync-presence alone is not
-        // sufficient — this is the split-brain guard.
+        // A peer is reachable when ICE has connected AND the PC layer is
+        // connected or still finishing ("connecting"). Sync-presence alone is
+        // not sufficient — this is the split-brain guard. Requiring the
+        // aggregate state to be exactly "connected" under-counted a live peer
+        // on Safari/iOS, which can leave `connectionState` on "connecting"
+        // while ICE is already up and media flows (SMOKE-BLOCK-1: Start dead).
+        // ICE connected/completed is the transport proof; "failed",
+        // "disconnected", "closed" and "new" still mean not reachable.
         if (
-          entry.peerConnectionState === "connected" &&
+          (entry.peerConnectionState === "connected" ||
+            entry.peerConnectionState === "connecting") &&
           (entry.iceConnectionState === "connected" ||
             entry.iceConnectionState === "completed")
         ) {
@@ -3270,6 +3322,15 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   const toggleCam = useCallback(() => {
     const stream = localVideoStreamRef.current;
+    // Camera still starting (no stream yet): the tap flips the pending intent,
+    // not the muted flag (AV-CAM-BUTTON-ACQUIRING). The start lands honoring it.
+    if (!stream && camStartingCountRef.current > 0) {
+      const nextIntentOn = !camStartIntentOnRef.current;
+      camStartIntentOnRef.current = nextIntentOn;
+      setCamStartIntentOn(nextIntentOn);
+      log.log(`toggleCam pending-start intent=${nextIntentOn ? "on" : "off"}`);
+      return;
+    }
     setIsCamMuted((prev) => {
       const next = !prev;
       if (stream) {
@@ -3297,6 +3358,36 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }`
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * B11: the session is over for this participant (student ended screen).
+   * Stops every local camera/mic track so the hardware indicator goes off,
+   * drops the streams from state, and makes any acquisition still in flight
+   * stop its tracks when it lands. Terminal for this hook instance.
+   */
+  const releaseLocalMedia = useCallback(() => {
+    mediaReleasedRef.current = true;
+    const graph = publishGraphRef.current;
+    if (graph) {
+      graph.dispose();
+      publishGraphRef.current = null;
+    }
+    disposeStreamTracks(rawMicStreamRef.current);
+    rawMicStreamRef.current = null;
+    if (!audioFromExternalRef.current) {
+      disposeStreamTracks(localAudioStreamRef.current);
+    }
+    disposeStreamTracks(localVideoStreamRef.current);
+    audioFromExternalRef.current = false;
+    localAudioStreamRef.current = null;
+    localVideoStreamRef.current = null;
+    if (!unmountedRef.current) {
+      setLocalAudioStream(null);
+      setLocalVideoStream(null);
+    }
+    log.log("event=release-local-media");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3349,6 +3440,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isCamStarting = camStartingCount > 0 && localVideoStream === null;
+
   const isActive =
     !!syncClient &&
     ((localAudioStream !== null && error === null) ||
@@ -3360,7 +3453,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     localAudioStream,
     localVideoStream,
     isMicMuted,
-    isCamMuted,
+    // While the camera is still starting the button must read "on" (the camera
+    // is coming) unless the user already cancelled the start.
+    isCamMuted: isCamMuted && !(isCamStarting && camStartIntentOn),
+    isCamStarting,
     toggleMic,
     toggleCam,
     hasMicPermission,
@@ -3374,6 +3470,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     videoError,
     reconnectPeer,
     leaveAllPeers,
+    releaseLocalMedia,
     retryAcquire,
     videoDevices,
     refreshVideoDeviceList: refreshVideoDevices,

@@ -60,6 +60,7 @@ import {
 } from "@/components/av/initials-from-label";
 import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
 import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
+import { hasPresentableVideoTrack } from "@/lib/av/video-track-presentable";
 
 /** Same on the server and the first client render. The real peer id is sessionStorage-backed and must not be in the hydrated HTML. */
 const PEER_ID_UNTIL_HYDRATED = "pending";
@@ -345,10 +346,7 @@ export function AVTile({
   const remoteReportsCamOff = remoteParticipant?.camOn === false;
   const hasActiveVideoTrack =
     !remoteReportsCamOff &&
-    !!participant.videoStream &&
-    participant.videoStream
-      .getVideoTracks()
-      .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
+    hasPresentableVideoTrack(participant.videoStream, remoteParticipant?.camOn);
   const showCamPlaceholder =
     remoteReportsCamOff ||
     !hasActiveVideoTrack ||

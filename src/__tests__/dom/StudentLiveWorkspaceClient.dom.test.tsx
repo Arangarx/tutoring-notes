@@ -292,6 +292,8 @@ jest.mock("@/hooks/useLiveAV", () => ({
     requestCam: jest.fn().mockResolvedValue(undefined),
     reconnectPeer: jest.fn(),
     leaveAllPeers: jest.fn(),
+    releaseLocalMedia: jest.fn(),
+    isCamStarting: false,
     retryAcquire: jest.fn().mockResolvedValue(undefined),
     videoDevices: [{ deviceId: "cam1", label: "Cam", kind: "videoinput", groupId: "", toJSON: () => ({}) }],
     audioDevices: [],

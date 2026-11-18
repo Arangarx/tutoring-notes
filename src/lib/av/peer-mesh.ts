@@ -282,11 +282,42 @@ type PeerEntry = {
    * after a late `addTrack` during an in-flight negotiation.
    */
   pendingRenegotiation: boolean;
+  /**
+   * Normalized DTLS `a=fingerprint` set (session + media level, all
+   * algorithms) of the remote description this PC last accepted. A real
+   * renegotiation or ICE restart keeps the remote certificate; a reloaded
+   * page builds a new RTCPeerConnection with a new one. `null` until a
+   * remote description with a parseable fingerprint has been applied.
+   */
+  remoteFingerprints: string[] | null;
 };
 
 // -----------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------
+
+/**
+ * Sorted, de-duplicated `<algorithm> <HEX>` set from every `a=fingerprint`
+ * line in an SDP (session and media level). `null` when the SDP has none,
+ * so an unparseable or fingerprint-less description never triggers a
+ * replacement.
+ */
+export function parseSdpFingerprints(sdp: string | null | undefined): string[] | null {
+  if (typeof sdp !== "string" || sdp.length === 0) return null;
+  const found = new Set<string>();
+  const re = /^a=fingerprint:(\S+)[ \t]+(\S+)/gim;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(sdp)) !== null) {
+    found.add(`${m[1]!.toLowerCase()} ${m[2]!.toUpperCase()}`);
+  }
+  if (found.size === 0) return null;
+  return Array.from(found).sort();
+}
+
+function sameFingerprintSet(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((fp, i) => fp === b[i]);
+}
 
 function decidePolite(localPeerId: string, remotePeerId: string): boolean {
   // Convention: polite = local id sorts AFTER remote id (lex). The
@@ -506,6 +537,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       pendingCandidates: [],
       closed: false,
       pendingRenegotiation: false,
+      remoteFingerprints: null,
     };
 
     pc.onnegotiationneeded = () => {
@@ -723,8 +755,53 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         return;
       }
     }
+    // **Reloaded peer = new RTCPeerConnection under the same stable peerId.**
+    // The survivor's stale PC may have more m-lines than the reloaded page's
+    // fresh offer and then cannot accept it (setRemoteDescription rejects an
+    // offer whose m-lines do not match the current description), while no
+    // roster edge fires to rebuild it. A different DTLS fingerprint on an
+    // offer is proof the remote is a different instance, so swap the PC.
+    // Missing/unparseable fingerprints never replace anything. Done
+    // synchronously, before the async apply, so ICE that follows the offer
+    // reaches the new entry.
+    if (payload.type === "offer" && entry.remoteFingerprints) {
+      const incoming = parseSdpFingerprints(payload.sdp);
+      if (incoming && !sameFingerprintSet(incoming, entry.remoteFingerprints)) {
+        const fresh = replaceReloadedPeerEntry(entry);
+        if (!fresh) return;
+        entry = fresh;
+      }
+    }
     void applyInboundSignal(entry, payload);
   };
+
+  /**
+   * Replace `old` with a fresh entry for the same remote peer id. Order is
+   * load-bearing: subscribers hear "leave" first (the hook's onPeerLeave
+   * stops and drains the old tracks and resets the video stream before the
+   * new PC's `ontrack`), then the old PC closes WITHOUT sending a `leave`
+   * (the remote is alive — a `leave` would kill the new instance), then the
+   * new entry is registered. "Leave" here means "prepare streams for the
+   * replacement", the same contract as a graceful remote leave.
+   */
+  function replaceReloadedPeerEntry(old: PeerEntry): PeerEntry | null {
+    const remotePeerId = old.remotePeerId;
+    log.log(
+      `peer=${remotePeerId} event=peer-instance-replaced reason=fingerprint-changed`
+    );
+    fan(leaveSubs, remotePeerId);
+    closePeerEntryLocal(old);
+    try {
+      const fresh = createPeerEntry(remotePeerId);
+      peers.set(remotePeerId, fresh);
+      return fresh;
+    } catch (err) {
+      log.error(
+        `peer=${remotePeerId} event=peer-instance-replace-fail reason=${(err as Error)?.message ?? String(err)}`
+      );
+      return null;
+    }
+  }
 
   async function applyInboundSignal(
     entry: PeerEntry,
@@ -771,6 +848,8 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         await pc.setRemoteDescription({ type: "offer", sdp: payload.sdp });
         if (entry.closed) return;
         entry.hasRemoteDescription = true;
+        entry.remoteFingerprints =
+          parseSdpFingerprints(payload.sdp) ?? entry.remoteFingerprints;
         await drainPendingCandidates(entry);
         if (entry.closed) return;
         const answer = await pc.createAnswer();
@@ -785,6 +864,8 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         await pc.setRemoteDescription({ type: "answer", sdp: payload.sdp });
         if (entry.closed) return;
         entry.hasRemoteDescription = true;
+        entry.remoteFingerprints =
+          parseSdpFingerprints(payload.sdp) ?? entry.remoteFingerprints;
         await drainPendingCandidates(entry);
         log.log(`peer=${remotePeerId} event=answer-applied`);
         return;

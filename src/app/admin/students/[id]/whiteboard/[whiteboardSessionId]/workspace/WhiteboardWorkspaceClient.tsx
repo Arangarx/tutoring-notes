@@ -1656,8 +1656,14 @@ export function WhiteboardWorkspaceClient({
   sessionCapabilitiesRef.current = sessionCapabilities;
   const initialHasConsentSnapshot = initialConsentInput.hasConsentSnapshot;
   // A learner page without server capabilities (token-only DOM harness) keeps the pre-consent mic.
+  // B11: once the student's join-unavailable screen ("Session has ended") is up there is no A/V UI, so the
+  // mic capability goes to "no" — the recorder hook's own mic acquisition releases its stream on that flip.
   const micAcquireForRole: MicAcquire =
-    role === "tutor" ? tutorMicAcquire : (learnerView.sessionCapabilities?.mic.acquire ?? "yes");
+    role === "tutor"
+      ? tutorMicAcquire
+      : joinUnavailableReason !== null
+        ? "no"
+        : (learnerView.sessionCapabilities?.mic.acquire ?? "yes");
   const micLocked = micRequestBlockedReason(micAcquireForRole) !== null;
   const tutorMicLocked = role === "tutor" && micLocked;
   const studentMicLocked = role === "student" && micLocked;
@@ -2323,6 +2329,16 @@ export function WhiteboardWorkspaceClient({
     }
     setHasLeft(true);
   }, [wjgLog, liveAv, studentSyncClient, whiteboardSessionId]);
+
+  // B11: the student's join-unavailable screen ("Session has ended", etc.) has
+  // no A/V UI, so the camera and mic hardware must be released the moment it
+  // shows — otherwise the camera light stays on and other apps cannot use the
+  // devices. Additive: runs once when the reason first becomes non-null.
+  useEffect(() => {
+    if (role !== "student" || joinUnavailableReason === null) return;
+    liveAvRef.current.leaveAllPeers();
+    liveAvRef.current.releaseLocalMedia();
+  }, [role, joinUnavailableReason]);
 
   // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
   // reachability rather than sync-join. This prevents the false
@@ -5612,6 +5628,11 @@ export function WhiteboardWorkspaceClient({
 
   const handleTopBarCam = useCallback(async () => {
     if (!liveAvRef.current.localVideoStream) {
+      // Camera already starting: this tap cancels (or re-arms) the pending start.
+      if (liveAvRef.current.isCamStarting) {
+        liveAvRef.current.toggleCam();
+        return;
+      }
       // requestCam() already sets isCamMuted=false on success.
       // Do NOT call toggleCam() after — that would immediately re-mute.
       await liveAvRef.current.requestCam();
