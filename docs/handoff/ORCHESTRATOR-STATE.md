@@ -35,8 +35,8 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | pw-parallel | MERGED f85468c8 | — |
 | first-impression | MERGED acd0cc00 | — |
 | consent-copy (C8 privacy/terms) | MERGED 96978496 | — |
-| fold-transcript | built (to 699a7c2d); Sonnet verify resumed after billing stop | ba62c33b |
-| fold-apply-race | 708307bc. Sonnet 355a519c died (usage limit) after gates: apply-race check 16/16; wb-affected 5 known baseline reds (W27, WS-X, E2, E4, E5); @wb-graph also hard-failed live-sync invariants 1b + 2 (passed in wb-affected run); build failed on missing PrismaClient (shared node_modules incident). Grok rerunning build + invariants x3 on stack 2 | 5ddae4f9 |
+| fold-transcript | 699a7c2d: Sonnet verify ba62c33b MERGE-OK with nits (no PDF/consent reds from this lane). Grok fixing nits: "No speech detected" message for silent sessions + Playwright, EMPTY_STRUCTURED_NOTE literal, BACKLOG wording, stale comment. Then merge | 32908d9d |
+| fold-apply-race | 708307bc: Sonnet verify 59208d8a MERGE-OK. Before merge (Sonnet author): extract one shared core for e2e-student-apply-hold.ts + test-seams.ts (else STOP → Andrew waiver), add student-undo H1 variant. Queued after merge (Sonnet, own lane with Playwright repro): overlapping apply windows (`releaseApplyingRemote` clears `applyingRemoteRef` mid-hydrate of next apply; guard ~:1103 should check `v3ApplyInFlightRef`); WB-STUDENT-FLUSH-IMAGE-ASSETURL | 355a519c |
 | static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
 | org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
 | jest-triage | MERGED 2035b5b4 (worktree removed). Remaining full-jest red: upload-outbox "different streams upload in parallel" (on base too → A8). Author had deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | — |
