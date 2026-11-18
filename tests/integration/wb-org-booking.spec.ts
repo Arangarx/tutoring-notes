@@ -217,6 +217,44 @@ test.describe("org booking calls the bridge @wb-presence", { tag: [TAG.ORG, TAG.
     }
   });
 
+  test("the booking dialog defaults the date to today in the organization zone", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    // 02:30Z is still the previous evening in Denver and already afternoon in Auckland.
+    const instant = new Date("2026-11-18T02:30:00.000Z");
+    const orgZone = "America/Denver";
+    const browserZone = "Pacific/Auckland";
+    const ymd = (zone: string) => {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(instant);
+      const pick = (type: Intl.DateTimeFormatPartTypes) =>
+        parts.find((entry) => entry.type === type)?.value ?? "";
+      return `${pick("year")}-${pick("month")}-${pick("day")}`;
+    };
+    const orgDay = ymd(orgZone);
+    const browserDay = ymd(browserZone);
+    expect(browserDay).not.toBe(orgDay);
+
+    const { org, owner } = await seedOrg();
+    const scheduler = await seedMember(org.id, "Sam Scheduler", ["scheduler"]);
+    await seedMember(org.id, "Ida Instructor", ["instructor"]);
+    await seedLearner(org.id, owner.id);
+    const { context, page } = await signIn(browser, scheduler, browserZone);
+    try {
+      await page.clock.install({ time: instant });
+      await page.goto(`/admin/organization/${org.id}`);
+      await page.getByTestId("schedule-new-session").click();
+      await expect(page.locator("#schedule-date")).toHaveValue(orgDay);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("a scheduler books, changes, and cancels an org appointment without a parent email", async ({
     browser,
   }) => {

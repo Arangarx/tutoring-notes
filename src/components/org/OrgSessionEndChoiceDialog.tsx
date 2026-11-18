@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { submitNamedForm } from "@/lib/submit-named-form";
 import {
   Dialog,
   DialogContent,
@@ -18,17 +19,11 @@ export const ORG_END_CHOICE_WARNING =
 export const ORG_END_NO_NOTES_WARNING =
   "No notes will come from this session. Ending it does not give the time back. After the free pilot, that time still counts as time used.";
 
-/**
- * The dialog portals outside the form. A submit button with the HTML form
- * attribute does not carry a Next.js server action, so the choice is written
- * onto a submitter inside the form and that form is submitted.
- */
 function submitOrgEndChoice(formId: string, choice: "finish" | "now" | "no-notes") {
-  const form = document.getElementById(formId);
-  if (!(form instanceof HTMLFormElement)) return;
-  const choiceInput = form.querySelector('input[name="choice"]');
-  if (choiceInput instanceof HTMLInputElement) choiceInput.value = choice;
-  form.requestSubmit();
+  submitNamedForm(formId, (form) => {
+    const choiceInput = form.querySelector('input[name="choice"]');
+    if (choiceInput instanceof HTMLInputElement) choiceInput.value = choice;
+  });
 }
 
 export function OrgSessionEndChoiceDialog({

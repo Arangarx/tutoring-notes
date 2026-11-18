@@ -39,6 +39,7 @@ import {
   type ScheduledSessionInput,
 } from "@/app/admin/schedule/actions";
 import { localDateToInputValue } from "@/lib/schedule/mock-data";
+import { formatInstantWallClockFields } from "@/lib/calendar/scheduled-session-datetime";
 import {
   endMatchesPlannedLength,
   endTimeForPlannedLength,
@@ -74,8 +75,9 @@ function describeSpan(startHhmm: string, endHhmm: string): string {
   return endHhmm < startHhmm ? `${length}, ending the next day` : length;
 }
 
-function buildDefaultDate(defaultDate?: string): string {
+function buildDefaultDate(defaultDate?: string, timeZone?: string): string {
   if (defaultDate) return defaultDate;
+  if (timeZone) return formatInstantWallClockFields(new Date(), timeZone).date;
   return localDateToInputValue(new Date());
 }
 
@@ -98,7 +100,7 @@ export function CreateSessionDialog({
   const isEdit = !!session;
 
   const initialStudentId = session?.studentId ?? studentOptions[0]?.id ?? "";
-  const initialDate = session?.date ?? buildDefaultDate(defaultDate);
+  const initialDate = session?.date ?? buildDefaultDate(defaultDate, instructorOptions ? timeZone : undefined);
   const initialDuration = String(session?.plannedDurationMinutes ?? 60);
   const initialStart = session?.startTimeInput ?? "16:00";
   const initialEnd = session?.endTimeInput ?? "17:00";

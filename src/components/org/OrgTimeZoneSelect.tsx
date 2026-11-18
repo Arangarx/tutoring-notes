@@ -1,4 +1,5 @@
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   DEFAULT_ORG_TIME_ZONE,
   ORG_TIME_ZONES,
@@ -20,20 +21,13 @@ export function OrgTimeZoneSelect({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>Time zone</Label>
-      <select
-        id={id}
-        name="timezone"
-        defaultValue={selected}
-        required
-        data-testid={id}
-        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
+      <NativeSelect id={id} name="timezone" defaultValue={selected} required data-testid={id}>
         {ORG_TIME_ZONES.map((zone) => (
           <option key={zone.id} value={zone.id}>
             {zone.label} ({zone.id})
           </option>
         ))}
-      </select>
+      </NativeSelect>
     </div>
   );
 }

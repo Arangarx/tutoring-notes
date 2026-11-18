@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { submitNamedForm } from "@/lib/submit-named-form";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,16 +13,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-/**
- * Confirms a server-action form that lives outside the dialog.
- * The dialog portals out of the form, and a button's form attribute does not
- * carry a Next.js server action, so confirm submits the form by id.
- */
-function submitNamedForm(formId: string) {
-  const form = document.getElementById(formId);
-  if (form instanceof HTMLFormElement) form.requestSubmit();
-}
 
 export function ConfirmActionDialog({
   formId,
