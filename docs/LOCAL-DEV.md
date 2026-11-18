@@ -118,7 +118,7 @@ One default stack at a time. Whoever runs it (Playwright, DB-backed Jest, `next 
 | `PW_OUTPUT_DIR` | `test-results` |
 | `PW_REPORT_DIR` | Playwright's default reporter. Set this so two runs do not share `playwright-report`. |
 | `PW_AUTH_DIR` | `tests/integration/.auth`. `integration-setup` and `openTutorAndStudent` follow it. |
-| `PW_DIST_DIR` | `.next`. Set this when two `next dev` processes share one worktree. |
+| `PW_DIST_DIR` | `.next`. Set this only when two `next dev` processes share one worktree. Prefer one worktree per stack and leave it unset. Next rewrites the tracked `next-env.d.ts` and `tsconfig.json` to name the custom dist dir; never commit those two files after such a run. |
 | `PW_PROD_SHAPE_PORT` | `3102` |
 | `PW_BLOB_DIR` | `wb-shard-blobs` (or `<PW_OUTPUT_DIR>-blobs` when `PW_OUTPUT_DIR` is set) |
 
