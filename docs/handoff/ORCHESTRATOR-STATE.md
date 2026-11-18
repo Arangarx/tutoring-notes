@@ -10,7 +10,7 @@
 
 ### Last action
 
-**2026-11-18 12:15: live-av MERGED `e4fe9a17`. static-checks MERGED `29a39bcc` (last lane). `npm ci` is next in the main checkout. Feature lanes are all merged. Left open: B11 camera-switch-after-release, SMOKE-UX-1 hardware end-jump, AV-REFRESH-LOSS, Gate A5 audit, learner-login leak, then A8 full gate.**
+**2026-11-18 12:20: live-av MERGED `e4fe9a17`. static-checks MERGED `29a39bcc`. `npm ci` finished in the main checkout (1334 packages; the install audit listed 4 low and 23 moderate, no high or critical). Feature lanes are all merged. Left open: B11 camera-switch-after-release, SMOKE-UX-1 hardware end-jump, AV-REFRESH-LOSS, Gate A5 audit, learner-login leak, then A8 full gate.**
 
 **2026-11-18 09:15: conductor swap (Opus → fresh Grok chat) to cut spend. Andrew: "today try really hard to keep the spending burn down."**
 
