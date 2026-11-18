@@ -18,6 +18,7 @@ import { CLAIM_INVITE_TTL_MS, generateRawToken, hashToken } from "@/lib/crypto/s
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { activeOrgInstructorMemberWhere, STAFF_HOME_ROLES } from "@/lib/org-appointment-scope";
+import { DEFAULT_ORG_TIME_ZONE, isOrgTimeZone, type OrgTimeZoneId } from "@/lib/org-time-zones";
 import { requireOperator, type OperatorIdentity } from "@/lib/operator";
 import { requireStudentScope } from "@/lib/student-scope";
 import { approveTutor, revokeTutorApproval } from "@/lib/tutor-approval-scope";
@@ -93,12 +94,8 @@ export function orgLog(organizationId: string, action: string, fields: Record<st
   console.log(`[org] org=${organizationId} action=${action}${extra ? ` ${extra}` : ""}`);
 }
 
-function assertIanaTimeZone(timeZone: string): void {
-  try {
-    Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
-  } catch {
-    throw new OrgMutationError("invalid_timezone");
-  }
+function assertOrgTimeZone(timeZone: string): asserts timeZone is OrgTimeZoneId {
+  if (!isOrgTimeZone(timeZone)) throw new OrgMutationError("invalid_timezone");
 }
 
 /** Midnight at the start of `now`'s calendar day in `timeZone`, as a UTC instant. */
@@ -398,8 +395,8 @@ export async function createOrganization(input: {
   const operator = await requireOperator();
   const name = input.name.trim();
   if (!name) throw new OrgMutationError("invalid_name");
-  const timezone = input.timezone ?? "America/Denver";
-  assertIanaTimeZone(timezone);
+  const timezone = input.timezone ?? DEFAULT_ORG_TIME_ZONE;
+  assertOrgTimeZone(timezone);
   const maxMembers = input.maxMembers ?? null;
   // Omitted stores the starting cap. Null is unlimited, and only when the
   // caller passes null on purpose. Do not treat those as the same value.
@@ -444,7 +441,11 @@ export async function createOrganization(input: {
     },
     select: { id: true, status: true },
   });
-  orgLog(org.id, "created", { actor: actorLabel(operator), status: org.status });
+  orgLog(org.id, "created", {
+    actor: actorLabel(operator),
+    status: org.status,
+    timezone,
+  });
   return { organizationId: org.id };
 }
 
@@ -732,6 +733,19 @@ export async function setOrganizationStatus(
   );
   scheduleBoardPurgeAfterResponse(purgeIds);
   orgLog(organizationId, "status_set", { actor: actorLabel(operator), status });
+}
+
+export async function setOrganizationTimezone(
+  organizationId: string,
+  timezone: string
+): Promise<void> {
+  const operator = await requireOperator();
+  assertOrgTimeZone(timezone);
+  await db.organization.update({
+    where: { id: organizationId },
+    data: { timezone },
+  });
+  orgLog(organizationId, "timezone_set", { actor: actorLabel(operator), timezone });
 }
 
 export async function setOrganizationCaps(

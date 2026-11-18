@@ -279,6 +279,11 @@ test.describe("organization staff invites", { tag: [TAG.ORG, TAG.WB_PRESENCE] },
       organizationId = await createOrgAsOperator(page, orgName);
       const inviteUrl = await sendStaffInvite(page, organizationId, email, "Instructor");
       await page.getByTestId("org-revoke-invite").click();
+      await expect(page.getByTestId("org-revoke-invite-dialog")).toBeVisible();
+      await page.getByTestId("org-revoke-invite-cancel").click();
+      await expect(page.getByTestId("org-invites").getByText(email)).toBeVisible();
+      await page.getByTestId("org-revoke-invite").click();
+      await page.getByTestId("org-revoke-invite-confirm").click();
       await expect(page.getByTestId("org-invites").getByText(email)).toHaveCount(0);
 
       await page.context().clearCookies();
@@ -638,6 +643,48 @@ test.describe("organization invite reasons do not reveal an account", { tag: [TA
       await withPrisma(async (prisma) => {
         if (organizationId) await prisma.organization.deleteMany({ where: { id: organizationId } });
         await prisma.adminUser.deleteMany({ where: { email: existingEmail } });
+      });
+    }
+  });
+
+  test("removing a member with no live session asks, and cancel leaves them", async ({ page }) => {
+    const orgName = uniqueName();
+    const email = uniqueEmail("remove-quiet");
+    let organizationId = "";
+    let memberId = "";
+    try {
+      organizationId = await createOrgAsOperator(page, orgName);
+      memberId = await withPrisma(async (prisma) => {
+        const extra = await prisma.adminUser.create({
+          data: {
+            email,
+            role: "TUTOR",
+            approvalStatus: "APPROVED",
+            emailVerifiedAt: new Date("2026-01-01"),
+            displayName: "Quiet Member",
+            isTestAccount: false,
+          },
+        });
+        await prisma.organizationMember.create({
+          data: { organizationId, adminUserId: extra.id, roles: ["instructor"] },
+        });
+        return extra.id;
+      });
+      await page.goto(`/admin/organization/${organizationId}`);
+      await expect(page.getByTestId("org-members").getByText(email)).toBeVisible();
+      await page.getByTestId(`org-remove-${memberId}`).click();
+      await expect(page.getByTestId(`org-remove-${memberId}-dialog`)).toBeVisible();
+      await page.getByTestId(`org-remove-${memberId}-cancel`).click();
+      await expect(page.getByTestId("org-members").getByText(email)).toBeVisible();
+      await page.getByTestId(`org-remove-${memberId}`).click();
+      await page.getByTestId(`org-remove-${memberId}-confirm`).click();
+      await expect(page.getByTestId("org-members").getByText(email)).toHaveCount(0, {
+        timeout: 30_000,
+      });
+    } finally {
+      await withPrisma(async (prisma) => {
+        if (organizationId) await prisma.organization.deleteMany({ where: { id: organizationId } });
+        if (email) await prisma.adminUser.deleteMany({ where: { email } });
       });
     }
   });

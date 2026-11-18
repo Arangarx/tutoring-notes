@@ -82,6 +82,7 @@ export default async function StaffOrganizationPage({
           data={data}
           canActivate={isOperatorEmail(data.actor.email)}
           error={error}
+          timeZone={timeZone}
         />
       ) : null}
       {data && (canManage || isScheduler) ? (

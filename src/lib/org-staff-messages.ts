@@ -8,6 +8,8 @@ export function orgStaffErrorSentence(code: string): string {
       return "Test accounts cannot own an organization.";
     case "invalid_name":
       return "Enter an organization name.";
+    case "invalid_timezone":
+      return "Choose a United States time zone.";
     case "role_forbidden":
       return "You cannot assign that role.";
     case "empty_roles":

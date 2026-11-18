@@ -39,6 +39,7 @@ import {
   type ScheduledSessionInput,
 } from "@/app/admin/schedule/actions";
 import { localDateToInputValue } from "@/lib/schedule/mock-data";
+import { formatInstantWallClockFields } from "@/lib/calendar/scheduled-session-datetime";
 import {
   endMatchesPlannedLength,
   endTimeForPlannedLength,
@@ -62,6 +63,8 @@ type CreateSessionDialogProps = {
   onSaved?: () => void;
   /** When set, this is an organization booking dialog. Absent keeps the personal tutor dialog. */
   instructorOptions?: InstructorOption[];
+  /** Organization IANA zone. Shown only on the organization booking dialog. */
+  timeZone?: string;
 };
 
 function describeSpan(startHhmm: string, endHhmm: string): string {
@@ -72,8 +75,9 @@ function describeSpan(startHhmm: string, endHhmm: string): string {
   return endHhmm < startHhmm ? `${length}, ending the next day` : length;
 }
 
-function buildDefaultDate(defaultDate?: string): string {
+function buildDefaultDate(defaultDate?: string, timeZone?: string): string {
   if (defaultDate) return defaultDate;
+  if (timeZone) return formatInstantWallClockFields(new Date(), timeZone).date;
   return localDateToInputValue(new Date());
 }
 
@@ -85,6 +89,7 @@ export function CreateSessionDialog({
   trigger,
   onSaved,
   instructorOptions,
+  timeZone,
 }: CreateSessionDialogProps) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -95,7 +100,7 @@ export function CreateSessionDialog({
   const isEdit = !!session;
 
   const initialStudentId = session?.studentId ?? studentOptions[0]?.id ?? "";
-  const initialDate = session?.date ?? buildDefaultDate(defaultDate);
+  const initialDate = session?.date ?? buildDefaultDate(defaultDate, instructorOptions ? timeZone : undefined);
   const initialDuration = String(session?.plannedDurationMinutes ?? 60);
   const initialStart = session?.startTimeInput ?? "16:00";
   const initialEnd = session?.endTimeInput ?? "17:00";
@@ -103,9 +108,7 @@ export function CreateSessionDialog({
   const initialNotes = session?.notes ?? "";
 
   const [studentId, setStudentId] = useState(initialStudentId);
-  const [instructorId, setInstructorId] = useState(
-    session?.instructorAdminUserId ?? instructorOptions?.[0]?.id ?? ""
-  );
+  const [instructorId, setInstructorId] = useState(session?.instructorAdminUserId ?? "");
   const [plannedDurationMinutes, setPlannedDurationMinutes] = useState(initialDuration);
   const [startTime, setStartTime] = useState(initialStart);
   const [endTime, setEndTime] = useState(initialEnd);
@@ -116,7 +119,7 @@ export function CreateSessionDialog({
   useEffect(() => {
     if (!open) return;
     setStudentId(initialStudentId);
-    setInstructorId(session?.instructorAdminUserId ?? instructorOptions?.[0]?.id ?? "");
+    setInstructorId(session?.instructorAdminUserId ?? "");
     setPlannedDurationMinutes(initialDuration);
     setStartTime(initialStart);
     setEndTime(initialEnd);
@@ -140,6 +143,10 @@ export function CreateSessionDialog({
     if (pending) return;
     setError(null);
     setWarning(null);
+    if (instructorOptions && !instructorId) {
+      setError("Choose an instructor.");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     const input: ScheduledSessionInput = {
       studentId,
@@ -273,9 +280,13 @@ export function CreateSessionDialog({
           {instructorOptions ? (
             <div className="space-y-2">
               <Label htmlFor="schedule-instructor">Instructor</Label>
-              <Select value={instructorId} onValueChange={setInstructorId} required>
+              <Select
+                value={instructorId || undefined}
+                onValueChange={setInstructorId}
+                required
+              >
                 <SelectTrigger id="schedule-instructor" className="min-h-11 w-full" data-testid="schedule-instructor">
-                  <SelectValue placeholder="Select instructor" />
+                  <SelectValue placeholder="Choose an instructor" />
                 </SelectTrigger>
                 <SelectContent>
                   {instructorOptions.map((instructor) => (
@@ -378,6 +389,17 @@ export function CreateSessionDialog({
             />
           </div>
 
+          {instructorOptions && timeZone ? (
+            <p className="text-sm text-muted-foreground" data-testid="schedule-timezone-note">
+              Times are in {timeZone}.
+            </p>
+          ) : null}
+          {instructorOptions && !instructorId ? (
+            <p className="text-sm text-muted-foreground" data-testid="schedule-instructor-required">
+              Choose an instructor.
+            </p>
+          ) : null}
+
           {error ? (
             <p className="text-sm text-destructive" role="alert" data-testid="schedule-save-error">
               {error}
@@ -405,7 +427,11 @@ export function CreateSessionDialog({
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
               Close
             </Button>
-            <Button type="submit" disabled={pending} data-testid="schedule-save-session">
+            <Button
+              type="submit"
+              disabled={pending || (Boolean(instructorOptions) && !instructorId)}
+              data-testid="schedule-save-session"
+            >
               {pending ? "Saving…" : isEdit ? "Save changes" : "Save session"}
             </Button>
           </DialogFooter>

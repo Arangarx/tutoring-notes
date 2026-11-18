@@ -11,6 +11,7 @@ import {
   revokeOrgGrantedApprovals,
   setOrganizationCaps,
   setOrganizationStatus,
+  setOrganizationTimezone,
 } from "@/lib/org-scope";
 
 export async function createOrganizationAction(input: {
@@ -56,9 +57,11 @@ export async function createOrganizationByOwnerEmailAction(formData: FormData): 
 
   let organizationId = "";
   try {
+    const timezone = String(formData.get("timezone") ?? "");
     const created = await createOrganization({
       name,
       ownerAdminUserId: resolved.adminUserId,
+      ...(timezone ? { timezone } : {}),
     });
     organizationId = created.organizationId;
   } catch (err) {
@@ -81,6 +84,22 @@ export async function activateOrganizationAction(formData: FormData): Promise<vo
   await setOrganizationStatus(organizationId, "active");
   const returnTo = safeRelativeReturnPath(String(formData.get("returnTo") ?? ""));
   redirect(returnTo ?? operatorOrgPath(organizationId));
+}
+
+export async function saveOrganizationTimezoneAction(formData: FormData): Promise<void> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const timezone = String(formData.get("timezone") ?? "");
+  const returnTo = safeRelativeReturnPath(String(formData.get("returnTo") ?? ""));
+  const back = returnTo ?? operatorOrgPath(organizationId);
+  try {
+    await setOrganizationTimezone(organizationId, timezone);
+  } catch (err) {
+    if (err instanceof OrgMutationError) {
+      redirect(`${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(err.code)}`);
+    }
+    throw err;
+  }
+  redirect(back);
 }
 
 export async function saveOrganizationCapsAction(formData: FormData): Promise<void> {

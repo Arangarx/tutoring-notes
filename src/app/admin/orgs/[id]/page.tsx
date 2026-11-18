@@ -22,7 +22,14 @@ export default async function OperatorOrganizationPage({
   const query = await searchParams;
   const org = await db.organization.findUnique({
     where: { id },
-    select: { id: true, name: true, status: true, dailyInviteCap: true, maxMembers: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      dailyInviteCap: true,
+      maxMembers: true,
+      timezone: true,
+    },
   });
   if (!org) notFound();
 
@@ -54,6 +61,7 @@ export default async function OperatorOrganizationPage({
           status={org.status}
           dailyInviteCap={org.dailyInviteCap}
           maxMembers={org.maxMembers}
+          timezone={org.timezone}
           waitlisted={members.map((member) => member.adminUser)}
           returnTo={`/admin/orgs/${org.id}`}
         />

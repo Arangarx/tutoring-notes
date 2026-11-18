@@ -603,7 +603,9 @@ test.describe("Admin student detail — stage 6", () => {
   });
 
   test(
-    "an organization instructor gets not found on the student page, Account & sharing, and the reminder dialog",
+    // org-ux-pass-plan.md W5 spec 4 (line 205): an admitted instructor opens the merged student page.
+    // Account & sharing stays closed (W5 spec 5, line 206; account/page.tsx still uses canAccessStudentRow).
+    "an admitted organization instructor opens the student page; Account & sharing stays not found",
     { tag: [TAG.WB_CHROME] },
     async ({ browser }) => {
       const seeded = await withPrisma(async (prisma) => {
@@ -651,7 +653,8 @@ test.describe("Admin student detail — stage 6", () => {
       });
       try {
         await page.goto(`/admin/students/${seeded.studentId}`, { waitUntil: "domcontentloaded" });
-        await expect(page.getByRole("heading", { name: "Not found" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Org Page Student" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Not found" })).toHaveCount(0);
 
         await page.goto(`/admin/students/${seeded.studentId}/account`, {
           waitUntil: "domcontentloaded",

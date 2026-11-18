@@ -4,6 +4,7 @@ import {
   revokeStaffInviteAction,
   setStaffRolesAction,
 } from "@/app/admin/organization/actions";
+import { ConfirmActionDialog } from "@/components/org/ConfirmActionDialog";
 import { OrgActivationPanel } from "@/components/org/OrgActivationPanel";
 import { OrgSessionEndChoiceDialog } from "@/components/org/OrgSessionEndChoiceDialog";
 import { OrgRolePicker } from "@/components/org/OrgRolePicker";
@@ -19,10 +20,12 @@ export function OrgStaffHome({
   data,
   canActivate,
   error,
+  timeZone,
 }: {
   data: OrgStaffHomeData;
   canActivate: boolean;
   error: string | null;
+  timeZone: string;
 }) {
   const canManage = data.actor.roles.includes("owner") || data.actor.roles.includes("admin");
   const waitlisted = data.members
@@ -43,6 +46,7 @@ export function OrgStaffHome({
           status={data.org.status}
           dailyInviteCap={data.org.dailyInviteCap}
           maxMembers={data.org.maxMembers}
+          timezone={timeZone}
           waitlisted={waitlisted}
           returnTo={`/admin/organization/${data.org.id}`}
         />
@@ -101,13 +105,23 @@ export function OrgStaffHome({
                       />
                     </>
                   ) : (
-                    <form action={removeStaffMemberAction}>
-                      <input type="hidden" name="organizationId" value={data.org.id} />
-                      <input type="hidden" name="adminUserId" value={member.adminUser.id} />
-                      <Button type="submit" variant="outline" size="sm">
-                        Remove from organization
-                      </Button>
-                    </form>
+                    <>
+                      <form
+                        id={`org-remove-form-${member.adminUser.id}`}
+                        action={removeStaffMemberAction}
+                      >
+                        <input type="hidden" name="organizationId" value={data.org.id} />
+                        <input type="hidden" name="adminUserId" value={member.adminUser.id} />
+                      </form>
+                      <ConfirmActionDialog
+                        formId={`org-remove-form-${member.adminUser.id}`}
+                        triggerLabel="Remove from organization"
+                        title="Remove this person"
+                        description="They leave the organization. Sessions they already taught stay on the record."
+                        confirmLabel="Remove"
+                        testId={`org-remove-${member.adminUser.id}`}
+                      />
+                    </>
                   )}
                 </div>
               ) : null}
@@ -138,13 +152,20 @@ export function OrgStaffHome({
                     <p className="text-sm text-muted-foreground">{formatOrgRoleList(invite.roles)}</p>
                   </div>
                   {canManage ? (
-                    <form action={revokeStaffInviteAction}>
-                      <input type="hidden" name="organizationId" value={data.org.id} />
-                      <input type="hidden" name="inviteId" value={invite.id} />
-                      <Button type="submit" variant="outline" size="sm" data-testid="org-revoke-invite">
-                        Revoke invitation
-                      </Button>
-                    </form>
+                    <>
+                      <form id={`org-revoke-form-${invite.id}`} action={revokeStaffInviteAction}>
+                        <input type="hidden" name="organizationId" value={data.org.id} />
+                        <input type="hidden" name="inviteId" value={invite.id} />
+                      </form>
+                      <ConfirmActionDialog
+                        formId={`org-revoke-form-${invite.id}`}
+                        triggerLabel="Revoke invitation"
+                        title="Revoke this invitation"
+                        description="The invitation link stops working."
+                        confirmLabel="Revoke invitation"
+                        testId="org-revoke-invite"
+                      />
+                    </>
                   ) : null}
                 </li>
               ))}
