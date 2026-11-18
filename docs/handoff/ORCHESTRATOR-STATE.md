@@ -35,14 +35,14 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | pw-parallel | MERGED f85468c8 | — |
 | first-impression | MERGED acd0cc00 | — |
 | consent-copy (C8 privacy/terms) | MERGED 96978496 | — |
-| fold-transcript | built (to 699a7c2d); Sonnet verify ba62c33b DIED on Cursor "unpaid invoice" — re-dispatch Sonnet verify once Andrew pays | — |
+| fold-transcript | built (to 699a7c2d); Sonnet verify resumed after billing stop | ba62c33b |
 | fold-apply-race | 708307bc. Sonnet 355a519c died (usage limit) after gates: apply-race check 16/16; wb-affected 5 known baseline reds (W27, WS-X, E2, E4, E5); @wb-graph also hard-failed live-sync invariants 1b + 2 (passed in wb-affected run); build failed on missing PrismaClient (shared node_modules incident). Grok rerunning build + invariants x3 on stack 2 | 5ddae4f9 |
 | static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
 | org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
-| jest-triage | ac1b9056: 13 suites = drift/env, no product bugs; default jest skips org-db suites unless JEST_ORG_DB=1. Full jest 468/469 (upload-outbox "different streams upload in parallel" fails, on base too → A8). Grok verify running. Author wrongly deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | f7aa132b |
-| recording-durability | tip 55bfc51b (pushed): tests reshaped (freeze-then-close crash, hidden-then-killed, graceful ≤1 slice); pagehide requestData dropped. Sonnet died (usage limit) before running. Grok running red/green on default stack | 27a1e1f8 |
+| jest-triage | MERGED 2035b5b4 (worktree removed). Remaining full-jest red: upload-outbox "different streams upload in parallel" (on base too → A8). Author had deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | — |
+| recording-durability | 55bfc51b: Sonnet verify 95c46f72 REJECT. B1 oracle samples after a slice boundary (10-15s slices would pass) → sample just before. B2 outbox finalize keeping rows (b9568ad3) has no consumer, orphan blobs, minor-audio retention → conductor decision: REVERT b9568ad3, backlog late-register/recovery UI. Sonnet author fixing | 4b3b91a3 |
 | jest-mocks | MERGED f0e97d94 (9 stale-mock reds fixed). Worktree removed. NOTE: removing it before its node_modules junction deleted main `node_modules\.bin`; repaired with `npm rebuild --ignore-scripts` (npm ls clean). Always `cmd /c rmdir <wt>\node_modules` FIRST | — |
-| replay-start | Sonnet; local commits 91f574fa, d05d719b not pushed; short-clip fix staged in %TEMP% | e47069eb |
+| replay-start | feat/org-qol merged in (ac0f9cf5, pushed). Sonnet resumed: apply short-clip fix from %TEMP%, red/green, gates | e47069eb-4f31-4f63-b672-2489506d9f28 |
 
 Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
 
