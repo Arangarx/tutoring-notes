@@ -51,7 +51,7 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | jest-triage | MERGED 2035b5b4 (worktree removed). Remaining full-jest red: upload-outbox "different streams upload in parallel" (on base too → A8). Author had deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | — |
 | recording-durability | MERGED 84cb0eed (tip 32b45dc1; B1 oracle red on 10s/30s, b9568ad3 reverted). Worktree removed | — |
 | jest-mocks | MERGED f0e97d94 (9 stale-mock reds fixed). Worktree removed. NOTE: removing it before its node_modules junction deleted main `node_modules\.bin`; repaired with `npm rebuild --ignore-scripts` (npm ls clean). Always `cmd /c rmdir <wt>\node_modules` FIRST | — |
-| replay-start | feat/org-qol merged in (ac0f9cf5, pushed). Sonnet resumed: apply short-clip fix from %TEMP%, red/green, gates | e47069eb-4f31-4f63-b672-2489506d9f28 |
+| replay-start | 441f5700 author done: short-clip (<0.5s never starts) fixed in `useReplayTimelineController.ts`, 0.3s test red 3/3 → green 3/3; new `wb-replay-start-position.spec.ts` (6 tests). SMOKE-UX-1 end-jump NOT reproduced in Chromium (no fix; WebKit audio can't run on this Windows host). consent-entry RP 15/15 PASS when `NEXTAUTH_SECRET` is loaded from `.env`, so the A8 RP reds are env setup, not app. Sonnet verify f7cdb02a running (incl. end-jump hypothesis + surrogate). On merge: add a PLAYWRIGHT-GAP BACKLOG entry for the end-jump, plus an A9 smokebook hardware item (capture `seeking`/`durationchange`/`seeked`/`play` trace) | f7cdb02a-2b01-4b9e-88f6-ae6da1733f5d |
 
 Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
 
