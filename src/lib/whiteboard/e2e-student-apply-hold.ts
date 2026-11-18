@@ -14,6 +14,8 @@
  * stream runs through until the switching apply arrives.
  */
 
+import { createParkingLot, type ParkingLot } from "@/lib/seam-parking-lot";
+
 export type StudentApplyHoldPoint = "H1" | "H2";
 
 export type StudentApplyHoldArmOptions = { pageSwitchOnly?: boolean };
@@ -23,8 +25,8 @@ export type StudentApplyHoldArrival = { pageSwitch?: boolean };
 type HoldState = {
   armed: boolean;
   pageSwitchOnly: boolean;
-  parkedTotal: number;
-  waiting: Array<() => void>;
+  /** Park / release / count mechanics, shared with `src/lib/test-seams.ts`. */
+  lot: ParkingLot;
 };
 
 export type StudentApplyHoldApi = {
@@ -54,8 +56,8 @@ let holds: Record<StudentApplyHoldPoint, HoldState> | null = null;
 function getHolds(): Record<StudentApplyHoldPoint, HoldState> {
   if (!holds) {
     holds = {
-      H1: { armed: false, pageSwitchOnly: false, parkedTotal: 0, waiting: [] },
-      H2: { armed: false, pageSwitchOnly: false, parkedTotal: 0, waiting: [] },
+      H1: { armed: false, pageSwitchOnly: false, lot: createParkingLot() },
+      H2: { armed: false, pageSwitchOnly: false, lot: createParkingLot() },
     };
     window.__WBX_STUDENT_APPLY_HOLD__ = {
       arm: (point, options) => {
@@ -67,11 +69,10 @@ function getHolds(): Record<StudentApplyHoldPoint, HoldState> {
         const h = getHolds()[point];
         h.armed = false;
         h.pageSwitchOnly = false;
-        const queued = h.waiting.splice(0);
-        for (const resume of queued) resume();
+        h.lot.releaseAll();
       },
-      parkedTotal: (point) => getHolds()[point].parkedTotal,
-      parkedNow: (point) => getHolds()[point].waiting.length,
+      parkedTotal: (point) => getHolds()[point].lot.parkedTotal(),
+      parkedNow: (point) => getHolds()[point].lot.parkedNow(),
     };
   }
   return holds;
@@ -99,9 +100,7 @@ export function runAfterStudentApplyHold(
     fn();
     return;
   }
-  const h = getHolds()[point];
-  h.parkedTotal += 1;
-  h.waiting.push(fn);
+  getHolds()[point].lot.park(fn);
 }
 
 /**

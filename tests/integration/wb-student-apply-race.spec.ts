@@ -192,6 +192,55 @@ async function graphEditDuringHeldApply(
 }
 
 /**
+ * The student draws a stroke that reaches the tutor, a tutor apply parks at
+ * `hold`, and the student undoes the stroke inside that window. The undone
+ * stroke must stay gone on both peers once the apply resumes and again after
+ * the next tutor apply (the stale page bucket still carries the stroke).
+ * H1 parks before the hydrate; H2 parks in the viewport-align release. An H1
+ * hold also arms H2 so idle viewport applies cannot end the window early.
+ */
+async function undoDuringHeldApply(
+  browser: import("@playwright/test").Browser,
+  hold: HoldPoint
+): Promise<void> {
+  const session = await seedWbLiveSyncSession();
+  const peers = await openTutorAndStudent(browser, session);
+  try {
+    await waitForHoldApi(peers.studentPage);
+    const tag = `t5a-${hold.toLowerCase()}-${Date.now()}`;
+    const strokeId = `student-${tag}`;
+    await drawTestStrokeOnRole(peers.studentPage, "student", strokeId, 60, 60, 160, 120);
+    await waitForElementOnPeer(peers.tutorPage, "tutor", strokeId, 15_000);
+
+    await armAndParkStudentApply(
+      peers.tutorPage,
+      peers.studentPage,
+      hold === "H1" ? ["H1", "H2"] : ["H2"],
+      hold,
+      `race-a-${tag}`
+    );
+    await studentUndo(peers.studentPage);
+    expect(await readSceneElementIds(peers.studentPage, "student")).not.toContain(strokeId);
+
+    await release(peers.studentPage, "H1", "H2");
+    await forceNextStudentApply(peers.tutorPage, peers.studentPage, `race-b-${tag}`);
+
+    expect(
+      await readSceneElementIds(peers.studentPage, "student"),
+      "undone stroke stays gone on the student"
+    ).not.toContain(strokeId);
+    await expect
+      .poll(() => readSceneElementIds(peers.tutorPage, "tutor"), {
+        timeout: 15_000,
+        message: "undone stroke removed on the tutor",
+      })
+      .not.toContain(strokeId);
+  } finally {
+    await peers.close();
+  }
+}
+
+/**
  * Tutor switches to a board that already has content; the student draws on
  * that board while the switching apply is parked. The edit must persist on
  * both peers and only ever appear on the new board.
@@ -394,41 +443,15 @@ test.describe("WB-STUDENT-APPLY-RACE — student edits during a held tutor apply
     "T5a — student undo inside the viewport-align window is not resurrected by the next apply",
     { tag: [TAG.WB_STROKES, TAG.WB_SYNC] },
     async ({ browser }) => {
-      const session = await seedWbLiveSyncSession();
-      const peers = await openTutorAndStudent(browser, session);
-      try {
-        await waitForHoldApi(peers.studentPage);
-        const tag = `t5a-${Date.now()}`;
-        const strokeId = `student-${tag}`;
-        await drawTestStrokeOnRole(peers.studentPage, "student", strokeId, 60, 60, 160, 120);
-        await waitForElementOnPeer(peers.tutorPage, "tutor", strokeId, 15_000);
+      await undoDuringHeldApply(browser, "H2");
+    }
+  );
 
-        await armAndParkStudentApply(
-          peers.tutorPage,
-          peers.studentPage,
-          ["H2"],
-          "H2",
-          `race-a-${tag}`
-        );
-        await studentUndo(peers.studentPage);
-        expect(await readSceneElementIds(peers.studentPage, "student")).not.toContain(strokeId);
-
-        await release(peers.studentPage, "H2");
-        await forceNextStudentApply(peers.tutorPage, peers.studentPage, `race-b-${tag}`);
-
-        expect(
-          await readSceneElementIds(peers.studentPage, "student"),
-          "undone stroke stays gone on the student"
-        ).not.toContain(strokeId);
-        await expect
-          .poll(() => readSceneElementIds(peers.tutorPage, "tutor"), {
-            timeout: 15_000,
-            message: "undone stroke removed on the tutor",
-          })
-          .not.toContain(strokeId);
-      } finally {
-        await peers.close();
-      }
+  test(
+    "T5a-H1 — student undo while the apply is parked before hydrate is not resurrected by that apply or the next one",
+    { tag: [TAG.WB_STROKES, TAG.WB_SYNC] },
+    async ({ browser }) => {
+      await undoDuringHeldApply(browser, "H1");
     }
   );
 
