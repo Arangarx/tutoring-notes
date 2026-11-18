@@ -10,7 +10,7 @@
 
 ### Last action
 
-**2026-11-18 12:22: learner-login MERGED `df798123` (lane `ce1b86f0`; Sonnet [login confirm](d4d73b93-40aa-40eb-93e1-096056cdc35d) MERGE-OK). A parent-mode username now returns 401 `invalid_credentials`, same as an unknown username, and counts toward lockout. Worktree `tn-learner-login` removed. Code lanes for this pass are in. Next is A8 full gate on this tip, then A9 smoke book. Still open and not this gate: SMOKE-UX-1 hardware end-jump, AV-REFRESH-LOSS, Gate A5 audit.**
+**2026-11-18 12:24: learner-login MERGED `df798123` (lane `ce1b86f0`; Sonnet [login confirm](d4d73b93-40aa-40eb-93e1-096056cdc35d) MERGE-OK). A8 started: `npm run test:wb-sync` on this tip, one stack only because WoW is running. `test:prod-shape` and `next build` wait until that finishes. No `next dev` is up. Still open outside this gate: SMOKE-UX-1 hardware end-jump, AV-REFRESH-LOSS, Gate A5 audit.**
 
 **2026-11-18 09:15: conductor swap (Opus → fresh Grok chat) to cut spend. Andrew: "today try really hard to keep the spending burn down."**
 
