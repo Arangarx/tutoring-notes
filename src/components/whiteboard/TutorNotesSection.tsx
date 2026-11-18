@@ -30,6 +30,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -503,13 +504,9 @@ export default function TutorNotesSection({
           }
         >
           {silentEmptyDone ? (
-            <div
-              className="muted"
-              style={{ fontSize: 13 }}
-              data-testid="tutor-notes-no-speech"
-            >
+            <NotesNotice testId="tutor-notes-no-speech">
               {NO_SPEECH_NOTE_COPY}
-            </div>
+            </NotesNotice>
           ) : null}
 
           {/* Partial transcript badge — done only */}
@@ -690,9 +687,7 @@ export default function TutorNotesSection({
           ends with a save: "Share session" releases the replay to the family with no notes text (Q1). */}
       {isSkipped && (
         <div style={{ display: "grid", gap: 10 }}>
-          <div className="muted" style={{ fontSize: 13 }} data-testid="tutor-notes-skipped">
-            {NOTES_SKIPPED_COPY}
-          </div>
+          <NotesNotice testId="tutor-notes-skipped">{NOTES_SKIPPED_COPY}</NotesNotice>
           {saveError ? <SaveErrorAlert message={saveError} /> : null}
           {savedInShell ? <SavedConfirmation /> : null}
           <div>
@@ -711,9 +706,9 @@ export default function TutorNotesSection({
 
       {/* Done but no content (shouldn't happen but defensive) */}
       {isDone && note.found && !note.content && (
-        <div className="muted" style={{ fontSize: 13 }}>
+        <NotesNotice>
           Notes were generated but the content is empty. Click Regenerate to retry.
-        </div>
+        </NotesNotice>
       )}
 
       {/* Failed state */}
@@ -755,10 +750,10 @@ export default function TutorNotesSection({
 
       {/* No audio recorded at all */}
       {isNotStarted && !hasAudio && !isSkipped && (
-        <div className="muted" style={{ fontSize: 13 }}>
+        <NotesNotice>
           No audio was recorded for this session. Notes are generated from the
           session recording.
-        </div>
+        </NotesNotice>
       )}
 
       {/* A done note with no content still hides the form. Failed and timed-out notes keep it. */}
@@ -773,6 +768,15 @@ export default function TutorNotesSection({
           </Link>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Inline muted line used by the notes section. Same markup at every site. */
+function NotesNotice({ testId, children }: { testId?: string; children: ReactNode }) {
+  return (
+    <div className="muted" style={{ fontSize: 13 }} data-testid={testId}>
+      {children}
     </div>
   );
 }
