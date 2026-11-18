@@ -10,7 +10,7 @@
 
 ### Last action
 
-**2026-11-18 12:10: live-av MERGED `e4fe9a17` (tip `d10ee7a3`). Sonnet [live-av confirm](9bde442f-8b36-4e3e-b7bf-2bebd469c285) MERGE-OK. Camera-switch-after-release stays open under B11 (pre-existing). Worktree removed. static-checks is the last lane (`d35645a7`, merge-tree clean) and is next, then `npm ci`.**
+**2026-11-18 12:15: live-av MERGED `e4fe9a17`. static-checks MERGED `29a39bcc` (last lane). `npm ci` is next in the main checkout. Feature lanes are all merged. Left open: B11 camera-switch-after-release, SMOKE-UX-1 hardware end-jump, AV-REFRESH-LOSS, Gate A5 audit, learner-login leak, then A8 full gate.**
 
 **2026-11-18 09:15: conductor swap (Opus → fresh Grok chat) to cut spend. Andrew: "today try really hard to keep the spending burn down."**
 
@@ -68,7 +68,7 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | c7-copy (`tn-c7-copy`) | 32f9d596: items 1-7, item 5 banner (one `Banner`, tutor + student, waiting room + live), item 22 sentence + assertion, org floors, V1-V4/E-copy/S2b/M16b green on stack 3; also applied approved self-learner items 29-36. `session-entry.ts` changed STRING LITERALS ONLY (`live_off` copy + `ENTRY_IN_PERSON_STILL_OPEN`, approved items 2-3). Round 2 (same Grok, 00:32): the /limits sentence was wrong (said updates apply while recording; the app DEFERS during capture). Conductor-set text: "A new version waits while you are recording, so it does not interrupt a recording." Also red-before on base 014ae4cb in a temp worktree. Red-before done at 0b98344c. Sonnet e232d744 BLOCKED: item 35 ("Mynk may draft") and the item 29 label were missing. Round 3 (00:55) covers those, plus nits (item 7 period, boolean `disabledReason`, V2 in-person). Honesty follow-up: the parent `LIVE_SESSION_CONSENT_COPY` and child `CHILD_DESCRIPTION` say "everything drawn … is saved", which is false when the whiteboard is off. Apply approved text if it exists, else ask Andrew. Round 3 at d864bb2f (items 35/29 fixed). Re-check f60a4683 BLOCKED on remaining false settings copy (child audio `ChildConsentSettings.tsx:19`, parent items 28/30-33). Round 4 (01:10) applies Part 2 items 28-33 verbatim and drops the child fork (item 37). **Andrew 2026-11-18 delegated Part 2:** "make sure it's honest and accurate and not awkwardly worded" (recorded in the copy doc header). Round 4 done at 41a34762 (items 28/30-33/37/38). Round 5 done. Verify e7bf69c7 BLOCK: `privacy/page.tsx` claimed both people can see which switches are off; online-off is tutor-only and waiting-room only. MERGED 623a366b (tip 7ffa5813). Re-verify 05fbae7d MERGE-OK. V4 child-home owner is out of scope (label lives in child-consent.ts, untouched). Worktree removed. | — |
 
 **Lock convention (revised 00:55):** EVERY jest run, even mock-only, holds `tn-pw.lock` while it runs, because jest global setup always resets `tutoring_notes_test`. Readonly verifiers must not run jest without that lock. Playwright may use the default stack only while holding that same lock, so jest waits. The 21:55 "stack 2/3 only" rule starved lanes and is retired for new dispatches. The WoW cap counts all `tn-pw*.lock` files.
-| static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
+| static-checks | MERGED 29a39bcc (tip d35645a7). Sonnet e20e3786 had said MERGE-OK. Worktree removed. `npm ci` follows in the main checkout | — |
 | org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
 | jest-triage | MERGED 2035b5b4 (worktree removed). Remaining full-jest red: upload-outbox "different streams upload in parallel" (on base too → A8). Author had deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | — |
 | recording-durability | MERGED 84cb0eed (tip 32b45dc1; B1 oracle red on 10s/30s, b9568ad3 reverted). Worktree removed | — |
@@ -103,7 +103,7 @@ Launch to pilot, Bucket A, on `feat/org-qol`. Sequencing is [LAUNCH-PLAN.md](LAU
 
 ### Latest committed state
 
-`feat/org-qol` at `e4fe9a17` (live-av merge). Production at usemynk.com still serves master `97c42ae8`. Git master is `eebafee1`.
+`feat/org-qol` at `29a39bcc` (static-checks merge). Production at usemynk.com still serves master `97c42ae8`. Git master is `eebafee1`.
 
 ### Recent architectural decisions
 
