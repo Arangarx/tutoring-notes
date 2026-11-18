@@ -2424,6 +2424,119 @@ describe("useLiveAV — releaseLocalMedia blocks later acquire", () => {
     expect(result.current.localVideoStream).toBeNull();
     unmount();
   });
+
+  function installCameraList(): () => void {
+    const nav = navigator as unknown as { mediaDevices?: unknown };
+    const hadMediaDevices = "mediaDevices" in nav;
+    const priorMediaDevices = nav.mediaDevices;
+    const cam = {
+      deviceId: "cam-slot",
+      kind: "videoinput" as const,
+      label: "Camera slot",
+      groupId: "cam-slot-grp",
+      toJSON(this: { deviceId: string; kind: string; label: string; groupId: string }) {
+        return {
+          deviceId: this.deviceId,
+          kind: this.kind,
+          label: this.label,
+          groupId: this.groupId,
+        };
+      },
+    };
+    nav.mediaDevices = {
+      enumerateDevices: jest.fn(async () => [cam]),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    };
+    return () => {
+      if (hadMediaDevices) nav.mediaDevices = priorMediaDevices;
+      else delete nav.mediaDevices;
+    };
+  }
+
+  /**
+   * Start a camera switch, release while getUserMedia is still pending, then
+   * let that call resolve. The ended screen stays mounted (`unmountedRef`
+   * stays false). The new tracks must be stopped and the hook must not hold
+   * the stream that just opened.
+   */
+  async function expectInFlightSwitchStoppedAfterRelease(
+    startSwitch: (
+      result: { current: ReturnType<typeof useLiveAV> }
+    ) => Promise<void>
+  ): Promise<void> {
+    const restoreCameras = installCameraList();
+    let resolveGUM: ((stream: MediaStream) => void) | null = null;
+    let gumSettled = false;
+    const getUM = jest.fn(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          resolveGUM = resolve;
+        })
+    );
+    const props = makeBaseProps({
+      _getUserMedia: getUM as unknown as UseLiveAVOptions["_getUserMedia"],
+    });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    let switchPromise: Promise<void> | undefined;
+    try {
+      await waitFor(() => {
+        expect(result.current.videoDevices.length).toBe(1);
+      });
+
+      act(() => {
+        switchPromise = startSwitch(result);
+      });
+      await waitFor(() => {
+        expect(getUM).toHaveBeenCalled();
+      });
+
+      const opened = makeFakeStream(0, 1);
+      const openedTrack = opened.videoTracks[0]!;
+      expect(openedTrack.stopped).toBe(false);
+
+      act(() => {
+        result.current.releaseLocalMedia();
+      });
+
+      await act(async () => {
+        gumSettled = true;
+        resolveGUM!(opened.stream as unknown as MediaStream);
+        await switchPromise;
+      });
+
+      // Oracle: MediaStreamTrack.stop() flipped the track, and the hook
+      // did not keep the stream that getUserMedia just returned.
+      expect(openedTrack.stopped).toBe(true);
+      expect(opened.stream.getVideoTracks()).toHaveLength(1);
+      expect(
+        (opened.stream.getVideoTracks()[0] as unknown as FakeMediaStreamTrack)
+          .stopped
+      ).toBe(true);
+      expect(result.current.localVideoStream).toBeNull();
+      const held = result.current.localVideoStream?.getVideoTracks() ?? [];
+      expect(held).not.toContain(openedTrack);
+    } finally {
+      if (!gumSettled && resolveGUM && switchPromise) {
+        resolveGUM(makeFakeStream(0, 1).stream as unknown as MediaStream);
+        await switchPromise;
+      }
+      unmount();
+      restoreCameras();
+    }
+  }
+
+  test("a camera slot switch that resolves after release stops the new tracks and does not hold the stream", async () => {
+    await expectInFlightSwitchStoppedAfterRelease((result) =>
+      result.current.setVideoCameraBySlot(0)
+    );
+  });
+
+  test("an orphan camera device switch that resolves after release stops the new tracks and does not hold the stream", async () => {
+    await expectInFlightSwitchStoppedAfterRelease((result) =>
+      result.current.setVideoDevice("orphan-cam")
+    );
+  });
 });
 
 // -----------------------------------------------------------------

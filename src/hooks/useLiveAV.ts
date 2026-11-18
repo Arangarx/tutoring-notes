@@ -2724,7 +2724,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         const newTrack = stream.getVideoTracks()[0];
         if (!newTrack) {
           disposeStreamTracks(stream);
-          if (!unmountedRef.current) {
+          if (!unmountedRef.current && !mediaReleasedRef.current) {
             const empty: AvAcquireError = {
               type: "no-device",
               message: "No video track from the selected camera.",
@@ -2736,7 +2736,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
           return;
         }
-        if (unmountedRef.current) {
+        if (unmountedRef.current || mediaReleasedRef.current) {
           disposeStreamTracks(stream);
           return;
         }
@@ -2771,11 +2771,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           `event=set-video-slot slot=${slotIndex} deviceId=${devIdPersist.length > 0 ? devIdPersist : "<empty>"}`
         );
       } catch (err) {
-        if (!unmountedRef.current) {
+        if (!unmountedRef.current && !mediaReleasedRef.current) {
           localVideoStreamRef.current = null;
           setLocalVideoStream(null);
         }
-        if (unmountedRef.current) return;
+        if (unmountedRef.current || mediaReleasedRef.current) return;
         const classified = classifyMediaError(err, "cam");
         log.warn(
           `setVideoCameraBySlot failed type=${classified.type} err=${
@@ -2864,7 +2864,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         const newTrack = stream.getVideoTracks()[0];
         if (!newTrack) {
           disposeStreamTracks(stream);
-          if (!unmountedRef.current) {
+          if (!unmountedRef.current && !mediaReleasedRef.current) {
             const empty: AvAcquireError = {
               type: "no-device",
               message: "No video track from the selected camera.",
@@ -2876,7 +2876,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
           return;
         }
-        if (unmountedRef.current) {
+        if (unmountedRef.current || mediaReleasedRef.current) {
           disposeStreamTracks(stream);
           return;
         }
@@ -2903,11 +2903,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         await refreshVideoDevices();
         log.log(`event=set-video-device orphan deviceId=${deviceId}`);
       } catch (err) {
-        if (!unmountedRef.current) {
+        if (!unmountedRef.current && !mediaReleasedRef.current) {
           localVideoStreamRef.current = null;
           setLocalVideoStream(null);
         }
-        if (unmountedRef.current) return;
+        if (unmountedRef.current || mediaReleasedRef.current) return;
         const classified = classifyMediaError(err, "cam");
         log.warn(
           `setVideoDevice failed type=${classified.type} err=${
