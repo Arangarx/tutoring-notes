@@ -35,7 +35,7 @@ describe("ConsentSetupForm — consent switches", () => {
   test("still renders active consent toggles", () => {
     render(<ConsentSetupForm {...defaultProps} />);
 
-    expect(screen.getByLabelText(/allow live tutoring sessions/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/allow online sessions/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/allow session audio recording/i)).toBeInTheDocument();
   });
 
@@ -44,9 +44,10 @@ describe("ConsentSetupForm — consent switches", () => {
 
     expect(
       screen.getByText(
-        /everything drawn on the shared whiteboard during the session is saved for later review/i
+        "Your child can join online sessions with video and audio. In person is not affected by this switch. You can also join an online session as your child from your parent account when they need help signing in."
       )
     ).toBeInTheDocument();
+    expect(screen.queryByText(/everything drawn/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(
         /live conversation is always available when live sessions are allowed/i

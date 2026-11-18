@@ -17,7 +17,7 @@ import { SELF_LEARNER_AGREEMENT } from "@/lib/consent-toggle-copy";
 
 /** Reader-facing agreement. Closing clause names Manage, then Privacy. */
 const SELF_LEARNER_AGREEMENT_COPY =
-  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk drafts session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
+  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk may draft session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
 
 const saveMock = saveSelfLearnerConsentAction as jest.MockedFunction<
   typeof saveSelfLearnerConsentAction
@@ -51,7 +51,7 @@ describe("SelfLearnerConsentSettings", () => {
     );
 
     expect(screen.getByText("Ms. Smith")).toBeInTheDocument();
-    expect(screen.getByLabelText(/allow live tutoring sessions/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/allow online sessions/i)).toBeInTheDocument();
     expect(screen.queryByTestId("self-learner-agreement")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/without live sessions, mynk is effectively just a scheduling calendar/i)

@@ -1059,7 +1059,7 @@ test.describe("consent 6a: Entry (online switch)", {
         await page.goto(`/account/children/${parent.learnerProfileId}/consent`, { waitUntil: "domcontentloaded" });
         await expect(page.getByTestId("consent-next-session")).toHaveText(NEXT);
         await expect(page.getByTestId("consent-restriction-applies")).toHaveText(BLOCK);
-        await expect(page.getByText("Always block whiteboard recording.")).toBeVisible();
+        await expect(page.getByText("Always block whiteboard recording")).toBeVisible();
       } finally {
         await parentContext.close();
       }
@@ -2169,6 +2169,24 @@ test.describe("consent 6h: Visibility (both sides see what is off)", {
       await expect(live).toContainText(STUDENT_AUDIO, { timeout: 20_000 });
       await expect(live).toContainText(BOARD_OFF);
       await expect(live).toContainText(NOTES_OFF);
+    } finally {
+      await pair.close();
+      await s.cleanup();
+    }
+  });
+  // Oracle: in person, audio off is the none sentence for the student too
+  test("V2b: a student in an in-person session sees the in-person audio line", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const s = await seedConsentSession({ switches: OFF, mode: "IN_PERSON" });
+    const pair = await openTutorAndStudent(browser, s, { ensureFollow: false });
+    try {
+      await chooseMode(pair.tutorPage, "IN_PERSON");
+      await startFromWaitingRoom(pair.tutorPage);
+      const live = pair.studentPage.getByTestId("wb-audio-consent-banner");
+      await expect(live).toContainText(AUDIO_NONE, { timeout: 20_000 });
+      await expect(live).toContainText(BOARD_OFF);
+      await expect(live).toContainText(NOTES_OFF);
+      await expect(live).not.toContainText(STUDENT_AUDIO);
     } finally {
       await pair.close();
       await s.cleanup();

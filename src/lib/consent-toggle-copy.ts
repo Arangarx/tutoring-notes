@@ -6,9 +6,9 @@
 import type { OffEffectByMode, SwitchCapability } from "@/lib/recording/session-capabilities";
 
 export const LIVE_SESSION_CONSENT_COPY = {
-  label: "Allow live tutoring sessions",
+  label: "Allow online sessions",
   description:
-    "Your child can join real-time video and audio with this tutor, and everything drawn on the shared whiteboard during the session is saved for later review. You can also join a live session as your child from your parent account when they need help signing in.",
+    "Your child can join online sessions with video and audio. In person is not affected by this switch. You can also join an online session as your child from your parent account when they need help signing in.",
 } as const;
 
 export const AUDIO_RECORDING_CONSENT_COPY = {
@@ -21,9 +21,9 @@ export const AUDIO_RECORDING_CONSENT_COPY = {
 export const SELF_LEARNER_AUDIO_HELP =
   "Off means your voice is left out of the saved recording. Online, your tutor's microphone can still be saved. In person, no audio is saved. The whiteboard follows its own setting. Nothing is transcribed if notes are off.";
 
-/** Accepted self-learner agreement. Andrew 2026-10-11. */
+/** Accepted self-learner agreement. Andrew 2026-11-17 (item 35). */
 export const SELF_LEARNER_AGREEMENT =
-  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk drafts session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
+  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk may draft session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
 
 export const WHITEBOARD_RECORDING_CONSENT_COPY = {
   label: "Allow whiteboard recording",
@@ -50,7 +50,7 @@ export const NEXT_SESSION_APPLIES_COPY =
 /** Parent always-block copy (item 7). */
 export const RESTRICTION_AUDIO_DESCRIPTION =
   "Applies to every tutor, including an organization's instructors. Online, your child's voice is left out; the tutor's voice can still be saved. In person, no audio is saved. The whiteboard follows its own setting.";
-export const RESTRICTION_WHITEBOARD_LABEL = "Always block whiteboard recording.";
+export const RESTRICTION_WHITEBOARD_LABEL = "Always block whiteboard recording";
 export const RESTRICTION_WHITEBOARD_DESCRIPTION =
   "Applies to every tutor, including an organization's instructors. The board still works during the session. After it ends, the saved board is deleted from our servers.";
 export const RESTRICTION_BLOCK_APPLIES_COPY =

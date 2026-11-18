@@ -84,10 +84,7 @@ import {
   type SessionConsentInput,
 } from "@/lib/recording/session-capabilities";
 import { micRequestBlockedReason } from "@/lib/recording/mic-acquire-gate";
-import {
-  RECORDING_OFF_AUDIO_NONE,
-  recordingOffBannerLines,
-} from "@/lib/consent-toggle-copy";
+import { recordingOffBannerLines } from "@/lib/consent-toggle-copy";
 import {
   createSessionMsClock,
   type SessionMsClock,
@@ -6778,9 +6775,7 @@ export function WhiteboardWorkspaceClient({
         !clientMounted ||
         (role === "student" ? studentAvPickerDisabled || studentMicLocked : endingBusy || tutorMicLocked)
       }
-      disabledReason={
-        (role === "student" ? studentMicLocked : tutorMicLocked) ? RECORDING_OFF_AUDIO_NONE : undefined
-      }
+      describedByBanner={role === "student" ? studentMicLocked : tutorMicLocked}
     />
   );
 
@@ -7013,7 +7008,7 @@ export function WhiteboardWorkspaceClient({
             }
             onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
             disabled={studentAvPickerDisabled || studentMicLocked}
-            disabledReason={studentMicLocked ? RECORDING_OFF_AUDIO_NONE : undefined}
+            describedByBanner={studentMicLocked}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}
@@ -7182,7 +7177,7 @@ export function WhiteboardWorkspaceClient({
               void liveAv.setMicDeviceBySlot(slot, { force: true })
             }
             disabled={!clientMounted || endingBusy || tutorMicLocked}
-            disabledReason={tutorMicLocked ? RECORDING_OFF_AUDIO_NONE : undefined}
+            describedByBanner={tutorMicLocked}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}

@@ -4,14 +4,17 @@ import { useState } from "react";
 
 import { ConsentSwitches, type ConsentSwitchKey } from "@/components/consent/ConsentSwitches";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CONSENT_SWITCHES, NEXT_SESSION_APPLIES_COPY } from "@/lib/consent-toggle-copy";
+import {
+  CONSENT_SWITCHES,
+  NEXT_SESSION_APPLIES_COPY,
+  SELF_SWITCH_DESCRIPTION,
+} from "@/lib/consent-toggle-copy";
 import type { ChildConsentOwner } from "@/lib/child-consent";
 import type { ConsentToggleCeiling } from "@/lib/consent-scope";
 import { saveChildConsentAction } from "@/app/join/child-home-actions";
 
 const CHILD_DESCRIPTION: Partial<Record<ConsentSwitchKey, string>> = {
-  allowLiveSession:
-    "You can join live video and audio with your tutor. Everything drawn on the shared whiteboard is saved for later review.",
+  allowLiveSession: SELF_SWITCH_DESCRIPTION.allowLiveSession,
   allowAudioRecording:
     "Session audio can be saved for notes and review. Live conversation still works when live sessions are on.",
 };
