@@ -12,7 +12,7 @@
 
 **2026-11-18 09:15: conductor swap (Opus → fresh Grok chat) to cut spend. Andrew: "today try really hard to keep the spending burn down."**
 
-- **BILLING:** at 09:12, Anthropic subagents (Sonnet) failed with "Other Models usage limit reached" and "unpaid invoice". Until Andrew says billing is fixed, ALL authors and verifiers run on `grok-4.7-high`. Fragile lanes (rec-draft, live-av, apply-overlap auth boundary) get a Grok verify now, plus a Sonnet confirm before merge once billing works. Ask Andrew whether to waive the Sonnet confirm if billing stays blocked.
+- **BILLING:** at 09:12, Anthropic subagents (Sonnet) failed with "Other Models usage limit reached" and "unpaid invoice". Until Andrew says billing is fixed, ALL authors and verifiers run on `grok-4.7-high`. Fragile lanes (rec-draft, live-av, apply-overlap auth boundary) get a Grok verify now, plus a Sonnet confirm before merge once billing works. If Sonnet is still blocked at merge time, a SECOND independent Grok verifier, with a fresh agent and an adversarial brief, stands in. Do not ask Andrew.
 - **Spend discipline today:** dispatch only what unblocks launch; no speculative reviews; one-line replies to pings.
 - **Five Grok agents were in flight at the swap.** Their final reports land in the OLD chat, not yours.
   - Read each report from the last lines of `../../../../.cursor/projects/c-Users-arang-Documents-Andrew-dev-agentic-projects-tutoring-notes/agent-transcripts/b0242bef-fab3-4d58-9b71-4ee838ac5294/subagents/<agentId>.jsonl`.
