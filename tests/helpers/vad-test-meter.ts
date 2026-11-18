@@ -38,3 +38,9 @@ export async function driveVadSilenceCut(page: Page) {
   await setVadTestMeterLevel(page, VAD_METER_LOW);
   await page.waitForTimeout(1_000);
 }
+
+/** Two silence cuts, so a recording that starts in speech holds three segments. */
+export async function driveTwoVadSilenceCuts(page: Page) {
+  await driveVadSilenceCut(page);
+  await driveVadSilenceCut(page);
+}

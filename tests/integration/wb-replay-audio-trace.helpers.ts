@@ -266,10 +266,6 @@ export async function assertReplayStartedAtZero(
     ).toBeLessThanOrEqual(audioFrac + SCRUBBER_LEAD_MAX);
   }
   const firstScrub = withScrubber[0]!;
-  expect(
-    firstScrub.sv! / firstScrub.sm!,
-    `${label}: scrubber right after playback began (${firstScrub.sv}/${firstScrub.sm})`
-  ).toBeLessThan(SCRUBBER_LEAD_MAX + Math.min(1, toNum(firstScrub.ct) / toNum(firstScrub.dur)));
 
   if (!opts.advances) return;
 

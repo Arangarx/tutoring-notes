@@ -32,8 +32,10 @@ import {
   hideReplay,
   installReplayAudioTrace,
   openReplayAndAssertStartsAtZero,
+  readTrace,
   replayAudioSrcKind,
   type StartOracleOptions,
+  type TraceRow,
 } from "./wb-replay-audio-trace.helpers";
 import { TAG } from "../test-tags";
 
@@ -52,7 +54,6 @@ const longClip: StartOracleOptions = {
 
 /** ~60 s Opus-in-WebM with no Duration element, like a MediaRecorder blob. */
 function buildHeaderlessWebm(sec: number): Buffer {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const ffmpeg = require("ffmpeg-static") as string;
   const dir = mkdtempSync(path.join(tmpdir(), "pw-headerless-webm-"));
   const out = path.join(dir, "clip.webm");
@@ -90,6 +91,28 @@ async function expectNoDurationHeader(page: Page, webm: Buffer) {
     return a.duration;
   }, webm.toString("base64"));
   expect(duration, "fixture must have no duration header (Infinity), or the test proves nothing").toBe(Infinity);
+}
+
+function durIsNonFinite(dur: number | string): boolean {
+  if (typeof dur === "number") return !Number.isFinite(dur);
+  return !Number.isFinite(Number(dur));
+}
+
+/** The replay element itself saw the headerless file: a non-finite `dur` before the settled one. */
+function expectReplaySawHeaderlessDuration(rows: TraceRow[]) {
+  let finalIdx = -1;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const d = rows[i]!.dur;
+    if (typeof d === "number" && Number.isFinite(d) && d > 0) {
+      finalIdx = i;
+      break;
+    }
+  }
+  expect(finalIdx, "replay element must settle on a finite duration").toBeGreaterThan(0);
+  expect(
+    rows.slice(0, finalIdx).some((r) => durIsNonFinite(r.dur)),
+    "replay element must have reported a non-finite duration before the final duration"
+  ).toBe(true);
 }
 
 type Delivery = {
@@ -184,6 +207,12 @@ test.describe(
           expect(await replayAudioSrcKind(page), "payload under test").toBe(payload);
           await hideReplay(page);
           await openReplayAndAssertStartsAtZero(page, testInfo, "re-open", longClip);
+          if (delivery.ranged) {
+            expect(log.length, "ranged delivery must intercept more than one audio request").toBeGreaterThan(1);
+          } else {
+            expect(log.length, "Range-stripped delivery must intercept the audio request").toBeGreaterThanOrEqual(1);
+          }
+          expectReplaySawHeaderlessDuration(await readTrace(page));
         } finally {
           await testInfo.attach("audio-requests.txt", {
             body: log.join("\n"),

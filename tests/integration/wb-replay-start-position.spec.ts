@@ -43,7 +43,9 @@ import {
   hideReplay,
   installReplayAudioTrace,
   openReplayAndAssertStartsAtZero,
+  readTrace,
   replayAudioSrcKind,
+  START_MAX_SEC,
   type StartOracleOptions,
 } from "./wb-replay-audio-trace.helpers";
 import { TAG } from "../test-tags";
@@ -147,6 +149,13 @@ test.describe(
 
       await reloadIntoReview(page, studentId, whiteboardSessionId);
       await openReplayAndAssertStartsAtZero(page, testInfo, "segments first open", longClip(totalSec));
+      const playingSegDur = (await readTrace(page))
+        .map((r) => r.dur)
+        .findLast((d): d is number => typeof d === "number" && Number.isFinite(d) && d > 0);
+      expect(
+        playingSegDur,
+        "playing segment must be long enough that its own start differs from its end"
+      ).toBeGreaterThanOrEqual(START_MAX_SEC + 0.5);
       expect(await replayAudioSrcKind(page)).toBe("segments");
       await hideReplay(page);
       await openReplayAndAssertStartsAtZero(page, testInfo, "segments re-open", longClip(totalSec));

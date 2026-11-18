@@ -6,15 +6,9 @@
 
 import { expect, type Page } from "@playwright/test";
 import { withPrisma } from "../helpers/consent-db-oracle";
-import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
+import { driveTwoVadSilenceCuts, injectVadOverrides } from "../helpers/vad-test-meter";
 import { seedWbLiveSyncSession, waitForWbE2eBridge } from "./whiteboard-live-sync.helpers";
 import { uploadHarnessBlob, uploadReplayEvents } from "./wb-replay-harness.helpers";
-
-/** Two silence cuts, so the recording holds three tutor:mic segments. */
-async function driveTwoVadSilenceCuts(page: Page) {
-  await driveVadSilenceCut(page);
-  await driveVadSilenceCut(page);
-}
 
 /**
  * Mute wb-replay-audio the moment it mounts. Headless Chrome can refuse
