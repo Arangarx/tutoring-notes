@@ -18,7 +18,9 @@
 2. As each lane reports MERGE-READY with green gates, run a separate verification (Sonnet on core/fragile, Grok otherwise), then `merge --no-ff` into `feat/org-qol` and push. static-checks merges LAST, then `npm ci` in main.
 3. After apply-race merges: live-A/V Sonnet lane (G1, SMOKE-BLOCK-1, BUG-8, AV-CAM-BUTTON-ACQUIRING, B11, AV-REFRESH-LOSS, phone WebKit A/V), WS-B, WS-N5 (recording-durability agent, WhiteboardWorkspaceClient `wbCaptureActive` wiring), then Gate A5 sync matrix.
 4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
-5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then Strix on the integrated tip. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
+5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
+6. **Strix pen test + any further OpenAI evals: deferred to 2026-11-18 (Andrew).** The local `.env` has NO `OPENAI_API_KEY`; the only key on the machine is production (`.env.production.local`). Ask Andrew which key before running. Andrew said the notes-abstain eval's few cents on the production key were fine (no rotation).
+7. notes-abstain: before merge, `scripts/eval-notes-abstain.mjs` must read only the lane's own `.env` / `process.env`. Remove the `.env.production.local` and `../tutoring-notes/*` fallbacks (lines ~56-59).
 
 ### Open Andrew-confirms
 
