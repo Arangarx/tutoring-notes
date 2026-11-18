@@ -10,7 +10,7 @@
 
 ### Last action
 
-**2026-11-18 12:20: live-av MERGED `e4fe9a17`. static-checks MERGED `29a39bcc`. `npm ci` finished in the main checkout (1334 packages; the install audit listed 4 low and 23 moderate, no high or critical). Feature lanes are all merged. Left open: B11 camera-switch-after-release, SMOKE-UX-1 hardware end-jump, AV-REFRESH-LOSS, Gate A5 audit, learner-login leak, then A8 full gate.**
+**2026-11-18 12:12: Feature lanes are merged and `npm ci` is done. Two lanes started: learner-login oracle [learner-login](27d60747-16e2-4f02-906a-5fa7cbbfeb31) in `tn-learner-login` (parent-mode username must look like a wrong PIN), and B11 camera switch [b11 camera](20def845-8f45-4bbe-aa58-fa1cc96e118d) in `tn-b11-camera` (stop a stream that arrives after release). Sonnet reviews both before merge. Still later: SMOKE-UX-1 hardware, AV-REFRESH-LOSS, Gate A5, A8.**
 
 **2026-11-18 09:15: conductor swap (Opus → fresh Grok chat) to cut spend. Andrew: "today try really hard to keep the spending burn down."**
 
@@ -40,7 +40,7 @@
 2. As each lane reports MERGE-READY with green gates, run a separate verification (Sonnet on core/fragile, Grok otherwise), then `merge --no-ff` into `feat/org-qol` and push. static-checks merges LAST, then `npm ci` in main.
 3. apply-race MERGED 014ae4cb. apply-overlap MERGED 93d496b0. Gate A5 sync matrix waits until rec-draft and live-av stop editing the workspace client. It is an audit, not the next merge.
 4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
-5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
+5. static-checks MERGED and `npm ci` done. learner-login leak and B11 camera-switch are in flight (see Last action). Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 6. **Strix pen test + any further OpenAI evals: deferred to 2026-11-18 (Andrew).** The local `.env` has NO `OPENAI_API_KEY`; the only key on the machine is production (`.env.production.local`). Ask Andrew which key before running. Andrew said the notes-abstain eval's few cents on the production key were fine (no rotation).
 7. 21:30 status. recording-durability MERGED 84cb0eed (Sonnet re-verify 347f9767 MERGE-OK). BACKLOG entry moved under Launch buckets → Bucket B (W1-SHIP-B-FINALIZE). Bucket A now lists WS-B recovered draft enqueue (still queued behind apply-race). Unfixed nit: the hard-kill sample at 19.5s leaves 0.5s margin, so a 10s mutation could pass by luck; 19.0s would be safer. notes-abstain MERGED fdf2c23b (Sonnet 7ba1e0a1 MERGE-OK; follow-ups 931d3e5b rechecked by conductor: eval reads only local `.env`, `hadSpeech` single `findFirst`, live-reduce cases red on base). Pending tomorrow with the key decision: first real run of the `mixed-homework-and-scheduling` fixture (`npm run eval:notes-abstain`). Nit: the poll's `transcript: { not: "" }` treats whitespace-only as speech; `transcriptsHadSpeech` may not.
 
