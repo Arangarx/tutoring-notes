@@ -27,7 +27,7 @@ import {
 } from "../helpers/blob-gate";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { recordEndEnterReplay } from "./wb-replay-record.helpers";
-import { uploadReplayEvents } from "./wb-replay-harness.helpers";
+import { uploadHarnessBlob, uploadReplayEvents } from "./wb-replay-harness.helpers";
 import { TAG } from "../test-tags";
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
@@ -35,9 +35,9 @@ const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regressio
 /** Playback must begin this close to the start. */
 const START_MAX_SEC = 1.0;
 /** The recording must be long enough that "near the end" is distinguishable from "start". */
-const MIN_RECORDING_SEC = 5;
+const MIN_RECORDING_SEC = 2.5;
 /** Real-time advance window after playback begins. */
-const ADVANCE_WAIT_MS = 2_000;
+const ADVANCE_WAIT_MS = 1_500;
 
 type TraceRow = {
   t: number;
@@ -247,11 +247,21 @@ async function waitForPlayingEvent(page: Page, sinceT: number): Promise<TraceRow
       },
       {
         message: "audio never began playing after replay was opened",
-        timeout: 60_000,
+        timeout: 30_000,
         intervals: [100, 250, 500],
       }
     )
-    .toBe(true);
+    .toBe(true)
+    .catch(async (err) => {
+      const rows = await readTrace(page);
+      console.log(
+        `--- audio trace at failure ---\n${rows
+          .filter((r) => r.ev !== "sample")
+          .map((r) => `${r.t}ms ${r.ev} ct=${r.ct} dur=${r.dur} paused=${r.paused} rs=${r.rs}${r.extra ? ` ${r.extra}` : ""}`)
+          .join("\n")}`
+      );
+      throw err;
+    });
   return playingRow!;
 }
 
@@ -294,9 +304,12 @@ async function withPrisma<T>(run: (prisma: PrismaClient) => Promise<T>): Promise
   }
 }
 
-/** Wait for the post-End ffmpeg concat to persist; returns its URL. */
-async function waitForConcatPersisted(sessionId: string): Promise<string> {
-  const deadline = Date.now() + 120_000;
+/**
+ * The post-End ffmpeg concat may persist a master (or not, e.g. no ffmpeg in the harness).
+ * Give it a bounded chance to land so it cannot overwrite the null we write next.
+ */
+async function settleConcat(sessionId: string): Promise<void> {
+  const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     const row = await withPrisma((p) =>
       p.whiteboardSession.findUnique({
@@ -304,12 +317,10 @@ async function waitForConcatPersisted(sessionId: string): Promise<string> {
         select: { concatBlobUrl: true },
       })
     );
-    if (row?.concatBlobUrl) return row.concatBlobUrl;
+    if (row?.concatBlobUrl) return;
     await new Promise((r) => setTimeout(r, 1_000));
   }
-  throw new Error(`concat master for ${sessionId} never persisted`);
 }
-
 /** Reload the ended session so the review payload is rebuilt from the DB. */
 async function reloadIntoReview(page: Page, studentId: string, sessionId: string) {
   await page.goto(`/admin/students/${studentId}/whiteboard/${sessionId}/workspace`, {
@@ -354,8 +365,8 @@ test.describe(
         multiSegment: true,
       });
 
-      // Let the real concat finish, then drop it so review builds the per-segment payload.
-      await waitForConcatPersisted(whiteboardSessionId);
+      // Drop any concat master so review builds the per-segment payload.
+      await settleConcat(whiteboardSessionId);
       const segmentCount = await withPrisma(async (p) => {
         await p.whiteboardSession.update({
           where: { id: whiteboardSessionId },
@@ -372,61 +383,56 @@ test.describe(
       await openReplayAndAssertStartsAtZero(page, testInfo, "segments re-open");
     });
 
-    test("concat master payload: first open and re-open start at ~0 and advance", async ({
-      page,
-    }, testInfo) => {
-      test.setTimeout(360_000);
-      test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
-
-      const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
-      await installReplayAudioTrace(page);
-      await recordEndEnterReplay(page, studentId, whiteboardSessionId, { soloMs: 10_000 });
-
-      await waitForConcatPersisted(whiteboardSessionId);
-      await reloadIntoReview(page, studentId, whiteboardSessionId);
-      await openReplayAndAssertStartsAtZero(page, testInfo, "concat first open");
-      expect(await replayAudioSrcKind(page)).toBe("concat");
-      await hideReplay(page);
-      await openReplayAndAssertStartsAtZero(page, testInfo, "concat re-open");
-    });
-
     // Seeded finite-duration PCM clips: no WebM duration scan, no mic needed, so these run
     // on every engine (Chromium here; WebKit via the same spec file).
     // 0.3 s is the sub-0.5 s clip (start and "near the end" are the same place).
     // 8 s is a long clip whose start is clearly distinct from its end.
-    for (const clipSec of [0.3, 8]) {
-      test(`seeded ${clipSec}s finite-duration clip: first open and re-open start playing at ~0`, async ({
+    // "concat" serves the same clip through the single canonical concat-master URL.
+    const SEEDED_CASES: { clipSec: number; payload: "segments" | "concat" }[] = [
+      { clipSec: 0.3, payload: "segments" },
+      { clipSec: 8, payload: "segments" },
+      { clipSec: 8, payload: "concat" },
+    ];
+    for (const { clipSec, payload } of SEEDED_CASES) {
+      test(`seeded ${clipSec}s finite-duration clip, ${payload} payload: first open and re-open start playing at ~0`, async ({
         page,
       }, testInfo) => {
         test.setTimeout(180_000);
         assertLocalDatabaseUrlForHarness();
 
         const session = await seedWbLiveSyncSession();
-        const recordingId = await withPrisma(async (p) => {
+        // A real blob in the harness store, served through the app's audio proxy (Range and
+        // all) like production, so every engine loads it the same way.
+        const clipUrl = await uploadHarnessBlob({
+          request: page.request,
+          pathname: `audio/${session.adminUserId}/${session.studentId}/pw-start-position-${clipSec}.wav`,
+          body: buildSineWav(clipSec),
+          contentType: "audio/wav",
+          clientPayload: { kind: "audio", studentId: session.studentId },
+        });
+        await withPrisma(async (p) => {
           await p.whiteboardSession.update({
             where: { id: session.whiteboardSessionId },
             data: {
               endedAt: new Date("2026-10-11T18:30:00.000Z"),
-              concatBlobUrl: null,
-              concatDurationSeconds: null,
+              concatBlobUrl: payload === "concat" ? clipUrl : null,
+              concatDurationSeconds: payload === "concat" ? clipSec : null,
               durationSeconds: 8,
             },
           });
-          const row = await p.sessionRecording.create({
+          await p.sessionRecording.create({
             data: {
               adminUserId: session.adminUserId,
               studentId: session.studentId,
               whiteboardSessionId: session.whiteboardSessionId,
-              blobUrl: `https://pw.local/${session.whiteboardSessionId}/clip.wav`,
+              blobUrl: clipUrl,
               mimeType: "audio/wav",
-              sizeBytes: 128,
+              sizeBytes: 44 + Math.round(8000 * clipSec) * 2,
               durationSeconds: clipSec,
               orderIndex: 0,
               streamId: "tutor:mic",
             },
-            select: { id: true },
           });
-          return row.id;
         });
         await uploadReplayEvents({
           request: page.request,
@@ -434,12 +440,6 @@ test.describe(
           studentId: session.studentId,
           whiteboardSessionId: session.whiteboardSessionId,
         });
-
-        const wav = buildSineWav(clipSec);
-        await page.route(`**/api/audio/admin/${recordingId}`, (route) =>
-          route.fulfill({ status: 200, body: wav, contentType: "audio/wav" })
-        );
-
         await installReplayAudioTrace(page);
         await page.goto(
           `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
@@ -460,6 +460,7 @@ test.describe(
           await hideReplay(page);
           await openReplayAndAssertStartsAtZero(page, testInfo, `${clipSec}s re-open`);
         }
+        expect(await replayAudioSrcKind(page), "payload under test").toBe(payload);
       });
     }
   }

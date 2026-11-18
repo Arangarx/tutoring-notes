@@ -406,29 +406,28 @@ export function useReplayTimelineController(
       const needsCorrection = () => {
         const ct = el.currentTime;
         if (!Number.isFinite(ct)) return true;
+        // Parked near the end, away from the target. A clip shorter than the
+        // 0.5 s end window has position 0 inside that window too, so the
+        // distance check keeps "at the target" from reading as "parked".
         if (
           targetSec < 0.5 &&
           Number.isFinite(el.duration) &&
           el.duration > 0 &&
-          ct >= el.duration - 0.5
+          ct >= el.duration - 0.5 &&
+          Math.abs(ct - targetSec) > toleranceSec
         ) {
           return true;
         }
         return false;
       };
 
+      // Ready = not mid-seek and sitting on the target. (A position parked at
+      // the end is never within tolerance of a start target, except on a clip
+      // shorter than the tolerance, where end and start are the same place.)
       const isReady = () => {
         if (el.seeking) return false;
         const ct = el.currentTime;
         if (!Number.isFinite(ct)) return false;
-        if (
-          targetSec < 0.5 &&
-          Number.isFinite(el.duration) &&
-          el.duration > 0 &&
-          ct >= el.duration - 0.5
-        ) {
-          return false;
-        }
         return Math.abs(ct - targetSec) <= toleranceSec;
       };
 
