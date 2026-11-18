@@ -4614,10 +4614,11 @@ export function WhiteboardWorkspaceClient({
       // Step 3 — wait for the outbox to land every pending segment.
       // The plan calls for 15s; we surface the in-flight count so
       // the End button's copy keeps updating during the wait.
-      // Failed (permanent-fail) outbox state aborts immediately with
-      // a copy-rich error rather than burning the full budget on
-      // doomed retries — the tutor's session data is still in IDB
-      // and re-clicking End will retry once the network heals.
+      // Only a drain TIMEOUT (rows still uploading at the deadline) aborts End,
+      // with a retry message — the rows stay in IDB and re-clicking End retries
+      // once the network heals. A permanent-fail row is NOT in flight, so it does
+      // not abort End: the drain settles, End proceeds without that segment, and
+      // outbox finalize drops the row (docs/BACKLOG.md, "un-uploaded at End").
       const drainResult = await drainOutboxOrTimeout(whiteboardSessionId);
       if (drainResult.timedOut) {
         const remaining = drainResult.remainingCount;

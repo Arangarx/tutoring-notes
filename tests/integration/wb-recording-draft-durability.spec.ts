@@ -27,9 +27,10 @@
  * wb-tab-kill-audio-durability.spec.ts). `Page.crash` was tried first and takes the whole
  * browser context down, so the draft cannot be read afterwards.
  *
- * Red-before (pre-fix hook, 30s MediaRecorder timeslice): no chunk exists 14-16s into a
- * segment, so every test below finds NO draft at all. The MediaRecorder timeslice is
- * printed in each failure message so a stale bundle cannot masquerade as the pre-fix hook.
+ * Red-before: pre-fix hook (30s MediaRecorder timeslice) -> no chunk exists 14-19.5s into a
+ * segment, so every test finds NO draft at all; a 10s timeslice -> the two "just before a
+ * boundary" tests lose ~9.5s (> 7.5s bound). The MediaRecorder timeslice is printed in each
+ * failure message so a stale bundle cannot masquerade as the swapped hook.
  *
  * Run:
  *   npx playwright test tests/integration/wb-recording-draft-durability.spec.ts --project=wb-regression --workers=1
@@ -46,6 +47,13 @@ const TUTOR_MIC = "tutor:mic";
 const SLICE_SEC = 5;
 /** Encoder / IDB scheduling + clock slack. Not a coordinate: tolerance on a relation. */
 const SLACK_SEC = 2.5;
+/**
+ * Kill sample points, chosen JUST BEFORE a 5s slice boundary (5, 10, 15, 20s...) so the test
+ * has teeth against a longer timeslice: a 5s slice loses ~4.5s here and passes, a 10s slice
+ * loses ~9.5s and a 30s slice has no chunk at all, both of which fail the 7.5s bound.
+ */
+const HARD_KILL_SEGMENT_AGE_MS = 19_500;
+const GRACEFUL_CLOSE_SEGMENT_AGE_MS = 19_000;
 /** Tab hidden, then killed this long after (page is alive in between). */
 const HIDDEN_TO_KILL_MS = 1_500;
 
@@ -55,7 +63,12 @@ type HookedPage = { __mrStarts?: StartRecord[] };
 /** Record every MediaRecorder.start() wall-clock so the test knows when the open segment began. */
 async function hookMediaRecorderStarts(context: BrowserContext) {
   await context.addInitScript(() => {
-    const w = window as unknown as HookedPage & { MediaRecorder?: typeof MediaRecorder };
+    const w = window as unknown as HookedPage & {
+      MediaRecorder?: typeof MediaRecorder;
+      __VAD_CUT_DISABLED?: boolean;
+    };
+    // A VAD cut mid-wait would swap the segment under test for a fresh one.
+    w.__VAD_CUT_DISABLED = true;
     w.__mrStarts = [];
     const Proto = w.MediaRecorder?.prototype;
     if (!Proto) return;
@@ -186,7 +199,7 @@ test.describe(
   "A4 WS-N-PAGEHIDE recording draft survives a mid-segment tab death",
   { tag: [TAG.WB_RECORDING] },
   () => {
-    test("hard kill (frozen then closed) 16s into a segment loses at most one slice plus slack", async ({
+    test("hard kill (frozen then closed) just before a slice boundary loses at most one slice plus slack", async ({
       browser,
     }) => {
       test.setTimeout(180_000);
@@ -195,7 +208,7 @@ test.describe(
       await hookMediaRecorderStarts(context);
 
       const page = await openWorkspaceAndStartRecording(context, studentId, whiteboardSessionId);
-      const segment = await waitForOpenSegmentAge(page, 16_000);
+      const segment = await waitForOpenSegmentAge(page, HARD_KILL_SEGMENT_AGE_MS);
       const { killedAt, reader } = await freezeCloseAndReopen(context, page);
       const draft = await decodeDraftSeconds(reader, whiteboardSessionId);
 
@@ -261,7 +274,7 @@ test.describe(
       await context.close();
     });
 
-    test("graceful close (navigate away) 14s into a segment loses at most one slice plus slack", async ({
+    test("graceful close (navigate away) just before a slice boundary loses at most one slice plus slack", async ({
       browser,
     }) => {
       test.setTimeout(180_000);
@@ -270,7 +283,7 @@ test.describe(
       await hookMediaRecorderStarts(context);
 
       const page = await openWorkspaceAndStartRecording(context, studentId, whiteboardSessionId);
-      const segment = await waitForOpenSegmentAge(page, 14_000);
+      const segment = await waitForOpenSegmentAge(page, GRACEFUL_CLOSE_SEGMENT_AGE_MS);
       const killedAt = Date.now();
       // Leave the workspace: pagehide + visibilitychange fire, and the workspace does not
       // re-mount (so no new recording overwrites the draft row). The partial slice cannot

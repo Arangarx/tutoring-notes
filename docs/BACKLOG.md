@@ -4,6 +4,10 @@ Living document for open work, pilot feedback, reliability gaps, and deferred pr
 
 **Andrew decision (2026-10-21): replay audio follows the consent snapshot at recording time.** If audio consent was off, the child is not recorded, so there is nothing to hide. Do not add a second gate on the child's current audio toggle.
 
+## Bucket B (pilot) — recording durability (A4, 2026-11-17)
+
+Audio segments still un-uploaded at End are dropped by outbox finalize. A real fix needs either late registration into an ended session (with notes re-run) or a recovery UI, plus a retention bound and erasure reach for kept rows (minor audio). Also: finalize keys on "has a remote URL at finalize time", so a row uploading between `assembleEndSessionSegments` and `finalize` is deleted but missing from the End payload (narrow, predates 2026-11-17). Draft row is one per stream, so the next segment's first checkpoint overwrites a previous segment's draft whose enqueue failed. (A "keep un-uploaded rows" attempt, b9568ad3, was reverted: kept rows had no consumer, register refuses late uploads after End with `register_mid_session_skipped_ended`, and the orphan blob is out of erasure's reach.) This worktree's BACKLOG has no "Launch buckets" heading yet; move this paragraph under Bucket B when merged.
+
 ## Go over soon (Andrew 2026-09-28)
 
 **Keep at the top (Andrew 2026-10-05).** This whole section stays here until Andrew explicitly clears an item. Reviewing or refining does not mean deleting the raw notes or the open items under them, and it does not mean moving them down the backlog.

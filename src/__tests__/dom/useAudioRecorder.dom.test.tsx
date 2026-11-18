@@ -938,9 +938,9 @@ describe("useAudioRecorder â€” mic persistence (WS-H)", () => {
   });
 });
 
-// A4 / WS-N-PAGEHIDE — draft durability cadence. Real timing/crash behavior is proven in Playwright
+// A4 / WS-N-PAGEHIDE â€” draft durability cadence. Real timing/crash behavior is proven in Playwright
 // (tests/integration/wb-recording-draft-durability.spec.ts); these pin the hook wiring in jsdom.
-describe("useAudioRecorder — recordingDraft cadence (A4 WS-N-PAGEHIDE)", () => {
+describe("useAudioRecorder â€” recordingDraft cadence (A4 WS-N-PAGEHIDE)", () => {
   function renderDraftRecorder() {
     return renderHook(() =>
       useAudioRecorder({
