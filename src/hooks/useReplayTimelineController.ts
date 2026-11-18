@@ -118,6 +118,8 @@ export function useReplayTimelineController(
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelWebmFixRef = useRef<(() => void) | null>(null);
+  /** Drops the seeked/durationchange listeners of a start that is still waiting to play. */
+  const cancelPendingStartRef = useRef<(() => void) | null>(null);
   const activeSegmentIndexRef = useRef(0);
   const isAtEndRef = useRef(false);
   const globalMsRef = useRef(0);
@@ -403,32 +405,35 @@ export function useReplayTimelineController(
     (el: HTMLAudioElement, targetSec: number, reason: string) => {
       const toleranceSec = 0.05;
 
+      // One waiting start at a time: a newer start replaces the older one, so
+      // a stale listener cannot re-fire later and force a seek or a second play.
+      cancelPendingStartRef.current?.();
+
       const needsCorrection = () => {
         const ct = el.currentTime;
         if (!Number.isFinite(ct)) return true;
+        // Parked near the end, away from the target. A clip shorter than the
+        // 0.5 s end window has position 0 inside that window too, so the
+        // distance check keeps "at the target" from reading as "parked".
         if (
           targetSec < 0.5 &&
           Number.isFinite(el.duration) &&
           el.duration > 0 &&
-          ct >= el.duration - 0.5
+          ct >= el.duration - 0.5 &&
+          Math.abs(ct - targetSec) > toleranceSec
         ) {
           return true;
         }
         return false;
       };
 
+      // Ready = not mid-seek and sitting on the target. (A position parked at
+      // the end is never within tolerance of a start target, except on a clip
+      // shorter than the tolerance, where end and start are the same place.)
       const isReady = () => {
         if (el.seeking) return false;
         const ct = el.currentTime;
         if (!Number.isFinite(ct)) return false;
-        if (
-          targetSec < 0.5 &&
-          Number.isFinite(el.duration) &&
-          el.duration > 0 &&
-          ct >= el.duration - 0.5
-        ) {
-          return false;
-        }
         return Math.abs(ct - targetSec) <= toleranceSec;
       };
 
@@ -456,14 +461,19 @@ export function useReplayTimelineController(
 
       if (!mayHavePendingWebmScan && attempt()) return;
 
-      const onSettled = () => {
-        if (attempt()) {
-          el.removeEventListener("seeked", onSettled);
-          el.removeEventListener("durationchange", onSettled);
+      const dropListeners = () => {
+        el.removeEventListener("seeked", onSettled);
+        el.removeEventListener("durationchange", onSettled);
+        if (cancelPendingStartRef.current === dropListeners) {
+          cancelPendingStartRef.current = null;
         }
+      };
+      const onSettled = () => {
+        if (attempt()) dropListeners();
       };
       el.addEventListener("seeked", onSettled);
       el.addEventListener("durationchange", onSettled);
+      cancelPendingStartRef.current = dropListeners;
     },
     [startPlay]
   );
@@ -483,6 +493,9 @@ export function useReplayTimelineController(
 
       const seekSec = Math.max(0, localMs / 1000);
       const applySeek = () => {
+        // A seek replaces any start still waiting to play (a paused scrub
+        // must not be undone by it). A seek that plays registers its own.
+        cancelPendingStartRef.current?.();
         // Cancel any pending WebM duration-fix reset so a durationchange
         // firing after this seek cannot clobber the intended position.
         cancelWebmFixRef.current?.();
@@ -665,6 +678,14 @@ export function useReplayTimelineController(
     el.muted = muted;
   }, [volume, muted, hasAudio]);
 
+  // Leaving the replay drops a start that is still waiting to play.
+  useEffect(
+    () => () => {
+      cancelPendingStartRef.current?.();
+    },
+    []
+  );
+
   const handleVolumeChange = useCallback((v: number) => {
     setVolume(Math.max(0, Math.min(1, v)));
   }, []);
@@ -674,6 +695,7 @@ export function useReplayTimelineController(
   }, []);
 
   const pause = useCallback(() => {
+    cancelPendingStartRef.current?.();
     if (hasAudio) {
       segmentSwappingRef.current = false;
       pendingPlayRef.current = false;

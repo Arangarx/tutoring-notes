@@ -23,7 +23,10 @@
     - `7e59b5e3-0a2d-4d9e-b12d-c9d2085c88c0`: rec-draft round 2 (Grok; continues uncommitted Web-Lock work left by the failed Sonnet author). Then a Grok verify, then a Sonnet confirm.
     - `055c818c-f6f1-430b-b9a5-9da3716b6d5f`: live-av round 2 (Grok). Covers: frame-evidence tile gate, `stopAllLocalMedia` dedupe, negative reachability jest, nits. Then a Grok verify, then a Sonnet confirm.
     - `81171a6d-16b0-40a7-9dea-0a9dcf0812cf`: apply-overlap verify (Grok; auth boundary + S3 flake).
-    - `e7bf69c7-4106-4fc0-a47b-474fa0d167bc`: c7-copy verify (Grok, readonly; truth vs code + natural wording). MERGE-OK means merge.
+    - `e7bf69c7-4106-4fc0-a47b-474fa0d167bc`: c7-copy verify (Grok, readonly; truth vs code + natural wording). **DONE: BLOCK.**
+      - The blocker: `privacy/page.tsx:307` says both people can see which switches are off during a session. Online-off is tutor-only, waiting room only.
+      - Exact replacement texts are in its report. They also cover parent/child audio, the scheduling note, decline, the notes line, self-learner help, the ParentJoinGapCallout title, the `/limits` leftovers, the tutor review link, and the `useDeployFreshness` toast.
+      - Next: c7 round 6 (Grok, resume `dc0d749d`) applying those replacements with tests updated, then a narrow re-verify, then merge.
 - **DECIDED (Andrew 2026-11-18): no Discard.** Recovered audio auto-uploads; deleting the whole session is the only removal. Andrew sees no real use case for losing part of a session. Do not add per-clip delete.
 - **Replay-start ready:** nits done at `790d71a8` (82516388; tsc and eslint clean; 14 Playwright passed). The new conductor reads the `af9e17aa..790d71a8` diff, then merges (`--no-ff`, message file). On merge: add a PLAYWRIGHT-GAP BACKLOG entry for the end-jump, plus an A9 hardware item (trace `seeking`/`durationchange`/`seeked`/`play`).
 

@@ -1726,3 +1726,114 @@ describe("WS-W — stored durationSeconds does not bypass entry gate before WebM
     audio.remove();
   });
 });
+
+// ---------------------------------------------------------------------------
+// startPlayWhenPositionReady — pending listeners must not outlive their start
+// ---------------------------------------------------------------------------
+describe("entry auto-play waiting on an unresolved WebM duration does not leak its seeked/durationchange listeners", () => {
+  // jsdom <audio>.duration is NaN, which is the "scan still pending" state the
+  // entry seek(0, {play:true}) waits on. Spec: once the user has paused, started
+  // a newer play, or left the replay, a late seeked/durationchange from the
+  // element must never start playback or start it twice.
+  async function mountWithPendingScan() {
+    const { audio, cleanup } = mockAudioElement();
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      const segments = useMemo(
+        () => [{ url: "/api/audio/admin/rec-1", mimeType: "audio/webm", durationSeconds: 10 }],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+    return { audio, cleanup, result, unmount };
+  }
+
+  const lateElementEvents = (audio: HTMLAudioElement) => {
+    act(() => {
+      audio.dispatchEvent(new Event("durationchange"));
+      audio.dispatchEvent(new Event("seeked"));
+    });
+  };
+
+  it("a seek that was waiting to play stays silent after the user pauses", async () => {
+    const { audio, cleanup, result, unmount } = await mountWithPendingScan();
+    act(() => {
+      result.current.seek(0, { play: true });
+    });
+    expect(audio.play).not.toHaveBeenCalled(); // precondition: start is waiting on the scan
+
+    act(() => {
+      result.current.pause();
+    });
+    lateElementEvents(audio);
+
+    expect(audio.play).not.toHaveBeenCalled();
+    unmount();
+    cleanup();
+  });
+
+  it("a paused scrub near the end after a stalled auto-play start keeps its position and stays silent", async () => {
+    const { audio, cleanup, result, unmount } = await mountWithPendingScan();
+    act(() => {
+      result.current.seek(0, { play: true });
+    });
+    expect(audio.play).not.toHaveBeenCalled();
+
+    // The scan resolves to 10 s; the user then drags the paused scrubber to 9.8 s.
+    Object.defineProperty(audio, "duration", { configurable: true, get: () => 10 });
+    act(() => {
+      result.current.seek(9800, { play: false });
+    });
+    expect(audio.currentTime).toBeCloseTo(9.8, 1);
+    lateElementEvents(audio);
+
+    expect(audio.currentTime).toBeCloseTo(9.8, 1);
+    expect(audio.play).not.toHaveBeenCalled();
+    unmount();
+    cleanup();
+  });
+
+  it("two starts in a row play once when the element settles", async () => {
+    const { audio, cleanup, result, unmount } = await mountWithPendingScan();
+    act(() => {
+      result.current.seek(0, { play: true });
+      result.current.seek(0, { play: true });
+    });
+    expect(audio.play).not.toHaveBeenCalled();
+
+    // The scan resolves: duration becomes finite and the element reports it.
+    Object.defineProperty(audio, "duration", { configurable: true, get: () => 10 });
+    lateElementEvents(audio);
+
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    unmount();
+    cleanup();
+  });
+
+  it("leaving the replay while a start is waiting leaves no live listener behind", async () => {
+    const { audio, cleanup, result, unmount } = await mountWithPendingScan();
+    act(() => {
+      result.current.seek(0, { play: true });
+    });
+    expect(audio.play).not.toHaveBeenCalled();
+
+    unmount();
+    lateElementEvents(audio);
+
+    expect(audio.play).not.toHaveBeenCalled();
+    cleanup();
+  });
+});
