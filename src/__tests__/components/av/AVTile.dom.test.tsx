@@ -384,7 +384,7 @@ describe("AVTile — remote participant", () => {
     );
   });
 
-  test("presence-signaled camOn=true exposes data-cam-on and hides initials", () => {
+  test("presence-signaled camOn=true exposes data-cam-on and hides initials until a frame", () => {
     const p = makeRemoteParticipant({
       peerId: "p-presence-cam-on",
       label: "Jamie Fox",
@@ -399,9 +399,125 @@ describe("AVTile — remote participant", () => {
       "data-cam-on",
       "true"
     );
+    // No decoded frame yet: waiting copy, not initials, video still mounted.
+    expect(screen.queryByTestId("av-tile-initials-p-presence-cam-on")).toBeNull();
     expect(
-      screen.queryByTestId("av-tile-cam-placeholder-p-presence-cam-on")
-    ).toBeNull();
+      screen.getByTestId("av-tile-cam-placeholder-p-presence-cam-on")
+    ).toHaveAttribute("data-placeholder-kind", "awaiting-video");
+  });
+
+  function setVideoWidth(el: HTMLVideoElement, width: number): void {
+    Object.defineProperty(el, "videoWidth", {
+      configurable: true,
+      get: () => width,
+    });
+  }
+
+  test("camOn true with a track that yields no frames shows Waiting for video, not a bare video", () => {
+    // Sender presence says the camera is on, and the receiver track is the
+    // pre-RTP / no-frame case (muted, videoWidth stays 0). The tile must not
+    // paint an empty <video>.
+    const p = makeRemoteParticipant({
+      peerId: "p-no-frames",
+      label: "No Frames",
+      camOn: true,
+      videoStream: makeFakeStream([
+        { kind: "video", enabled: true, muted: true, readyState: "live" },
+      ]),
+      peerConnectionState: "connected",
+      iceConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    const video = screen.getByTestId("av-tile-video-p-no-frames") as HTMLVideoElement;
+    const placeholder = screen.getByTestId("av-tile-cam-placeholder-p-no-frames");
+    expect(placeholder).toHaveAttribute("data-placeholder-kind", "awaiting-video");
+    expect(placeholder).toHaveTextContent("Waiting for video");
+    expect(screen.queryByTestId("av-tile-initials-p-no-frames")).toBeNull();
+    // Mounted and compositor-eligible, but not a visible picture.
+    expect(video.style.display).not.toBe("none");
+    expect(video.style.opacity).toBe("0");
+    expect(video.srcObject).toBe(p.videoStream);
+  });
+
+  test("a decoded frame (loadeddata, resize, or requestVideoFrameCallback) reveals the video, and a new stream hides it again", () => {
+    type RvfcHost = {
+      requestVideoFrameCallback?: (cb: () => void) => number;
+      cancelVideoFrameCallback?: (handle: number) => void;
+    };
+    const proto = HTMLVideoElement.prototype as unknown as RvfcHost;
+    const origRvfc = proto.requestVideoFrameCallback;
+    const origCancel = proto.cancelVideoFrameCallback;
+    const rvfcQueue: Array<() => void> = [];
+    proto.requestVideoFrameCallback = (cb) => {
+      rvfcQueue.push(cb);
+      return rvfcQueue.length;
+    };
+    proto.cancelVideoFrameCallback = () => {};
+
+    function renderStalled(peerId: string) {
+      return makeRemoteParticipant({
+        peerId,
+        label: "No Frames",
+        camOn: true,
+        videoStream: makeFakeStream([
+          { kind: "video", enabled: true, muted: true, readyState: "live" },
+        ]),
+        peerConnectionState: "connected",
+      });
+    }
+
+    function reveal(peerId: string, fire: "loadeddata" | "resize" | "rvfc") {
+      const video = screen.getByTestId(`av-tile-video-${peerId}`) as HTMLVideoElement;
+      setVideoWidth(video, 320);
+      act(() => {
+        if (fire === "rvfc") {
+          const cb = rvfcQueue.shift();
+          if (!cb) throw new Error("requestVideoFrameCallback was not armed");
+          cb();
+        } else {
+          video.dispatchEvent(new Event(fire));
+        }
+      });
+    }
+
+    try {
+      const { rerender } = render(<AVTile participant={renderStalled("p-frames")} />);
+      expect(
+        screen.getByTestId("av-tile-cam-placeholder-p-frames")
+      ).toHaveAttribute("data-placeholder-kind", "awaiting-video");
+
+      reveal("p-frames", "loadeddata");
+      expect(screen.queryByTestId("av-tile-cam-placeholder-p-frames")).toBeNull();
+      const shown = screen.getByTestId("av-tile-video-p-frames") as HTMLVideoElement;
+      expect(shown.style.display).not.toBe("none");
+      expect(shown.style.opacity).toBe("1");
+
+      // New stream identity returns to the placeholder until that stream paints.
+      rerender(<AVTile participant={renderStalled("p-frames")} />);
+      expect(
+        screen.getByTestId("av-tile-cam-placeholder-p-frames")
+      ).toHaveAttribute("data-placeholder-kind", "awaiting-video");
+      const reset = screen.getByTestId("av-tile-video-p-frames") as HTMLVideoElement;
+      expect(reset.style.opacity).toBe("0");
+
+      reveal("p-frames", "resize");
+      expect(screen.queryByTestId("av-tile-cam-placeholder-p-frames")).toBeNull();
+
+      cleanup();
+      rvfcQueue.length = 0;
+      render(<AVTile participant={renderStalled("p-rvfc")} />);
+      expect(
+        screen.getByTestId("av-tile-cam-placeholder-p-rvfc")
+      ).toHaveAttribute("data-placeholder-kind", "awaiting-video");
+      reveal("p-rvfc", "rvfc");
+      expect(screen.queryByTestId("av-tile-cam-placeholder-p-rvfc")).toBeNull();
+      expect(
+        (screen.getByTestId("av-tile-video-p-rvfc") as HTMLVideoElement).style.opacity
+      ).toBe("1");
+    } finally {
+      proto.requestVideoFrameCallback = origRvfc;
+      proto.cancelVideoFrameCallback = origCancel;
+    }
   });
 
   test("omitted camOn is data-cam-on=unknown; connected with no video still shows initials", () => {

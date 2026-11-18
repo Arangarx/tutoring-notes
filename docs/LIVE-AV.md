@@ -322,7 +322,11 @@ fix for a real pilot-blocking bug.
     attaches before the first SDP offer so the audio m-line exists from
     the start; a `pendingRenegotiation` that never flushes (PC stuck
     non-`stable`, amplified by dual-device join) is forced through by a
-    watchdog re-offer / ICE restart in `peer-mesh.ts`. This is the root
+    watchdog re-offer / ICE restart in `peer-mesh.ts`. An offer that
+    already passed the stable check and then loses `setLocalDescription`
+    to an inbound offer (`have-remote-offer`) is deferred the same way,
+    not dropped — that drop left the tutor receiving video RTP with no
+    `ontrack` after a reload. This is the root
     of "tutor can't hear student." Evidence-first: `[peer-mesh]` logs
     must show the student offer carrying `kind=audio` and the tutor
     firing `event=remote-track kind=audio`. Guard: peer-mesh unit
@@ -385,15 +389,25 @@ fix for a real pilot-blocking bug.
       recovery waits on the 3s watchdog + wedge path (~15s in the harness;
       Tyson item 35 / G1 waiting-room reload).
     - **Presence-trusted tile gate** (`video-track-presentable.ts`
-      `hasPresentableVideoTrack(stream, senderReportsCamOn)`): a remote video
-      track counts as presentable when it is `enabled`, not `ended`, and either
-      the sender's presence says `camOn === true` OR the receiver track is not
-      `muted`. After a peer reload the receiver `track.muted` can stay stuck
-      `true` while RTP flows (`rxM` in the PC summary, `vIn>0`), so gating on
-      `!muted` alone painted the placeholder forever. This loosens the old
-      "require `!track.muted`" gate **only** when the sender affirmatively
-      reports `camOn===true` (presence only broadcasts `camOn` when a stream
-      exists). One-line revert in that file if product disagrees.
+      `hasPresentableVideoTrack(stream, senderReportsCamOn)`, revealed in
+      `AVTile.tsx`): a remote video track counts as presentable — and
+      `useLiveAV` keeps exposing `videoStream` — when it is `enabled`, not
+      `ended`, and either the sender's presence says `camOn === true` OR the
+      receiver track is not `muted`. After a peer reload the receiver
+      `track.muted` can stay stuck `true` while RTP flows (`rxM` in the PC
+      summary, `vIn>0`), so gating the stream on `!muted` alone painted the
+      placeholder forever (G1). The loosened gate applies **only** when the
+      sender affirmatively reports `camOn===true` (presence only broadcasts
+      `camOn` when a stream exists). That exposed stream is not yet a
+      picture: on join or reload the receiver track exists before any RTP, so
+      `AVTile` keeps the `<video>` mounted (`display: block`, so Chrome wires
+      the compositor) and visually hidden, and shows the existing "Waiting
+      for video…" placeholder until frame evidence arrives (`videoWidth > 0`
+      from `loadeddata`, `resize`, or `requestVideoFrameCallback`). Do not
+      time this off `track.muted` — G1 proved `muted` can lie while RTP flows.
+      A new stream or track identity returns the tile to the placeholder. If
+      ICE fails or the sender never produces a frame, the placeholder stays
+      (no empty `<video>`).
     - **Reachability** (`useLiveAV.rebuild()`): a peer is `reachable` when its
       ICE state is `connected`/`completed` and the aggregate PC state is
       `connected` **or** `connecting`. Safari/iOS keep aggregate
@@ -405,16 +419,21 @@ fix for a real pilot-blocking bug.
       reads "on"; one tap flips the intent, and the track lands disabled
       (`isCamMuted` true) when the user cancelled. `requestMicAndCam` honors
       the same intent (AV-CAM-BUTTON-ACQUIRING).
-    - **`releaseLocalMedia()`** stops and nulls every local track the hook
-      owns. The student workspace calls it (after `leaveAllPeers`) when the
-      join-unavailable / ended screen shows, and `micAcquireForRole` is `"no"`
-      for a student there so `useAudioRecorder` (which holds its OWN second
-      mic gUM on students) also releases (B11).
+    - **`releaseLocalMedia()`** and unmount share one `stopAllLocalMedia`:
+      the publish graph, the raw mic, and the camera are stopped and the
+      refs nulled. The student workspace calls `releaseLocalMedia` (after
+      `leaveAllPeers`) when the join-unavailable / ended screen shows, and
+      `micAcquireForRole` is `"no"` for a student there so `useAudioRecorder`
+      (which holds its OWN second mic gUM on students) also releases (B11).
+      Once that release flag is set, `requestMic` and `requestCam` return
+      before `getUserMedia`.
     - Guards: `@wb-av` specs in `tests/integration/wb-av-mesh.spec.ts`
       (`G1:`, `SMOKE-BLOCK-1:`, `BUG-8:`, `AV-REFRESH-LOSS:`, `B11:`,
-      `AV-CAM-BUTTON-ACQUIRING:`, phone-student surrogates) + jest
-      `video-track-presentable.test.ts` and the C2 cases in
-      `peer-mesh.test.ts`.
+      `AV-CAM-BUTTON-ACQUIRING:`, phone-student surrogates, the undrawn
+      canvas-captureStream placeholder test) + jest
+      `video-track-presentable.test.ts`, the AVTile frame-evidence cases,
+      the SMOKE-BLOCK-1 reachability case in `useLiveAV.dom.test.tsx`,
+      and the C2 cases in `peer-mesh.test.ts`.
 
 
 ---

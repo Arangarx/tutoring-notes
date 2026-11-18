@@ -460,8 +460,36 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         log.error(
           `peer=${entry.remotePeerId} event=offer-fail reason=${(err as Error)?.message ?? String(err)}`
         );
+        // createOffer() is async. An inbound offer can move the PC to
+        // have-remote-offer in that gap, and setLocalDescription then throws.
+        // The state check in triggerRenegotiationOnPeers already passed
+        // (it was stable), so nobody set pendingRenegotiation — the late
+        // video m-line was dropped and ontrack for the remote camera never
+        // fired (item 35 reload-only: RTP on the transceiver, initials tile).
+        // Defer and let the stable transition, or the watchdog, send it.
+        if (!entry.closed && entry.pc.signalingState !== "stable") {
+          entry.pendingRenegotiation = true;
+          armRenegotiationWatchdog(entry);
+          log.log(
+            `peer=${entry.remotePeerId} event=renegotiation-deferred reason=offer-fail signalingState=${entry.pc.signalingState}`
+          );
+        }
       } finally {
         entry.makingOffer = false;
+        // The inbound negotiation may have returned to stable before this
+        // catch ran, so onsignalingstatechange already missed the flag.
+        if (
+          !entry.closed &&
+          entry.pendingRenegotiation &&
+          entry.pc.signalingState === "stable"
+        ) {
+          entry.pendingRenegotiation = false;
+          clearRenegotiationWatchdog(entry.remotePeerId);
+          log.log(
+            `peer=${entry.remotePeerId} event=renegotiation-flush reason=offer-fail-now-stable`
+          );
+          initiateOffer(entry);
+        }
       }
     })();
   }

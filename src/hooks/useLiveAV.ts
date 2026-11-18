@@ -326,8 +326,12 @@ export type UseLiveAVReturn = {
   participants: ReadonlyArray<AvParticipant>;
   /**
    * Subset of `participants` where WebRTC is confirmed healthy:
-   * `peerConnectionState === "connected"` AND
-   * `iceConnectionState ∈ {connected, completed}`.
+   * `iceConnectionState ∈ {connected, completed}` AND
+   * `peerConnectionState ∈ {connected, connecting}`.
+   *
+   * ICE `checking`, `failed`, `disconnected`, `closed`, and `new` are not
+   * reachable. Aggregate `connectionState` may stay `connecting` on
+   * Safari/iOS after ICE is up (SMOKE-BLOCK-1); that peer still counts.
    *
    * Use this — not raw `participants` — for: the recording gate
    * (FSM `participants` input), the session timer gate, and any
@@ -955,6 +959,28 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // externalAudioStream (so we don't stop its tracks — those belong to
   // the recorder hook).
   const audioFromExternalRef = useRef<boolean>(false);
+  /**
+   * Shared by unmount and `releaseLocalMedia`. Stops the student publish
+   * graph, the raw mic it captured (a different stream from
+   * `localAudioStream`), and the camera. Does not set React state.
+   */
+  const stopAllLocalMediaRef = useRef<() => void>(() => {});
+  stopAllLocalMediaRef.current = () => {
+    const graph = publishGraphRef.current;
+    if (graph) {
+      graph.dispose();
+      publishGraphRef.current = null;
+    }
+    disposeStreamTracks(rawMicStreamRef.current);
+    rawMicStreamRef.current = null;
+    if (!audioFromExternalRef.current) {
+      disposeStreamTracks(localAudioStreamRef.current);
+    }
+    disposeStreamTracks(localVideoStreamRef.current);
+    audioFromExternalRef.current = false;
+    localAudioStreamRef.current = null;
+    localVideoStreamRef.current = null;
+  };
   /** Latest enumerated cameras + picker slot — read inside async enumeration. */
   const videoDevicesRef = useRef<MediaDeviceInfo[]>([]);
   const selectedVideoDeviceIdRef = useRef<string | null>(null);
@@ -1166,6 +1192,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   const requestMic = useCallback(
     async (): Promise<void> => {
+      // Ended screen (B11): do not open the mic again after release.
+      if (mediaReleasedRef.current) return;
       if (micBlocked("requestMic")) return;
       if (localAudioStreamRef.current) return; // already acquired (own or external)
       if (externalAudioStream) return; // external stream will wire via effect
@@ -1334,6 +1362,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   const requestCam = useCallback(
     async (): Promise<void> => {
+      // Ended screen (B11): do not open the camera again after release.
+      if (mediaReleasedRef.current) return;
       if (localVideoStreamRef.current) return;
       if (camInFlightRef.current) return camInFlightRef.current;
 
@@ -1512,6 +1542,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   );
 
   const requestMicAndCam = useCallback(async (opts?: RequestMicAndCamOptions): Promise<void> => {
+    if (mediaReleasedRef.current) return;
     const wantAudio = opts?.wantAudio !== false;
     if (wantAudio && micBlocked("requestMicAndCam")) {
       if (!localVideoStreamRef.current) await requestCam();
@@ -1867,35 +1898,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
-      if (publishGraphRef.current) {
-        publishGraphRef.current.dispose();
-        publishGraphRef.current = null;
-        rawMicStreamRef.current = null;
-      } else {
-        const aud = localAudioStreamRef.current;
-        if (aud && !audioFromExternalRef.current) {
-          for (const t of aud.getTracks()) {
-            try {
-              t.stop();
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-      }
-      const vid = localVideoStreamRef.current;
-      if (vid) {
-        for (const t of vid.getTracks()) {
-          try {
-            t.stop();
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-      audioFromExternalRef.current = false;
-      localAudioStreamRef.current = null;
-      localVideoStreamRef.current = null;
+      stopAllLocalMediaRef.current();
     };
   }, []);
 
@@ -3369,20 +3372,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
    */
   const releaseLocalMedia = useCallback(() => {
     mediaReleasedRef.current = true;
-    const graph = publishGraphRef.current;
-    if (graph) {
-      graph.dispose();
-      publishGraphRef.current = null;
-    }
-    disposeStreamTracks(rawMicStreamRef.current);
-    rawMicStreamRef.current = null;
-    if (!audioFromExternalRef.current) {
-      disposeStreamTracks(localAudioStreamRef.current);
-    }
-    disposeStreamTracks(localVideoStreamRef.current);
-    audioFromExternalRef.current = false;
-    localAudioStreamRef.current = null;
-    localVideoStreamRef.current = null;
+    stopAllLocalMediaRef.current();
     if (!unmountedRef.current) {
       setLocalAudioStream(null);
       setLocalVideoStream(null);

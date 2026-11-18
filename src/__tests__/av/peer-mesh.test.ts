@@ -88,6 +88,11 @@ class FakePc {
   /** Tracks added via addTrack — peer-mesh attaches local-track outputs here. */
   addedTracks: MediaStreamTrack[] = [];
   closed = false;
+  /**
+   * Next local offer throws as if an inbound offer landed during
+   * `createOffer` and moved the PC to `have-remote-offer`.
+   */
+  failNextLocalOffer = false;
 
   constructor(config: RTCConfiguration = {}) {
     this.config = config;
@@ -107,6 +112,13 @@ class FakePc {
   async setLocalDescription(desc?: RTCSessionDescriptionInit | RTCLocalSessionDescriptionInit): Promise<void> {
     const t = (desc as { type?: string } | undefined)?.type ?? "(none)";
     this.history.push({ type: `setLocalDescription:${t}` });
+    if (t === "offer" && this.failNextLocalOffer) {
+      this.failNextLocalOffer = false;
+      this.signalingState = "have-remote-offer";
+      throw new Error(
+        "Failed to set local offer sdp: Called in wrong state: have-remote-offer"
+      );
+    }
     if (t === "offer") {
       this.signalingState = "have-local-offer";
     } else if (t === "answer") {
@@ -1791,6 +1803,42 @@ describe("createPeerMesh — triggerRenegotiationOnPeers", () => {
 
     expect(() => m.triggerRenegotiationOnPeers(["B"])).not.toThrow();
     expect(sig.sends.filter((s) => s.kind === "offer")).toHaveLength(0);
+  });
+
+  test("a late offer that loses the race to an inbound offer is retried once stable", async () => {
+    // Item 35 reload-only: triggerRenegotiation sees stable, createOffer
+    // yields, the student's offer moves the PC to have-remote-offer, and
+    // setLocalDescription throws. The video m-line must still be offered
+    // after that inbound negotiation returns to stable — otherwise the
+    // tutor's transceiver gets RTP and never fires ontrack.
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+      log,
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+
+    pc.failNextLocalOffer = true;
+    const sendsBefore = sig.sends.length;
+    m.triggerRenegotiationOnPeers(["B"]);
+    await flush();
+
+    expect(sig.sends.slice(sendsBefore).filter((s) => s.kind === "offer")).toHaveLength(0);
+
+    pc.triggerSignalingStateChange("stable");
+    await flush();
+
+    expect(sig.sends.slice(sendsBefore).filter((s) => s.kind === "offer")).toHaveLength(1);
+    expect(
+      lines.some((l) => /event=renegotiation-deferred reason=offer-fail/.test(l))
+    ).toBe(true);
+    m.dispose();
   });
 
   test("onnegotiationneeded defers when PC is mid-negotiation", async () => {

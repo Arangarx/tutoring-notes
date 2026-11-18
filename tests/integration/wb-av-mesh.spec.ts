@@ -273,13 +273,7 @@ async function installPeerConnectionCapture(
       md.getUserMedia = async (constraints?: MediaStreamConstraints) => {
         const stream = await nativeGum(constraints);
         for (const t of stream.getVideoTracks()) gumTracks.push(t);
-        for (const t of stream.getAudioTracks()) {
-          gumAudioTracks.push(t);
-          (w as unknown as { __pwGumAudioStacks?: string[] }).__pwGumAudioStacks ??= [];
-          (w as unknown as { __pwGumAudioStacks: string[] }).__pwGumAudioStacks.push(
-            new Error().stack?.split("\n").slice(2, 7).join(" | ") ?? ""
-          );
-        }
+        for (const t of stream.getAudioTracks()) gumAudioTracks.push(t);
         return stream;
       };
     }
@@ -1040,14 +1034,8 @@ test.describe("live A/V reload recovers a peer whose PC has extra m-lines", {
 }, () => {
   // A reloaded page builds a brand-new RTCPeerConnection (new DTLS identity)
   // for the same stable peerId. The survivor's old PC must not be the one
-  // that answers it, whatever m-line count it grew to.
-  //
-  // FIXME(item 35 / C2): stays red until the fingerprint-based peer replacement
-  // (peer-mesh C2) ships. A stale student PC with a forced extra video m-line
-  // cannot answer the reloaded tutor's 2-m-line offer. Fix A (one camera track
-  // per device) removes the real-world cause, so this documents only the
-  // remaining class. Patch: docs/handoff/item35-c2-fingerprint-replace.patch.
-  // Tracked in docs/BACKLOG.md ("Live A/V reload: C2 fingerprint replacement").
+  // that answers it, whatever m-line count it grew to. Recovery is
+  // fingerprint replace in `src/lib/av/peer-mesh.ts` (`replaceReloadedPeerEntry`).
   test("tutor reload: student's PC with an extra video m-line still shows the student's camera on the tutor", async ({
     browser,
   }) => {
@@ -1695,4 +1683,165 @@ test.describe("phone student A/V is bidirectional", { tag: [TAG.WB_AV, TAG.WB_PR
       }
     });
   }
+});
+
+/**
+ * The presence-trusted gate exposes a videoStream as soon as camOn is true,
+ * which is before any RTP. An undrawn canvas captureStream(0) is a sender
+ * track that never produces a frame. The tutor must see "Waiting for video…"
+ * on that tile (the <video> stays mounted) until the canvas is drawn.
+ */
+test.describe("receiver tile waits for a frame when camOn is true", {
+  tag: [TAG.WB_AV],
+}, () => {
+  type StallTile = {
+    camOn: string | null;
+    videoTracks: number;
+    videoWidth: number;
+    placeholder: string | null;
+    waitingText: string;
+    videoDisplay: string;
+    videoOpacity: string;
+  };
+
+  async function readRemoteStallTile(page: Page): Promise<StallTile | null> {
+    return page.evaluate(() => {
+      const tiles = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-is-local="false"]')
+      ).filter((tile) => {
+        const style = getComputedStyle(tile);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        const box = tile.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      });
+      const tile = tiles[0];
+      if (!tile) return null;
+      const video = tile.querySelector<HTMLVideoElement>("video");
+      const placeholder = tile.querySelector<HTMLElement>("[data-placeholder-kind]");
+      const stream = video?.srcObject;
+      const style = video ? getComputedStyle(video) : null;
+      return {
+        camOn: tile.getAttribute("data-cam-on"),
+        videoTracks: stream instanceof MediaStream ? stream.getVideoTracks().length : 0,
+        videoWidth: video?.videoWidth ?? 0,
+        placeholder: placeholder?.getAttribute("data-placeholder-kind") ?? null,
+        waitingText: placeholder?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        videoDisplay: style?.display ?? "",
+        videoOpacity: style?.opacity ?? "",
+      };
+    });
+  }
+
+  test("camOn with an undrawn canvas captureStream(0) shows Waiting for video, and a drawn frame reveals it", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbPendingLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+      prepareContext: async (ctx) => {
+        await prepareCamerasAndCapture(ctx);
+        await ctx.addInitScript(() => {
+          const w = window as Window & {
+            __pwStallCanvases?: HTMLCanvasElement[];
+            __pwStallTracks?: Array<MediaStreamTrack & { requestFrame?: () => void }>;
+          };
+          w.__pwStallCanvases = [];
+          w.__pwStallTracks = [];
+          const md = navigator.mediaDevices;
+          if (!md || typeof md.getUserMedia !== "function") return;
+          const wrapped = md.getUserMedia.bind(md);
+          md.getUserMedia = async (constraints?: MediaStreamConstraints) => {
+            if (!constraints?.video) return wrapped(constraints);
+            const canvas = document.createElement("canvas");
+            canvas.width = 64;
+            canvas.height = 48;
+            w.__pwStallCanvases!.push(canvas);
+            const videoOnly = canvas.captureStream(0);
+            for (const track of videoOnly.getVideoTracks()) {
+              w.__pwStallTracks!.push(track);
+            }
+            if (!constraints.audio) return videoOnly;
+            const audioOnly = await wrapped({ audio: constraints.audio, video: false });
+            return new MediaStream([
+              ...audioOnly.getAudioTracks(),
+              ...videoOnly.getVideoTracks(),
+            ]);
+          };
+        });
+      },
+    });
+    try {
+      await expect(peers.tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible();
+      await expect
+        .poll(async () => readRemoteStallTile(peers.tutorPage), {
+          timeout: 60_000,
+          message: "tutor remote tile never showed the waiting placeholder over a mounted no-frame video",
+        })
+        .toEqual(
+          expect.objectContaining({
+            camOn: "true",
+            videoTracks: 1,
+            videoWidth: 0,
+            placeholder: "awaiting-video",
+            videoDisplay: "block",
+            videoOpacity: "0",
+          })
+        );
+      const held = await readRemoteStallTile(peers.tutorPage);
+      expect(held?.waitingText).toContain("Waiting for video");
+      // An undrawn captureStream(0) must not flip to a bare video on its own.
+      await peers.tutorPage.waitForTimeout(1_500);
+      const still = await readRemoteStallTile(peers.tutorPage);
+      expect(still).toEqual(
+        expect.objectContaining({
+          camOn: "true",
+          videoTracks: 1,
+          videoWidth: 0,
+          placeholder: "awaiting-video",
+          videoOpacity: "0",
+        })
+      );
+
+      const drawn = await peers.studentPage.evaluate(() => {
+        const w = window as Window & {
+          __pwStallCanvases?: HTMLCanvasElement[];
+          __pwStallTracks?: Array<MediaStreamTrack & { requestFrame?: () => void }>;
+        };
+        const canvases = w.__pwStallCanvases ?? [];
+        for (const canvas of canvases) {
+          const ctx = canvas.getContext("2d");
+          if (!ctx) continue;
+          ctx.fillStyle = "#00aa00";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        for (const track of w.__pwStallTracks ?? []) {
+          if (track.readyState === "live" && typeof track.requestFrame === "function") {
+            track.requestFrame();
+          }
+        }
+        return canvases.length;
+      });
+      expect(drawn).toBeGreaterThan(0);
+
+      await expect
+        .poll(async () => readRemoteStallTile(peers.tutorPage), {
+          timeout: 20_000,
+          message: "drawing the sender canvas never revealed the tutor's remote video",
+        })
+        .toEqual(
+          expect.objectContaining({
+            camOn: "true",
+            placeholder: null,
+            videoDisplay: "block",
+            videoOpacity: "1",
+          })
+        );
+      const revealed = await readRemoteStallTile(peers.tutorPage);
+      expect(revealed?.videoWidth ?? 0).toBeGreaterThan(0);
+      expect(revealed?.waitingText ?? "").not.toContain("Waiting for video");
+    } finally {
+      await peers.close();
+    }
+  });
 });
