@@ -64,7 +64,9 @@ jest.mock("@/lib/security", () => ({
 
 jest.mock("@/lib/student-scope", () => ({
   __esModule: true,
+  // sendUpdateEmail calls assertOwnsMutableStudent; owner passes, same as assertOwnsStudent here.
   assertOwnsStudent: jest.fn().mockResolvedValue(undefined),
+  assertOwnsMutableStudent: jest.fn().mockResolvedValue(undefined),
   requireStudentScope: jest.fn(),
   getStudentScope: jest.fn(),
 }));
