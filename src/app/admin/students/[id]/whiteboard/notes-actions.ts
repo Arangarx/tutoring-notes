@@ -191,17 +191,31 @@ export type TutorNoteStatusResult =
       hadSpeech?: boolean;
     };
 
-/** The one TutorNote → status mapping. Caller has asserted ownership. Never creates a row. */
-async function readTutorNoteStatus(whiteboardSessionId: string): Promise<TutorNoteStatusResult> {
-  const [note, chunks] = await Promise.all([
-    getTutorNoteBySessionId(whiteboardSessionId),
-    getTranscriptChunksBySessionId(whiteboardSessionId),
-  ]);
-  const hadSpeech = transcriptsHadSpeech(chunks.map((chunk) => chunk.transcript));
+/** True when any stored chunk has a non-empty transcript. One indexed lookup, not the full rows. */
+async function sessionHadSpeech(whiteboardSessionId: string): Promise<boolean> {
+  const row = await db.transcriptChunk.findFirst({
+    where: { sessionId: whiteboardSessionId, transcript: { not: "" } },
+    select: { id: true },
+  });
+  return row != null;
+}
+
+/**
+ * The one TutorNote → status mapping. Caller has asserted ownership. Never creates a row.
+ * `knownHadSpeech` is set when the caller already loaded transcript text (review payload),
+ * so the poll path is the only one that runs the existence check.
+ */
+async function readTutorNoteStatus(
+  whiteboardSessionId: string,
+  knownHadSpeech?: boolean
+): Promise<TutorNoteStatusResult> {
+  const note = await getTutorNoteBySessionId(whiteboardSessionId);
   if (!note) {
     const draft = await gateNotesDraft(whiteboardSessionId, "status");
     return draft.allow ? { found: false } : { found: false, notesOff: true };
   }
+  const hadSpeech =
+    knownHadSpeech ?? (await sessionHadSpeech(whiteboardSessionId));
   return {
     found: true,
     status: note.status,
@@ -649,8 +663,7 @@ export async function loadSessionReviewPayload(
     throw new Error(`Session ${whiteboardSessionId} not found`);
   }
 
-  const [initialNote, replayAccess, transcriptChunks] = await Promise.all([
-    readTutorNoteStatus(whiteboardSessionId),
+  const [replayAccess, transcriptChunks] = await Promise.all([
     resolveReplayAccess([whiteboardSessionId], { principal: "tutor" }),
     db.transcriptChunk.findMany({
       where: { sessionId: whiteboardSessionId, transcript: { not: "" } },
@@ -658,6 +671,10 @@ export async function loadSessionReviewPayload(
       select: { transcript: true },
     }),
   ]);
+  const initialNote = await readTutorNoteStatus(
+    whiteboardSessionId,
+    transcriptsHadSpeech(transcriptChunks.map((chunk) => chunk.transcript))
+  );
 
   console.log(
     `[nsi] wbsid=${whiteboardSessionId} action=load_review_payload hasAudio=${detail.audioRecordings.length > 0} noteFound=${initialNote.found}`

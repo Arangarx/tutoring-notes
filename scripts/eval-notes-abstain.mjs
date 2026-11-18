@@ -1,6 +1,7 @@
 /**
  * Real-model eval for notes abstain (SMOKE-NOTES-3).
- * Loads OPENAI_API_KEY from the repo .env and never prints it or any other env value.
+ * Reads OPENAI_API_KEY only from process.env or this worktree's .env.
+ * Never prints the key or any other env value.
  *
  * Each fixture runs RUNS times at the reduce temperature in notes-prompts.ts.
  * Non-teaching must come back with every note field empty.
@@ -30,7 +31,7 @@ registerHooks({
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** First non-empty OPENAI_API_KEY. Worktree .env is preferred; a blank value falls through. */
+/** Read one key from this worktree's .env. Blank values do not count. */
 function readEnvKey(path, name) {
   if (!existsSync(path)) return "";
   const text = readFileSync(path, "utf8");
@@ -52,28 +53,23 @@ function readEnvKey(path, name) {
   return "";
 }
 
-const keyFiles = [
-  resolve(root, ".env"),
-  resolve(root, ".env.production.local"),
-  resolve(root, "../tutoring-notes/.env"),
-  resolve(root, "../tutoring-notes/.env.production.local"),
-];
-
+const worktreeEnv = resolve(root, ".env");
 const RUNS = 3;
 const FIELDS = ["topics", "assessment", "nextSteps", "links"];
 
-let apiKey = "";
-let model = "gpt-4o-mini";
-for (const path of keyFiles) {
-  if (!apiKey) apiKey = readEnvKey(path, "OPENAI_API_KEY");
-  const fromFile = readEnvKey(path, "OPENAI_REDUCE_MODEL");
-  if (fromFile) model = fromFile;
-}
+const apiKey = process.env.OPENAI_API_KEY || readEnvKey(worktreeEnv, "OPENAI_API_KEY");
+const model =
+  process.env.OPENAI_REDUCE_MODEL ||
+  readEnvKey(worktreeEnv, "OPENAI_REDUCE_MODEL") ||
+  "gpt-4o-mini";
 if (!apiKey) {
-  console.error("OPENAI_API_KEY is not set in .env");
+  console.error(
+    "OPENAI_API_KEY is not set. Add it to .env in this worktree (or export it) and run again."
+  );
   process.exit(1);
 }
 
+// mixed-homework-and-scheduling is pending its first real run (no API call in this change).
 const prompts = await import("../src/lib/recording/notes-prompts.ts");
 const fixtures = JSON.parse(
   readFileSync(resolve(root, "tests/fixtures/notes-abstain.json"), "utf8")

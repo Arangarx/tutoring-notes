@@ -425,8 +425,10 @@ describe("processNotesReduceJob — successful reduce", () => {
       nextSteps: "",
       links: "",
     });
-    // The abstain signal is the existing transcript row, not a new column.
-    expect(chunk.transcript).toContain("Thursday");
+    const userMsg = mockChatCreate.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "user"
+    ).content as string;
+    expect(userMsg).toContain("Can we move Thursday from 3 to 4:30?");
   });
 
   it("collapses sentinel-only model fields to the empty note", async () => {

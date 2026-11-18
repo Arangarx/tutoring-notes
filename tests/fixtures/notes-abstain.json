@@ -26,6 +26,13 @@
       "kind": "teaching",
       "subjectPattern": "whale|main idea",
       "transcript": "Tutor: Let's find the main idea of this paragraph about whales. It says blue whales are the largest animals on Earth and they eat krill.\nStudent: The main idea is that blue whales are the biggest animals.\nTutor: Yes. The detail about krill supports that they're huge, but the main idea is their size."
+    },
+    {
+      "id": "mixed-homework-and-scheduling",
+      "kind": "teaching",
+      "subjectPattern": "fraction",
+      "pendingFirstRun": true,
+      "transcript": "Tutor: For homework, finish adding fractions: one half plus one fourth.\nStudent: That's three fourths.\nTutor: Yes. Also, can we move Thursday to 4:30? I'll send your mom the calendar invite.\nStudent: Friday at 5 is better.\nTutor: Friday at 5 works. Text me if you'll be late."
     }
   ]
 }

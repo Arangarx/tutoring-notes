@@ -95,7 +95,7 @@ const mockLogCostEvent = logCostEvent as jest.Mock;
 const SESSION_ID = "wbs-wsk-live-01";
 const NOW = new Date("2026-07-05T10:00:00Z");
 
-function makeChunk(id: string, status = "done", offsetMs = 0) {
+function makeChunk(id: string, status = "done", offsetMs = 0, transcript?: string) {
   return {
     id,
     sessionId: SESSION_ID,
@@ -103,7 +103,7 @@ function makeChunk(id: string, status = "done", offsetMs = 0) {
     status,
     attempts: 1,
     recordingTimeOffsetMs: offsetMs,
-    transcript: `Tutor explained topic ${id}.`,
+    transcript: transcript ?? `Tutor explained topic ${id}.`,
     durationMs: 30000,
     transcribedAt: NOW,
     error: null,
@@ -114,12 +114,12 @@ function makeChunk(id: string, status = "done", offsetMs = 0) {
   };
 }
 
-function makeExtraction(chunkId: string) {
+function makeExtraction(chunkId: string, topics: string[] = ["Algebra"]) {
   return {
     id: `ext-${chunkId}`,
     sessionId: SESSION_ID,
     chunkId,
-    topics: JSON.stringify(["Algebra"]),
+    topics: JSON.stringify(topics),
     studentQuestions: JSON.stringify([]),
     corrections: JSON.stringify([]),
     followUps: JSON.stringify([]),
@@ -549,6 +549,97 @@ describe("(e) Copy — 'Preparing your notes...' (not 'Waiting for transcript…
   it("component source does NOT contain old copy 'Waiting for transcript…'", () => {
     const src = fs.readFileSync(tntPath, "utf8");
     expect(src).not.toContain("Waiting for transcript\u2026");
+  });
+});
+
+function makeEmptyExtraction(chunkId: string) {
+  return {
+    chunkId,
+    topics: "[]",
+    studentQuestions: "[]",
+    corrections: "[]",
+    followUps: "[]",
+  };
+}
+
+function storedLiveContent(): Record<string, string> | undefined {
+  const call = mockUpdateNote.mock.calls.find(
+    (c: unknown[]) => typeof (c[1] as { content?: string }).content === "string"
+  );
+  const content = (call?.[1] as { content?: string } | undefined)?.content;
+  return content ? (JSON.parse(content) as Record<string, string>) : undefined;
+}
+
+describe("processLiveReduceJob — abstain on empty live extractions", () => {
+  const emptyNote = { topics: "", assessment: "", nextSteps: "", links: "" };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockChatCreate.mockReset();
+    mockGateNotesDraft.mockResolvedValue({ allow: true });
+    mockUpsertNotePending.mockResolvedValue(makeNote());
+    mockUpdateNote.mockResolvedValue(makeNote());
+  });
+
+  it("stores the canonical empty note and skips the model when every live extraction is empty", async () => {
+    const chunk = makeChunk("chunk-1", "done", 0, "");
+    mockGetNote.mockResolvedValue(makeNote({ lastReducedChunkCount: 0 }));
+    mockGetChunks.mockResolvedValue([chunk]);
+    mockGetExtractions.mockResolvedValue([makeEmptyExtraction(chunk.id)]);
+    mockOpenAISuccess();
+
+    const result = await processLiveReduceJob(SESSION_ID);
+
+    expect(result.outcome).toBe("live_done");
+    expect(mockChatCreate).not.toHaveBeenCalled();
+    expect(storedLiveContent()).toEqual(emptyNote);
+  });
+
+  it("normalizes sentinel strings to the canonical empty note", async () => {
+    const chunk = makeChunk("chunk-1", "done", 0);
+    mockGetNote.mockResolvedValue(makeNote({ lastReducedChunkCount: 0 }));
+    mockGetChunks.mockResolvedValue([chunk]);
+    mockGetExtractions.mockResolvedValue([makeExtraction(chunk.id)]);
+    mockChatCreate.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              topics: "N/A",
+              assessment: "none",
+              nextSteps: "null",
+              links: "",
+            }),
+          },
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    });
+
+    const result = await processLiveReduceJob(SESSION_ID);
+
+    expect(result.outcome).toBe("live_done");
+    expect(storedLiveContent()).toEqual(emptyNote);
+  });
+
+  it("sends only teaching extractions when empty chunks are mixed in", async () => {
+    const teaching = makeChunk("chunk-teach", "done", 0);
+    const empty = makeChunk("chunk-empty", "done", 30000, "");
+    mockGetNote.mockResolvedValue(makeNote({ lastReducedChunkCount: 0 }));
+    mockGetChunks.mockResolvedValue([teaching, empty]);
+    mockGetExtractions.mockResolvedValue([
+      makeExtraction(teaching.id, ["fractions"]),
+      makeEmptyExtraction(empty.id),
+    ]);
+    mockOpenAISuccess();
+
+    await processLiveReduceJob(SESSION_ID);
+
+    const userMsg = mockChatCreate.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "user"
+    ).content as string;
+    expect(userMsg).toContain("fractions");
+    expect(userMsg).not.toContain("Topics: none");
   });
 });
 
