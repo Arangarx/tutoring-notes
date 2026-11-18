@@ -53,13 +53,16 @@ async function createAccountHolder(familyId: string) {
 async function createLearnerWithCredential(
   accountHolderId: string,
   username: string,
-  opts?: { disabled?: boolean }
+  opts?: {
+    disabled?: boolean;
+    accessMode?: "child_pin_required" | "account_holder_session" | "parent_session_select";
+  }
 ) {
   const lp = await db.learnerProfile.create({
     data: {
       accountHolderId,
       displayName: "Disabled Login Child",
-      accessMode: "child_pin_required",
+      accessMode: opts?.accessMode ?? "child_pin_required",
     },
   });
   const secretHash = await hashLearnerPin("654321");
@@ -120,4 +123,82 @@ describe("learner login — LearnerCredential.disabled", () => {
     });
     expect(sessions).toBeGreaterThanOrEqual(1);
   });
+});
+
+type LoginOutcome = {
+  status: number;
+  body: { error?: string; message?: string };
+  retryAfter: string | null;
+  cookie: string | null;
+};
+
+async function postLogin(handle: string, pin: string): Promise<LoginOutcome> {
+  const res = await learnerLoginPost(buildLoginRequest(handle, pin));
+  const body = (await res.json()) as { error?: string; message?: string };
+  return {
+    status: res.status,
+    body,
+    retryAfter: res.headers.get("Retry-After"),
+    cookie: res.headers.get("set-cookie"),
+  };
+}
+
+describe("learner login — parent access mode is not a handle oracle", () => {
+  const CORRECT_PIN = "654321";
+  // Fat-finger grace is 3 failures; the 4th is the first lockout the caller can see.
+  const ATTEMPTS_THROUGH_FIRST_LOCKOUT = 4;
+
+  it.each(["account_holder_session", "parent_session_select"] as const)(
+    "%s username gets the same failure as an unknown username, and further probes lock out",
+    async (accessMode) => {
+      const familyId = `fam_mode_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const username = `kid_${Math.random().toString(36).slice(2, 8)}`;
+      const ah = await createAccountHolder(familyId);
+      const { lp } = await createLearnerWithCredential(ah.id, username, { accessMode });
+      const parentHandle = `${username}@${familyId}`;
+      const unknownHandle = `missing_${Math.random().toString(36).slice(2, 8)}@${familyId}`;
+
+      const unknownAttempts: LoginOutcome[] = [];
+      for (let i = 0; i < ATTEMPTS_THROUGH_FIRST_LOCKOUT; i++) {
+        unknownAttempts.push(await postLogin(unknownHandle, CORRECT_PIN));
+      }
+
+      const logs: string[] = [];
+      const spy = jest.spyOn(console, "log").mockImplementation((msg?: unknown) => {
+        logs.push(String(msg));
+      });
+      try {
+        const parentAttempts: LoginOutcome[] = [];
+        for (let i = 0; i < ATTEMPTS_THROUGH_FIRST_LOCKOUT; i++) {
+          parentAttempts.push(await postLogin(parentHandle, CORRECT_PIN));
+        }
+
+        for (let i = 0; i < ATTEMPTS_THROUGH_FIRST_LOCKOUT; i++) {
+          const parent = parentAttempts[i];
+          const unknown = unknownAttempts[i];
+          expect(parent.status).toBe(unknown.status);
+          expect(parent.body.error).toBe(unknown.body.error);
+          expect(parent.body).toEqual(unknown.body);
+          expect(JSON.stringify(parent.body)).not.toContain("access_mode_mismatch");
+          expect(JSON.stringify(parent.body).toLowerCase()).not.toMatch(
+            /does not use|doesn't use a pin/
+          );
+          expect(parent.cookie).toBeNull();
+          expect(parent.retryAfter).toBe(unknown.retryAfter);
+        }
+
+        const rejectionLines = logs.filter((line) => line.includes("reason=wrong_access_mode"));
+        expect(rejectionLines).toHaveLength(ATTEMPTS_THROUGH_FIRST_LOCKOUT);
+        for (const line of rejectionLines) {
+          expect(line).toContain(
+            `[lpr] lpr=${lp.id} action=login_rejected reason=wrong_access_mode`
+          );
+          expect(line).toContain(`accessMode=${accessMode}`);
+          expect(line).not.toContain("handle=");
+        }
+      } finally {
+        spy.mockRestore();
+      }
+    }
+  );
 });
