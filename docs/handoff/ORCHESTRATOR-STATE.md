@@ -10,7 +10,7 @@
 
 ### Last action
 
-**2026-11-18 12:20: B11 camera-switch MERGED `13aa5d41` (lane `4d5cc067`; Sonnet [B11 confirm](0d3cb46a-43d6-4111-b077-fb548febbfad) MERGE-OK). Worktree `tn-b11-camera` removed. learner-login oracle [learner-login](27d60747-16e2-4f02-906a-5fa7cbbfeb31) is still running in `tn-learner-login`. Sonnet reviews that before merge. Still later: SMOKE-UX-1 hardware, AV-REFRESH-LOSS, Gate A5, A8.**
+**2026-11-18 12:22: learner-login MERGED `df798123` (lane `ce1b86f0`; Sonnet [login confirm](d4d73b93-40aa-40eb-93e1-096056cdc35d) MERGE-OK). A parent-mode username now returns 401 `invalid_credentials`, same as an unknown username, and counts toward lockout. Worktree `tn-learner-login` removed. Code lanes for this pass are in. Next is A8 full gate on this tip, then A9 smoke book. Still open and not this gate: SMOKE-UX-1 hardware end-jump, AV-REFRESH-LOSS, Gate A5 audit.**
 
 **2026-11-18 09:15: conductor swap (Opus → fresh Grok chat) to cut spend. Andrew: "today try really hard to keep the spending burn down."**
 
@@ -40,7 +40,7 @@
 2. As each lane reports MERGE-READY with green gates, run a separate verification (Sonnet on core/fragile, Grok otherwise), then `merge --no-ff` into `feat/org-qol` and push. static-checks merges LAST, then `npm ci` in main.
 3. apply-race MERGED 014ae4cb. apply-overlap MERGED 93d496b0. Gate A5 sync matrix waits until rec-draft and live-av stop editing the workspace client. It is an audit, not the next merge.
 4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
-5. static-checks MERGED and `npm ci` done. B11 camera-switch MERGED `13aa5d41`. learner-login leak is still in flight (see Last action). Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
+5. static-checks MERGED and `npm ci` done. B11 camera-switch MERGED `13aa5d41`. learner-login MERGED `df798123`. Next: A8 full gate on this tip (`test:wb-sync` + `test:regression` + `test:prod-shape` + `next build`; prod-shape must not run beside `next dev`). Then A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 6. **Strix pen test + any further OpenAI evals: deferred to 2026-11-18 (Andrew).** The local `.env` has NO `OPENAI_API_KEY`; the only key on the machine is production (`.env.production.local`). Ask Andrew which key before running. Andrew said the notes-abstain eval's few cents on the production key were fine (no rotation).
 7. 21:30 status. recording-durability MERGED 84cb0eed (Sonnet re-verify 347f9767 MERGE-OK). BACKLOG entry moved under Launch buckets → Bucket B (W1-SHIP-B-FINALIZE). Bucket A now lists WS-B recovered draft enqueue (still queued behind apply-race). Unfixed nit: the hard-kill sample at 19.5s leaves 0.5s margin, so a 10s mutation could pass by luck; 19.0s would be safer. notes-abstain MERGED fdf2c23b (Sonnet 7ba1e0a1 MERGE-OK; follow-ups 931d3e5b rechecked by conductor: eval reads only local `.env`, `hadSpeech` single `findFirst`, live-reduce cases red on base). Pending tomorrow with the key decision: first real run of the `mixed-homework-and-scheduling` fixture (`npm run eval:notes-abstain`). Nit: the poll's `transcript: { not: "" }` treats whitespace-only as speech; `transcriptsHadSpeech` may not.
 
@@ -74,6 +74,7 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | recording-durability | MERGED 84cb0eed (tip 32b45dc1; B1 oracle red on 10s/30s, b9568ad3 reverted). Worktree removed | — |
 | jest-mocks | MERGED f0e97d94 (9 stale-mock reds fixed). Worktree removed. NOTE: removing it before its node_modules junction deleted main `node_modules\.bin`; repaired with `npm rebuild --ignore-scripts` (npm ls clean). Always `cmd /c rmdir <wt>\node_modules` FIRST | — |
 | replay-start | MERGED ad03beac (tip 790d71a8). Short clips start. End-jump PLAYWRIGHT-GAP + A9 hardware trace in BACKLOG. Worktree removed | — |
+| learner-login | MERGED df798123 (tip ce1b86f0). Sonnet d4d73b93 MERGE-OK. Parent-mode username is 401 invalid_credentials and counts toward lockout. Worktree removed | — |
 
 Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
 
