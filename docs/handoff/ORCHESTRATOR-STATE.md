@@ -38,10 +38,10 @@ Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [
 | fold-transcript | built (to 699a7c2d); Sonnet verify ba62c33b DIED on Cursor "unpaid invoice" — re-dispatch Sonnet verify once Andrew pays | — |
 | fold-apply-race | 708307bc. Sonnet 355a519c died (usage limit) after gates: apply-race check 16/16; wb-affected 5 known baseline reds (W27, WS-X, E2, E4, E5); @wb-graph also hard-failed live-sync invariants 1b + 2 (passed in wb-affected run); build failed on missing PrismaClient (shared node_modules incident). Grok rerunning build + invariants x3 on stack 2 | 5ddae4f9 |
 | static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
-| org-finish | 0849bc8e: Grok verify 259b6a86 REJECT on one blocker (OrgTimeZoneSelect forks NativeSelect); auth/timezone/logging/tsc/org-db sound. Grok author fixing: NativeSelect, form-submit dedupe if new, dialog default date in org zone (+ Playwright). Race/DST/page-breadth nits → BACKLOG Bucket B. Then narrow re-verify | e77120ee |
+| org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
+| jest-triage | ac1b9056: 13 suites = drift/env, no product bugs; default jest skips org-db suites unless JEST_ORG_DB=1. Full jest 468/469 (upload-outbox "different streams upload in parallel" fails, on base too → A8). Grok verify running. Author wrongly deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | f7aa132b |
 | recording-durability | tip 55bfc51b (pushed): tests reshaped (freeze-then-close crash, hidden-then-killed, graceful ≤1 slice); pagehide requestData dropped. Sonnet died (usage limit) before running. Grok running red/green on default stack | 27a1e1f8 |
 | jest-mocks | MERGED f0e97d94 (9 stale-mock reds fixed). Worktree removed. NOTE: removing it before its node_modules junction deleted main `node_modules\.bin`; repaired with `npm rebuild --ignore-scripts` (npm ls clean). Always `cmd /c rmdir <wt>\node_modules` FIRST | — |
-| jest-triage | NEW: 13 failing jest suites on feat/org-qol (env / drift / real bug). Grok classifying, fixing drift, reporting real bugs | f2bc9df0 |
 | replay-start | Sonnet; local commits 91f574fa, d05d719b not pushed; short-clip fix staged in %TEMP% | e47069eb |
 
 Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
