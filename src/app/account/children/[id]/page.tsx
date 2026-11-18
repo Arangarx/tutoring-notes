@@ -270,7 +270,7 @@ export default async function ChildDetailPage({
           }
         >
           <p className="text-sm text-muted-foreground">
-            Set per-tutor preferences for live sessions, recordings, and session notes.
+            Set per-tutor preferences for online sessions, recordings, and session notes.
             Child restrictions can narrow what you allow.
           </p>
         </SectionCard>

@@ -492,7 +492,7 @@ test.describe("org QoL schedule bridge", () => {
         await expectReasonUnderControl(
           joinBtn,
           row.getByTestId(`join-scheduled-reason-${sched.scheduledSessionId}`),
-          "Live sessions are off in privacy settings."
+          "Online sessions are off in privacy settings."
         );
         await expect(page).toHaveURL(/\/account\/dashboard/);
       }
@@ -516,7 +516,7 @@ test.describe("org QoL schedule bridge", () => {
         await expect(openBtns.first()).toHaveAttribute("type", "submit");
         await expect(
           page.getByTestId(`open-scheduled-room-reason-${sched.scheduledSessionId}`)
-        ).toContainText("You can still open the room in person.");
+        ).toContainText("You can still meet in person.");
       }
     );
   });

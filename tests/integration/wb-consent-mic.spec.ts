@@ -604,11 +604,39 @@ test.describe("consent 6d: Mic openers (B4, D7)", {
       });
     }
   );
-  // Oracle: C7, both roles. Same controls as M16. The disabled control's reason text is the § 2.5 notice ('CONSENT_SWITCHES.effectWhenOff'), typed in the spec. The spy, the disabled state and '[avx] mic_request_blocked' stay on M16  …
-  test.fixme(
-    "M16b: disabled mic controls show the § 2.5 notice as their reason",
-    async () => {
-      // pending: wave that owns M16b
+  // Oracle: the disabled mic's reason is the visible "Session audio is not being saved." line. Both roles.
+  test("M16b: disabled mic controls show the session-audio line as their reason", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const s = await seedConsentSession({ switches: AUDIO_OFF });
+    const pair = await openTutorAndStudent(browser, s, { ensureFollow: false });
+    try {
+      await chooseMode(pair.tutorPage, "IN_PERSON");
+      for (const who of [pair.tutorPage, pair.studentPage]) {
+        const mics = who.getByTestId("wb-topbar-mic-toggle");
+        await expect(mics.first()).toBeDisabled();
+        const count = await mics.count();
+        for (let i = 0; i < count; i++) {
+          await expect(mics.nth(i)).toBeDisabled();
+          await expect(mics.nth(i)).toHaveAttribute("aria-describedby", "wb-audio-consent-banner");
+        }
+        await expect(who.getByTestId("wb-audio-consent-banner")).toContainText("Session audio is not being saved.");
+      }
+      await startFromWaitingRoom(pair.tutorPage);
+      for (const who of [pair.tutorPage, pair.studentPage]) {
+        const mics = who.getByTestId("wb-topbar-mic-toggle");
+        expect(await mics.count()).toBeGreaterThan(0);
+        const count = await mics.count();
+        for (let i = 0; i < count; i++) {
+          await expect(mics.nth(i)).toHaveAttribute("aria-describedby", "wb-audio-consent-banner");
+        }
+        await expect(who.getByTestId("wb-topbar-mic-settings").first()).toHaveAttribute(
+          "aria-describedby",
+          "wb-audio-consent-banner"
+        );
+      }
+    } finally {
+      await pair.close();
+      await s.cleanup();
     }
-  );
+  });
 });

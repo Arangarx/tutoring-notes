@@ -193,7 +193,7 @@ test.describe("consent 6a: Entry (online switch)", {
         await page.goto(`/join/${s.whiteboardSessionId}#k=AAAAAAAAAAAAAAAAAAAAAA`, { waitUntil: "domcontentloaded" });
         const line = page.getByTestId("join-entry-blocked");
         await expect(line).toBeVisible({ timeout: 60_000 });
-        await expect(line).toHaveText("Live sessions are off in privacy settings.");
+        await expect(line).toHaveText("Online sessions are off in privacy settings.");
         await expect(line).toHaveAttribute("data-entry-reason", "live_off");
         await expect(page).toHaveURL(new RegExp(`/join/${s.whiteboardSessionId}`));
         // No room, no A/V: the board never mounts, and no getUserMedia could have been asked for.
@@ -239,7 +239,7 @@ test.describe("consent 6a: Entry (online switch)", {
         await startFromWaitingRoom(pair.tutorPage);
 
         await expect(learner.getByRole("heading", { name: "You were disconnected" })).toBeVisible({ timeout: 10_000 });
-        await expect(learner.getByText("Live sessions are off in privacy settings.")).toBeVisible();
+        await expect(learner.getByText("Online sessions are off in privacy settings.")).toBeVisible();
         await expect(learner.getByText("This link isn't usable anymore")).toHaveCount(0);
         await expect
           .poll(() => lines.some((l) => /\[wjg\].*action=sync_disconnect/.test(l)), { timeout: 10_000 })

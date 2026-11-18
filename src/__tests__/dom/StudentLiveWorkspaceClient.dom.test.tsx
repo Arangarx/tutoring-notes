@@ -456,7 +456,9 @@ describe("WhiteboardWorkspaceClient role=student — join-timer says the room is
     answerJoinTimer({ live: false, reason: "online_off" });
     await renderStudentWorkspace();
     expect(await screen.findByText("You were disconnected")).toBeInTheDocument();
-    expect(screen.getByText("Live sessions are off in privacy settings.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Online sessions are off in privacy settings, so this device has been disconnected.")
+    ).toBeInTheDocument();
     await waitFor(() => expect(mockDisconnect).toHaveBeenCalled());
   });
 

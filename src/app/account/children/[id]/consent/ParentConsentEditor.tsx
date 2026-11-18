@@ -14,7 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/SectionCard";
-import { CONSENT_SWITCHES } from "@/lib/consent-toggle-copy";
+import {
+  CONSENT_SWITCHES,
+  NEXT_SESSION_APPLIES_COPY,
+  RESTRICTION_AUDIO_DESCRIPTION,
+  RESTRICTION_BLOCK_APPLIES_COPY,
+  RESTRICTION_WHITEBOARD_DESCRIPTION,
+  RESTRICTION_WHITEBOARD_LABEL,
+} from "@/lib/consent-toggle-copy";
 import { ConsentSwitches, type ConsentSwitchKey } from "@/components/consent/ConsentSwitches";
 import { saveParentConsentAction } from "./actions";
 
@@ -66,14 +73,12 @@ const RESTRICTION_TOGGLES = [
   {
     key: "restrictAudioRecording" as const,
     label: "Always block audio recording",
-    description:
-      "Applies to every tutor. If checked, session audio cannot be recorded even when a tutor's setting above is on.",
+    description: RESTRICTION_AUDIO_DESCRIPTION,
   },
   {
     key: "restrictWhiteboardRecording" as const,
-    label: "Always block whiteboard replay",
-    description:
-      "Applies to every tutor. If checked, you cannot replay saved whiteboard sessions even when a tutor's setting above is on.",
+    label: RESTRICTION_WHITEBOARD_LABEL,
+    description: RESTRICTION_WHITEBOARD_DESCRIPTION,
   },
 ] satisfies ReadonlyArray<{
   key: keyof ConsentRestrictionState;
@@ -86,7 +91,7 @@ const CHILD_OFF_SWITCHES = [
     restrict: "restrictLiveSession" as const,
     childSet: "childSetLiveSession" as const,
     key: "allowLiveSession" as const,
-    label: "Live tutoring sessions",
+    label: "Online sessions",
     description: "Your child turned this off. Turn it back on to allow it again.",
   },
   {
@@ -290,13 +295,6 @@ export function ParentConsentEditor({
               </AccordionTrigger>
               <AccordionContent className="pb-4">
                 <div className="space-y-3">
-                  {!tutor.allowLiveSession ? (
-                    <div className="rounded-[8px] border border-warning/30 bg-warning/10 px-3 py-2">
-                      <p className="text-sm font-medium text-warning">
-                        Limited to scheduling without live sessions
-                      </p>
-                    </div>
-                  ) : null}
                   <ConsentSwitches
                     idPrefix={tutor.adminUserId}
                     testIdPrefix="parent-consent-toggle"
@@ -310,7 +308,10 @@ export function ParentConsentEditor({
               </AccordionContent>
             </AccordionItem>
           ))}
-        </Accordion>
+            </Accordion>
+        <p className="text-sm text-muted-foreground" data-testid="consent-next-session">
+          {NEXT_SESSION_APPLIES_COPY}
+        </p>
       </div>
 
       {orgStates.length > 0 ? (
@@ -416,6 +417,9 @@ export function ParentConsentEditor({
             </div>
           ))}
         </div>
+        <p className="mt-3 text-xs text-muted-foreground" data-testid="consent-restriction-applies">
+          {RESTRICTION_BLOCK_APPLIES_COPY}
+        </p>
       </SectionCard>
 
       <div className="space-y-3 border-t border-border pt-4">

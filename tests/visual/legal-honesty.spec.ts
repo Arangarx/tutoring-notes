@@ -60,7 +60,11 @@ for (const path of ["/privacy", "/terms"] as const) {
     await page.goto(path);
     const text = await pageText(page);
 
-    expect(text).toContain("Last updated: November 17, 2026");
+    expect(text).toContain(
+      path === "/privacy"
+        ? "Last updated: November 18, 2026"
+        : "Last updated: November 17, 2026"
+    );
     expect(text).not.toContain("October 12, 2026");
     expect(text).not.toContain("October 6, 2026");
     expect(text).toContain(ORGANIZATION_SENTENCE);
@@ -134,7 +138,11 @@ for (const path of ["/privacy", "/terms"] as const) {
       expect(text).toContain(
         "Notes. On, notes are drafted from the saved audio. Transcription is for English speech. Off, nothing is transcribed and no notes are drafted, even if audio was saved."
       );
-      // Item 22 last sentence is added with the item 5 banner (C7).
+      expect(text).toContain(
+        "During the session, the tutor and the student can both see when audio recording, the whiteboard, or notes are off."
+      );
+      expect(text).not.toContain("which of these are off");
+      // Item 22 last sentence ships with the item 5 banner.
       expect(text).toContain(BOARD_DELETION);
       expect(text).toContain(
         "While a session runs, the tutor's browser keeps a recovery copy of the board on that device so a dropped connection does not lose the drawing. That copy is removed when the session ends on that device. If the session ended somewhere else, it is removed the next time the tutor opens that student's workspace on that device."

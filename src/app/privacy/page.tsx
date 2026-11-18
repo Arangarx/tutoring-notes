@@ -19,6 +19,8 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Mynk SMS 2FA opt-in / no marketing share (product-specific) 2026-09-21.
  * Org honesty copy (product-specific; umbrella SYNCED FROM unchanged) 2026-10-12.
  * Consent-switch honesty (product-specific; umbrella SYNCED FROM unchanged) 2026-11-17.
+ * In-session switch visibility (product-specific; umbrella SYNCED FROM unchanged) 2026-11-17.
+ * In-session visibility limited to audio, whiteboard, and notes (product-specific; umbrella SYNCED FROM unchanged) 2026-11-18.
  *
  * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
  * the CANONICAL legal source and the URL registered in the shared
@@ -48,7 +50,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalDocumentShell title="Privacy Policy" lastUpdated="November 17, 2026">
+    <LegalDocumentShell title="Privacy Policy" lastUpdated="November 18, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Mynk</strong>, also titled Tutoring Notes, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
@@ -301,6 +303,9 @@ export default function PrivacyPage() {
             </p>
             <p style={{ margin: "8px 0 0" }}>
               Notes. On, notes are drafted from the saved audio. Transcription is for English speech. Off, nothing is transcribed and no notes are drafted, even if audio was saved.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              During the session, the tutor and the student can both see when audio recording, the whiteboard, or notes are off.
             </p>
           </div>
 

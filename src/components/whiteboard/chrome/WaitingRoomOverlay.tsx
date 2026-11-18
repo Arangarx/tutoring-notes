@@ -73,6 +73,11 @@ export type WaitingRoomOverlayProps = {
    */
   onlineBlockedReason?: EntryBlockReason | null;
   /**
+   * The same recording-off banner the live session shows. The overlay covers the canvas,
+   * so the waiting room renders that one banner here until Start.
+   */
+  recordingOffNotice?: ReactNode;
+  /**
    * Pre-built mic control node (both roles: WbTopBarMicControlLive with
    * cloned-stream inline meter). Already wired to liveAv in the workspace —
    * no A/V coupling needed here.
@@ -157,6 +162,7 @@ export function WaitingRoomOverlay({
   onStart,
   onSessionModeChange,
   onlineBlockedReason = null,
+  recordingOffNotice = null,
   micControlNode,
   camControlNode,
   micPickerNode,
@@ -259,6 +265,8 @@ export function WaitingRoomOverlay({
             {camPickerNode}
           </div>
         )}
+
+        {recordingOffNotice}
 
         {isTutor && (
           <>

@@ -131,8 +131,8 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
     const button = screen.getByTestId("start-whiteboard-session-btn");
     expect(button).toBeEnabled();
     const reason = screen.getByTestId("start-whiteboard-session-reason");
-    expect(reason).toHaveTextContent("Live sessions are off in Maya's privacy settings.");
-    expect(reason).toHaveTextContent("You can still open the room in person.");
+    expect(reason).toHaveTextContent("Online sessions are off in Maya's privacy settings.");
+    expect(reason).toHaveTextContent("You can still meet in person.");
     expect(button.getAttribute("aria-describedby")).toBe(reason.id);
     expect(screen.queryByTestId("start-wb-consent-callout")).not.toBeInTheDocument();
   });
@@ -178,7 +178,7 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
     {
       situation: "learner with online sessions off",
       reason: "live_off",
-      expected: "Live sessions are off in Maya's privacy settings.",
+      expected: "Online sessions are off in Maya's privacy settings.",
       parentHint: false,
     },
   ])(

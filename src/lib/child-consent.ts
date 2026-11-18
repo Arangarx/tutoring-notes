@@ -95,10 +95,18 @@ const NO_CHILD_SET: ChildSetFlags = {
   childSetNoteSending: false,
 };
 
+export type ChildConsentOwner = {
+  key: string;
+  label: string;
+  toggles: ConsentToggleCeiling;
+};
+
 export type ChildConsentFacing = {
   ceiling: ConsentToggleCeiling;
   effective: ConsentToggleCeiling;
   restoredByParent: ConsentToggleCeiling;
+  /** One row per tutor and per organization, so the child screen does not collapse them. */
+  owners: ChildConsentOwner[];
 };
 
 function andCeiling(records: ConsentToggleCeiling[]): ConsentToggleCeiling {
@@ -176,7 +184,39 @@ export async function readChildConsentFacing(
         restriction[RESTORED_FIELD[key]] && effective[key];
     }
   }
-  return { ceiling, effective, restoredByParent };
+  const tutorIds = records.flatMap((row) => (row.adminUserId ? [row.adminUserId] : []));
+  const orgIds = records.flatMap((row) => (row.organizationId ? [row.organizationId] : []));
+  const [tutors, orgs] = await Promise.all([
+    tutorIds.length
+      ? db.adminUser.findMany({
+          where: { id: { in: tutorIds } },
+          select: { id: true, displayName: true, email: true },
+        })
+      : [],
+    orgIds.length
+      ? db.organization.findMany({
+          where: { id: { in: orgIds } },
+          select: { id: true, name: true },
+        })
+      : [],
+  ]);
+  const tutorName = new Map(tutors.map((tutor) => [tutor.id, tutor.displayName?.trim() || tutor.email]));
+  const orgName = new Map(orgs.map((org) => [org.id, org.name]));
+  const owners: ChildConsentOwner[] = records.map((row) =>
+    row.organizationId
+      ? {
+          key: `org:${row.organizationId}`,
+          label: orgName.get(row.organizationId) || "Organization",
+          toggles: row,
+        }
+      : {
+          key: `tutor:${row.adminUserId ?? "unknown"}`,
+          label: (row.adminUserId && tutorName.get(row.adminUserId)) || "Tutor",
+          toggles: row,
+        }
+  );
+
+  return { ceiling, effective, restoredByParent, owners };
 }
 
 export async function applyChildConsentTightening(

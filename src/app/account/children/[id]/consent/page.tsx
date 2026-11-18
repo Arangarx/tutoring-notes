@@ -201,7 +201,11 @@ export default async function LearnerConsentPage({
   return (
     <PageShell realm="account"
       title={`${learnerName} — Privacy`}
-      description="Choose what each tutor may do, and optional limits that always apply to your child."
+      description={
+        learnerProfile.isSelfLearner
+          ? undefined
+          : "Choose what each tutor may do, and optional limits that always apply to your child."
+      }
       userEmail={accountHolder?.email}
       eyebrow={
         <div className="space-y-2">

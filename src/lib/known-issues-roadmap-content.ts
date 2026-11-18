@@ -62,7 +62,7 @@ export const recentlyImprovedSections: readonly RecentlyImprovedSection[] = [
   {
     title: "Recording & ending sessions",
     items: [
-      "Ending a session from your sessions list or the resume screen now saves your full recording, the same as ending from inside a live session.",
+      "Ending a session from your sessions list or the resume screen now saves your full recording, the same as ending from inside the session.",
       "When you mute yourself, your voice stays muted in the session recording too.",
       "Your recording is better protected if you accidentally close the browser tab mid-session and come back to finish.",
     ],
@@ -98,14 +98,14 @@ export const recentlyImprovedSections: readonly RecentlyImprovedSection[] = [
     title: "Reliability & clearer messaging",
     items: [
       "Friendlier messages throughout — clearer saving status, reconnection text, error screens with a way forward, and plain-language notes when something is still preparing.",
-      "A new version waits until the session ends, so it does not interrupt a recording.",
+      "A new version waits while you are recording, so it does not interrupt a recording.",
       "If the app hits a loading glitch after an update, it tries to recover on its own instead of leaving you stuck.",
     ],
   },
   {
     title: "Identity, consent & privacy",
     items: [
-      "Parent or guardian consent is now required and recorded before a minor joins a live session, with clear consent choices during account setup.",
+      "Parent or guardian consent is now required and recorded before a session can start, online or in person, with clear consent choices during account setup.",
       "Parents can set up a learner's own login through a guided claim flow.",
       "You can request deletion of a student's data, with a grace period before it's permanently removed.",
     ],
@@ -117,11 +117,11 @@ export const knownIssuesIntro = "Honest notes on things that may still come up."
 export const knownIssuesItems: readonly KnownIssueItem[] = [
   {
     title: "A child does not need their own login for a parent to join",
-    body: "A parent signed in on the family account can open that child's live session from Upcoming sessions when the appointment window is open. They do not need the child's username or PIN. Set up the child's login under Manage only if the child will sign in on their own device.",
+    body: "A parent signed in on the family account can open that child's online session from Upcoming sessions when the appointment window is open and online sessions are on. They do not need the child's username or PIN. Set up the child's login under Manage only if the child will sign in on their own device.",
   },
   {
     title: "Student microphone volume",
-    body: "Students can turn their own microphone up during a live session. We have not finished checking that the tutor hears that boost on a second device.",
+    body: "Students can turn their own microphone up during a session. We have not finished checking that the tutor hears that boost on a second device.",
   },
 ];
 

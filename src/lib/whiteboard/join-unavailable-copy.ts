@@ -1,5 +1,9 @@
 import { ENTRY_BLOCK_COPY } from "@/lib/scheduling/session-entry";
 
+/** Item 4. Not the join-page line: this person was in a room and then removed. */
+export const ONLINE_OFF_DISCONNECTED_COPY =
+  "Online sessions are off in privacy settings, so this device has been disconnected.";
+
 export type JoinUnavailableReason =
   | "session_ended"
   | "session_canceled"
@@ -54,7 +58,7 @@ export function joinUnavailableCopy(
     case "online_off":
       return {
         title: "You were disconnected",
-        body: ENTRY_BLOCK_COPY.live_off.family,
+        body: ONLINE_OFF_DISCONNECTED_COPY,
       };
     case "unavailable":
       return {

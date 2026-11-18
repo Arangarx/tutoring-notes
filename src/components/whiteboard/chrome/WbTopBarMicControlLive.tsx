@@ -88,6 +88,9 @@ type Props = {
 
   disabled?: boolean;
 
+  /** The recording-off banner names why these controls are disabled. */
+  describedByBanner?: boolean;
+
 };
 
 
@@ -125,6 +128,8 @@ export function WbTopBarMicControlLive({
   recorderMicControls,
 
   disabled = false,
+
+  describedByBanner,
 
 }: Props) {
 
@@ -249,6 +254,8 @@ export function WbTopBarMicControlLive({
 
         disabled={disabled || micUnavailable}
 
+        aria-describedby={describedByBanner ? "wb-audio-consent-banner" : undefined}
+
         data-testid="wb-topbar-mic-toggle"
 
       >
@@ -275,6 +282,8 @@ export function WbTopBarMicControlLive({
             aria-expanded={popoverOpen}
 
             disabled={disabled}
+
+            aria-describedby={describedByBanner ? "wb-audio-consent-banner" : undefined}
 
             onClick={(e) => {
 

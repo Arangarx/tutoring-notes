@@ -268,7 +268,7 @@ describe("JoinSessionPage — the one entry rule at /join (consent wave C5)", ()
 
     await renderJoinPage(session.id, profile.id);
 
-    expectRefused("live_off", "Live sessions are off in privacy settings.");
+    expectRefused("live_off", "Online sessions are off in privacy settings.");
     // A started room is decided by its snapshot: no live read.
     expect(mockLoadSessionEntryInputs).not.toHaveBeenCalled();
   });
@@ -300,7 +300,7 @@ describe("JoinSessionPage — the one entry rule at /join (consent wave C5)", ()
 
     await renderJoinPage(session.id, profile.id);
 
-    expectRefused("live_off", "Live sessions are off in privacy settings.");
+    expectRefused("live_off", "Online sessions are off in privacy settings.");
   });
 
   it("self-learner with a record that allows online → allowed", async () => {

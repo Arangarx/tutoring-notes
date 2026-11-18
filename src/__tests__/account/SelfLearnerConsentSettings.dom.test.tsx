@@ -17,7 +17,7 @@ import { SELF_LEARNER_AGREEMENT } from "@/lib/consent-toggle-copy";
 
 /** Reader-facing agreement. Closing clause names Manage, then Privacy. */
 const SELF_LEARNER_AGREEMENT_COPY =
-  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk drafts session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
+  "I agree that my tutoring sessions may be recorded — the shared whiteboard and the audio — and that Mynk may draft session notes from them. I can turn any of this off later. Open Manage, then Privacy.";
 
 const saveMock = saveSelfLearnerConsentAction as jest.MockedFunction<
   typeof saveSelfLearnerConsentAction
@@ -51,14 +51,28 @@ describe("SelfLearnerConsentSettings", () => {
     );
 
     expect(screen.getByText("Ms. Smith")).toBeInTheDocument();
-    expect(screen.getByLabelText(/allow live tutoring sessions/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/allow online sessions/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "These switches control what is saved. The video and audio call is separate."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Session audio is recorded. If this is off, online sessions leave your voice out, and your tutor's microphone can still be saved. In person, no audio is saved. The video and audio call still works when online sessions are on. The whiteboard follows its own setting."
+      )
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("self-learner-agreement")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/without live sessions, mynk is effectively just a scheduling calendar/i)
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/you can turn this off, but most families keep it on/i)
+      screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
+    expect(screen.getByTestId("consent-next-session")).toHaveTextContent(
+      "A change applies to a session that has not started, including one whose room is already open."
+    );
+    expect(document.body.textContent ?? "").not.toMatch(/your child/i);
 
     await user.click(screen.getByRole("button", { name: /save preferences/i }));
     await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
@@ -171,10 +185,13 @@ describe("SelfLearnerConsentSettings", () => {
     );
 
     expect(
-      screen.getByText(/without live sessions, mynk is effectively just a scheduling calendar/i)
+      screen.getByText(
+        "Online sessions cannot be started or joined. In person is not affected."
+      )
     ).toBeInTheDocument();
+    expect(screen.queryByText(/your child/i)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/you can turn this off, but most families keep it on/i)
+      screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
   });
 });

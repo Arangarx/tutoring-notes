@@ -32,7 +32,14 @@ describe("privacy policy copy (SEC-POLICY-TRUTH interim)", () => {
   it("shows updated date and truthful retention/audio wording", () => {
     render(<PrivacyPage />);
 
-    expect(screen.getByText(/Last updated: November 17, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last updated: November 18, 2026/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Last updated: November 17, 2026/i)).toBeNull();
+    expect(
+      screen.getByText(
+        "During the session, the tutor and the student can both see when audio recording, the whiteboard, or notes are off."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/which of these are off/i)).toBeNull();
     expect(screen.queryByText(/Last updated: October 12, 2026/i)).toBeNull();
     expect(screen.queryByText(/24 months after the account is closed/i)).toBeNull();
     expect(screen.queryByText(/grade level/i)).toBeNull();

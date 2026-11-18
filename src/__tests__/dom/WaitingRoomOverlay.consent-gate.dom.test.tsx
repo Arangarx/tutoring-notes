@@ -367,7 +367,7 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
     {
       situation: "learner with online sessions off",
       reason: "live_off" as const,
-      expected: "Live sessions are off in Alex's privacy settings.",
+      expected: "Online sessions are off in Alex's privacy settings.",
       parentHint: false,
     },
   ])(

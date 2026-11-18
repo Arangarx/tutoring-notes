@@ -695,7 +695,7 @@ describe("scheduler and instructor loaders", () => {
     await writeConsent(liveOff.profile, 1, true);
     await writeConsent(liveOff.profile, 2, false);
     const offCard = await loadSchedulerLearner(org.id, liveOff.studentId);
-    expect(offCard.blockedReason).toBe("Live sessions are off");
+    expect(offCard.blockedReason).toBe("Online sessions are off");
 
     const liveOn = await seedClaimed("Owen", "Park");
     await writeConsent(liveOn.profile, 1, false);
@@ -758,9 +758,9 @@ describe("scheduler and instructor loaders", () => {
       return loadSchedulerLearner(org.id, student.id);
     }
 
-    // The bug: org record allows live, the child restricted live. Must read "Live sessions are off".
+    // The bug: org record allows live, the child restricted live. Must read "Online sessions are off".
     const restricted = await seedCard("Rae", { allowLiveSession: true }, { restrictLiveSession: true });
-    expect(restricted.blockedReason).toBe("Live sessions are off");
+    expect(restricted.blockedReason).toBe("Online sessions are off");
 
     // Positive control: same record, restriction row present but not restricting live. Not blocked.
     const unrestricted = await seedCard("Sam", { allowLiveSession: true }, { restrictLiveSession: false });
@@ -768,7 +768,7 @@ describe("scheduler and instructor loaders", () => {
 
     // Unchanged: org record already off is blocked with no restriction at all.
     const orgOff = await seedCard("Tia", { allowLiveSession: false }, null);
-    expect(orgOff.blockedReason).toBe("Live sessions are off");
+    expect(orgOff.blockedReason).toBe("Online sessions are off");
 
     // Unchanged: a claimed learner with no record is not blocked on this card (the record-missing reason is entry state's, org W4/C5).
     const noRecord = await seedCard("Uma", null, null);

@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /**
  * Shown when a child has no username and PIN yet.
- * A parent can already join that child's live session from this account
+ * A parent can already join that child's online session from this account
  * inside the appointment window. The child's own login is only for the
  * child signing in on their device.
  */
@@ -20,7 +20,7 @@ export function ParentJoinGapCallout({
       className="border-border border-l-[3px] border-l-accent bg-accent-soft/40"
     >
       <AlertTitle className="text-foreground">
-        You can join live sessions for your child
+        Your child does not need their own login for you to join
       </AlertTitle>
       <AlertDescription className="text-muted-foreground">
         <p>

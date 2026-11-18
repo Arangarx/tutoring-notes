@@ -51,15 +51,23 @@ describe("ParentConsentEditor — consent switches", () => {
     render(<ParentConsentEditor {...defaultProps} />);
 
     expect(screen.getByLabelText(/allow session notes/i)).toBeInTheDocument();
-    expect(screen.getByText(/mynk can draft session notes/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Session notes are drafted from the audio. Transcription is for English speech. If this is off, nothing is transcribed and no notes are drafted, even if audio was saved."
+      )
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/allow whiteboard recording/i)).toBeInTheDocument();
-    expect(screen.getByText(/shared whiteboard can be saved and replayed/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The board is saved and can be replayed. If this is off, the board still works during the session. After the session ends, the saved board is deleted from our servers."
+      )
+    ).toBeInTheDocument();
   });
 
   test("still renders active consent toggles", () => {
     render(<ParentConsentEditor {...defaultProps} />);
 
-    expect(screen.getByLabelText(/allow live tutoring sessions/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/allow online sessions/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/allow session audio recording/i)).toBeInTheDocument();
   });
 
@@ -68,12 +76,13 @@ describe("ParentConsentEditor — consent switches", () => {
 
     expect(
       screen.getByText(
-        /everything drawn on the shared whiteboard during the session is saved for later review/i
+        "Your child can join online sessions with video and audio. In person is not affected by this switch. You can also join an online session as your child from your parent account when they need help signing in."
       )
     ).toBeInTheDocument();
+    expect(screen.queryByText(/everything drawn/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        /live conversation is always available when live sessions are allowed/i
+        "Session audio is recorded. If this is off, online sessions leave your child's voice out, and the tutor's microphone can still be saved. In person, no audio is saved. The video and audio call still works when online sessions are on. This switch only controls what is saved. The whiteboard follows its own setting."
       )
     ).toBeInTheDocument();
   });
@@ -123,7 +132,7 @@ describe("ParentConsentEditor — consent switches", () => {
 
     render(<ParentConsentEditor {...defaultProps} />);
 
-    await user.click(screen.getByLabelText(/allow live tutoring sessions/i));
+    await user.click(screen.getByLabelText(/allow online sessions/i));
     await user.click(
       screen.getByRole("button", { name: /save privacy preferences/i })
     );
@@ -219,11 +228,11 @@ describe("ParentConsentEditor — organization rows", () => {
     render(<ParentConsentEditor {...defaultProps} />);
     expect(
       screen.queryByText(
-        /without live sessions, mynk is effectively just a scheduling calendar/i
+        "Online sessions cannot be started or joined. In person is not affected."
       )
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/you can turn this off, but most families keep it on/i)
+      screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
   });
 
@@ -236,12 +245,33 @@ describe("ParentConsentEditor — organization rows", () => {
     );
     expect(
       screen.getByText(
-        /without live sessions, mynk is effectively just a scheduling calendar/i
+        "Online sessions cannot be started or joined. In person is not affected."
       )
     ).toBeInTheDocument();
+    expect(screen.queryByText(/limited to scheduling/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/without live sessions/i)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/you can turn this off, but most families keep it on/i)
+      screen.getByText(/you can turn this off, but Mynk recommends keeping this on/i)
     ).toBeInTheDocument();
+  });
+
+  test("a child-off online row is labeled Online sessions", () => {
+    render(
+      <ParentConsentEditor
+        {...defaultProps}
+        childSet={{
+          childSetLiveSession: true,
+          childSetAudioRecording: false,
+          childSetWhiteboardRecording: false,
+          childSetNoteSending: false,
+        }}
+      />
+    );
+    expect(screen.getByLabelText("Online sessions")).toBeInTheDocument();
+    expect(
+      screen.getByText("Your child turned this off. Turn it back on to allow it again.")
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Live tutoring sessions")).not.toBeInTheDocument();
   });
 });
 

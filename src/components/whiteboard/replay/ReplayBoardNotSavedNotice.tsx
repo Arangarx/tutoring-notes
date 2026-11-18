@@ -5,6 +5,9 @@
  */
 export const BOARD_NOT_SAVED_COPY = "The board was not saved because whiteboard recording was off.";
 
+/** A saved board with an empty log. Not the not-saved sentence (item 6). */
+export const NOTHING_DRAWN_COPY = "Nothing was drawn.";
+
 export function ReplayBoardNotSavedNotice({ className }: { className?: string }) {
   return (
     <div

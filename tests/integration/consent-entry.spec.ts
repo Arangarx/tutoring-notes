@@ -61,7 +61,7 @@ import {
   seedWbPendingLiveSyncSession,
   waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
-import { TEST_PARENT } from "./identity/identity.helpers";
+import { seedParentConsentFixture, TEST_PARENT } from "./identity/identity.helpers";
 import { seedBridgeScheduledSession, seedOnlineOffAppointment } from "./wb-org-qol-bridge.helpers";
 import { blobIntegrationEnabled } from "../helpers/blob-gate";
 import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
@@ -75,6 +75,7 @@ import {
   setFamilySwitches,
   startFromWaitingRoom,
 } from "../helpers/consent-tutor-room";
+import { endWithBoard, seedBoard, seedOrgBoardSession } from "../helpers/consent-board-fixture";
 const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
@@ -139,9 +140,9 @@ async function openWorkspaceWaitingRoom(page: Page, f: StartFixture): Promise<vo
 // ---------------------------------------------------------------------------
 
 /** Spec-typed copy (the plan's § 7b table, written by hand here, never read from the code under test). */
-const FAMILY_LIVE_OFF = "Live sessions are off in privacy settings.";
-const tutorLiveOff = (learnerName: string) => `Live sessions are off in ${learnerName}'s privacy settings.`;
-const IN_PERSON_STILL_OPEN = "You can still open the room in person.";
+const FAMILY_LIVE_OFF = "Online sessions are off in privacy settings.";
+const tutorLiveOff = (learnerName: string) => `Online sessions are off in ${learnerName}'s privacy settings.`;
+const IN_PERSON_STILL_OPEN = "You can still meet in person.";
 const familyMissingParent = (learnerName: string) => `Finish privacy preferences for ${learnerName} to join.`;
 
 const TUTOR_STATE = authStatePath("tutor.json");
@@ -1028,11 +1029,52 @@ test.describe("consent 6a: Entry (online switch)", {
       }
     }
   );
-  // Oracle: C7. Spec-typed literals: the § 7a consent-editor descriptions (parent, child, self) and the § 7b 'ENTRY_BLOCK_COPY.live_off' lines (tutor and family) plus the waiting-room reason. The in-session recording notice is V1 an …
-  test.fixme(
-    "E-copy: approved § 7a editor strings and the § 7b live_off reword render",
-    async () => {
-      // pending: wave that owns E-copy
+  // Oracle: approved items 1, 2, and 7, typed here. The in-session recording notice is V1 and V2.
+  test(
+    "E-copy: approved next-session, online-off, and always-block sentences render",
+    async ({ browser }) => {
+      test.setTimeout(180_000);
+      const NEXT =
+        "A change applies to a session that has not started, including one whose room is already open. A session that has started keeps what it started with.";
+      const BLOCK =
+        "A block applies to sessions that have not started yet. A session that has started keeps what it started with. A recording already saved stays until the tutor deletes that session, or you ask Mynk to delete it.";
+
+      const blocked = await seedConsentSession({ switches: { allowLiveSession: false } });
+      const name = await studentNameOf(blocked.studentId);
+      const room = await openTutorRoom(browser, blocked);
+      try {
+        await expect(room.page.getByTestId("wb-waiting-online-blocked")).toHaveText(
+          `${tutorLiveOff(name)} ${IN_PERSON_STILL_OPEN}`
+        );
+      } finally {
+        await room.close();
+        await blocked.cleanup();
+      }
+
+      const parent = await seedParentConsentFixture();
+      const parentContext = await browser.newContext();
+      try {
+        await loginAccountHolderInContext(parentContext, TEST_PARENT.email, TEST_PARENT.password);
+        const page = await parentContext.newPage();
+        await page.goto(`/account/children/${parent.learnerProfileId}/consent`, { waitUntil: "domcontentloaded" });
+        await expect(page.getByTestId("consent-next-session")).toHaveText(NEXT);
+        await expect(page.getByTestId("consent-restriction-applies")).toHaveText(BLOCK);
+        await expect(page.getByText("Always block whiteboard recording")).toBeVisible();
+      } finally {
+        await parentContext.close();
+      }
+
+      const child = await seedConsentSession({ switches: {} });
+      const childContext = await browser.newContext();
+      try {
+        await loginLearnerInContext(childContext, child.learnerHandle, child.learnerPin);
+        const page = await childContext.newPage();
+        await page.goto("/join", { waitUntil: "domcontentloaded" });
+        await expect(page.getByTestId("consent-next-session")).toHaveText(NEXT);
+      } finally {
+        await childContext.close();
+        await child.cleanup();
+      }
     }
   );
 });
@@ -1132,11 +1174,33 @@ test.describe("consent 6b: Start and refreeze (B5)", {
       }
     }
   );
-  // Oracle: C7. DOM text typed in the spec, the § 7a line "Changes apply to the next session, not one already started", on the in-session notice and the consent editors. Not folded into V1/V2: those assert which recordings are off,  …
-  test.fixme(
+  // Oracle: approved item 1 on the consent editors. An already-started session does not grow a second "next session" notice.
+  test(
     "S2b: ACTIVE session: the notice says a consent change applies to the next session",
-    async () => {
-      // pending: wave that owns S2b
+    async ({ browser }) => {
+      test.setTimeout(180_000);
+      const NEXT =
+        "A change applies to a session that has not started, including one whose room is already open. A session that has started keeps what it started with.";
+      const self = await seedSelfLearnerWbSession();
+      const context = await browser.newContext();
+      try {
+        await loginAccountHolderInContext(context, self.ahEmail, self.ahPassword);
+        const page = await context.newPage();
+        await page.goto(`/account/children/${self.learnerProfileId}/consent`, { waitUntil: "domcontentloaded" });
+        await expect(page.getByTestId("consent-next-session")).toHaveText(NEXT);
+        await expect(page.getByText("your child", { exact: false })).toHaveCount(0);
+      } finally {
+        await context.close();
+      }
+
+      const live = await seedConsentSession({ switches: {}, phase: "ACTIVE", mode: "LIVE" });
+      const room = await openTutorRoom(browser, live);
+      try {
+        await expect(room.page.getByText("next session")).toHaveCount(0);
+      } finally {
+        await room.close();
+        await live.cleanup();
+      }
     }
   );
   // Oracle: Blob store listing has no learner-lane object; no 'speaker:*' row in 'SessionRecording' or 'TranscriptChunk'; client adopted the response
@@ -1168,7 +1232,9 @@ test.describe("consent 6b: Start and refreeze (B5)", {
         const blobsBefore = blobIntegrationEnabled() ? new Set((await listHarnessBlobs(request)).map((o) => o.key)) : null;
 
         await startFromWaitingRoom(pair.tutorPage);
-        await expect(pair.tutorPage.getByTestId("wb-audio-consent-banner")).toContainText("Student audio not recorded");
+        await expect(pair.tutorPage.getByTestId("wb-audio-consent-banner")).toContainText(
+          "This student's voice is not being saved. Your microphone can still be saved."
+        );
         await pair.tutorPage.waitForTimeout(2_000);
         await driveVadSilenceCut(pair.tutorPage);
         await pair.tutorPage.waitForTimeout(6_000);
@@ -2052,32 +2118,187 @@ test.describe("consent 6g: Replay per principal (B7, D4)", {
 test.describe("consent 6h: Visibility (both sides see what is off)", {
   tag: [TAG.WB_CONSENT, TAG.WB_CHROME],
 }, () => {
+  const OFF = {
+    allowAudioRecording: false,
+    allowWhiteboardRecording: false,
+    allowNoteSending: false,
+  } as const;
+  const AUDIO_NONE = "Session audio is not being saved.";
+  const TUTOR_AUDIO = "This student's voice is not being saved. Your microphone can still be saved.";
+  const STUDENT_AUDIO = "Your voice is not being saved. Your tutor's microphone can still be saved.";
+  const BOARD_OFF =
+    "The board is not being saved. It still works during this session. After the session ends, we delete the saved board from our servers.";
+  const NOTES_OFF = "Notes are off for this session. Nothing is transcribed and no notes are drafted.";
+
   // Oracle: DOM text from literals in the spec (not the copy module)
-  test.fixme(
-    "V1: tutor sees which recordings are off before Start and during the session",
-    async () => {
-      // pending: wave that owns V1
+  test("V1: tutor sees which recordings are off before Start and during the session", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const s = await seedConsentSession({ switches: OFF });
+    const pair = await openTutorAndStudent(browser, s, { ensureFollow: false });
+    try {
+      const banner = pair.tutorPage.getByTestId("wb-audio-consent-banner");
+      await expect(banner).toContainText(AUDIO_NONE);
+      await expect(banner).toContainText(BOARD_OFF);
+      await expect(banner).toContainText(NOTES_OFF);
+      await chooseMode(pair.tutorPage, "LIVE");
+      await expect(banner).toContainText(TUTOR_AUDIO);
+      await startFromWaitingRoom(pair.tutorPage);
+      const live = pair.tutorPage.getByTestId("wb-audio-consent-banner");
+      await expect(live).toContainText(TUTOR_AUDIO);
+      await expect(live).toContainText(BOARD_OFF);
+      await expect(live).toContainText(NOTES_OFF);
+    } finally {
+      await pair.close();
+      await s.cleanup();
     }
-  );
+  });
   // Oracle: Same
-  test.fixme(
-    "V2: learner sees which recordings are off in the waiting room and in the session",
-    async () => {
-      // pending: wave that owns V2
+  test("V2: learner sees which recordings are off in the waiting room and in the session", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const s = await seedConsentSession({ switches: OFF, mode: "LIVE" });
+    const pair = await openTutorAndStudent(browser, s, { ensureFollow: false });
+    try {
+      const waiting = pair.studentPage.getByTestId("wb-audio-consent-banner");
+      // Until Start, the learner is told the mode is not chosen yet.
+      await expect(waiting).toContainText(AUDIO_NONE, { timeout: 20_000 });
+      await expect(waiting).toContainText(BOARD_OFF);
+      await expect(waiting).toContainText(NOTES_OFF);
+      await chooseMode(pair.tutorPage, "LIVE");
+      await startFromWaitingRoom(pair.tutorPage);
+      const live = pair.studentPage.getByTestId("wb-audio-consent-banner");
+      await expect(live).toContainText(STUDENT_AUDIO, { timeout: 20_000 });
+      await expect(live).toContainText(BOARD_OFF);
+      await expect(live).toContainText(NOTES_OFF);
+    } finally {
+      await pair.close();
+      await s.cleanup();
     }
-  );
-  // Oracle: Grep over every consent surface DOM for the self-learner principal
-  test.fixme(
-    "V3: self-learner copy never says \"your child\"",
-    async () => {
-      // pending: wave that owns V3
+  });
+  // Oracle: in person, audio off is the none sentence for the student too
+  test("V2b: a student in an in-person session sees the in-person audio line", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const s = await seedConsentSession({ switches: OFF, mode: "IN_PERSON" });
+    const pair = await openTutorAndStudent(browser, s, { ensureFollow: false });
+    try {
+      await chooseMode(pair.tutorPage, "IN_PERSON");
+      await startFromWaitingRoom(pair.tutorPage);
+      const live = pair.studentPage.getByTestId("wb-audio-consent-banner");
+      await expect(live).toContainText(AUDIO_NONE, { timeout: 20_000 });
+      await expect(live).toContainText(BOARD_OFF);
+      await expect(live).toContainText(NOTES_OFF);
+      await expect(live).not.toContainText(STUDENT_AUDIO);
+    } finally {
+      await pair.close();
+      await s.cleanup();
     }
-  );
-  // Oracle: DOM
-  test.fixme(
-    "V4: child consent screen shows each tutor/org separately",
-    async () => {
-      // pending: wave that owns V4
+  });
+  // Oracle: the self-learner privacy page DOM never says "your child"
+  test("V3: self-learner copy never says \"your child\"", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const self = await seedSelfLearnerWbSession();
+    const context = await browser.newContext();
+    try {
+      await loginAccountHolderInContext(context, self.ahEmail, self.ahPassword);
+      const page = await context.newPage();
+      await page.goto(`/account/children/${self.learnerProfileId}/consent`, { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("consent-next-session")).toBeVisible();
+      await expect(page.locator("body")).not.toContainText("your child");
+    } finally {
+      await context.close();
     }
-  );
+  });
+  // Oracle: DOM — one labeled section per tutor and per organization
+  test("V4: child consent screen shows each tutor/org separately", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const s = await seedConsentSession({ switches: {} });
+    const orgName = `V4 North High ${Date.now()}`;
+    await withPrisma(async (prisma) => {
+      const profile = await prisma.learnerProfile.findUniqueOrThrow({
+        where: { id: s.learnerProfileId },
+        select: { accountHolderId: true },
+      });
+      const org = await prisma.organization.create({
+        data: {
+          name: orgName,
+          status: "active",
+          timezone: "America/Denver",
+          statusChangedAt: new Date(),
+          createdByOperatorId: "playwright@test.local",
+        },
+        select: { id: true },
+      });
+      await prisma.consentRecord.create({
+        data: {
+          learnerProfileId: s.learnerProfileId,
+          adminUserId: null,
+          organizationId: org.id,
+          version: 1,
+          allowLiveSession: true,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+          setByAccountHolderId: profile.accountHolderId,
+          captureMethod: "electronic",
+        },
+      });
+    });
+    const context = await browser.newContext();
+    try {
+      await loginLearnerInContext(context, s.learnerHandle, s.learnerPin);
+      const page = await context.newPage();
+      await page.goto("/join", { waitUntil: "domcontentloaded" });
+      const owners = page.getByTestId("child-consent-owner");
+      await expect(owners.filter({ hasText: orgName })).toBeVisible();
+      await expect(owners.filter({ hasText: TEST_ADMIN.displayName })).toBeVisible();
+    } finally {
+      await context.close();
+      await s.cleanup();
+    }
+  });
+});
+
+test.describe("consent org restriction floors", { tag: [TAG.ORG, TAG.WB_RECORDING, TAG.WB_CHROME] }, () => {
+  test("org session with audio off shows the banner and records no audio", async ({ browser, request }) => {
+    test.setTimeout(180_000);
+    const inPerson = await seedOrgBoardSession(request, { whiteboard: true, audio: false, mode: "IN_PERSON" });
+    const room = await openTutorRoom(browser, inPerson);
+    try {
+      await expect(room.page.getByTestId("wb-audio-consent-banner")).toContainText(
+        "Session audio is not being saved."
+      );
+      await room.page.waitForTimeout(1_500);
+      expect(await audioRequests(room.page)).toBe(0);
+    } finally {
+      await room.close();
+    }
+
+    const online = await seedOrgBoardSession(request, { whiteboard: true, audio: false, mode: "LIVE" });
+    const live = await openTutorRoom(browser, online);
+    try {
+      await expect(live.page.getByTestId("wb-audio-consent-banner")).toContainText(
+        "This student's voice is not being saved. Your microphone can still be saved."
+      );
+    } finally {
+      await live.close();
+    }
+  });
+
+  test("org session with the whiteboard off does not save the board", async ({ page, request }) => {
+    test.setTimeout(180_000);
+    const off = await seedOrgBoardSession(request, { whiteboard: false, audio: true, mode: "LIVE" });
+    try {
+      const keys = await seedBoard(request, off);
+      const end = await endWithBoard(request, off, keys);
+      expect(end.status(), await end.text()).toBe(200);
+      await page.goto(`/admin/students/${off.studentId}/whiteboard/${off.whiteboardSessionId}/workspace`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({ timeout: 60_000 });
+      const notice = page.getByTestId("wb-review-board-thumbnail-wrap").getByTestId("wb-board-not-saved");
+      await expect(notice).toBeVisible({ timeout: 30_000 });
+      await expect(notice).toHaveText("The board was not saved because whiteboard recording was off.");
+    } finally {
+      await off.cleanup();
+    }
+  });
 });

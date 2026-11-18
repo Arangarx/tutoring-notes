@@ -38,7 +38,7 @@ test.describe("P2-ID-2 — parent dashboard + child-notes scoping", () => {
     const joinCallout = page.getByTestId("parent-join-gap-callout");
     await expect(joinCallout).toBeVisible();
     await expect(joinCallout).toContainText(
-      "You can join live sessions for your child"
+      "Your child does not need their own login for you to join"
     );
     await expect(joinCallout).toContainText("You do not need their PIN");
     await expect(joinCallout).not.toContainText(

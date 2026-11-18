@@ -70,8 +70,7 @@ test.describe("self-learner audio recording off", { tag: [TAG.WB_RECORDING] }, (
 
       const banner = page.getByTestId("wb-audio-consent-banner");
       await expect(banner).toBeVisible({ timeout: 15_000 });
-      await expect(banner).toContainText("Audio not recorded");
-      await expect(banner).toContainText("parent has not allowed session audio");
+      await expect(banner).toContainText("Session audio is not being saved.");
 
       const record = await prisma.consentRecord.findFirst({
         where: { learnerProfileId: profile.id, adminUserId },

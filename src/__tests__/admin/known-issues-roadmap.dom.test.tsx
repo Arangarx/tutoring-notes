@@ -37,7 +37,14 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
       within(section).queryByText(/Replays start from the beginning when you open them/)
     ).not.toBeInTheDocument();
     expect(
-      within(section).getByText(/Parent or guardian consent is now required/)
+      within(section).getByText(
+        "Parent or guardian consent is now required and recorded before a session can start, online or in person, with clear consent choices during account setup."
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(
+        "Ending a session from your sessions list or the resume screen now saves your full recording, the same as ending from inside the session."
+      )
     ).toBeInTheDocument();
     expect(
       within(section).getByText(/request deletion of a student's data/)
@@ -52,7 +59,16 @@ describe("KnownIssuesRoadmapView — Sarah-facing content", () => {
     ).toBeInTheDocument();
     expect(within(list).queryByText(/Empty review screen/)).not.toBeInTheDocument();
     expect(within(list).getByText(/Student microphone volume/)).toBeInTheDocument();
-    expect(within(list).getByText(/have not finished checking/)).toBeInTheDocument();
+    expect(
+      within(list).getByText(
+        "A parent signed in on the family account can open that child's online session from Upcoming sessions when the appointment window is open and online sessions are on. They do not need the child's username or PIN. Set up the child's login under Manage only if the child will sign in on their own device."
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(list).getByText(
+        "Students can turn their own microphone up during a session. We have not finished checking that the tutor hears that boost on a second device."
+      )
+    ).toBeInTheDocument();
   });
 
   it("does not list known issues that shipped in the durability wave", () => {
