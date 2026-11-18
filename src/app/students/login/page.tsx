@@ -76,14 +76,10 @@ function StudentLoginForm() {
         return;
       }
 
-      const data = (await res.json()) as { error?: string };
+      await res.json();
 
       if (!res.ok) {
-        if (data.error === "access_mode_mismatch") {
-          setError("access_mode_mismatch");
-        } else {
-          setError("invalid_credentials");
-        }
+        setError("invalid_credentials");
         return;
       }
 
@@ -199,13 +195,6 @@ function StudentLoginForm() {
                 <Alert variant="destructive">
                   <AlertDescription>
                     {"That username or PIN isn't right. Try again!"}
-                  </AlertDescription>
-                </Alert>
-              )}
-              {error === "access_mode_mismatch" && (
-                <Alert variant="destructive">
-                  <AlertDescription>
-                    {"This account doesn't use a PIN login. Ask a parent/guardian to sign in instead."}
                   </AlertDescription>
                 </Alert>
               )}

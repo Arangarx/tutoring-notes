@@ -10,8 +10,10 @@
  * Resolution: parse handle → look up AccountHolder by familyId → look up
  * LearnerCredential by (accountHolderId, username) → verify PIN.
  *
- * IAC-6: accessMode enforcement — `account_holder_session` learners are rejected
- * (they authenticate via the owning AccountHolder session, not independent PIN).
+ * IAC-6: accessMode enforcement — `account_holder_session` and
+ * `parent_session_select` learners cannot PIN-login. The HTTP response matches
+ * a wrong PIN so the handle is not an oracle. They authenticate via the
+ * owning AccountHolder session, not an independent PIN.
  *
  * IAC-10: layered lockout — gentle early tiers (soft cooldown) → hard lock
  * (IP-independent per-credential counter) → parent unlock required.
@@ -156,19 +158,15 @@ export async function POST(req: NextRequest) {
         );
         await dummyLearnerHashCompare();
       } else if (
-        // IAC-6: reject account_holder_session learners at PIN login
+        // IAC-6: parent-mode learners authenticate via the parent session.
+        // Same status, body, and failure count as a wrong PIN — no handle oracle.
         cred.learnerProfile.accessMode === "account_holder_session" ||
         cred.learnerProfile.accessMode === "parent_session_select"
       ) {
-        // This learner authenticates via parent's session, not independent PIN
         console.log(
           `[lpr] lpr=${cred.learnerProfileId} action=login_rejected reason=wrong_access_mode accessMode=${cred.learnerProfile.accessMode}`
         );
         await dummyLearnerHashCompare();
-        return NextResponse.json(
-          { error: "access_mode_mismatch", message: "This account does not use PIN login. Ask your parent/guardian to sign in." },
-          { status: 403 }
-        );
       } else {
         matched = await verifyLearnerPin(pin, cred.secretHash);
         if (matched) {
