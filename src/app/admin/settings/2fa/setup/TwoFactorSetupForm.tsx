@@ -44,12 +44,14 @@ export function TwoFactorSetupForm({
   pendingSmsEnrollment,
   pendingMaskedPhone,
   smsEnrollmentAvailable = false,
+  emailEnrollmentAvailable = true,
 }: {
   pendingEmailEnrollment?: boolean;
   pendingMaskedEmail?: string;
   pendingSmsEnrollment?: boolean;
   pendingMaskedPhone?: string;
   smsEnrollmentAvailable?: boolean;
+  emailEnrollmentAvailable?: boolean;
 }) {
   const router = useRouter();
   const [method, setMethod] = useState<SetupMethod>(pendingSmsEnrollment ? "sms" : "email");
@@ -206,16 +208,19 @@ export function TwoFactorSetupForm({
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Two-factor authentication adds a second layer of security. By default we email a
-          one-time code to your account address — no app required.
+          {emailEnrollmentAvailable
+            ? "Two-factor authentication adds a second layer of security. By default we email a one-time code to your account address — no app required."
+            : "Two-factor authentication adds a second layer of security. Use an authenticator app. Email codes are not available yet."}
         </p>
         <TwoFactorMethodChooserCards
           onChooseEmail={handleStartEmail}
           onChooseTotp={switchToTotp}
           onChooseSms={handleStartSms}
           smsEnrollmentAvailable={smsEnrollmentAvailable}
+          emailEnrollmentAvailable={emailEnrollmentAvailable}
           loading={loading}
           loadingMethod={method}
+          emailCardHighlighted={emailEnrollmentAvailable}
         />
       </div>
     );

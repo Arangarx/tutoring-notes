@@ -16,6 +16,7 @@ import { productionCanonicalMetadata } from "@/lib/seo/canonical-host";
  * Calendar titles are first name + last initial (product-specific) 2026-10-06.
  * Mynk SMS two-factor texts program (product-specific) 2026-09-21.
  * Org honesty copy (product-specific; umbrella SYNCED FROM unchanged) 2026-10-12.
+ * Consent-switch honesty (product-specific; umbrella SYNCED FROM unchanged) 2026-11-17.
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
  * the CANONICAL legal source for eligibility / acceptable use /
@@ -44,7 +45,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalDocumentShell title="Terms of Use" lastUpdated="October 12, 2026">
+    <LegalDocumentShell title="Terms of Use" lastUpdated="November 17, 2026">
         <p className="text-sm leading-relaxed text-muted-foreground">
           These terms govern your use of <strong>Mynk</strong>, also titled Tutoring Notes, a web
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
@@ -62,9 +63,7 @@ export default function TermsPage() {
             <h2 className="heading m-0 text-lg font-normal">The service</h2>
             <p style={{ margin: "8px 0 0" }}>
               Mynk is the web application these pages describe. It is also titled Tutoring Notes.
-              It helps private tutors run a shared whiteboard session, record it, and draft the
-              notes. When a note is finalized, the parent and student can see the notes and the
-              lesson replay in their account.
+              It helps private tutors run a shared whiteboard session, record what the privacy settings allow, and draft notes when notes are on. When the tutor saves, the parent and student can see what was recorded. That save can be notes and a replay, or a replay with no notes.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               An organization owner, admin, or scheduler can see learners that organization
@@ -108,17 +107,14 @@ export default function TermsPage() {
               you grant us permission to store and transmit that content as needed to
               operate the product (for example, storing notes in the database, storing
               audio in object storage, sending emails you initiate, generating share
-              links you create, and processing audio through the transcription
-              provider described in the privacy policy).
+              links you create, and, when session notes are on, processing that audio through the transcription provider described in the privacy policy).
             </p>
           </div>
 
           <div>
             <h2 className="heading m-0 text-lg font-normal">Gmail integration</h2>
             <p style={{ margin: "8px 0 0" }}>
-              If you connect your Gmail account, the app sends email on your behalf only when you click Email a reminder. That email is optional. The parent
-              or student already sees the notes and the lesson replay in their account
-              when you finalize a note. You can disconnect at any time from Settings,
+              If you connect your Gmail account, the app sends email on your behalf only when you click Email a reminder. That email is optional. The parent or student already sees what was recorded, when you save. You can disconnect at any time from Settings,
               then Email. Your use of Gmail is also subject to
               Google&apos;s own terms of service.
             </p>
@@ -200,14 +196,10 @@ export default function TermsPage() {
               child under 13, they represent that they are that child&rsquo;s parent or
               legal guardian and that they have reviewed and consented to the privacy
               practices described in our{" "}
-              <Link href="/privacy">privacy policy</Link>, including the collection of
-              session audio recordings, transcripts, and notes.
+              <Link href="/privacy">privacy policy</Link>, including session audio when it is saved, whiteboard drawings when whiteboard recording is on, and transcripts and notes when notes are on.
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              When a parent or a self-learner has finished account setup, consent is recorded
-              in that Mynk account before a live session. A parent records it for a child. A
-              self-learner records it for themselves. A student who has not finished setup
-              does not have that record yet.
+              When a parent or a self-learner has finished account setup, consent is recorded in that Mynk account before a session can start, online or in person. A parent records it for a child. A self-learner records it for themselves. Without that record, a session cannot start.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               Parents and legal guardians retain the right to review, request deletion of,
@@ -215,11 +207,7 @@ export default function TermsPage() {
               See the <Link href="/privacy">privacy policy</Link> — specifically the{" "}
               &ldquo;Children&rsquo;s data and parental rights (COPPA)&rdquo; section — for
               how to exercise these rights, our retention practices, and the contact address
-              for deletion requests. Turning a consent off stops that new collection. Online,
-              if audio recording is off, the tutor&rsquo;s microphone can still be saved. It
-              does not automatically delete data already collected under prior consent. A
-              parent can ask Mynk to delete the account and its data. Deleting only some of
-              it is a special request.
+              for deletion requests. Turning a consent off stops that new collection. A change applies to a session that has not started. A session that has started keeps what it started with. Online, if audio recording is off, the tutor&apos;s microphone can still be saved, and it is transcribed only when notes are on. In person, audio recording off saves no audio. When whiteboard recording is off, the board from that session is deleted from our servers after the session ends. A board saved from an earlier session is not deleted by turning the switch off. It does not automatically delete data already collected under prior consent. A parent can ask Mynk to delete the account and its data. Deleting only some of it is a special request. To ask Mynk to delete a recording or other personal information, email <a href="mailto:arangarx+tutoringnotes@gmail.com">arangarx+tutoringnotes@gmail.com</a>. Mynk completes that request within 30 days.
             </p>
             <p style={{ margin: "8px 0 0" }}>
               After an account is deleted, we keep a record of the consent choices that were

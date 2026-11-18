@@ -2,10 +2,13 @@ import { defineConfig, devices } from "@playwright/test";
 import { PROD_SHAPE_NEXTAUTH_SECRET } from "./tests/helpers/prod-shape-secret";
 
 const {
-  WB_REGRESSION_LOCAL_DATABASE_URL,
   WB_REGRESSION_TOTP_ENCRYPTION_KEY,
   applyWbRegressionLocalDatabaseEnv,
 } = require("./scripts/wb-regression-local-db.cjs");
+const {
+  buildProdShapeServerCommand,
+  resolvePwStack,
+} = require("./scripts/pw-stack.cjs");
 
 /**
  * Production-shape Playwright config — `npm run test:prod-shape`.
@@ -23,7 +26,7 @@ const {
  */
 applyWbRegressionLocalDatabaseEnv();
 
-const PORT = 3102;
+const stack = resolvePwStack();
 // Iteration only: `PROD_SHAPE_REUSE_BUILD=1` skips the build and serves the existing `.next`
 // (which MUST be a production build of the current tree, or the run proves nothing).
 const BUILD_STEP = process.env.PROD_SHAPE_REUSE_BUILD === "1" ? "" : "npx next build&& ";
@@ -34,13 +37,16 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: stack.prodShapeOrigin,
     trace: "retain-on-failure",
   },
   webServer: {
-    command:
-      `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set TOTP_ENCRYPTION_KEY=${WB_REGRESSION_TOTP_ENCRYPTION_KEY}&& set NEXTAUTH_URL=http://localhost:${PORT}&& set NEXTAUTH_SECRET=${PROD_SHAPE_NEXTAUTH_SECRET}&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set GOOGLE_CLIENT_ID=prod-shape-google-client-id&& set GOOGLE_CLIENT_SECRET=prod-shape-google-client-secret&& set LEARNER_SESSION_HMAC_SECRET=pw-prod-shape-hmac-secret-2026&& set AH_SESSION_HMAC_SECRET=pw-prod-shape-ah-hmac-secret-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& node scripts/apply-org-learner-guards.cjs&& ${BUILD_STEP}npx next start --port ${PORT}"`,
-    url: `http://localhost:${PORT}/login`,
+    command: buildProdShapeServerCommand({
+      nextAuthSecret: PROD_SHAPE_NEXTAUTH_SECRET,
+      totpKey: WB_REGRESSION_TOTP_ENCRYPTION_KEY,
+      buildStep: BUILD_STEP,
+    }),
+    url: `${stack.prodShapeOrigin}/login`,
     // next build + start; the build is the long part.
     timeout: 900_000,
     reuseExistingServer: false,

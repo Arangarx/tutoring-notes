@@ -10,15 +10,18 @@
 
 ### Last action
 
-Launch plan approved and day-1 lanes dispatched on 2026-11-17.
+2026-11-17 13:40. Merged so far into `feat/org-qol`: launch docs (ec04ccf5), decisions + freshness (cde8296d), test type fixes (a55fca4f). Every other lane has code pushed but is blocked on Playwright: the single shared lock `$env:TEMP\tn-pw.lock` serialised all lanes, and most 4h waits expired. Andrew approved the consent copy (item 36 → "Mynk recommends keeping this on for the best experience."), and the Strix pen test using the existing local `OPENAI_API_KEY` (never printed).
 
 ### Next actions
 
-Review each lane's report. Run a separate verification for each lane: Sonnet when the lane touches core flow or a fragile surface, Grok otherwise. Merge each accepted lane with `merge --no-ff` into `feat/org-qol`. Andrew approves `CONSENT-COPY-FOR-APPROVAL.md`. Then C8 and C7-min. Then A8, the full master gate. Then A9, the book `docs/handoff/PILOT-RELEASE-SMOKE.md`. Then A10, cutover, only after Andrew's go.
+1. pw-parallel verify + 3-stack proof. If MERGE-OK, merge it FIRST, then give later lanes their own stack (PW_* env vars) instead of the shared lock.
+2. As each lane reports MERGE-READY with green gates, run a separate verification (Sonnet on core/fragile, Grok otherwise), then `merge --no-ff` into `feat/org-qol` and push. static-checks merges LAST, then `npm ci` in main.
+3. After apply-race merges: live-A/V Sonnet lane (G1, SMOKE-BLOCK-1, BUG-8, AV-CAM-BUTTON-ACQUIRING, B11, AV-REFRESH-LOSS, phone WebKit A/V), WS-B, WS-N5 (recording-durability agent, WhiteboardWorkspaceClient `wbCaptureActive` wiring), then Gate A5 sync matrix.
+4. After transcript fold merges: SMOKE-NOTES-3 notes abstain (Grok). After both folds + C8: C7-min UI copy.
+5. After static-checks: learner-login `access_mode_mismatch` leak fix. Then Strix on the integrated tip. Then A8 full gate, A9 PILOT-RELEASE-SMOKE book, A10 cutover with Andrew's go.
 
 ### Open Andrew-confirms
 
-- Consent copy approval (`CONSENT-COPY-FOR-APPROVAL.md`, not written yet).
 - What to do with stale worktrees `../tn-org` and `../tn-qol-hydrate`. Both have uncommitted edits and were not removed.
 - Repoint of preview.usemynk.com at `feat/org-qol`. That is a Vercel write and waits for an explicit go.
 - Go to apply the seven production migrations.
@@ -27,17 +30,33 @@ Review each lane's report. Run a separate verification for each lane: Sonnet whe
 
 Each lane is worktree `../tn-<lane>` on branch `launch/<lane>`. Details are in [LAUNCH-STATE.md](LAUNCH-STATE.md).
 
-| Lane | Tier | Agent |
+| Lane | State | Agent now |
 |---|---|---|
-| pw-parallel | Grok | 1242c63a |
-| fold-transcript | Grok | 28cb0681 |
-| fold-apply-race | Sonnet | 355a519c |
-| consent-copy | Grok | 506b73f2 |
-| static-checks | Grok | 500b16c6 |
-| org-finish | Grok | e77120ee |
-| first-impression | Grok | cb9d36d8 |
+| pw-parallel | MERGED f85468c8 | — |
+| first-impression | MERGED acd0cc00 | — |
+| consent-copy (C8 privacy/terms) | MERGED 96978496 | — |
+| fold-transcript | built (to 699a7c2d); Sonnet verify ba62c33b DIED on Cursor "unpaid invoice" — re-dispatch Sonnet verify once Andrew pays | — |
+| fold-apply-race | 708307bc. Sonnet 355a519c died (usage limit) after gates: apply-race check 16/16; wb-affected 5 known baseline reds (W27, WS-X, E2, E4, E5); @wb-graph also hard-failed live-sync invariants 1b + 2 (passed in wb-affected run); build failed on missing PrismaClient (shared node_modules incident). Grok rerunning build + invariants x3 on stack 2 | 5ddae4f9 |
+| static-checks | MERGE-OK (Sonnet e20e3786) at d35645a7 (adds npm-ls guard). HOLD: merge LAST, then `npm ci` in main | — |
+| org-finish | MERGED c040063c (worktree removed). No schema change. Race/DST/page-breadth nits in BACKLOG Bucket B | — |
+| jest-triage | ac1b9056: 13 suites = drift/env, no product bugs; default jest skips org-db suites unless JEST_ORG_DB=1. Full jest 468/469 (upload-outbox "different streams upload in parallel" fails, on base too → A8). Grok verify running. Author wrongly deleted the recording lane's tn-pw.lock (dead pid) — check recording red run wasn't contaminated | f7aa132b |
+| recording-durability | tip 55bfc51b (pushed): tests reshaped (freeze-then-close crash, hidden-then-killed, graceful ≤1 slice); pagehide requestData dropped. Sonnet died (usage limit) before running. Grok running red/green on default stack | 27a1e1f8 |
+| jest-mocks | MERGED f0e97d94 (9 stale-mock reds fixed). Worktree removed. NOTE: removing it before its node_modules junction deleted main `node_modules\.bin`; repaired with `npm rebuild --ignore-scripts` (npm ls clean). Always `cmd /c rmdir <wt>\node_modules` FIRST | — |
+| replay-start | Sonnet; local commits 91f574fa, d05d719b not pushed; short-clip fix staged in %TEMP% | e47069eb |
 
-Read-only freshness checks of the 78 MUST rows (six Grok explorers) and a calculus sizing are running. The shared machine lock for Playwright, the database, and the dev server is `$env:TEMP\tn-pw.lock`.
+Shared lock for Playwright, the test DB and the dev server: `$env:TEMP\tn-pw.lock` (atomic `New-Item`; never delete another lane's lock).
+
+**Parallel Playwright stacks (merged f85468c8, 2026-11-17).** Each stack has its own lock. A lane worktree must contain f85468c8 (conductor merges `origin/feat/org-qol` into the lane first). One worktree per stack; leave `PW_DIST_DIR` unset.
+
+| Stack | Lock | Env |
+|---|---|---|
+| default | `$env:TEMP\tn-pw.lock` | none (3100/3101, relay 3002, DB `tutoring_notes`) |
+| 2 | `$env:TEMP\tn-pw-2.lock` | `PW_PORT=3200 PW_RELAY_PORT=3012 PW_DB_NAME=tutoring_notes_pw2 PW_OUTPUT_DIR=test-results-pw2 PW_REPORT_DIR=playwright-report-pw2 PW_AUTH_DIR=tests/integration/.auth-pw2` |
+| 3 | `$env:TEMP\tn-pw-3.lock` | same with 3300 / 3022 / `tutoring_notes_pw3` / `-pw3` |
+
+DBs `tutoring_notes_pw2` and `tutoring_notes_pw3` already exist locally. After a stack-2/3 run: `docker rm -f wb-relay-local-3012` (or `-3022`). Never run jest with `PW_DB_NAME` set while that stack's Playwright runs (jest force-resets that DB). The harness mail dir is shared across stacks: never run `wb-child-home`, `org-staff-invite`, or tutor-verify specs on two stacks at once. Never commit `tsconfig.json` / `next-env.d.ts` from a lane.
+
+**Machine-load cap (Andrew 2026-11-17 16:36):** applies ONLY while Andrew is playing WoW. Before starting a Playwright stack, check `Get-Process | Where-Object { $_.ProcessName -match '^Wow(Classic|T|B)?$' }` (the game itself, not WowCompanion or WowVoiceProxy). If WoW is running: at most TWO stacks at once (one when the time difference is small). If not: up to three.
 
 ### Uncommitted / unmerged
 

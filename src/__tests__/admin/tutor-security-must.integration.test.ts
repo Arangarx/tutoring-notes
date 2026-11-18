@@ -444,7 +444,7 @@ describe("createStudent burst limit", () => {
     const tutor = await seedTutor("America/Denver");
     mockSessionAsTutor(tutor);
 
-    const familyId = uniq("fam").replace(/[^a-z0-9]/gi, "").slice(0, 16);
+    const familyId = uniq("fam").replace(/[^a-z0-9]/gi, "").slice(-16);
     const username = "kid";
     const familyEmail = `${uniq("family")}@example.com`;
     const holder = await db.accountHolder.create({
@@ -475,7 +475,7 @@ describe("createStudent burst limit", () => {
       await db.student.count({ where: { adminUserId: tutor.id, organizationId: null } })
     ).toBe(10);
 
-    const freshHandle = `${uniq("newkid")}@${uniq("nofam").replace(/[^a-z0-9]/gi, "").slice(0, 16)}`;
+    const freshHandle = `${uniq("newkid")}@${uniq("nofam").replace(/[^a-z0-9]/gi, "").slice(-16)}`;
     const fresh = await createStudent(
       null,
       form({

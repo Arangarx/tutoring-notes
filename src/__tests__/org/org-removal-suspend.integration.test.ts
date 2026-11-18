@@ -36,10 +36,27 @@ jest.mock("@/lib/blob", () => ({
   deleteBlob: jest.fn(async () => {}),
 }));
 
-const mockBeforeScheduledSessionDeleted = jest.fn(async () => undefined);
+const mockBeforeScheduledSessionDeleted = jest.fn(
+  async (
+    _adminUserId: string,
+    _sessionId: string,
+    _googleEventId: string | null,
+    _refreshToken: string | null
+  ) => undefined
+);
 jest.mock("@/lib/calendar/google-calendar-write", () => ({
-  beforeScheduledSessionDeleted: (...args: unknown[]) =>
-    mockBeforeScheduledSessionDeleted(...args),
+  beforeScheduledSessionDeleted: (
+    adminUserId: string,
+    sessionId: string,
+    googleEventId: string | null,
+    refreshToken: string | null
+  ) =>
+    mockBeforeScheduledSessionDeleted(
+      adminUserId,
+      sessionId,
+      googleEventId,
+      refreshToken
+    ),
   afterScheduledSessionCreated: jest.fn(async () => undefined),
   afterScheduledSessionUpdated: jest.fn(async () => undefined),
 }));

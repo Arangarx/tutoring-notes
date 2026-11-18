@@ -89,7 +89,7 @@ describe("POST /api/auth/learner/logout — SMOKE-PRIV-1", () => {
     const profile = await createTestLearnerProfile(ah.id);
 
     const ahSession = await createAccountHolderSession(ah.id);
-    const learnerSession = await createLearnerSession(profile.id);
+    const learnerSession = await createLearnerSession(profile.id, null);
 
     const req = buildLogoutRequest({
       [AH_SESSION_COOKIE]: ahSession.rawToken,
@@ -118,7 +118,7 @@ describe("POST /api/auth/learner/logout — SMOKE-PRIV-1", () => {
     const ah = await createTestAccountHolder();
     const profile = await createTestLearnerProfile(ah.id);
 
-    const learnerSession = await createLearnerSession(profile.id);
+    const learnerSession = await createLearnerSession(profile.id, null);
 
     const req = buildLogoutRequest({
       [LEARNER_SESSION_COOKIE]: learnerSession.rawToken,

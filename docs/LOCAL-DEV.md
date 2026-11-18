@@ -104,9 +104,47 @@ Playwright starts the Next dev server on port **3100** with `WHITEBOARD_SYNC_URL
 
 Pre-merge: any whiteboard-touching branch must show green `npm run test:wb-sync` before `git merge --no-ff` (see `AGENTS.md`).
 
+## A second Playwright stack
+
+Unset env is the default stack: Next on **3100** and **3101**, relay on **3002** (container name `wb-relay-local`), prod-shape on **3102**, Playwright database `tutoring_notes`, Jest database `tutoring_notes_test`, output directory `test-results`. The relay image is still `wb-relay-local` and still listens on 3002 inside the container; only the published host port changes.
+
+One default stack at a time. Whoever runs it (Playwright, DB-backed Jest, `next dev` / `next start`, or `test:prod-shape`) holds the lock file `$env:TEMP\tn-pw.lock`. Do not delete a lock you did not create. A stack that uses other ports and another database does not need that lock.
+
+| Env | Unset means |
+|---|---|
+| `PW_PORT` | `3100`. The second dev port is `PW_ALT_PORT`, or `3101` when `PW_PORT` is 3100, otherwise `PW_PORT + 1`. |
+| `PW_RELAY_PORT` | `3002`. `WHITEBOARD_SYNC_URL` follows it. The image is `wb-relay-local`. On 3002 the container is unnamed (Docker auto-names it, as before). Any other port runs as container `wb-relay-local-<port>`. |
+| `PW_DB_NAME` | Playwright stays on `tutoring_notes` and Jest stays on `tutoring_notes_test`. When set, both use that database name on `127.0.0.1` unless `TEST_DATABASE_URL` is already set (Jest keeps the explicit URL). The host guard still refuses any non-local host. |
+| `PW_OUTPUT_DIR` | `test-results` |
+| `PW_REPORT_DIR` | Playwright's default reporter. Set this so two runs do not share `playwright-report`. |
+| `PW_AUTH_DIR` | `tests/integration/.auth`. `integration-setup` and `openTutorAndStudent` follow it. |
+| `PW_DIST_DIR` | `.next`. Set this only when two `next dev` processes share one worktree. Prefer one worktree per stack and leave it unset. Next rewrites the tracked `next-env.d.ts` and `tsconfig.json` to name the custom dist dir; never commit those two files after such a run. |
+| `PW_PROD_SHAPE_PORT` | `3102` |
+| `PW_BLOB_DIR` | `wb-shard-blobs` (or `<PW_OUTPUT_DIR>-blobs` when `PW_OUTPUT_DIR` is set) |
+
+Docker init creates `tutoring_notes` and `tutoring_notes_test` only. Create any other database once:
+
+```powershell
+docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE tutoring_notes_pw_a;"
+```
+
+The relay image is still the one-time `npm run relay:build`. Set `WB_SKIP_3101_WEBSERVER=1` when the run does not need the second Next server. Example for a stack beside the default:
+
+```powershell
+$env:PW_PORT = "3200"
+$env:PW_RELAY_PORT = "3012"
+$env:PW_DB_NAME = "tutoring_notes_pw_a"
+$env:PW_OUTPUT_DIR = "test-results-pw-a"
+$env:PW_REPORT_DIR = "playwright-report-pw-a"
+$env:PW_AUTH_DIR = "tests/integration/.auth-pw-a"
+$env:PW_DIST_DIR = ".next-pw-a"
+$env:WB_SKIP_3101_WEBSERVER = "1"
+npm run test:wb-playwright:tags -- @wb-chrome
+```
+
 ## Organization Jest suites (`npm run test:org-db`)
 
-Runs the two org integration suites (`src/__tests__/org/org-slice1.integration.test.ts` and `org-learner.integration.test.ts`) in **one process** (`--runInBand`) against their own database, `tutoring_notes_org_test`, on the same local Docker Postgres. Both suites refuse to run on any other database (they check `current_database()`), so org rows never land in `tutoring_notes_test`. Run it after `npm run db:up`.
+Runs the two org integration suites (`src/__tests__/org/org-slice1.integration.test.ts` and `org-learner.integration.test.ts`) in **one process** (`--runInBand`) against their own database, `tutoring_notes_org_test`, on the same local Docker Postgres. Both suites refuse to run on any other database (they check `current_database()`), so org rows never land in `tutoring_notes_test`. Default `npx jest` ignores these two files. Run this command after `npm run db:up`.
 
 - **Hardcoded URL.** `scripts/test-org-db.mjs` uses `postgresql://postgres:postgres@127.0.0.1:5432/tutoring_notes_org_test` (the local Docker credentials from `.env.example`). It is not read from `.env`.
 - **It overrides your environment.** The script sets `TEST_DATABASE_URL`, `DATABASE_URL` and `DIRECT_URL` to that URL, and `ADMIN_EMAIL=org-operator@example.com` / `OPERATOR_EMAILS=env-operator@example.com`, for the child jest process only. Whatever is in `.env` or your shell for those variables is ignored for this run.

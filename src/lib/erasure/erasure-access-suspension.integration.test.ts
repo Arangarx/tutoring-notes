@@ -21,6 +21,10 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
+jest.mock("@/lib/env", () =>
+  require("@/__tests__/helpers/mock-env-with-blob-token").envModuleWithBlobToken()
+);
+
 jest.mock("@vercel/blob", () => ({
   __esModule: true,
   put: jest.fn(),
@@ -102,6 +106,7 @@ import { GET as getEvents } from "@/app/api/whiteboard/[sessionId]/events/route"
 import { GET as getSnapshot } from "@/app/api/whiteboard/[sessionId]/snapshot/route";
 import { GET as getTutorAsset } from "@/app/api/whiteboard/[sessionId]/tutor-asset/route";
 import { GET as getAudio } from "@/app/api/audio/admin/[recordingId]/route";
+import { TEST_BLOB_RW_TOKEN } from "../../__tests__/helpers/mock-env-with-blob-token";
 import { uniq } from "../../__tests__/helpers/unique-test-token";
 
 const ADMIN_ID = "00000000-0000-4000-8000-00000000e8a0";
@@ -136,7 +141,7 @@ beforeEach(() => {
   getStudentScopeMock.mockResolvedValue(defaultAdminScope);
   assertOwnsStudentMock.mockResolvedValue(undefined);
   putMock.mockResolvedValue(defaultBlobResult);
-  process.env.BLOB_READ_WRITE_TOKEN = "test_token";
+  process.env.BLOB_READ_WRITE_TOKEN = TEST_BLOB_RW_TOKEN;
 });
 
 afterAll(async () => {

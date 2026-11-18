@@ -5,7 +5,7 @@
  * B1: ICS parser and Google insert payload share wall-clock policy (DST week).
  */
 import { Temporal } from "@js-temporal/polyfill";
-import ical from "node-ical";
+import ical, { type VEvent } from "node-ical";
 
 import { buildIcsCalendarBody } from "@/lib/calendar/ics-feed";
 import { buildScheduledSessionGoogleEventResource } from "@/lib/calendar/google-calendar-event-payload";
@@ -30,7 +30,7 @@ function parsedStartWallClock(
   const parsed = ical.parseICS(icsBody);
   const event = Object.values(parsed).find(
     (e) => e && typeof e === "object" && "type" in e && e.type === "VEVENT"
-  ) as ical.VEvent | undefined;
+  ) as VEvent | undefined;
   if (!event?.start) {
     throw new Error("No VEVENT start in feed");
   }

@@ -19,10 +19,11 @@ import {
   readLearnerCredentialOracle,
 } from "./claim-wizard.helpers";
 import { seedClaimInvite, seedParentAccountHolder } from "./identity.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
 const { assertLocalDatabaseUrlForHarness } = require("../../../scripts/wb-regression-local-db.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
+const PARENT_STATE = authStatePath("parent.json");
 
 /** Read exact credential count for a learnerProfileId — DB oracle. */
 async function countLearnerCredentials(learnerProfileId: string): Promise<number> {

@@ -9,10 +9,11 @@ import {
   seedSelfLearnerWbSession,
   seedWbLiveSyncSession,
 } from "../whiteboard-live-sync.helpers";
+const { authStatePath } = require("../../../scripts/pw-stack.cjs");
 
 const EMPTY_STATE = { cookies: [] as [], origins: [] as [] };
-const LEARNER_STATE = "tests/integration/.auth/learner.json";
-const PARENT_STATE = "tests/integration/.auth/parent.json";
+const LEARNER_STATE = authStatePath("learner.json");
+const PARENT_STATE = authStatePath("parent.json");
 
 test.describe("Login pages are persona-distinct", () => {
   test.use({ storageState: EMPTY_STATE });

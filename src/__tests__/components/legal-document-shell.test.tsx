@@ -81,7 +81,8 @@ describe("Privacy page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Privacy Policy"
     );
-    expect(screen.getByText("Last updated: October 12, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: November 17, 2026")).toBeInTheDocument();
+    expect(screen.queryByText("Last updated: October 12, 2026")).toBeNull();
 
     // Verbatim body locks (distinctive product / umbrella sentences)
     expect(
@@ -95,9 +96,21 @@ describe("Privacy page — shell + verbatim legal copy", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Mynk is the web application these pages describe. It is also titled Tutoring Notes. It helps private tutors run a shared whiteboard session, record it, and draft the notes. When a note is finalized, the parent and student can see the notes and the lesson replay in their account."
+        "Mynk is the web application these pages describe. It is also titled Tutoring Notes. It helps private tutors run a shared whiteboard session, record what the privacy settings allow, and draft notes when notes are on. When the tutor saves, the parent and student can see what was recorded. That save can be notes and a replay, or a replay with no notes."
       )
     ).toBeInTheDocument();
+    const privacyBodyEarly = document.body.textContent ?? "";
+    expect(privacyBodyEarly).not.toContain("record it, and draft the notes");
+    expect(privacyBodyEarly).not.toContain(
+      "transcribed by OpenAI and the notes are drafted automatically"
+    );
+    expect(privacyBodyEarly).not.toContain(
+      "Automated retention schedules may be introduced in the future"
+    );
+    expect(privacyBodyEarly).not.toContain("before a live session");
+    expect(privacyBodyEarly).not.toContain(
+      "timestamped stroke logs, optional PDF / image inserts, and a session snapshot used for the parent replay surface"
+    );
 
     expect(
       screen.getByRole("heading", { level: 2, name: "AI note generation (OpenAI)" })
@@ -155,7 +168,8 @@ describe("Terms page — shell + verbatim legal copy", () => {
     expect(document.querySelector('[data-slot="card-title"]')).toHaveTextContent(
       "Terms of Use"
     );
-    expect(screen.getByText("Last updated: October 12, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: November 17, 2026")).toBeInTheDocument();
+    expect(screen.queryByText("Last updated: October 12, 2026")).toBeNull();
 
     expect(
       screen.getByText(/These terms govern your use of/, { exact: false })
@@ -216,6 +230,16 @@ describe("Terms page — shell + verbatim legal copy", () => {
       "https://www.mortensenapps.com/terms"
     );
 
+    expect(termsBody).toContain(
+      "record what the privacy settings allow, and draft notes when notes are on"
+    );
+    expect(termsBody).not.toContain("record it, and draft the notes");
+    expect(termsBody).not.toContain("before a live session");
+    expect(termsBody).not.toContain("when you finalize a note");
+    expect(termsBody).toContain("Mynk completes that request within 30 days.");
+    expect(termsBody).toContain(
+      "when session notes are on, processing that audio through the transcription provider"
+    );
     expect(termsBody).toMatch(/Message and data rates may apply/i);
     expect(termsBody).toMatch(/\bSTOP\b/);
     expect(termsBody).toMatch(/\bHELP\b/);

@@ -2,6 +2,8 @@ import { SectionCard } from "@/components/SectionCard";
 import {
   knownIssuesIntro,
   knownIssuesItems,
+  productTodayIntro,
+  productTodayItems,
   recentlyImprovedIntro,
   recentlyImprovedSections,
   roadmapIntro,
@@ -21,6 +23,23 @@ function BulletList({ items }: { items: readonly string[] }) {
 export function KnownIssuesRoadmapView() {
   return (
     <div className="space-y-6" data-testid="known-issues-roadmap">
+      <SectionCard realm="admin"
+        title="What Mynk does today"
+        description={productTodayIntro}
+        data-testid="product-today"
+      >
+        <ul
+          className="m-0 list-disc space-y-3 pl-5 text-sm leading-relaxed text-foreground"
+          data-testid="product-today-list"
+        >
+          {productTodayItems.map(({ title, body }) => (
+            <li key={title}>
+              <strong className="font-semibold text-foreground">{title}:</strong> {body}
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
+
       <SectionCard realm="admin"
         title="Recently improved"
         description={recentlyImprovedIntro}
@@ -42,7 +61,7 @@ export function KnownIssuesRoadmapView() {
       </SectionCard>
 
       <SectionCard realm="admin"
-        title="Known issues we're still working on"
+        title="Known issues"
         description={knownIssuesIntro}
         data-testid="known-issues-open"
       >

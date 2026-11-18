@@ -7,6 +7,7 @@ import {
   seedTestStudent,
   seedOpenWhiteboardSession,
 } from "../visual/helpers";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 /**
  * Group-session presence canary — Phase 1c (Pillar 4 follow-on).
@@ -152,7 +153,7 @@ test.describe("group-session presence (Phase 1c)", () => {
 
       // Tutor context — uses the storageState from auth.setup.ts.
       const tutorContext = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
       });
       // Two anonymous student contexts — distinct browser contexts so
       // the sync server treats them as separate peers.

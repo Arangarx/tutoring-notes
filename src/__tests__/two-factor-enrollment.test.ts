@@ -104,3 +104,40 @@ describe("isSms2faEnrollmentAvailable", () => {
     expect(isSms2faEnrollmentAvailable()).toBe(true);
   });
 });
+
+describe("isEmail2faEnrollmentAvailable", () => {
+  const previousPlaywright = process.env.PLAYWRIGHT_TEST;
+
+  afterEach(() => {
+    if (previousPlaywright === undefined) delete process.env.PLAYWRIGHT_TEST;
+    else process.env.PLAYWRIGHT_TEST = previousPlaywright;
+    jest.resetModules();
+    jest.dontMock("@/lib/env");
+  });
+
+  async function load(mailConfigured: boolean) {
+    jest.doMock("@/lib/env", () => ({
+      isEmailConfigured: () => mailConfigured,
+    }));
+    const mod = await import("@/lib/two-factor-enrollment");
+    return mod.isEmail2faEnrollmentAvailable;
+  }
+
+  it("is false when mail is not configured", async () => {
+    delete process.env.PLAYWRIGHT_TEST;
+    const isEmail2faEnrollmentAvailable = await load(false);
+    expect(isEmail2faEnrollmentAvailable()).toBe(false);
+  });
+
+  it("is true when mail is configured", async () => {
+    delete process.env.PLAYWRIGHT_TEST;
+    const isEmail2faEnrollmentAvailable = await load(true);
+    expect(isEmail2faEnrollmentAvailable()).toBe(true);
+  });
+
+  it("stays available in the Playwright harness when SMTP is unset", async () => {
+    process.env.PLAYWRIGHT_TEST = "1";
+    const isEmail2faEnrollmentAvailable = await load(false);
+    expect(isEmail2faEnrollmentAvailable()).toBe(true);
+  });
+});

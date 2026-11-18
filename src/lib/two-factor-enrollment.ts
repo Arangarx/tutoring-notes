@@ -1,3 +1,5 @@
+import { isEmailConfigured } from "@/lib/env";
+
 /**
  * Shared enrollment confirmation oracle for 2FA setup and manage pages.
  *
@@ -23,4 +25,15 @@ export function isSms2faEnrollmentAvailable(): boolean {
     process.env.TWILIO_AUTH_TOKEN?.trim() &&
     process.env.TWILIO_FROM_NUMBER?.trim()
   );
+}
+
+/**
+ * True when an email 2FA code can be sent.
+ * `isEmailConfigured()` is the product check. The Playwright identity harness
+ * completes email OTP without SMTP (`sendEmailOtpChallenge` returns ok when
+ * `PLAYWRIGHT_TEST=1`), so the chooser stays available there too.
+ */
+export function isEmail2faEnrollmentAvailable(): boolean {
+  if (process.env.PLAYWRIGHT_TEST === "1") return true;
+  return isEmailConfigured();
 }

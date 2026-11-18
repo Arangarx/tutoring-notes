@@ -1,8 +1,10 @@
 import {
   activateOrganizationAction,
   saveOrganizationCapsAction,
+  saveOrganizationTimezoneAction,
   suspendOrganizationAction,
 } from "@/app/admin/orgs/actions";
+import { OrgTimeZoneSelect } from "@/components/org/OrgTimeZoneSelect";
 import { OrgSessionEndChoiceDialog } from "@/components/org/OrgSessionEndChoiceDialog";
 import { TutorWaitlistActions } from "@/app/admin/tutor-approvals/TutorWaitlistActions";
 import { OrgDailyCapFields } from "@/components/org/OrgDailyCapFields";
@@ -22,6 +24,7 @@ export function OrgActivationPanel({
   status,
   dailyInviteCap,
   maxMembers,
+  timezone,
   waitlisted,
   returnTo,
 }: {
@@ -29,6 +32,7 @@ export function OrgActivationPanel({
   status: "pending" | "active" | "suspended";
   dailyInviteCap: number | null;
   maxMembers: number | null;
+  timezone: string;
   waitlisted: WaitlistedTutor[];
   returnTo: string;
 }) {
@@ -70,6 +74,14 @@ export function OrgActivationPanel({
               />
             </>
           )}
+          <form action={saveOrganizationTimezoneAction} className="flex flex-col gap-3">
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <OrgTimeZoneSelect id="org-timezone" defaultValue={timezone} />
+            <Button type="submit" variant="outline" data-testid="org-save-timezone">
+              Save time zone
+            </Button>
+          </form>
           <form action={saveOrganizationCapsAction} className="flex flex-col gap-3">
             <input type="hidden" name="organizationId" value={organizationId} />
             <input type="hidden" name="maxMembers" value={maxMembers ?? ""} />

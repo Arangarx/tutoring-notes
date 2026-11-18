@@ -88,6 +88,9 @@ jest.mock("@/lib/whiteboard-scope", () => ({
   assertOwnsWhiteboardSession: jest.fn(),
   // Stale-mock fix (was missing, so every action here returned ok:false at the org-edit check, pre-C2 as well).
   orgBoardEditsAllowed: jest.fn().mockResolvedValue(true),
+  // saveSessionNotesAction uses this gate. These fixtures are personal sessions
+  // (no notesForbidden, no org read-only), so the real helper would allow the save.
+  orgNotesSaveAllowed: jest.fn().mockReturnValue(true),
 }));
 
 jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
@@ -394,6 +397,12 @@ describe("(ii) saveSessionNotesAction: idempotent create/update of READY Session
 
   it("updates existing SessionNote when session already has noteId (re-save)", async () => {
     mockWbFindUnique.mockResolvedValue({ noteId: NOTE_ID });
+    // Provenance is read from the session's TutorNote, not the client fields.
+    mockGetNote.mockResolvedValue({
+      status: "done",
+      content: "{\"topics\":\"Quadratics\"}",
+      sessionId: SESSION_ID,
+    });
 
     const result = await saveSessionNotesAction(SESSION_ID, SESSION_FIELDS);
 

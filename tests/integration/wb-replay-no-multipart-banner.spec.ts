@@ -15,9 +15,10 @@ import { generateShareToken } from "@/lib/security";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { uploadReplayEvents } from "./wb-replay-harness.helpers";
 import { promoteSessionNoteReady } from "./wb-replay-note.helpers";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
 const RENDERED_BANNER = /multi-?part|multi-?segment|drift|out of sync/i;
-const LEARNER_STATE = "tests/integration/.auth/learner.json";
+const LEARNER_STATE = authStatePath("learner.json");
 
 const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
 

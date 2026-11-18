@@ -19,6 +19,7 @@ const env = {
   DIRECT_URL: orgDb,
   ADMIN_EMAIL: "org-operator@example.com",
   OPERATOR_EMAILS: "env-operator@example.com",
+  JEST_ORG_DB: "1",
 };
 
 const child = spawn(

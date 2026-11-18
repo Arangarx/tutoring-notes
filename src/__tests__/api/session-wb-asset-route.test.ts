@@ -13,6 +13,10 @@
  * DB: tutoring_notes_test via jest.global-setup.ts.
  */
 
+jest.mock("@/lib/env", () =>
+  require("@/__tests__/helpers/mock-env-with-blob-token").envModuleWithBlobToken()
+);
+
 const mockBlobGet = jest.fn();
 
 jest.mock("@vercel/blob", () => ({
@@ -43,6 +47,7 @@ jest.mock("@/lib/join-scope", () => ({
 
 import { db } from "@/lib/db";
 import { GET } from "@/app/api/sessions/[sessionId]/wb-asset/route";
+import { TEST_BLOB_RW_TOKEN } from "../helpers/mock-env-with-blob-token";
 import { uniq } from "../helpers/unique-test-token";
 
 
@@ -110,7 +115,7 @@ function makeGetRequest(sessionId: string, assetUrl: string | null) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  process.env.BLOB_READ_WRITE_TOKEN = "test_blob_rw_token";
+  process.env.BLOB_READ_WRITE_TOKEN = TEST_BLOB_RW_TOKEN;
   getAccountHolderSessionMock.mockResolvedValue(null);
   resolveAhJoinLearnerProfileIdMock.mockResolvedValue(null);
   mockBlobGet.mockResolvedValue({

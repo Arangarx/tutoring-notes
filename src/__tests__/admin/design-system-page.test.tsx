@@ -53,7 +53,7 @@ jest.mock("@/components/ThemeProvider", () => ({
 }));
 
 const mockGetServerSession = getServerSession as jest.Mock;
-const mockNotFound = notFound as jest.Mock;
+const mockNotFound = notFound as unknown as jest.Mock;
 
 const OPERATOR_EMAIL = "operator@example.com";
 

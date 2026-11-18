@@ -53,7 +53,19 @@ The Tyson Drive packet has 70 items: 65 PASS, PARTIAL on 35, 48, and 60, FAIL on
 
 ## Andrew's decisions (2026-11-17)
 
-There is one release: both hotfixes fold into `feat/org-qol`. Signup stays curated. Approval stays, and Andrew is emailed on every signup. The pilot is free now. Stripe and pricing come during the pilot. Static security checks are required before launch. An AI pen test runs before launch if it can be set up properly in quarantine. Otherwise it runs during the pilot. A human pen test waits until there is income. Legacy sessions are almost all test data, so audio-only replay for old sessions is accepted. Calculus might become a must if a college organization requires it. That item stays conditional Bucket B while a sizing pass is in progress.
+There is one release: both hotfixes fold into `feat/org-qol`. Signup stays curated. Approval stays, and Andrew is emailed on every signup. The pilot is free now. Stripe and pricing come during the pilot. Legacy sessions are almost all test data, so audio-only replay for old sessions is accepted. Calculus might become a must if a college organization requires it. That item stays conditional Bucket B while a sizing pass is in progress.
+
+**Parent data deletion.** Parents request deletion by email. Mynk performs it with the existing admin erasure tool. C8 privacy and terms honesty must say how to ask and the timeframe. Parent self-serve deletion with email confirmation is Bucket B.
+
+**Consent at session Start.** No consent popup. The parent's saved privacy settings, frozen at session Start, are the consent.
+
+**Consent switch tiers.** The critical / recommended / standard tiers in `CONSENT_SWITCHES` are ratified as-is.
+
+**OpenAI (Andrew action).** Confirm in the OpenAI dashboard that API data is not used for training and apply for zero data retention. Launch does not wait for ZDR approval.
+
+**Lawyer questions (Bucket B).** Audio recording of minors per jurisdiction, `CONSENT-LEGAL-CONSULT`, and deletion not reaching backups / calendar / mail / logs / OpenAI wait until the site pays for itself. Until then, privacy and terms state only what the app actually does.
+
+**Security launch bar.** Static checks required: Semgrep, gitleaks, npm audit high and critical cleared (including `next` and `next-auth`) plus the security jest suite. AI pen test during the pilot if quarantine setup takes more than one day. Human pen test is Bucket C (after income).
 
 ## Stale worktrees
 

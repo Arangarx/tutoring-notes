@@ -39,9 +39,10 @@ import {
   expectDisabledStartShowsLearnerLine,
   seedPendingWithoutConsent,
 } from "../helpers/refused-start";
+const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
-const PARENT_STATE = "tests/integration/.auth/parent.json";
-const LEARNER_STATE = "tests/integration/.auth/learner.json";
+const PARENT_STATE = authStatePath("parent.json");
+const LEARNER_STATE = authStatePath("learner.json");
 
 /**
  * The only reason codes a family may be sent (org-ux-pass-plan § 3, W4 family audience).
@@ -83,6 +84,37 @@ function assertFamilyReasonAllowList(
  * button is the main control and is not repeated in the upcoming list. The page-level
  * locator is unique, so a second copy would fail this click with a strict-mode error.
  */
+/**
+ * The document HTML for the family dashboard, including the embedded RSC payload.
+ * `response.text()` after render can throw "Request content was evicted from inspector cache".
+ * `route.fetch` reads the body as it arrives. A same-URL document GET is the fallback
+ * and is still the server's HTML for this page.
+ */
+async function readDashboardDocument(page: import("@playwright/test").Page): Promise<string> {
+  let navigationText = "";
+  await page.route("**/account/dashboard", async (route) => {
+    if (route.request().resourceType() !== "document") {
+      await route.continue();
+      return;
+    }
+    const upstream = await route.fetch();
+    navigationText = await upstream.text();
+    await route.fulfill({ response: upstream, body: navigationText });
+  });
+  try {
+    await page.goto("/account/dashboard", { waitUntil: "domcontentloaded" });
+  } finally {
+    await page.unroute("**/account/dashboard");
+  }
+  if (navigationText.length < 1_000) {
+    const fresh = await page.request.get("/account/dashboard", {
+      headers: { Accept: "text/html" },
+    });
+    navigationText = await fresh.text();
+  }
+  return navigationText;
+}
+
 async function clickOpenScheduledRoom(
   tutorPage: import("@playwright/test").Page,
   scheduledSessionId: string
@@ -224,7 +256,7 @@ test.describe("org QoL schedule bridge", () => {
       });
 
       const tutorContext = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 1200 },
         ...WB_LIVE_CONTEXT,
       });
@@ -302,7 +334,7 @@ test.describe("org QoL schedule bridge", () => {
       });
 
       const tutorContext = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 1200 },
         ...WB_LIVE_CONTEXT,
       });
@@ -385,7 +417,7 @@ test.describe("org QoL schedule bridge", () => {
         ...WB_LIVE_CONTEXT,
       });
       const tutorContext = await browser.newContext({
-        storageState: "tests/integration/.auth/tutor.json",
+        storageState: authStatePath("tutor.json"),
         viewport: { width: 1280, height: 1200 },
         ...WB_LIVE_CONTEXT,
       });
@@ -468,7 +500,7 @@ test.describe("org QoL schedule bridge", () => {
   });
 
   test.describe("Online sessions off: the tutor can still open the room in person", () => {
-    test.use({ storageState: "tests/integration/.auth/tutor.json" });
+    test.use({ storageState: authStatePath("tutor.json") });
     test(
       "online sessions off: the tutor's Open room stays available for in person, with the reason under it",
       { tag: [TAG.WB_CHROME] },
@@ -587,9 +619,7 @@ test.describe("org QoL schedule bridge", () => {
             instructorRemoved: scenario.instructorRemoved,
           });
 
-          const response = await page.goto("/account/dashboard", {
-            waitUntil: "domcontentloaded",
-          });
+          const navigationText = await readDashboardDocument(page);
           const row = page.getByTestId(`upcoming-session-row-${fx.scheduledSessionId}`);
           const joinBtn = row.getByTestId(`join-scheduled-session-${fx.scheduledSessionId}`);
           await expect(joinBtn).toBeDisabled({ timeout: 15_000 });
@@ -599,7 +629,6 @@ test.describe("org QoL schedule bridge", () => {
 
           // Everything the server sent: the navigation HTML (it embeds the RSC payload),
           // the rendered DOM, and a direct RSC fetch of the same page.
-          const navigationText = (await response?.text()) ?? "";
           const domHtml = await page.content();
           const rsc = await page.request.get("/account/dashboard", { headers: { RSC: "1" } });
           const rscText = await rsc.text();
@@ -881,7 +910,7 @@ test.describe(
   "refused waiting-room Start names the learner's situation",
   { tag: [TAG.WB_PRESENCE, TAG.WB_CHROME] },
   () => {
-    test.use({ storageState: "tests/integration/.auth/tutor.json" });
+    test.use({ storageState: authStatePath("tutor.json") });
 
     for (const testCase of REFUSED_START_CASES) {
       test(`${testCase.situation}: the refusal reads the learner's own line`, async ({ page }) => {

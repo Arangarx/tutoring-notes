@@ -248,7 +248,9 @@ test.describe("Admin student detail — Start / claim findability", () => {
 
       const startBtn = page.getByTestId("start-whiteboard-session-btn");
       await expect(startBtn).toBeVisible();
+      await expect(startBtn).toBeEnabled();
       await expect(startBtn).toHaveText(/Start session/i);
+      await expect(page.getByTestId("start-wb-consent-callout")).toHaveCount(0);
     }
   );
 });
