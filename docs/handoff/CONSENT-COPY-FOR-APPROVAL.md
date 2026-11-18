@@ -1,6 +1,7 @@
 # Consent copy for approval
 
 **Part 1 approved by Andrew on 2026-11-17** ("as long as it is fair and accurate").
+**Part 2 (items 28-35) delegated by Andrew on 2026-11-18:** "Just make sure it's honest and accurate and not awkwardly worded." Agents may ship Part 2 wording when an independent reviewer confirms it is true against the code and reads naturally. Andrew does not need to review these settings screens before launch.
 
 One change: item 36's "Most families keep this on" becomes "Mynk recommends keeping this on for the best experience."
 
