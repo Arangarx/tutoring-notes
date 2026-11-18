@@ -118,6 +118,8 @@ export function useReplayTimelineController(
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelWebmFixRef = useRef<(() => void) | null>(null);
+  /** Drops the seeked/durationchange listeners of a start that is still waiting to play. */
+  const cancelPendingStartRef = useRef<(() => void) | null>(null);
   const activeSegmentIndexRef = useRef(0);
   const isAtEndRef = useRef(false);
   const globalMsRef = useRef(0);
@@ -403,6 +405,10 @@ export function useReplayTimelineController(
     (el: HTMLAudioElement, targetSec: number, reason: string) => {
       const toleranceSec = 0.05;
 
+      // One waiting start at a time: a newer start replaces the older one, so
+      // a stale listener cannot re-fire later and force a seek or a second play.
+      cancelPendingStartRef.current?.();
+
       const needsCorrection = () => {
         const ct = el.currentTime;
         if (!Number.isFinite(ct)) return true;
@@ -455,14 +461,19 @@ export function useReplayTimelineController(
 
       if (!mayHavePendingWebmScan && attempt()) return;
 
-      const onSettled = () => {
-        if (attempt()) {
-          el.removeEventListener("seeked", onSettled);
-          el.removeEventListener("durationchange", onSettled);
+      const dropListeners = () => {
+        el.removeEventListener("seeked", onSettled);
+        el.removeEventListener("durationchange", onSettled);
+        if (cancelPendingStartRef.current === dropListeners) {
+          cancelPendingStartRef.current = null;
         }
+      };
+      const onSettled = () => {
+        if (attempt()) dropListeners();
       };
       el.addEventListener("seeked", onSettled);
       el.addEventListener("durationchange", onSettled);
+      cancelPendingStartRef.current = dropListeners;
     },
     [startPlay]
   );
@@ -482,6 +493,9 @@ export function useReplayTimelineController(
 
       const seekSec = Math.max(0, localMs / 1000);
       const applySeek = () => {
+        // A seek replaces any start still waiting to play (a paused scrub
+        // must not be undone by it). A seek that plays registers its own.
+        cancelPendingStartRef.current?.();
         // Cancel any pending WebM duration-fix reset so a durationchange
         // firing after this seek cannot clobber the intended position.
         cancelWebmFixRef.current?.();
@@ -664,6 +678,14 @@ export function useReplayTimelineController(
     el.muted = muted;
   }, [volume, muted, hasAudio]);
 
+  // Leaving the replay drops a start that is still waiting to play.
+  useEffect(
+    () => () => {
+      cancelPendingStartRef.current?.();
+    },
+    []
+  );
+
   const handleVolumeChange = useCallback((v: number) => {
     setVolume(Math.max(0, Math.min(1, v)));
   }, []);
@@ -673,6 +695,7 @@ export function useReplayTimelineController(
   }, []);
 
   const pause = useCallback(() => {
+    cancelPendingStartRef.current?.();
     if (hasAudio) {
       segmentSwappingRef.current = false;
       pendingPlayRef.current = false;

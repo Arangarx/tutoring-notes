@@ -280,6 +280,7 @@ export default defineConfig({
         "**/integration/wb-replay-active-board-tab.spec.ts",
         "**/integration/wb-replay-scrub-seek.spec.ts",
         "**/integration/wb-replay-start-position.spec.ts",
+        "**/integration/wb-replay-start-latency.spec.ts",
         "**/integration/view-whiteboard-new-replay.spec.ts",
         "**/integration/wb-share-replay-viewport-phone.spec.ts",
         "**/integration/wb-board-tab-overflow.spec.ts",

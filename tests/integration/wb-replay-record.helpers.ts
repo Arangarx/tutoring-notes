@@ -5,45 +5,15 @@
  */
 
 import { expect, type Page } from "@playwright/test";
-import { waitForWbE2eBridge } from "./whiteboard-live-sync.helpers";
-
-const VAD_METER_HIGH = 0.5;
-const VAD_METER_LOW = 0;
-
-/** Shrink the VAD segmenter so a short test produces several tutor:mic segments. Call before page.goto. */
-export async function injectVadOverrides(page: Page) {
-  await page.addInitScript(() => {
-    const w = window as unknown as {
-      __VAD_MAX_SEGMENT_SECONDS_OVERRIDE?: number;
-      __VAD_MIN_SEGMENT_SECONDS_OVERRIDE?: number;
-      __VAD_SILENCE_HOLD_MS_OVERRIDE?: number;
-      __VAD_SILENCE_RMS_THRESHOLD_OVERRIDE?: number;
-      __VAD_TEST_METER_LEVEL__?: number;
-    };
-    w.__VAD_MIN_SEGMENT_SECONDS_OVERRIDE = 1;
-    w.__VAD_SILENCE_HOLD_MS_OVERRIDE = 800;
-    w.__VAD_SILENCE_RMS_THRESHOLD_OVERRIDE = 0.15;
-    w.__VAD_MAX_SEGMENT_SECONDS_OVERRIDE = 120;
-    w.__VAD_TEST_METER_LEVEL__ = 0.5;
-  });
-}
-
-async function setVadTestMeterLevel(page: Page, level: number) {
-  await page.evaluate((lvl) => {
-    (window as unknown as { __VAD_TEST_METER_LEVEL__?: number }).__VAD_TEST_METER_LEVEL__ = lvl;
-  }, level);
-}
+import { withPrisma } from "../helpers/consent-db-oracle";
+import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
+import { seedWbLiveSyncSession, waitForWbE2eBridge } from "./whiteboard-live-sync.helpers";
+import { uploadHarnessBlob, uploadReplayEvents } from "./wb-replay-harness.helpers";
 
 /** Two silence cuts, so the recording holds three tutor:mic segments. */
-export async function driveTwoVadSilenceCuts(page: Page) {
-  await setVadTestMeterLevel(page, VAD_METER_HIGH);
-  await page.waitForTimeout(1_200);
-  await setVadTestMeterLevel(page, VAD_METER_LOW);
-  await page.waitForTimeout(1_000);
-  await setVadTestMeterLevel(page, VAD_METER_HIGH);
-  await page.waitForTimeout(1_200);
-  await setVadTestMeterLevel(page, VAD_METER_LOW);
-  await page.waitForTimeout(1_000);
+async function driveTwoVadSilenceCuts(page: Page) {
+  await driveVadSilenceCut(page);
+  await driveVadSilenceCut(page);
 }
 
 /**
@@ -108,4 +78,73 @@ export async function recordEndEnterReplay(
   await expect(page.getByTestId("wb-review-enter-replay")).toBeVisible({
     timeout: 60_000,
   });
+}
+
+/**
+ * Seed an ENDED session with one tutor:mic recording whose bytes the test supplies,
+ * stored as a real harness blob so the app's audio proxy serves it (Range and all).
+ * `payload: "concat"` also points the session's concat master at the same blob.
+ * Returns the session; open its workspace URL to land in the in-shell review.
+ */
+export async function seedEndedSessionWithAudioClip(
+  page: Page,
+  opts: {
+    clip: Buffer;
+    contentType: string;
+    fileExt: string;
+    /** Real length in seconds; the DB columns are whole seconds, like production. */
+    clipSec: number;
+    payload: "segments" | "concat";
+  }
+) {
+  const session = await seedWbLiveSyncSession();
+  const clipUrl = await uploadHarnessBlob({
+    request: page.request,
+    pathname: `audio/${session.adminUserId}/${session.studentId}/pw-replay-clip-${Date.now()}.${opts.fileExt}`,
+    body: opts.clip,
+    contentType: opts.contentType,
+    clientPayload: { kind: "audio", studentId: session.studentId },
+  });
+  await withPrisma(async (p) => {
+    await p.whiteboardSession.update({
+      where: { id: session.whiteboardSessionId },
+      data: {
+        endedAt: new Date("2026-10-11T18:30:00.000Z"),
+        concatBlobUrl: opts.payload === "concat" ? clipUrl : null,
+        concatDurationSeconds: opts.payload === "concat" ? Math.round(opts.clipSec) : null,
+        durationSeconds: Math.max(8, Math.ceil(opts.clipSec)),
+      },
+    });
+    await p.sessionRecording.create({
+      data: {
+        adminUserId: session.adminUserId,
+        studentId: session.studentId,
+        whiteboardSessionId: session.whiteboardSessionId,
+        blobUrl: clipUrl,
+        mimeType: opts.contentType,
+        sizeBytes: opts.clip.length,
+        durationSeconds: Math.round(opts.clipSec),
+        orderIndex: 0,
+        streamId: "tutor:mic",
+      },
+    });
+  });
+  await uploadReplayEvents({
+    request: page.request,
+    adminUserId: session.adminUserId,
+    studentId: session.studentId,
+    whiteboardSessionId: session.whiteboardSessionId,
+  });
+  return session;
+}
+
+/** Total seconds of recorded audio for a session, straight from the DB (independent of the replay UI). */
+export async function recordedSecondsInDb(whiteboardSessionId: string): Promise<number> {
+  const agg = await withPrisma((p) =>
+    p.sessionRecording.aggregate({
+      where: { whiteboardSessionId },
+      _sum: { durationSeconds: true },
+    })
+  );
+  return agg._sum.durationSeconds ?? 0;
 }
