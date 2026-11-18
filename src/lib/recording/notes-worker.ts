@@ -52,6 +52,13 @@ import {
 } from "@/lib/recording/transcript-types";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 import { REDUCE_MODEL } from "@/lib/ai-models";
+import {
+  buildReducePrompt,
+  extractionHasTeaching,
+  normalizeStructuredNote,
+  parseReduceResponse,
+  reduceCompletionParams,
+} from "@/lib/recording/notes-prompts";
 import { holdPoint } from "@/lib/test-seams";
 import { gateNotesDraft } from "@/lib/recording/consent-gates";
 import { TUTOR_MIC_STREAM_ID, parseLane } from "@/lib/recording/session-capabilities";
@@ -75,30 +82,7 @@ function laneSpeakerLabel(streamId: string): string {
 const NOTES_COMPLETION_TIMEOUT_MS = 5 * 60 * 1000;
 
 // REDUCE_PROMPT_VERSION is imported from notes-reduce-config (lightweight, no heavy deps).
-
-/**
- * Reduce phase system prompt — emits JSON matching SessionNote field shape.
- *
- * Field semantics mirror src/lib/ai.ts generateSessionNote (v7):
- *  - topics: subjects covered, comma list, past tense
- *  - assessment: where the student stands (strengths, struggles, mastery)
- *  - nextSteps: what to do next, including any homework (Plan — covers both plan + homework)
- *  - links: URLs mentioned, one per line, "" if none
- *
- * homework is intentionally omitted from the AI output and will be stored as ""
- * on the SessionNote row (per REQ-S3-4: homework folds into nextSteps/Plan).
- */
-const REDUCE_SYSTEM_PROMPT = `You are an expert tutoring assistant. Given structured session data (per-segment extractions of topics, student questions, corrections, and follow-ups), synthesize a concise session note as JSON.
-
-STRICT RULES:
-(1) Be terse — short phrases or comma lists, not full sentences. A parent should scan in under 10 seconds.
-(2) Only include information present in the source data — do not fabricate or invent observations the session did not contain.
-(3) assessment: where the student stands on what was covered — strengths, struggles, mastery level. Include both EXPLICIT comments in corrections/questions AND clear in-session reactions: "almost!" / "try again" / "not quite" → wrestling with that topic; "yes!" / "got it" / "perfect" / "right on" → has it. Cluster by topic when possible. Do NOT fabricate observations the session never contained or implied. Empty string "" only if there is NEITHER explicit commentary NOR reaction signal on understanding.
-(4) nextSteps covers all DISTINCT follow-ups and any assigned homework — the complete "Plan" including homework. Merge semantically-duplicate follow-ups from different chunks into ONE phrase (e.g. the same future action stated twice → include once). One item per distinct future action; keep completeness for distinct actions but do not repeat the same plan in different words.
-(5) If a field has no information, return empty string "".
-
-Respond with JSON ONLY — no markdown fences, no commentary:
-{"topics":"...","assessment":"...","nextSteps":"...","links":"..."}`;
+// Reduce and map prompt text lives in notes-prompts.ts.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -128,88 +112,12 @@ function spokenChunkText(transcript: string | null | undefined): string | null {
   return text.length > 0 ? text : null;
 }
 
-/** True when the reduce has tutoring content. Silence must not call the model. */
+/** True when the reduce has source text. Silence must not call the model. */
 function hasReduceSource(
   extractions: readonly unknown[],
   rawTranscripts: readonly unknown[]
 ): boolean {
   return extractions.length > 0 || rawTranscripts.length > 0;
-}
-
-function buildReducePrompt(
-  extractions: Array<ChunkExtractionPayload & { speakerLabel?: string | null }>,
-  rawTranscripts?: Array<{ text: string; speakerLabel?: string | null }>
-): string {
-  if (extractions.length > 0) {
-    const chunks = extractions
-      .map((e, i) => {
-        const speakerLine =
-          e.speakerLabel && e.speakerLabel.length > 0
-            ? `Speaker: ${e.speakerLabel}\n`
-            : "";
-        return `### Chunk ${i + 1}
-${speakerLine}Topics: ${e.topics.join(", ") || "none"}
-Student Questions: ${e.studentQuestions.join("; ") || "none"}
-Corrections: ${e.corrections.join("; ") || "none"}
-Follow-ups: ${e.followUps.join("; ") || "none"}`;
-      })
-      .join("\n\n");
-    return `Synthesize a structured session note from these per-segment extractions (ordered by recording time; speaker labels identify who spoke). Include only what the extractions support — do not fabricate. Map in-session reactions in corrections to assessment meaning when synthesizing.
-
-${chunks}`;
-  }
-
-  // Fallback: use raw transcripts
-  if (rawTranscripts && rawTranscripts.length > 0) {
-    const joined = rawTranscripts
-      .map((t, i) => {
-        const speakerLine =
-          t.speakerLabel && t.speakerLabel.length > 0
-            ? `[${t.speakerLabel}] `
-            : "";
-        const body =
-          rawTranscripts.length > 1
-            ? `[Segment ${i + 1}]\n${speakerLine}${t.text}`
-            : `${speakerLine}${t.text}`;
-        return body;
-      })
-      .join("\n\n");
-    return `Synthesize a structured session note from this tutoring session transcript (ordered by recording time; speaker prefixes identify who spoke). Include only what the transcript supports — do not fabricate. Map tutor reactions ("almost!", "yes!", etc.) to assessment meaning when present.
-
-${joined}`;
-  }
-
-  return "Synthesize a structured session note. No audio transcript was available.";
-}
-
-/**
- * Parse the JSON reduce response, tolerating minor formatting issues.
- * Returns null on parse failure.
- */
-function parseReduceResponse(text: string): StructuredNoteFields | null {
-  const trimmed = text.trim();
-  // Strip markdown code fences if present
-  const jsonText = trimmed
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-
-  try {
-    const parsed = JSON.parse(jsonText) as Record<string, unknown>;
-    return {
-      topics: typeof parsed.topics === "string" ? parsed.topics : "",
-      assessment: typeof parsed.assessment === "string" ? parsed.assessment : "",
-      nextSteps:
-        typeof parsed.nextSteps === "string"
-          ? parsed.nextSteps
-          : typeof parsed.plan === "string"
-            ? parsed.plan
-            : "",
-      links: typeof parsed.links === "string" ? parsed.links : "",
-    };
-  } catch {
-    return null;
-  }
 }
 
 
@@ -300,11 +208,13 @@ export async function processLiveReduceJob(
       speakerLabel: speakerLabelForChunk(c.id),
     }));
 
+  const promptExtractions = orderedExtractions.filter(extractionHasTeaching);
+
   console.log(
-    `[tnt] wbsid=${sessionId} action=live_reduce_inputs extractions=${orderedExtractions.length} rawTranscripts=${rawTranscripts.length} watermarkWas=${watermark} nowReducing=${doneCount}`
+    `[tnt] wbsid=${sessionId} action=live_reduce_inputs extractions=${orderedExtractions.length} teaching=${promptExtractions.length} rawTranscripts=${rawTranscripts.length} watermarkWas=${watermark} nowReducing=${doneCount}`
   );
 
-  if (!hasReduceSource(orderedExtractions, rawTranscripts)) {
+  if (!hasReduceSource(promptExtractions, rawTranscripts)) {
     await updateTutorNote(sessionId, {
       content: JSON.stringify(EMPTY_STRUCTURED_NOTE),
       lastReducedChunkCount: doneCount,
@@ -326,19 +236,13 @@ export async function processLiveReduceJob(
   try {
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     const prompt = buildReducePrompt(
-      orderedExtractions,
+      promptExtractions,
       rawTranscripts.length > 0 ? rawTranscripts : undefined
     );
 
     const response = await client.chat.completions.create({
       model: REDUCE_MODEL,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: REDUCE_SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: 800,
-      temperature: 0.3,
+      ...reduceCompletionParams(prompt),
     });
 
     const rawText = response.choices[0]?.message?.content?.trim() ?? "";
@@ -350,7 +254,10 @@ export async function processLiveReduceJob(
         : REDUCE_MODEL;
     const latencyMs = Date.now() - reduceStartMs;
 
-    const structuredFields = parseReduceResponse(rawText);
+    const parsedFields = parseReduceResponse(rawText);
+    const structuredFields = parsedFields
+      ? normalizeStructuredNote(parsedFields)
+      : null;
     if (!structuredFields) {
       console.warn(
         `[tnt] wbsid=${sessionId} action=live_reduce_parse_failed rawText=${rawText.slice(0, 200)}`
@@ -599,11 +506,13 @@ export async function processNotesReduceJob(
       speakerLabel: speakerLabelForChunk(c.id),
     }));
 
+  const promptExtractions = orderedExtractions.filter(extractionHasTeaching);
+
   console.log(
-    `[tnt] wbsid=${sessionId} action=reduce_inputs extractions=${orderedExtractions.length} rawTranscripts=${rawTranscripts.length} isPartial=${isPartial}`
+    `[tnt] wbsid=${sessionId} action=reduce_inputs extractions=${orderedExtractions.length} teaching=${promptExtractions.length} rawTranscripts=${rawTranscripts.length} isPartial=${isPartial}`
   );
 
-  if (!hasReduceSource(orderedExtractions, rawTranscripts)) {
+  if (!hasReduceSource(promptExtractions, rawTranscripts)) {
     const finalStatus = isPartial ? "partial" : "done";
     await updateTutorNote(sessionId, {
       status: finalStatus,
@@ -636,19 +545,13 @@ export async function processNotesReduceJob(
   try {
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     const prompt = buildReducePrompt(
-      orderedExtractions,
+      promptExtractions,
       rawTranscripts.length > 0 ? rawTranscripts : undefined
     );
 
     const response = await client.chat.completions.create({
       model: REDUCE_MODEL,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: REDUCE_SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: 800,
-      temperature: 0.3,
+      ...reduceCompletionParams(prompt),
     });
 
     const rawText = response.choices[0]?.message?.content?.trim() ?? "";
@@ -660,8 +563,11 @@ export async function processNotesReduceJob(
         : REDUCE_MODEL;
     const latencyMs = Date.now() - reduceStartMs;
 
-    // Parse structured JSON response
-    const structuredFields = parseReduceResponse(rawText);
+    // Parse structured JSON response. All-empty (or sentinel) fields are the abstain note.
+    const parsedFields = parseReduceResponse(rawText);
+    const structuredFields = parsedFields
+      ? normalizeStructuredNote(parsedFields)
+      : null;
     if (!structuredFields) {
       console.warn(
         `[tnt] wbsid=${sessionId} action=reduce_parse_failed rawText=${rawText.slice(0, 200)}`

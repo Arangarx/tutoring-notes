@@ -397,6 +397,128 @@ describe("processNotesReduceJob — successful reduce", () => {
     expect(userMsg).not.toContain("[Segment 2]");
   });
 
+  it("a mocked all-empty reduce abstains: done, empty content, speech chunk still readable", async () => {
+    const chunk = makeChunk({
+      id: "chunk-1",
+      transcript: "Can we move Thursday from 3 to 4:30? I'll send the calendar invite.",
+    });
+    mockGetChunks.mockResolvedValue([chunk]);
+    mockGetExtractions.mockResolvedValue([]);
+    mockOpenAISuccess(
+      JSON.stringify({ topics: "", assessment: "", nextSteps: "", links: "" })
+    );
+
+    const result = await processNotesReduceJob(SESSION_ID);
+
+    expect(result).toMatchObject({ outcome: "done", isPartial: false });
+    expect(mockChatCreate).toHaveBeenCalledTimes(1);
+    const systemMsg = mockChatCreate.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "system"
+    ).content as string;
+    expect(systemMsg).toContain("ABSTAIN WHEN NOTHING WAS TAUGHT");
+    const doneCall = mockUpdateNote.mock.calls.find(
+      (c: unknown[]) => (c[1] as { status?: string }).status === "done"
+    );
+    expect(parseNoteContent((doneCall?.[1] as { content: string }).content)).toEqual({
+      topics: "",
+      assessment: "",
+      nextSteps: "",
+      links: "",
+    });
+    const userMsg = mockChatCreate.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "user"
+    ).content as string;
+    expect(userMsg).toContain("Can we move Thursday from 3 to 4:30?");
+  });
+
+  it("collapses sentinel-only model fields to the empty note", async () => {
+    mockGetChunks.mockResolvedValue([
+      makeChunk({ transcript: "Can you hear me? Your mic was on the wrong device." }),
+    ]);
+    mockGetExtractions.mockResolvedValue([]);
+    mockOpenAISuccess(
+      JSON.stringify({
+        topics: "N/A",
+        assessment: "none",
+        nextSteps: "null",
+        links: "",
+      })
+    );
+
+    await processNotesReduceJob(SESSION_ID);
+
+    const doneCall = mockUpdateNote.mock.calls.find(
+      (c: unknown[]) => (c[1] as { status?: string }).status === "done"
+    );
+    expect(parseNoteContent((doneCall?.[1] as { content: string }).content)).toEqual({
+      topics: "",
+      assessment: "",
+      nextSteps: "",
+      links: "",
+    });
+  });
+
+  it("a mocked model that returns teaching content stores that note", async () => {
+    mockGetChunks.mockResolvedValue([
+      makeChunk({ transcript: "One half plus one fourth is three fourths." }),
+    ]);
+    mockGetExtractions.mockResolvedValue([]);
+    mockOpenAISuccess(
+      JSON.stringify({
+        topics: "adding fractions",
+        assessment: "Got the common denominator",
+        nextSteps: "Practice set",
+        links: "",
+      })
+    );
+
+    const result = await processNotesReduceJob(SESSION_ID);
+
+    expect(result).toMatchObject({ outcome: "done", isPartial: false });
+    const doneCall = mockUpdateNote.mock.calls.find(
+      (c: unknown[]) => (c[1] as { status?: string }).status === "done"
+    );
+    expect(parseNoteContent((doneCall?.[1] as { content: string }).content)).toEqual({
+      topics: "adding fractions",
+      assessment: "Got the common denominator",
+      nextSteps: "Practice set",
+      links: "",
+    });
+  });
+
+  it("uses the transcript when map extractions are empty so abstain sees the speech", async () => {
+    mockGetChunks.mockResolvedValue([
+      makeChunk({
+        id: "chunk-1",
+        transcript: "Can we move Thursday from 3 to 4:30?",
+      }),
+    ]);
+    mockGetExtractions.mockResolvedValue([
+      {
+        id: "ext-empty",
+        sessionId: SESSION_ID,
+        chunkId: "chunk-1",
+        topics: "[]",
+        studentQuestions: "[]",
+        corrections: "[]",
+        followUps: "[]",
+        extractedAt: NOW,
+      },
+    ]);
+    mockOpenAISuccess(
+      JSON.stringify({ topics: "", assessment: "", nextSteps: "", links: "" })
+    );
+
+    await processNotesReduceJob(SESSION_ID);
+
+    const userMsg = mockChatCreate.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "user"
+    ).content as string;
+    expect(userMsg).toContain("Can we move Thursday from 3 to 4:30?");
+    expect(userMsg).toContain("ABSTAIN WHEN NOTHING WAS TAUGHT");
+    expect(userMsg).not.toContain("Topics: none");
+  });
+
   it("a fully silent session still produces an empty done note", async () => {
     mockGetChunks.mockResolvedValue([
       makeChunk({ id: "c1", transcript: "", recordingTimeOffsetMs: 0 }),
@@ -440,7 +562,7 @@ describe("processNotesReduceJob — failure handling", () => {
 
 describe("processNotesReduceJob — REDUCE prompt version", () => {
   it("uses the current dated REDUCE_PROMPT_VERSION", () => {
-    expect(REDUCE_PROMPT_VERSION).toBe("2026-07-09-v3-dedup-assessment");
+    expect(REDUCE_PROMPT_VERSION).toBe("2026-11-17-v4-abstain");
   });
 });
 

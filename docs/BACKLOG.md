@@ -1320,6 +1320,8 @@ Perceived perf.
 **[P1][NOTES] Map/reduce accuracy + abstain-on-low-content + eval harness**  
 Remainder: formal eval harness and abstain bar. Prompts/models exist.
 
+**[P2][NOTES] Reduce raw-transcript fallback has no input cap; ~27k tokens per 2h fine for gpt-4o-mini, cap later.**
+
 **[P1][NOTES] WS-K — see §3** (fold the running note; End only adds the tail).
 
 **[P2][NOTES] SMOKE-NOTES-2 — live/progressive notes during session**  

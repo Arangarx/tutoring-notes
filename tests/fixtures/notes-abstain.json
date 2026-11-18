@@ -1,0 +1,38 @@
+{
+  "fixtures": [
+    {
+      "id": "small-talk",
+      "kind": "non-teaching",
+      "transcript": "Tutor: Hey, how was your weekend?\nStudent: Pretty good. We went to the lake.\nTutor: Nice. Did you swim?\nStudent: Yeah, the water was freezing.\nTutor: Ha. How's your little brother doing?\nStudent: Annoying, but fine. My mom is getting me a snack.\nTutor: No rush. Tell me when you're ready to hop on."
+    },
+    {
+      "id": "scheduling",
+      "kind": "non-teaching",
+      "transcript": "Tutor: Can we move Thursday from 3 to 4:30?\nStudent: I have soccer at 4. What about Friday at 5?\nTutor: Friday at 5 works. I'll send your mom the new calendar invite.\nStudent: Should I still come next Tuesday?\nTutor: Yes, Tuesday stays at the usual time. If you'll be late, text me.\nTutor: Also the invoice for last month went out yesterday."
+    },
+    {
+      "id": "tech-setup",
+      "kind": "non-teaching",
+      "transcript": "Tutor: Can you hear me okay?\nStudent: It's echoey. Hang on.\nTutor: Mute and unmute. Is your camera on?\nStudent: Now it is. I can see you.\nTutor: Your mic was on the wrong device. Click the arrow next to the mic and pick the headset.\nStudent: Okay, I think that's better.\nTutor: Loud and clear. Tell me if the screen share freezes."
+    },
+    {
+      "id": "math-fractions",
+      "kind": "teaching",
+      "subjectPattern": "fraction",
+      "transcript": "Tutor: Today we're adding fractions. One half plus one fourth. What do you need first?\nStudent: A common denominator?\nTutor: Yes. Two fourths plus one fourth is three fourths.\nStudent: So one half plus one fourth is three fourths.\nTutor: Exactly. That's the answer."
+    },
+    {
+      "id": "reading-whales",
+      "kind": "teaching",
+      "subjectPattern": "whale|main idea",
+      "transcript": "Tutor: Let's find the main idea of this paragraph about whales. It says blue whales are the largest animals on Earth and they eat krill.\nStudent: The main idea is that blue whales are the biggest animals.\nTutor: Yes. The detail about krill supports that they're huge, but the main idea is their size."
+    },
+    {
+      "id": "mixed-homework-and-scheduling",
+      "kind": "teaching",
+      "subjectPattern": "fraction",
+      "pendingFirstRun": true,
+      "transcript": "Tutor: For homework, finish adding fractions: one half plus one fourth.\nStudent: That's three fourths.\nTutor: Yes. Also, can we move Thursday to 4:30? I'll send your mom the calendar invite.\nStudent: Friday at 5 is better.\nTutor: Friday at 5 works. Text me if you'll be late."
+    }
+  ]
+}

@@ -41,6 +41,7 @@ import { gateNotesDraft, gateTranscription } from "@/lib/recording/consent-gates
 import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
 import type { TutorNote } from "@prisma/client";
 import { TRANSCRIBE_SWEEP_MAX_ATTEMPTS } from "@/lib/recording/transcribe-sweep-config";
+import { transcriptsHadSpeech } from "@/lib/note-content";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { replayResourceIsDenied, resolveReplayAccess } from "@/lib/share/replay-access";
@@ -186,15 +187,35 @@ export type TutorNoteStatusResult =
       isPartial: boolean;
       error: string | null;
       generatedAt: string | null;
+      /** A stored transcript chunk has non-empty speech. Empty note + this is abstain, not silence. */
+      hadSpeech?: boolean;
     };
 
-/** The one TutorNote → status mapping. Caller has asserted ownership. Never creates a row. */
-async function readTutorNoteStatus(whiteboardSessionId: string): Promise<TutorNoteStatusResult> {
+/** True when any stored chunk has a non-empty transcript. One indexed lookup, not the full rows. */
+async function sessionHadSpeech(whiteboardSessionId: string): Promise<boolean> {
+  const row = await db.transcriptChunk.findFirst({
+    where: { sessionId: whiteboardSessionId, transcript: { not: "" } },
+    select: { id: true },
+  });
+  return row != null;
+}
+
+/**
+ * The one TutorNote → status mapping. Caller has asserted ownership. Never creates a row.
+ * `knownHadSpeech` is set when the caller already loaded transcript text (review payload),
+ * so the poll path is the only one that runs the existence check.
+ */
+async function readTutorNoteStatus(
+  whiteboardSessionId: string,
+  knownHadSpeech?: boolean
+): Promise<TutorNoteStatusResult> {
   const note = await getTutorNoteBySessionId(whiteboardSessionId);
   if (!note) {
     const draft = await gateNotesDraft(whiteboardSessionId, "status");
     return draft.allow ? { found: false } : { found: false, notesOff: true };
   }
+  const hadSpeech =
+    knownHadSpeech ?? (await sessionHadSpeech(whiteboardSessionId));
   return {
     found: true,
     status: note.status,
@@ -202,6 +223,7 @@ async function readTutorNoteStatus(whiteboardSessionId: string): Promise<TutorNo
     isPartial: note.isPartial,
     error: note.error ?? null,
     generatedAt: note.generatedAt?.toISOString() ?? null,
+    hadSpeech,
   };
 }
 
@@ -641,8 +663,7 @@ export async function loadSessionReviewPayload(
     throw new Error(`Session ${whiteboardSessionId} not found`);
   }
 
-  const [initialNote, replayAccess, transcriptChunks] = await Promise.all([
-    readTutorNoteStatus(whiteboardSessionId),
+  const [replayAccess, transcriptChunks] = await Promise.all([
     resolveReplayAccess([whiteboardSessionId], { principal: "tutor" }),
     db.transcriptChunk.findMany({
       where: { sessionId: whiteboardSessionId, transcript: { not: "" } },
@@ -650,6 +671,10 @@ export async function loadSessionReviewPayload(
       select: { transcript: true },
     }),
   ]);
+  const initialNote = await readTutorNoteStatus(
+    whiteboardSessionId,
+    transcriptsHadSpeech(transcriptChunks.map((chunk) => chunk.transcript))
+  );
 
   console.log(
     `[nsi] wbsid=${whiteboardSessionId} action=load_review_payload hasAudio=${detail.audioRecordings.length > 0} noteFound=${initialNote.found}`

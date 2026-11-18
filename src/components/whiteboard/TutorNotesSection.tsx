@@ -97,11 +97,16 @@ const POLL_INTERVAL_MS = 3_000;
 
 /**
  * A finished note whose stored content is the canonical empty structured note.
- * That is what the worker writes when every chunk was silence. A blank
- * in-progress form is pending or generating, so it does not match.
+ * Silence (no stored speech) and abstain (speech, but no lesson) share that
+ * content. hadSpeech on the status result, read from transcript rows, picks
+ * the copy. A blank in-progress form is pending or generating, so it does not match.
  */
 const NO_SPEECH_NOTE_COPY =
   "No speech was detected in this recording, so no notes were drafted. You can write notes yourself.";
+
+/** Speech was stored, but the reduce abstained because nothing was taught. */
+const NO_LESSON_NOTE_COPY =
+  "No lesson content was found in this recording, so no notes were drafted. You can write notes yourself.";
 
 /** Client-side skeleton timeout in ms — matches ratified Q5 (5 min). */
 const SKELETON_TIMEOUT_MS = 5 * 60 * 1_000;
@@ -228,6 +233,7 @@ export default function TutorNotesSection({
     ? "Writing notes…"
     : "Preparing your notes...";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
+  const hadSpeech = note.found && note.hadSpeech === true;
   const silentEmptyDone =
     note.found &&
     note.status === "done" &&
@@ -504,8 +510,10 @@ export default function TutorNotesSection({
           }
         >
           {silentEmptyDone ? (
-            <NotesNotice testId="tutor-notes-no-speech">
-              {NO_SPEECH_NOTE_COPY}
+            <NotesNotice
+              testId={hadSpeech ? "tutor-notes-no-lesson" : "tutor-notes-no-speech"}
+            >
+              {hadSpeech ? NO_LESSON_NOTE_COPY : NO_SPEECH_NOTE_COPY}
             </NotesNotice>
           ) : null}
 
