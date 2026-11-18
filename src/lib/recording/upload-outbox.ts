@@ -26,8 +26,7 @@
  *                   reads it via `assembleEndSessionPayload` and
  *                   registers it server-side as part of the same
  *                   transaction. After that, `outbox.finalize(sessionId)`
- *                   deletes the rows for that session that have a confirmed
- *                   remote upload (rows with only a local blob are kept).
+ *                   deletes the rows for that session.
  *
  * Multi-stream + multi-participant from day one (per plan):
  * --------------------------------------------------------
@@ -319,16 +318,10 @@ export type UploadOutbox = {
    */
   listUploadedSegments: (sessionId: string) => Promise<OutboxRow[]>;
   /**
-   * Delete the rows for `sessionId` whose audio is safely stored remotely.
-   * Called after the atomic end-session action commits. Per-row deletes are
-   * wrapped in a single IDB transaction so a partial finalize cannot leave a
+   * Delete every row for `sessionId`. Called after the atomic
+   * end-session action commits. Per-row deletes are wrapped in a
+   * single IDB transaction so a partial finalize cannot leave a
    * mix-state behind.
-   *
-   * Rows WITHOUT a confirmed `blobRemoteUrl` (never uploaded / permanently
-   * failed) that still hold a `blobLocalRef` are KEPT — the local blob is the
-   * only copy (A4 / W1-SHIP-B-FINALIZE). Each kept row logs
-   * `obx=… action=finalize_kept_unuploaded`. Rows with neither a remote URL
-   * nor a local blob have nothing to preserve and are deleted.
    */
   finalize: (sessionId: string) => Promise<void>;
   /**
@@ -1048,32 +1041,8 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
         (s) => drainChainByStream.get(streamKey(sessionId, s)) ?? Promise.resolve()
       )
     );
-    const rowsAtFinalize = await listAllRowsInternal(sessionId);
-    if (rowsAtFinalize.length === 0) {
-      return;
-    }
-    // A4 / W1-SHIP-B-FINALIZE: a row with no CONFIRMED remote upload holds the only copy of
-    // that audio (the End payload could not include it). Never delete it. A row with neither
-    // a remote URL nor a local blob has nothing left to preserve, so it is still cleared.
-    // Kept rows stay scoped to `sessionId` (every query/drain/observe is per session), so
-    // they cannot block or confuse another session.
-    const rowsToDelete: OutboxRow[] = [];
-    const rowsKept: OutboxRow[] = [];
-    for (const r of rowsAtFinalize) {
-      if (r.blobRemoteUrl || !r.blobLocalRef) rowsToDelete.push(r);
-      else rowsKept.push(r);
-    }
-    for (const r of rowsKept) {
-      logger.warn?.(
-        `[upload-outbox] obx=${r.id.slice(0, 8)} action=finalize_kept_unuploaded sessionId=${sessionId} streamId=${r.streamId} segmentId=${r.segmentId} attempts=${r.attempts} sizeBytes=${r.sizeBytes} lastError=${r.lastError ?? "none"}`
-      );
-    }
+    const rowsToDelete = await listAllRowsInternal(sessionId);
     if (rowsToDelete.length === 0) {
-      lastStateBySession.delete(sessionId);
-      await refreshStateAndNotify(sessionId);
-      logger.log?.(
-        `[upload-outbox] obx=${shortObx} finalized sessionId=${sessionId} rowsDeleted=0 rowsKept=${rowsKept.length}`
-      );
       return;
     }
     await withStore("readwrite", async (store) => {
@@ -1096,7 +1065,7 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
     lastStateBySession.delete(sessionId);
     await refreshStateAndNotify(sessionId);
     logger.log?.(
-      `[upload-outbox] obx=${shortObx} finalized sessionId=${sessionId} rowsDeleted=${rowsToDelete.length} rowsKept=${rowsKept.length}`
+      `[upload-outbox] obx=${shortObx} finalized sessionId=${sessionId} rowsDeleted=${rowsToDelete.length}`
     );
   }
 

@@ -23,8 +23,7 @@
  *   - multi-stream concurrent: tutor:mic + student:peer-A:mic drain
  *     in parallel; same-stream serial
  *   - drainAndAwait with timeout: timeout fires, remainingCount > 0
- *   - finalize clears rows with a remote URL (observe → idle) and KEEPS rows with
- *     no confirmed upload (A4 W1-SHIP-B-FINALIZE)
+ *   - finalize wipes rows; subsequent observe is idle
  *   - listUploadedSegments returns rows in deterministic order
  */
 
@@ -84,7 +83,6 @@ function makeHarness(opts: {
   clearTimeout?: typeof globalThis.clearTimeout;
   defaultResult?: OutboxUploadResult;
   onSegmentUploaded?: (row: OutboxRow) => Promise<void>;
-  logger?: { log: (...a: unknown[]) => void; warn: (...a: unknown[]) => void; error: (...a: unknown[]) => void };
 }): Harness {
   const queue: OutboxUploadResult[] = [];
   let defaultResult: OutboxUploadResult =
@@ -101,7 +99,7 @@ function makeHarness(opts: {
     backoffMsByAttempt: opts.backoffMsByAttempt ?? [0, 0, 0, 0, 0],
     permanentFailAfter: opts.permanentFailAfter ?? 5,
     indexedDB: new IDBFactory(),
-    logger: opts.logger ?? SILENT_LOGGER,
+    logger: SILENT_LOGGER,
     onSegmentUploaded: opts.onSegmentUploaded,
     setTimeout: (cb, ms) =>
       (opts.setTimeout ?? globalThis.setTimeout)(cb, ms) as unknown as number,
@@ -809,118 +807,7 @@ describe("upload-outbox — onSegmentUploaded (WS-A mid-session register)", () =
 });
 
 describe("upload-outbox — finalize", () => {
-  // A4 / W1-SHIP-B-FINALIZE spec: finalize clears rows whose upload is confirmed (remote URL) and
-  // NEVER deletes a row that has no confirmed remote upload — its local blob is the only copy.
-
-  test("finalize keeps a permanently failed row (local blob only copy) and clears the uploaded one", async () => {
-    const logs: string[] = [];
-    const h = makeHarness({
-      permanentFailAfter: 2,
-      onSegmentUploaded: jest.fn(async () => {}),
-      logger: {
-        log: (...a) => logs.push(a.map(String).join(" ")),
-        warn: (...a) => logs.push(a.map(String).join(" ")),
-        error: (...a) => logs.push(a.map(String).join(" ")),
-      },
-    });
-    const localBytes = "only-copy-of-the-audio";
-    // One segment lands; one fails past the cap (upload always errors).
-    h.pushResult({ ok: true, blobUrl: "https://blob.example/good" });
-    h.pushResult({ ok: false, error: "network down" });
-    h.pushResult({ ok: false, error: "network down" });
-    await h.outbox.enqueue({
-      sessionId: "ws-keep",
-      streamId: TUTOR_MIC_STREAM_ID,
-      segmentId: "seg-good",
-      blobLocalRef: makeBlob("good-bytes"),
-      mimeType: "audio/webm",
-      sizeBytes: 10,
-      audioStartedAtMs: 1,
-    });
-    await h.outbox.drainAndAwait("ws-keep", { timeoutMs: 500 });
-    await h.outbox.enqueue({
-      sessionId: "ws-keep",
-      streamId: TUTOR_MIC_STREAM_ID,
-      segmentId: "seg-lost",
-      blobLocalRef: makeBlob(localBytes),
-      mimeType: "audio/webm",
-      sizeBytes: localBytes.length,
-      audioStartedAtMs: 2,
-    });
-    await h.outbox.drainAndAwait("ws-keep", { timeoutMs: 500 });
-    await waitForRegisterOk(h.outbox, "ws-keep");
-    const before = await h.outbox.listAllRows("ws-keep");
-    expect(before.find((r) => r.segmentId === "seg-lost")?.attempts).toBe(2);
-
-    await h.outbox.finalize("ws-keep");
-
-    const after = await h.outbox.listAllRows("ws-keep");
-    expect(after.map((r) => r.segmentId)).toEqual(["seg-lost"]);
-    expect(after[0].blobRemoteUrl).toBeNull();
-    expect(after[0].blobLocalRef).not.toBeNull();
-    const kept = after[0].blobLocalRef as Blob;
-    expect(await kept.text()).toBe(localBytes);
-    expect(logs.some((l) => /obx=\S+ .*action=finalize_kept.*segmentId=seg-lost/.test(l))).toBe(true);
-    await h.outbox.close();
-  });
-
-  test("a row kept by finalize is scoped to its own session — another session stays idle and drains normally", async () => {
-    const h = makeHarness({ permanentFailAfter: 1, onSegmentUploaded: jest.fn(async () => {}) });
-    h.pushResult({ ok: false, error: "boom" });
-    await h.outbox.enqueue({
-      sessionId: "ws-ended",
-      streamId: TUTOR_MIC_STREAM_ID,
-      segmentId: "seg-stuck",
-      blobLocalRef: makeBlob("stuck"),
-      mimeType: "audio/webm",
-      sizeBytes: 5,
-      audioStartedAtMs: 1,
-    });
-    await h.outbox.drainAndAwait("ws-ended", { timeoutMs: 500 });
-    await h.outbox.finalize("ws-ended");
-    expect(await h.outbox.listAllRows("ws-ended")).toHaveLength(1);
-
-    // Next session on the same device: unaffected by the kept row.
-    expect(h.outbox.observe("ws-next").getState().state).toBe("idle");
-    await h.outbox.enqueue({
-      sessionId: "ws-next",
-      streamId: TUTOR_MIC_STREAM_ID,
-      segmentId: "seg-next",
-      blobLocalRef: makeBlob("next"),
-      mimeType: "audio/webm",
-      sizeBytes: 4,
-      audioStartedAtMs: 3,
-    });
-    const drain = await h.outbox.drainAndAwait("ws-next", { timeoutMs: 500 });
-    expect(drain.timedOut).toBe(false);
-    expect(drain.remainingCount).toBe(0);
-    expect((await h.outbox.listUploadedSegments("ws-next")).map((r) => r.segmentId)).toEqual(["seg-next"]);
-    // finalize of the next session leaves the ended session's kept row alone.
-    await h.outbox.finalize("ws-next");
-    expect(await h.outbox.listAllRows("ws-next")).toHaveLength(0);
-    expect(await h.outbox.listAllRows("ws-ended")).toHaveLength(1);
-    await h.outbox.close();
-  });
-
-  test("finalize still deletes a row with neither a remote URL nor a local blob (nothing left to preserve)", async () => {
-    const h = makeHarness({ permanentFailAfter: 1, onSegmentUploaded: jest.fn(async () => {}) });
-    await h.outbox.enqueue({
-      sessionId: "ws-empty",
-      streamId: TUTOR_MIC_STREAM_ID,
-      segmentId: "seg-empty",
-      blobLocalRef: null,
-      mimeType: "audio/webm",
-      sizeBytes: 0,
-      audioStartedAtMs: 1,
-    });
-    await h.outbox.drainAndAwait("ws-empty", { timeoutMs: 500 });
-    expect(await h.outbox.listAllRows("ws-empty")).toHaveLength(1);
-    await h.outbox.finalize("ws-empty");
-    expect(await h.outbox.listAllRows("ws-empty")).toHaveLength(0);
-    await h.outbox.close();
-  });
-
-  test("finalize clears rows with a remote URL; observer drops to idle", async () => {
+  test("finalize clears rows; observer drops to idle", async () => {
     const h = makeHarness({ onSegmentUploaded: jest.fn(async () => {}) });
     await h.outbox.enqueue({
       sessionId: "ws-fin",

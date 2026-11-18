@@ -165,12 +165,7 @@ outbox.enqueue({ sessionId, streamId: "tutor:mic", segmentId, blob, ... })
         ↓
 endWhiteboardSession({ segments: [...all uploaded rows] })
         ↓ SessionRecording.createMany inside the atomic txn
-        ↓ finalizeOutboxAfterEnd(sessionId) drops the IDB rows whose upload is
-          confirmed (blobRemoteUrl set). A row with NO confirmed remote upload
-          (permanently failed / never uploaded) that still holds its local blob
-          is KEPT — it is the only copy of that audio — and logs
-          `obx=… action=finalize_kept_unuploaded`. Kept rows are session-scoped
-          and never block another session. (A4 / W1-SHIP-B-FINALIZE)
+        ↓ finalizeOutboxAfterEnd(sessionId) drops the IDB rows
 ```
 
 ### Observers
@@ -276,7 +271,7 @@ on when generation fails best-effort.
 6. endWhiteboardSession(wbsid, eventsBlobUrl, { segments, snapshotBlobUrl? })
         │      atomic txn — see Pillar 3
         ▼
-7. finalizeOutboxAfterEnd(wbsid)           # drop IDB rows with a confirmed remote upload (unuploaded rows are kept)
+7. finalizeOutboxAfterEnd(wbsid)           # drop IDB rows
         │
         ▼
 8. onSessionEnded?.() → shell flips mode="review"  # A3 in-shell flip
