@@ -240,6 +240,8 @@ export default defineConfig({
         "**/integration/wb-sync-text.spec.ts",
         "**/integration/wb-sync-shapes.spec.ts",
         "**/integration/wb-sync-eraser.spec.ts",
+        "**/integration/wb-sync-transform.spec.ts",
+        "**/integration/wb-sync-pages.spec.ts",
         "**/integration/wb-student-exit-rejoin.spec.ts",
         "**/integration/wb-student-mic-persistence.spec.ts",
         "**/integration/wb-wave5-polish.spec.ts",

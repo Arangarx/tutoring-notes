@@ -272,6 +272,15 @@ export type SceneElementSummary = {
   y: number;
   width: number;
   height: number;
+  /** Radians. 0 when the live element omits angle (`toCanonical` drops 0). */
+  angle: number;
+  strokeColor: string;
+  strokeWidth: number;
+  /**
+   * Excalidraw stacking key from the live element.
+   * Fractional indexes are strings; older scenes may use a number.
+   */
+  index: string | number | null;
 };
 
 export type SceneElementQuery = {
@@ -303,6 +312,10 @@ export async function readSceneElementSummary(
                 y?: number;
                 width?: number;
                 height?: number;
+                angle?: number;
+                strokeColor?: string;
+                strokeWidth?: number;
+                index?: string | number | null;
               }>;
             }
           >;
@@ -324,6 +337,19 @@ export async function readSceneElementSummary(
           y: Number(element.y) || 0,
           width: Number(element.width) || 0,
           height: Number(element.height) || 0,
+          angle:
+            typeof element.angle === "number" && Number.isFinite(element.angle)
+              ? element.angle
+              : 0,
+          strokeColor: typeof element.strokeColor === "string" ? element.strokeColor : "",
+          strokeWidth:
+            typeof element.strokeWidth === "number" && Number.isFinite(element.strokeWidth)
+              ? element.strokeWidth
+              : 0,
+          index:
+            typeof element.index === "string" || typeof element.index === "number"
+              ? element.index
+              : null,
         }));
     },
     { r: role, filter: query ?? null }
@@ -2408,4 +2434,306 @@ export async function dragPointerAcrossSceneBox(
   await page.mouse.down();
   await page.mouse.move(x1, y1, { steps: 18 });
   await page.mouse.up();
+}
+
+/**
+ * Poll until `role` gains a non-deleted element that was not in `beforeIds`
+ * and that `accept` returns true for. The accepted element is the oracle.
+ */
+export async function waitForAddedElement(
+  page: Page,
+  role: WbSyncRole,
+  beforeIds: readonly string[],
+  accept: (element: SceneElementSummary) => boolean,
+  timeoutMs = 20_000
+): Promise<SceneElementSummary> {
+  let found: SceneElementSummary | undefined;
+  await expect
+    .poll(
+      async () => {
+        const summary = await readSceneElementSummary(page, role, { omitDeleted: true });
+        const prior = new Set(beforeIds);
+        found = summary.find((element) => !prior.has(element.id) && accept(element));
+        return Boolean(found);
+      },
+      { timeout: timeoutMs }
+    )
+    .toBe(true);
+  if (!found) throw new Error(`${role} scene did not gain an accepted element`);
+  return found;
+}
+
+/** One live element by id, or undefined when the bridge does not have it. */
+export async function readSceneElement(
+  page: Page,
+  role: WbSyncRole,
+  elementId: string
+): Promise<SceneElementSummary | undefined> {
+  const summary = await readSceneElementSummary(page, role);
+  return summary.find((element) => element.id === elementId);
+}
+
+/**
+ * Poll until the peer's live element agrees with the author's.
+ * `same` returns true, or a short reason that becomes the poll message.
+ * The compared values are re-read from each peer — nothing is hardcoded.
+ */
+export async function expectPeerReflectsAuthor(
+  authorPage: Page,
+  author: WbSyncRole,
+  peerPage: Page,
+  peer: WbSyncRole,
+  elementId: string,
+  same: (authorEl: SceneElementSummary, peerEl: SceneElementSummary) => true | string,
+  timeoutMs = 20_000
+): Promise<{ author: SceneElementSummary; peer: SceneElementSummary }> {
+  let authorEl: SceneElementSummary | undefined;
+  let peerEl: SceneElementSummary | undefined;
+  await expect
+    .poll(
+      async () => {
+        authorEl = await readSceneElement(authorPage, author, elementId);
+        peerEl = await readSceneElement(peerPage, peer, elementId);
+        if (!authorEl || !peerEl) {
+          return `missing author=${Boolean(authorEl)} peer=${Boolean(peerEl)}`;
+        }
+        const result = same(authorEl, peerEl);
+        return result === true ? "match" : result;
+      },
+      { timeout: timeoutMs }
+    )
+    .toBe("match");
+  if (!authorEl || !peerEl) throw new Error(`element ${elementId} missing after match`);
+  return { author: authorEl, peer: peerEl };
+}
+
+/** JSON clone of the role's live elements. Red-proof revert snapshot. */
+export async function readRawSceneElements(page: Page, role: WbSyncRole): Promise<unknown[]> {
+  return page.evaluate((r) => {
+    const bridge = (
+      window as Window & {
+        __TN_WB_E2E__?: Record<string, { getElements?: () => unknown[] }>;
+      }
+    ).__TN_WB_E2E__?.[r];
+    const elements = bridge?.getElements?.() ?? [];
+    return JSON.parse(JSON.stringify(elements)) as unknown[];
+  }, role);
+}
+
+/**
+ * Replace the live scene locally. Does not broadcast.
+ * Red-proof only (`__WBX_FORCE_LIVE_SCENE__`). The tutor page installs this
+ * seam; the student page does not. Revert by passing the array from
+ * {@link readRawSceneElements}.
+ */
+export async function forceLiveScene(page: Page, elements: unknown): Promise<void> {
+  const installed = await page.evaluate((els) => {
+    const fn = (
+      window as Window & { __WBX_FORCE_LIVE_SCENE__?: (value: unknown) => void }
+    ).__WBX_FORCE_LIVE_SCENE__;
+    if (typeof fn !== "function") return false;
+    fn(els);
+    return true;
+  }, elements);
+  if (!installed) {
+    throw new Error(
+      "__WBX_FORCE_LIVE_SCENE__ is not installed on this page (tutor seam only)"
+    );
+  }
+}
+
+/**
+ * Select tool, then marquee the element's box.
+ * A hollow rectangle's center is not a hit target (only the stroke is),
+ * so a center click does not select it. The marquee starts outside the
+ * stroke's hit slop and encloses the box.
+ */
+export async function selectSceneElement(
+  page: Page,
+  role: WbSyncRole,
+  element: Pick<SceneElementSummary, "id" | "x" | "y" | "width" | "height">
+): Promise<void> {
+  await selectStripTool(page, "Select (V)");
+  const screen = await projectSceneRectToScreen(page, role, {
+    x: element.x,
+    y: element.y,
+    width: element.width,
+    height: element.height,
+  });
+  const pad = 14;
+  await page.mouse.move(screen.x - pad, screen.y - pad);
+  await page.mouse.down();
+  await page.mouse.move(screen.x + screen.width + pad, screen.y + screen.height + pad, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await page.waitForFunction(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            { getAppState?: () => { selectedElementIds?: Record<string, boolean> } }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      const selected = bridge?.getAppState?.().selectedElementIds as
+        | Record<string, boolean>
+        | undefined;
+      return selected?.[id] === true;
+    },
+    { r: role, id: element.id },
+    { timeout: 10_000 }
+  );
+}
+
+/**
+ * Scene point of an Excalidraw 0.18.1 mouse transform handle for an
+ * unrotated box. SE center is 4/zoom outside the bottom-right corner.
+ * Rotation center is the top midpoint, 20/zoom above the top edge.
+ * (handle size 8, spacing 2, rectangle margin 2, rotation gap 16.)
+ */
+function transformHandleScenePoint(
+  element: { x: number; y: number; width: number; height: number },
+  zoom: number,
+  handle: "se" | "rotation"
+): { x: number; y: number } {
+  const z = zoom > 0 ? zoom : 1;
+  if (handle === "se") {
+    const outside = 4 / z;
+    return {
+      x: element.x + element.width + outside,
+      y: element.y + element.height + outside,
+    };
+  }
+  return {
+    x: element.x + element.width / 2,
+    y: element.y - 20 / z,
+  };
+}
+
+/**
+ * Drag a selected element's resize or rotation handle.
+ * The element must already be selected ({@link selectSceneElement}) so
+ * Excalidraw hit-tests the handle. The drag is a real pointer gesture:
+ * Excalidraw onChange broadcasts it. This does not call the force seam.
+ */
+export async function dragSceneTransformHandle(
+  page: Page,
+  role: WbSyncRole,
+  element: Pick<SceneElementSummary, "x" | "y" | "width" | "height">,
+  handle: "se" | "rotation",
+  screenDelta: { x: number; y: number }
+): Promise<void> {
+  const zoom = (await readViewportSnapshot(page, role)).zoom;
+  const scenePoint = transformHandleScenePoint(element, zoom, handle);
+  const screen = await projectSceneRectToScreen(page, role, {
+    x: scenePoint.x,
+    y: scenePoint.y,
+    width: 0,
+    height: 0,
+  });
+  const mount = page.locator(`[data-testid="${canvasMountTestId(role)}"]`);
+  const box = await mount.boundingBox();
+  if (!box) throw new Error(`${role} canvas mount has no bounding box`);
+  if (
+    screen.x < box.x ||
+    screen.y < box.y ||
+    screen.x > box.x + box.width ||
+    screen.y > box.y + box.height
+  ) {
+    throw new Error(
+      `${handle} handle (${screen.x.toFixed(1)}, ${screen.y.toFixed(1)}) is outside the ${role} canvas`
+    );
+  }
+  await page.mouse.move(screen.x, screen.y);
+  await page.mouse.down();
+  await page.mouse.move(screen.x + screenDelta.x, screen.y + screenDelta.y, { steps: 14 });
+  await page.mouse.up();
+}
+
+/**
+ * Restyle the selected element through Excalidraw's own properties island
+ * (`strokeWidth-extraBold`, then a stroke-color swatch).
+ *
+ * Zen mode translates `.selected-shape-actions` off-screen, so the click is
+ * dispatched on the control itself. That control runs `changeProperty`, which
+ * updates the live element and fires onChange → the app broadcast. It is not
+ * `__WBX_FORCE_LIVE_SCENE__`. The compact Mynk stroke panel only writes
+ * `currentItemStroke*` and does not restyle a selection, so it is not used here.
+ */
+export async function restyleSelectedElement(
+  page: Page,
+  role: WbSyncRole,
+  element: SceneElementSummary
+): Promise<void> {
+  await selectSceneElement(page, role, element);
+  const width = page.getByTestId("strokeWidth-extraBold");
+  await expect(width).toBeAttached({ timeout: 10_000 });
+  await width.evaluate((el) => (el as HTMLElement).click());
+  const trigger = page.locator(".selected-shape-actions button.color-picker__button").first();
+  if ((await trigger.count()) === 0) return;
+  await trigger.evaluate((el) => (el as HTMLElement).click());
+  const swatch = page.locator(".color-picker-content button").nth(4);
+  try {
+    await swatch.waitFor({ state: "attached", timeout: 3_000 });
+  } catch {
+    return;
+  }
+  await swatch.evaluate((el) => (el as HTMLElement).click());
+}
+
+/** Product z-order control. Dispatches Excalidraw's bring/send shortcut. */
+export async function clickZOrderAction(
+  page: Page,
+  action: "Bring to front" | "Send to back"
+): Promise<void> {
+  const popover = page.getByTestId("wb-more-popover");
+  if (!(await popover.isVisible())) {
+    await page.getByRole("button", { name: /More.*z-order/ }).click();
+    await expect(popover).toBeVisible({ timeout: 5_000 });
+  }
+  // Accessible name includes the shortcut kbd ("Bring to front Ctrl+Shift+]").
+  await popover.getByRole("button", { name: new RegExp(`^${action}\\b`) }).click();
+}
+
+/**
+ * Rendered board tabs. Labels are the user-visible page list (`Board N`).
+ * One DOM read so a tab that disappears mid-sync cannot stall the locator.
+ */
+export async function readBoardStrip(
+  page: Page,
+  side: WbSyncRole
+): Promise<{ labels: string[]; selectedLabel: string | null }> {
+  const testId = side === "tutor" ? "wb-tutor-page-strip" : "wb-student-page-strip";
+  return page.getByTestId(testId).evaluate((strip) => {
+    const tabs = [...strip.querySelectorAll<HTMLElement>('[role="tab"]')];
+    const labels = tabs.map((tab) => tab.getAttribute("aria-label") ?? "");
+    const selected = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+    return {
+      labels,
+      selectedLabel: selected ? (selected.getAttribute("aria-label") ?? "") : null,
+    };
+  });
+}
+
+/** Tutor "Add board" control. Student strip has no add button. */
+export async function addTutorBoard(page: Page): Promise<void> {
+  await page
+    .getByTestId("wb-tutor-page-strip")
+    .getByRole("button", { name: "Add board", exact: true })
+    .click();
+}
+
+/**
+ * Confirm-delete the tutor tab at `index` (0-based).
+ * The student strip is read-only and has no delete control.
+ */
+export async function deleteTutorBoardAt(page: Page, index: number): Promise<void> {
+  const strip = page.getByTestId("wb-tutor-page-strip");
+  await strip.locator(".mynk-wb-board-tab-wrap").nth(index).hover();
+  await page.getByTestId(`wb-board-delete-${index}`).click();
+  const confirm = page.getByTestId(`wb-board-delete-confirm-${index}`);
+  await expect(confirm).toBeVisible({ timeout: 5_000 });
+  await confirm.click();
 }
