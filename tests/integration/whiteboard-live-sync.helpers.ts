@@ -241,23 +241,189 @@ export async function readPageDataBucketIds(
   }, pageId);
 }
 
-/** Live scene element id + type from the E2E bridge. */
+/**
+ * Tutor or student whiteboard peer.
+ * Batches B/C/D import this instead of re-declaring a role union.
+ */
+export type WbSyncRole = "tutor" | "student";
+
+export function peerOf(role: WbSyncRole): WbSyncRole {
+  return role === "tutor" ? "student" : "tutor";
+}
+
+/** Ids present in `after` that were not in `before` (order follows `after`). */
+export function addedIds(before: readonly string[], after: readonly string[]): string[] {
+  const prior = new Set(before);
+  return after.filter((id) => !prior.has(id));
+}
+
+/**
+ * One live scene element from `__TN_WB_E2E__.getElements()`.
+ * `text` is the Excalidraw text-element string (empty for other types).
+ * Geometry is the scene box passed to {@link projectSceneRectToScreen}.
+ */
+export type SceneElementSummary = {
+  id: string;
+  type?: string;
+  text: string;
+  isDeleted: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type SceneElementQuery = {
+  /** Keep elements whose `type` equals this. */
+  type?: string;
+  /** Drop `isDeleted` elements. Default keeps the bridge list as returned. */
+  omitDeleted?: boolean;
+};
+
+/** Live scene summary from the E2E bridge. Optional query filters in the page. */
 export async function readSceneElementSummary(
   page: Page,
-  role: "tutor" | "student"
-): Promise<Array<{ id: string; type?: string }>> {
-  return page.evaluate((r) => {
-    const bridge = (
-      window as Window & {
-        __TN_WB_E2E__?: Record<
-          string,
-          { getElements?: () => Array<{ id: string; type?: string }> }
-        >;
-      }
-    ).__TN_WB_E2E__?.[r];
-    const elements = bridge?.getElements?.() ?? [];
-    return elements.map((element) => ({ id: element.id, type: element.type }));
-  }, role);
+  role: "tutor" | "student",
+  query?: SceneElementQuery
+): Promise<SceneElementSummary[]> {
+  return page.evaluate(
+    ({ r, filter }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              getElements?: () => Array<{
+                id: string;
+                type?: string;
+                text?: string;
+                isDeleted?: boolean;
+                x?: number;
+                y?: number;
+                width?: number;
+                height?: number;
+              }>;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      const elements = bridge?.getElements?.() ?? [];
+      return elements
+        .filter((element) => {
+          if (filter?.type && element.type !== filter.type) return false;
+          if (filter?.omitDeleted && element.isDeleted === true) return false;
+          return true;
+        })
+        .map((element) => ({
+          id: element.id,
+          type: element.type,
+          text: typeof element.text === "string" ? element.text : "",
+          isDeleted: element.isDeleted === true,
+          x: Number(element.x) || 0,
+          y: Number(element.y) || 0,
+          width: Number(element.width) || 0,
+          height: Number(element.height) || 0,
+        }));
+    },
+    { r: role, filter: query ?? null }
+  );
+}
+
+export type PeerElementFieldMatch = {
+  [K in keyof SceneElementSummary]: {
+    field: K;
+    equals: SceneElementSummary[K];
+  };
+}[keyof SceneElementSummary];
+
+/**
+ * Wait until the peer's live element matches a predicate or a single field.
+ * The predicate runs in Node against {@link readSceneElementSummary}, so
+ * batches B/C/D can match any field without a new bridge reader.
+ */
+export async function waitForPeerElement(
+  page: Page,
+  role: WbSyncRole,
+  elementId: string,
+  match: ((element: SceneElementSummary) => boolean) | PeerElementFieldMatch,
+  timeoutMs = 45_000
+): Promise<void> {
+  const matches = (element: SceneElementSummary): boolean => {
+    if (typeof match === "function") return match(element);
+    const record = element as unknown as Record<string, unknown>;
+    return record[match.field] === match.equals;
+  };
+  await expect
+    .poll(
+      async () => {
+        const elements = await readSceneElementSummary(page, role);
+        const element = elements.find((entry) => entry.id === elementId);
+        return Boolean(element && matches(element));
+      },
+      { timeout: timeoutMs }
+    )
+    .toBe(true);
+}
+
+/**
+ * Fill Excalidraw's text editor. `commit: false` leaves the wysiwyg open
+ * (SMOKE-BUG-3 uncommitted-editor probe). Default commits with Escape.
+ */
+export async function fillExcalidrawWysiwyg(
+  page: Page,
+  value: string,
+  options?: { commit?: boolean }
+): Promise<void> {
+  const editor = page.locator("textarea.excalidraw-wysiwyg");
+  await expect(editor).toBeVisible({ timeout: 10_000 });
+  await editor.fill(value);
+  if (options?.commit === false) {
+    await expect(editor).toHaveValue(value);
+    await expect(editor).toBeVisible();
+    return;
+  }
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeHidden({ timeout: 10_000 });
+}
+
+/** Fill the text editor and commit with Escape. */
+export async function commitWysiwyg(page: Page, value: string): Promise<void> {
+  await fillExcalidrawWysiwyg(page, value);
+}
+
+/**
+ * Poll `read` until it deep-equals `expected`, then require that value to
+ * hold for `holdMs`. A late change (debounced onChange leak) resets the
+ * window, so the first matching sample is not a pass.
+ */
+export async function expectHeld<T>(
+  read: () => Promise<T>,
+  expected: T,
+  options?: { holdMs?: number; timeoutMs?: number; intervalMs?: number }
+): Promise<void> {
+  const holdMs = options?.holdMs ?? 3_000;
+  const timeoutMs = options?.timeoutMs ?? 15_000;
+  const intervalMs = options?.intervalMs ?? 250;
+  const deadline = Date.now() + timeoutMs;
+  const expectedJson = JSON.stringify(expected);
+  let heldSince: number | null = null;
+  let last: T | undefined;
+  while (Date.now() < deadline) {
+    last = await read();
+    if (JSON.stringify(last) === expectedJson) {
+      if (heldSince === null) heldSince = Date.now();
+      if (Date.now() - heldSince >= holdMs) return;
+    } else {
+      heldSince = null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  if (last !== undefined && JSON.stringify(last) === expectedJson) {
+    throw new Error(
+      `value matched expected but did not hold for ${holdMs}ms within ${timeoutMs}ms`
+    );
+  }
+  expect(last, "held scene oracle").toEqual(expected);
 }
 
 /**
@@ -2056,6 +2222,19 @@ export async function projectSceneRectToScreen(
     },
     { r: role, scene }
   );
+}
+
+/** Screen-pixel center of a scene box. Uses {@link projectSceneRectToScreen}. */
+export async function projectSceneRectCenterToScreen(
+  page: Page,
+  role: "tutor" | "student",
+  scene: { x: number; y: number; width: number; height: number }
+): Promise<{ x: number; y: number }> {
+  const screen = await projectSceneRectToScreen(page, role, scene);
+  return {
+    x: screen.x + screen.width / 2,
+    y: screen.y + screen.height / 2,
+  };
 }
 
 export async function readElementVersion(
