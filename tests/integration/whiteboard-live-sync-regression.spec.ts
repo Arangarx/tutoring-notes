@@ -7,11 +7,14 @@ import {
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
 import {
+  boardTab,
   clickBoardPageTab,
   drawTestStrokeOnRole,
+  e2eTwoPagePdfBoardTitle,
   ensureStudentFollowsTutor,
   expectedAlignedStudentScroll,
   findFirstImageElementId,
+  forceLiveScene,
   growStrokeOnRole,
   insertGraphOnRole,
   insertPngFixtureOnRole,
@@ -20,10 +23,13 @@ import {
   placeMarkerAtViewportCenter,
   readAppStateCenterXY,
   readElementPosition,
+  readElementViewportPlacement,
   readEncryptionKeyFromHash,
   readGraphElementState,
   readImageElementState,
+  readRawSceneElements,
   readSceneElementIds,
+  readSceneElementSummary,
   readStrokeWidth,
   readViewportSnapshot,
   sceneCenterDistance,
@@ -47,9 +53,45 @@ import {
   WB_MOVE_PROPAGATION_TOLERANCE_SCENE,
   WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX,
   WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE,
+  type ElementViewportPlacement,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 const { authStatePath } = require("../../scripts/pw-stack.cjs");
+
+/** Slack for "contained in the viewport" (subpixel / rounding). */
+const PDF_FIT_SLACK_PX = 4;
+/**
+ * Tight-axis leftover above this means the page is not zoomed to fit.
+ * A fitted page leaves a small margin on its tighter axis. This band is
+ * wider than that margin and narrower than an unfitted page.
+ */
+const PDF_FIT_MAX_LEFTOVER_FRACTION = 0.25;
+
+/**
+ * Centered in the peer's viewport, contained by it, and snug on the
+ * tighter axis. Returns true or a short reason. No absolute coordinates.
+ */
+function pdfPageCenteredAndFit(placement: ElementViewportPlacement): true | string {
+  if (placement.centerOffsetPx > WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX) {
+    return `center offset ${placement.centerOffsetPx.toFixed(1)}px`;
+  }
+  if (placement.screenWidth > placement.viewportWidth + PDF_FIT_SLACK_PX) {
+    return `wider than viewport ${placement.screenWidth.toFixed(1)} > ${placement.viewportWidth.toFixed(1)}`;
+  }
+  if (placement.screenHeight > placement.viewportHeight + PDF_FIT_SLACK_PX) {
+    return `taller than viewport ${placement.screenHeight.toFixed(1)} > ${placement.viewportHeight.toFixed(1)}`;
+  }
+  if (!(placement.viewportWidth > 0 && placement.viewportHeight > 0)) {
+    return "viewport has no size";
+  }
+  const leftoverW = (placement.viewportWidth - placement.screenWidth) / placement.viewportWidth;
+  const leftoverH = (placement.viewportHeight - placement.screenHeight) / placement.viewportHeight;
+  const tightLeftover = Math.min(leftoverW, leftoverH);
+  if (tightLeftover > PDF_FIT_MAX_LEFTOVER_FRACTION) {
+    return `not fitted; tight-axis leftover ${(tightLeftover * 100).toFixed(0)}%`;
+  }
+  return true;
+}
 
 /**
  * Real-browser whiteboard live-sync regression net (hermetic local relay).
@@ -558,15 +600,23 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
   test("invariant 8 ΓÇö PDF page opens centered+fit on student viewport", { tag: [TAG.WB_ASSETS] }, async ({
     browser,
   }) => {
-    // pdfjs headless load fixed (static ESM from /pdfjs/pdf.min.mjs). Remaining
-    // gate gap: findFirstImageElementId races live sync — needs waitForFunction.
-    test.skip(
-      true,
-      "pdfjs headless fixed; inv-8 still races student image sync (findFirstImageElementId null). Re-enable after sync wait."
-    );
-
+    // Oracle (below, not run while fixme'd): the student's own scene + app
+    // state. The PDF page image should be centered in that viewport and
+    // snug on the tighter axis. The old skip raced a one-shot image lookup
+    // and waited on a tab named "Board 2"; PDF pages are titled from the
+    // file (`e2e-two-pages p.1`).
+    //
+    // Observed 2026-11-19, twice, on the hermetic relay: the student follows
+    // onto `e2e-two-pages p.1`, the image is present, and the center check
+    // passes. Fit does not. The page's screen box is 1003.5px tall in the
+    // student's 555px canvas ("taller than viewport 1003.5 > 555.0"). The
+    // fit zoom is the tutor's (taller canvas); follow copies that zoom.
     test.setTimeout(300_000);
     test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
+    test.fixme(
+      true,
+      "PDF page is centered on the student but not fit: screen height 1003.5px > student viewport 555px. Tutor fit-zoom is inherited via follow."
+    );
 
     const pdfPath = path.join(__dirname, "../fixtures/e2e-two-pages.pdf");
     const session = await seedWbLiveSyncSession();
@@ -587,69 +637,57 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
         timeout: 120_000,
       });
 
-      await expect(
-        peers.studentPage
-          .getByTestId("wb-student-page-strip")
-          .getByRole("tab", { name: "Board 2" })
-      ).toBeVisible({
-        timeout: 60_000,
+      const pdfTitle = e2eTwoPagePdfBoardTitle(1);
+      const studentPdfTab = boardTab(peers.studentPage, "student", pdfTitle);
+      await expect(studentPdfTab).toBeVisible({ timeout: 60_000 });
+      await expect(studentPdfTab).toHaveAttribute("aria-selected", "true", {
+        timeout: 30_000,
       });
 
-      const pdfImageId = await findFirstImageElementId(peers.studentPage, "student");
-      expect(pdfImageId).toBeTruthy();
+      let pdfImageId = "";
+      await expect
+        .poll(
+          async () => {
+            const summary = await readSceneElementSummary(peers.studentPage, "student", {
+              type: "image",
+              omitDeleted: true,
+            });
+            const image = summary.find((element) => element.width > 1 && element.height > 1);
+            if (!image) return "no image yet";
+            pdfImageId = image.id;
+            return "ready";
+          },
+          { timeout: 60_000 }
+        )
+        .toBe("ready");
 
-      await peers.studentPage.waitForFunction(
-        ({ id, maxPx }) => {
-          const bridge = (
-            window as Window & {
-              __TN_WB_E2E__?: Record<
-                string,
-                {
-                  getElements: () => Array<{
-                    id: string;
-                    type?: string;
-                    x?: number;
-                    y?: number;
-                    width?: number;
-                    height?: number;
-                  }>;
-                  getAppState: () => Record<string, unknown>;
-                }
-              >;
-            }
-          ).__TN_WB_E2E__?.student;
-          if (!bridge?.getElements || !bridge.getAppState) return false;
-          const el = bridge.getElements().find((e) => e.id === id);
-          if (!el || el.type !== "image") return false;
-          const st = bridge.getAppState();
-          const zoomObj = st.zoom as { value?: number } | undefined;
-          const zoom =
-            zoomObj && typeof zoomObj.value === "number" ? zoomObj.value : 1;
-          const vw = Number(st.width) || 1;
-          const vh = Number(st.height) || 1;
-          const scrollX = Number(st.scrollX) || 0;
-          const scrollY = Number(st.scrollY) || 0;
-          const offsetLeft = Number(st.offsetLeft) || 0;
-          const offsetTop = Number(st.offsetTop) || 0;
-          const ex = (Number(el.x) || 0) + (Number(el.width) || 0) / 2;
-          const ey = (Number(el.y) || 0) + (Number(el.height) || 0) / 2;
-          const screenX = (ex + scrollX) * zoom + offsetLeft;
-          const screenY = (ey + scrollY) * zoom + offsetTop;
-          const cx = offsetLeft + vw / 2;
-          const cy = offsetTop + vh / 2;
-          const offset = Math.hypot(screenX - cx, screenY - cy);
-          return offset <= maxPx;
-        },
-        { id: pdfImageId!, maxPx: WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX },
-        { timeout: 60_000 }
-      );
+      await expect
+        .poll(
+          async () => pdfPageCenteredAndFit(
+            await readElementViewportPlacement(peers.studentPage, "student", pdfImageId)
+          ),
+          { timeout: 30_000 }
+        )
+        .toBe(true);
 
-      const offset = await markerCenterOffsetFromViewportCenter(
-        peers.studentPage,
-        "student",
-        pdfImageId!
+      // Red-proof: shrink the tutor's copy of the page (local seam, no
+      // broadcast) so the same centered+fit relationship fails, then put
+      // the scene back. The student's placement is the assertion above.
+      const raw = await readRawSceneElements(peers.tutorPage, "tutor");
+      const poisoned = (raw as Array<Record<string, unknown>>).map((element) =>
+        element.id === pdfImageId ? { ...element, x: 0, y: 0, width: 1, height: 1 } : element
       );
-      expect(offset).toBeLessThan(WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX);
+      await forceLiveScene(peers.tutorPage, poisoned);
+      const poisonedFit = pdfPageCenteredAndFit(
+        await readElementViewportPlacement(peers.tutorPage, "tutor", pdfImageId)
+      );
+      expect(poisonedFit, "red-proof: a 1px page is not centered+fit").not.toBe(true);
+      await forceLiveScene(peers.tutorPage, raw);
+      expect(
+        pdfPageCenteredAndFit(
+          await readElementViewportPlacement(peers.tutorPage, "tutor", pdfImageId)
+        )
+      ).toBe(true);
     } finally {
       await peers.close();
     }

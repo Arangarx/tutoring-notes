@@ -431,7 +431,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Post–sync-redesign smoke findings** —  (§4)
 - **Preview-before-Start canvas wipe race** —  (§4)
 - **Promote math insert to toolbar + library persistence** —  (§4)
-- **Re-enable Playwright invariant 8 (PDF center+fit)** —  (§4)
+- **PDF page center+fit on the student viewport (invariant 8)** — centered, not fit: 1003.5px page in a 555px student canvas (§4)
 - **Replay audio loading CLS** —  (§4)
 - **Replay board tabs missing PDF icons** —  (§4)
 - **Replay disabled top-bar buttons dimming** —  (§4)
@@ -1071,8 +1071,8 @@ Mobile pointer-transform hit offset.
 **[P2][WB] NR-07 — transform handles with native chrome hidden**  
 Verify periodic regression.
 
-**[P2][WB] Re-enable Playwright invariant 8 (PDF center+fit)**  
-Skipped pending pdfjs headless load.
+**[P2][WB] PDF page center+fit on the student viewport (invariant 8)**  
+Un-skipped 2026-11-19 (Gate A5 Batch C2). pdfjs headless load is fine, and the student follows onto `e2e-two-pages p.1` with the image present. The page is centered in the student viewport (the center check passes). It is not fit: observed screen height 1003.5px in a 555px-tall student canvas. The fit zoom is computed for the taller tutor viewport and follow copies that zoom. `tests/integration/whiteboard-live-sync-regression.spec.ts` › invariant 8 is `test.fixme` with that observed state. This is a product bug, not a harness gap.
 
 **[P2][WB] Thin-viewport top-bar compaction**  
 Controls leave viewport before ⋯; End should stay visible. **WB-STUDENT-TOPBAR-CONTRACTION**.

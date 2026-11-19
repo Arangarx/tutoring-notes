@@ -277,6 +277,11 @@ export type SceneElementSummary = {
   strokeColor: string;
   strokeWidth: number;
   /**
+   * LaTeX source when the live element carries `customData.latex`
+   * (a math equation is an image with this field). Empty otherwise.
+   */
+  latex: string;
+  /**
    * Excalidraw stacking key from the live element.
    * Fractional indexes are strings; older scenes may use a number.
    */
@@ -316,6 +321,7 @@ export async function readSceneElementSummary(
                 strokeColor?: string;
                 strokeWidth?: number;
                 index?: string | number | null;
+                customData?: { latex?: unknown };
               }>;
             }
           >;
@@ -346,6 +352,8 @@ export async function readSceneElementSummary(
             typeof element.strokeWidth === "number" && Number.isFinite(element.strokeWidth)
               ? element.strokeWidth
               : 0,
+          latex:
+            typeof element.customData?.latex === "string" ? element.customData.latex : "",
           index:
             typeof element.index === "string" || typeof element.index === "number"
               ? element.index
@@ -993,14 +1001,24 @@ export async function resetScrollChangeCount(page: Page): Promise<void> {
 }
 
 /**
- * Distance from element center to viewport center in screen pixels.
- * Uses Excalidraw's sceneCoordsToViewportCoords (offsetLeft/offsetTop included).
+ * Where a live element sits in that peer's own viewport.
+ * Center offset uses the same screen projection as a scene point
+ * (`(scene + scroll) * zoom + offset`). Screen size is scene size × zoom.
+ * Callers decide centered / fit; this only reads the peer's scene and app state.
  */
-export async function markerCenterOffsetFromViewportCenter(
+export type ElementViewportPlacement = {
+  centerOffsetPx: number;
+  screenWidth: number;
+  screenHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
+export async function readElementViewportPlacement(
   page: Page,
-  role: "tutor" | "student",
-  markerId: string
-): Promise<number> {
+  role: WbSyncRole,
+  elementId: string
+): Promise<ElementViewportPlacement> {
   return page.evaluate(
     ({ r, id }) => {
       const bridge = (
@@ -1022,7 +1040,7 @@ export async function markerCenterOffsetFromViewportCenter(
       ).__TN_WB_E2E__?.[r];
       if (!bridge) throw new Error(`missing bridge for ${r}`);
       const el = bridge.getElements().find((e) => e.id === id);
-      if (!el) throw new Error(`marker ${id} not on ${r} canvas`);
+      if (!el) throw new Error(`element ${id} not on ${r} canvas`);
       const st = bridge.getAppState();
       const zoomObj = st.zoom as { value?: number } | undefined;
       const zoom =
@@ -1033,16 +1051,37 @@ export async function markerCenterOffsetFromViewportCenter(
       const scrollY = Number(st.scrollY) || 0;
       const offsetLeft = Number(st.offsetLeft) || 0;
       const offsetTop = Number(st.offsetTop) || 0;
-      const ex = (Number(el.x) || 0) + (Number(el.width) || 0) / 2;
-      const ey = (Number(el.y) || 0) + (Number(el.height) || 0) / 2;
+      const width = Number(el.width) || 0;
+      const height = Number(el.height) || 0;
+      const ex = (Number(el.x) || 0) + width / 2;
+      const ey = (Number(el.y) || 0) + height / 2;
       const screenX = (ex + scrollX) * zoom + offsetLeft;
       const screenY = (ey + scrollY) * zoom + offsetTop;
       const cx = offsetLeft + vw / 2;
       const cy = offsetTop + vh / 2;
-      return Math.hypot(screenX - cx, screenY - cy);
+      return {
+        centerOffsetPx: Math.hypot(screenX - cx, screenY - cy),
+        screenWidth: Math.abs(width) * zoom,
+        screenHeight: Math.abs(height) * zoom,
+        viewportWidth: vw,
+        viewportHeight: vh,
+      };
     },
-    { r: role, id: markerId }
+    { r: role, id: elementId }
   );
+}
+
+/**
+ * Distance from element center to viewport center in screen pixels.
+ * Uses Excalidraw's sceneCoordsToViewportCoords (offsetLeft/offsetTop included).
+ */
+export async function markerCenterOffsetFromViewportCenter(
+  page: Page,
+  role: "tutor" | "student",
+  markerId: string
+): Promise<number> {
+  const placement = await readElementViewportPlacement(page, role, markerId);
+  return placement.centerOffsetPx;
 }
 
 /**
@@ -2332,12 +2371,15 @@ export type CanvasDragFrac = { xFrac: number; yFrac: number };
 
 /**
  * Pointer-drag on the role's Excalidraw canvas. Fractions are of that canvas box.
+ * `release: false` leaves the button down so a caller can read an ephemeral
+ * overlay (laser trail) before pointer-up.
  */
 export async function dragOnRoleCanvas(
   page: Page,
   role: WbSyncRole,
   from: CanvasDragFrac,
-  to: CanvasDragFrac
+  to: CanvasDragFrac,
+  options?: { release?: boolean }
 ): Promise<void> {
   const canvas = page.locator(`[data-testid="${canvasMountTestId(role)}"] canvas`).first();
   await canvas.waitFor({ state: "visible", timeout: 30_000 });
@@ -2350,7 +2392,9 @@ export async function dragOnRoleCanvas(
   await page.mouse.move(x0, y0);
   await page.mouse.down();
   await page.mouse.move(x1, y1, { steps: 12 });
-  await page.mouse.up();
+  if (options?.release !== false) {
+    await page.mouse.up();
+  }
 }
 
 /**
@@ -2371,14 +2415,69 @@ export async function drawShapeWithTool(
   }
 }
 
+/** Left-rail tool buttons. "Pointer wand (K)" is the laser tool. */
+export type WbStripToolLabel =
+  | "Select (V)"
+  | "Eraser (E)"
+  | "Pencil (P)"
+  | "Text (T)"
+  | "Pointer wand (K)";
+
 /** Press a left-rail tool button and wait until it is the active tool. */
-export async function selectStripTool(
-  page: Page,
-  label: "Select (V)" | "Eraser (E)" | "Pencil (P)" | "Text (T)"
-): Promise<void> {
+export async function selectStripTool(page: Page, label: WbStripToolLabel): Promise<void> {
   const button = page.getByRole("button", { name: label, exact: true });
   await button.click();
   await expect(button).toHaveAttribute("aria-pressed", "true");
+}
+
+/**
+ * One painted laser-trail path inside the role's canvas mount.
+ * Excalidraw draws collaborator lasers as SVG `<path>` nodes under `.SVGLayer`.
+ * `fillAttr` is the attribute Excalidraw set (`pointer.laserColor`);
+ * `computedFill` is the color the browser actually paints.
+ */
+export type LaserTrailPaint = {
+  fillAttr: string;
+  computedFill: string;
+};
+
+/** Non-empty laser-trail paths currently painted on `role`'s board. */
+export async function readLaserTrailPaints(
+  page: Page,
+  role: WbSyncRole
+): Promise<LaserTrailPaint[]> {
+  const mountId = canvasMountTestId(role);
+  return page.evaluate((id) => {
+    const mount = document.querySelector(`[data-testid="${id}"]`);
+    if (!mount) return [];
+    return Array.from(mount.querySelectorAll(".SVGLayer svg path"))
+      .filter((node) => (node.getAttribute("d") ?? "").trim().length > 0)
+      .map((node) => ({
+        fillAttr: node.getAttribute("fill") ?? "",
+        computedFill: window.getComputedStyle(node).fill ?? "",
+      }));
+  }, mountId);
+}
+
+/**
+ * Select the laser tool, drag, and run `whileDown` before pointer-up.
+ * The trail is ephemeral and decays after the button is released, so the
+ * peer oracle has to run while the drag is still held.
+ */
+export async function dragLaserWhileHeld(
+  page: Page,
+  role: WbSyncRole,
+  from: CanvasDragFrac,
+  to: CanvasDragFrac,
+  whileDown: () => Promise<void>
+): Promise<void> {
+  await selectStripTool(page, "Pointer wand (K)");
+  await dragOnRoleCanvas(page, role, from, to, { release: false });
+  try {
+    await whileDown();
+  } finally {
+    await page.mouse.up();
+  }
 }
 
 /** Top-bar undo/redo. Tutor and student chrome use different testids. */
