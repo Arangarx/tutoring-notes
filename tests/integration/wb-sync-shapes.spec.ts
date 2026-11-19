@@ -20,8 +20,9 @@ import { TAG } from "../test-tags";
  * Geometric-shape bidirectional sync.
  *
  * The oracle is the other peer's live scene (`__TN_WB_E2E__.getElements()`):
- * a new element of the tool's type, with non-zero geometry. Nothing here is
- * derived from the sync apply path.
+ * a new element of the tool's type, with non-zero geometry, whose width and
+ * height match the author's own scene box within a few pixels. Nothing here
+ * is derived from the sync apply path.
  *
  * `toCanonical` drops `frame` / `magicframe` / `selection` and keeps `angle`
  * only when it is non-zero. These tests do not assert on frame or on angle.
@@ -138,6 +139,30 @@ test.describe("whiteboard shape-tool live sync", { tag: [...SHAPE_TAGS] }, () =>
               const synced = peerSummary.find((element) => element.id === authored.id);
               expect(synced?.type).toBe(tool);
               expect(plausibleGeometry(synced!, tool)).toBe(true);
+
+              // Re-read both live scenes until the peer box matches the author's.
+              // An in-flight update can land a half-size element first; a sync
+              // that stays halved or stretched never matches and fails.
+              await expect
+                .poll(
+                  async () => {
+                    const authorBox = (
+                      await readSceneElementSummary(authorPage, author, { omitDeleted: true })
+                    ).find((element) => element.id === authored.id);
+                    const peerBox = (
+                      await readSceneElementSummary(peerPage, peer, { omitDeleted: true })
+                    ).find((element) => element.id === authored.id);
+                    if (!authorBox || !peerBox) {
+                      return `missing author=${Boolean(authorBox)} peer=${Boolean(peerBox)}`;
+                    }
+                    const widthDelta = Math.abs(peerBox.width - authorBox.width);
+                    const heightDelta = Math.abs(peerBox.height - authorBox.height);
+                    if (widthDelta <= 4 && heightDelta <= 4) return "match";
+                    return `width author=${authorBox.width} peer=${peerBox.width} height author=${authorBox.height} peer=${peerBox.height}`;
+                  },
+                  { timeout: 15_000 }
+                )
+                .toBe("match");
             });
           }
         } finally {

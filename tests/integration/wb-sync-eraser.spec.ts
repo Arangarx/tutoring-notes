@@ -1,14 +1,16 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import {
-  drawTestStrokeOnRole,
+  dragOnRoleCanvas,
   dragPointerAcrossSceneBox,
+  drawTestStrokeOnRole,
   expectHeld,
   openTutorAndStudent,
   pageForRole,
   peerOf,
   projectSceneRectCenterToScreen,
   readAppStateCenterXY,
+  readSceneElementIds,
   readSceneElementSummary,
   seedWbLiveSyncSession,
   selectStripTool,
@@ -27,8 +29,9 @@ import { TAG } from "../test-tags";
  * id present or absent among non-deleted elements. Nothing here is derived
  * from the sync apply path.
  *
- * Create uses `drawTestStrokeOnRole` (the shared hermetic stroke). That helper
- * writes a scene element through the live API; the peer must gain the same id.
+ * The hermetic stroke (`drawTestStrokeOnRole`) is always a `line`. Pencil
+ * coverage is a separate test: select Pencil (P) and drag, which must sync
+ * a real `type === "freedraw"` element.
  * Undo/redo use the top-bar buttons, then `expectHeld` so a mid-apply frame
  * is not a pass. The undo apply-race itself is T5 — not repeated here.
  *
@@ -84,7 +87,8 @@ async function syncNewStroke(
     (element) => element.id === id
   );
   if (!authored?.type) throw new Error(`stroke ${id} missing on ${author}`);
-  expect(["line", "freedraw"]).toContain(authored.type);
+  // drawTestStroke → makeLine. A freedraw would be the wrong element here.
+  expect(authored.type).toBe("line");
   expect(Math.abs(authored.width) >= 1 || Math.abs(authored.height) >= 1).toBe(true);
 
   await waitForElementOnPeer(peerPage, peer, id);
@@ -130,6 +134,94 @@ async function eraseElement(
   await dragPointerAcrossSceneBox(page, role, element);
 }
 
+/** Diagonal Pencil drags. The two roles use different regions so strokes do not overlap. */
+const PENCIL_DRAG: Record<
+  WbSyncRole,
+  { from: { xFrac: number; yFrac: number }; to: { xFrac: number; yFrac: number } }
+> = {
+  tutor: { from: { xFrac: 0.22, yFrac: 0.32 }, to: { xFrac: 0.46, yFrac: 0.62 } },
+  student: { from: { xFrac: 0.56, yFrac: 0.3 }, to: { xFrac: 0.8, yFrac: 0.64 } },
+};
+
+/** A real freedraw stroke, not a 1px speck. Both axes of the scene box count. */
+function freedrawExtentOk(element: SceneElementSummary): boolean {
+  return Math.abs(element.width) > 1 && Math.abs(element.height) > 1;
+}
+
+async function drawPencilStroke(page: Page, role: WbSyncRole): Promise<void> {
+  await selectStripTool(page, "Pencil (P)");
+  const drag = PENCIL_DRAG[role];
+  await dragOnRoleCanvas(page, role, drag.from, drag.to);
+}
+
+async function waitForAddedFreedraw(
+  page: Page,
+  role: WbSyncRole,
+  beforeIds: readonly string[]
+): Promise<SceneElementSummary> {
+  let found: SceneElementSummary | undefined;
+  await expect
+    .poll(
+      async () => {
+        const summary = await readSceneElementSummary(page, role, {
+          type: "freedraw",
+          omitDeleted: true,
+        });
+        const prior = new Set(beforeIds);
+        found = summary.find(
+          (element) =>
+            !prior.has(element.id) && element.type === "freedraw" && freedrawExtentOk(element)
+        );
+        return Boolean(found);
+      },
+      { timeout: 20_000 }
+    )
+    .toBe(true);
+  if (!found) {
+    const summary = await readSceneElementSummary(page, role, { omitDeleted: true });
+    const prior = new Set(beforeIds);
+    const added = summary.filter((element) => !prior.has(element.id));
+    throw new Error(
+      `${role} scene did not gain a freedraw; new elements=${JSON.stringify(added)}`
+    );
+  }
+  return found;
+}
+
+/**
+ * Select Pencil and drag on `author`. The peer's non-deleted scene must gain
+ * that same id with `type === "freedraw"` and a bounding box over 1px.
+ */
+async function syncNewFreedraw(
+  authorPage: Page,
+  author: WbSyncRole,
+  peerPage: Page,
+  peer: WbSyncRole
+): Promise<SceneElementSummary> {
+  const before = await readSceneElementIds(authorPage, author);
+  await drawPencilStroke(authorPage, author);
+  const authored = await waitForAddedFreedraw(authorPage, author, before);
+  expect(authored.type).toBe("freedraw");
+  expect(freedrawExtentOk(authored)).toBe(true);
+
+  await waitForPeerElement(
+    peerPage,
+    peer,
+    authored.id,
+    (element) =>
+      element.type === "freedraw" && element.isDeleted === false && freedrawExtentOk(element)
+  );
+  const peerRow = (
+    await readSceneElementSummary(peerPage, peer, { omitDeleted: true })
+  ).find((element) => element.id === authored.id);
+  expect(peerRow?.id).toBe(authored.id);
+  expect(peerRow?.type).toBe("freedraw");
+  expect(peerRow?.isDeleted).toBe(false);
+  if (!peerRow) throw new Error(`freedraw ${authored.id} missing on ${peer}`);
+  expect(freedrawExtentOk(peerRow)).toBe(true);
+  return authored;
+}
+
 async function selectAndDelete(
   page: Page,
   role: WbSyncRole,
@@ -169,6 +261,58 @@ test.describe("whiteboard eraser, delete, and redo live sync", { tag: [...ERASER
             expect(peerRow?.isDeleted).toBe(false);
           });
         }
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "a pencil freedraw stroke created on one peer appears on the other (tutor → student and student → tutor)",
+    { tag: [...ERASER_TAGS] },
+    async ({ browser }) => {
+      test.setTimeout(180_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session);
+      try {
+        for (const author of ["tutor", "student"] as const) {
+          const peer = peerOf(author);
+          await test.step(`freedraw ${author} → ${peer}`, async () => {
+            await syncNewFreedraw(
+              pageForRole(peers, author),
+              author,
+              pageForRole(peers, peer),
+              peer
+            );
+          });
+        }
+      } finally {
+        await peers.close();
+      }
+    }
+  );
+
+  test(
+    "the creator erases a pencil freedraw and the other peer sees it deleted",
+    { tag: [...ERASER_TAGS] },
+    async ({ browser }) => {
+      test.setTimeout(180_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session);
+      try {
+        const author: WbSyncRole = "tutor";
+        const peer = peerOf(author);
+        const authorPage = pageForRole(peers, author);
+        const peerPage = pageForRole(peers, peer);
+        const authored = await syncNewFreedraw(authorPage, author, peerPage, peer);
+        const local = (
+          await readSceneElementSummary(authorPage, author, { omitDeleted: true })
+        ).find((element) => element.id === authored.id);
+        if (!local) throw new Error(`freedraw ${authored.id} left ${author} before erase`);
+        expect(local.type).toBe("freedraw");
+        await eraseElement(authorPage, author, local);
+        await expectDeletedOn(authorPage, author, authored.id);
+        await expectDeletedOn(peerPage, peer, authored.id);
       } finally {
         await peers.close();
       }

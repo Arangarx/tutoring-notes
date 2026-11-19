@@ -2122,6 +2122,7 @@ export async function readVisibleScene(
   role: "tutor" | "student"
 ): Promise<VisibleSceneRect> {
   return page.evaluate((r) => {
+    // Inlined: this callback runs in the browser and cannot call canvasMountTestId.
     const mountId = r === "tutor" ? "tutor-whiteboard-canvas-mount" : "student-whiteboard-canvas-mount";
     const mount = document.querySelector(`[data-testid='${mountId}']`);
     if (!mount) throw new Error(`missing canvas mount for ${r}`);

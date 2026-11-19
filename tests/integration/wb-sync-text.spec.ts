@@ -2,12 +2,14 @@ import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import {
   addedIds,
+  canvasMountTestId,
   clickBoardPageTab,
   commitWysiwyg,
   drawTestStrokeOnRole,
   expectHeld,
   fillExcalidrawWysiwyg,
   openTutorAndStudent,
+  pageForRole,
   peerOf,
   projectSceneRectCenterToScreen,
   readActiveWhiteboardPageId,
@@ -15,6 +17,7 @@ import {
   readSceneElementIds,
   readSceneElementSummary,
   seedWbLiveSyncSession,
+  selectStripTool,
   waitForElementOnPeer,
   waitForPeerElement,
   type SceneElementSummary,
@@ -33,18 +36,9 @@ import { TAG } from "../test-tags";
  */
 const TEXT_TAGS = [TAG.WB_STROKES, TAG.WB_SYNC] as const;
 
-const CANVAS_MOUNT: Record<WbSyncRole, string> = {
-  tutor: "tutor-whiteboard-canvas-mount",
-  student: "student-whiteboard-canvas-mount",
-};
+type OpenedPeers = Awaited<ReturnType<typeof openTutorAndStudent>>;
 
 type TextEl = { id: string; type: "text"; text: string };
-
-type Peers = { tutorPage: Page; studentPage: Page };
-
-function pageFor(peers: Peers, role: WbSyncRole): Page {
-  return role === "tutor" ? peers.tutorPage : peers.studentPage;
-}
 
 async function readLiveText(page: Page, role: WbSyncRole): Promise<TextEl[]> {
   const summary = await readSceneElementSummary(page, role, {
@@ -60,10 +54,8 @@ async function readLiveText(page: Page, role: WbSyncRole): Promise<TextEl[]> {
 
 /** Click Text (T) and click the canvas so the wysiwyg opens. */
 async function armTextEditor(page: Page, role: WbSyncRole): Promise<void> {
-  const textTool = page.getByRole("button", { name: "Text (T)" });
-  await textTool.click();
-  await expect(textTool).toHaveAttribute("aria-pressed", "true");
-  const canvas = page.locator(`[data-testid="${CANVAS_MOUNT[role]}"] .excalidraw`).first();
+  await selectStripTool(page, "Text (T)");
+  const canvas = page.locator(`[data-testid="${canvasMountTestId(role)}"] .excalidraw`).first();
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
   expect(box, "excalidraw canvas box").not.toBeNull();
@@ -83,9 +75,7 @@ async function editCommittedText(
   elementId: string,
   nextText: string
 ): Promise<void> {
-  const select = page.getByRole("button", { name: "Select (V)" });
-  await select.click();
-  await expect(select).toHaveAttribute("aria-pressed", "true");
+  await selectStripTool(page, "Select (V)");
   const summary = await readSceneElementSummary(page, role);
   const element = summary.find((entry) => entry.id === elementId);
   if (!element) throw new Error(`text ${elementId} not on ${role} canvas`);
@@ -155,7 +145,7 @@ type BoardSnapshot = {
 };
 
 async function readBoardSnapshot(
-  peers: Peers,
+  peers: OpenedPeers,
   board1Id: string,
   board2Id: string
 ): Promise<BoardSnapshot> {
@@ -196,7 +186,7 @@ function isolationView(snap: BoardSnapshot, elementId: string, sentinel: string,
   };
 }
 
-async function addBoardAndFollow(peers: Peers, boardTitle: string): Promise<string> {
+async function addBoardAndFollow(peers: OpenedPeers, boardTitle: string): Promise<string> {
   const previousId = await readActiveWhiteboardPageId(peers.tutorPage);
   await peers.tutorPage
     .getByTestId("wb-tutor-page-strip")
@@ -220,7 +210,7 @@ async function addBoardAndFollow(peers: Peers, boardTitle: string): Promise<stri
 }
 
 /** Marker drawn after the switch: its arrival means the live scene is that board. */
-async function markLiveBoard(peers: Peers, prefix: string): Promise<string> {
+async function markLiveBoard(peers: OpenedPeers, prefix: string): Promise<string> {
   const markerId = `${prefix}-${Date.now()}`;
   await drawTestStrokeOnRole(peers.tutorPage, "tutor", markerId, 240, 80, 360, 160);
   await waitForElementOnPeer(peers.studentPage, "student", markerId);
@@ -239,7 +229,7 @@ const BOARD2_ABSENCE = {
 };
 
 async function expectBoard2AbsenceHeld(
-  peers: Peers,
+  peers: OpenedPeers,
   board1Id: string,
   board2Id: string,
   elementId: string,
@@ -274,9 +264,9 @@ test.describe("whiteboard text-tool live sync", { tag: [...TEXT_TAGS] }, () => {
         try {
           const sentinel = `pwTxt${author}${Date.now()}`;
           await syncNewText(
-            pageFor(peers, author),
+            pageForRole(peers, author),
             author,
-            pageFor(peers, peer),
+            pageForRole(peers, peer),
             peer,
             sentinel
           );
@@ -294,8 +284,8 @@ test.describe("whiteboard text-tool live sync", { tag: [...TEXT_TAGS] }, () => {
         const session = await seedWbLiveSyncSession();
         const peers = await openTutorAndStudent(browser, session);
         try {
-          const authorPage = pageFor(peers, author);
-          const peerPage = pageFor(peers, peer);
+          const authorPage = pageForRole(peers, author);
+          const peerPage = pageForRole(peers, peer);
           const sentinel = `pwTxtEdit${author}${Date.now()}`;
           const revised = `${sentinel}X`;
           const authorBefore = await readSceneElementIds(authorPage, author);
