@@ -237,6 +237,7 @@ export default defineConfig({
       },
       testMatch: [
         "**/integration/whiteboard-live-sync-regression.spec.ts",
+        "**/integration/wb-sync-text.spec.ts",
         "**/integration/wb-student-exit-rejoin.spec.ts",
         "**/integration/wb-student-mic-persistence.spec.ts",
         "**/integration/wb-wave5-polish.spec.ts",
