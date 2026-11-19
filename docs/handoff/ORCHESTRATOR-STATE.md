@@ -10,6 +10,8 @@
 
 ### Last action
 
+**2026-11-19 09:45: Security CI green — `ts-node` was missing.** Andrew's "security checks failing" emails were a broken CI job, NOT a vulnerability: the `Security` workflow's `jest-security` job couldn't parse `jest.config.ts` (made `.ts` in `ac1b9056`, feat/org-qol only) because `ts-node` was never in `package.json`, so `npm ci` → `--only jest` died before any test ran. The other 3 jobs (Semgrep, gitleaks, npm audit) were already green. Fixed by pinning `ts-node` 10.9.2 in devDependencies (`3bb03c3d`); local `security:check` jest 69/69; CI [run 44569325526](https://github.com/Arangarx/tutoring-notes/actions/runs/44569325526) all 4 jobs green. This also unblocks `npm run security:check` locally (part of the A8 master gate). Not on master — branch-only breakage.
+
 **2026-11-18 evening: harness verified, V4 harness red fixed, AI pen test deferred to Bucket B.**
 
 - Harness fix `2ddfccf3` VERIFIED MERGE-OK by Sonnet (origin test is a real oracle, 3101 scoping correct, no orphaned server, no dup). Already on `feat/org-qol`.
