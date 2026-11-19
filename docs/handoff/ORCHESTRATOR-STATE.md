@@ -16,7 +16,8 @@
 - [gate harness fix](889df3bc-3471-4551-bda0-b646e37633b6) (Grok) is fixing both, test code only, red/green. A separate verifier reviews it before the gate is rerun.
 - **Still open after that:** V4 child-consent owner label (unexplained red). AI panel x2 is real env (`aiEnabled = !!OPENAI_API_KEY`, no local key). M11 flake. `npm run security:check` has NOT run on this tip, and the master gate requires it.
 - **Bucket A not started:** AV-REFRESH-LOSS and Gate A5. SMOKE-UX-1 is a hardware gap.
-- A9 book not written. A10 needs Andrew's go plus the migrations. The AI pen test needs Andrew's key decision.
+- A9 book not written. A10 needs Andrew's go plus the migrations.
+- **AI pen test STARTED 17:25:** [pen test](612ee05f-3c6f-4969-bb58-ec39e4f3300f) (Grok), timeboxed to one day. Andrew OK'd the production OpenAI key for Strix's own calls. Quarantine rule: the target runs from worktree `../tn-pentest` (no `.env*` files) on :3400 with DB `tutoring_notes_pentest`, dummy secrets, the blob harness, and no OpenAI, email or SMS creds. Reason: `next start` in the main checkout auto-loads `.env.production.local`, which would hand the target the production Blob, email and OpenAI credentials. Only the Strix process gets the key, and its logs are scrubbed afterwards. The agent holds `tn-pw-3.lock`. Findings go to `docs/security/ai-pentest-2026-11-18.md` on `launch/pentest`, report only, no fixes. Advised Andrew to set an OpenAI budget limit and avoid Sarah's session hours.
 
 `npx next build` exit 0, `test:regression` 150/150, and `test:prod-shape` 5/5 (at `836c8062`) still stand.
 
