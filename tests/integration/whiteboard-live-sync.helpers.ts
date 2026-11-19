@@ -2257,3 +2257,154 @@ export async function readElementVersion(
     { r: role, id: elementId }
   );
 }
+
+/** Canvas mount testid for a live whiteboard peer. */
+export function canvasMountTestId(role: WbSyncRole): string {
+  return role === "tutor"
+    ? "tutor-whiteboard-canvas-mount"
+    : "student-whiteboard-canvas-mount";
+}
+
+/** Page for a role on an open tutor+student pair. */
+export function pageForRole(
+  peers: { tutorPage: Page; studentPage: Page },
+  role: WbSyncRole
+): Page {
+  return role === "tutor" ? peers.tutorPage : peers.studentPage;
+}
+
+/** Geometric tools in the shapes pulldown. Labels match `WB_SHAPE_TOOLS`. */
+export type WbShapeToolName = "rectangle" | "ellipse" | "diamond" | "arrow" | "line";
+
+const SHAPE_MENU_LABEL: Record<WbShapeToolName, string> = {
+  rectangle: "Rectangle (R)",
+  ellipse: "Ellipse (O)",
+  diamond: "Diamond (D)",
+  arrow: "Arrow (A)",
+  line: "Line (L)",
+};
+
+/**
+ * Open the shapes pulldown and choose `tool`.
+ * The chevron is the split-button control (`Open shape picker`); the menuitem
+ * calls the same `selectTool` the toolbar uses.
+ */
+export async function selectShapeTool(page: Page, tool: WbShapeToolName): Promise<void> {
+  await page.locator(".mynk-wb-shapes-menu .mynk-wb-pulldown-chevron").click();
+  const menu = page.locator(".mynk-wb-shapes-dropdown");
+  await expect(menu).toBeVisible({ timeout: 5_000 });
+  await menu.getByRole("menuitem", { name: SHAPE_MENU_LABEL[tool], exact: true }).click();
+  await expect(menu).toBeHidden({ timeout: 5_000 });
+  await expect(page.getByRole("button", { name: "Shapes", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+}
+
+export type CanvasDragFrac = { xFrac: number; yFrac: number };
+
+/**
+ * Pointer-drag on the role's Excalidraw canvas. Fractions are of that canvas box.
+ */
+export async function dragOnRoleCanvas(
+  page: Page,
+  role: WbSyncRole,
+  from: CanvasDragFrac,
+  to: CanvasDragFrac
+): Promise<void> {
+  const canvas = page.locator(`[data-testid="${canvasMountTestId(role)}"] canvas`).first();
+  await canvas.waitFor({ state: "visible", timeout: 30_000 });
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error(`${role} excalidraw canvas has no bounding box`);
+  const x0 = box.x + box.width * from.xFrac;
+  const y0 = box.y + box.height * from.yFrac;
+  const x1 = box.x + box.width * to.xFrac;
+  const y1 = box.y + box.height * to.yFrac;
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move(x1, y1, { steps: 12 });
+  await page.mouse.up();
+}
+
+/**
+ * Select a shapes-menu tool and drag a box on that peer's canvas.
+ * Line and arrow get Escape afterwards so a multi-point editor commits.
+ */
+export async function drawShapeWithTool(
+  page: Page,
+  role: WbSyncRole,
+  tool: WbShapeToolName,
+  from: CanvasDragFrac,
+  to: CanvasDragFrac
+): Promise<void> {
+  await selectShapeTool(page, tool);
+  await dragOnRoleCanvas(page, role, from, to);
+  if (tool === "line" || tool === "arrow") {
+    await page.keyboard.press("Escape");
+  }
+}
+
+/** Press a left-rail tool button and wait until it is the active tool. */
+export async function selectStripTool(
+  page: Page,
+  label: "Select (V)" | "Eraser (E)" | "Pencil (P)" | "Text (T)"
+): Promise<void> {
+  const button = page.getByRole("button", { name: label, exact: true });
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+}
+
+/** Top-bar undo/redo. Tutor and student chrome use different testids. */
+export function undoRedoButton(page: Page, role: WbSyncRole, which: "undo" | "redo") {
+  const testId =
+    role === "tutor"
+      ? which === "undo"
+        ? "wb-undo"
+        : "wb-redo"
+      : which === "undo"
+        ? "wb-student-undo"
+        : "wb-student-redo";
+  return page.getByTestId(testId);
+}
+
+/**
+ * Drag the pointer along a scene box's screen diagonal (eraser stroke, marquee).
+ * The box is projected with the viewer's own transform.
+ */
+export async function dragPointerAcrossSceneBox(
+  page: Page,
+  role: WbSyncRole,
+  scene: { x: number; y: number; width: number; height: number }
+): Promise<void> {
+  const screen = await projectSceneRectToScreen(page, role, {
+    x: scene.x,
+    y: scene.y,
+    width: scene.width === 0 ? 1 : scene.width,
+    height: scene.height === 0 ? 1 : scene.height,
+  });
+  const mount = page.locator(`[data-testid="${canvasMountTestId(role)}"]`);
+  const box = await mount.boundingBox();
+  if (!box) throw new Error(`${role} canvas mount has no bounding box`);
+  const centerX = screen.x + screen.width / 2;
+  const centerY = screen.y + screen.height / 2;
+  if (
+    centerX < box.x ||
+    centerY < box.y ||
+    centerX > box.x + box.width ||
+    centerY > box.y + box.height
+  ) {
+    throw new Error(
+      `scene box center (${centerX.toFixed(1)}, ${centerY.toFixed(1)}) is outside the ${role} canvas`
+    );
+  }
+  const insetX = Math.min(6, Math.max(0, screen.width * 0.08));
+  const insetY = Math.min(6, Math.max(0, screen.height * 0.08));
+  const x0 = screen.x + insetX;
+  const y0 = screen.y + insetY;
+  const x1 = screen.x + screen.width - insetX;
+  const y1 = screen.y + screen.height - insetY;
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move(x1, y1, { steps: 18 });
+  await page.mouse.up();
+}
