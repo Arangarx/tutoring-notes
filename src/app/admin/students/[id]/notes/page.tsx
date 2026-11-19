@@ -16,6 +16,7 @@ import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { env } from "@/lib/env";
+import { isPlaywrightTestEnvEnabled } from "@/lib/playwright-test-route";
 import { EmailReminderDialog } from "../EmailReminderDialog";
 import { NotesPageBody } from "./NotesPageBody";
 export const dynamic = "force-dynamic";
@@ -246,7 +247,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
             ? null
             : {
                 studentId: student.id,
-                aiEnabled: !!env.OPENAI_API_KEY,
+                aiEnabled: !!env.OPENAI_API_KEY || isPlaywrightTestEnvEnabled(),
                 blobEnabled: !!env.BLOB_READ_WRITE_TOKEN,
               }
         }
