@@ -25,6 +25,14 @@ const PROJECT = "wb-regression";
 /** Combined flag — required on Windows (shell:true mangles separate `--project` + name + file paths). */
 const PROJECT_FLAG = `--project=${PROJECT}`;
 const LIFECYCLE_BASENAME = "wb-session-lifecycle.spec.ts";
+/**
+ * Primary dev server sets NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1, which
+ * records while the FSM is `recording` and would hide the production
+ * armed-reopen bug. This spec must hit the alternate server (solo flag off).
+ * The gate starts that server only for shards and isolation reruns that
+ * include the file. Every other shard still skips it.
+ */
+const ALT_SERVER_SPEC = "wb-reopen-stroke-capture.spec.ts";
 const DEFAULT_TARGET_SHARDS = 6;
 /**
  * Per-shard blob zips for merge-reports. MUST live outside Playwright's
@@ -59,6 +67,16 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+function needsAltDevServer(files) {
+  return files.some((file) => String(file).replace(/\\/g, "/").includes(ALT_SERVER_SPEC));
+}
+
+function gateEnvForFiles(files, extra = {}) {
+  const env = { ...extra };
+  if (!needsAltDevServer(files)) env.WB_SKIP_3101_WEBSERVER = "1";
+  return env;
 }
 
 function npxPlaywright(args, env = {}) {
@@ -415,12 +433,11 @@ async function runShard(shard, index) {
       "--workers=1",
       "--reporter=line,blob",
     ],
-    {
-      WB_SKIP_3101_WEBSERVER: "1",
+    gateEnvForFiles(shard.files, {
       PWTEST_BLOB_DO_NOT_REMOVE: "1",
       PLAYWRIGHT_BLOB_OUTPUT_DIR: blobOutputDir,
       PLAYWRIGHT_BLOB_OUTPUT_NAME: `${shardLabel}-report.zip`,
-    },
+    }),
   );
 
   process.stdout.write(result.stdout || "");
@@ -529,7 +546,7 @@ async function runIsolationPass(failures) {
         "--workers=1",
         "--reporter=line",
       ],
-      { WB_SKIP_3101_WEBSERVER: "1" },
+      gateEnvForFiles([failure.file]),
     );
     process.stdout.write(result.stdout || "");
     process.stderr.write(result.stderr || "");
@@ -630,6 +647,7 @@ if (require.main === module) {
 module.exports = {
   buildShards,
   extractUnexpectedFailuresFromJsonReport,
+  gateEnvForFiles,
   loadWbRegressionProject,
   listProjectTests,
   parseListOutput,

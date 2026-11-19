@@ -6,9 +6,12 @@
  * recording, so the replay shows them.
  *
  * Production default: `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT` is UNSET. The primary harness server
- * sets it to 1 (which masks the bug by recording solo), so this spec runs against the alternate
+ * sets it to 1. With that flag the FSM is `recording` before any student joins, so strokes are
+ * captured even if the armed-reopen path is broken. This spec therefore runs against the alternate
  * server (`PW_ALT_PORT`), which carries the production default — same trick as
  * `wb-in-person-audio-start.spec.ts` / project `wb-in-person-unmasked`.
+ * `scripts/wb-relay-shard-run.cjs` starts that server for the shard and the isolation rerun that
+ * include this file. Other shards still set WB_SKIP_3101_WEBSERVER.
  *
  * Oracle (independent of app internals): the replay event log the server returns after End
  * (`GET /api/whiteboard/:id/events`, assembled from the server-persisted batches). The stroke is

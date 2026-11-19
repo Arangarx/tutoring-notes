@@ -25,6 +25,9 @@ const {
  * stop any running `next dev` first. Local Docker Postgres only (host guard below).
  */
 applyWbRegressionLocalDatabaseEnv();
+// Test workers inherit this. harnessOrigin() then returns this stack's
+// prod-shape origin instead of the developer .env NEXTAUTH_URL.
+process.env.PW_PROD_SHAPE = "1";
 
 const stack = resolvePwStack();
 // Iteration only: `PROD_SHAPE_REUSE_BUILD=1` skips the build and serves the existing `.next`

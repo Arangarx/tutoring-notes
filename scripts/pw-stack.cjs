@@ -115,9 +115,14 @@ function authStatePath(fileName, env = process.env) {
 }
 
 function harnessOrigin(env = process.env) {
-  const configured = envGet(env, "NEXTAUTH_URL");
-  if (configured) return configured.replace(/\/$/, "");
-  return resolvePwStack(env).origin;
+  const stack = resolvePwStack(env);
+  // The test worker imports Prisma, which loads the developer .env.
+  // That file's NEXTAUTH_URL is the everyday app origin (often :3000),
+  // not the server this run started. The dev server sets its own
+  // NEXTAUTH_URL inside the webServer command. Prod-shape sets
+  // PW_PROD_SHAPE=1 so this same function addresses that server.
+  if (envGet(env, "PW_PROD_SHAPE") === "1") return stack.prodShapeOrigin;
+  return stack.origin;
 }
 
 function relayHttpUrl(env = process.env) {

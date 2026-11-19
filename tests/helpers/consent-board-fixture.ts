@@ -20,7 +20,7 @@ export const CLEANUP = "/api/cron/session-cleanup" as const;
 export const PAST_PASS_2_DELAY_MS = 2 * 60 * 60_000;
 const { harnessOrigin } = require("../../scripts/pw-stack.cjs");
 
-/** Same origin the server builds harness URLs from (`NEXTAUTH_URL`, else PW_PORT). */
+/** Origin of the server under test: this stack's PW_PORT, or the prod-shape port when that suite is running. */
 export function currentHarnessOrigin(): string {
   return harnessOrigin();
 }

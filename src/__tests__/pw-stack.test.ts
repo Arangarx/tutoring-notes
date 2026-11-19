@@ -14,6 +14,7 @@ const {
   authStatePath,
   buildProdShapeServerCommand,
   buildWbDevServerCommand,
+  harnessOrigin,
   jestDatabaseUrl,
   playwrightDatabaseUrl,
   relayDockerArgs,
@@ -184,5 +185,57 @@ describe("playwright stack endpoints", () => {
 
   it("refuses a dev port that collides with the relay", () => {
     expect(() => resolvePwStack({ PW_PORT: "3002" })).toThrow(/relay/i);
+  });
+
+  it("addresses the stack dev server, not a developer NEXTAUTH_URL", () => {
+    expect(harnessOrigin({})).toBe("http://localhost:3100");
+    expect(harnessOrigin({ NEXTAUTH_URL: "http://localhost:3000" })).toBe(
+      "http://localhost:3100",
+    );
+    expect(
+      harnessOrigin({
+        NEXTAUTH_URL: "http://localhost:3000/",
+        PW_PORT: "3200",
+        PW_RELAY_PORT: "3012",
+      }),
+    ).toBe("http://localhost:3200");
+    expect(
+      harnessOrigin({
+        NEXTAUTH_URL: "http://localhost:3000",
+        PW_PORT: "3300",
+        PW_RELAY_PORT: "3022",
+      }),
+    ).toBe("http://localhost:3300");
+  });
+
+  it("starts the alternate dev server only for the reopen-stroke spec", () => {
+    const { gateEnvForFiles } = require("../../scripts/wb-relay-shard-run.cjs");
+    expect(gateEnvForFiles(["integration/wb-consent-cron.spec.ts"]).WB_SKIP_3101_WEBSERVER).toBe(
+      "1",
+    );
+    expect(
+      gateEnvForFiles(["integration/wb-reopen-stroke-capture.spec.ts"]).WB_SKIP_3101_WEBSERVER,
+    ).toBeUndefined();
+    expect(
+      gateEnvForFiles(["tests/integration/wb-reopen-stroke-capture.spec.ts"]).WB_SKIP_3101_WEBSERVER,
+    ).toBeUndefined();
+  });
+
+  it("addresses the prod-shape server when that suite is the one under test", () => {
+    expect(
+      harnessOrigin({
+        PW_PROD_SHAPE: "1",
+        NEXTAUTH_URL: "http://localhost:3000",
+      }),
+    ).toBe("http://localhost:3102");
+    expect(
+      harnessOrigin({
+        PW_PROD_SHAPE: "1",
+        NEXTAUTH_URL: "http://localhost:3000",
+        PW_PORT: "3200",
+        PW_RELAY_PORT: "3012",
+        PW_PROD_SHAPE_PORT: "3212",
+      }),
+    ).toBe("http://localhost:3212");
   });
 });
