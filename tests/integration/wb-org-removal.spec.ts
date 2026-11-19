@@ -10,6 +10,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { encode } from "next-auth/jwt";
 import { TAG } from "../test-tags";
+import { TEST_ADMIN } from "../visual/helpers";
 import {
   loginLearnerInContext,
   readEncryptionKeyFromHash,
@@ -362,20 +363,24 @@ test.describe("org removal and suspension", { tag: [TAG.ORG, TAG.WB_CHROME, TAG.
       studentId: learner.student.id,
       learnerProfileId: learner.profile.id,
     });
+    // Operator access is the email (OPERATOR_EMAILS includes this row). The
+    // display name is the shared harness admin's canonical name. This spec's
+    // assertions never read "Playwright Operator"; renaming the row made
+    // consent V4 look for a name that was no longer stored.
     const operatorRow = await prisma.adminUser.upsert({
-      where: { email: "playwright@test.local" },
+      where: { email: TEST_ADMIN.email },
       update: {
         approvalStatus: "APPROVED",
         emailVerifiedAt: new Date("2026-01-01"),
         isTestAccount: false,
-        displayName: "Playwright Operator",
+        displayName: TEST_ADMIN.displayName,
       },
       create: {
-        email: "playwright@test.local",
+        email: TEST_ADMIN.email,
         role: "TUTOR",
         approvalStatus: "APPROVED",
         emailVerifiedAt: new Date("2026-01-01"),
-        displayName: "Playwright Operator",
+        displayName: TEST_ADMIN.displayName,
         isTestAccount: false,
       },
     });

@@ -63,6 +63,8 @@ export async function seedTestAdmin(): Promise<string> {
       update: {
         approvalStatus: "APPROVED",
         emailVerifiedAt: new Date("2026-01-01"),
+        // Heal a rename. This row is shared; consent V4 reads TEST_ADMIN.displayName.
+        displayName: TEST_ADMIN.displayName,
         // Harness admin should always reflect current app billing defaults (null → DEFAULT_*).
         defaultRoundingMode: null,
         defaultRoundingIncrementMin: null,
