@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import {
   seedTestAdmin,
   seedTestStudent,
@@ -1575,6 +1576,33 @@ export async function loginAccountHolderInContext(
         `email=${email} — ensure AH_SESSION_HMAC_SECRET is set and the account exists.`
     );
   }
+}
+
+/** Password for TEST_LEARNER.parentEmail. The share wall requires this entitled session. */
+const TEST_LEARNER_PARENT_AH_PASSWORD = "PlaywrightParentAh!456";
+
+/**
+ * Sign the Playwright parent (account holder) into this context.
+ * With the notes auth wall on, `/s/<token>` opens only for that owner.
+ */
+export async function loginOwningParentForShare(
+  context: BrowserContext
+): Promise<void> {
+  const prisma = new PrismaClient();
+  try {
+    const passwordHash = await bcrypt.hash(TEST_LEARNER_PARENT_AH_PASSWORD, 10);
+    await prisma.accountHolder.update({
+      where: { email: TEST_LEARNER.parentEmail },
+      data: { passwordHash, emailVerifiedAt: new Date("2026-01-01") },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+  await loginAccountHolderInContext(
+    context,
+    TEST_LEARNER.parentEmail,
+    TEST_LEARNER_PARENT_AH_PASSWORD
+  );
 }
 
 export type SelfLearnerWbSession = {

@@ -3,7 +3,13 @@
  *
  * Prod defaults (`NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT` unset): without
  * `inPersonMode` FSM wiring, the recorder sits in armed/awaiting_first_participant
- * and captures zero tutor:mic audio. Run on wb-in-person-unmasked for the true gate.
+ * and captures zero tutor:mic audio.
+ *
+ * The primary harness server sets NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1.
+ * This file addresses the alternate server (solo flag off) via test.use, so
+ * both wb-regression and wb-in-person-unmasked hit production defaults.
+ * scripts/wb-relay-shard-run.cjs starts that server for the shard that
+ * includes this file.
  *
  * Run:
  *   npx playwright test tests/integration/wb-in-person-audio-start.spec.ts --project=wb-in-person-unmasked
@@ -22,7 +28,10 @@ import {
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 import { driveVadSilenceCut, injectVadOverrides } from "../helpers/vad-test-meter";
-const { authStatePath } = require("../../scripts/pw-stack.cjs");
+const { authStatePath, resolvePwStack } = require("../../scripts/pw-stack.cjs");
+
+// Production-default server (solo-until-student OFF). Same as wb-reopen-stroke-capture.
+test.use({ baseURL: resolvePwStack().altOrigin });
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
@@ -65,6 +74,8 @@ test.describe(
           `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
           { waitUntil: "domcontentloaded" }
         );
+        // This path is only meaningful on the production-default server.
+        expect(new URL(tutorPage.url()).origin).toBe(resolvePwStack().altOrigin);
         await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
           timeout: 90_000,
         });

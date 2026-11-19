@@ -263,7 +263,10 @@ export default defineConfig({
         "**/integration/wb-recording-draft-recovery.spec.ts",
         "**/integration/wb-recording-draft-live-owner.spec.ts",
         "**/integration/wb-recording-draft-recovery-guards.spec.ts",
+        "**/integration/wb-delete-session.spec.ts",
         "**/integration/wb-reopen-stroke-capture.spec.ts",
+        // Alt-origin (solo flag off). Shard runner starts :3101 only for shards that include this file.
+        "**/integration/wb-in-person-audio-start.spec.ts",
         "**/integration/wb-tutor-recording-mute.spec.ts",
         "**/integration/wb-transcription-language-notice.spec.ts",
         "**/integration/wb-e2-pdf-stroke-leak.spec.ts",

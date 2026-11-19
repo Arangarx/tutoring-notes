@@ -28,11 +28,15 @@ const LIFECYCLE_BASENAME = "wb-session-lifecycle.spec.ts";
 /**
  * Primary dev server sets NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1, which
  * records while the FSM is `recording` and would hide the production
- * armed-reopen bug. This spec must hit the alternate server (solo flag off).
- * The gate starts that server only for shards and isolation reruns that
- * include the file. Every other shard still skips it.
+ * armed-reopen bug and the production in-person audio start. These specs
+ * must hit the alternate server (solo flag off). The gate starts that
+ * server only for shards and isolation reruns that include one of the
+ * files. Every other shard still skips it.
  */
-const ALT_SERVER_SPEC = "wb-reopen-stroke-capture.spec.ts";
+const ALT_SERVER_SPEC = [
+  "wb-reopen-stroke-capture.spec.ts",
+  "wb-in-person-audio-start.spec.ts",
+];
 const DEFAULT_TARGET_SHARDS = 6;
 /**
  * Per-shard blob zips for merge-reports. MUST live outside Playwright's
@@ -70,7 +74,10 @@ function parseArgs(argv) {
 }
 
 function needsAltDevServer(files) {
-  return files.some((file) => String(file).replace(/\\/g, "/").includes(ALT_SERVER_SPEC));
+  return files.some((file) => {
+    const normalized = String(file).replace(/\\/g, "/");
+    return ALT_SERVER_SPEC.some((spec) => normalized.includes(spec));
+  });
 }
 
 function gateEnvForFiles(files, extra = {}) {
@@ -645,10 +652,12 @@ if (require.main === module) {
 }
 
 module.exports = {
+  ALT_SERVER_SPEC,
   buildShards,
   extractUnexpectedFailuresFromJsonReport,
   gateEnvForFiles,
   loadWbRegressionProject,
   listProjectTests,
+  needsAltDevServer,
   parseListOutput,
 };

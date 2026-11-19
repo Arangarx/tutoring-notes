@@ -8,16 +8,13 @@
  */
 
 import { test, expect } from "./fixtures";
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
-import { TEST_LEARNER } from "../visual/helpers";
 import {
   drawTestStrokeOnRole,
-  loginAccountHolderInContext,
+  loginOwningParentForShare,
   seedWbLiveSyncSession,
   waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
@@ -26,30 +23,9 @@ import { promoteSessionNoteReady } from "./wb-replay-note.helpers";
 import { TAG } from "../test-tags";
 
 const PHONE_VIEWPORT = { width: 390, height: 844 };
-const TEST_LEARNER_PARENT_AH_PASSWORD = "PlaywrightParentAh!456";
 
 /** Minimum canvas host height as a fraction of viewport — catches 0×0 / collapsed shell. */
 const MIN_CANVAS_HEIGHT_VIEWPORT_RATIO = 0.35;
-
-async function loginOwningParentForShare(
-  context: import("@playwright/test").BrowserContext
-) {
-  const prisma = new PrismaClient();
-  try {
-    const passwordHash = await bcrypt.hash(TEST_LEARNER_PARENT_AH_PASSWORD, 10);
-    await prisma.accountHolder.update({
-      where: { email: TEST_LEARNER.parentEmail },
-      data: { passwordHash, emailVerifiedAt: new Date("2026-01-01") },
-    });
-  } finally {
-    await prisma.$disconnect();
-  }
-  await loginAccountHolderInContext(
-    context,
-    TEST_LEARNER.parentEmail,
-    TEST_LEARNER_PARENT_AH_PASSWORD
-  );
-}
 
 async function muteReplayAudioWhenPresent(page: import("@playwright/test").Page) {
   await page.evaluate(() => {

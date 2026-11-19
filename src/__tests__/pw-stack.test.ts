@@ -208,8 +208,19 @@ describe("playwright stack endpoints", () => {
     ).toBe("http://localhost:3300");
   });
 
-  it("starts the alternate dev server only for the reopen-stroke spec", () => {
-    const { gateEnvForFiles } = require("../../scripts/wb-relay-shard-run.cjs");
+  it("starts the alternate dev server for the reopen-stroke and in-person audio specs", () => {
+    const {
+      ALT_SERVER_SPEC,
+      gateEnvForFiles,
+      needsAltDevServer,
+    } = require("../../scripts/wb-relay-shard-run.cjs");
+    expect(ALT_SERVER_SPEC).toEqual([
+      "wb-reopen-stroke-capture.spec.ts",
+      "wb-in-person-audio-start.spec.ts",
+    ]);
+    expect(needsAltDevServer(["integration/wb-consent-cron.spec.ts"])).toBe(false);
+    expect(needsAltDevServer(["integration/wb-reopen-stroke-capture.spec.ts"])).toBe(true);
+    expect(needsAltDevServer(["tests/integration/wb-in-person-audio-start.spec.ts"])).toBe(true);
     expect(gateEnvForFiles(["integration/wb-consent-cron.spec.ts"]).WB_SKIP_3101_WEBSERVER).toBe(
       "1",
     );
@@ -218,6 +229,12 @@ describe("playwright stack endpoints", () => {
     ).toBeUndefined();
     expect(
       gateEnvForFiles(["tests/integration/wb-reopen-stroke-capture.spec.ts"]).WB_SKIP_3101_WEBSERVER,
+    ).toBeUndefined();
+    expect(
+      gateEnvForFiles(["integration/wb-in-person-audio-start.spec.ts"]).WB_SKIP_3101_WEBSERVER,
+    ).toBeUndefined();
+    expect(
+      gateEnvForFiles(["tests/integration/wb-in-person-audio-start.spec.ts"]).WB_SKIP_3101_WEBSERVER,
     ).toBeUndefined();
   });
 

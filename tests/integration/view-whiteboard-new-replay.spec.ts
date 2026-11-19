@@ -12,43 +12,18 @@
 
 import { test, expect } from "./fixtures";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
-import { TEST_LEARNER } from "../visual/helpers";
 import {
-  loginAccountHolderInContext,
+  loginOwningParentForShare,
   seedWbLiveSyncSession,
   waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
 import { resolveShareTokenForStudent } from "./share-page-audio-scrub.helpers";
 import { uploadReplayEvents } from "./wb-replay-harness.helpers";
 import { TAG } from "../test-tags";
-
-/** Password for TEST_LEARNER.parentEmail AH login (share wall requires entitled session). */
-const TEST_LEARNER_PARENT_AH_PASSWORD = "PlaywrightParentAh!456";
-
-async function loginOwningParentForShare(
-  context: import("@playwright/test").BrowserContext
-) {
-  const prisma = new PrismaClient();
-  try {
-    const passwordHash = await bcrypt.hash(TEST_LEARNER_PARENT_AH_PASSWORD, 10);
-    await prisma.accountHolder.update({
-      where: { email: TEST_LEARNER.parentEmail },
-      data: { passwordHash, emailVerifiedAt: new Date("2026-01-01") },
-    });
-  } finally {
-    await prisma.$disconnect();
-  }
-  await loginAccountHolderInContext(
-    context,
-    TEST_LEARNER.parentEmail,
-    TEST_LEARNER_PARENT_AH_PASSWORD
-  );
-}
 
 /** Parent share card reads WhiteboardSession.noteId — end-session alone does not set it. */
 async function linkEndedWhiteboardToReadyShareNote(
