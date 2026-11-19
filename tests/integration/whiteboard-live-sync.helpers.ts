@@ -8,6 +8,7 @@ import {
 } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { PrismaClient } from "@prisma/client";
 import {
   seedTestAdmin,
@@ -283,7 +284,7 @@ export type SceneElementQuery = {
 /** Live scene summary from the E2E bridge. Optional query filters in the page. */
 export async function readSceneElementSummary(
   page: Page,
-  role: "tutor" | "student",
+  role: WbSyncRole,
   query?: SceneElementQuery
 ): Promise<SceneElementSummary[]> {
   return page.evaluate(
@@ -330,7 +331,7 @@ export async function readSceneElementSummary(
 }
 
 export type PeerElementFieldMatch = {
-  [K in keyof SceneElementSummary]: {
+  [K in keyof SceneElementSummary]-?: {
     field: K;
     equals: SceneElementSummary[K];
   };
@@ -350,8 +351,9 @@ export async function waitForPeerElement(
 ): Promise<void> {
   const matches = (element: SceneElementSummary): boolean => {
     if (typeof match === "function") return match(element);
+    const fieldMatch: PeerElementFieldMatch = match;
     const record = element as unknown as Record<string, unknown>;
-    return record[match.field] === match.equals;
+    return record[fieldMatch.field] === fieldMatch.equals;
   };
   await expect
     .poll(
@@ -405,12 +407,11 @@ export async function expectHeld<T>(
   const timeoutMs = options?.timeoutMs ?? 15_000;
   const intervalMs = options?.intervalMs ?? 250;
   const deadline = Date.now() + timeoutMs;
-  const expectedJson = JSON.stringify(expected);
   let heldSince: number | null = null;
   let last: T | undefined;
   while (Date.now() < deadline) {
     last = await read();
-    if (JSON.stringify(last) === expectedJson) {
+    if (isDeepStrictEqual(last, expected)) {
       if (heldSince === null) heldSince = Date.now();
       if (Date.now() - heldSince >= holdMs) return;
     } else {
@@ -418,12 +419,14 @@ export async function expectHeld<T>(
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
-  if (last !== undefined && JSON.stringify(last) === expectedJson) {
+  if (isDeepStrictEqual(last, expected)) {
     throw new Error(
       `value matched expected but did not hold for ${holdMs}ms within ${timeoutMs}ms`
     );
   }
-  expect(last, "held scene oracle").toEqual(expected);
+  throw new Error(
+    `held scene oracle actual=${JSON.stringify(last)} expected=${JSON.stringify(expected)}`
+  );
 }
 
 /**
@@ -2227,7 +2230,7 @@ export async function projectSceneRectToScreen(
 /** Screen-pixel center of a scene box. Uses {@link projectSceneRectToScreen}. */
 export async function projectSceneRectCenterToScreen(
   page: Page,
-  role: "tutor" | "student",
+  role: WbSyncRole,
   scene: { x: number; y: number; width: number; height: number }
 ): Promise<{ x: number; y: number }> {
   const screen = await projectSceneRectToScreen(page, role, scene);
