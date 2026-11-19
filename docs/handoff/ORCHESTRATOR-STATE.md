@@ -10,6 +10,13 @@
 
 ### Last action
 
+**2026-11-18 evening: harness verified, V4 harness red fixed, AI pen test deferred to Bucket B.**
+
+- Harness fix `2ddfccf3` VERIFIED MERGE-OK by Sonnet (origin test is a real oracle, 3101 scoping correct, no orphaned server, no dup). Already on `feat/org-qol`.
+- V4 red was a harness seeding gap (shared admin renamed to "Playwright Operator" by `wb-org-removal.spec.ts`); FIXED harness-only in `82c9a49d` — `seedTestAdmin` restores "Playwright Test Admin" on update; `wb-org-removal` no longer clobbers it. V4 red to green, `wb-org-removal` still green. This was the last known non-env red.
+- AI pen test DONE and deferred to Bucket B (see BACKLOG). Quarantine and key handling worked (no prod env loaded; dedicated key scrubbed, not in the report or the commit; key file deleted; sandbox worktree removed). Report on `feat/org-qol` as `ab06b056`. `launch/pentest` left as a pushed record (not merged — it would conflict on this state doc).
+- REMAINING before the A8 master gate is green: run full `npm run test:wb-sync` (also the end-to-end proof of the harness fix, V4, and WS-N5) and `npm run security:check`. The heavy wb-sync run is HELD for Andrew's WoW-performance go (CPU/RAM heavy, about 40 min). After green: A9 smokebook, then A10 cutover with Andrew's go.
+
 **2026-11-18 17:20 (Opus re-check of today's Grok work): the "known harness reds" call was wrong for two groups.**
 - **RP1–RP3, RP5–RP7, W27:** a test-harness regression from `d0647098` (pw-parallel, 11-17). `harnessOrigin()` prefers `NEXTAUTH_URL`, and the test worker reads `.env`'s `http://localhost:3000`. Seeded blob URLs point at the wrong server. Proof: RP1 passed 2/2 with `NEXTAUTH_URL=http://localhost:3100`. No product bug and no waiver needed.
 - **WS-N5 (`wb-reopen-stroke-capture.spec.ts`, added today in `0901d836`):** uses `altOrigin` (3101), and `wb-relay-shard-run.cjs` sets `WB_SKIP_3101_WEBSERVER=1` for every shard. It can never pass in the gate, so today's WS-N5 fix has no gate-passing test yet.
