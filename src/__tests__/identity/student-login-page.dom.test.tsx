@@ -48,7 +48,7 @@ describe("student login page — parent-mode handles", () => {
         error: "access_mode_mismatch",
         message: "This account does not use PIN login. Ask your parent/guardian to sign in.",
       }),
-    } as Response);
+    } as unknown as Response);
 
     await submitHandle("parentkid@family", "654321");
 

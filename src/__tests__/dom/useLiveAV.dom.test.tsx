@@ -2479,6 +2479,17 @@ describe("useLiveAV — releaseLocalMedia blocks later acquire", () => {
     });
     const { result, unmount } = renderHook(() => useLiveAV(props));
     let switchPromise: Promise<void> | undefined;
+    // The resolver is assigned inside the getUserMedia promise, and
+    // `gumSettled` flips only after that call resolves. A `finally`
+    // check on those locals is narrowed as if the try always completed,
+    // which types the resolver as `never`. Read them from a closure so
+    // the abandoned-switch cleanup stays callable on the throw path.
+    const settleIfAbandoned = async () => {
+      if (!gumSettled && resolveGUM && switchPromise) {
+        resolveGUM(makeFakeStream(0, 1).stream as unknown as MediaStream);
+        await switchPromise;
+      }
+    };
     try {
       await waitFor(() => {
         expect(result.current.videoDevices.length).toBe(1);
@@ -2517,10 +2528,7 @@ describe("useLiveAV — releaseLocalMedia blocks later acquire", () => {
       const held = result.current.localVideoStream?.getVideoTracks() ?? [];
       expect(held).not.toContain(openedTrack);
     } finally {
-      if (!gumSettled && resolveGUM && switchPromise) {
-        resolveGUM(makeFakeStream(0, 1).stream as unknown as MediaStream);
-        await switchPromise;
-      }
+      await settleIfAbandoned();
       unmount();
       restoreCameras();
     }
