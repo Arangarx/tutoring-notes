@@ -33,7 +33,7 @@ import {
 import { MIN_KEY_LEN } from "../../src/lib/whiteboard/encryption-key";
 const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
-/** Screen-pixel tolerance for viewport center / PDF fit (owner: 16px). */
+/** Screen-pixel tolerance for viewport center (owner: 16px). */
 export const WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX = 16;
 
 /** Scene-unit tolerance for zoom-invariant center (independent oracle). */
@@ -393,8 +393,7 @@ export async function waitForPeerElement(
   await expect
     .poll(
       async () => {
-        const elements = await readSceneElementSummary(page, role);
-        const element = elements.find((entry) => entry.id === elementId);
+        const element = await readSceneElement(page, role, elementId);
         return Boolean(element && matches(element));
       },
       { timeout: timeoutMs }
@@ -577,24 +576,6 @@ export async function growStrokeOnRole(
       bridge.growStroke(id, w, v);
     },
     { r: role, id: strokeId, w: width, v: version }
-  );
-}
-
-export async function readStrokeWidth(
-  page: Page,
-  role: "tutor" | "student",
-  strokeId: string
-): Promise<number> {
-  return page.evaluate(
-    ({ r, id }) => {
-      const bridge = (
-        window as Window & {
-          __TN_WB_E2E__?: Record<string, { widthOf: (id: string) => number }>;
-        }
-      ).__TN_WB_E2E__?.[r];
-      return bridge?.widthOf ? bridge.widthOf(id) : -1;
-    },
-    { r: role, id: strokeId }
   );
 }
 
@@ -2469,22 +2450,70 @@ export type LaserTrailPaint = {
   computedFill: string;
 };
 
+type LaserTrailStageRead = {
+  before: LaserTrailPaint[];
+  poisoned: LaserTrailPaint[];
+  restored: LaserTrailPaint[];
+};
+
+/**
+ * One page turn over the laser-trail paths. `poisonFill` null only reads.
+ * A fill rewrites every path, reads, then restores the attribute before the
+ * turn ends so the trail renderer cannot repaint between samples.
+ * The `.SVGLayer svg path` query lives only here.
+ */
+async function inspectLaserTrails(
+  page: Page,
+  role: WbSyncRole,
+  poisonFill: string | null
+): Promise<LaserTrailStageRead> {
+  const mountId = canvasMountTestId(role);
+  return page.evaluate(
+    ({ id, poison }) => {
+      const mount = document.querySelector(`[data-testid="${id}"]`);
+      const paths = Array.from(mount?.querySelectorAll(".SVGLayer svg path") ?? []).filter(
+        (node) => (node.getAttribute("d") ?? "").trim().length > 0
+      );
+      const read = (): Array<{ fillAttr: string; computedFill: string }> =>
+        paths.map((node) => ({
+          fillAttr: node.getAttribute("fill") ?? "",
+          computedFill: window.getComputedStyle(node).fill ?? "",
+        }));
+      const before = read();
+      if (poison == null) return { before, poisoned: before, restored: before };
+      const originals = paths.map((node) => node.getAttribute("fill"));
+      for (const node of paths) node.setAttribute("fill", poison);
+      const poisoned = read();
+      paths.forEach((node, index) => {
+        const original = originals[index];
+        if (original == null) node.removeAttribute("fill");
+        else node.setAttribute("fill", original);
+      });
+      return { before, poisoned, restored: read() };
+    },
+    { id: mountId, poison: poisonFill }
+  );
+}
+
 /** Non-empty laser-trail paths currently painted on `role`'s board. */
 export async function readLaserTrailPaints(
   page: Page,
   role: WbSyncRole
 ): Promise<LaserTrailPaint[]> {
-  const mountId = canvasMountTestId(role);
-  return page.evaluate((id) => {
-    const mount = document.querySelector(`[data-testid="${id}"]`);
-    if (!mount) return [];
-    return Array.from(mount.querySelectorAll(".SVGLayer svg path"))
-      .filter((node) => (node.getAttribute("d") ?? "").trim().length > 0)
-      .map((node) => ({
-        fillAttr: node.getAttribute("fill") ?? "",
-        computedFill: window.getComputedStyle(node).fill ?? "",
-      }));
-  }, mountId);
+  const stages = await inspectLaserTrails(page, role, null);
+  return stages.before;
+}
+
+/**
+ * Show a trail-color oracle can fail, then put the fill attribute back.
+ * Same path query as {@link readLaserTrailPaints}, one page turn.
+ */
+export async function poisonAndRestoreLaserTrail(
+  page: Page,
+  role: WbSyncRole,
+  poisonFill: string
+): Promise<LaserTrailStageRead> {
+  return inspectLaserTrails(page, role, poisonFill);
 }
 
 /**
@@ -2522,44 +2551,65 @@ export function undoRedoButton(page: Page, role: WbSyncRole, which: "undo" | "re
 }
 
 /**
- * Drag the pointer along a scene box's screen diagonal (eraser stroke, marquee).
- * The box is projected with the viewer's own transform.
+ * Drag a marquee across a scene box in this peer's own viewport.
+ * `pad` is screen pixels from the box edge: positive expands outward
+ * (selection), negative insets inward. Omit `pad` for the eraser stroke:
+ * each axis insets by min(6, 8% of that side), a zero-size box is treated
+ * as 1px, and the box center must sit inside the canvas.
  */
 export async function dragPointerAcrossSceneBox(
   page: Page,
   role: WbSyncRole,
-  scene: { x: number; y: number; width: number; height: number }
+  scene: { x: number; y: number; width: number; height: number },
+  options?: {
+    pad?: number | { x: number; y: number };
+    steps?: number;
+  }
 ): Promise<void> {
+  const explicitPad = options?.pad;
+  const eraserDefaults = explicitPad === undefined;
   const screen = await projectSceneRectToScreen(page, role, {
     x: scene.x,
     y: scene.y,
-    width: scene.width === 0 ? 1 : scene.width,
-    height: scene.height === 0 ? 1 : scene.height,
+    width: eraserDefaults && scene.width === 0 ? 1 : scene.width,
+    height: eraserDefaults && scene.height === 0 ? 1 : scene.height,
   });
-  const mount = page.locator(`[data-testid="${canvasMountTestId(role)}"]`);
-  const box = await mount.boundingBox();
-  if (!box) throw new Error(`${role} canvas mount has no bounding box`);
-  const centerX = screen.x + screen.width / 2;
-  const centerY = screen.y + screen.height / 2;
-  if (
-    centerX < box.x ||
-    centerY < box.y ||
-    centerX > box.x + box.width ||
-    centerY > box.y + box.height
-  ) {
-    throw new Error(
-      `scene box center (${centerX.toFixed(1)}, ${centerY.toFixed(1)}) is outside the ${role} canvas`
-    );
+  let padX: number;
+  let padY: number;
+  if (eraserDefaults) {
+    padX = -Math.min(6, Math.max(0, screen.width * 0.08));
+    padY = -Math.min(6, Math.max(0, screen.height * 0.08));
+  } else if (typeof explicitPad === "number") {
+    padX = explicitPad;
+    padY = explicitPad;
+  } else {
+    padX = explicitPad.x;
+    padY = explicitPad.y;
   }
-  const insetX = Math.min(6, Math.max(0, screen.width * 0.08));
-  const insetY = Math.min(6, Math.max(0, screen.height * 0.08));
-  const x0 = screen.x + insetX;
-  const y0 = screen.y + insetY;
-  const x1 = screen.x + screen.width - insetX;
-  const y1 = screen.y + screen.height - insetY;
+  if (eraserDefaults) {
+    const mount = page.locator(`[data-testid="${canvasMountTestId(role)}"]`);
+    const box = await mount.boundingBox();
+    if (!box) throw new Error(`${role} canvas mount has no bounding box`);
+    const centerX = screen.x + screen.width / 2;
+    const centerY = screen.y + screen.height / 2;
+    if (
+      centerX < box.x ||
+      centerY < box.y ||
+      centerX > box.x + box.width ||
+      centerY > box.y + box.height
+    ) {
+      throw new Error(
+        `scene box center (${centerX.toFixed(1)}, ${centerY.toFixed(1)}) is outside the ${role} canvas`
+      );
+    }
+  }
+  const x0 = screen.x - padX;
+  const y0 = screen.y - padY;
+  const x1 = screen.x + screen.width + padX;
+  const y1 = screen.y + screen.height + padY;
   await page.mouse.move(x0, y0);
   await page.mouse.down();
-  await page.mouse.move(x1, y1, { steps: 18 });
+  await page.mouse.move(x1, y1, { steps: options?.steps ?? (eraserDefaults ? 18 : 8) });
   await page.mouse.up();
 }
 
@@ -2672,8 +2722,8 @@ export async function forceLiveScene(page: Page, elements: unknown): Promise<voi
 /**
  * Select tool, then marquee the element's box.
  * A hollow rectangle's center is not a hit target (only the stroke is),
- * so a center click does not select it. The marquee starts outside the
- * stroke's hit slop and encloses the box.
+ * so a center click does not select it. The marquee starts 14px outside the
+ * box (outward pad) so it encloses the stroke's hit slop.
  */
 export async function selectSceneElement(
   page: Page,
@@ -2681,19 +2731,12 @@ export async function selectSceneElement(
   element: Pick<SceneElementSummary, "id" | "x" | "y" | "width" | "height">
 ): Promise<void> {
   await selectStripTool(page, "Select (V)");
-  const screen = await projectSceneRectToScreen(page, role, {
-    x: element.x,
-    y: element.y,
-    width: element.width,
-    height: element.height,
-  });
-  const pad = 14;
-  await page.mouse.move(screen.x - pad, screen.y - pad);
-  await page.mouse.down();
-  await page.mouse.move(screen.x + screen.width + pad, screen.y + screen.height + pad, {
-    steps: 8,
-  });
-  await page.mouse.up();
+  await dragPointerAcrossSceneBox(
+    page,
+    role,
+    { x: element.x, y: element.y, width: element.width, height: element.height },
+    { pad: 14, steps: 8 }
+  );
   await page.waitForFunction(
     ({ r, id }) => {
       const bridge = (

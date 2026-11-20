@@ -431,7 +431,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Post–sync-redesign smoke findings** —  (§4)
 - **Preview-before-Start canvas wipe race** —  (§4)
 - **Promote math insert to toolbar + library persistence** —  (§4)
-- **PDF page center+fit on the student viewport (invariant 8)** — centered, not fit: 1003.5px page in a 555px student canvas (§4)
+- **PDF page centered + zoom-parity on the student viewport (invariant 8)** — Resolved (Andrew 2026-11-19): Option B, matched zoom; fit-per-student stays the Sarah enhancement (§4)
 - **Replay audio loading CLS** —  (§4)
 - **Replay board tabs missing PDF icons** —  (§4)
 - **Replay disabled top-bar buttons dimming** —  (§4)
@@ -443,7 +443,7 @@ Bucketed for expanding beyond Sarah to **unsupervised new pilots** (strangers, n
 - **Session type selection UX (in-person vs remote)** —  (§4)
 - **SMOKE-BUG-10** — in-person "waiting for student" banner (§4)
 - **SMOKE-BUG-2** — stale "Call Reconnecting" pill (§4)
-- **SMOKE-BUG-3** — student text cross-page sync (§4)
+- **SMOKE-BUG-3** — student text cross-page sync; tracked post-launch (Andrew 2026-11-19) (§4)
 - **SMOKE-BUG-5** — replay board-tab context (§4)
 - **SMOKE-BUG-7 / CH-SMOKE-STUDENT-MIC-PERSIST** —  (§4)
 - **SMOKE-UX-3** — replay ±10s skip (§4)
@@ -1071,8 +1071,8 @@ Mobile pointer-transform hit offset.
 **[P2][WB] NR-07 — transform handles with native chrome hidden**  
 Verify periodic regression.
 
-**[P2][WB] PDF page center+fit on the student viewport (invariant 8)**  
-Un-skipped 2026-11-19 (Gate A5 Batch C2). pdfjs headless load is fine, and the student follows onto `e2e-two-pages p.1` with the image present. The page is centered in the student viewport (the center check passes). It is not fit: observed screen height 1003.5px in a 555px-tall student canvas. The fit zoom is computed for the taller tutor viewport and follow copies that zoom. `tests/integration/whiteboard-live-sync-regression.spec.ts` › invariant 8 is `test.fixme` with that observed state. **This is a spec-vs-design conflict, NOT a regression/defect** (corrected after Sonnet verify a98b02cc 2026-11-19): follow mode B shares the scene-coordinate center *at matched zoom* by design (`viewport-align.ts`; wire carries `centerSceneX/Y`+`zoom`; fit is tutor-side only via `scrollToContent({fitToContent:true})` in `insert-asset.ts`), so a page fitted to the tutor's canvas necessarily overflows a smaller student canvas. The test title ("centered+fit on student viewport") encodes the OLD spec the shipped matched-zoom contract does not satisfy. **This is the same concern as the pre-existing owner-triaged item "PDF open — fit tutor vs student view — Owner-requested if Sarah raises."** Andrew's call: (A) fit-per-student — scale follow zoom per viewport (changes the follow contract on a fragile surface), or (B) accept matched zoom and rewrite the oracle to centered + tutor-zoom-parity (drop "fit"). Until decided, the fixme preserves the stale-spec oracle as the record.
+**[P2][WB] PDF page centered + zoom-parity on the student viewport (invariant 8)**  
+**Resolved (Andrew 2026-11-19): Option B — matched-zoom design accepted.** Invariant 8 now asserts centered + zoom-parity and is green. Fit-per-student remains the existing enhancement "PDF open — fit tutor vs student view — Owner-requested if Sarah raises." Follow mode B shares the scene-coordinate center at matched zoom (`viewport-align.ts`; wire carries `centerSceneX/Y`+`zoom`; fit is tutor-side only via `scrollToContent({fitToContent:true})` in `insert-asset.ts`), so a page fitted to the tutor's canvas can overflow a smaller student canvas. That overflow is the accepted design. Observed before the rewrite: screen height 1003.5px in a 555px-tall student canvas, with the center check already passing.
 
 **[P2][WB] Thin-viewport top-bar compaction**  
 Controls leave viewport before ⋯; End should stay visible. **WB-STUDENT-TOPBAR-CONTRACTION**.
@@ -1099,7 +1099,7 @@ Unify smoke item 21.
 Clear when reachable.
 
 **[P2][WB] SMOKE-BUG-3 — student text cross-page sync**  
-Text carry on page switch.
+**Tracked post-launch (Andrew 2026-11-19).** Open-editor overlay repro is `test.fixme` in `wb-sync-text.spec.ts`; committed-text isolation + post-switch-typing variants are green. Commit-from-stranded-editor path unverified. No engine change pre-launch.
 
 **[P2][WB] SMOKE-BUG-5 — replay board-tab context**  
 Which board during replay switch.

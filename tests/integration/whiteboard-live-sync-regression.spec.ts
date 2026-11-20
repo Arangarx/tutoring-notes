@@ -28,9 +28,9 @@ import {
   readGraphElementState,
   readImageElementState,
   readRawSceneElements,
+  readSceneElement,
   readSceneElementIds,
   readSceneElementSummary,
-  readStrokeWidth,
   readViewportSnapshot,
   sceneCenterDistance,
   seedWbLiveSyncSession,
@@ -58,37 +58,35 @@ import {
 import { TAG } from "../test-tags";
 const { authStatePath } = require("../../scripts/pw-stack.cjs");
 
-/** Slack for "contained in the viewport" (subpixel / rounding). */
-const PDF_FIT_SLACK_PX = 4;
 /**
- * Tight-axis leftover above this means the page is not zoomed to fit.
- * A fitted page leaves a small margin on its tighter axis. This band is
- * wider than that margin and narrower than an unfitted page.
+ * Relative slack for "student zoom ≈ tutor zoom". The expected zoom is the
+ * other peer's own appState reading, not a constant. Large enough for float
+ * noise, far smaller than a per-canvas fit (that ratio tracks viewport height).
  */
-const PDF_FIT_MAX_LEFTOVER_FRACTION = 0.25;
+const PDF_ZOOM_PARITY_RELATIVE_SLACK = 0.02;
 
 /**
- * Centered in the peer's viewport, contained by it, and snug on the
- * tighter axis. Returns true or a short reason. No absolute coordinates.
+ * Centered in the peer's viewport. Returns true or a short reason.
+ * No absolute coordinates — equal offset from the viewport center.
  */
-function pdfPageCenteredAndFit(placement: ElementViewportPlacement): true | string {
+function pdfPageCentered(placement: ElementViewportPlacement): true | string {
   if (placement.centerOffsetPx > WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX) {
     return `center offset ${placement.centerOffsetPx.toFixed(1)}px`;
   }
-  if (placement.screenWidth > placement.viewportWidth + PDF_FIT_SLACK_PX) {
-    return `wider than viewport ${placement.screenWidth.toFixed(1)} > ${placement.viewportWidth.toFixed(1)}`;
+  return true;
+}
+
+/**
+ * Zoom-parity: the student's applied zoom matches the tutor's.
+ * Each zoom is read from that peer's viewport. Returns true or a short reason.
+ */
+function pdfZoomParity(tutorZoom: number, studentZoom: number): true | string {
+  if (!(tutorZoom > 0) || !(studentZoom > 0)) {
+    return `zoom missing tutor=${tutorZoom} student=${studentZoom}`;
   }
-  if (placement.screenHeight > placement.viewportHeight + PDF_FIT_SLACK_PX) {
-    return `taller than viewport ${placement.screenHeight.toFixed(1)} > ${placement.viewportHeight.toFixed(1)}`;
-  }
-  if (!(placement.viewportWidth > 0 && placement.viewportHeight > 0)) {
-    return "viewport has no size";
-  }
-  const leftoverW = (placement.viewportWidth - placement.screenWidth) / placement.viewportWidth;
-  const leftoverH = (placement.viewportHeight - placement.screenHeight) / placement.viewportHeight;
-  const tightLeftover = Math.min(leftoverW, leftoverH);
-  if (tightLeftover > PDF_FIT_MAX_LEFTOVER_FRACTION) {
-    return `not fitted; tight-axis leftover ${(tightLeftover * 100).toFixed(0)}%`;
+  const rel = Math.abs(tutorZoom - studentZoom) / Math.max(tutorZoom, studentZoom);
+  if (rel > PDF_ZOOM_PARITY_RELATIVE_SLACK) {
+    return `zoom mismatch tutor=${tutorZoom.toFixed(4)} student=${studentZoom.toFixed(4)}`;
   }
   return true;
 }
@@ -243,8 +241,10 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
         finalWidth,
         12_000
       );
-      const studentWidth = await readStrokeWidth(peers.studentPage, "student", strokeId);
-      expect(studentWidth).toBeGreaterThanOrEqual(finalWidth - 1);
+      // Geometric width (growStroke's argument). Pen `strokeWidth` stays at the
+      // fixture default and is not what this continuation grows.
+      const grown = await readSceneElement(peers.studentPage, "student", strokeId);
+      expect(grown?.width ?? -1).toBeGreaterThanOrEqual(finalWidth - 1);
     } finally {
       await peers.close();
     }
@@ -597,26 +597,16 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
     }
   });
 
-  test("invariant 8 ΓÇö PDF page opens centered+fit on student viewport", { tag: [TAG.WB_ASSETS] }, async ({
+  test("invariant 8 ΓÇö PDF page opens centered + zoom-parity on student viewport", { tag: [TAG.WB_ASSETS] }, async ({
     browser,
   }) => {
-    // Oracle (below, not run while fixme'd): the student's own scene + app
-    // state. The PDF page image should be centered in that viewport and
-    // snug on the tighter axis. The old skip raced a one-shot image lookup
-    // and waited on a tab named "Board 2"; PDF pages are titled from the
-    // file (`e2e-two-pages p.1`).
-    //
-    // Observed 2026-11-19, twice, on the hermetic relay: the student follows
-    // onto `e2e-two-pages p.1`, the image is present, and the center check
-    // passes. Fit does not. The page's screen box is 1003.5px tall in the
-    // student's 555px canvas ("taller than viewport 1003.5 > 555.0"). The
-    // fit zoom is the tutor's (taller canvas); follow copies that zoom.
+    // Accepted spec (Andrew 2026-11-19, Option B): follow shares the
+    // scene-coordinate center at matched zoom. On a smaller student canvas
+    // the page is centered and the student's zoom matches the tutor's.
+    // Fit stays tutor-side, so the page is intentionally not snug here.
+    // PDF pages are titled from the file (`e2e-two-pages p.1`).
     test.setTimeout(300_000);
     test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
-    test.fixme(
-      true,
-      "PDF page is centered on the student but not fit: screen height 1003.5px > student viewport 555px. Tutor fit-zoom is inherited via follow."
-    );
 
     const pdfPath = path.join(__dirname, "../fixtures/e2e-two-pages.pdf");
     const session = await seedWbLiveSyncSession();
@@ -663,29 +653,47 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
 
       await expect
         .poll(
-          async () => pdfPageCenteredAndFit(
-            await readElementViewportPlacement(peers.studentPage, "student", pdfImageId)
-          ),
+          async () => {
+            const centered = pdfPageCentered(
+              await readElementViewportPlacement(peers.studentPage, "student", pdfImageId)
+            );
+            if (centered !== true) return centered;
+            const tutorZoom = (await readViewportSnapshot(peers.tutorPage, "tutor")).zoom;
+            const studentZoom = (await readViewportSnapshot(peers.studentPage, "student")).zoom;
+            return pdfZoomParity(tutorZoom, studentZoom);
+          },
           { timeout: 30_000 }
         )
         .toBe(true);
 
-      // Red-proof: shrink the tutor's copy of the page (local seam, no
-      // broadcast) so the same centered+fit relationship fails, then put
-      // the scene back. The student's placement is the assertion above.
+      // Red-proof, then revert. A doubled student zoom is not applied (a live
+      // setViewport would broadcast). The 1×1 poison is local and reverted.
+      const tutorZoom = (await readViewportSnapshot(peers.tutorPage, "tutor")).zoom;
+      const studentZoom = (await readViewportSnapshot(peers.studentPage, "student")).zoom;
+      expect(
+        pdfZoomParity(tutorZoom, studentZoom * 2),
+        "red-proof: a doubled student zoom is not parity"
+      ).not.toBe(true);
+
       const raw = await readRawSceneElements(peers.tutorPage, "tutor");
       const poisoned = (raw as Array<Record<string, unknown>>).map((element) =>
         element.id === pdfImageId ? { ...element, x: 0, y: 0, width: 1, height: 1 } : element
       );
       await forceLiveScene(peers.tutorPage, poisoned);
-      const poisonedFit = pdfPageCenteredAndFit(
+      const poisonedCenter = pdfPageCentered(
         await readElementViewportPlacement(peers.tutorPage, "tutor", pdfImageId)
       );
-      expect(poisonedFit, "red-proof: a 1px page is not centered+fit").not.toBe(true);
+      expect(poisonedCenter, "red-proof: a 1px page at the origin is not centered").not.toBe(
+        true
+      );
       await forceLiveScene(peers.tutorPage, raw);
       expect(
-        pdfPageCenteredAndFit(
-          await readElementViewportPlacement(peers.tutorPage, "tutor", pdfImageId)
+        pdfPageCentered(await readElementViewportPlacement(peers.tutorPage, "tutor", pdfImageId))
+      ).toBe(true);
+      expect(
+        pdfZoomParity(
+          (await readViewportSnapshot(peers.tutorPage, "tutor")).zoom,
+          (await readViewportSnapshot(peers.studentPage, "student")).zoom
         )
       ).toBe(true);
     } finally {

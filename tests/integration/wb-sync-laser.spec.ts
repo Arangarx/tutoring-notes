@@ -1,11 +1,11 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import {
-  canvasMountTestId,
   dragLaserWhileHeld,
   openTutorAndStudent,
   pageForRole,
   peerOf,
+  poisonAndRestoreLaserTrail,
   readLaserTrailPaints,
   readSceneElementSummary,
   seedWbLiveSyncSession,
@@ -85,31 +85,7 @@ async function proveTrailColorOracleCanFail(
   role: WbSyncRole,
   expected: string
 ): Promise<void> {
-  const stages = await page.evaluate(
-    ({ mountId, token }) => {
-      const mount = document.querySelector(`[data-testid="${mountId}"]`);
-      const paths = Array.from(mount?.querySelectorAll(".SVGLayer svg path") ?? []).filter(
-        (node) => (node.getAttribute("d") ?? "").trim().length > 0
-      );
-      const read = (): Array<{ fillAttr: string; computedFill: string }> =>
-        paths.map((node) => ({
-          fillAttr: node.getAttribute("fill") ?? "",
-          computedFill: window.getComputedStyle(node).fill ?? "",
-        }));
-      const before = read();
-      const originals = paths.map((node) => node.getAttribute("fill"));
-      for (const node of paths) node.setAttribute("fill", "#010101");
-      const poisoned = read();
-      paths.forEach((node, index) => {
-        const original = originals[index];
-        if (original == null) node.removeAttribute("fill");
-        else node.setAttribute("fill", original);
-      });
-      const restored = read();
-      return { before, poisoned, restored, token };
-    },
-    { mountId: canvasMountTestId(role), token: expected }
-  );
+  const stages = await poisonAndRestoreLaserTrail(page, role, "#010101");
   expect(trailRenderedIn(stages.before, expected), "trail is the author's color before poison").toBe(
     true
   );
@@ -118,7 +94,6 @@ async function proveTrailColorOracleCanFail(
     "red-proof: a rewritten fill must not match the token"
   ).toBe(false);
   expect(trailRenderedIn(stages.restored, expected), "restored fill matches the token").toBe(true);
-  expect(stages.token).toBe(expected);
 }
 
 test.describe("whiteboard laser-pointer live sync", { tag: [...LASER_TAGS] }, () => {
