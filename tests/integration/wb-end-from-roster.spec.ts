@@ -15,7 +15,10 @@ import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
-import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
+import {
+  installMidSessionRegisterBlock,
+  seedWbLiveSyncSession,
+} from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 import {
   ENDED_NEEDS_REVIEW_DISCLOSURE_TESTID,
@@ -102,33 +105,6 @@ async function listTutorMicOutboxRows(
         r.transcriptionOnly !== true
     );
   }, sessionId);
-}
-
-function installMidSessionRegisterBlock(
-  context: import("@playwright/test").BrowserContext,
-  opts: { block: boolean }
-) {
-  return context.route("**/admin/students/**", async (route, request) => {
-    if (request.method() !== "POST" || !request.headers()["next-action"]) {
-      await route.continue();
-      return;
-    }
-    const body = request.postData() ?? "";
-    const looksLikeMidSessionRegister =
-      body.includes("blobUrl") &&
-      body.includes("mimeType") &&
-      body.includes("sizeBytes") &&
-      !body.includes("extraSegments");
-    if (opts.block && looksLikeMidSessionRegister) {
-      await route.fulfill({
-        status: 200,
-        contentType: "text/x-component",
-        body: `0:{"ok":false,"error":"e2e blocked mid-session register (WS-N4)"}\n`,
-      });
-      return;
-    }
-    await route.continue();
-  });
 }
 
 async function fetchDbState(page: import("@playwright/test").Page, sessionId: string) {

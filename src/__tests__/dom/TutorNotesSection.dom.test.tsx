@@ -3,19 +3,23 @@
  */
 
 import React from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import TutorNotesSection, {
   noteFieldsAreEmpty,
 } from "@/components/whiteboard/TutorNotesSection";
 import {
+  deleteWhiteboardSessionAndDataAction,
   getTutorNoteStatusAction,
   regenerateNotesAction,
   saveSessionNotesAction,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
+const routerPushMock = jest.fn();
+
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: routerPushMock }),
 }));
 
 jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
@@ -375,5 +379,46 @@ describe("TutorNotesSection regenerate clears the earlier Save confirmation", ()
     // The old draft is still on screen (regeneration failed), yet the confirmation for the replaced draft is gone.
     expect(topicsValue()).toBe("Algebra factoring");
     expect(screen.queryByTestId("wb-save-note-confirmation")).not.toBeInTheDocument();
+  });
+});
+
+describe("TutorNotesSection review delete latch", () => {
+  beforeEach(() => {
+    routerPushMock.mockReset();
+    (deleteWhiteboardSessionAndDataAction as jest.Mock).mockReset();
+  });
+
+  it("keeps Yes and Cancel disabled after the delete resolves and before navigation", async () => {
+    let resolveDelete: (value: { ok: true }) => void = () => {};
+    (deleteWhiteboardSessionAndDataAction as jest.Mock).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDelete = resolve;
+        })
+    );
+    const user = userEvent.setup();
+    renderNotes("done", ALGEBRA);
+
+    await user.click(screen.getByTestId("wb-delete-session"));
+    await user.click(screen.getByTestId("wb-delete-confirm-yes"));
+
+    expect(deleteWhiteboardSessionAndDataAction).toHaveBeenCalledWith("wbs-1");
+    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("wb-delete-confirm")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-delete-confirm-yes")).toBeDisabled();
+    expect(screen.getByTestId("wb-delete-confirm-cancel")).toBeDisabled();
+
+    resolveDelete({ ok: true });
+
+    await waitFor(() => {
+      expect(routerPushMock).toHaveBeenCalledTimes(1);
+    });
+    expect(routerPushMock).toHaveBeenCalledWith("/admin/students/stu-1");
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-delete-confirm-yes")).toBeDisabled();
+    });
+    expect(screen.getByTestId("wb-delete-confirm-cancel")).toBeDisabled();
+    expect(screen.getByTestId("tutor-notes-section")).toBeInTheDocument();
+    expect(deleteWhiteboardSessionAndDataAction).toHaveBeenCalledTimes(1);
   });
 });

@@ -48,6 +48,8 @@ Blocked on a provider or model that permits the task and will not kill specialis
 - Org `notesForbidden` share error unverified.
 - A recording with no session id can render inline.
 
+**Bucket B — cancel-pending navigation has no last-resort error (2026-11-20).** In `WhiteboardWorkspaceClient.tsx` `handleCancelPendingSession`, if both `location.replace` and `location.assign` throw after the delete committed, the UI stays on "cancelling" with no message. A last-resort `setCancelError` with "session is gone" wording would fix it. Vanishingly rare, and the file is FRAGILE, so it is deferred.
+
 **Bucket C — after the site is live.** A human pen test once there is income (Andrew 2026-11-17). Self-serve org signup, org billing and departments, two-way calendar sync, and Apple CalDAV. Wyzant and UVU export. A brand pass. Dedupe waves C and D. WS-T-9 empty outbox IDB self-heal. The rest of the MAYBE and 1.x rows.
 
 ### Testing scope waiver (Andrew 2026-11-17)

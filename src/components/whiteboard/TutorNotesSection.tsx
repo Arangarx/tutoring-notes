@@ -46,6 +46,7 @@ import {
   type StructuredNoteFields,
 } from "@/lib/note-content";
 import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
+import { useSessionDeleteLatch } from "@/hooks/useSessionDeleteLatch";
 import { awaitSessionDataDelete } from "@/lib/whiteboard/await-session-data-delete";
 
 export type { StructuredNoteFields };
@@ -209,9 +210,14 @@ export default function TutorNotesSection({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedInShell, setSavedInShell] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const {
+    deleting,
+    locked: deleteLocked,
+    startDeleteTransition,
+    markDeleted,
+  } = useSessionDeleteLatch();
 
   const startTimeRef = useRef<number>(Date.now());
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -402,21 +408,22 @@ export default function TutorNotesSection({
     [saveNoteFields]
   );
 
-  const handleDelete = useCallback(async () => {
-    if (deleting) return;
-    setDeleting(true);
+  const handleDelete = () => {
+    if (deleteLocked) return;
     setDeleteError(null);
-    const fallbackError = "Could not delete the session. Please try again.";
-    const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError, {
-      errLine: `[nsi] wbsid=${whiteboardSessionId} action=delete_uncommitted`,
+    startDeleteTransition(async () => {
+      const fallbackError = "Could not delete the session. Please try again.";
+      const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError, {
+        errLine: `[nsi] wbsid=${whiteboardSessionId} action=delete_uncommitted`,
+      });
+      if (!result.ok) {
+        setDeleteError(result.error);
+        return;
+      }
+      markDeleted();
+      router.push(`/admin/students/${studentId}`);
     });
-    if (!result.ok) {
-      setDeleteError(result.error);
-      setDeleting(false);
-      return;
-    }
-    router.push(`/admin/students/${studentId}`);
-  }, [deleting, whiteboardSessionId, router, studentId]);
+  };
 
   // -------------------------------------------------------------------------
   // Render states
@@ -456,7 +463,7 @@ export default function TutorNotesSection({
             className="btn"
             style={{ fontSize: 12, padding: "3px 10px" }}
             onClick={handleRegenerate}
-            disabled={regenerating || saving || deleting}
+            disabled={regenerating || saving || deleteLocked}
             data-testid="wb-regenerate-notes"
           >
             {regenerating ? "Regenerating…" : "Regenerate notes"}
@@ -611,7 +618,7 @@ export default function TutorNotesSection({
                   className="btn primary"
                   onClick={handleSave}
                   disabled={
-                    saving || deleting || regenerating || noteFieldsAreEmpty(fields)
+                    saving || deleteLocked || regenerating || noteFieldsAreEmpty(fields)
                   }
                   data-testid="wb-save-note"
                 >
@@ -624,7 +631,7 @@ export default function TutorNotesSection({
                   className="btn"
                   style={{ color: "var(--sign-out)", borderColor: "var(--error-border)" }}
                   onClick={() => setShowDeleteConfirm(true)}
-                  disabled={saving || deleting || regenerating}
+                  disabled={saving || deleteLocked || regenerating}
                   data-testid="wb-delete-session"
                 >
                   {deleting ? "Deleting…" : "Cancel and delete session data"}
@@ -673,10 +680,8 @@ export default function TutorNotesSection({
                     color: "white",
                     borderColor: "var(--sign-out)",
                   }}
-                  onClick={() => {
-                    void handleDelete();
-                  }}
-                  disabled={deleting}
+                  onClick={handleDelete}
+                  disabled={deleteLocked}
                   data-testid="wb-delete-confirm-yes"
                 >
                   {deleting ? "Deleting…" : "Yes, delete"}
@@ -685,7 +690,7 @@ export default function TutorNotesSection({
                   type="button"
                   className="btn"
                   onClick={() => setShowDeleteConfirm(false)}
-                  disabled={deleting}
+                  disabled={deleteLocked}
                   data-testid="wb-delete-confirm-cancel"
                 >
                   Cancel
@@ -708,7 +713,7 @@ export default function TutorNotesSection({
               type="button"
               className="btn primary"
               onClick={handleShareSession}
-              disabled={saving || deleting}
+              disabled={saving || deleteLocked}
               data-testid="wb-share-session"
             >
               {saving ? "Sharing…" : "Share session"}

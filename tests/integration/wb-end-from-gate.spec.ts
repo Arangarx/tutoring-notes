@@ -17,7 +17,10 @@ import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
 } from "../helpers/blob-gate";
-import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
+import {
+  installMidSessionRegisterBlock,
+  seedWbLiveSyncSession,
+} from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 import { RESUME_GATE_STALENESS_MS } from "@/lib/whiteboard/resume-gate";
 
@@ -105,34 +108,6 @@ async function listTutorMicOutboxRows(
         r.transcriptionOnly !== true
     );
   }, sessionId);
-}
-
-/** Block mid-session registerWhiteboardSessionAudioSegmentAction (WS-N4 orphan oracle). */
-function installMidSessionRegisterBlock(
-  context: import("@playwright/test").BrowserContext,
-  opts: { block: boolean }
-) {
-  return context.route("**/admin/students/**", async (route, request) => {
-    if (request.method() !== "POST" || !request.headers()["next-action"]) {
-      await route.continue();
-      return;
-    }
-    const body = request.postData() ?? "";
-    const looksLikeMidSessionRegister =
-      body.includes("blobUrl") &&
-      body.includes("mimeType") &&
-      body.includes("sizeBytes") &&
-      !body.includes("extraSegments");
-    if (opts.block && looksLikeMidSessionRegister) {
-      await route.fulfill({
-        status: 200,
-        contentType: "text/x-component",
-        body: `0:{"ok":false,"error":"e2e blocked mid-session register (WS-N4)"}\n`,
-      });
-      return;
-    }
-    await route.continue();
-  });
 }
 
 async function fetchDbState(page: import("@playwright/test").Page, sessionId: string) {
@@ -439,10 +414,10 @@ test.describe(
         await expect(page.getByTestId("wb-resume-gate-cancel-delete")).toHaveText("Deleting…");
         expect(held.deletePostCount()).toBe(1);
 
-        // Release the action but hold the student-page flight. Next keeps this
-        // transition pending until that flight returns, so the label stays
-        // "Deleting…". The click below waits until Yes is enabled. A second
-        // delete is a failure; staying disabled is the pass.
+        // Release the action but hold the student-page flight. This test covers
+        // the pending window (one POST, controls disabled). The post-resolve
+        // latch window is covered by the DOM test "keeps Yes and Cancel
+        // disabled after the delete resolves and before navigation".
         held.stallStudentDetail();
         const secondClick = yes
           .click({ noWaitAfter: true, timeout: 5_000 })
