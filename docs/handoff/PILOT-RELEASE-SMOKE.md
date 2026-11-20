@@ -24,7 +24,7 @@ Where it sits:
 
 **Not this book.** SMS two-factor (the **Text message (SMS)** card; only after the A2P campaign is approved). Apple Calendar. Stripe, a pricing page, and the other Bucket B work listed on each item.
 
-**Preview dependencies you cannot see in the UI.** Notes and transcription call OpenAI. Email confirmation and the email second factor need SMTP on this deployment (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`). Operator pages (**Tutor approvals**, **Organizations**) appear only for an email in `OPERATOR_EMAILS` or `ADMIN_EMAIL`; anyone else gets a not-found page. This book does not confirm those env values are set on the preview. If a step says the control is missing, record that in Notes rather than hunting a different screen.
+**Preview dependencies you cannot see in the UI.** Notes and transcription call OpenAI. Email confirmation and the email second factor need SMTP. Operator pages (**Tutor approvals**, **Organizations**) appear only for an email in `OPERATOR_EMAILS` or `ADMIN_EMAIL`; anyone else gets a not-found page. On 2026-11-20 the Vercel project was checked for these names, without reading any values. The Preview environment has `OPENAI_API_KEY`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_FROM`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `WHITEBOARD_SYNC_URL`, and `ADMIN_EMAIL`. `OPERATOR_EMAILS` is not set, so the only operator is the account whose email is `ADMIN_EMAIL`. Use that account wherever a step says "sign in as an operator". If a step says a control is missing, record that in Notes rather than hunting for a different screen.
 
 Run order is top to bottom. Re-run **Cross-branch / post-merge** after the branch merges to `master`.
 
