@@ -1,9 +1,7 @@
 import { test, expect } from "./fixtures";
 import {
   addedIds,
-  forceLiveScene,
   openTutorAndStudent,
-  readRawSceneElements,
   readSceneElementIds,
   readSceneElementSummary,
   seedWbLiveSyncSession,
@@ -24,7 +22,10 @@ import { TAG } from "../test-tags";
  * the string typed in the dialog, with a box larger than 1px on both axes,
  * matching the tutor's own box within a few pixels.
  *
- * `__WBX_FORCE_LIVE_SCENE__` is used only in the reverted red-proof.
+ * `__WBX_FORCE_LIVE_SCENE__` fires onChange and can broadcast to the peer
+ * (`captureUpdate: "NEVER"` only skips undo history), so it must not be
+ * used for a red-proof while sync is live. The red-proof runs `plausibleMath`
+ * on a synthetic 1×1 copy of the live equation.
  *
  * Gate: `npx playwright test tests/integration/wb-sync-math.spec.ts --project=wb-regression`
  */
@@ -121,27 +122,15 @@ test.describe("whiteboard math-insert live sync", { tag: [...MATH_TAGS] }, () =>
           )
           .toBe("match");
 
-        const raw = await readRawSceneElements(peers.tutorPage, "tutor");
-        const poisoned = (raw as Array<Record<string, unknown>>).map((element) =>
-          element.id === authored.id ? { ...element, width: 1, height: 1 } : element
-        );
-        await forceLiveScene(peers.tutorPage, poisoned);
-        const poisonedRow = (
-          await readSceneElementSummary(peers.tutorPage, "tutor")
-        ).find((element) => element.id === authored.id);
-        expect(poisonedRow?.width, "red-proof: poisoned width is not a real equation box").toBe(1);
-        expect(plausibleMath(poisonedRow!, EQUATION), "red-proof: 1px box is not plausible").toBe(
-          false
-        );
-        const peerDuringPoison = (
+        const peerRow = (
           await readSceneElementSummary(peers.studentPage, "student", { omitDeleted: true })
         ).find((element) => element.id === authored.id);
-        expect(peerDuringPoison && plausibleMath(peerDuringPoison, EQUATION)).toBe(true);
-        await forceLiveScene(peers.tutorPage, raw);
-        const restored = (
-          await readSceneElementSummary(peers.tutorPage, "tutor", { omitDeleted: true })
-        ).find((element) => element.id === authored.id);
-        expect(restored && plausibleMath(restored, EQUATION)).toBe(true);
+        expect(peerRow, "equation is on the student").toBeTruthy();
+        const poisoned: SceneElementSummary = { ...peerRow!, width: 1, height: 1 };
+        expect(
+          plausibleMath(poisoned, EQUATION),
+          "red-proof: a 1×1 copy is not a plausible equation"
+        ).toBe(false);
       } finally {
         await peers.close();
       }

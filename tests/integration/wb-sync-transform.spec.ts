@@ -5,11 +5,9 @@ import {
   dragSceneTransformHandle,
   drawShapeWithTool,
   expectPeerReflectsAuthor,
-  forceLiveScene,
   openTutorAndStudent,
   pageForRole,
   peerOf,
-  readRawSceneElements,
   readSceneElement,
   readSceneElementIds,
   readSceneElementSummary,
@@ -28,7 +26,10 @@ import { TAG } from "../test-tags";
  *
  * Each mutation is a real pointer gesture or a real Excalidraw property /
  * z-order control. Those fire onChange, which is the app's normal broadcast.
- * `__WBX_FORCE_LIVE_SCENE__` is used only in the reverted red-proof.
+ * `__WBX_FORCE_LIVE_SCENE__` also fires onChange and can broadcast to the
+ * peer (`captureUpdate: "NEVER"` only skips undo history), so it must not
+ * be used for a red-proof while sync is live. The resize red-proof runs
+ * `sizeAgrees` on a synthetic 1×1 copy of the live row.
  *
  * The oracle is the other peer's live scene (`__TN_WB_E2E__.getElements()`).
  * The peer must match the author's own resulting value. Geometry is not a
@@ -100,35 +101,22 @@ async function drawSyncedRectangle(peers: Peers, author: WbSyncRole): Promise<st
 }
 
 /**
- * Poison the tutor's copy of `elementId`, show the size oracle can fail,
- * then put the pre-poison scene back. Tutor seam only.
+ * Pure red-proof: `sizeAgrees` rejects a 1×1 copy of the live row.
+ * Does not mutate the scene. `__WBX_FORCE_LIVE_SCENE__` fires onChange
+ * and can broadcast, so it is not used while sync is live.
  */
 async function proveSizeMatchCanFail(
   authorPage: Parameters<typeof pageForRole>[0]["tutorPage"],
   author: WbSyncRole,
-  tutorPage: Parameters<typeof pageForRole>[0]["tutorPage"],
   elementId: string
 ): Promise<void> {
-  const raw = await readRawSceneElements(tutorPage, "tutor");
-  const poisoned = (raw as Array<Record<string, unknown>>).map((element) =>
-    element.id === elementId ? { ...element, width: 1, height: 1 } : element
-  );
-  await forceLiveScene(tutorPage, poisoned);
-  const tutorRow = await readSceneElement(tutorPage, "tutor", elementId);
-  const authorRow = await readSceneElement(authorPage, author, elementId);
+  const row = await readSceneElement(authorPage, author, elementId);
+  expect(row, "red-proof reads the live rectangle").toBeTruthy();
+  const poisoned: SceneElementSummary = { ...row!, width: 1, height: 1 };
   expect(
-    Math.abs((tutorRow?.width ?? 0) - (authorRow?.width ?? 0)),
-    "red-proof: poisoned tutor width must not match the author"
-  ).toBeGreaterThan(GEOMETRY_PX);
-  await forceLiveScene(tutorPage, raw);
-  await expectPeerReflectsAuthor(
-    authorPage,
-    author,
-    tutorPage,
-    "tutor",
-    elementId,
-    sizeAgrees
-  );
+    sizeAgrees(row!, poisoned),
+    "red-proof: a 1×1 copy does not size-agree"
+  ).not.toBe(true);
 }
 
 test.describe("whiteboard transform live sync", { tag: [...TRANSFORM_TAGS] }, () => {
@@ -179,17 +167,13 @@ test.describe("whiteboard transform live sync", { tag: [...TRANSFORM_TAGS] }, ()
             );
           });
         }
-        // Red-proof on the student→tutor rectangle (FORCE is installed on the tutor only).
-        const studentId = (
+        // `find` returns the first rectangle on the student scene. The tutor
+        // draws first, so that element is the tutor-authored rectangle.
+        const firstRectangleId = (
           await readSceneElementSummary(peers.studentPage, "student", { omitDeleted: true })
         ).find((element) => element.type === "rectangle")?.id;
-        expect(studentId, "student rectangle survived both resizes").toBeTruthy();
-        await proveSizeMatchCanFail(
-          peers.studentPage,
-          "student",
-          peers.tutorPage,
-          studentId!
-        );
+        expect(firstRectangleId, "tutor-authored rectangle is first on the student scene").toBeTruthy();
+        await proveSizeMatchCanFail(peers.studentPage, "student", firstRectangleId!);
       } finally {
         await peers.close();
       }

@@ -14,7 +14,6 @@ import {
   ensureStudentFollowsTutor,
   expectedAlignedStudentScroll,
   findFirstImageElementId,
-  forceLiveScene,
   growStrokeOnRole,
   insertGraphOnRole,
   insertPngFixtureOnRole,
@@ -27,7 +26,6 @@ import {
   readEncryptionKeyFromHash,
   readGraphElementState,
   readImageElementState,
-  readRawSceneElements,
   readSceneElement,
   readSceneElementIds,
   readSceneElementSummary,
@@ -597,7 +595,7 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
     }
   });
 
-  test("invariant 8 ΓÇö PDF page opens centered + zoom-parity on student viewport", { tag: [TAG.WB_ASSETS] }, async ({
+  test("invariant 8 — PDF page opens centered + zoom-parity on student viewport", { tag: [TAG.WB_ASSETS] }, async ({
     browser,
   }) => {
     // Accepted spec (Andrew 2026-11-19, Option B): follow shares the
@@ -666,8 +664,9 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
         )
         .toBe(true);
 
-      // Red-proof, then revert. A doubled student zoom is not applied (a live
-      // setViewport would broadcast). The 1×1 poison is local and reverted.
+      // Pure red-proofs. `__WBX_FORCE_LIVE_SCENE__` fires onChange and can
+      // broadcast to the peer, so it is not used while sync is live. A doubled
+      // student zoom is not applied (a live setViewport would also broadcast).
       const tutorZoom = (await readViewportSnapshot(peers.tutorPage, "tutor")).zoom;
       const studentZoom = (await readViewportSnapshot(peers.studentPage, "student")).zoom;
       expect(
@@ -675,27 +674,19 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
         "red-proof: a doubled student zoom is not parity"
       ).not.toBe(true);
 
-      const raw = await readRawSceneElements(peers.tutorPage, "tutor");
-      const poisoned = (raw as Array<Record<string, unknown>>).map((element) =>
-        element.id === pdfImageId ? { ...element, x: 0, y: 0, width: 1, height: 1 } : element
+      const placement = await readElementViewportPlacement(
+        peers.studentPage,
+        "student",
+        pdfImageId
       );
-      await forceLiveScene(peers.tutorPage, poisoned);
-      const poisonedCenter = pdfPageCentered(
-        await readElementViewportPlacement(peers.tutorPage, "tutor", pdfImageId)
-      );
-      expect(poisonedCenter, "red-proof: a 1px page at the origin is not centered").not.toBe(
-        true
-      );
-      await forceLiveScene(peers.tutorPage, raw);
+      const offCenter: ElementViewportPlacement = {
+        ...placement,
+        centerOffsetPx: placement.centerOffsetPx + WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX + 1,
+      };
       expect(
-        pdfPageCentered(await readElementViewportPlacement(peers.tutorPage, "tutor", pdfImageId))
-      ).toBe(true);
-      expect(
-        pdfZoomParity(
-          (await readViewportSnapshot(peers.tutorPage, "tutor")).zoom,
-          (await readViewportSnapshot(peers.studentPage, "student")).zoom
-        )
-      ).toBe(true);
+        pdfPageCentered(offCenter),
+        "red-proof: an off-center copy of the live placement is not centered"
+      ).not.toBe(true);
     } finally {
       await peers.close();
     }

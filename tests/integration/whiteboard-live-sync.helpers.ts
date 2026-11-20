@@ -2684,40 +2684,12 @@ export async function expectPeerReflectsAuthor(
   return { author: authorEl, peer: peerEl };
 }
 
-/** JSON clone of the role's live elements. Red-proof revert snapshot. */
-export async function readRawSceneElements(page: Page, role: WbSyncRole): Promise<unknown[]> {
-  return page.evaluate((r) => {
-    const bridge = (
-      window as Window & {
-        __TN_WB_E2E__?: Record<string, { getElements?: () => unknown[] }>;
-      }
-    ).__TN_WB_E2E__?.[r];
-    const elements = bridge?.getElements?.() ?? [];
-    return JSON.parse(JSON.stringify(elements)) as unknown[];
-  }, role);
-}
-
 /**
- * Replace the live scene locally. Does not broadcast.
- * Red-proof only (`__WBX_FORCE_LIVE_SCENE__`). The tutor page installs this
- * seam; the student page does not. Revert by passing the array from
- * {@link readRawSceneElements}.
+ * `__WBX_FORCE_LIVE_SCENE__` fires onChange and can broadcast to the peer
+ * (`captureUpdate: "NEVER"` only skips undo history). It must not be used
+ * for red-proofs while sync is live, so there is no `forceLiveScene` helper.
+ * The e2e leak spec calls the seam inline as a bug repro.
  */
-export async function forceLiveScene(page: Page, elements: unknown): Promise<void> {
-  const installed = await page.evaluate((els) => {
-    const fn = (
-      window as Window & { __WBX_FORCE_LIVE_SCENE__?: (value: unknown) => void }
-    ).__WBX_FORCE_LIVE_SCENE__;
-    if (typeof fn !== "function") return false;
-    fn(els);
-    return true;
-  }, elements);
-  if (!installed) {
-    throw new Error(
-      "__WBX_FORCE_LIVE_SCENE__ is not installed on this page (tutor seam only)"
-    );
-  }
-}
 
 /**
  * Select tool, then marquee the element's box.

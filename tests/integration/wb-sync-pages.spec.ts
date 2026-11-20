@@ -3,12 +3,9 @@ import {
   addTutorBoard,
   deleteTutorBoardAt,
   drawShapeWithTool,
-  expectPeerReflectsAuthor,
-  forceLiveScene,
   openTutorAndStudent,
   readActiveWhiteboardPageId,
   readBoardStrip,
-  readRawSceneElements,
   readSceneElement,
   readSceneElementIds,
   seedWbLiveSyncSession,
@@ -30,9 +27,10 @@ import { TAG } from "../test-tags";
  * is also the live scene: the rectangle drawn on board 1 leaves the scene
  * while board 2 is active and comes back after the delete.
  *
- * `__WBX_FORCE_LIVE_SCENE__` cannot rewrite the page list. The red-proof
- * poisons that rectangle's width, shows the size oracle can fail, then
- * reverts. The strip stays on Board 1 through the poison.
+ * `__WBX_FORCE_LIVE_SCENE__` fires onChange and can broadcast to the peer
+ * (`captureUpdate: "NEVER"` only skips undo history). It must not be used
+ * for a red-proof while sync is live. The red-proof runs `sizeAgrees` on a
+ * synthetic 1×1 copy of the live rectangle. The strip stays on Board 1.
  *
  * Gate: `npx playwright test tests/integration/wb-sync-pages.spec.ts --project=wb-regression`
  */
@@ -147,28 +145,15 @@ test.describe("whiteboard board-delete live sync", { tag: [...PAGE_TAGS] }, () =
           )
           .toBe("deleted");
 
-        // Red-proof. FORCE replaces the live scene only; it does not broadcast
-        // and it cannot put Board 2 back on the strip.
-        const raw = await readRawSceneElements(peers.tutorPage, "tutor");
-        const poisoned = (raw as Array<Record<string, unknown>>).map((element) =>
-          element.id === rectangle.id ? { ...element, width: 1, height: 1 } : element
-        );
-        await forceLiveScene(peers.tutorPage, poisoned);
-        const poisonedRow = await readSceneElement(peers.tutorPage, "tutor", rectangle.id);
-        const studentRow = await readSceneElement(peers.studentPage, "student", rectangle.id);
+        // `__WBX_FORCE_LIVE_SCENE__` fires onChange and can broadcast to the
+        // peer, so this red-proof does not mutate the live scene.
+        const liveRow = await readSceneElement(peers.tutorPage, "tutor", rectangle.id);
+        expect(liveRow, "rectangle is on the tutor after the delete").toBeTruthy();
+        const poisonedRow: SceneElementSummary = { ...liveRow!, width: 1, height: 1 };
         expect(
-          Math.abs((poisonedRow?.width ?? 0) - (studentRow?.width ?? 0)),
-          "red-proof: poisoned tutor width must not match the student"
-        ).toBeGreaterThan(GEOMETRY_PX);
-        await forceLiveScene(peers.tutorPage, raw);
-        await expectPeerReflectsAuthor(
-          peers.studentPage,
-          "student",
-          peers.tutorPage,
-          "tutor",
-          rectangle.id,
-          sizeAgrees
-        );
+          sizeAgrees(liveRow!, poisonedRow),
+          "red-proof: a 1×1 copy does not size-agree"
+        ).not.toBe(true);
         const tutorStrip = await readBoardStrip(peers.tutorPage, "tutor");
         const studentStrip = await readBoardStrip(peers.studentPage, "student");
         expect(tutorStrip.labels).toEqual(["Board 1"]);
