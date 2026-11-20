@@ -10,6 +10,8 @@
 
 ### Last action
 
+**2026-11-20 11:45: SMOKEBOOK VERIFIED AGAINST CODE + IN GOOGLE DRIVE.** At Andrew's request, [92a15ffe](92a15ffe-6374-41a9-b3aa-445bbd96e9e6) re-checked every step, label, and Expect line against the shipped source (`cfcb6f71`; many label, flow, and role corrections). Preview env var names were verified via Vercel MCP without reading values (`f99d268a`). Every dependency is set. `OPERATOR_EMAILS` is unset, so `ADMIN_EMAIL` is the only operator. Google Doc: [Pilot release smoke test — Nov 20 2026](https://docs.google.com/document/d/14FCwaxQhgSc4gysTQ8WiFek16Yett4oGQ4ipI5P4jaM/edit), in Drive folder "test plans". The repo copy `docs/handoff/PILOT-RELEASE-SMOKE.md` is the source. Waiting on Andrew's smoke.
+
 **2026-11-20 08:55: FULL MASTER GATE GREEN on `9748c5ca` (code `7d7145c8`) — FEATURE DONE; Andrew asked to smoke `docs/handoff/PILOT-RELEASE-SMOKE.md` once.** Gate [86dcaa28](86dcaa28-cf6a-4dae-a066-717b9984edb5), logs in `%TEMP%\tn-gate4-*.log`. Results:
 - `test:wb-sync`, exit 0, 2h05m. Jest 1223/1223. Playwright 661 passed, 6 failed (all cleared as ENV-FLAKE in isolation: replay-start-position ×2, review-overlay seeded-VAD ×3, recording-resilience reopen), 4 flaky passed on retry (replay 0.3s clip, claim-findability banner, notes-silent-empty blob reset 404, gate cancel-and-delete waitForURL 20s), 12 skipped. The earlier real VAD per-speaker failure, the delete-session flake, and the org-qol rename flake did NOT recur.
 - `test:regression` 150/150.
