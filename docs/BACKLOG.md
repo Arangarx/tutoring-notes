@@ -50,6 +50,10 @@ Blocked on a provider or model that permits the task and will not kill specialis
 
 **Bucket B — cancel-pending navigation has no last-resort error (2026-11-20).** In `WhiteboardWorkspaceClient.tsx` `handleCancelPendingSession`, if both `location.replace` and `location.assign` throw after the delete committed, the UI stays on "cancelling" with no message. A last-resort `setCancelError` with "session is gone" wording would fix it. Vanishingly rare, and the file is FRAGILE, so it is deferred.
 
+**Bucket B — review delete retry re-enable is unasserted (2026-11-20).** After a failed review-page delete (`TutorNotesSection`), the confirm's Yes and Cancel buttons should re-enable for a retry. No test checks this at any layer. Playwright `wb-delete-session.spec.ts` covers the error being shown and the session being kept. Add a DOM test for the failure path through `useSessionDeleteLatch` (Sonnet verify of `7d7145c8`, NIT).
+
+**Bucket B — gate cancel-and-delete flaky under gate load (2026-11-20).** `wb-end-from-gate.spec.ts` › "gate shows → Cancel and delete → confirm → session deleted" timed out once in the full gate on `9748c5ca` (`page.waitForURL` 20s for the student page) and passed on retry. Since `5359a199`, the gate navigates only after the delete commits, so this wait now covers the action plus the student page's on-demand dev compile while the suite is under shard load. It passed 15 of 15 runs standalone. Likely fix: align that wait with the spec's other post-action waits (about 45s). If it recurs, check server logs for the `delete_session_start` / `delete_session_done` gap before blaming load.
+
 **Bucket C — after the site is live.** A human pen test once there is income (Andrew 2026-11-17). Self-serve org signup, org billing and departments, two-way calendar sync, and Apple CalDAV. Wyzant and UVU export. A brand pass. Dedupe waves C and D. WS-T-9 empty outbox IDB self-heal. The rest of the MAYBE and 1.x rows.
 
 ### Testing scope waiver (Andrew 2026-11-17)
