@@ -8,10 +8,11 @@ import userEvent from "@testing-library/user-event";
 const deleteWhiteboardSessionAndDataActionMock = jest.fn();
 const finalizeWhiteboardSessionWithOutboxMock = jest.fn();
 const routerPushMock = jest.fn();
+const routerRefreshMock = jest.fn();
 
 jest.mock("next/navigation", () => ({
   __esModule: true,
-  useRouter: () => ({ push: routerPushMock }),
+  useRouter: () => ({ push: routerPushMock, refresh: routerRefreshMock }),
 }));
 
 jest.mock("@/lib/recording/finalize-whiteboard-session-client", () => ({
@@ -39,6 +40,7 @@ beforeEach(() => {
     registeredSegments: 1,
   });
   routerPushMock.mockReset();
+  routerRefreshMock.mockReset();
 });
 
 describe("ActiveWhiteboardSessionsList — End and review wiring (WS-N4)", () => {
@@ -112,6 +114,62 @@ describe("ActiveWhiteboardSessionsList — End and review wiring (WS-N4)", () =>
         /still saving/i
       );
     });
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ActiveWhiteboardSessionsList — cancel and delete awaits the action", () => {
+  const session = { id: "wb_roster_delete", startedAt: new Date("2026-07-05T12:00:00Z") };
+
+  async function confirmDelete() {
+    const user = userEvent.setup();
+    render(
+      <ActiveWhiteboardSessionsList studentId="stu_roster" sessions={[session]} />
+    );
+    await user.click(screen.getByTestId("roster-cancel-delete"));
+    await user.click(screen.getByTestId("roster-cancel-delete-confirm-yes"));
+  }
+
+  it("refreshes only after the delete action resolves", async () => {
+    let resolveDelete: (value: { ok: true }) => void = () => {};
+    deleteWhiteboardSessionAndDataActionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDelete = resolve;
+        })
+    );
+
+    await confirmDelete();
+
+    expect(deleteWhiteboardSessionAndDataActionMock).toHaveBeenCalledWith("wb_roster_delete");
+    expect(routerRefreshMock).not.toHaveBeenCalled();
+    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("roster-cancel-delete-confirm-yes")).toBeDisabled();
+    expect(screen.getByTestId("roster-resume-session")).toBeInTheDocument();
+
+    resolveDelete({ ok: true });
+
+    await waitFor(() => {
+      expect(routerRefreshMock).toHaveBeenCalledTimes(1);
+    });
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the row and shows the error when the delete action fails", async () => {
+    deleteWhiteboardSessionAndDataActionMock.mockResolvedValueOnce({
+      ok: false,
+      error: "Could not delete the session. Please try again.",
+    });
+
+    await confirmDelete();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("roster-cancel-delete-error")).toHaveTextContent(
+        /could not delete the session/i
+      );
+    });
+    expect(screen.getByTestId("roster-resume-session")).toBeInTheDocument();
+    expect(routerRefreshMock).not.toHaveBeenCalled();
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 });

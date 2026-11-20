@@ -5,9 +5,10 @@ import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/
 /**
  * Await session erasure. Callers navigate only when `ok` is true.
  *
- * Shared by the waiting-room cancel and the review-page delete. Navigating
- * first reports a delete that may never commit, so the session row and the
- * student's data survive a delete the UI already called done.
+ * Shared by the waiting-room cancel, the review-page delete, and the
+ * student-list cancel. Navigating or refreshing first reports a delete that
+ * may never commit, so the session row and the student's data survive a
+ * delete the UI already called done.
  */
 export type SessionDeleteCommit =
   | { ok: true }

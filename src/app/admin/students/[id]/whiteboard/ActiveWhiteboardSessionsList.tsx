@@ -8,7 +8,7 @@ import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked
 import { Button } from "@/components/ui/button";
 import { tutorControlState, type SessionEntryState } from "@/lib/scheduling/session-entry";
 import { finalizeWhiteboardSessionWithOutbox } from "@/lib/recording/finalize-whiteboard-session-client";
-import { deleteWhiteboardSessionAndDataAction } from "./notes-actions";
+import { awaitSessionDataDelete } from "@/lib/whiteboard/await-session-data-delete";
 export type ActiveWbListItem = {
   id: string;
   startedAt: Date;
@@ -129,6 +129,7 @@ function RosterRow({
   const [deleting, startDeleteTransition] = useTransition();
   const [finalizing, startFinalizeTransition] = useTransition();
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleEndAndReview = () => {
     setFinalizeError(null);
@@ -147,17 +148,25 @@ function RosterRow({
     });
   };
   const handleDelete = () => {
-    setShowDeleteConfirm(false);
+    if (deleting) return;
+    setDeleteError(null);
     startDeleteTransition(async () => {
-      // Navigate away immediately (optimistic). Fire delete in background;
-      // cron sweep reconciles any orphaned rows if the delete fails.
-      router.push(`/admin/students/${studentId}`);
-      const result = await deleteWhiteboardSessionAndDataAction(session.id);
+      const fallbackError = "Could not delete the session. Please try again.";
+      const result = await awaitSessionDataDelete(session.id, fallbackError);
       if (!result.ok) {
+        const message =
+          result.thrown instanceof Error
+            ? result.thrown.message
+            : result.thrown != null
+              ? String(result.thrown)
+              : result.error;
         console.error(
-          `[nsi] wbsid=${session.id} roster_delete_failed err=${result.error}`
+          `[nsi] wbsid=${session.id} action=roster_delete_failed err=${message}`
         );
+        setDeleteError(result.error);
+        return;
       }
+      router.refresh();
     });
   };
 
@@ -215,6 +224,16 @@ function RosterRow({
           </p>
         )}
 
+        {deleteError && (
+          <p
+            role="alert"
+            className="text-xs text-destructive"
+            data-testid="roster-cancel-delete-error"
+          >
+            {deleteError}
+          </p>
+        )}
+
         {/* Inline confirm dialog for destructive delete */}        {showDeleteConfirm && (
           <div
             role="alertdialog"
@@ -244,14 +263,16 @@ function RosterRow({
                   borderColor: "var(--sign-out)",
                 }}
                 onClick={handleDelete}
+                disabled={deleting}
                 data-testid="roster-cancel-delete-confirm-yes"
               >
-                Yes, delete
+                {deleting ? "Deleting…" : "Yes, delete"}
               </button>
               <button
                 type="button"
                 className="btn"
                 onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
                 data-testid="roster-cancel-delete-confirm-cancel"
               >
                 Cancel
