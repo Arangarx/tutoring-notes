@@ -370,6 +370,7 @@ test.describe(
       // Replay set is mixdown-only; count may grow between mid-session snapshot and End.
       expect(replay.count).toBeGreaterThanOrEqual(mixdownUploadCount);
       expect(replay.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(mixdownUploadCount);
+      // transcriptionOnly is enforced by exclusion: a non-transcriptionOnly student row would register a `student:peer-*:mic` recording and fail this loop.
       for (const streamId of Object.keys(replay.byStream)) {
         expect(streamId).toBe("tutor:mic");
       }

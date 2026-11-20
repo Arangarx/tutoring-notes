@@ -152,6 +152,11 @@ describe("ActiveWhiteboardSessionsList — cancel and delete awaits the action",
     await waitFor(() => {
       expect(routerRefreshMock).toHaveBeenCalledTimes(1);
     });
+    // refresh() returns before the new RSC arrives. "Yes, delete" must stay
+    // disabled so a second click cannot fire another delete.
+    await waitFor(() => {
+      expect(screen.getByTestId("roster-cancel-delete-confirm-yes")).toBeDisabled();
+    });
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 

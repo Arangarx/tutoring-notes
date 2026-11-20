@@ -379,7 +379,41 @@ describe("WorkspaceResumeGate", () => {
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(/database is on fire/i);
     });
-    // Gate still showing, workspace still hidden.
+    // Gate still showing, workspace still hidden. The confirm stays up until
+    // the delete actually succeeds — closing it first hides a failure.
+    expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-resume-gate")).toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-canary")).not.toBeInTheDocument();
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it("a thrown delete action shows the error, keeps the confirm, and does not navigate", async () => {
+    deleteWhiteboardSessionAndDataActionMock.mockRejectedValueOnce(
+      new Error("network down")
+    );
+    const user = userEvent.setup();
+    render(
+      <WorkspaceResumeGate
+        whiteboardSessionId="wb_42"
+        studentId="stu_99"
+        startedAtIso={new Date(NOW - 2 * 60 * 60_000).toISOString()}
+        initialLastActiveAtIso={null}
+        syncEnabled={true}
+        __testOverrides={{ nowMs: NOW }}
+      >
+        <CanaryChildren />
+      </WorkspaceResumeGate>
+    );
+
+    await user.click(screen.getByTestId("wb-resume-gate-cancel-delete"));
+    await user.click(screen.getByTestId("wb-resume-gate-cancel-delete-confirm-yes"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /could not delete the session/i
+      );
+    });
+    expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm")).toBeInTheDocument();
     expect(screen.getByTestId("wb-resume-gate")).toBeInTheDocument();
     expect(screen.queryByTestId("workspace-canary")).not.toBeInTheDocument();
     expect(routerPushMock).not.toHaveBeenCalled();

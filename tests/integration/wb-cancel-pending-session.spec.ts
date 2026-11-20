@@ -23,7 +23,7 @@
  * Tags: @wb-presence (adjacency: @wb-sync, @wb-av)
  */
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import {
   seedWbPendingLiveSyncSession,
   seedParentJoinPendingSession,
@@ -354,5 +354,78 @@ test.describe(
         }
       }
     );
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Failed cancel stays on the workspace
+// ---------------------------------------------------------------------------
+
+/** Abort only the session-delete action. Other POSTs on this page keep flowing. */
+async function abortSessionDeletePost(page: Page, whiteboardSessionId: string): Promise<() => Promise<void>> {
+  const onRoute = async (route: Route) => {
+    const request = route.request();
+    const isDelete =
+      request.method() === "POST" &&
+      Boolean(request.headers()["next-action"]) &&
+      request.postData()?.trim() === JSON.stringify([whiteboardSessionId]);
+    if (!isDelete) {
+      await route.continue();
+      return;
+    }
+    await route.abort("failed");
+  };
+  await page.route("**/*", onRoute);
+  return async () => {
+    await page.unroute("**/*", onRoute).catch(() => {});
+  };
+}
+
+test.describe(
+  "cancel PENDING session — failed delete stays put",
+  { tag: [TAG.WB_PRESENCE] },
+  () => {
+    test("aborted cancel stays on the workspace and shows the error", async ({ browser }) => {
+      test.setTimeout(120_000);
+
+      const session = await seedWbPendingLiveSyncSession();
+      const tutorContext = await browser.newContext({
+        storageState: authStatePath("tutor.json"),
+        viewport: { width: 1280, height: 800 },
+      });
+
+      try {
+        const tutorPage = await tutorContext.newPage();
+        await tutorPage.goto(
+          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+          timeout: 30_000,
+        });
+        await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+
+        const unroute = await abortSessionDeletePost(tutorPage, session.whiteboardSessionId);
+        try {
+          await confirmCancelSession(tutorPage);
+          await expect(tutorPage.getByTestId("wb-waiting-cancel-error")).toBeVisible({
+            timeout: 15_000,
+          });
+          await expect(tutorPage.getByTestId("wb-waiting-cancel-error")).toContainText(
+            /could not cancel the session/i
+          );
+          await expect(tutorPage).toHaveURL(
+            new RegExp(`/whiteboard/${session.whiteboardSessionId}`)
+          );
+          await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible();
+        } finally {
+          await unroute();
+        }
+      } finally {
+        await tutorContext.close();
+      }
+    });
   }
 );

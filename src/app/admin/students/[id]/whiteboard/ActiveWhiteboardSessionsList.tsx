@@ -130,6 +130,9 @@ function RosterRow({
   const [finalizing, startFinalizeTransition] = useTransition();
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // refresh() returns before the new list arrives. Keep "Yes, delete" inert
+  // so a second click cannot fire a delete the server will not find.
+  const [deleted, setDeleted] = useState(false);
 
   const handleEndAndReview = () => {
     setFinalizeError(null);
@@ -148,24 +151,18 @@ function RosterRow({
     });
   };
   const handleDelete = () => {
-    if (deleting) return;
+    if (deleting || deleted) return;
     setDeleteError(null);
     startDeleteTransition(async () => {
       const fallbackError = "Could not delete the session. Please try again.";
-      const result = await awaitSessionDataDelete(session.id, fallbackError);
+      const result = await awaitSessionDataDelete(session.id, fallbackError, {
+        errLine: `[nsi] wbsid=${session.id} action=roster_delete_failed`,
+      });
       if (!result.ok) {
-        const message =
-          result.thrown instanceof Error
-            ? result.thrown.message
-            : result.thrown != null
-              ? String(result.thrown)
-              : result.error;
-        console.error(
-          `[nsi] wbsid=${session.id} action=roster_delete_failed err=${message}`
-        );
         setDeleteError(result.error);
         return;
       }
+      setDeleted(true);
       router.refresh();
     });
   };
@@ -195,7 +192,7 @@ function RosterRow({
             variant="outline"
             className="min-h-11 whitespace-nowrap"
             onClick={handleEndAndReview}
-            disabled={finalizing || deleting || showDeleteConfirm}
+            disabled={finalizing || deleting || deleted || showDeleteConfirm}
             data-testid="roster-end-and-review"
           >
             {finalizing ? "Finalizing…" : "End and review"}
@@ -206,7 +203,7 @@ function RosterRow({
             variant="outline"
             className="min-h-11 whitespace-nowrap text-destructive hover:text-destructive"
             onClick={() => setShowDeleteConfirm(true)}
-            disabled={deleting || showDeleteConfirm}
+            disabled={deleting || deleted || showDeleteConfirm}
             data-testid="roster-cancel-delete"
             aria-label="Cancel and delete this session and its recording"
           >
@@ -263,7 +260,7 @@ function RosterRow({
                   borderColor: "var(--sign-out)",
                 }}
                 onClick={handleDelete}
-                disabled={deleting}
+                disabled={deleting || deleted}
                 data-testid="roster-cancel-delete-confirm-yes"
               >
                 {deleting ? "Deleting…" : "Yes, delete"}
@@ -272,7 +269,7 @@ function RosterRow({
                 type="button"
                 className="btn"
                 onClick={() => setShowDeleteConfirm(false)}
-                disabled={deleting}
+                disabled={deleting || deleted}
                 data-testid="roster-cancel-delete-confirm-cancel"
               >
                 Cancel

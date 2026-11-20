@@ -18,14 +18,14 @@
  *   - Resume → sets consented=true, workspace mounts and reconnects.
  *   - End and review → server-side finalize (WS-C) then navigate to review
  *     overlay — no live workspace mount / waiting-room flash.
- *   - Cancel and delete → confirm-guarded destructive delete via
- *     deleteWhiteboardSessionAndDataAction; returns to student detail.
+ *   - Cancel and delete → confirm stays open until
+ *     deleteWhiteboardSessionAndDataAction commits, then returns to student detail.
  */
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { finalizeWhiteboardSessionWithOutbox } from "@/lib/recording/finalize-whiteboard-session-client";
-import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { awaitSessionDataDelete } from "@/lib/whiteboard/await-session-data-delete";
 import { Button } from "@/components/ui/button";
 import { useHydrated } from "@/hooks/useHydrated";
 import {
@@ -143,12 +143,13 @@ export function WorkspaceResumeGate({
     });
   };
   const handleDelete = () => {
-    setShowDeleteConfirm(false);
+    if (deleting) return;
     setDeleteError(null);
     startDeleteTransition(async () => {
-      const result = await deleteWhiteboardSessionAndDataAction(whiteboardSessionId);
+      const fallbackError = "Could not delete the session. Please try again.";
+      const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError);
       if (!result.ok) {
-        setDeleteError(result.error ?? "Could not delete the session. Please try again.");
+        setDeleteError(result.error);
         return;
       }
       router.push(`/admin/students/${studentId}`);
@@ -237,6 +238,7 @@ export function WorkspaceResumeGate({
                 borderColor: "var(--sign-out)",
               }}
               onClick={handleDelete}
+              disabled={deleting}
               data-testid="wb-resume-gate-cancel-delete-confirm-yes"
             >
               Yes, delete

@@ -4614,24 +4614,29 @@ export function WhiteboardWorkspaceClient({
     );
     const rosterUrl = `/admin/students/${studentId}`;
     const fallbackError = "Could not cancel the session. Please try again.";
-    const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError);
+    const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError, {
+      thrownLine: `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
+    });
     if (!result.ok) {
-      if (result.thrown != null) {
-        console.error(
-          `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
-          result.thrown
-        );
-      }
       setCancelError(result.error);
       setIsCancelling(false);
       return;
     }
-    // Parity with End: clear the local encryption key so a BFCache restore
-    // of this workspace cannot re-copy the deleted session id.
-    clearEncryptionKeyForSession(whiteboardSessionId);
-    // replace (not assign) removes this deleted workspace from the history
-    // stack — Back will skip it and go to the page before the workspace.
-    window.location.replace(rosterUrl);
+    try {
+      // Parity with End: clear the local encryption key so a BFCache restore
+      // of this workspace cannot re-copy the deleted session id.
+      clearEncryptionKeyForSession(whiteboardSessionId);
+      // replace (not assign) removes this deleted workspace from the history
+      // stack — Back will skip it and go to the page before the workspace.
+      window.location.replace(rosterUrl);
+    } catch (err: unknown) {
+      console.error(
+        `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
+        err
+      );
+      setCancelError(fallbackError);
+      setIsCancelling(false);
+    }
   }, [whiteboardSessionId, studentId, isCancelling]);
 
   const handleEndSession = useCallback(async () => {

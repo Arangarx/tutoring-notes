@@ -407,19 +407,10 @@ export default function TutorNotesSection({
     setDeleting(true);
     setDeleteError(null);
     const fallbackError = "Could not delete the session. Please try again.";
-    const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError);
+    const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError, {
+      errLine: `[nsi] wbsid=${whiteboardSessionId} action=delete_uncommitted`,
+    });
     if (!result.ok) {
-      if (result.thrown != null) {
-        const message =
-          result.thrown instanceof Error ? result.thrown.message : String(result.thrown);
-        console.error(
-          `[nsi] wbsid=${whiteboardSessionId} action=delete_uncommitted err=${message}`
-        );
-      } else {
-        console.error(
-          `[nsi] wbsid=${whiteboardSessionId} action=delete_uncommitted err=${result.error}`
-        );
-      }
       setDeleteError(result.error);
       setDeleting(false);
       return;
