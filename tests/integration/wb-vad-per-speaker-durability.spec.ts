@@ -5,6 +5,10 @@ import {
 } from "../helpers/blob-gate";
 import { TAG } from "../test-tags";
 import {
+  driveTwoVadSilenceCuts,
+  injectVadOverrides,
+} from "../helpers/vad-test-meter";
+import {
   openTutorAndStudent,
   seedWbLiveSyncSession,
   waitForWbE2eBridge,
@@ -26,53 +30,13 @@ const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secre
  */
 const OPENAI_NOT_CONFIGURED = "OPENAI_API_KEY not configured";
 
-/** Above injectVadOverrides threshold (0.15) — forces "speech" in VAD tick. */
-const VAD_METER_HIGH = 0.5;
-/** Below threshold — forces silence accumulation toward a boundary cut. */
-const VAD_METER_LOW = 0;
-
-async function injectVadOverrides(page: import("@playwright/test").Page) {
-  await page.addInitScript(() => {
-    const w = window as unknown as {
-      __VAD_MAX_SEGMENT_SECONDS_OVERRIDE?: number;
-      __VAD_MIN_SEGMENT_SECONDS_OVERRIDE?: number;
-      __VAD_SILENCE_HOLD_MS_OVERRIDE?: number;
-      __VAD_SILENCE_RMS_THRESHOLD_OVERRIDE?: number;
-      __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number;
-      __VAD_CUT_DISABLED?: boolean;
-      __VAD_TEST_METER_LEVEL__?: number;
-    };
-    w.__VAD_MIN_SEGMENT_SECONDS_OVERRIDE = 1;
-    w.__VAD_SILENCE_HOLD_MS_OVERRIDE = 800;
-    w.__VAD_SILENCE_RMS_THRESHOLD_OVERRIDE = 0.15;
-    w.__VAD_MAX_SEGMENT_SECONDS_OVERRIDE = 120;
-    w.__VAD_TEST_METER_LEVEL__ = 0.5;
-  });
-}
-
-async function setVadTestMeterLevel(
-  page: import("@playwright/test").Page,
-  level: number
-) {
-  await page.evaluate((lvl) => {
-    (window as unknown as { __VAD_TEST_METER_LEVEL__?: number }).__VAD_TEST_METER_LEVEL__ =
-      lvl;
-  }, level);
-}
-
-/**
- * Drive speak → silence → speak → silence via the test-only meter seam so
- * ≥2 VAD boundary cuts fire (VAD_MIN=1s, SILENCE_HOLD=800ms in overrides).
- */
-async function driveTwoVadSilenceCuts(page: import("@playwright/test").Page) {
-  await setVadTestMeterLevel(page, VAD_METER_HIGH);
-  await page.waitForTimeout(1_200);
-  await setVadTestMeterLevel(page, VAD_METER_LOW);
-  await page.waitForTimeout(1_000);
-  await setVadTestMeterLevel(page, VAD_METER_HIGH);
-  await page.waitForTimeout(1_200);
-  await setVadTestMeterLevel(page, VAD_METER_LOW);
-  await page.waitForTimeout(1_000);
+/** Learner transcript lane created when a transcriptionOnly upload is enqueued. */
+function speakerTranscriptChunkCount(byStream: Record<string, number>): number {
+  let count = 0;
+  for (const [streamId, n] of Object.entries(byStream)) {
+    if (/^speaker:.+:transcript$/.test(streamId)) count += n;
+  }
+  return count;
 }
 
 async function fetchRecordingCount(
@@ -327,23 +291,6 @@ test.describe(
         peers.tutorPage,
         session.whiteboardSessionId
       );
-
-      await peers.studentPage.waitForTimeout(5_000);
-      await peers.tutorPage.waitForTimeout(3_000);
-
-      const outboxRows = await listOutboxRowsForSession(
-        peers.tutorPage,
-        session.whiteboardSessionId
-      );
-      const studentTxRows = outboxRows.filter(
-        (r) =>
-          r.transcriptionOnly === true &&
-          /^student:peer-.+:mic$/.test(r.streamId) &&
-          typeof r.blobRemoteUrl === "string" &&
-          r.blobRemoteUrl.length > 0
-      );
-      expect(studentTxRows.length).toBeGreaterThanOrEqual(1);
-
       const mixdownUploadCount = midMixdown.byStream["tutor:mic"] ?? 0;
 
       await peers.tutorPage.getByTestId("wb-end-session").click();
@@ -366,6 +313,11 @@ test.describe(
               peers.tutorPage,
               session.whiteboardSessionId
             );
+            // The student lane is uploaded only when its recorder stops (End).
+            // A speaker transcript row exists only after that upload is enqueued.
+            if (speakerTranscriptChunkCount(tx.byStream) < 1) {
+              return "waiting-student-lane";
+            }
             if (tx.tutorNoteStatus === "done" || tx.tutorNoteStatus === "partial") {
               noteOutcome = "ready";
               return "ready";
@@ -390,6 +342,7 @@ test.describe(
         session.whiteboardSessionId
       );
       expect(tx.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(1);
+      expect(speakerTranscriptChunkCount(tx.byStream)).toBeGreaterThanOrEqual(1);
       if (noteOutcome === "not-configured") {
         test.info().annotations.push({
           type: "openai-not-configured",
