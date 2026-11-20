@@ -479,8 +479,8 @@ export type DeleteSessionResult =
  * IMPORTANT: Audio and events Blob files are NOT deleted here (that is the
  * stale-branch sweep utility's responsibility). DB rows only.
  *
- * On failure the action returns {ok:false} but the CALLER is responsible for
- * redirecting to the student detail regardless (cron sweeps orphaned rows).
+ * On failure the action returns {ok:false}. Callers stay on the page and
+ * show that error — they navigate only after {ok:true}, once the rows are gone.
  *
  * Requires a confirm dialog client-side.
  *

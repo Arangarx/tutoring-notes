@@ -151,7 +151,7 @@ import {
   revokeJoinTokensForSession,
   startWhiteboardSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
-import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { awaitSessionDataDelete } from "@/lib/whiteboard/await-session-data-delete";
 import { LEGACY_INTENT_ENDREVIEW_AUTO_END } from "@/lib/whiteboard/finalize-flags";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useRemoteMicRecorders } from "@/hooks/useRemoteMicRecorders";
@@ -4613,27 +4613,25 @@ export function WhiteboardWorkspaceClient({
       `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending`
     );
     const rosterUrl = `/admin/students/${studentId}`;
-    try {
-      const result = await deleteWhiteboardSessionAndDataAction(whiteboardSessionId);
-      if (!result.ok) {
-        setCancelError(result.error ?? "Could not cancel the session. Please try again.");
-        setIsCancelling(false);
-        return;
+    const fallbackError = "Could not cancel the session. Please try again.";
+    const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError);
+    if (!result.ok) {
+      if (result.thrown != null) {
+        console.error(
+          `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
+          result.thrown
+        );
       }
-      // Parity with End: clear the local encryption key so a BFCache restore
-      // of this workspace cannot re-copy the deleted session id.
-      clearEncryptionKeyForSession(whiteboardSessionId);
-      // replace (not assign) removes this deleted workspace from the history
-      // stack — Back will skip it and go to the page before the workspace.
-      window.location.replace(rosterUrl);
-    } catch (err: unknown) {
-      console.error(
-        `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
-        err
-      );
-      setCancelError("Could not cancel the session. Please try again.");
+      setCancelError(result.error);
       setIsCancelling(false);
+      return;
     }
+    // Parity with End: clear the local encryption key so a BFCache restore
+    // of this workspace cannot re-copy the deleted session id.
+    clearEncryptionKeyForSession(whiteboardSessionId);
+    // replace (not assign) removes this deleted workspace from the history
+    // stack — Back will skip it and go to the page before the workspace.
+    window.location.replace(rosterUrl);
   }, [whiteboardSessionId, studentId, isCancelling]);
 
   const handleEndSession = useCallback(async () => {

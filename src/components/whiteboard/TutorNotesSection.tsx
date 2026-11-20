@@ -18,8 +18,8 @@
  * Save → saveDraftSessionNoteAction → SessionNote finalized (READY), appears in
  *   student's notes list at /admin/students/[id]/notes.
  * Cancel+delete → confirm dialog ("Are you sure you want to delete this session
- *   and all related data?") → deleteWhiteboardSessionAndDataAction → redirect to
- *   student page.
+ *   and all related data?") → await deleteWhiteboardSessionAndDataAction, and
+ *   redirect to the student page only after the delete commits.
  * Regenerate → confirm dialog → regenerateNotesAction → re-polls until done.
  *
  * Accessibility: status updates are announced via aria-live region.
@@ -38,7 +38,6 @@ import {
   getTutorNoteStatusAction,
   regenerateNotesAction,
   saveSessionNotesAction,
-  deleteWhiteboardSessionAndDataAction,
   type TutorNoteStatusResult,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -47,6 +46,7 @@ import {
   type StructuredNoteFields,
 } from "@/lib/note-content";
 import { NOTES_SKIPPED_COPY } from "@/lib/recording/transcript-types";
+import { awaitSessionDataDelete } from "@/lib/whiteboard/await-session-data-delete";
 
 export type { StructuredNoteFields };
 
@@ -210,6 +210,7 @@ export default function TutorNotesSection({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedInShell, setSavedInShell] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const startTimeRef = useRef<number>(Date.now());
@@ -401,24 +402,30 @@ export default function TutorNotesSection({
     [saveNoteFields]
   );
 
-  const handleDelete = useCallback(() => {
-    setShowDeleteConfirm(false);
+  const handleDelete = useCallback(async () => {
+    if (deleting) return;
     setDeleting(true);
-    // Navigate away immediately (optimistic). Fire delete in background;
-    // cron sweep reconciles any orphaned rows if the delete fails.
-    router.push(`/admin/students/${studentId}`);
-    void deleteWhiteboardSessionAndDataAction(whiteboardSessionId).then((result) => {
-      if (!result.ok) {
+    setDeleteError(null);
+    const fallbackError = "Could not delete the session. Please try again.";
+    const result = await awaitSessionDataDelete(whiteboardSessionId, fallbackError);
+    if (!result.ok) {
+      if (result.thrown != null) {
+        const message =
+          result.thrown instanceof Error ? result.thrown.message : String(result.thrown);
         console.error(
-          `[nsi] wbsid=${whiteboardSessionId} delete_failed err=${result.error} — navigating to student detail`
+          `[nsi] wbsid=${whiteboardSessionId} action=delete_uncommitted err=${message}`
+        );
+      } else {
+        console.error(
+          `[nsi] wbsid=${whiteboardSessionId} action=delete_uncommitted err=${result.error}`
         );
       }
-    }).catch((err: unknown) => {
-      console.error(
-        `[nsi] wbsid=${whiteboardSessionId} delete_exception err=${err instanceof Error ? err.message : String(err)} — navigating to student detail`
-      );
-    });
-  }, [whiteboardSessionId, router, studentId]);
+      setDeleteError(result.error);
+      setDeleting(false);
+      return;
+    }
+    router.push(`/admin/students/${studentId}`);
+  }, [deleting, whiteboardSessionId, router, studentId]);
 
   // -------------------------------------------------------------------------
   // Render states
@@ -663,6 +670,9 @@ export default function TutorNotesSection({
               <span style={{ fontWeight: 600, color: "var(--sign-out)" }}>
                 Delete this session and all recording data?
               </span>
+              {deleteError ? (
+                <SaveErrorAlert message={deleteError} testId="wb-delete-session-error" />
+              ) : null}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   type="button"
@@ -672,15 +682,19 @@ export default function TutorNotesSection({
                     color: "white",
                     borderColor: "var(--sign-out)",
                   }}
-                  onClick={handleDelete}
+                  onClick={() => {
+                    void handleDelete();
+                  }}
+                  disabled={deleting}
                   data-testid="wb-delete-confirm-yes"
                 >
-                  Yes, delete
+                  {deleting ? "Deleting…" : "Yes, delete"}
                 </button>
                 <button
                   type="button"
                   className="btn"
                   onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
                   data-testid="wb-delete-confirm-cancel"
                 >
                   Cancel
@@ -793,7 +807,7 @@ function NotesNotice({ testId, children }: { testId?: string; children: ReactNod
 // Save feedback — shared by "Save to notes" and "Share session"
 // ---------------------------------------------------------------------------
 
-function SaveErrorAlert({ message }: { message: string }) {
+function SaveErrorAlert({ message, testId }: { message: string; testId?: string }) {
   return (
     <div
       role="alert"
@@ -806,6 +820,7 @@ function SaveErrorAlert({ message }: { message: string }) {
         color: "var(--sign-out)",
         marginTop: 8,
       }}
+      data-testid={testId}
     >
       {message}
     </div>
