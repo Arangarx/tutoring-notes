@@ -9,8 +9,10 @@
  *   npx playwright test tests/integration/wb-end-from-gate.spec.ts --project=wb-regression
  */
 
+import { type Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import { PrismaClient } from "@prisma/client";
+import { interceptSessionDeletePost } from "./session-delete-intercept";
 import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
@@ -381,8 +383,128 @@ test.describe(
         await prisma.$disconnect();
       }
     });
+
+    test("aborted gate delete keeps the confirm, shows the error, and leaves the session", async ({
+      page,
+    }) => {
+      test.setTimeout(120_000);
+      const { studentId, whiteboardSessionId } = await openGateDeleteConfirm(page);
+      const held = await interceptSessionDeletePost(page, whiteboardSessionId, "abort");
+      try {
+        await held.armDeleteCapture();
+        await page.getByTestId("wb-resume-gate-cancel-delete-confirm-yes").click({ noWaitAfter: true });
+
+        const error = page.getByTestId("wb-resume-gate-cancel-delete-error");
+        await expect(error).toBeVisible({ timeout: 15_000 });
+        await expect(error).toContainText(/could not delete the session/i);
+        await expect(page.getByTestId("wb-resume-gate-cancel-delete-confirm")).toBeVisible();
+        await expect(page.getByTestId("wb-resume-gate")).toBeVisible();
+        await expect(page).toHaveURL(workspaceUrl(whiteboardSessionId));
+        await expect(page).not.toHaveURL(studentDetailUrl(studentId));
+
+        const prisma = new PrismaClient();
+        try {
+          const row = await prisma.whiteboardSession.findUnique({
+            where: { id: whiteboardSessionId },
+            select: { id: true },
+          });
+          expect(row, "session row kept when the gate delete fails").not.toBeNull();
+        } finally {
+          await prisma.$disconnect();
+        }
+      } finally {
+        await held.unroute();
+      }
+    });
+
+    test("gate delete second click sends one POST and no error", async ({ page }) => {
+      test.setTimeout(120_000);
+      const { studentId, whiteboardSessionId } = await openGateDeleteConfirm(page);
+      const held = await interceptSessionDeletePost(page, whiteboardSessionId, "hold", {
+        studentId,
+      });
+      held.arm();
+      try {
+        const yes = page.getByTestId("wb-resume-gate-cancel-delete-confirm-yes");
+        const cancel = page.getByTestId("wb-resume-gate-cancel-delete-confirm-cancel");
+        await held.armDeleteCapture();
+        await yes.click({ noWaitAfter: true });
+        await expect
+          .poll(
+            () => (held.sawDeletePost() ? "seen" : held.actionPosts.slice(-6).join(" || ") || "none"),
+            { timeout: 15_000 },
+          )
+          .toBe("seen");
+        await expect(page.getByTestId("wb-resume-gate-cancel-delete-confirm")).toBeVisible();
+        await expect(page.getByTestId("wb-resume-gate-cancel-delete")).toHaveText("Deleting…");
+        expect(held.deletePostCount()).toBe(1);
+
+        // Release the action but hold the student-page flight. Next keeps this
+        // transition pending until that flight returns, so the label stays
+        // "Deleting…". The click below waits until Yes is enabled. A second
+        // delete is a failure; staying disabled is the pass.
+        held.stallStudentDetail();
+        const secondClick = yes
+          .click({ noWaitAfter: true, timeout: 5_000 })
+          .then(() => "clicked" as const, () => "blocked" as const);
+        held.release();
+        const second = await secondClick;
+        await expect(page).toHaveURL(workspaceUrl(whiteboardSessionId));
+        await expect(yes).toBeDisabled();
+        await expect(cancel).toBeDisabled();
+        expect(
+          held.deletePostCount(),
+          `second confirm click (${second}) sent another delete. posts: ${held.actionPosts.join(" | ") || "(none)"}`,
+        ).toBe(1);
+        await expect(page.getByTestId("wb-resume-gate-cancel-delete-error")).toHaveCount(0);
+
+        held.releaseFlights();
+        await expect(page).toHaveURL(studentDetailUrl(studentId), { timeout: 30_000 });
+        const prisma = new PrismaClient();
+        try {
+          const gone = await prisma.whiteboardSession.findUnique({
+            where: { id: whiteboardSessionId },
+            select: { id: true },
+          });
+          expect(gone, "session row still present after the gate delete committed").toBeNull();
+        } finally {
+          await prisma.$disconnect();
+        }
+      } finally {
+        await held.unroute();
+      }
+    });
   }
 );
+
+/** Student detail only — the workspace URL is a longer path under the same id. */
+function studentDetailUrl(studentId: string): RegExp {
+  const id = studentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`/admin/students/${id}/?(?:\\?.*)?$`);
+}
+
+function workspaceUrl(whiteboardSessionId: string): RegExp {
+  const id = whiteboardSessionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`/whiteboard/${id}(?:/workspace)?(?:[?#].*)?$`);
+}
+
+async function openGateDeleteConfirm(page: Page) {
+  const seeded = await seedStaleSession();
+  await page.goto(
+    `/admin/students/${seeded.studentId}/whiteboard/${seeded.whiteboardSessionId}/workspace`,
+    { waitUntil: "domcontentloaded" },
+  );
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByTestId("wb-resume-gate")).toBeVisible({ timeout: 30_000 });
+  const deleteBtn = page.getByTestId("wb-resume-gate-cancel-delete");
+  await expect(deleteBtn).toBeEnabled({ timeout: 15_000 });
+  await deleteBtn.click();
+  await expect(page.getByTestId("wb-resume-gate-cancel-delete-confirm")).toBeVisible({
+    timeout: 8_000,
+  });
+  await expect(page.getByTestId("wb-resume-gate-cancel-delete-confirm-yes")).toBeEnabled();
+  return seeded;
+}
 
 // ---------------------------------------------------------------------------
 // 3. Gate Resume

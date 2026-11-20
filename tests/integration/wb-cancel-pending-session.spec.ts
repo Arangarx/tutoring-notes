@@ -23,7 +23,11 @@
  * Tags: @wb-presence (adjacency: @wb-sync, @wb-av)
  */
 
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import {
+  interceptSessionDeletePost,
+  type HeldSessionDelete,
+} from "./session-delete-intercept";
 import {
   seedWbPendingLiveSyncSession,
   seedParentJoinPendingSession,
@@ -47,12 +51,14 @@ function studentRosterUrl(studentId: string) {
 }
 
 /** Two-step cancel: one click on Cancel session, then Confirm cancel. */
-async function confirmCancelSession(page: Page) {
+async function confirmCancelSession(page: Page, held?: HeldSessionDelete) {
   const cancelBtn = page.getByTestId("wb-waiting-cancel");
   await expect(cancelBtn).toBeEnabled({ timeout: 15_000 });
   await cancelBtn.click();
   const confirmBtn = page.getByTestId("wb-waiting-cancel-confirm");
   await expect(confirmBtn).toBeEnabled({ timeout: 10_000 });
+  // Arm only for the confirm click, so an earlier action with the same body cannot pin.
+  if (held) await held.armDeleteCapture();
   await confirmBtn.click();
 }
 
@@ -361,26 +367,6 @@ test.describe(
 // Failed cancel stays on the workspace
 // ---------------------------------------------------------------------------
 
-/** Abort only the session-delete action. Other POSTs on this page keep flowing. */
-async function abortSessionDeletePost(page: Page, whiteboardSessionId: string): Promise<() => Promise<void>> {
-  const onRoute = async (route: Route) => {
-    const request = route.request();
-    const isDelete =
-      request.method() === "POST" &&
-      Boolean(request.headers()["next-action"]) &&
-      request.postData()?.trim() === JSON.stringify([whiteboardSessionId]);
-    if (!isDelete) {
-      await route.continue();
-      return;
-    }
-    await route.abort("failed");
-  };
-  await page.route("**/*", onRoute);
-  return async () => {
-    await page.unroute("**/*", onRoute).catch(() => {});
-  };
-}
-
 test.describe(
   "cancel PENDING session — failed delete stays put",
   { tag: [TAG.WB_PRESENCE] },
@@ -407,9 +393,13 @@ test.describe(
           timeout: 90_000,
         });
 
-        const unroute = await abortSessionDeletePost(tutorPage, session.whiteboardSessionId);
+        const held = await interceptSessionDeletePost(
+          tutorPage,
+          session.whiteboardSessionId,
+          "abort",
+        );
         try {
-          await confirmCancelSession(tutorPage);
+          await confirmCancelSession(tutorPage, held);
           await expect(tutorPage.getByTestId("wb-waiting-cancel-error")).toBeVisible({
             timeout: 15_000,
           });
@@ -421,7 +411,7 @@ test.describe(
           );
           await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible();
         } finally {
-          await unroute();
+          await held.unroute();
         }
       } finally {
         await tutorContext.close();

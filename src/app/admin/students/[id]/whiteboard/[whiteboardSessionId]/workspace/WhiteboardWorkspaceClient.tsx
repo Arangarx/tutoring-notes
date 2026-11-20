@@ -4622,20 +4622,35 @@ export function WhiteboardWorkspaceClient({
       setIsCancelling(false);
       return;
     }
+    // The delete has committed. A throw from key cleanup or navigation is not
+    // a failed cancel — that copy would offer a retry of a session that is gone.
     try {
       // Parity with End: clear the local encryption key so a BFCache restore
       // of this workspace cannot re-copy the deleted session id.
       clearEncryptionKeyForSession(whiteboardSessionId);
+    } catch (err: unknown) {
+      console.error(
+        `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_nav_failed`,
+        err
+      );
+    }
+    try {
       // replace (not assign) removes this deleted workspace from the history
       // stack — Back will skip it and go to the page before the workspace.
       window.location.replace(rosterUrl);
     } catch (err: unknown) {
       console.error(
-        `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
+        `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_nav_failed`,
         err
       );
-      setCancelError(fallbackError);
-      setIsCancelling(false);
+      try {
+        window.location.assign(rosterUrl);
+      } catch (assignErr: unknown) {
+        console.error(
+          `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_nav_failed`,
+          assignErr
+        );
+      }
     }
   }, [whiteboardSessionId, studentId, isCancelling]);
 

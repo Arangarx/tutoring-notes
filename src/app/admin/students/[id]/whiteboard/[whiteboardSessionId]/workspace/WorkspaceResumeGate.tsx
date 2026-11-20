@@ -20,6 +20,7 @@
  *     overlay — no live workspace mount / waiting-room flash.
  *   - Cancel and delete → confirm stays open until
  *     deleteWhiteboardSessionAndDataAction commits, then returns to student detail.
+ *     Yes and Cancel stay disabled after the transition resolves, until navigation lands.
  */
 
 import { useRouter } from "next/navigation";
@@ -28,6 +29,7 @@ import { finalizeWhiteboardSessionWithOutbox } from "@/lib/recording/finalize-wh
 import { awaitSessionDataDelete } from "@/lib/whiteboard/await-session-data-delete";
 import { Button } from "@/components/ui/button";
 import { useHydrated } from "@/hooks/useHydrated";
+import { useSessionDeleteLatch } from "@/hooks/useSessionDeleteLatch";
 import {
   deriveResumeGateState,
   describeResumeGate,
@@ -109,7 +111,12 @@ export function WorkspaceResumeGate({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
-  const [deleting, startDeleteTransition] = useTransition();
+  const {
+    deleting,
+    locked: deleteLocked,
+    startDeleteTransition,
+    markDeleted,
+  } = useSessionDeleteLatch();
   const [finalizing, startFinalizeTransition] = useTransition();
   if (consented) {
     return <>{children}</>;
@@ -143,7 +150,7 @@ export function WorkspaceResumeGate({
     });
   };
   const handleDelete = () => {
-    if (deleting) return;
+    if (deleteLocked) return;
     setDeleteError(null);
     startDeleteTransition(async () => {
       const fallbackError = "Could not delete the session. Please try again.";
@@ -152,6 +159,7 @@ export function WorkspaceResumeGate({
         setDeleteError(result.error);
         return;
       }
+      markDeleted();
       router.push(`/admin/students/${studentId}`);
     });
   };
@@ -180,7 +188,7 @@ export function WorkspaceResumeGate({
             markSkipIndexedDbResumeAfterGate(whiteboardSessionId);
             setConsented(true);
           }}
-          disabled={!hydrated || deleting}
+          disabled={!hydrated || deleteLocked}
           data-testid="wb-resume-gate-resume"
           autoFocus
         >
@@ -191,7 +199,7 @@ export function WorkspaceResumeGate({
           type="button"
           variant="outline"
           onClick={handleEndAndReview}
-          disabled={!hydrated || deleting || finalizing || showDeleteConfirm}
+          disabled={!hydrated || deleteLocked || finalizing || showDeleteConfirm}
           data-testid="wb-resume-gate-end-and-review"
         >
           {finalizing ? "Finalizing…" : "End and review"}
@@ -200,7 +208,7 @@ export function WorkspaceResumeGate({
           type="button"
           variant="outline"
           onClick={() => setShowDeleteConfirm(true)}
-          disabled={!hydrated || deleting || showDeleteConfirm}
+          disabled={!hydrated || deleteLocked || showDeleteConfirm}
           data-testid="wb-resume-gate-cancel-delete"
           style={{ color: "var(--sign-out)" }}
         >
@@ -238,7 +246,7 @@ export function WorkspaceResumeGate({
                 borderColor: "var(--sign-out)",
               }}
               onClick={handleDelete}
-              disabled={deleting}
+              disabled={deleteLocked}
               data-testid="wb-resume-gate-cancel-delete-confirm-yes"
             >
               Yes, delete
@@ -247,6 +255,7 @@ export function WorkspaceResumeGate({
               type="button"
               className="btn"
               onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleteLocked}
               data-testid="wb-resume-gate-cancel-delete-confirm-cancel"
             >
               Cancel
@@ -265,9 +274,11 @@ export function WorkspaceResumeGate({
         </p>
       )}
 
-      {deleteError && (        <p
+      {deleteError && (
+        <p
           role="alert"
           style={{ color: "var(--color-error)", marginTop: 12, fontSize: 13 }}
+          data-testid="wb-resume-gate-cancel-delete-error"
         >
           {deleteError}
         </p>

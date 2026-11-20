@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition, useState } from "react";
+import { useSessionDeleteLatch } from "@/hooks/useSessionDeleteLatch";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { SessionEntryBlocked } from "@/components/scheduling/SessionEntryBlocked";
 import { Button } from "@/components/ui/button";
@@ -126,13 +127,15 @@ function RosterRow({
 }) {
   const router = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleting, startDeleteTransition] = useTransition();
+  const {
+    deleting,
+    locked: deleteLocked,
+    startDeleteTransition,
+    markDeleted,
+  } = useSessionDeleteLatch();
   const [finalizing, startFinalizeTransition] = useTransition();
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  // refresh() returns before the new list arrives. Keep "Yes, delete" inert
-  // so a second click cannot fire a delete the server will not find.
-  const [deleted, setDeleted] = useState(false);
 
   const handleEndAndReview = () => {
     setFinalizeError(null);
@@ -151,7 +154,7 @@ function RosterRow({
     });
   };
   const handleDelete = () => {
-    if (deleting || deleted) return;
+    if (deleteLocked) return;
     setDeleteError(null);
     startDeleteTransition(async () => {
       const fallbackError = "Could not delete the session. Please try again.";
@@ -162,7 +165,7 @@ function RosterRow({
         setDeleteError(result.error);
         return;
       }
-      setDeleted(true);
+      markDeleted();
       router.refresh();
     });
   };
@@ -192,7 +195,7 @@ function RosterRow({
             variant="outline"
             className="min-h-11 whitespace-nowrap"
             onClick={handleEndAndReview}
-            disabled={finalizing || deleting || deleted || showDeleteConfirm}
+            disabled={finalizing || deleteLocked || showDeleteConfirm}
             data-testid="roster-end-and-review"
           >
             {finalizing ? "Finalizing…" : "End and review"}
@@ -203,7 +206,7 @@ function RosterRow({
             variant="outline"
             className="min-h-11 whitespace-nowrap text-destructive hover:text-destructive"
             onClick={() => setShowDeleteConfirm(true)}
-            disabled={deleting || deleted || showDeleteConfirm}
+            disabled={deleteLocked || showDeleteConfirm}
             data-testid="roster-cancel-delete"
             aria-label="Cancel and delete this session and its recording"
           >
@@ -260,7 +263,7 @@ function RosterRow({
                   borderColor: "var(--sign-out)",
                 }}
                 onClick={handleDelete}
-                disabled={deleting || deleted}
+                disabled={deleteLocked}
                 data-testid="roster-cancel-delete-confirm-yes"
               >
                 {deleting ? "Deleting…" : "Yes, delete"}
@@ -269,7 +272,7 @@ function RosterRow({
                 type="button"
                 className="btn"
                 onClick={() => setShowDeleteConfirm(false)}
-                disabled={deleting || deleted}
+                disabled={deleteLocked}
                 data-testid="roster-cancel-delete-confirm-cancel"
               >
                 Cancel

@@ -25,8 +25,12 @@
  *   npx playwright test tests/integration/wb-delete-session.spec.ts --project=wb-regression
  */
 
-import { type Locator, type Page, type Request, type Route } from "@playwright/test";
+import { type Locator, type Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+import {
+  interceptSessionDeletePost,
+  type HeldSessionDelete,
+} from "./session-delete-intercept";
 import { PrismaClient } from "@prisma/client";
 import {
   loginLearnerInContext,
@@ -134,178 +138,6 @@ function studentDetailUrl(studentId: string): RegExp {
   return new RegExp(`/admin/students/${id}/?(?:\\?.*)?$`);
 }
 
-/**
- * Delete server action. The review URL contains the session id, and the notes
- * poll and save bodies contain it too, so a substring match aborts the wrong
- * action. The delete body is exactly the one-argument server-action payload.
- * `pinnedActionId` is the `next-action` id from the first match.
- */
-function isSessionDeletePost(
-  request: Request,
-  whiteboardSessionId: string,
-  pinnedActionId: string | null,
-): boolean {
-  if (request.method() !== "POST") return false;
-  const actionId = request.headers()["next-action"];
-  if (!actionId) return false;
-  if (pinnedActionId && actionId !== pinnedActionId) return false;
-  return request.postData()?.trim() === JSON.stringify([whiteboardSessionId]);
-}
-
-/** RSC refresh/navigation of the student detail page. Prefetches are not a navigation. */
-function isStudentDetailFlight(request: Request, studentId: string): boolean {
-  if (request.headers()["next-action"]) return false;
-  if (request.headers()["next-router-prefetch"]) return false;
-  if (request.headers()["next-router-segment-prefetch"]) return false;
-  let pathname = "";
-  let search = "";
-  try {
-    const url = new URL(request.url());
-    pathname = url.pathname;
-    search = url.search;
-  } catch {
-    return false;
-  }
-  const detail =
-    pathname === `/admin/students/${studentId}` || pathname === `/admin/students/${studentId}/`;
-  if (!detail) return false;
-  return request.headers()["rsc"] === "1" || search.includes("_rsc=");
-}
-
-type HeldSessionDelete = {
-  actionPosts: string[];
-  flights: string[];
-  sawDeletePost: () => boolean;
-  deletePostCount: () => number;
-  deletePostPath: () => string;
-  /** Start recording student-page flights. Call after the page has settled. */
-  arm: () => void;
-  /**
-   * Hold later student-detail RSC flights so the row stays on screen after
-   * refresh() returns. That is the window where "Yes, delete" used to re-enable.
-   */
-  stallStudentDetail: () => void;
-  releaseFlights: () => void;
-  release: () => void;
-  unroute: () => Promise<void>;
-};
-
-/**
- * Hold or abort the session-delete server action. The review page and the
- * student list share this route: the broken handler navigates first, so the
- * POST may land on a page that does not own the control, and a refresh can
- * leave while the POST is still held.
- */
-async function interceptSessionDeletePost(
-  page: Page,
-  whiteboardSessionId: string,
-  mode: "hold" | "abort",
-  opts?: { studentId?: string },
-): Promise<HeldSessionDelete> {
-  const actionPosts: string[] = [];
-  const flights: string[] = [];
-  let sawDeletePost = false;
-  let deletePostCount = 0;
-  let deletePostPath = "";
-  let pinnedActionId: string | null = null;
-  let armed = false;
-  let released = false;
-  let aborted = false;
-  let stallStudentDetail = false;
-  let releaseDelete = () => {};
-  let releaseFlights = () => {};
-  const deleteHeld = new Promise<void>((resolve) => {
-    releaseDelete = () => {
-      released = true;
-      resolve();
-    };
-  });
-  const flightsStalled = new Promise<void>((resolve) => {
-    releaseFlights = () => {
-      stallStudentDetail = false;
-      resolve();
-    };
-  });
-
-  const onRoute = async (route: Route) => {
-    const request = route.request();
-    if (request.method() === "POST") {
-      actionPosts.push(describeActionPost(request));
-    }
-    if (!isSessionDeletePost(request, whiteboardSessionId, pinnedActionId)) {
-      const studentFlight =
-        Boolean(opts?.studentId) && isStudentDetailFlight(request, opts?.studentId ?? "");
-      if (armed && !released && studentFlight) {
-        flights.push(describeActionPost(request));
-      }
-      if (stallStudentDetail && studentFlight) {
-        await flightsStalled;
-      }
-      await route.continue();
-      return;
-    }
-    try {
-      deletePostPath = new URL(request.url()).pathname;
-    } catch {
-      deletePostPath = request.url();
-    }
-    sawDeletePost = true;
-    deletePostCount += 1;
-    if (!pinnedActionId) {
-      pinnedActionId = request.headers()["next-action"] ?? null;
-    }
-    if (mode === "abort") {
-      if (aborted) {
-        await route.continue();
-        return;
-      }
-      aborted = true;
-      await route.abort("failed");
-      return;
-    }
-    await deleteHeld;
-    try {
-      await route.continue();
-    } catch {
-      // The test unroutes on the way out. The request was already settled.
-    }
-  };
-  await page.route("**/*", onRoute);
-
-  return {
-    actionPosts,
-    flights,
-    sawDeletePost: () => sawDeletePost,
-    deletePostCount: () => deletePostCount,
-    deletePostPath: () => deletePostPath,
-    arm: () => {
-      armed = true;
-    },
-    stallStudentDetail: () => {
-      stallStudentDetail = true;
-    },
-    releaseFlights: () => releaseFlights(),
-    release: () => releaseDelete(),
-    unroute: async () => {
-      releaseDelete();
-      releaseFlights();
-      await page.unroute("**/*", onRoute).catch(() => {});
-    },
-  };
-}
-
-function describeActionPost(request: Request): string {
-  let pathname = request.url();
-  try {
-    pathname = new URL(request.url()).pathname;
-  } catch {
-    // keep the raw url
-  }
-  const action = request.headers()["next-action"] ? "yes" : "no";
-  const body = (request.postData() ?? "").slice(0, 160);
-  return `next-action=${action} ${pathname} body=${body}`;
-}
-
 async function readSessionRow(whiteboardSessionId: string) {
   return withHarnessPrisma((prisma) =>
     prisma.whiteboardSession.findUnique({
@@ -345,16 +177,22 @@ async function openRosterDelete(
   return item;
 }
 
-async function confirmRosterDelete(item: Locator): Promise<Locator> {
+async function confirmRosterDelete(
+  item: Locator,
+  held?: HeldSessionDelete,
+): Promise<Locator> {
   await item.getByTestId("roster-cancel-delete").click();
   const confirm = item.getByTestId("roster-cancel-delete-confirm-yes");
   await expect(confirm).toBeVisible();
   await expect(confirm).toBeEnabled();
+  // Arm only once the confirm click is about to happen, so a notes poll
+  // that shares the delete body cannot pin the action id.
+  if (held) await held.armDeleteCapture();
   await confirm.click({ noWaitAfter: true });
   return confirm;
 }
 
-async function confirmReviewDelete(page: Page): Promise<void> {
+async function confirmReviewDelete(page: Page, held?: HeldSessionDelete): Promise<void> {
   await page.getByTestId("wb-delete-session").click();
   const confirm = page.getByTestId("wb-delete-confirm-yes");
   await expect(confirm).toBeVisible();
@@ -362,6 +200,7 @@ async function confirmReviewDelete(page: Page): Promise<void> {
   // Do not wait for the navigation this click starts. The spec checks the
   // session row as soon as the student-detail URL is showing, and a full
   // load wait lets a background delete finish first.
+  if (held) await held.armDeleteCapture();
   await confirm.click({ noWaitAfter: true });
 }
 
@@ -490,11 +329,12 @@ test.describe(
 
       const held = await interceptSessionDeletePost(page, seeded.whiteboardSessionId, "hold", {
         studentId: seeded.studentId,
+        requireTutorNoteDone: true,
       });
       held.arm();
 
       try {
-        await confirmReviewDelete(page);
+        await confirmReviewDelete(page, held);
         await expect
           .poll(
             () => (held.sawDeletePost() ? "seen" : held.actionPosts.slice(-6).join(" || ") || "none"),
@@ -558,10 +398,12 @@ test.describe(
       await expect(page.getByTestId("wb-delete-session")).toBeVisible();
       await expect(page.getByTestId("wb-delete-session")).toBeEnabled();
 
-      const held = await interceptSessionDeletePost(page, seeded.whiteboardSessionId, "abort");
+      const held = await interceptSessionDeletePost(page, seeded.whiteboardSessionId, "abort", {
+        requireTutorNoteDone: true,
+      });
 
       try {
-        await confirmReviewDelete(page);
+        await confirmReviewDelete(page, held);
         await expect(page.getByTestId("wb-delete-session-error")).toBeVisible({ timeout: 15_000 });
         await expect(page).toHaveURL(new RegExp(`/whiteboard/${seeded.whiteboardSessionId}`));
         await expect(page.getByTestId("wb-session-review-mode")).toBeVisible();
@@ -601,7 +443,7 @@ test.describe(
       held.arm();
 
       try {
-        const confirm = await confirmRosterDelete(item);
+        const confirm = await confirmRosterDelete(item, held);
         await expect
           .poll(
             () => (held.sawDeletePost() ? "seen" : held.actionPosts.slice(-6).join(" || ") || "none"),
@@ -681,7 +523,7 @@ test.describe(
       const held = await interceptSessionDeletePost(page, seeded.whiteboardSessionId, "abort");
 
       try {
-        await confirmRosterDelete(item);
+        await confirmRosterDelete(item, held);
         await expect(item.getByTestId("roster-cancel-delete-error")).toBeVisible({ timeout: 15_000 });
         await expect(item.getByTestId("roster-resume-session")).toBeVisible();
         await expect(page).toHaveURL(studentDetailUrl(seeded.studentId));

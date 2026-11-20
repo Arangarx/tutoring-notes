@@ -326,6 +326,58 @@ describe("WorkspaceResumeGate", () => {
     await waitFor(() => {
       expect(routerPushMock).toHaveBeenCalledWith("/admin/students/stu_99");
     });
+    // push() returns before the next page replaces this gate. Yes and Cancel
+    // stay inert so a second click cannot delete a session that is already gone.
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm-yes")).toBeDisabled();
+    });
+    expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm-cancel")).toBeDisabled();
+    expect(deleteWhiteboardSessionAndDataActionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Yes and Cancel disabled after the delete resolves and before navigation", async () => {
+    let resolveDelete: (value: { ok: true }) => void = () => {};
+    deleteWhiteboardSessionAndDataActionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDelete = resolve;
+        })
+    );
+    const user = userEvent.setup();
+    render(
+      <WorkspaceResumeGate
+        whiteboardSessionId="wb_42"
+        studentId="stu_99"
+        startedAtIso={new Date(NOW - 2 * 60 * 60_000).toISOString()}
+        initialLastActiveAtIso={null}
+        syncEnabled={true}
+        __testOverrides={{ nowMs: NOW }}
+      >
+        <CanaryChildren />
+      </WorkspaceResumeGate>
+    );
+
+    await user.click(screen.getByTestId("wb-resume-gate-cancel-delete"));
+    await user.click(screen.getByTestId("wb-resume-gate-cancel-delete-confirm-yes"));
+
+    expect(deleteWhiteboardSessionAndDataActionMock).toHaveBeenCalledWith("wb_42");
+    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm-yes")).toBeDisabled();
+    expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm-cancel")).toBeDisabled();
+
+    resolveDelete({ ok: true });
+
+    await waitFor(() => {
+      expect(routerPushMock).toHaveBeenCalledTimes(1);
+    });
+    expect(routerPushMock).toHaveBeenCalledWith("/admin/students/stu_99");
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm-yes")).toBeDisabled();
+    });
+    expect(screen.getByTestId("wb-resume-gate-cancel-delete-confirm-cancel")).toBeDisabled();
+    expect(screen.getByTestId("wb-resume-gate")).toBeInTheDocument();
+    expect(deleteWhiteboardSessionAndDataActionMock).toHaveBeenCalledTimes(1);
   });
 
   it("Cancel and delete — cancel dismisses confirm dialog without deleting", async () => {
