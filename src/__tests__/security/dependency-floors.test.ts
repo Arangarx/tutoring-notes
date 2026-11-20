@@ -17,7 +17,7 @@ const FLOORS: Record<string, string> = {
   "@xmldom/xmldom": "0.9.12",
   postcss: "8.5.23",
   "deepmerge-ts": "8.0.0",
-  effect: "3.20.0",
+  effect: "3.22.1",
   defu: "6.1.5",
   dompurify: "3.4.17",
   immutable: "4.3.9",

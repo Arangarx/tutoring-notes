@@ -123,7 +123,7 @@
     "brace-expansion@<=1.1.20": "1.1.22",
     "nodemailer": "$nodemailer",
     "deepmerge-ts": "8.0.2",
-    "effect": "3.21.0",
+    "effect": "3.22.5",
     "@excalidraw/mermaid-to-excalidraw": {
       "nanoid": "5.1.16"
     }
